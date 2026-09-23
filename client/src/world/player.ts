@@ -17,8 +17,10 @@ const EYE = 1.5;
 export class Player {
   readonly position = new THREE.Vector3();
   heading = Math.PI;
+  /** Ground speed this frame, m/s. */
+  speed = 0;
   camYaw = 0;
-  camPitch = 0.3;
+  camPitch = 0.26;
   camDist = 3.3;
   private enabled = true;
   private vel = new THREE.Vector2();
@@ -67,6 +69,7 @@ export class Player {
     this.enabled = on;
     this.keys.clear();
     this.vel.set(0, 0);
+    this.speed = 0;
     this.drag = null;
     this.character.setMotion(0);
   }
@@ -114,6 +117,7 @@ export class Player {
       // the camera drifts round behind the walker unless the mouse has been steering it
       if (this.clock - this.manualAt > 1.5 && iz >= 0) this.camYaw = turn(this.camYaw, this.heading + Math.PI, 1 - Math.exp(-dt * 1.4));
     }
+    this.speed = moved;
     const motion = moved < 0.05 ? 0 : moved <= WALK ? moved / WALK : 1 + (moved - WALK) / (RUN - WALK);
     this.character.setMotion(motion);
     this.syncCharacter();

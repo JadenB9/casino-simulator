@@ -56,6 +56,10 @@ export interface World {
     position: THREE.Vector3;
     /** Hand the keyboard and camera to someone else (a panel, a table) and back. */
     setEnabled(on: boolean): void;
+    /** For presence, every frame: floor position, facing (Object3D.rotation.y; PI faces -z) and whether walking. */
+    state(): { x: number; z: number; yaw: number; moving: boolean };
+    /** Put the player somewhere (the server's spawn in the first hello). The camera snaps behind. */
+    teleport(x: number, z: number, yaw: number): void;
   };
   /** The player pressed E at a station; the camera is already flying to its play pose. */
   onEnter(cb: (station: Station) => void): () => void;

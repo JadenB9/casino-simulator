@@ -24,6 +24,9 @@ import { Bloom, PixelRatio } from './bloom.ts';
 import './world.css';
 
 export type { WorldStation } from './stations.ts';
+
+/** Where a player first appears: inside the doors on the marble, facing into the casino (-z). */
+export const SPAWN = { x: 0, z: 12.8, yaw: Math.PI };
 export type { World } from './contract.ts';
 
 export interface WorldOptions {
@@ -104,7 +107,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
   root.add(character.root);
   const canvas = renderer.domElement;
   const player = new Player(character, engine.camera, col, plan.pit, canvas);
-  player.spawn(0, plan.entrance.z0 + 1.2, Math.PI);
+  player.spawn(SPAWN.x, SPAWN.z, SPAWN.yaw);
 
   const cashierAnchor = new THREE.Object3D();
   cashierAnchor.name = 'cashier';
@@ -146,6 +149,8 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
       character,
       position: player.position,
       setEnabled: (on) => player.setEnabled(on),
+      state: () => ({ x: player.position.x, z: player.position.z, yaw: player.heading, moving: player.speed > 0.05 }),
+      teleport: (x, z, yaw) => player.spawn(x, z, yaw),
     },
     onEnter: (cb) => interact.onEnter(cb),
     onCashier: (cb) => interact.onCashier(cb),

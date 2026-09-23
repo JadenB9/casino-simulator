@@ -60,7 +60,7 @@ export function floorSigns(plan: FloorPlan, b: Batch, m: Mats): SignSpec[] {
   {
     const x = 0;
     const z = plan.pit.z1 + 0.2;
-    const y = 2.78;
+    const y = 2.96;
     hang(x, y, z, 0, 4.6, 0.6);
     out.push({ kind: 'lit', text: 'TABLE GAMES', color: '#ffe0a0', font: 'Cinzel', at: face(x, y, z, 0, 0.075), ry: 0, w: 4.4, h: 0.52 });
     out.push({ kind: 'lit', text: 'TABLE GAMES', color: '#ffe0a0', font: 'Cinzel', at: face(x, y, z, Math.PI, 0.075), ry: Math.PI, w: 4.4, h: 0.52 });
@@ -69,7 +69,7 @@ export function floorSigns(plan: FloorPlan, b: Batch, m: Mats): SignSpec[] {
   {
     const x = plan.slotsZone.x1 - 0.35;
     const z = plan.slotsZone.z0 + 3.2;
-    const y = 2.82;
+    const y = 2.98;
     hang(x, y, z, Math.PI / 2, 2.4, 0.66);
     out.push({ kind: 'neon', text: 'SLOTS', color: '#ff3fa4', font: 'Tilt Neon', at: face(x, y, z, Math.PI / 2, 0.075), ry: Math.PI / 2, w: 2.3, h: 0.62 });
     out.push({ kind: 'neon', text: 'SLOTS', color: '#ff3fa4', font: 'Tilt Neon', at: face(x, y, z, -Math.PI / 2, 0.075), ry: -Math.PI / 2, w: 2.3, h: 0.62 });
@@ -78,7 +78,7 @@ export function floorSigns(plan: FloorPlan, b: Batch, m: Mats): SignSpec[] {
   {
     const x = plan.pokerRoom.x0 - 0.05;
     const z = (plan.pokerRoom.z0 + plan.pokerRoom.z1) / 2;
-    const y = 2.82;
+    const y = 2.98;
     hang(x, y, z, -Math.PI / 2, 2.2, 0.6);
     out.push({ kind: 'neon', text: 'POKER', color: '#ff5a4a', font: 'Tilt Neon', at: face(x, y, z, -Math.PI / 2, 0.075), ry: -Math.PI / 2, w: 2.1, h: 0.56 });
     out.push({ kind: 'neon', text: 'POKER', color: '#ff5a4a', font: 'Tilt Neon', at: face(x, y, z, Math.PI / 2, 0.075), ry: Math.PI / 2, w: 2.1, h: 0.56 });
@@ -86,7 +86,7 @@ export function floorSigns(plan: FloorPlan, b: Batch, m: Mats): SignSpec[] {
   // overhead wayfinding just inside the entrance
   {
     const z = plan.entrance.z0 - 0.9;
-    const y = 2.74;
+    const y = 3.0;
     hang(0, y, z, 0, 5.2, 0.5);
     out.push({
       kind: 'way', text: '', color: '#f4e6c8', font: 'Cinzel', at: face(0, y, z, 0, 0.075), ry: 0, w: 5.1, h: 0.44,
@@ -109,7 +109,7 @@ export function floorSigns(plan: FloorPlan, b: Batch, m: Mats): SignSpec[] {
   {
     const x = plan.pit.x0 - 1.2;
     const z = (plan.aisles[0]!.z0 + plan.aisles[0]!.z1) / 2;
-    const y = 2.74;
+    const y = 3.02;
     hang(x, y, z, Math.PI / 2, 3.2, 0.44);
     out.push({
       kind: 'way', text: '', color: '#f4e6c8', font: 'Cinzel', at: face(x, y, z, Math.PI / 2, 0.075), ry: Math.PI / 2, w: 3.1, h: 0.38,

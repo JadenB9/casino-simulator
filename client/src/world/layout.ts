@@ -239,11 +239,15 @@ export function planFloor(footprint: (game: GameId) => Footprint): FloorPlan {
     addBank('sevens', cx, top, 0);
     addBank('wild', cx, Math.min(z2, bottom), 0);
   }
+  let neonNorth = 0;
   {
-    // between the cashier and the cross aisle, back from the cashier's queue
+    // between the cashier's queue and the cross aisle; when that corner is too tight, the aisle wins
     const x = (ROOM.x0 + WALL + Math.min(pit.x0, -9.5)) / 2 - 0.4;
-    const z = Math.max(counter.z1 + 3.2 + PLAYER_ZONE + bankDepth / 2, crossZ0 - PLAYER_ZONE - 0.4 - bankDepth / 2);
+    const queueSide = counter.z1 + 3.2 + PLAYER_ZONE + bankDepth / 2;
+    const aisleSide = crossZ0 - PLAYER_ZONE - 0.4 - bankDepth / 2;
+    const z = queueSide <= aisleSide ? (queueSide + aisleSide) / 2 : aisleSide;
     addBank('neon', x, z, 0);
+    neonNorth = z - bankDepth / 2 - PLAYER_ZONE;
   }
 
   // --- the bar: counter along the east wall, video poker set into the north end ----------------
@@ -292,8 +296,8 @@ export function planFloor(footprint: (game: GameId) => Footprint): FloorPlan {
     { points: [[staffHalf + 0.35, zN + dN / 2 - 0.2], [staffHalf + 0.35, zS - dS / 2 + 0.2]] },
     { points: [[pokerRoom.x0, pokerRoom.z0 + 1.2], [pokerRoom.x0, (pokerRoom.z0 + pokerRoom.z1) / 2 - 1.0]] },
     { points: [[pokerRoom.x0, (pokerRoom.z0 + pokerRoom.z1) / 2 + 1.0], [pokerRoom.x0, pokerRoom.z1], [pokerRoom.x1 - 0.4, pokerRoom.z1]] },
-    { points: [[cashier.x - 1.5, counter.z1 + 0.25], [cashier.x - 1.5, counter.z1 + 2.2]] },
-    { points: [[cashier.x + 1.5, counter.z1 + 0.25], [cashier.x + 1.5, counter.z1 + 2.2]] },
+    { points: [[cashier.x - 1.5, counter.z1 + 0.25], [cashier.x - 1.5, Math.min(counter.z1 + 2.2, neonNorth - 0.3)]] },
+    { points: [[cashier.x + 1.5, counter.z1 + 0.25], [cashier.x + 1.5, Math.min(counter.z1 + 2.2, neonNorth - 0.3)]] },
   ];
 
   const plants: [number, number, number][] = [
