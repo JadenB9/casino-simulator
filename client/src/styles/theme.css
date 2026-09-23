@@ -122,7 +122,7 @@ button { font: inherit; color: inherit; }
 .tip-pick { box-shadow: 0 0 0 2px var(--brass-hi), 0 0 16px rgba(241, 213, 154, 0.45) !important; }
 
 /* Celebrations: the hand's name over the table, sized to the win. */
-.celebrate { position: fixed; left: 50%; top: 30%; transform: translate(-50%, -50%); display: grid; justify-items: center; gap: 4px; padding: 14px 34px; pointer-events: none; z-index: 25; animation: celebrate-in 0.45s var(--ease) both; text-align: center; }
+.celebrate { position: fixed; left: 50%; top: max(22%, 180px); transform: translate(-50%, -50%); display: grid; justify-items: center; gap: 4px; padding: 14px 34px; pointer-events: none; z-index: 25; animation: celebrate-in 0.45s var(--ease) both; text-align: center; }
 .celebrate.out { opacity: 0; transform: translate(-50%, -58%); transition: opacity 0.35s var(--ease), transform 0.35s var(--ease); }
 .celebrate-title { font-family: var(--serif); font-size: 30px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--brass-hi); text-shadow: 0 0 18px rgba(241, 213, 154, 0.45); }
 .celebrate-sub { font-size: 17px; color: var(--ink); }

@@ -168,6 +168,8 @@ export class TableSession {
         break;
       }
       case 'seat':
+        // Keep the snapshot's idea of you current (status and stack change after it was taken).
+        if (this.snapshot) this.snapshot.you = { ...this.snapshot.you, status: m.status, stack: m.stack, seat: m.seat ?? this.snapshot.you.seat };
         this.view?.onSeat(m);
         this.hooks.onSeat?.(m);
         if (m.status === 'watching' && this.snapshot?.meta.mode === 'solo' && m.stack === 0) void this.promptBuyIn();
