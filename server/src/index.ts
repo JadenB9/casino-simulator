@@ -11,6 +11,7 @@ import { closeWith, corsHeaders, fail, json, originAllowed, readJson } from './h
 import { bearer, signToken, verifyToken, type Claims } from './auth.ts';
 import { bumpRate, escrowsOf, getAccount, loadProfile, loginAccount, setLook } from './db.ts';
 import { takeLoan } from './transfer.ts';
+import { leaderboard } from './leaderboard.ts';
 import type { CasinoFloor } from './floor/index.ts';
 import type { CasinoTable } from './table/host.ts';
 
@@ -79,6 +80,11 @@ async function handleApi(request: Request, env: Env, route: string, cors: Record
     const profile = await loadProfile(env.DB, claims.a, stacks);
     if (!profile) return fail(401, 'UNAUTHORIZED', 'That account is gone.', cors);
     return json({ profile } satisfies MeResponse, 200, cors);
+  }
+
+  // Names and numbers only; the boards are kept for a minute (see leaderboard.ts).
+  if (route === 'leaderboard' && request.method === 'GET') {
+    return json(await leaderboard(env.DB, { id: claims.a, name: claims.n }, now), 200, cors);
   }
 
   if (route === 'me/look' && request.method === 'PUT') {

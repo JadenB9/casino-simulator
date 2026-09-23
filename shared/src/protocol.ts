@@ -164,6 +164,38 @@ export interface HttpError {
   inPlay?: Cents;
 }
 
+/** The leaderboards (GET /leaderboard), in the order the sheet shows them. */
+export const LEADERBOARDS = ['richest', 'biggestWin', 'rounds'] as const;
+export type LeaderboardId = (typeof LEADERBOARDS)[number];
+
+/** How many places each board lists. */
+export const LEADERBOARD_TOP = 10;
+
+export interface LeaderboardRow {
+  /** 1 is first; players on the same value share a place (1, 2, 2, 4). */
+  rank: number;
+  name: string;
+  /** Cents on richest (balance plus chips on tables) and biggestWin; a count on rounds. */
+  value: number;
+  /** The player who asked. */
+  you?: true;
+}
+
+export interface Leaderboard {
+  top: LeaderboardRow[];
+  /**
+   * The asker's own place when it isn't in `top` (null when it is). `rank` is null while there
+   * is nothing to rank: no money, no win yet, no rounds yet.
+   */
+  you: { rank: number | null; name: string; value: number } | null;
+}
+
+export interface LeaderboardResponse {
+  boards: Record<LeaderboardId, Leaderboard>;
+  /** How old the boards are, in ms: the server reads them at most about once a minute. */
+  age: number;
+}
+
 // ---------------------------------------------------------------------------------------------
 // Floor socket
 

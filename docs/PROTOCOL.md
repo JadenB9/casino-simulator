@@ -66,6 +66,7 @@ reconnect.
 | POST | `/bank/loan` | | `{ profile, loan }` | 409 `NOT_ELIGIBLE {balance, inPlay}` |
 | POST | `/tables` | `{ game, variant?, visibility }` | `{ tableId, pin? }` | 400, 429 |
 | POST | `/tables/join` | `{ pin }` | `{ tableId, game }` | 404 `BAD_PIN`, 429 |
+| GET | `/leaderboard` | | `LeaderboardResponse` | 401 |
 | GET | `/health` | | `ok` | |
 
 ```ts
@@ -84,6 +85,24 @@ type Look = { v: 1; body: "m" | "f"; outfit: string;      // outfit ids per body
               hair: string; top: string; bottom: string; shoes: string };   // "#rrggbb"; either case in, lower case stored
 ```
 
+```ts
+type LeaderboardId = "richest" | "biggestWin" | "rounds";       // LEADERBOARDS, in tab order
+type LeaderboardRow = { rank: number; name: string; value: number; you?: true };
+type Leaderboard = {
+  top: LeaderboardRow[];                                       // at most LEADERBOARD_TOP (10), best first
+  you: { rank: number | null; name: string; value: number } | null;  // only when you're not in top
+};
+type LeaderboardResponse = { boards: Record<LeaderboardId, Leaderboard>; age: number };
+```
+
+Leaderboards. `richest` is balance plus chips taken to tables (`inPlay`, what the buy-ins took;
+a stack's wins count once it cashes out), in cents. `biggestWin` is the largest single-round
+profit in any one game, in cents. `rounds` is rounds played over every game, a count. Places
+are shared on a tie (1, 2, 2, 4), and ties are listed oldest account first. `you.rank` is null
+when there's nothing to rank yet (no money, no win, no rounds). Names only: no account ids.
+Each Worker isolate reads the boards from D1 at most once a minute and `age` says how old they
+are (ms); a player outside a top ten has their own place read once per such read.
+
 ## Floor socket
 
 `wss://api.j4den.com/casino/ws/floor?v=1&t=<token>`
@@ -95,6 +114,7 @@ Client to server:
 | `mv` | `x, z` (integer cm), `r` (yaw 0-255) | at most every 100 ms, only while moving |
 | `st` | `x, z, r` | once when you stop |
 | `watch` | `game: GameId \| null` | subscribe to one game's lobby list |
+| `emote` | `e: "wave" \| "cheer" \| "clap" \| "thumbs" \| "shrug"` (`EMOTES`) | 3 in a burst, then one every 2 s; extras are dropped without a reply |
 
 Movement rules. The first `mv` or `st` on a connection places you anywhere inside the floor
 (`FLOOR_BOUNDS`, the room's walls): a first visit echoes the spawn in `hello`, and after a dropped
@@ -117,6 +137,7 @@ Server to client:
 | `lobbies` | `game, list: LobbySummary[]` (the answer to `watch`) |
 | `lobby` | `game, lobby: LobbySummary` (upsert, to watchers) |
 | `lobby.gone` | `game, tableId` |
+| `emote` | `id, e` (to everyone on the floor, the sender included) |
 
 ```ts
 type PlayerInfo = { id: number; name: string; look: Look; x: number; z: number; r: number;

@@ -1,0 +1,69 @@
+/* The leaderboard sheet and the emote wheel. Shared pieces (.sheet, .seg, .data, .kc) come
+   from menu.css; colours and faces from theme.css. No backdrop-filter: these sit over the
+   running 3D canvas. */
+
+/* ---------------------------------------------------------------- leaderboards */
+
+/* Hung from the top rather than centred, so a longer board grows downward instead of moving the
+   tabs under the pointer. */
+.lb-sheet { --lb-top: clamp(0px, 7vh - 24px, 48px); width: min(540px, 100%); align-self: start; margin-top: var(--lb-top); max-height: calc(100vh - 48px - var(--lb-top)); }
+.lb-tabs { display: flex; width: 100%; margin-bottom: 16px; }
+.lb-tabs .seg-btn { flex: 1; padding: 0 10px; }
+.lb-tabs .seg-btn[aria-selected='true'] { background: rgba(226, 190, 118, 0.16); color: var(--brass-hi); }
+
+.lb-table { table-layout: fixed; }
+.lb-table th.lb-rank, .lb-table td.lb-rank { width: 52px; padding-left: 12px; text-align: left; }
+.lb-table th.lb-name, .lb-table td.lb-name { text-align: left; overflow: hidden; text-overflow: ellipsis; }
+.lb-table th.lb-value, .lb-table td.lb-value { width: 168px; padding-right: 12px; }
+.lb-table td { padding-top: 9px; padding-bottom: 9px; }
+.lb-table td.lb-rank { font-size: 17px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.lb-table td.lb-name { color: var(--ink); }
+.lb-table td.lb-value { color: var(--ink); }
+.lb-table tr.podium td.lb-rank { color: var(--brass); }
+.lb-table tr.p1 td.lb-rank { color: var(--brass-hi); }
+
+/* Your row: lit, with a brass edge. */
+.lb-table tr.you td { background: rgba(226, 190, 118, 0.1); color: var(--brass-hi); border-bottom-color: rgba(226, 190, 118, 0.3); }
+.lb-table tr.you td.lb-rank { color: var(--brass-hi); box-shadow: inset 2px 0 0 var(--brass-hi); }
+.lb-you { display: inline-block; margin-left: 10px; padding: 0 6px; border: 1px solid rgba(241, 213, 154, 0.45); border-radius: 3px; font-size: 11px; line-height: 16px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--brass-hi); vertical-align: 2px; }
+
+/* The break between the top ten and your own place further down. */
+.lb-table tr.lb-gap td { height: 16px; padding: 0; border-bottom: 1px dashed rgba(214, 178, 110, 0.3); }
+
+.lb-note { margin: 14px 0 0; font-size: 14px; letter-spacing: 0.03em; color: var(--ink-3); }
+.lb-foot { margin-top: 12px; }
+.lb-problem { color: var(--lose); }
+
+@media (max-width: 520px) {
+  .lb-table th.lb-value, .lb-table td.lb-value { width: 124px; }
+  .lb-tabs .seg-btn { font-size: 13px; letter-spacing: 0.04em; }
+}
+
+/* ---------------------------------------------------------------- emote wheel */
+
+/* Clear, not dimmed: a click anywhere off the wheel puts it away. Under the sheets (35). */
+.emo-scrim { position: fixed; inset: 0; z-index: 34; display: grid; place-items: center; }
+.emo-wheel { position: relative; width: 272px; height: 272px; border-radius: 50%; outline: none; animation: emo-in 0.2s var(--ease); }
+.emo-ring { position: absolute; inset: 0; border-radius: 50%; background: rgba(14, 12, 10, 0.95); border: 1px solid var(--line); box-shadow: 0 18px 60px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(241, 213, 154, 0.07); }
+.emo-ring::after { content: ''; position: absolute; inset: 84px; border-radius: 50%; border: 1px solid rgba(214, 178, 110, 0.16); }
+
+.emo-hub { position: absolute; left: 50%; top: 50%; width: 100px; transform: translate(-50%, -50%); text-align: center; pointer-events: none; }
+.emo-name { font-family: var(--serif); font-size: 14px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--brass-hi); white-space: nowrap; }
+.emo-hint { margin-top: 4px; font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-3); transition: color 0.15s; }
+
+.emo-btn { position: absolute; left: 50%; top: 50%; display: grid; place-items: center; width: 60px; height: 60px; margin: -30px 0 0 -30px; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: #1c1712; color: var(--ink-2); cursor: pointer; transform: translate(var(--x), var(--y)); transition: color 0.12s, border-color 0.12s, background 0.12s, transform 0.14s var(--ease), opacity 0.15s; }
+.emo-btn:hover, .emo-btn:focus-visible { color: var(--brass-hi); border-color: var(--brass-hi); background: #2a2016; outline: none; transform: translate(var(--x), var(--y)) scale(1.08); }
+.emo-btn:active { transform: translate(var(--x), var(--y)) scale(0.96); }
+.emo-glyph { width: 30px; height: 30px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; }
+.emo-glyph .fill { fill: currentColor; stroke: none; }
+.emo-key { position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px; padding: 0 4px; border: 1px solid rgba(241, 213, 154, 0.34); border-bottom-width: 2px; border-radius: 4px; background: #15110d; color: var(--ink-2); font: 600 11px/15px var(--ui); text-align: center; }
+
+/* Too soon after the last few: the server would drop it, so the wheel waits. */
+.emo-wheel.cooling .emo-btn { opacity: 0.45; }
+.emo-wheel.cooling .emo-hint { color: var(--lose); }
+
+@keyframes emo-in { from { opacity: 0; transform: scale(0.94); } }
+@media (prefers-reduced-motion: reduce) {
+  .emo-wheel { animation: none; }
+  .emo-btn { transition: none; }
+}
