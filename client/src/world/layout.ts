@@ -355,8 +355,11 @@ export function planFloor(footprint: (game: GameId) => Footprint, slots: readonl
     { points: [[cashier.x + 1.5, counter.z1 + 0.25], [cashier.x + 1.5, counter.z1 + 2.2]] },
   ];
 
+  // the west wall's corner plant keeps clear of the Big Six's south end (or goes, if it can't)
+  const wheel = stations.find((p) => p.zone === 'feature');
+  const cornerZ = Math.max(crossZ0 - 0.8, wheel ? wheel.z + wheel.fp.width / 2 + 0.55 : -Infinity);
   const plants: [number, number, number][] = [
-    [ROOM.x0 + 0.8, crossZ0 - 0.8, 1],
+    ...(cornerZ <= crossZ0 - 0.45 ? [[ROOM.x0 + 0.8, cornerZ, 1] as [number, number, number]] : []),
     [-12.2, ROOM.z0 + 1.0, 0],
     [pokerRoom.x0 + 0.7, ROOM.z0 + 0.9, 1],
     [ROOM.x1 - 0.8, crossZ1 + 0.8, 0],

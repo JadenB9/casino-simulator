@@ -24,19 +24,19 @@ function views(w: FloorWorld): Record<string, View | 'walk'> {
   const p = w.plan;
   const pitZ = (p.staff.z0 + p.staff.z1) / 2;
   const cross = p.aisles[0]!;
-  const bankX = p.banks.reduce((sum, b) => sum + b.x, 0) / Math.max(1, p.banks.length);
-  const bankZ = p.banks.reduce((sum, b) => sum + b.z, 0) / Math.max(1, p.banks.length);
+  const wheel = p.stations.find((s) => s.game === 'bigsix') ?? { x: p.feature.x0 + 1, z: (p.feature.z0 + p.feature.z1) / 2 };
   return {
     entrance: 'walk',
     overview: { pos: [0.8, 1.95, p.entrance.z0 - 2.4], at: [0, 1.1, pitZ] },
-    // from the main aisle, across the islands toward the west wall
-    slots: { pos: [p.slotsZone.x1 + 0.9, 2.3, bankZ + 3.2], at: [bankX - 3.5, 0.9, bankZ - 1.0] },
+    // from the south-east corner of the slot floor, across the islands toward the north-west
+    slots: { pos: [p.slotsZone.x1 - 3.1, 2.5, p.slotsZone.z1 - 0.7], at: [p.slotsZone.x0 + 3, 0.8, p.slotsZone.z0 + 2] },
     pit: { pos: [5.6, 2.0, cross.z1 - 0.3], at: [-1.2, 0.9, pitZ] },
     cashier: { pos: [p.cashier.x + 4.6, 1.8, p.cashier.z + 1.1], at: [p.cashier.x - 0.4, 1.35, p.cashier.counter.z1] },
     bar: { pos: [p.bar.front - 4.6, 1.75, (p.bar.z0 + p.bar.z1) / 2 + 4.6], at: [p.bar.back, 1.3, (p.bar.z0 + p.bar.z1) / 2 - 1.6] },
     poker: { pos: [p.pokerRoom.x0 - 2.2, 2.0, p.pokerRoom.z1 + 1.3], at: [p.pokerRoom.x1 - 2.4, 0.9, (p.pokerRoom.z0 + p.pokerRoom.z1) / 2] },
     lounge: { pos: [p.lounge.x0 - 1.2, 1.75, p.lounge.z0 - 1.0], at: [(p.lounge.x0 + p.lounge.x1) / 2, 0.7, (p.lounge.z0 + p.lounge.z1) / 2] },
-    bigsix: { pos: [p.feature.x0 + 6.5, 2.0, p.feature.z1 + 1.9], at: [p.feature.x0 + 0.8, 1.5, (p.feature.z0 + p.feature.z1) / 2] },
+    // in front of the wheel, where its players stand
+    bigsix: { pos: [wheel.x + 5.2, 1.9, wheel.z + 1.4], at: [wheel.x, 1.5, wheel.z] },
   };
 }
 

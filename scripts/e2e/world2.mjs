@@ -3,7 +3,7 @@
 // views with draw calls, a pointer-lock walk (mouse look while walking), drag-to-look, the
 // camera's recentring rules, and emotes over characters. Vite only, no server.
 // Usage: node scripts/e2e/world2.mjs [port] [out dir] [checks...]
-//   checks: layout views lock drag emote (default: all)
+//   checks: layout views lock drag emote (default: all); VIEWS=slots,bigsix limits the views
 // Runs Chrome's new headless mode (channel 'chromium'): the headless shell refuses Pointer Lock.
 
 import { chromium } from 'playwright';
@@ -99,7 +99,10 @@ if (checks.includes('layout')) {
 
 // --- fixed views with six islands -----------------------------------------------------------------
 if (checks.includes('views')) {
-  for (const [view, quality] of [['overview', 'high'], ['slots', 'high'], ['bigsix', 'high'], ['entrance', 'high'], ['pit', 'high'], ['slots', 'low']]) {
+  // VIEWS=slots,bigsix picks some
+  const only = process.env.VIEWS?.split(',');
+  const views = [['overview', 'high'], ['slots', 'high'], ['bigsix', 'high'], ['entrance', 'high'], ['pit', 'high'], ['slots', 'low']].filter(([v]) => !only || only.includes(v));
+  for (const [view, quality] of views) {
     const { page, errors } = await open(`quality=${quality}&stats=1&slots=${SIX}${view === 'entrance' ? '' : `&view=${view}`}`);
     await page.waitForTimeout(1500);
     const s = await stats(page);
