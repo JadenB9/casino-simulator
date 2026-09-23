@@ -250,7 +250,7 @@ for (const r of runs) {
     else if (r === 'european') report.european = await roulette('european');
     else report[r] = await slots(r);
   } catch (e) {
-    report[r] = { failed: String(e).slice(0, 400) };
+    report[r] = { failed: String(e).slice(0, 400), stack: String(e.stack ?? '').split('\n').filter((l) => l.includes('dice2.mjs')).slice(0, 3) };
   }
 }
 console.log(JSON.stringify(report, null, 1));
