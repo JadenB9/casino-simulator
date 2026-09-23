@@ -26,8 +26,8 @@ const engine = new Engine3D(document.getElementById('scene') as HTMLCanvasElemen
 const sfx = new Sfx();
 void sfx.load().catch(() => {});
 devRoom(engine, GAMES.blackjack, '');
-engine.camera.position.set(0, 1.75, 2.9);
-engine.camera.lookAt(0, 0.9, 0);
+engine.camera.position.set(1.95, 1.5, 2.35);
+engine.camera.lookAt(0, 0.8, 0);
 
 const fixture = q.get('fixture') === '1';
 const api: LeaderboardApi = fixture ? fixtureApi({ fail: q.get('fail') === '1' }) : socialApi;

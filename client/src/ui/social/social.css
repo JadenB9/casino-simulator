@@ -4,19 +4,19 @@
 
 /* ---------------------------------------------------------------- leaderboards */
 
-.lb-sheet { width: min(540px, 100%); }
+/* Hung from the top rather than centred, so a longer board grows downward instead of moving the
+   tabs under the pointer. */
+.lb-sheet { --lb-top: clamp(0px, 7vh - 24px, 48px); width: min(540px, 100%); align-self: start; margin-top: var(--lb-top); max-height: calc(100vh - 48px - var(--lb-top)); }
 .lb-tabs { display: flex; width: 100%; margin-bottom: 16px; }
 .lb-tabs .seg-btn { flex: 1; padding: 0 10px; }
 .lb-tabs .seg-btn[aria-selected='true'] { background: rgba(226, 190, 118, 0.16); color: var(--brass-hi); }
-/* Room for ten rows and your own, so switching boards doesn't make the sheet jump. */
-.lb-panel { min-height: 486px; }
 
 .lb-table { table-layout: fixed; }
 .lb-table th.lb-rank, .lb-table td.lb-rank { width: 52px; padding-left: 12px; text-align: left; }
 .lb-table th.lb-name, .lb-table td.lb-name { text-align: left; overflow: hidden; text-overflow: ellipsis; }
 .lb-table th.lb-value, .lb-table td.lb-value { width: 168px; padding-right: 12px; }
 .lb-table td { padding-top: 9px; padding-bottom: 9px; }
-.lb-table td.lb-rank { font-family: var(--serif); font-size: 15px; font-weight: 600; color: var(--ink-3); }
+.lb-table td.lb-rank { font-size: 17px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
 .lb-table td.lb-name { color: var(--ink); }
 .lb-table td.lb-value { color: var(--ink); }
 .lb-table tr.podium td.lb-rank { color: var(--brass); }
@@ -44,7 +44,7 @@
 /* Clear, not dimmed: a click anywhere off the wheel puts it away. Under the sheets (35). */
 .emo-scrim { position: fixed; inset: 0; z-index: 34; display: grid; place-items: center; }
 .emo-wheel { position: relative; width: 272px; height: 272px; border-radius: 50%; outline: none; animation: emo-in 0.2s var(--ease); }
-.emo-ring { position: absolute; inset: 0; border-radius: 50%; background: rgba(14, 12, 10, 0.88); border: 1px solid var(--line); box-shadow: 0 18px 60px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(241, 213, 154, 0.07); }
+.emo-ring { position: absolute; inset: 0; border-radius: 50%; background: rgba(14, 12, 10, 0.95); border: 1px solid var(--line); box-shadow: 0 18px 60px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(241, 213, 154, 0.07); }
 .emo-ring::after { content: ''; position: absolute; inset: 84px; border-radius: 50%; border: 1px solid rgba(214, 178, 110, 0.16); }
 
 .emo-hub { position: absolute; left: 50%; top: 50%; width: 100px; transform: translate(-50%, -50%); text-align: center; pointer-events: none; }

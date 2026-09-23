@@ -26,25 +26,35 @@ function svg(cls: string): SVGSVGElement {
   return s;
 }
 
-function add(s: SVGSVGElement, tag: string, attrs: Record<string, string | number>): void {
+function add(s: SVGElement, tag: string, attrs: Record<string, string | number>): SVGElement {
   const e = document.createElementNS(NS, tag);
   for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, String(v));
   s.append(e);
+  return e;
 }
 
 /** A capsule from (x1, y1) to (x2, y2), `w` wide. */
-const bar = (s: SVGSVGElement, x1: number, y1: number, x2: number, y2: number, w: number) =>
+const bar = (s: SVGElement, x1: number, y1: number, x2: number, y2: number, w: number) =>
   add(s, 'path', { d: `M${x1} ${y1}L${x2} ${y2}`, 'stroke-width': w });
 /** A thin stroked line or curve (motion marks). */
-const line = (s: SVGSVGElement, d: string, w = 1.5) => add(s, 'path', { d, 'stroke-width': w });
-const blob = (s: SVGSVGElement, x: number, y: number, w: number, h: number, r: number, transform?: string) =>
-  add(s, 'rect', { x, y, width: w, height: h, rx: r, class: 'fill', ...(transform ? { transform } : {}) });
-const dot = (s: SVGSVGElement, cx: number, cy: number, r: number) => add(s, 'circle', { cx, cy, r, class: 'fill' });
+const line = (s: SVGElement, d: string, w = 1.5) => add(s, 'path', { d, 'stroke-width': w });
+const blob = (s: SVGElement, x: number, y: number, w: number, h: number, r: number) => add(s, 'rect', { x, y, width: w, height: h, rx: r, class: 'fill' });
+const dot = (s: SVGElement, cx: number, cy: number, r: number) => add(s, 'circle', { cx, cy, r, class: 'fill' });
 
 /** A four-pointed sparkle centred on (x, y). */
-function sparkle(s: SVGSVGElement, x: number, y: number, r: number): void {
+function sparkle(s: SVGElement, x: number, y: number, r: number): void {
   const k = r * 0.28;
   add(s, 'path', { d: `M${x} ${y - r}Q${x + k} ${y - k} ${x + r} ${y}Q${x + k} ${y + k} ${x} ${y + r}Q${x - k} ${y + k} ${x - r} ${y}Q${x - k} ${y - k} ${x} ${y - r}Z`, class: 'fill' });
+}
+
+/** An open right hand, palm out, fingers up, thumb to the left; about 13 x 17 around (12.5, 12). */
+function hand(s: SVGElement): void {
+  bar(s, 9, 12, 9, 5.4, 2.3);
+  bar(s, 11.6, 12, 11.6, 4.3, 2.3);
+  bar(s, 14.2, 12, 14.2, 5, 2.3);
+  bar(s, 16.7, 12.6, 16.7, 7.2, 2.1);
+  bar(s, 7.9, 14.8, 5.2, 10.9, 2.4);
+  blob(s, 7.7, 10.2, 10.2, 9.6, 3.4);
 }
 
 export function emoteGlyph(e: EmoteId): SVGSVGElement {
@@ -52,14 +62,9 @@ export function emoteGlyph(e: EmoteId): SVGSVGElement {
   switch (e) {
     case 'wave':
       // An open hand held up, and the air it moves.
-      bar(s, 9, 12, 9, 5.4, 2.3);
-      bar(s, 11.6, 12, 11.6, 4.3, 2.3);
-      bar(s, 14.2, 12, 14.2, 5, 2.3);
-      bar(s, 16.7, 12.6, 16.7, 7.2, 2.1);
-      bar(s, 7.9, 14.8, 5.2, 10.9, 2.4);
-      blob(s, 7.7, 10.2, 10.2, 9.6, 3.4);
+      hand(s);
       line(s, 'M19.7 5.1c.95.85 1.5 2 1.5 3.3');
-      line(s, 'M21.1 2.9c1.5 1.4 2.3 3.2 2.3 5.3');
+      line(s, 'M21 2.9c1.4 1.3 2.1 3.1 2.1 5.1');
       line(s, 'M4.6 5.2c-.3-1.1-.1-2.3.6-3.2');
       break;
     case 'cheer':
@@ -73,19 +78,15 @@ export function emoteGlyph(e: EmoteId): SVGSVGElement {
       sparkle(s, 3.4, 8.8, 1.9);
       sparkle(s, 20.6, 8.8, 1.9);
       break;
-    case 'clap': {
-      // Two hands meeting, and the sound of it.
-      const hand = (cx: number, lean: number, thumbX: number) => {
-        blob(s, cx - 2.6, 9, 5.2, 12, 2.6, `rotate(${lean} ${cx} 15)`);
-        bar(s, cx + (thumbX > cx ? 1.2 : -1.2), 15.6, thumbX, 12.4, 2.1);
-      };
-      hand(9.3, 14, 5.2);
-      hand(14.7, -14, 18.8);
-      line(s, 'M12 2.4v2.6');
-      line(s, 'M8.1 3.5l1.2 2');
-      line(s, 'M15.9 3.5l-1.2 2');
+    case 'clap':
+      // Two open hands leaning in to meet, and the sound of it. The right one is the left
+      // mirrored, so both thumbs are on the outside.
+      hand(add(s, 'g', { transform: 'translate(7.5 14) rotate(24) scale(0.73) translate(-12.5 -12)' }));
+      hand(add(s, 'g', { transform: 'translate(16.5 14) scale(-1 1) rotate(24) scale(0.73) translate(-12.5 -12)' }));
+      line(s, 'M12 1.8v2.4');
+      line(s, 'M8.4 2.8l1.1 1.9');
+      line(s, 'M15.6 2.8l-1.1 1.9');
       break;
-    }
     case 'thumbs':
       // A fist, thumb up, and the cuff of a sleeve.
       blob(s, 9.4, 10.4, 3.8, 9.6, 1.8);
