@@ -1,0 +1,3 @@
+/* At the card tables the banner sits above the dealer's cards instead of over them: below the
+   dealer's line (which ends at about 118px), above the chip rack. */
+.card-table > .celebrate { top: max(22%, 180px); }

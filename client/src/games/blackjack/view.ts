@@ -13,8 +13,12 @@ import { BETTING_CHIPS, formatMoney, type BetLimits, type Cents } from '../../..
 import type { BlackjackView, HandView, SpotView, BlackjackEvent } from '../../../../shared/src/games/blackjack/protocol.ts';
 import { handTotal, cardValue, type Move, type Outcome } from '../../../../shared/src/games/blackjack/rules.ts';
 import { BETTING_MS, INSURANCE_MS, TURN_MS } from '../../../../shared/src/games/blackjack/engine.ts';
+import { advise, insuranceAdvice } from '../../../../shared/src/games/blackjack/advice.ts';
 import { CardMesh, dealCard, flipCard } from '../../table/cards.ts';
 import { ChipStack, slideStack } from '../../table/chips.ts';
+import { celebrate } from '../../table/celebrate.ts';
+import { dropGlow, handGlow, raiseBanner } from './celebration.ts';
+import { roundMoment } from './moments.ts';
 import { tween, wait, ease } from '../../table/tween.ts';
 import { ChipTray, button, el } from '../../ui/kit.ts';
 import { serverNow } from '../../net/clock.ts';
@@ -82,6 +86,24 @@ function dealerBlackjack(v: BlackjackView): boolean {
   return v.dealer.length === 2 && v.dealer.every((c) => c !== null) && handTotal(v.dealer as Card[]).total === 21;
 }
 
+/**
+ * The dealer's label: "Dealer shows 10" while the hole card is down, then "Dealer 17", "Dealer 4/14"
+ * while a soft hand still has to draw (the dealer stands on every 17, soft ones too), or
+ * "Dealer blackjack".
+ */
+function dealerLabel(cards: readonly (Card | null)[], natural: boolean): { word: string; value: string; cls: string } | null {
+  const known = cards.filter((c): c is Card => c !== null);
+  if (known.length === 0) return null;
+  if (natural) return { word: 'Dealer', value: 'Blackjack', cls: ' bj' };
+  if (known.length === 1) {
+    const v = cardValue(known[0]!);
+    return { word: 'Dealer shows', value: v === 1 ? 'A' : String(v), cls: '' };
+  }
+  const t = handTotal(known);
+  const value = t.soft && t.total < 17 ? `${t.total - 10}/${t.total}` : String(t.total);
+  return { word: 'Dealer', value, cls: t.total > 21 ? ' bust' : '' };
+}
+
 export class BlackjackTable implements TableView {
   private readonly root: THREE.Group;
   private readonly felt = playFelt();
@@ -118,6 +140,10 @@ export class BlackjackTable implements TableView {
   private readonly timerLeft: SVGCircleElement;
   private timerObj: CSS2DObject | null = null;
   private readonly onPointer: (e: PointerEvent) => void;
+  private readonly offTips: () => void;
+  private readonly lowerBanner: () => void;
+  /** A decision is on its way to the server: its tip stays down until the next view arrives. */
+  private acted = false;
 
   constructor(private readonly ctx: TableViewCtx) {
     this.root = new THREE.Group();
@@ -148,12 +174,12 @@ export class BlackjackTable implements TableView {
     this.tray.root.classList.add('bj-tray');
 
     for (const m of ['hit', 'stand', 'double', 'split', 'surrender'] as Move[]) {
-      const b = button(MOVE_LABEL[m], () => this.act({ type: m }), { key: MOVE_KEYS[m], cls: m === 'stand' ? 'primary' : '' });
+      const b = button(MOVE_LABEL[m], () => this.decide({ type: m }), { key: MOVE_KEYS[m], cls: m === 'stand' ? 'primary' : '' });
       this.moveButtons.set(m, b);
       this.actions.append(b);
     }
-    this.insureYes = button('Insure', () => this.act({ type: 'insurance', take: true }), { key: 'Y' });
-    this.insureNo = button('No insurance', () => this.act({ type: 'insurance', take: false }), { key: 'N', cls: 'ghost' });
+    this.insureYes = button('Insure', () => this.decide({ type: 'insurance', take: true }), { key: 'Y' });
+    this.insureNo = button('No insurance', () => this.decide({ type: 'insurance', take: false }), { key: 'N', cls: 'ghost' });
     this.insure.append(this.insureLabel, this.insureYes, this.insureNo);
 
     this.timer = document.createElementNS(SVG, 'svg');
@@ -179,6 +205,8 @@ export class BlackjackTable implements TableView {
       if (hit?.region === `spot:${this.seat}` && this.canBet()) this.act({ type: 'bet', amount: this.tray.selected.value });
     };
     addEventListener('pointerdown', this.onPointer);
+    this.offTips = ctx.tips.subscribe(() => this.renderTip());
+    this.lowerBanner = raiseBanner(ctx.ui);
   }
 
   // ------------------------------------------------------------------------------------------
@@ -224,6 +252,8 @@ export class BlackjackTable implements TableView {
   }
 
   onError(): void {
+    // A refused decision is still the player's to make.
+    this.acted = false;
     this.updateControls();
   }
 
@@ -232,6 +262,13 @@ export class BlackjackTable implements TableView {
 
   private act(a: unknown): void {
     this.ctx.link.act(a);
+  }
+
+  /** A move or an insurance answer: once it's sent, its tip has served. */
+  private decide(a: { type: string; take?: boolean }): void {
+    this.acted = true;
+    this.renderTip();
+    this.act(a);
   }
 
   private canBet(): boolean {
@@ -275,7 +312,7 @@ export class BlackjackTable implements TableView {
     if (!this.actions.hidden && v) {
       const move = (Object.keys(MOVE_KEYS) as Move[]).find((m) => MOVE_KEYS[m].toLowerCase() === k);
       if (move) {
-        if (!this.moveButtons.get(move)!.disabled) this.act({ type: move });
+        if (!this.moveButtons.get(move)!.disabled) this.decide({ type: move });
         return true;
       }
     }
@@ -298,6 +335,7 @@ export class BlackjackTable implements TableView {
 
   private sync(v: BlackjackView): void {
     this.v = v;
+    this.acted = false;
     this.spots = structuredClone(v.spots);
     this.dealer = [...v.dealer];
     if (this.seat !== null && v.last[this.seat]) this.lastBet = v.last[this.seat]!;
@@ -370,6 +408,7 @@ export class BlackjackTable implements TableView {
     } else if (card && m.card !== card) m.setCard(card);
     m.position.copy(pos);
     m.rotation.set(card ? 0 : Math.PI, yaw, 0);
+    m.scale.setScalar(key.startsWith('d:') ? L.DEALER_CARD_SCALE : 1);
     return m;
   }
 
@@ -408,6 +447,20 @@ export class BlackjackTable implements TableView {
     return l.el;
   }
 
+  /** The dealer's total beside the up card ("Dealer shows 10", "Dealer 17"), redrawn as cards come. */
+  private dealerTotal(cards: readonly (Card | null)[], natural: boolean): boolean {
+    const d = dealerLabel(cards, natural);
+    if (!d) {
+      this.dropLabel('dealer');
+      return false;
+    }
+    const at = this.label('dealer', 'bj-dealer-at', '', L.DEALER_TOTAL.clone());
+    const box = el('div', `bj-dealer${d.cls}`);
+    box.append(el('span', 'bj-dealer-word', d.word), el('b', 'bj-dealer-value', d.value));
+    at.replaceChildren(box);
+    return true;
+  }
+
   private dropLabel(key: string): void {
     const l = this.labels.get(key);
     if (!l) return;
@@ -427,8 +480,7 @@ export class BlackjackTable implements TableView {
       keep.add(key);
       this.label(key, cls, text, at);
     };
-    const dealerText = totalText(v.dealer, dealerBlackjack(v));
-    if (dealerText) put('dealer', `bj-total dealer${dealerText === 'BJ' ? ' bj' : ''}`, dealerText, L.DEALER_TOTAL.clone());
+    if (this.dealerTotal(v.dealer, dealerBlackjack(v))) keep.add('dealer');
     for (const sp of v.spots) {
       const { out } = L.spotFrame(sp.seat);
       sp.hands.forEach((h, hi) => {
@@ -507,6 +559,33 @@ export class BlackjackTable implements TableView {
 
     this.renderMeters();
     this.placeTimer();
+    this.renderTip();
+  }
+
+  /**
+   * Tips: the basic-strategy move for the hand you're playing, rung on its button, or no to
+   * insurance and even money. Only while it's your decision; the buttons' own enabled state says
+   * which moves the table will take (the rules, and the chips to pay for a double or a split).
+   */
+  private renderTip(): void {
+    const v = this.v;
+    let text: string | null = null;
+    let pick: HTMLButtonElement | null = null;
+    if (this.ctx.tips.on && v && !this.acted) {
+      const spot = this.seat !== null ? v.spots.find((s) => s.seat === this.seat) : undefined;
+      const up = v.dealer[0];
+      if (!this.insure.hidden && spot) {
+        text = insuranceAdvice(isNatural(spot.hands[0]!));
+        pick = this.insureNo;
+      } else if (!this.actions.hidden && spot && v.turn && up) {
+        const open = (m: Move) => !this.moveButtons.get(m)!.disabled;
+        const a = advise(spot.hands[v.turn.hand]!.cards, up, { double: open('double'), split: open('split'), surrender: open('surrender') });
+        text = a.text;
+        pick = this.moveButtons.get(a.move)!;
+      }
+    }
+    for (const b of [...this.moveButtons.values(), this.insureYes, this.insureNo]) b.classList.toggle('tip-pick', b === pick);
+    this.ctx.kit.tip(text);
   }
 
   private renderMeters(): void {
@@ -587,7 +666,10 @@ export class BlackjackTable implements TableView {
     this.root.add(m);
     this.cards.set(key, m);
     this.ctx.sfx.play('card-deal');
+    // The dealer's own cards grow to their larger size on the way out of the shoe.
+    const grow = key.startsWith('d:') ? this.scaleTo(m, L.DEALER_CARD_SCALE, ms) : null;
     await dealCard(m, L.SHOE_MOUTH.clone(), to.pos, { faceUp: false, ms, yaw: to.yaw });
+    await grow;
     if (card) {
       m.setCard(card);
       await flipCard(m, true, 180);
@@ -606,6 +688,11 @@ export class BlackjackTable implements TableView {
   private async slideIn(key: string, amount: Cents, from: THREE.Vector3, to: THREE.Vector3, ms = 380): Promise<void> {
     const s = this.placeStack(key, amount, from);
     await slideStack(s, to, ms);
+  }
+
+  private scaleTo(m: CardMesh, to: number, ms: number): Promise<void> {
+    const from = m.scale.x;
+    return tween(ms, (k) => m.scale.setScalar(from + (to - from) * k), ease.out);
   }
 
   private moveCardTo(m: CardMesh, pos: THREE.Vector3, yaw: number, ms: number): Promise<void> {
@@ -636,6 +723,7 @@ export class BlackjackTable implements TableView {
     for (const m of this.cards.values()) {
       n++;
       const to = L.DISCARD.clone().setY(L.DISCARD.y + 0.02 + this.discards * 0.00032);
+      if (m.scale.x !== 1) void this.scaleTo(m, 1, 360);
       moves.push(dealCard(m, m.position.clone(), to, { faceUp: false, ms: 360, yaw: 0 }).then(() => void m.removeFromParent()));
     }
     for (const [key, s] of this.stacks) {
@@ -728,7 +816,7 @@ export class BlackjackTable implements TableView {
         if (i >= 2) await wait(420);
         this.dealer.push(e.card);
         await this.fly(`d:${i}`, e.card, L.dealerCard(i));
-        if (i >= 2) this.say(`Dealer has ${totalText(this.dealer)}`, 2000);
+        if (i >= 2) this.say(`Dealer has ${dealerLabel(this.dealer, false)!.value}`, 2000);
         this.renderLiveTotals();
         break;
       }
@@ -774,7 +862,7 @@ export class BlackjackTable implements TableView {
           await flipCard(m, true, 260);
         }
         const bj = this.dealer.length === 2 && handTotal(this.dealer as Card[]).total === 21;
-        this.say(bj ? 'Dealer blackjack' : `Dealer has ${totalText(this.dealer)}`, 2200);
+        this.say(bj ? 'Dealer blackjack' : `Dealer has ${dealerLabel(this.dealer, false)!.value}`, 2200);
         this.renderLiveTotals();
         await wait(300);
         break;
@@ -847,7 +935,10 @@ export class BlackjackTable implements TableView {
         break;
       case 'done': {
         const mine = me !== null ? next.spots.find((s) => s.seat === me) : undefined;
-        if (mine) this.lastNet = mine.returned - mine.wagered;
+        if (mine) {
+          this.lastNet = mine.returned - mine.wagered;
+          this.celebrateRound(mine);
+        }
         break;
       }
     }
@@ -881,8 +972,8 @@ export class BlackjackTable implements TableView {
 
   /** Totals and the turn marker while the animation is mid-round (from the local copy of the round). */
   private renderLiveTotals(): void {
-    const dealerText = totalText(this.dealer);
-    if (dealerText) this.label('dealer', 'bj-total dealer', dealerText, L.DEALER_TOTAL.clone());
+    const natural = this.dealer.length === 2 && this.dealer.every((c) => c !== null) && handTotal(this.dealer as Card[]).total === 21;
+    this.dealerTotal(this.dealer, natural);
     for (const sp of this.spots) {
       const { out } = L.spotFrame(sp.seat);
       sp.hands.forEach((h, hi) => {
@@ -895,6 +986,19 @@ export class BlackjackTable implements TableView {
     }
   }
 
+  /**
+   * Your round's moment, if it had one, with light under the hands that made it: one light under
+   * them all, since split hands lie side by side and two would overlap into a bright seam.
+   */
+  private celebrateRound(sp: SpotView): void {
+    const found = roundMoment(sp);
+    if (!found) return;
+    const cards = found.hands.flatMap((hi) => sp.hands[hi]!.cards.map((_, ci) => this.cards.get(`c:${sp.seat}:${hi}:${ci}`)).filter((m): m is CardMesh => !!m));
+    const stand = handGlow(cards, L.TOP_Y + 0.0013);
+    celebrate(this.ctx, { ...found.m, glow: stand ? [stand] : [] });
+    dropGlow(stand);
+  }
+
   private liveTurn(seat: number, hand: number): void {
     const sp = this.spots.find((s) => s.seat === seat);
     if (!sp) return;
@@ -904,6 +1008,9 @@ export class BlackjackTable implements TableView {
 
   dispose(): void {
     removeEventListener('pointerdown', this.onPointer);
+    this.offTips();
+    this.lowerBanner();
+    this.ctx.kit.tip(null);
     this.tray.root.remove();
     this.actions.remove();
     this.insure.remove();
