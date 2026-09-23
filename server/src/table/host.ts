@@ -342,7 +342,8 @@ export class CasinoTable extends DurableObject<Env> {
         const refused = this.checkPin(accountId, request.headers.get('x-casino-pin'), now);
         if (refused) {
           server.accept();
-          server.close(refused === 'locked' ? CLOSE.RATE_LIMITED : CLOSE.FORBIDDEN, refused === 'locked' ? 'too many tries' : 'wrong pin');
+          // FORBIDDEN either way: the client must not keep retrying a lobby it can't enter.
+          server.close(CLOSE.FORBIDDEN, refused === 'locked' ? 'too many tries' : 'wrong pin');
           return new Response(null, { status: 101, webSocket: client });
         }
       }

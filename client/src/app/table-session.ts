@@ -6,7 +6,7 @@ import { Socket } from '../net/socket.ts';
 import { socketUrl } from '../net/api.ts';
 import { observeServerTime } from '../net/clock.ts';
 import { finishAll } from '../table/tween.ts';
-import type { GameClientModule, TableLink, TableView, TableSnapshot } from '../games/contract.ts';
+import type { GameClientModule, SeatMsg, TableLink, TableView, TableSnapshot } from '../games/contract.ts';
 import type { TableStage } from '../table/stage.ts';
 import { UiKit, toast } from '../ui/kit.ts';
 import type { Sfx } from '../audio/sfx.ts';
@@ -21,6 +21,12 @@ export interface TableTarget {
   /** A private lobby's PIN; the table asks for it from anyone who isn't a member yet. */
   pin?: string;
   station?: string;
+}
+
+/** What the app around the table wants to hear besides the view (the HUD, the camera). */
+export interface TableHooks {
+  onTable?(snap: TableSnapshot): void;
+  onSeat?(msg: SeatMsg): void;
 }
 
 export class TableSession {
@@ -41,6 +47,7 @@ export class TableSession {
     readonly sfx: Sfx,
     onFrame: (fn: (dt: number) => void) => () => void,
     readonly onClosed: (code?: number) => void,
+    private readonly hooks: TableHooks = {},
   ) {
     this.kit = new UiKit(ui);
     const path = target.kind === 'solo' ? `solo/${target.game}` : `table/${target.tableId}`;
@@ -111,6 +118,7 @@ export class TableSession {
         this.snapshot = m;
         const view = this.mountIfNeeded();
         view.onTable(m);
+        this.hooks.onTable?.(m);
         if (m.you.status === 'watching' && (m.meta.mode === 'solo' || m.meta.started)) void this.promptBuyIn();
         break;
       }
@@ -126,6 +134,7 @@ export class TableSession {
       }
       case 'seat':
         this.view?.onSeat(m);
+        this.hooks.onSeat?.(m);
         if (m.status === 'watching' && this.snapshot?.meta.mode === 'solo' && m.stack === 0) void this.promptBuyIn();
         break;
       case 'balance':

@@ -3,7 +3,7 @@
 // the page's CSP blocks inline style attributes and injected <style> tags.
 
 import * as THREE from 'three';
-import { BETTING_CHIPS, formatMoney, type Cents, type ChipSpec } from '../../../shared/src/money.ts';
+import { BETTING_CHIPS, LOAN_AMOUNT, formatMoney, type Cents, type ChipSpec } from '../../../shared/src/money.ts';
 import { chipTrayCanvases } from '../table/chips.ts';
 import type { TableStage } from '../table/stage.ts';
 
@@ -64,6 +64,7 @@ export function askBuyIn(opts: { min: Cents; max: Cents; balance: Cents; suggest
     input.step = '1';
     input.value = String(Math.min(max, opts.suggested ?? picks[1] ?? opts.min) / 100);
     const note = el('p', '', `Balance ${formatMoney(opts.balance)}. This table takes ${formatMoney(opts.min)} to ${formatMoney(opts.max)}.`);
+    const broke = max < opts.min ? el('p', '', `The cashier lends ${formatMoney(LOAN_AMOUNT)} once your balance and the chips on every table are all gone.`) : null;
     const quick = el('div', 'row');
     for (const v of picks) quick.append(button(formatMoney(v), () => (input.value = String(v / 100)), { cls: 'ghost' }));
     let m: { close: () => void };
@@ -79,11 +80,15 @@ export function askBuyIn(opts: { min: Cents; max: Cents; balance: Cents; suggest
       }
       done(v);
     }, { cls: 'primary' });
-    m = modal(max < opts.min ? 'Not enough to sit down' : 'Buy in', [note, quick, input], max < opts.min ? [button('Close', () => done(null))] : [ok, button('Cancel', () => done(null), { cls: 'ghost' })]);
+    m = modal(max < opts.min ? 'Not enough to sit down' : 'Buy in', broke ? [note, broke] : [note, quick, input], max < opts.min ? [button('Close', () => done(null))] : [ok, button('Cancel', () => done(null), { cls: 'ghost' })]);
     input.focus();
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') ok.click();
-      if (e.key === 'Escape') done(null);
+      if (e.key === 'Escape') {
+        // Esc closes the prompt only; it mustn't also reach the floor and stand you up.
+        e.stopPropagation();
+        done(null);
+      }
     });
   });
 }

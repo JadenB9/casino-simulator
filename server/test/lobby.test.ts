@@ -795,7 +795,7 @@ describe('host.ts gaps', () => {
     }
     // The sixth try is refused even with the right PIN, for a while.
     const { client: locked } = await connect(`table/${made.tableId}`, g.token, `&pin=${made.pin}`);
-    expect(await closedWith(locked!, 400)).toEqual({ code: 4008, reason: 'too many tries' });
+    expect(await closedWith(locked!, 400)).toEqual({ code: 4005, reason: 'too many tries' });
     const [, snap] = await enter(b, made.tableId, made.pin);
     expect(snap.members.map((m: Member) => m.accountId)).toContain(b.id);
   });
