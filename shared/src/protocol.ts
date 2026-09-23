@@ -321,6 +321,9 @@ export const MAX_TABLE_FRAME = 4096;
 export const CHAT_MAX = 200;
 /** Lines a room keeps for whoever arrives next. */
 export const CHAT_HISTORY = 30;
+/** Lines one account may say in a burst, then lines per second after it (per room). */
+export const CHAT_BURST = 3;
+export const CHAT_PER_S = 1;
 
 export interface ChatLine {
   /** Counts up by one per line in its room, so a reconnect's backlog can skip lines already shown. */

@@ -15,13 +15,11 @@
 // The floor's socket plumbing is FloorChat, at the bottom; tables use ChatRoom directly
 // (table/host.ts).
 
-import { CHAT_HISTORY, CHAT_MAX, CLOSE, cleanChat, type ChatLine, type ChatServerMsg, type FloorServerMsg } from '../../../shared/src/protocol.ts';
+import { CHAT_BURST, CHAT_HISTORY, CHAT_MAX, CHAT_PER_S, CLOSE, cleanChat, type ChatLine, type ChatServerMsg, type FloorServerMsg } from '../../../shared/src/protocol.ts';
 import { Bucket } from '../ratelimit.ts';
 import type { FloorAtt } from './presence.ts';
 
-/** Lines in a burst, then lines per second after it. The client keeps the same count. */
-export const CHAT_BURST = 3;
-export const CHAT_PER_S = 1;
+export { CHAT_BURST, CHAT_PER_S };
 /** Refused lines that earn a mute, when each comes within STRIKE_MS of the one before. */
 export const STRIKES = 5;
 export const STRIKE_MS = 30_000;
