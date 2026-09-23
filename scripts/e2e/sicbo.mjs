@@ -59,7 +59,7 @@ await shot('0-empty');
 if (quick) {
   console.log(JSON.stringify({ errors: errors.slice(0, 10) }, null, 1));
   await browser.close();
-  process.exit(0);
+  process.exit(errors.length ? 1 : 0);
 }
 
 const at = (key) => page.evaluate((k) => window.casino.table.view.debug.screenOf(k), key);
@@ -136,6 +136,7 @@ await shot('6-triple');
 await until(() => !window.casino.table.view.debug.state().animating);
 console.log(JSON.stringify({ errors: errors.slice(0, 10) }, null, 1));
 await browser.close();
+process.exit(errors.length ? 1 : 0);
 
 /**
  * Multiplayer through the real table host: two players in a lobby, the leader starts, both bet,

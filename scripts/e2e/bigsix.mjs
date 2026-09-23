@@ -63,7 +63,7 @@ await shot('0-empty');
 if (flag('--quick')) {
   console.log(JSON.stringify({ errors: errors.slice(0, 10) }, null, 1));
   await browser.close();
-  process.exit(0);
+  process.exit(errors.length ? 1 : 0);
 }
 
 const at = (key) => page.evaluate((k) => window.casino.table.view.debug.screenOf(k), key);
@@ -133,9 +133,11 @@ await until(() => !!document.querySelector('.celebrate'), 30000);
 await page.waitForTimeout(700);
 await shot('9-star-celebrate');
 await until(() => !window.casino.table.view.debug.state().animating, 90000);
-console.log(JSON.stringify({ starShows: (await state()).shows, errors: errors.slice(0, 10) }, null, 1));
+const starShows = (await state()).shows;
+console.log(JSON.stringify({ starShows, errors: errors.slice(0, 10) }, null, 1));
 await browser.close();
-if (!ok) process.exit(1);
+// Fail on a clapper off the drawn stop (the live spin, or the Star at stop 0) or on page errors.
+if (!ok || starShows !== 0 || errors.length) process.exit(1);
 
 /**
  * Multiplayer through the real table host: two players in a lobby, the leader starts, both bet,
