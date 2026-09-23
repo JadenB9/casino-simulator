@@ -62,12 +62,24 @@ export interface FloorEvents {
 
 type Listeners = { [K in keyof FloorEvents]: Set<FloorEvents[K]> };
 
+/** What FloorLink needs from a socket; the real one reconnects on its own (net/socket.ts). */
+export interface FloorTransport {
+  send(msg: unknown): boolean;
+  close(): void;
+}
+
+export interface FloorLinkOptions {
+  url?: () => string;
+  /** Replace the socket (tests drive FloorLink without a network this way). */
+  open?: (onMessage: (msg: unknown) => void, onState: (state: SocketState, code?: number) => void) => FloorTransport;
+}
+
 export class FloorLink {
   readonly players = new Map<number, RemotePlayer>();
   /** Us, as the server last described us (null until the first hello). */
   you: PlayerInfo | null = null;
   onlineCount = 0;
-  private readonly socket: Socket;
+  private readonly socket: FloorTransport;
   private readonly listeners: Listeners = { hello: new Set(), join: new Set(), leave: new Set(), look: new Set(), at: new Set(), online: new Set(), state: new Set() };
   private connected = false;
   private placed = false;
@@ -77,15 +89,15 @@ export class FloorLink {
   private walking = false;
   private frame: { x: number; z: number; r: number } | null = null;
 
-  constructor(opts: { url?: () => string } = {}) {
-    this.socket = new Socket({
-      url: opts.url ?? (() => socketUrl('floor')),
-      onMessage: (m) => this.receive(m as FloorServerMsg),
-      onState: (state, code) => {
-        if (state !== 'open') this.connected = false;
-        this.emit('state', state, code);
-      },
-    });
+  constructor(opts: FloorLinkOptions = {}) {
+    const onMessage = (m: unknown) => this.receive(m as FloorServerMsg);
+    const onState = (state: SocketState, code?: number) => {
+      if (state !== 'open') this.connected = false;
+      this.emit('state', state, code);
+    };
+    this.socket = opts.open
+      ? opts.open(onMessage, onState)
+      : new Socket({ url: opts.url ?? (() => socketUrl('floor')), onMessage, onState });
   }
 
   on<K extends keyof FloorEvents>(event: K, fn: FloorEvents[K]): () => void {
