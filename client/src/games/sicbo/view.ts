@@ -39,7 +39,7 @@ const SETTLE_MS = 1_300;
 
 /** Betting: the whole layout from above the players' rail. The shake: close on the dome. */
 export const BET_POSE: Pose = { position: [0, 1.95, 1.18], target: [0, TOP_Y, 0.08] };
-const DOME_POSE: Pose = { position: [0, TOP_Y + 0.34, SHAKER_Z + 0.4], target: [0, TOP_Y + 0.05, SHAKER_Z] };
+const DOME_POSE: Pose = { position: [0, TOP_Y + 0.29, SHAKER_Z + 0.33], target: [0, TOP_Y + 0.07, SHAKER_Z] };
 
 export const SEATS: { position: [number, number, number]; yaw: number }[] = [
   ...[-0.975, -0.65, -0.325, 0, 0.325, 0.65, 0.975].map((x) => ({ position: [x, 0, TABLE_D / 2 + 0.32] as [number, number, number], yaw: Math.PI })),
@@ -59,7 +59,7 @@ export function advice(bets: Record<string, Cents>): string {
     if (!worst || edge > worst.edge) worst = { key, edge };
   }
   if (worst && !EVEN_MONEY.includes(worst.key)) return `House edge on ${spotName(spotByKey(worst.key)!)}: ${pct(worst.edge)}. On Small or Big: 2.78%.`;
-  return 'Best odds: Small, Big, Odd or Even, house edge 2.78%. Totals, doubles and triples: 9.7% to 19%.';
+  return 'Best bets: Small, Big, Odd, Even at 2.78%. Totals and triples cost 9.7% to 19%.';
 }
 
 export function mountSicBo(ctx: TableViewCtx): TableView {
@@ -105,7 +105,7 @@ export function mountSicBo(ctx: TableViewCtx): TableView {
   const glowMat = (color: string, opacity: number) => new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthWrite: false, blending: THREE.AdditiveBlending });
   const hoverMat = glowMat('#ffe0a0', 0.2);
   const litMat = glowMat('#ffe9b8', 0.3);
-  const bestMat = glowMat('#f1d59a', 0.14);
+  const bestMat = glowMat('#ffd98a', 0.6);
   const hoverGroup = new THREE.Group();
   const litGroup = new THREE.Group();
   const bestGroup = new THREE.Group();
@@ -117,7 +117,14 @@ export function mountSicBo(ctx: TableViewCtx): TableView {
     m.position.set(r.x, TOP_Y + 0.0013, r.z);
     return m;
   };
-  for (const key of EVEN_MONEY) bestGroup.add(rectMesh(areaOf(key)!.rect, bestMat));
+  // the tips' best bets get a lit border, which leaves the printing under it as it is
+  for (const key of EVEN_MONEY) {
+    const r = areaOf(key)!.rect;
+    const t = 0.006;
+    for (const [x, z, w, d] of [[r.x, r.z - r.d / 2 + t, r.w, t], [r.x, r.z + r.d / 2 - t, r.w, t], [r.x - r.w / 2 + t, r.z, t, r.d], [r.x + r.w / 2 - t, r.z, t, r.d]] as const) {
+      bestGroup.add(rectMesh({ x, z, w: w + 0.004, d: d + 0.004 }, bestMat, 0.004));
+    }
+  }
   bestGroup.visible = false;
   const ghostMat = new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.5, depthWrite: false });
   const ghost = new THREE.Mesh(new THREE.CylinderGeometry(CHIP_R, CHIP_R, CHIP_H, 32), ghostMat);
@@ -164,7 +171,8 @@ export function mountSicBo(ctx: TableViewCtx): TableView {
   const clock = new Clock();
   const players = new Players();
   ctx.ui.append(history.root, meters.root, tip.root, players.root);
-  const boardObj = stage.label(board.root, new THREE.Vector3(0, TOP_Y + 0.27, SHAKER_Z - 0.02));
+  // the result board stands over the game's name, left of the dome, clear of the dealer's line and the banners
+  const boardObj = stage.label(board.root, new THREE.Vector3(-0.66, TOP_Y + 0.1, SHAKER_Z + 0.03));
   const clockObj = stage.label(clock.root, new THREE.Vector3(-0.34, TOP_Y + 0.12, SHAKER_Z + 0.03));
 
   const tray = new ChipTray({
@@ -415,20 +423,20 @@ export function mountSicBo(ctx: TableViewCtx): TableView {
 
   async function settleTable(dice: Dice, seats: Record<number, SeatSettle>, next: SicBoView): Promise<void> {
     history.set(next.history);
-    board.show(dice);
     ctx.kit.say(callRoll(dice), 3800);
     const mine = mySeat !== null ? seats[mySeat] : undefined;
     lastNet = Object.fromEntries(Object.entries(seats).map(([k, v]) => [Number(k), v.returned - v.wagered]));
     const net = mine ? mine.returned - mine.wagered : 0;
+
+    // a moment on the dice, then back over the layout, where the winning boxes light up
+    await wait(1_100);
+    if (disposed) return;
+    board.show(dice);
     if (mine) {
       if (net > 0) board.setNet(`You won ${formatMoney(net)}`, 'win');
       else if (mine.returned > 0) board.setNet(`Paid ${formatMoney(mine.returned)} · net ${net === 0 ? 'even' : '−' + formatMoney(-net)}`, 'quiet');
       else board.setNet('No winning bets', 'quiet');
     }
-
-    // a moment on the dice, then back over the layout, where the winning boxes light up
-    await wait(1_100);
-    if (disposed) return;
     await glideHome(850);
     if (disposed) return;
     showLit(dice);
@@ -627,7 +635,7 @@ export function mountSicBo(ctx: TableViewCtx): TableView {
       updateClock();
       const t = performance.now();
       if (litGroup.children.length) litMat.opacity = 0.24 + 0.1 * (0.5 + 0.5 * Math.sin(t / 260));
-      if (bestGroup.visible) bestMat.opacity = 0.1 + 0.07 * (0.5 + 0.5 * Math.sin(t / 420));
+      if (bestGroup.visible) bestMat.opacity = 0.45 + 0.3 * (0.5 + 0.5 * Math.sin(t / 420));
     },
 
     dispose() {
@@ -660,7 +668,7 @@ export function mountSicBo(ctx: TableViewCtx): TableView {
         const p = scene.localToWorld(new THREE.Vector3(a[0], TOP_Y, a[1])).project(stage.engine.camera);
         return { x: ((p.x + 1) / 2) * innerWidth, y: ((1 - p.y) / 2) * innerHeight };
       },
-      state: () => ({ mode, mySeat, phase: view?.phase, round: view?.round, animating, rolling: shaker.rolling, bets: myBets(), history: view?.history ?? [], stack, lit: litGroup.children.length }),
+      state: () => ({ mode, mySeat, phase: view?.phase, round: view?.round, animating, rolling: shaker.rolling, shake: shaker.progress, bets: myBets(), history: view?.history ?? [], stack, lit: litGroup.children.length }),
     },
   };
   return tableView;

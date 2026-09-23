@@ -42,23 +42,53 @@ export function buildShaker(quality: Quality): THREE.Group {
   leds.name = 'sicbo-leds';
   leds.rotation.x = -Math.PI / 2;
   leds.position.y = BED_Y - 0.0035;
-  const bed = new THREE.Mesh(new THREE.CircleGeometry(DOME_R + 0.004, seg), new THREE.MeshStandardMaterial({ color: '#5e0f15', roughness: 0.95 }));
+  const bed = new THREE.Mesh(new THREE.CircleGeometry(DOME_R + 0.004, seg), new THREE.MeshStandardMaterial({ color: '#4a0b10', roughness: 0.95 }));
   bed.rotation.x = -Math.PI / 2;
   bed.position.y = BED_Y - 0.003;
 
-  // the dome: a thin, almost clear shell that catches the light at its edges
+  // the dome: a thin, almost clear shell with the light caught in it, brighter toward its edges
+  // the way curved glass is (a fresnel rim over a glossy, nearly transparent skin)
   const dome = new THREE.Group();
   dome.name = 'sicbo-dome';
+  const shell = new THREE.SphereGeometry(DOME_R, seg, Math.round(seg / 2), 0, Math.PI * 2, 0, Math.PI / 2);
   const glass = new THREE.Mesh(
-    new THREE.SphereGeometry(DOME_R, seg, Math.round(seg / 2), 0, Math.PI * 2, 0, Math.PI / 2),
-    new THREE.MeshPhysicalMaterial({ color: '#f4f7fa', roughness: 0.04, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.05, transparent: true, opacity: 0.14, depthWrite: false, side: THREE.DoubleSide }),
+    shell,
+    new THREE.MeshPhysicalMaterial({ color: '#f4f7fa', roughness: 0.03, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.04, transparent: true, opacity: 0.1, depthWrite: false }),
   );
-  glass.renderOrder = 2;
-  glass.position.y = BED_Y - 0.003;
+  const rim = new THREE.Mesh(shell, new THREE.ShaderMaterial({
+    uniforms: { tint: { value: new THREE.Color('#e9f1ff') }, base: { value: 0.015 }, edge: { value: 0.5 } },
+    vertexShader: `
+      varying vec3 vN;
+      varying vec3 vV;
+      void main() {
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        vN = normalize(normalMatrix * normal);
+        vV = normalize(-mv.xyz);
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: `
+      uniform vec3 tint;
+      uniform float base;
+      uniform float edge;
+      varying vec3 vN;
+      varying vec3 vV;
+      void main() {
+        float f = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), 3.0);
+        gl_FragColor = vec4(tint, base + edge * f);
+      }`,
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+  }));
+  for (const m of [glass, rim]) {
+    m.renderOrder = 2;
+    m.position.y = BED_Y - 0.003;
+  }
   const band = new THREE.Mesh(new THREE.TorusGeometry(DOME_R + 0.002, 0.004, 10, seg), brass);
   band.rotation.x = Math.PI / 2;
   band.position.y = BED_Y - 0.001;
-  dome.add(glass, band);
+  dome.add(glass, rim, band);
 
   g.add(pedestal, collar, leds, bed, dome);
   [2, 5, 6].forEach((face, i) => {
@@ -88,6 +118,8 @@ export class Shaker {
   private readonly dome: THREE.Object3D;
   private readonly leds: THREE.MeshStandardMaterial;
   rolling = false;
+  /** How far through the shake (0 to 1) the current roll is, for the headless checks. */
+  progress = 0;
 
   constructor(readonly group: THREE.Object3D, private readonly sfx: Sfx) {
     this.dice = [0, 1, 2].map((i) => group.getObjectByName(`sicbo-die-${i}`)!);
@@ -143,6 +175,7 @@ export class Shaker {
     if (T > 1.6) this.sfx.play('dice-shake', { volume: 0.45, rate: 1.2, delay: 1.0 });
     const turn = new THREE.Quaternion();
     await tween(shakeMs, (k) => {
+      this.progress = k;
       const t = k * T;
       // the vibration builds for a moment and fades away at the end
       const env = Math.min(1, t / 0.25) * Math.min(1, (T - t) / 0.35 + 0.2);
@@ -155,7 +188,7 @@ export class Shaker {
       }
       this.dome.position.y = 0.0012 * env * Math.sin(t * Math.PI * 2 * 15);
       this.dome.rotation.z = 0.006 * env * Math.sin(t * Math.PI * 2 * 9);
-      this.leds.emissiveIntensity = 0.25 + 1.9 * env * (0.75 + 0.25 * Math.sin(t * 40));
+      this.leds.emissiveIntensity = 0.25 + 1.1 * env * (0.75 + 0.25 * Math.sin(t * 40));
     }, ease.linear);
     this.dome.position.set(0, 0, 0);
     this.dome.rotation.set(0, 0, 0);
@@ -163,9 +196,10 @@ export class Shaker {
     // the vibration stops and each die bounces to rest on its face
     this.sfx.play('dice-throw', { volume: 0.3, rate: 1.5 });
     this.sfx.play('dice-throw', { volume: 0.22, rate: 1.7, delay: 0.25 });
-    const glow = tween(settleMs, (k) => (this.leds.emissiveIntensity = 0.25 + 1.2 * (1 - k)), ease.out);
+    const glow = tween(settleMs, (k) => (this.leds.emissiveIntensity = 0.25 + 0.8 * (1 - k)), ease.out);
     await Promise.all([glow, ...this.dice.map((die, i) => this.settle(die, this.rest(i, round, faces[i]!), settleMs - i * 90, [1, -1, 0.7][i]!))]);
     this.rolling = false;
+    this.progress = 0;
   }
 
   /** Two or three shrinking hops from where the shake left the die, turning onto its face on the last. */
