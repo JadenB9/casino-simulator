@@ -1,0 +1,17 @@
+/* Profile: a wide sheet, summary tiles across the top, the per-game table on the left, where
+   your chips are and your loans on the right. */
+
+.profile-sheet { width: min(1000px, 100%); }
+.profile-stats { margin-bottom: 24px; }
+.profile-cols { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 36px; align-items: start; }
+.profile-main, .profile-side { min-width: 0; }
+.profile-side .data td { font-size: 15px; }
+.data td .where { margin-left: 8px; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); }
+
+@media (max-width: 860px) {
+  .profile-cols { grid-template-columns: 1fr; gap: 6px; }
+  .profile-side .section-label:first-child { margin-top: 22px; }
+}
+@media (max-width: 560px) {
+  .profile-sheet .data th:nth-child(3), .profile-sheet .games td:nth-child(3) { display: none; }
+}

@@ -1,0 +1,7 @@
+/* Dev page only: the row of screen links, bottom right (the bottom-left corner stays clear). */
+
+.dev-dock { position: fixed; right: 12px; bottom: 12px; z-index: 60; display: flex; flex-wrap: wrap; gap: 2px; max-width: calc(100vw - 180px); padding: 4px; border: 1px solid var(--line); border-radius: 6px; background: rgba(10, 8, 7, 0.86); font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; }
+.dev-dock a { padding: 3px 7px; border-radius: 4px; color: var(--ink-3); text-decoration: none; }
+.dev-dock a:hover { color: var(--ink); }
+.dev-dock a.on { color: #1d140a; background: var(--brass); }
+.dev-error { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); padding: 8px 14px; border: 1px solid var(--lose); border-radius: 6px; background: #1a0f0d; color: var(--lose); }
