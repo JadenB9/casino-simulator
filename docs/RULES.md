@@ -3,7 +3,10 @@
 Every game in the casino follows standard Las Vegas Strip rules and pays real odds. This page
 is the summary. The full rules, every paytable, the strategy charts and the sources are in:
 
+- [rules/table-games.md](rules/table-games.md): blackjack, roulette, craps, baccarat, Sic Bo
+||||||| 9239b79
 - [rules/table-games.md](rules/table-games.md): blackjack, roulette, craps, baccarat
+- [rules/table-games.md](rules/table-games.md): blackjack, roulette, craps, baccarat, Casino War
 - [rules/cards-and-machines.md](rules/cards-and-machines.md): Three Card Poker, video poker,
   slots, Texas Hold'em
 - [math/](math/): the dependency-free Node scripts that enumerate each game exactly
@@ -48,12 +51,28 @@ inside 3. Seeds are fixed, so `npm run test:mc` reproduces these exactly.
 | | | Tie | 14.360% | 14.300% (10M coups, z −0.72) |
 | Three Card Poker | dealer qualifies with queen high; Ante Bonus 5-4-1; Pair Plus 40-30-6-3-1 | Ante and Play, Q-6-4 strategy | 3.373% | 3.384% (10M hands, z +0.20) |
 | | | Pair Plus | 7.276% | 7.264% (10M hands, z −0.14) |
+| Casino War | 6 decks, cover card a quarter from the bottom; on a tie surrender half or go to war (raise equal to the bet, burn three); a tie in the war pays the raise 2:1; Tie bet 10:1 | Bet, going to war on every tie | 2.330% | 2.323% (10M rounds, z −0.21) |
+| | | Bet, surrendering every tie | 3.698% | 3.719% (10M rounds, z +0.69) |
+| | | Tie bet | 18.650% | 18.642% (10M rounds, z −0.08) |
 | Video poker | Jacks or Better 9/6, 5 coins, optimal hold list | | 99.544% RTP | 99.447% (20M hands, z −1.00) |
-| Slots | three machines, published reel strips | A "Classic Sevens" (3 reels) | 94.428% RTP | 94.563% (10M spins, z +0.65) |
+| Slots | six machines, published reel strips | A "Classic Sevens" (3 reels) | 94.428% RTP | 94.563% (10M spins, z +0.65) |
 | | | B "Neon Nights" (5x3, 20 lines, free spins) | 95.374% RTP | 95.325% (10M spins, z −0.41) |
 | | | C "5x Wild" (3 reels, high volatility) | 89.820% RTP | 89.968% (50M spins, z +0.39) |
+| Sic Bo | three dice in an automated shaker, US (Atlantic City) pay table, Odd and Even offered | Small, Big, Odd, Even (lose to any triple) | 2.778% | 2.755%, 2.781%, 2.754%, 2.782% (4M rolls, z −0.46, +0.06, −0.48, +0.08) |
+| | | Single number (1, 2 or 3 to 1) | 7.870% | 7.814% on 4 (4M rolls, z −1.01) |
+| | | Totals: 7 or 14 at 12:1 (best) to 9 or 12 at 6:1 (worst) | 9.722% to 18.981% | 9.507% on 7, 19.080% on 9 (4M rolls, z −1.30, +0.88) |
+| | | Specific triple (180:1) / any triple (30:1) | 16.204% / 13.889% | 15.799% on 6-6-6, 14.197% (4M rolls, z −0.66, +1.21) |
+| | | Double (10:1) / two-dice combination (5:1) | 18.519% / 16.667% | 18.524% on 5-5, 16.857% on 2-5 (4M rolls, z +0.04, +1.84) |
+||||||| 98527a4
+| | | D "Diamond Line" (3 reels, doubling diamond wild) | 94.983% RTP | 94.929% (10M spins, z −0.28) |
+| | | E "Lucky Cherries" (5x3, 10 lines, Cherry Wheel) | 94.028% RTP | 94.126% (10M spins, z +0.90) |
+| | | F "Gold Rush" (5x4, 40 lines, sticky-wild free games) | 92.994% RTP | 93.138% (10M spins, z +1.22) |
 | Texas Hold'em | no-limit, blinds, Poker TDA rules, no rake | | no house edge | every seat within 1.2 SE of 0 (300K hands, 6 seats); deals uniform (chi-square z 0.45, 2M deals) |
 
 The blackjack figure is for exactly these rules. The often-quoted 0.26-0.28% assumes aces can be
 resplit, which this table doesn't allow, and a cut card adds about 0.02 points over dealing each
 round from a fresh shoe (0.334%).
+
+The Casino War figure most often quoted, 2.88%, is for tables that pay a tie in the war only even
+money on the raise. Pennsylvania's rules and the Mirage pay it 2:1 (a bonus equal to the bet), which
+brings the edge down to 2.33%. Going to war always beats surrendering, whatever rank tied.

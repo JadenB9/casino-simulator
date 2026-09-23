@@ -19,6 +19,7 @@ import { GAMES } from '../games/index.ts';
 import { openTableFlow, PartyPanel, withParty, type TableChoice } from '../ui/lobby/index.ts';
 import { mountHud, mountLogin, mountMenu, openBank, openEditor, openProfile, openSettings, overlayCount, type Hud, type MenuHandle } from '../ui/menu/index.ts';
 import { isTyping } from '../ui/keyboard.ts';
+import { mountEmotes, openLeaderboard, socialApi, socialButton, type EmoteWheel } from '../ui/social/index.ts';
 import { button, modal, toast } from '../ui/kit.ts';
 import { ENGINES } from '../../../shared/src/games/index.ts';
 import { CLOSE, type Profile } from '../../../shared/src/protocol.ts';
@@ -64,6 +65,7 @@ class App {
   private link: FloorLink | null = null;
   private remotes: RemotePlayers | null = null;
   private hud: Hud | null = null;
+  private emotes: EmoteWheel | null = null;
   private menu: MenuHandle | null = null;
   private table: OpenTable | null = null;
   private passUsers = 0;
@@ -259,11 +261,19 @@ class App {
       onMenu: () => void this.backToMenu(),
     });
     this.hud.setOnline(this.link?.onlineCount ?? null);
+    // Emotes (G) and the leaderboards, in the HUD's right-hand bar ahead of the tips bulb.
+    this.emotes = mountEmotes({ root: this.ui, send: (e) => void this.link?.emote(e) });
+    const bar = this.hud.root.querySelector('.hud-right')!;
+    const first = bar.querySelector('.hud-btn');
+    bar.insertBefore(socialButton('emotes', 'Emotes (G)', () => this.emotes?.toggle()), first);
+    bar.insertBefore(socialButton('leaderboard', 'Leaderboards', () => openLeaderboard({ root: this.ui, api: socialApi })), first);
   }
 
   private async backToMenu(): Promise<void> {
     if (!this.hud) return;
     if (this.table) await this.leaveTable();
+    this.emotes?.dispose();
+    this.emotes = null;
     this.hud?.close();
     this.hud = null;
     this.showMenu();
@@ -443,6 +453,8 @@ class App {
     if (this.stopped) return;
     this.stopped = true;
     this.table?.session.close();
+    this.emotes?.dispose();
+    this.emotes = null;
     this.disconnectFloor();
     this.world.player.setEnabled(false);
     modal(title, [text], [button('Reload', () => location.reload(), { cls: 'primary' })]);

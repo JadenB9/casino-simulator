@@ -55,7 +55,9 @@ export class Die extends THREE.Mesh {
 
 /** Throw a die from `from` to rest at `to`, ending with `face` up. */
 export async function throwDie(die: Die, from: THREE.Vector3, to: THREE.Vector3, face: number, ms = 1600, spin = 1): Promise<void> {
-  const target = topFor(face).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), spin * 1.3));
+  // The yaw turns the die about the table's up axis after the rolled face is on top (the other
+  // order turned it about its own axis first and showed a different number for 2 to 5).
+  const target = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), spin * 1.3).multiply(topFor(face));
   const wild = new THREE.Quaternion().setFromEuler(new THREE.Euler(9 * spin, 7, 5 * spin));
   const start = die.quaternion.clone();
   await tween(ms, (k) => {

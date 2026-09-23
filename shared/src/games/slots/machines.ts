@@ -1,11 +1,13 @@
-// The three machines' PAR sheets as data: reel strips, weights, pays, lines and bets. The strips
+// The first three machines' PAR sheets as data: reel strips, weights, pays, lines and bets. The strips
 // and pays are copied from docs/math/slot-*.mjs, which stay the published source (see
 // docs/rules/cards-and-machines.md §3). The tests enumerate every stop combination through the
 // engine's own scoring and compare against the published returns, so a changed weight or pay
-// here can't slip through.
+// here can't slip through. Diamond Line, Lucky Cherries and Gold Rush came later and live in their
+// own files; lineup.ts puts all six together.
 
 import type { Cents } from '../../money.ts';
 
+/** The first three machines, which share the v1 cabinets and view. SlotId (lineup.ts) is all six. */
 export type MachineId = 'sevens' | 'neon' | 'wild';
 export const MACHINE_IDS: readonly MachineId[] = ['sevens', 'neon', 'wild'];
 
@@ -14,8 +16,8 @@ export function isMachineId(x: unknown): x is MachineId {
 }
 
 /** What every machine shares: its bets, and the published figures its help screen shows. */
-export interface MachineBase {
-  id: MachineId;
+export interface MachineBase<Id extends string = MachineId> {
+  id: Id;
   name: string;
   /** Coin values the player can pick, in cents, lowest first. */
   denoms: readonly Cents[];
@@ -38,7 +40,7 @@ export type WeightedStop<S extends string> = readonly [symbol: S, weight: number
 
 export type SevensCombo = 'three7' | 'three3B' | 'three2B' | 'three1B' | 'anyBar' | 'threeCH' | 'twoCH' | 'oneCH';
 
-export interface StepperMachine<S extends string, C extends string> extends MachineBase {
+export interface StepperMachine<S extends string, C extends string, Id extends string = MachineId> extends MachineBase<Id> {
   kind: 'stepper';
   virtualStops: number;
   /** [symbol, weight] for physical stops 0..21 on each reel. */
@@ -199,6 +201,6 @@ export type Machine = typeof SEVENS | typeof WILD | typeof NEON;
 export const MACHINES: Readonly<Record<MachineId, Machine>> = { sevens: SEVENS, neon: NEON, wild: WILD };
 
 /** The amount one spin costs: coins x denomination, times the lines on the 5-reel. */
-export function betOf(m: MachineBase, coins: number, denom: Cents): Cents {
+export function betOf(m: Pick<MachineBase<string>, 'lines'>, coins: number, denom: Cents): Cents {
   return m.lines * coins * denom;
 }

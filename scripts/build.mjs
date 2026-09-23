@@ -9,7 +9,7 @@
 //   npm run build -- --out ../j4den     # dist/ and the site repo
 
 import { execFileSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 
 const args = process.argv.slice(2);
@@ -53,4 +53,13 @@ const schema = readFileSync(join(root, 'server/migrations/0001_casino.sql'), 'ut
 if (!existsSync(mig)) writeFileSync(mig, schema);
 else if (readFileSync(mig, 'utf8') !== schema) console.warn('warning: 014_casino.sql in the site differs from server/migrations; migrations are append-only, add a new one');
 
-console.log(`\npublished to ${site}: frontend/public/casino, workers/casino/index.js, database/migrations/014_casino.sql`);
+// Later schema changes: server/migrations/000N_name.sql ships as 0(13+N)_casino_name.sql.
+for (const f of readdirSync(join(root, 'server/migrations')).filter((x) => /^\d{4}_.+\.sql$/.test(x) && !x.startsWith('0001_'))) {
+  const n = 13 + Number(f.slice(0, 4));
+  const target = join(site, 'database/migrations', `${String(n).padStart(3, '0')}_casino_${f.slice(5)}`);
+  const body = readFileSync(join(root, 'server/migrations', f), 'utf8');
+  if (!existsSync(target)) writeFileSync(target, body);
+  else if (readFileSync(target, 'utf8') !== body) console.warn(`warning: ${target} differs from server/migrations/${f}; add a new migration instead`);
+}
+
+console.log(`\npublished to ${site}: frontend/public/casino, workers/casino/index.js, database/migrations (014 and later)`);

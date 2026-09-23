@@ -49,7 +49,8 @@ function halo(stage: TableStage, target: THREE.Object3D, ms: number): void {
   const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.6, 1.25, 0.6), transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
   const ring = new THREE.Mesh(new THREE.PlaneGeometry(Math.max(size.x, 0.05) * 1.35, Math.max(size.z, 0.05) * 1.35), mat);
   ring.rotation.x = -Math.PI / 2;
-  ring.position.set(centre.x, centre.y - size.y / 2 + 0.001, centre.z);
+  // Just above the object's underside (under a flat card, not over its face).
+  ring.position.set(centre.x, centre.y - size.y / 2 + Math.min(0.001, size.y / 2), centre.z);
   stage.root.add(ring);
   const start = performance.now();
   const tick = () => {

@@ -29,6 +29,8 @@ import { Flight, OpenTrack, Rotor, TAU, DIMS, LAUNCH_W, BOUNCE_S } from './spin.
 import { LayoutChips, Pile, seatColor, CHIP_SCALE, type PileStyle } from './chips.ts';
 import { BallSound } from './sound.ts';
 import { History, Meters, Plaque, Tip, Clock, Players, type PlayerRow } from './hud.ts';
+import { rouletteAdvice, rouletteMoment } from './advice.ts';
+import { celebrate } from '../../table/celebrate.ts';
 
 const FELT_Y = TOP_Y + 0.0007;
 const CHIP_Y = TOP_Y + 0.0009;
@@ -271,7 +273,15 @@ function mountRoulette(ctx: TableViewCtx): TableView {
     if (rebetBtn) rebetBtn.disabled = !betting || !canRepeat;
     if (doubleBtn) doubleBtn.disabled = !betting || (!has && !canRepeat);
     meters.set({ bet: animating ? undefined : myTotal() });
+    refreshAdvice();
   }
+
+  /** Tips: which bet to skip (and a warning once it's down), while bets can still go on. */
+  function refreshAdvice(): void {
+    if (!ctx.tips.on || !canBet()) ctx.kit.tip(null);
+    else ctx.kit.tip(rouletteAdvice(variant, myBets()));
+  }
+  const unTips = ctx.tips.subscribe(() => refreshAdvice());
 
   // ------------------------------------------------------------------------------------------
   // Pointer: hover shows what a spot is and what it pays; a click puts the selected chip on it
@@ -590,6 +600,24 @@ function mountRoulette(ctx: TableViewCtx): TableView {
     }
     if (pays.length) ctx.sfx.play(net > 0 ? 'chips-stack' : 'chips-handle', { volume: 0.8 });
     await Promise.all(pays);
+    // a straight-up (or split or street) hit that beat the whole stake: light the number and the bet
+    const moment = mine && mySeat !== null ? rouletteMoment(variant, mine) : null;
+    const spot = moment && spotByKey(variant, moment.key);
+    if (moment && spot) {
+      // light the numbers the bet covered, the winning one among them: the kit rings an object's
+      // bounds 35% wider, so stand-ins that much smaller than each cell make the light fill it
+      const stands = rectsFor(variant, spot).map((r) => {
+        const m = new THREE.Mesh(plane);
+        m.visible = false;
+        m.rotation.x = -Math.PI / 2;
+        m.scale.set(r.w / 1.35, r.d / 1.35, 1);
+        m.position.set(r.x, TOP_Y + 0.0013, r.z);
+        scene.add(m);
+        return m;
+      });
+      celebrate({ stage, ui: ctx.ui, sfx: ctx.sfx }, { title: moment.title, sub: moment.sub, tier: moment.tier, glow: stands });
+      for (const m of stands) m.removeFromParent();
+    }
     if (mine && mine.returned > 0) lastWin = mine.returned;
     if (disposed) return;
     await wait(winners.length ? 1500 : 700);
@@ -758,6 +786,8 @@ function mountRoulette(ctx: TableViewCtx): TableView {
         camHome = null;
       }
       disposed = true;
+      unTips();
+      ctx.kit.tip(null);
       removeEventListener('pointermove', onMove);
       removeEventListener('pointerdown', onDown);
       canvas.removeEventListener('pointerleave', onLeave);

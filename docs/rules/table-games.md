@@ -1,6 +1,6 @@
 # Table Game Rules and Odds
 
-Blackjack, roulette, craps and baccarat as this casino deals them. For each game this page lists the
+Blackjack, roulette, craps, baccarat and Casino War as this casino deals them. For each game this page lists the
 house rules, every bet's payout, its house edge with a source, and the standard deviation (SD) per
 bet. The Monte Carlo tests use the SD to work out how many rounds they need.
 
@@ -751,6 +751,123 @@ Test definitions. These decide whether the published number applies.
 
 ---
 
+## 7. Casino War
+
+Researched 2026-09-23. Casino War is a high-card game developed by Bet Technology (patent filed
+1993) and distributed by Shuffle Master since 2004 [W3]. This section's sources are W1 to W3,
+listed at its end.
+
+### 7.1 House rules and dealing procedure
+
+| Rule | Setting | Source |
+|---|---|---|
+| Decks | 6 (312 cards). Pennsylvania allows 6 or 8 | [W1], [W2] §651a.3(a) |
+| Card ranks | Ace high, down to 2. Suits never matter | [W1], [W2] §651a.6 |
+| Cover card | A quarter of the way up from the bottom (78 cards). Pennsylvania requires at least a quarter | [W2] §651a.5(d) |
+| Burn | The first card after each shuffle, face down and unseen | [W2] §651a.8(b) |
+| Bets | The bet (the Initial Wager), $10 to $1,000 in whole dollars, and an optional Tie bet placed with it, $1 to $100 | [W2] §651a.7 |
+| Deal | One card face up to each player with a bet, first base first, then one face up to the dealer | [W1], [W2] §651a.8(c) |
+| Higher card | The bet wins 1:1 and the Tie bet loses | [W1], [W2] §651a.9(a)(2) |
+| Lower card | The bet and the Tie bet lose | [W1], [W2] §651a.9(a)(1) |
+| Tie | The Tie bet wins 10:1. The player surrenders (half the bet comes back) or goes to war | [W1], [W2] §651a.9(a)(3), (c) |
+| Going to war | Raise by the amount of the bet. The dealer burns three cards face down, then deals one card face up to each player at war and one to the dealer | [W1], [W2] §651a.9(e)–(f) |
+| War result | Higher war card: the bet pushes and the raise wins 1:1. **A tie in the war: the bet pushes and the raise wins 2:1.** Lower: the bet and the raise lose | [W2] §651a.9(g), §651a.10(a)(3); [W1]; [W3] |
+| Settlement | Each spot in turn from the dealer's right: losers collected, winners paid | [W2] §651a.9(a), (g) |
+| End of shoe | When the cover card comes out, finish the round, then shuffle. A table nobody is playing has its cards picked up and reshuffled | [W2] §651a.8(d), §651a.5(g) |
+| Tie bet on the war deal | Not offered (Pennsylvania lets a player at war add one) | [W2] §651a.9(e) |
+
+A bet is only taken with its match still in the stack, so a player with a tie can always go to war.
+At a multiplayer table every tie is decided at once within 12 seconds. A timeout, or a player
+leaving during a tie, goes to war (the better play, §7.2), or surrenders if the stack no longer
+covers the raise.
+
+### 7.2 Outcomes and the best play
+
+Every order of a shuffled shoe is equally likely, so one seat's deal is two cards from 312: they
+tie 13·24·23 / (312·311) = 23/311 of the time. The three burned cards are never seen, so after a
+tie the war cards are two cards from the other 310, which hold 22 of the tied rank and 24 of every
+other. They tie with probability t = (22·21 + 12·24·23) / (310·309) = 1181/15965, and each side
+wins half of the rest.
+
+| Outcome (going to war on every tie) | Net, units of the bet | Probability |
+|---|---|---|
+| Higher card on the deal | +1 | 144/311 = 0.463023 |
+| Lower card on the deal | −1 | 144/311 = 0.463023 |
+| Tie, then win the war | +1 | 0.034242 |
+| Tie, then tie the war | +2 | 0.005471 |
+| Tie, then lose the war | −2 | 0.034242 |
+| **Expected result** | **−23138/993023 = −0.023301** | 1 |
+
+These are the rows of Wizard of Odds' six-deck "liberal rules" table, to the last digit [W1].
+
+**Always go to war.** The two war cards are dealt blind from the same shoe, so the player wins and
+loses the war equally often: (1 − t)/2 each. Going to war returns (1 − t)/2 + 2t − 2(1 − t)/2 =
+−½ + 2½·t of the bet (−½ + 1½·t without the bonus), and surrendering returns −½. Going to war is
+better whenever the war cards can tie at all, whatever rank tied and whatever the shoe has left.
+From a full shoe a war returns −0.3151 of the bet (−0.3890 without the bonus) against −0.5.
+
+### 7.3 Payout table and house edges
+
+House edge is per unit of the bet, as in §0: the raise is money added after the first wager and is
+not in the denominator.
+
+| Bet | Pays | House edge | Exact EV per unit | SD | Source |
+|---|---|---|---|---|---|
+| Bet, going to war on every tie | 1:1; the raise 1:1, or 2:1 on a tie in the war | **2.3301%** | −23138/993023 | 1.0576 | [W1] 2.33%, SD 1.057637 |
+| Bet, surrendering every tie | 1:1; half back on a tie | **3.6977%** | −23/622 | 0.9712 | [W1] 3.70% |
+| Bet, going to war, no bonus (variant, off) | 1:1; the raise 1:1 on a won or tied war | 2.8771% | −142853/4965115 | 1.0497 | [W1] 2.88%, SD 1.05 |
+| Tie | 10:1 | **18.6495%** | −58/311 | 2.8787 | [W1] 18.65% |
+| Tie at 11:1 (variant, off) | 11:1 | 11.2540% | −35/311 | 3.1404 | [W1] 11.25% |
+
+As a share of everything bet, the raise included (the element of risk), going to war costs 2.170%
+with the bonus and 2.679% without. `exactOdds()` in shared/src/games/war/rules.ts computes these in
+closed form, and shared/test/war.test.ts checks them against an enumeration of every rank
+combination through `settle()`, the same function the table pays with.
+
+### 7.4 Edge cases (each one has a unit test)
+
+1. Surrendering gives back exactly half the bet (a whole-dollar bet halves to the cent) and burns
+   nothing. When every tie surrenders there is no war deal.
+2. The Tie bet is paid 10:1 as soon as the tie is dealt, whatever the player then does, and loses on
+   any other deal. It can only go down with a bet.
+3. A won war returns the bet and pays the raise 1:1. A tied war returns the bet and pays the raise
+   2:1. A lost war takes both.
+4. One dealer war card serves every player at war, and the three cards are burned once per war
+   deal, not once per player.
+5. The shoe is shuffled before its first deal and once the card behind the cover card has been dealt.
+   The cover card can come out mid-round, even during a war, and the round is finished first.
+6. Every card is dealt face up, so every seat sees every card. The burned cards and the shoe order
+   never leave the server.
+
+### 7.5 Monte Carlo and the shoe
+
+The test deals 10⁷ rounds with the table's own shoe procedure (six decks, the cover card a quarter
+from the bottom, a burn after each shuffle and three before each war), goes to war on every tie,
+and settles each deal three ways plus the Tie bet. SE at N = 10⁷ is about 0.033% for the bet and
+0.091% for the Tie bet. Paying a tie in the war 1:1 instead of 2:1 moves the edge by 0.547 points,
+which `(5·SD/δ)²` says 9.4×10⁵ rounds catch; the enumeration catches it exactly.
+
+**Shoe check.** 4×10⁸ rounds dealt from the shoe this way measured 2.3331% ± 0.0053% for going to
+war, against 2.3301% from a full shoe (z +0.57). Like baccarat, Casino War shows no measurable
+cut-card effect, so the full-shoe figures are the test targets.
+
+### 7.6 Where sources differ
+
+| Topic | Disagreement | Choice and reason |
+|---|---|---|
+| A tie in the war | The raise pays 2:1 ([W2] §651a.10(a)(3)), which is the bonus equal to the bet that the Mirage and Casino Niagara pay [W1], and the "wins the amount of their doubled wager" of [W3]; vs the raise paying only 1:1, Wizard of Odds' "stingy rules" [W1] | 2:1 (2.33%): the regulated rule. 1:1 stays a table option (`warTiePays: 1`, 2.88%), and 2.88% is the figure most often quoted for the game |
+| No-bonus figure | Wizard of Odds' text calls 2.70% the element of risk of the no-bonus game; its house-edge table says 2.88% [W1] | 2.88% is the house edge per bet. The same expected loss divided by the average amount bet (1 + 23/311) is 2.679%, not 2.70% |
+| Decks | 6 [W1], [W3]; 6 or 8 [W2] | 6. Eight decks would be 2.34% with the bonus [W1] |
+| Tie bet | 10:1 [W1], [W2], [W3]; 11:1 at some online casinos [W1] | 10:1 (18.65%); `tiePays` is a table option |
+
+**Sources for this section**
+
+- W1. Wizard of Odds, "Casino War" (rules; six-deck return tables with no bonus, a bonus equal to the bet, and a 3x bonus; house edge for 1 to 8 decks with and without the bonus, surrendering, and the Tie bet; Tie bet analysis). Updated 2026-08-03. https://wizardofodds.com/games/casino-war/
+- W2. 58 Pa. Code Chapter 651a, Casino War (decks §651a.3, shuffle and cut §651a.5, ranks §651a.6, wagers §651a.7, dealing §651a.8, settlement §651a.9, payout odds §651a.10). https://www.pacodeandbulletin.gov/Display/pacode?file=/secure/pacode/data/058/chapter651a/chap651atoc.html
+- W3. Wikipedia, "Casino War" (game play, the tie in the war, history). https://en.wikipedia.org/wiki/Casino_War
+
+---
+
 ## References
 
 1. Wizard of Odds, "Blackjack House Edge Calculator" (rule-combination table in the page source, with its basic-strategy and cut-card adjustments). https://wizardofodds.com/games/blackjack/calculator/
@@ -780,3 +897,109 @@ Test definitions. These decide whether the published number applies.
 25. 58 Pa. Code Chapter 627a, Minibaccarat (shuffle, burn and cut §627a.5, dealing §627a.8–9, drawing rules §627a.10, payouts §627a.12). https://pacodeandbulletin.gov/Display/pacode?d=&file=%2Fsecure%2Fpacode%2Fdata%2F058%2Fchapter627a%2Fchap627atoc.html
 26. Casino News Daily, "The Big Six and Big Eight Craps Bets" ("The Big Six and Eight are always working"). https://www.casinonewsdaily.com/craps-guide/big-six-big-eight/
 27. Art of Craps, "Hardways Bets in Craps" (players call "hardways off" before the come-out). https://www.artofcraps.com/craps-bets/hardways-bets/
+
+---
+
+## Sic Bo
+
+Three dice shaken under a glass dome, and 52 places to bet on how they land. Researched
+2026-09-23. This section keeps its own sources, [S1] to [S2], listed at its end.
+
+### House rules
+
+| Rule | Setting | Source |
+|---|---|---|
+| Dice | Three standard dice, each drawn uniformly and independently with rejection sampling | [S2] §625a.2 |
+| Shaker | Automated, under a clear dome with no cover: every bet goes down before it runs | [S2] §625a.1(d)(2), §625a.5(g) |
+| Procedure | "No more bets", the shake, the dealer calls each die, the winning boxes light up, losers are collected, then winners paid, then the lights go off | [S2] §625a.5(c)–(f) |
+| No roll | Never. A live shaker calls "no roll" when a die doesn't land flat ([S2] §625a.7(a)); here the server's roll is final and the dice are animated onto it | |
+| Pay table | The usual US table: the Wizard of Odds "Atlantic City" column (below) | [S1] |
+| Odd and Even | Offered at 1:1, losing to any triple. It is a Macau bet; [S1] has "only seen [it] in Macau, never in the United States" | [S1] |
+| Limits | Small, Big, Odd, Even $5–$5,000. Single numbers $1–$1,000. Totals, two-dice combinations, doubles and Any triple $1–$500. Specific triples $1–$100. At most $10,000 on the layout per player per roll | this casino |
+
+Multiplayer tables open a 20 second betting window after the leader starts them. It closes early
+once everyone connected has pressed Ready with chips down; the dice are drawn only when it closes.
+
+### Payout table and house edge
+
+All 216 ordered rolls of three dice are equally likely, so every figure here is exact: the wins
+are counted over the 216 rolls, and the edge is the units lost per 216 one-unit bets. The unit tests
+enumerate the same 216 rolls for every one of the 52 bets.
+
+| Bet | Wins when | Pays | Winning rolls | P(win) | House edge | SD |
+|---|---|---|---|---|---|---|
+| Small / Big | Total 4–10 / 11–17, and not a triple | 1:1 | 105 | 48.61% | **2.78%** (6/216) | 0.9996 |
+| Odd / Even | Odd / even total, and not a triple | 1:1 | 105 | 48.61% | **2.78%** (6/216) | 0.9996 |
+| Total 4 or 17 | The three dice add up to it | 60:1 | 3 | 1.39% | 15.28% (33/216) | 7.139 |
+| Total 5 or 16 | | 30:1 | 6 | 2.78% | 13.89% (30/216) | 5.094 |
+| Total 6 or 15 | | 17:1 | 10 | 4.63% | 16.67% (36/216) | 3.782 |
+| Total 7 or 14 | | 12:1 | 15 | 6.94% | 9.72% (21/216) | 3.305 |
+| Total 8 or 13 | | 8:1 | 21 | 9.72% | 12.50% (27/216) | 2.666 |
+| Total 9 or 12 | | 6:1 | 25 | 11.57% | 18.98% (41/216) | 2.239 |
+| Total 10 or 11 | | 6:1 | 27 | 12.50% | 12.50% (27/216) | 2.315 |
+| Specific triple (e.g. 6-6-6) | All three dice show it | 180:1 | 1 | 0.46% | 16.20% (35/216) | 12.29 |
+| Any triple | All three dice match | 30:1 | 6 | 2.78% | 13.89% (30/216) | 5.094 |
+| Specific double (e.g. 3-3) | At least two dice show it | 10:1 | 16 | 7.41% | 18.52% (40/216) | 2.881 |
+| Two-dice combination (e.g. 2-5) | Both faces show | 5:1 | 30 | 13.89% | 16.67% (36/216) | 2.075 |
+| Single number (e.g. 4) | One, two or three dice show it | 1:1, 2:1, 3:1 | 75, 15, 1 | 42.13% | 7.87% (17/216) | 1.113 |
+
+Every edge matches [S1]'s Atlantic City table to the two decimals it prints. The SD of a bet that
+pays `k:1` with probability `p` is `(k+1)·sqrt(p(1−p))`; the single number's is worked from its
+four outcomes (−1, +1, +2, +3 on 125, 75, 15 and 1 rolls).
+
+**Which bets are good.** Small, Big, Odd and Even give the house 2.78%. Everything else gives it far
+more: a single number 7.87%, the totals 9.72% (7 and 14) to 18.98% (9 and 12), the triples 13.89%
+and 16.20%, a double 18.52%. The table's Tips say so.
+
+**Pay tables vary** ([S1]: "In Vegas and on the Internet casinos, anything is possible"). Macau pays
+150:1 on a specific triple, 24:1 any triple, 8:1 a double, and 50, 18 and 14 to 1 on 4/17, 5/16 and
+6/15, which puts Total 5 at a 47.22% edge. Pennsylvania lets a casino choose between two tables
+([S2] §625a.6): A is the Macau table, and B pays 180, 31 and 11 to 1 on triples and doubles,
+62/31/18 to 1 on the outer totals, 7:1 on 9 and 12, 6:1 on two-dice combinations and 12:1 when a
+single number shows on all three dice. This table uses the Atlantic City column, the usual US
+table.
+
+### Settlement edge cases (each one has a unit test)
+
+1. A triple loses Small, Big, Odd and Even ([S2] §625a.3(6)–(7); [S1]). It still makes its total:
+   2-2-2 wins Total 6 at 17:1.
+2. A triple also wins the specific double of its number: 5-5-5 pays Double 5-5 (16 winning rolls,
+   the 0.074074 in [S1]).
+3. A two-dice combination is paid once, however many of either face show: 1-1-2 pays 1-2 at 5:1.
+4. A single number pays 1:1, 2:1 or 3:1 by how many dice show it ([S2] §625a.6(b), paytable A).
+5. 3 and 18 aren't total bets: they are only 1-1-1 and 6-6-6, which the triples already cover.
+6. Nothing comes down after "No more bets". A player who leaves before it takes their chips back.
+
+### Monte Carlo test
+
+One trial = one roll, per bet. `shared/test/sicbo.mc.test.ts` draws 4,000,000 rolls (seed
+20260923) through `rollDice` and `returnFor`, the functions the engine settles with, and tallies
+all 52 bets on the same rolls; each must land within 3 SE of its exact edge. All 52 do; the largest
+|z| is 2.61 (Single 2). The 216 ordered outcomes pass a chi-square test (222.30 on 215 degrees of
+freedom, critical 284.82 at p = 0.001), as does each die's six faces. A second run plays 300,000
+rounds through the whole engine (bet, shake, settle, chip moves).
+
+| Bet | Published | Measured (4M rolls) | SE | z |
+|---|---|---|---|---|
+| Small | 2.778% | 2.755% | 0.050% | −0.46 |
+| Big | 2.778% | 2.781% | 0.050% | +0.06 |
+| Odd | 2.778% | 2.754% | 0.050% | −0.48 |
+| Even | 2.778% | 2.782% | 0.050% | +0.08 |
+| Total 4 | 15.278% | 15.294% | 0.357% | +0.05 |
+| Total 7 | 9.722% | 9.507% | 0.165% | −1.30 |
+| Total 9 | 18.981% | 19.080% | 0.112% | +0.88 |
+| Total 10 | 12.500% | 12.467% | 0.116% | −0.28 |
+| Triple 6-6-6 | 16.204% | 15.799% | 0.616% | −0.66 |
+| Any triple | 13.889% | 14.197% | 0.254% | +1.21 |
+| Double 5-5 | 18.519% | 18.524% | 0.144% | +0.04 |
+| Two dice 2-5 | 16.667% | 16.857% | 0.104% | +1.84 |
+| Single 4 | 7.870% | 7.814% | 0.056% | −1.01 |
+
+### Sources
+
+- [S1] Wizard of Odds, "Sic Bo" (Atlantic City, Macau and Australia pay tables with winning
+  combinations and returns; Odd and Even as a Macau bet), updated 2026-08-03.
+  https://wizardofodds.com/games/sic-bo/
+- [S2] 58 Pa. Code Chapter 625a, Sic Bo (shaker §625a.1, dice §625a.2, wagers §625a.3, procedure
+  §625a.5, payout odds §625a.6, irregularities §625a.7).
+  https://www.pacodeandbulletin.gov/Display/pacode?file=%2Fsecure%2Fpacode%2Fdata%2F058%2Fchapter625a%2Fchap625atoc.html
