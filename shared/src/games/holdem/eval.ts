@@ -29,6 +29,13 @@ export function cardInt(c: Card): number {
   return RANK_CHARS.indexOf(c[0]!) * 4 + SUIT_CHARS.indexOf(c[1]!);
 }
 
+const SUIT_SIGN: Record<string, string> = { s: '♠', h: '♥', d: '♦', c: '♣' };
+
+/** A card as a dealer reads it out: "10♥", "A♠". */
+export function cardText(c: Card): string {
+  return `${c[0] === 'T' ? '10' : c[0]}${SUIT_SIGN[c[1]!]}`;
+}
+
 export function intCard(n: number): Card {
   return `${RANK_CHARS[n >> 2]}${SUIT_CHARS[n & 3]}` as Card;
 }

@@ -38,8 +38,8 @@ export type HoldemEvent =
       move: 'fold' | 'check' | 'call' | 'bet' | 'raise' | 'allin';
       /** Chips added by this move. */
       added: Cents;
-      /** The seat's street total after it. */
-      to: Cents;
+      /** The seat's street total after it. (Not `to`: on a GameEvent, `to` names who may see it.) */
+      total: Cents;
       /** Set when the table made the move: the clock ran out, or the player left. */
       auto?: 'timeout' | 'leave';
     }
@@ -125,6 +125,8 @@ export interface HoldemHandSummary {
 }
 
 export interface HoldemView {
+  /** Server time of the step that produced this view, so a client that has fallen behind can catch up. */
+  at: number;
   mode: TableMode;
   maxSeats: number;
   blinds: { sb: Cents; bb: Cents };

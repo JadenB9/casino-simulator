@@ -158,6 +158,28 @@ describe('holdem engine: single player against bots', () => {
     expect(botStats.refused - before.refused).toBe(0);
   });
 
+  it('never puts a `to` field on an event: the host reads it as who may see the event', () => {
+    const sim = solo(6);
+    const rng = seededRng(66);
+    let checked = 0;
+    for (let i = 0; i < 20_000 && sim.state.handNo < 40; i++) {
+      if (turnOf(sim) === 0) sim.act(0, randomAction(seatView(sim, 0), rng));
+      else if (!step(sim)) break;
+      for (const e of sim.lastEvents as Record<string, unknown>[]) {
+        expect(e).not.toHaveProperty('to');
+        checked++;
+      }
+      if (sim.stack(0) === 0 && engine.liveBets(sim.state, 0) === 0) {
+        sim.apply(engine.seatLeaving(sim.state, 0, sim.ctx()));
+        sim.seats.get(0)!.stack = 100_000;
+        sim.apply(engine.seatJoined(sim.state, 0, sim.ctx()));
+      }
+    }
+    expect(checked).toBeGreaterThan(500);
+    // and every view says when its step happened
+    expect(seatView(sim, 0).at).toBe(sim.state.at);
+  });
+
   it('bots rebuy with house chips when they bust', () => {
     const sim = solo(4);
     const bot = sim.state.seats[1]!;

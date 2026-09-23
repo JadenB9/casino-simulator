@@ -11,6 +11,7 @@ import type { Card } from '../../../../shared/src/cards.ts';
 import { formatMoney, type Cents } from '../../../../shared/src/money.ts';
 import type { HoldemView, HoldemEvent, HoldemSeatView } from '../../../../shared/src/games/holdem/protocol.ts';
 import { ACT_MS } from '../../../../shared/src/games/holdem/engine.ts';
+import { cardText } from '../../../../shared/src/games/holdem/eval.ts';
 import { CardMesh, dealCard, flipCard, CARD_W } from '../../table/cards.ts';
 import { ChipStack, slideStack } from '../../table/chips.ts';
 import { tween, wait, ease } from '../../table/tween.ts';
@@ -22,6 +23,10 @@ import { holdemFelt, dealerButton, slotPoint, slotEdge, slotYaw, boardPoint, DEA
 import './holdem.css';
 
 const SVG = 'http://www.w3.org/2000/svg';
+/** A batch this far behind the server is drawn without animating. */
+const SKIP_MS = 2_500;
+/** Your own two cards are drawn a little larger: they're in your hand, nearest the camera. */
+const MY_CARD_SCALE = 1.35;
 const RING_R = 21;
 const RING_C = 2 * Math.PI * RING_R;
 const money = (c: Cents) => formatMoney(c);
@@ -38,6 +43,8 @@ const MOVE_LABEL: Record<string, string> = {
 };
 
 interface SeatObj {
+  /** The stack the plate shows, kept current while bets animate. */
+  shown: Cents;
   plate: HTMLElement;
   label: CSS2DObject;
   avatar: HTMLElement;
@@ -55,6 +62,8 @@ interface SeatObj {
 export function mountHoldem(ctx: TableViewCtx): TableView {
   const { stage, kit, sfx, link } = ctx;
   let v: HoldemView | null = null;
+  /** The newest view from the server, ahead of `v` while a batch is still animating. */
+  let latest: HoldemView | null = null;
   let n = 0;
   /** The seat drawn nearest the camera: yours, or seat 0 while you watch. */
   let base = 0;
@@ -71,6 +80,15 @@ export function mountHoldem(ctx: TableViewCtx): TableView {
   let put: Record<number, Cents> = {};
   let turnKey = '';
   let turnStart = 0;
+  /**
+   * Animation speed. Batches play in order, so a table that falls behind the server (a slow
+   * frame rate, a burst of bot moves) plays the backlog faster, and skips it past a point.
+   */
+  let speed = 1;
+  const T = (ms: number) => ms / speed;
+  const pause = (ms: number) => wait(T(ms));
+  const ringShown = new Map<number, string>();
+  let clockShown = '';
 
   const button = dealerButton();
   button.visible = false;
@@ -83,6 +101,7 @@ export function mountHoldem(ctx: TableViewCtx): TableView {
   const bar = new ActionBar(
     (a) => {
       link.act(a);
+      bar.lock();
       sfx.play('ui-click', { volume: 0.4 });
     },
     (on) => link.act({ type: 'sitout', on }),
@@ -138,8 +157,8 @@ export function mountHoldem(ctx: TableViewCtx): TableView {
 
   function cardAt(k: number, i: number): { pos: THREE.Vector3; yaw: number; tilt: number } {
     if (k === 0) {
-      const p = slotPoint(0, n, 0.2, TOP_Y + 0.03);
-      p.x += (i - 0.5) * (CARD_W + 0.008);
+      const p = slotPoint(0, n, 0.2, TOP_Y + 0.035);
+      p.x += (i - 0.5) * (CARD_W * MY_CARD_SCALE + 0.01);
       return { pos: p, yaw: 0, tilt: 0.55 };
     }
     const p = slotPoint(k, n, 0.15, TOP_Y + 0.0015 + i * 0.0006);
@@ -185,7 +204,7 @@ export function mountHoldem(ctx: TableViewCtx): TableView {
     stage.root.add(bet);
     const betTag = el('div', 'he-bet money');
     const betLabel = stage.label(betTag, new THREE.Vector3());
-    return { plate, label, avatar, ring, name, tag, stack, status, cards: [], bet, betTag, betLabel };
+    return { shown: 0, plate, label, avatar, ring, name, tag, stack, status, cards: [], bet, betTag, betLabel };
   }
 
   function ensureSeats(count: number): void {
@@ -212,6 +231,11 @@ export function mountHoldem(ctx: TableViewCtx): TableView {
   // ------------------------------------------------------------------------------------------
   // Drawing the view
 
+  function setStack(o: SeatObj, stack: Cents, allIn = false): void {
+    o.shown = stack;
+    o.stack.textContent = allIn && stack <= 0 ? 'All-in' : money(Math.max(0, stack));
+  }
+
   function clearCards(o: SeatObj): void {
     for (const c of o.cards) c.removeFromParent();
     o.cards = [];
@@ -221,6 +245,7 @@ export function mountHoldem(ctx: TableViewCtx): TableView {
     const m = new CardMesh(card);
     const at = cardAt(k, i);
     m.position.copy(at.pos);
+    if (k === 0) m.scale.setScalar(MY_CARD_SCALE);
     m.rotation.set(card ? at.tilt : Math.PI, card && k !== 0 ? 0 : at.yaw, 0, 'YXZ');
     if (card && k !== 0) m.position.y += 0.0008;
     stage.root.add(m);
@@ -253,7 +278,7 @@ export function mountHoldem(ctx: TableViewCtx): TableView {
     o.name.textContent = sv.name;
     o.tag.hidden = !sv.bot;
     o.avatar.querySelector('.he-initial')!.textContent = sv.name.slice(0, 1).toUpperCase();
-    o.stack.textContent = sv.allIn && sv.stack === 0 ? 'All-in' : money(sv.stack);
+    setStack(o, sv.stack, sv.allIn);
     const st = statusText(sv, view);
     o.status.textContent = st;
     o.status.hidden = st === '';
@@ -281,6 +306,7 @@ export function mountHoldem(ctx: TableViewCtx): TableView {
 
   function draw(view: HoldemView): void {
     v = view;
+    latest = view;
     ensureSeats(view.maxSeats);
     const mine = view.you?.seat ?? null;
     if (mine !== null) mySeat = mine;
@@ -317,7 +343,7 @@ export function mountHoldem(ctx: TableViewCtx): TableView {
     });
     potLabelEl.hidden = view.total <= 0;
     potLabelEl.textContent = `Pot ${money(view.total)}`;
-    potLabel.position.set(0, TOP_Y + 0.012, -0.1);
+    potLabel.position.set(0, TOP_Y + 0.012, 0.215);
 
     if (view.button !== null && view.seats[view.button]) {
       button.visible = true;
@@ -366,7 +392,7 @@ export function mountHoldem(ctx: TableViewCtx): TableView {
     const live = view.phase !== 'waiting' && view.phase !== 'results' && view.handId > 0;
     histTitle.textContent = view.handId ? `Hand #${view.handId}` : 'Hand history';
     if (live) section(`Hand #${view.handId} (in play)`, view.log);
-    for (const h of view.history) section(`Hand #${h.id}${h.board.length ? ` · ${h.board.join(' ')}` : ''}`, h.lines);
+    for (const h of view.history) section(`Hand #${h.id}${h.board.length ? ` · ${h.board.map(cardText).join(' ')}` : ''}`, h.lines);
   }
 
   function drawSeatPanel(): void {
@@ -392,7 +418,7 @@ export function mountHoldem(ctx: TableViewCtx): TableView {
     s.position.copy(from);
     stage.root.add(s);
     temps.add(s);
-    await slideStack(s, to, ms);
+    await slideStack(s, to, T(ms));
     s.removeFromParent();
     temps.delete(s);
   }
@@ -404,13 +430,22 @@ export function mountHoldem(ctx: TableViewCtx): TableView {
       cards.map(async (m) => {
         const from = m.position.clone();
         const to = DEALER_POINT.clone();
-        await tween(260, (t) => {
+        await tween(T(260), (t) => {
           m.position.lerpVectors(from, to, t);
           m.rotation.x = m.rotation.x > 1 ? Math.PI : m.rotation.x * (1 - t) + Math.PI * t;
         }, ease.inOut);
         m.removeFromParent();
       }),
     );
+  }
+
+  /** The dealer's call for a pot: "Alex wins $1,240 (main pot)", "Split pot: $620 each", "Side pot: $300 to Sam". */
+  function winCall(e: Extract<HoldemEvent, { type: 'win' }>, next: HoldemView): string {
+    const lead = e.winners[0]!;
+    const hand = e.hand ? ` · ${e.hand}` : '';
+    if (e.winners.length > 1) return `Split ${e.label}: ${money(lead.amount)} each${hand}`;
+    if (e.pot > 0) return `${e.label[0]!.toUpperCase()}${e.label.slice(1)}: ${money(e.amount)} to ${nameOf(lead.seat, next)}${hand}`;
+    return `${nameOf(lead.seat, next)} wins ${money(e.amount)} (${e.label})${hand}`;
   }
 
   async function play(e: HoldemEvent, next: HoldemView): Promise<void> {
@@ -432,7 +467,7 @@ export function mountHoldem(ctx: TableViewCtx): TableView {
         const to = buttonAt(slot(e.button));
         if (button.visible) {
           const from = button.position.clone();
-          await tween(420, (t) => button.position.lerpVectors(from, to, t), ease.inOut);
+          await tween(T(420), (t) => button.position.lerpVectors(from, to, t), ease.inOut);
         } else {
           button.position.copy(to);
           button.visible = true;
@@ -443,6 +478,8 @@ export function mountHoldem(ctx: TableViewCtx): TableView {
       case 'post': {
         put[e.seat] = (put[e.seat] ?? 0) + e.amount;
         const k = slot(e.seat);
+        const po = seats[e.seat];
+        if (po) setStack(po, po.shown - e.amount, e.allIn);
         await slideChips(e.amount, railAt(k), betAt(k), 260);
         seats[e.seat]?.bet.set(e.amount);
         sfx.play('chip-lay', { volume: 0.7 });
@@ -459,11 +496,12 @@ export function mountHoldem(ctx: TableViewCtx): TableView {
             const at = cardAt(k, round);
             const m = new CardMesh(null);
             m.rotation.set(Math.PI, 0, 0, 'YXZ');
+            if (k === 0) m.scale.setScalar(MY_CARD_SCALE);
             stage.root.add(m);
             o.cards.push(m);
-            last = dealCard(m, DEALER_POINT, at.pos, { faceUp: false, ms: 240, yaw: at.yaw });
+            last = dealCard(m, DEALER_POINT, at.pos, { faceUp: false, ms: T(240), yaw: at.yaw });
             if (round === 0 && seat === e.order[0]) sfx.play('card-deal', { volume: 0.5 });
-            await wait(70);
+            await pause(55);
           }
         }
         await last;
@@ -476,7 +514,7 @@ export function mountHoldem(ctx: TableViewCtx): TableView {
               m.setCard(mineCards[i]!);
               const at = cardAt(0, i);
               const from = m.position.clone();
-              await tween(260, (t) => {
+              await tween(T(260), (t) => {
                 m.position.lerpVectors(from, at.pos, t);
                 m.rotation.x = Math.PI + (at.tilt - Math.PI) * t;
               }, ease.inOut);
@@ -490,17 +528,18 @@ export function mountHoldem(ctx: TableViewCtx): TableView {
         const k = slot(e.seat);
         if (o) {
           o.status.hidden = false;
-          o.status.textContent = e.move === 'call' ? `Call ${money(e.added)}` : e.move === 'bet' || e.move === 'raise' ? `${MOVE_LABEL[e.move]} ${money(e.to)}` : MOVE_LABEL[e.move]!;
+          o.status.textContent = e.move === 'call' ? `Call ${money(e.added)}` : e.move === 'bet' || e.move === 'raise' ? `${MOVE_LABEL[e.move]} ${money(e.total)}` : MOVE_LABEL[e.move]!;
           o.status.dataset.kind = e.move;
           o.plate.classList.remove('he-turn');
         }
         if (e.added > 0) {
           put[e.seat] = (put[e.seat] ?? 0) + e.added;
+          if (o) setStack(o, o.shown - e.added, e.move === 'allin');
           await slideChips(e.added, railAt(k), betAt(k), 280);
-          o?.bet.set(e.to);
+          o?.bet.set(e.total);
           if (o) {
             o.betTag.hidden = false;
-            o.betTag.textContent = money(e.to);
+            o.betTag.textContent = money(e.total);
           }
           sfx.play(e.move === 'allin' ? 'chips-stack' : 'chip-lay');
         } else if (e.move === 'check') sfx.play('chips-handle', { volume: 0.35 });
@@ -510,7 +549,7 @@ export function mountHoldem(ctx: TableViewCtx): TableView {
           await muck(o);
         }
         if (e.auto === 'timeout') kit.say(`${nameOf(e.seat, next)} ran out of time`, 2000);
-        await wait(e.move === 'check' ? 180 : 120);
+        await pause(e.move === 'check' ? 180 : 120);
         break;
       }
       case 'collect': {
@@ -554,6 +593,7 @@ export function mountHoldem(ctx: TableViewCtx): TableView {
         const o = seats[e.seat];
         const k = slot(e.seat);
         if (o && o.bet.amount > 0) o.bet.set(Math.max(0, o.bet.amount - e.amount));
+        if (o) setStack(o, o.shown + e.amount);
         kit.say(`Uncalled bet of ${money(e.amount)} returned to ${nameOf(e.seat, next)}`, 2400);
         await slideChips(e.amount, betAt(k), railAt(k), 300);
         break;
@@ -570,17 +610,17 @@ export function mountHoldem(ctx: TableViewCtx): TableView {
         sfx.play('card-deal');
         await Promise.all(
           cards.map(async ({ m, i }) => {
-            await wait(i * 110);
-            await dealCard(m, DEALER_POINT, boardPoint(start + i), { faceUp: false, ms: 260 });
+            await pause(i * 110);
+            await dealCard(m, DEALER_POINT, boardPoint(start + i), { faceUp: false, ms: T(260) });
           }),
         );
         for (const { m, code } of cards) m.setCard(code);
         sfx.play('card-flip');
         await Promise.all(cards.map(async ({ m, i }) => {
-          await wait(i * 70);
-          await flipCard(m, true, 220);
+          await pause(i * 70);
+          await flipCard(m, true, T(220));
         }));
-        await wait(160);
+        await pause(160);
         break;
       }
       case 'reveal': {
@@ -600,7 +640,7 @@ export function mountHoldem(ctx: TableViewCtx): TableView {
             const x0 = m.rotation.x;
             const x1 = k === 0 ? cardAt(0, i).tilt : 0;
             const y0 = m.position.y;
-            await tween(300, (t) => {
+            await tween(T(300), (t) => {
               m.rotation.x = x0 + (x1 - x0) * t;
               m.rotation.y = yaw0 * (1 - t);
               m.position.y = y0 + Math.sin(Math.PI * t) * 0.03;
@@ -610,9 +650,10 @@ export function mountHoldem(ctx: TableViewCtx): TableView {
         );
         o.status.hidden = false;
         o.status.dataset.kind = 'show';
-        o.status.textContent = e.hand ?? 'Shows';
-        kit.say(`${nameOf(e.seat, next)} shows ${e.hand ?? e.cards.join(' ')}`, 2600);
-        await wait(480);
+        const shown = e.cards.map(cardText).join(' ');
+        o.status.textContent = e.hand ?? shown;
+        kit.say(`${nameOf(e.seat, next)} shows ${e.hand ?? shown}`, 2600);
+        await pause(480);
         break;
       }
       case 'muck': {
@@ -622,20 +663,17 @@ export function mountHoldem(ctx: TableViewCtx): TableView {
         break;
       }
       case 'win': {
-        const each = e.winners.length > 1;
-        const lead = e.winners[0]!;
-        const text = each
-          ? `Split ${e.label}: ${money(lead.amount)} each${e.hand ? ` · ${e.hand}` : ''}`
-          : e.pot > 0
-            ? `${e.label[0]!.toUpperCase()}${e.label.slice(1)}: ${money(e.amount)} to ${nameOf(lead.seat, next)}${e.hand ? ` · ${e.hand}` : ''}`
-            : `${nameOf(lead.seat, next)} wins ${money(e.amount)} (${e.label})${e.hand ? ` · ${e.hand}` : ''}`;
-        kit.say(text, 3200);
+        kit.say(winCall(e, next), 3200);
         const from = pots[e.pot]?.stack.position.clone() ?? potAt(0, 1);
         if (pots[e.pot]) pots[e.pot]!.stack.set(0);
         const remaining = pots.reduce((a, p) => a + p.stack.amount, 0);
         potLabelEl.hidden = remaining <= 0;
         potLabelEl.textContent = `Pot ${money(remaining)}`;
         await Promise.all(e.winners.map((w) => slideChips(w.amount, from, railAt(slot(w.seat)), 460)));
+        for (const w of e.winners) {
+          const wo = seats[w.seat];
+          if (wo) setStack(wo, wo.shown + w.amount);
+        }
         let celebrate = false;
         for (const w of e.winners) {
           const net = w.amount - (put[w.seat] ?? 0);
@@ -645,7 +683,7 @@ export function mountHoldem(ctx: TableViewCtx): TableView {
           kit.pill(stage, new THREE.Vector3(p.x, p.y + 0.06, p.z), mine && net <= 0 ? `Back ${money(w.amount)}` : `+${money(w.amount)}`, mine && net <= 0 ? 'push' : 'win', 2600);
         }
         sfx.play('chips-stack', { volume: celebrate ? 1 : 0.6 });
-        await wait(520);
+        await pause(520);
         break;
       }
       case 'rebuy':
@@ -660,15 +698,21 @@ export function mountHoldem(ctx: TableViewCtx): TableView {
   // ------------------------------------------------------------------------------------------
 
   function tickTimers(): void {
-    const view = v;
+    const view = latest;
     const t = view?.turn ?? null;
     let mineMs: number | null = null;
     let bank = false;
+    const setRing = (s: number, o: SeatObj, offset: string, inBank: boolean) => {
+      const key = `${offset}|${inBank}`;
+      if (ringShown.get(s) === key) return;
+      ringShown.set(s, key);
+      o.ring.style.strokeDashoffset = offset;
+      o.plate.classList.toggle('he-bank', inBank);
+    };
     for (let s = 0; s < seats.length; s++) {
       const o = seats[s]!;
       if (!t || t.seat !== s || view?.phase !== 'playing') {
-        o.ring.style.strokeDashoffset = String(RING_C);
-        o.plate.classList.remove('he-bank');
+        setRing(s, o, String(RING_C), false);
         continue;
       }
       const now = serverNow();
@@ -684,11 +728,14 @@ export function mountHoldem(ctx: TableViewCtx): TableView {
         frac = (t.deadline - now) / Math.max(1, t.deadline - t.bankFrom);
       } else frac = (t.deadline - now) / Math.max(1, t.deadline - turnStart);
       frac = Math.max(0, Math.min(1, frac));
-      o.ring.style.strokeDashoffset = String(RING_C * (1 - frac));
-      o.plate.classList.toggle('he-bank', bank);
+      setRing(s, o, (RING_C * (1 - frac)).toFixed(1), bank);
       if (s === mySeat) mineMs = Math.max(0, (bank || t.bankFrom === null ? t.deadline : t.bankFrom) - now);
     }
-    bar.setClock(mineMs, bank);
+    const clock = mineMs === null ? '' : `${Math.ceil(mineMs / 1000)}|${bank}`;
+    if (clock !== clockShown) {
+      clockShown = clock;
+      bar.setClock(mineMs, bank);
+    }
   }
 
   return {
@@ -707,7 +754,21 @@ export function mountHoldem(ctx: TableViewCtx): TableView {
         base = mySeat ?? 0;
         layout();
       }
-      for (const e of events as unknown as HoldemEvent[]) await play(e, next);
+      const list = events as unknown as HoldemEvent[];
+      // Whose turn it is changes now, not when the animation ends: the clock is already running.
+      latest = next;
+      drawBar(next);
+      const behind = serverNow() - next.at;
+      if (behind > SKIP_MS) {
+        // Too far behind to animate: settle on the view, keeping the last call for the pot.
+        const win = [...list].reverse().find((e) => e.type === 'win');
+        draw(next);
+        if (win && win.type === 'win') kit.say(winCall(win, next), 2600);
+        return;
+      }
+      speed = behind > 1_200 ? 3 : behind > 450 ? 1.8 : 1;
+      for (const e of list) await play(e, next);
+      speed = 1;
       draw(next);
     },
     onSeat(msg) {
@@ -718,7 +779,8 @@ export function mountHoldem(ctx: TableViewCtx): TableView {
       if (before !== status) drawSeatPanel();
     },
     onError() {
-      if (v) drawBar(v);
+      // A refused move: show the choices again from the newest view.
+      if (latest) drawBar(latest);
     },
     keydown(e) {
       if (e.metaKey || e.ctrlKey || e.altKey) return false;

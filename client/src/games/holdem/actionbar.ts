@@ -97,6 +97,7 @@ export class ActionBar {
       return;
     }
     this.fold.disabled = !legal.fold;
+    this.call.disabled = false;
     this.fold.title = legal.fold ? '' : 'Checking is free';
     this.label(this.call, legal.check ? 'Check' : legal.callAllIn ? `Call all-in ${formatMoney(legal.call)}` : `Call ${formatMoney(legal.call)}`);
     const range = legal.bet ?? legal.raise;
@@ -113,7 +114,19 @@ export class ActionBar {
       for (const p of this.presets) p.disabled = range.min >= range.max;
       if (fresh) this.setAmount(range.min);
     } else if (!legal.call && !legal.check) this.allin.disabled = true;
-    if (fresh) this.armed = 0;
+    if (fresh) {
+      this.armed = 0;
+      this.allin.classList.remove('he-armed');
+    }
+  }
+
+  /** After sending a move: nothing more can be sent until the table answers with the next view. */
+  lock(): void {
+    this.legal = null;
+    this.armed = 0;
+    this.allin.classList.remove('he-armed');
+    for (const b of [this.fold, this.call, this.raise, this.allin, ...this.presets]) b.disabled = true;
+    this.slider.disabled = true;
   }
 
   /** Countdown text for the player's own turn. */
@@ -185,6 +198,7 @@ export class ActionBar {
     const now = performance.now();
     if (now - this.armed < 3000) {
       this.armed = 0;
+      this.allin.classList.remove('he-armed');
       this.send({ type: 'allin' });
       return;
     }

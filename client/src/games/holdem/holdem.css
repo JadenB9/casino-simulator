@@ -1,6 +1,10 @@
 /* Texas Hold'em table: nameplates around the rail, the pot, the action bar and hand history.
    Plates are DOM pinned to table points (CSS2DRenderer positions them; never set transform here). */
 
+/* `hidden` must win over the display rules below (and the kit's .btn). */
+.he-plate[hidden], .he-plate [hidden], .he-bar[hidden], .he-bar [hidden], .he-seat[hidden], .he-pot[hidden],
+.he-bet[hidden], .he-sidepot[hidden], .he-history [hidden] { display: none !important; }
+
 .he-plate {
   position: absolute;
   display: flex;

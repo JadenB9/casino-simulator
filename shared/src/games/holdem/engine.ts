@@ -20,7 +20,7 @@ import { refuse } from '../../engine.ts';
 import { isObj, isAmount } from '../../protocol.ts';
 import { type Rng, shuffle, randInt, randUnit } from '../../rng.ts';
 import * as R from './rules.ts';
-import { evaluate, handName, bestFive, intCard } from './eval.ts';
+import { evaluate, handName, bestFive, intCard, cardText } from './eval.ts';
 import { decide, PERSONAS, PERSONA_IDS, type BotSituation, type Position } from './bots.ts';
 import type {
   HoldemAction,
@@ -94,6 +94,8 @@ export interface SeatState {
 
 export interface HoldemState {
   cfg: TableConfig;
+  /** Server time of the last step. */
+  at: number;
   seats: Record<number, SeatState>;
   phase: HoldemPhase;
   hand: R.Hand | null;
@@ -173,7 +175,8 @@ function newOut(): Out {
   return { events: [], chips: [], rounds: [] };
 }
 
-function done(s: HoldemState, out: Out): Step<HoldemState> {
+function done(s: HoldemState, out: Out, now: number): Step<HoldemState> {
+  s.at = now;
   const step: Step<HoldemState> = { state: s, events: out.events as unknown as GameEvent[] };
   if (out.chips.length) step.chips = out.chips;
   if (out.rounds.length) step.rounds = out.rounds;
@@ -401,7 +404,7 @@ function afterMove(s: HoldemState, ctx: EngineCtx, out: Out, seat: number, r: { 
   const p = R.player(h, seat)!;
   if (r.added > 0) move(s, out, seat, r.added, 0);
   const mv = r.move as 'fold' | 'check' | 'call' | 'bet' | 'raise' | 'allin';
-  out.events.push({ type: 'act', seat, move: mv, added: r.added, to: p.street, ...(auto ? { auto } : {}) });
+  out.events.push({ type: 'act', seat, move: mv, added: r.added, total: p.street, ...(auto ? { auto } : {}) });
   const raised = h.bet > prevBet;
   const amount = mv === 'call' ? ` ${money(r.added)}` : mv === 'bet' || mv === 'raise' ? ` ${money(p.street)}` : mv === 'allin' ? ` (${money(p.street)})` : '';
   const why = auto === 'timeout' ? ' (out of time)' : auto === 'leave' ? ' (left the table)' : '';
@@ -474,7 +477,7 @@ function boardEvent(s: HoldemState, out: Out, cards: number[]): void {
   const codes = cards.map(intCard);
   out.events.push({ type: 'board', street, cards: codes });
   const label = street[0]!.toUpperCase() + street.slice(1);
-  say(s, `${label}: ${h.board.map(intCard).join(' ')}`);
+  say(s, `${label}: ${h.board.map((c) => cardText(intCard(c))).join(' ')}`);
 }
 
 function reveal(s: HoldemState, out: Out, seat: number): void {
@@ -485,7 +488,7 @@ function reveal(s: HoldemState, out: Out, seat: number): void {
   const cards = [...p.hole, ...h.board];
   const hand = cards.length >= 5 ? handName(evaluate(cards)) : null;
   out.events.push({ type: 'reveal', seat, cards: p.hole.map(intCard), hand });
-  say(s, `${nameOf(s, seat)} shows ${p.hole.map(intCard).join(' ')}${hand ? ` (${hand})` : ''}`);
+  say(s, `${nameOf(s, seat)} shows ${p.hole.map((c) => cardText(intCard(c))).join(' ')}${hand ? ` (${hand})` : ''}`);
 }
 
 function runout(s: HoldemState, ctx: EngineCtx, out: Out): void {
@@ -681,7 +684,7 @@ function act(state: HoldemState, seat: number, action: HoldemAction, ctx: Engine
     out.events.push({ type: 'sitout', seat, on: action.on });
     say(s, `${st.name} ${action.on ? 'sits out' : 'is back'}`);
     if (!action.on && s.phase === 'waiting' && s.due === null && canStart(s, ctx)) s.due = ctx.now + START_MS;
-    return done(s, out);
+    return done(s, out, ctx.now);
   }
 
   const h = s.hand;
@@ -695,7 +698,7 @@ function act(state: HoldemState, seat: number, action: HoldemAction, ctx: Engine
   useBank(s, seat, ctx.now);
   st.away = false;
   afterMove(s, ctx, out, seat, r, prevBet);
-  return done(s, out);
+  return done(s, out, ctx.now);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -763,6 +766,7 @@ function view(s: HoldemState, viewer: number | null): HoldemView {
   const mine = h && viewer !== null ? R.player(h, viewer) : undefined;
   const pots = h && live ? R.computePots(h.players, true) : [];
   return {
+    at: s.at,
     mode: s.cfg.mode,
     maxSeats: s.cfg.maxSeats,
     blinds: blinds(s.cfg),
@@ -807,6 +811,7 @@ export const engine: GameEngine<HoldemState, HoldemAction, HoldemView> = {
   create(cfg, ctx) {
     const s: HoldemState = {
       cfg,
+      at: ctx.now,
       seats: {},
       phase: 'waiting',
       hand: null,
@@ -840,6 +845,7 @@ export const engine: GameEngine<HoldemState, HoldemAction, HoldemView> = {
       sync(s, ctx);
       if (!canStart(s, ctx)) return null;
       s.due = ctx.now + START_MS;
+      s.at = ctx.now;
       return { state: s, events: [] };
     }
     const s = structuredClone(state);
@@ -866,7 +872,7 @@ export const engine: GameEngine<HoldemState, HoldemAction, HoldemView> = {
         if (canStart(s, ctx)) startHand(s, ctx, out);
         break;
     }
-    return done(s, out);
+    return done(s, out, ctx.now);
   },
 
   deadline(state) {
@@ -901,7 +907,7 @@ export const engine: GameEngine<HoldemState, HoldemAction, HoldemView> = {
     }
     seatBots(s, ctx.rng);
     if (s.phase === 'waiting' && s.due === null && canStart(s, ctx)) s.due = ctx.now + START_MS;
-    return done(s, out);
+    return done(s, out, ctx.now);
   },
 
   seatLeaving(state, seat, ctx) {
@@ -920,7 +926,7 @@ export const engine: GameEngine<HoldemState, HoldemAction, HoldemView> = {
         // Leaving mid-hand folds the hand, even out of turn. Chips already in stay in the pot.
         R.fold(p);
         if (h.toAct === seat) useBank(s, seat, ctx.now);
-        out.events.push({ type: 'act', seat, move: 'fold', added: 0, to: p.street, auto: 'leave' });
+        out.events.push({ type: 'act', seat, move: 'fold', added: 0, total: p.street, auto: 'leave' });
         say(s, `${st.name} folds (left the table)`);
         record(s, out, seat);
         if (h.toAct === seat) advance(s, ctx, out, seat, ctx.now + 500);
@@ -928,7 +934,7 @@ export const engine: GameEngine<HoldemState, HoldemAction, HoldemView> = {
       } else live = true; // all-in, or the board is running out: the hand plays on
     }
     if (!live && s.seats[seat]) delete s.seats[seat];
-    return done(s, out);
+    return done(s, out, ctx.now);
   },
 
   liveBets(state, seat) {
