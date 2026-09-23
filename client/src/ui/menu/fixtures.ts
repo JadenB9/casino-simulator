@@ -61,12 +61,18 @@ export function broke(now = Date.now()): Profile {
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** The canned player's password on the dev page. Any other name is new there and takes any. */
+export const FIXTURE_PASSWORD = 'ace-high';
+
 export function fixtureApi(start: Profile, opts: { lastName?: string | null; latency?: number } = {}): AccountApi {
   let p = structuredClone(start);
   const ms = opts.latency ?? 220;
   return {
-    async login(name: string) {
+    async login(name: string, password: string) {
       await wait(ms);
+      if (name.toLowerCase() === start.name.toLowerCase() && password !== FIXTURE_PASSWORD) {
+        throw new ApiError(401, { error: 'UNAUTHORIZED', msg: 'Wrong name or password.' });
+      }
       p = { ...p, name };
       return structuredClone(p);
     },

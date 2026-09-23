@@ -6,7 +6,7 @@
 
 import * as THREE from 'three';
 import { Engine3D, savedQuality } from '../render/engine3d.ts';
-import { login, saveLook, socketUrl } from './api.ts';
+import { DEV_PASSWORD, login, saveLook, socketUrl } from './api.ts';
 import { byteToYaw, FloorLink } from './presence.ts';
 import { CapsuleFactory, RemotePlayers, type SeatPose } from '../world/remote-players.ts';
 import { GAMES } from '../games/index.ts';
@@ -98,7 +98,7 @@ async function run(): Promise<void> {
   engine.camera.position.set(0, 4.3, 21.4);
   engine.camera.lookAt(0, 0.6, 15.6);
   const stations = room(engine);
-  const profile = await login(params.get('name') ?? `dev_${Math.random().toString(36).slice(2, 8)}`);
+  const profile = await login(params.get('name') ?? `dev_${Math.random().toString(36).slice(2, 8)}`, DEV_PASSWORD);
 
   const seatOf = (station: string, slot: number): SeatPose | null => {
     const st = stations.find((s) => s.id === station);

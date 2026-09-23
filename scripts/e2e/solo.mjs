@@ -34,6 +34,7 @@ async function enterFloor() {
   await page.waitForSelector('.name-input, .menu-item', { timeout: 180_000 });
   if (await page.$('.name-input')) {
     await page.fill('.name-input', name);
+    await page.fill('.pass-input', 'casino-dev'); // DEV_PASSWORD in client/src/net/api.ts
     await page.click('.enter-btn');
   }
   await page.waitForSelector('.menu-item', { timeout: 20_000 });

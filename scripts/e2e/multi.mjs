@@ -41,6 +41,7 @@ async function player(name) {
   await page.goto(`${process.env.BASE ?? `http://localhost:${port}`}/casino/`);
   await page.waitForSelector('.name-input', { timeout: 180_000 });
   await page.fill('.name-input', name);
+  await page.fill('.pass-input', 'casino-dev'); // DEV_PASSWORD in client/src/net/api.ts
   await page.click('.enter-btn');
   await page.waitForSelector('.menu-item', { timeout: 20_000 });
   await page.click('.menu-item >> nth=0');
