@@ -97,9 +97,9 @@ export function dealerSlot(war: boolean): THREE.Vector3 {
   return new THREE.Vector3(war ? PAIR : -PAIR, TOP_Y + 0.001, DEALER_CARD_Z);
 }
 
-/** Just beyond a seat's cards, toward the dealer: where the call for that hand is pinned. */
+/** Between a seat's cards and its TIE spot, clear of the printing: where the call for that hand is pinned. */
 export function handLabelPoint(seat: number): THREE.Vector3 {
-  return onSeat(seat, CARD_R - CARD_H / 2 - 0.028, 0, TOP_Y + 0.01);
+  return onSeat(seat, (CARD_R + CARD_H / 2 + SPOT_R.tie - SPOT_SIZE.tie) / 2, 0, TOP_Y + 0.01);
 }
 
 /** Toward the player from their WAR box, where collected chips go. */

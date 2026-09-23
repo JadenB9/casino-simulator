@@ -59,6 +59,15 @@ function pct(x: number): string {
   return `${(x * 100).toFixed(x < 0.1 ? 2 : 1)}%`;
 }
 
+const OUTCOME_WORDS: Record<Settlement['outcome'], string> = {
+  win: 'Won',
+  lose: 'Lost',
+  surrender: 'Surrendered',
+  'war-win': 'War won',
+  'war-tie': 'War tied',
+  'war-lose': 'War lost',
+};
+
 /** The objects that exist, for a celebration's glow. */
 function present(...xs: (THREE.Object3D | null | undefined)[]): THREE.Object3D[] {
   return xs.filter((x): x is THREE.Object3D => !!x);
@@ -267,7 +276,7 @@ export function mountWar(ctx: TableViewCtx): TableView {
     }
     const o = exactOdds(rules);
     if (myTiePending()) {
-      ctx.kit.tip(`Always go to war; surrendering costs more: half the bet, where a war costs ${pct(-o.warAfterTie)} on average`);
+      ctx.kit.tip(`Always go to war; surrendering costs more (50% of the bet, a war ${pct(-o.warAfterTie)} on average)`);
       (bestChoice(rules) === 'war' ? warBtn : surrenderBtn).classList.add('tip-pick');
       return;
     }
@@ -336,26 +345,22 @@ export function mountWar(ctx: TableViewCtx): TableView {
     const parts: { text: string; cls?: string }[] = [{ text: sv.warCard ? `${cardName(sv.card)} · war ${cardName(sv.warCard)}` : cardName(sv.card) }];
     const r = sv.result;
     if (r) {
+      // the round's net, Tie bet included: a lost war can still come out even
       const net = r.returned - r.wagered;
-      parts.push({ text: r.outcome === 'surrender' ? 'Surrendered' : '', cls: 'muted' });
-      parts.push({ text: net === 0 ? 'Push' : signed(net), cls: net > 0 ? 'net up' : net < 0 ? 'net down' : 'net' });
+      parts.push({ text: OUTCOME_WORDS[r.outcome], cls: 'muted' });
+      parts.push({ text: net === 0 ? 'Even' : signed(net), cls: net > 0 ? 'net up' : net < 0 ? 'net down' : 'net' });
     } else if (sv.decision === 'pending') {
       parts.push({ text: 'Tie', cls: 'muted' });
     } else if (sv.decision === 'war') {
       parts.push({ text: 'At war', cls: 'muted' });
     }
-    setLabel(
-      `hand:${seat}`,
-      handLabelPoint(seat),
-      parts.filter((p) => p.text),
-      cls,
-    );
+    setLabel(`hand:${seat}`, handLabelPoint(seat), parts, cls);
   };
 
   const dealerLabel = (card: Card, war: Card | null): void => {
     const parts: { text: string; cls?: string }[] = [{ text: `Dealer: ${cardName(card)}` }];
     if (war) parts.push({ text: `war ${cardName(war)}`, cls: 'muted' });
-    setLabel('dealer', new THREE.Vector3(0, TOP_Y + 0.01, dealerSlot(false).z - 0.075), parts, 'wr-hand dealer');
+    setLabel('dealer', new THREE.Vector3(0, TOP_Y + 0.01, dealerSlot(false).z - 0.09), parts, 'wr-hand dealer');
   };
 
   const clearPayouts = (): void => {
@@ -680,14 +685,14 @@ export function mountWar(ctx: TableViewCtx): TableView {
     const paid = await payOut(seat, 'tie', tiePaid - stake);
     if (seat !== me) return;
     pill(seat, 'tie', `${signed(tiePaid - stake)} · ${rules.tiePays} TO 1`, 'win');
-    const pair = seatCards.get(seat);
+    // the light goes under the chips: a halo laid over a flat card washes its face out
     celebrate(
       { stage: ctx.stage, ui: ctx.ui, sfx: ctx.sfx },
       {
         title: `Tie pays ${rules.tiePays} to 1`,
         sub: `${signed(tiePaid - stake)} on the Tie bet`,
         tier: 'big',
-        glow: present(pair?.card, dealerCard, paid),
+        glow: present(spotStack(seat, 'tie'), paid),
       },
     );
   };
@@ -697,6 +702,7 @@ export function mountWar(ctx: TableViewCtx): TableView {
     const jobs: Promise<unknown>[] = [];
     const lost: SpotKind[] = [];
     const mineSeat = seat === me;
+    let warPaid: ChipStack | null = null;
     // the Tie bet was settled at the deal when the cards tied; otherwise it lost here
     if (bets.tie > 0 && r.outcome !== 'surrender' && !r.outcome.startsWith('war')) {
       lost.push('tie');
@@ -718,7 +724,7 @@ export function mountWar(ctx: TableViewCtx): TableView {
       case 'war-win':
       case 'war-tie': {
         const win = r.war - bets.raise;
-        jobs.push(payOut(seat, 'war', win));
+        jobs.push(payOut(seat, 'war', win).then((s) => (warPaid = s)));
         if (mineSeat) {
           pill(seat, 'bet', 'PUSH', 'push');
           pill(seat, 'war', r.outcome === 'war-tie' ? `${signed(win)} · ${rules.warTiePays} TO 1` : signed(win), 'win');
@@ -737,7 +743,6 @@ export function mountWar(ctx: TableViewCtx): TableView {
     jobs.push(sweep(seat, lost));
     await Promise.all(jobs);
     if (mineSeat && (r.outcome === 'war-win' || r.outcome === 'war-tie')) {
-      const pair = seatCards.get(seat);
       const win = r.war - bets.raise;
       celebrate(
         { stage: ctx.stage, ui: ctx.ui, sfx: ctx.sfx },
@@ -745,7 +750,7 @@ export function mountWar(ctx: TableViewCtx): TableView {
           title: r.outcome === 'war-win' ? 'War won' : 'Tie in the war',
           sub: `The raise pays ${r.outcome === 'war-win' ? 1 : rules.warTiePays} to 1 · ${signed(win)}`,
           tier: 'nice',
-          glow: present(pair?.war, r.outcome === 'war-tie' ? dealerWar : null),
+          glow: present(spotStack(seat, 'war'), warPaid),
         },
       );
     }
