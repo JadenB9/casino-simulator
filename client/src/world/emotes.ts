@@ -8,10 +8,16 @@ import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import type { EmoteId } from '../../../shared/src/protocol.ts';
 import type { Character } from './contract.ts';
 
-/** Seconds a bubble stays up (world.css times its fade to this). */
+/** Seconds a bubble stays up, the last FADE_S of them fading (on the frame clock, like the gesture). */
 export const EMOTE_S = 2.8;
-/** Over the name tag (2.08 m). */
-const BUBBLE_Y = 2.46;
+const FADE_S = 0.4;
+/** Over another player's name tag (2.08 m). */
+export const BUBBLE_Y = 2.46;
+/**
+ * Over your own head, which has no name tag: the follow camera is close behind you, and a bubble
+ * as high as other players' would be off the top of the screen.
+ */
+export const OWN_BUBBLE_Y = 2.0;
 
 const NS = 'http://www.w3.org/2000/svg';
 
@@ -68,14 +74,15 @@ const LABELS: Record<EmoteId, string> = { wave: 'waves', cheer: 'cheers', clap: 
 
 interface Showing {
   tag: CSS2DObject;
+  bubble: HTMLElement;
   left: number;
 }
 
 export class Emotes {
   private readonly showing = new Map<Character, Showing>();
 
-  /** Put `e` over this character (and play its gesture, when the character has one). */
-  show(ch: Character, e: EmoteId): void {
+  /** Put `e` over this character, `y` metres up (and play its gesture, when the character has one). */
+  show(ch: Character, e: EmoteId, y = BUBBLE_Y): void {
     this.clear(ch);
     const outer = document.createElement('div');
     outer.className = 'emote';
@@ -86,9 +93,9 @@ export class Emotes {
     bubble.append(glyph(e));
     outer.append(bubble);
     const tag = new CSS2DObject(outer);
-    tag.position.set(0, BUBBLE_Y, 0);
+    tag.position.set(0, y, 0);
     ch.root.add(tag);
-    this.showing.set(ch, { tag, left: EMOTE_S });
+    this.showing.set(ch, { tag, bubble, left: EMOTE_S });
     ch.gesture?.(e);
   }
 
@@ -96,6 +103,7 @@ export class Emotes {
     for (const [ch, s] of this.showing) {
       s.left -= dt;
       if (s.left <= 0) this.clear(ch);
+      else if (s.left < FADE_S) s.bubble.classList.add('leaving');
     }
   }
 

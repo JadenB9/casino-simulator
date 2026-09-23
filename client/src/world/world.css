@@ -70,9 +70,9 @@
   pointer-events: none;
 }
 
-/* Emotes: a round bubble over a character for a few seconds (emotes.ts, EMOTE_S = 2.8 s).
-   CSS2DRenderer places the outer element with `transform`, so the pop and the float are on the
-   bubble inside it. */
+/* Emotes: a round bubble over a character for a few seconds (emotes.ts, EMOTE_S = 2.8 s; it
+   adds .leaving for the last 0.4 s). CSS2DRenderer places the outer element with `transform`, so
+   the pop and the float are on the bubble inside it. */
 .emote { pointer-events: none; }
 .emote-bubble {
   position: relative;
@@ -85,8 +85,9 @@
   border: 1px solid var(--line-strong);
   color: var(--brass-hi);
   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.5);
-  animation: emote-in 0.32s var(--ease) both, emote-out 0.4s ease-in 2.35s forwards;
+  animation: emote-in 0.32s var(--ease) both;
 }
+.emote-bubble.leaving { animation: emote-out 0.4s ease-in forwards; }
 .emote-bubble::after {
   content: '';
   position: absolute;
@@ -117,7 +118,8 @@
 }
 @keyframes emote-out { to { opacity: 0; transform: translateY(-14px) scale(0.92); } }
 @media (prefers-reduced-motion: reduce) {
-  .emote-bubble { animation: emote-fade-in 0.2s both, emote-out-still 0.4s ease-in 2.35s forwards; }
+  .emote-bubble { animation: emote-fade-in 0.2s both; }
+  .emote-bubble.leaving { animation: emote-out-still 0.4s ease-in forwards; }
   @keyframes emote-fade-in { from { opacity: 0; } }
   @keyframes emote-out-still { to { opacity: 0; } }
 }

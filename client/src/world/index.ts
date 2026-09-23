@@ -23,7 +23,7 @@ import { Interact } from './interact.ts';
 import { StationLod } from './lod.ts';
 import { Bloom, PixelRatio } from './bloom.ts';
 import type { MouseSettings } from './mouse.ts';
-import { Emotes, type CharacterSource } from './emotes.ts';
+import { Emotes, OWN_BUBBLE_Y, BUBBLE_Y, type CharacterSource } from './emotes.ts';
 import type { EmoteId } from '../../../shared/src/protocol.ts';
 import './world.css';
 
@@ -245,7 +245,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
     showEmote(who, e) {
       const ch = who === 'me' ? character : remotes?.character(who);
       if (!ch) return false;
-      emotes.show(ch, e);
+      emotes.show(ch, e, who === 'me' ? OWN_BUBBLE_Y : BUBBLE_Y);
       return true;
     },
     useRemotes(source) {

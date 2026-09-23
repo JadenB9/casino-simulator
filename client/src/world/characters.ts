@@ -281,7 +281,11 @@ class Person implements Character {
   }
 
   update(dt: number): void {
-    if (!this.mixer) return;
+    if (!this.mixer) {
+      // still loading: a gesture made meanwhile runs out rather than playing late
+      if (this.act && (this.act.t += dt) > (GESTURES[this.act.e]?.dur ?? 0)) this.act = null;
+      return;
+    }
     // the mixer only rewrites bones its clips move: undo last frame's gesture first
     for (const [bone, q] of this.posed) bone.quaternion.copy(q);
     this.posed.clear();

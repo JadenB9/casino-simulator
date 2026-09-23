@@ -25,10 +25,12 @@ const fail = (what) => {
 async function open(query) {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
   const errors = [];
-  page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+  // the full browser asks for /favicon.ico, which the dev floor doesn't have
+  page.on('console', (m) => m.type() === 'error' && !m.location()?.url?.endsWith('/favicon.ico') && errors.push(`${m.text()} ${m.location()?.url ?? ''}`.trim()));
   page.on('pageerror', (e) => errors.push(String(e)));
+  page.on('response', (r) => r.status() >= 400 && errors.push(`${r.status()} ${r.url()}`));
   await page.goto(`${base}?${query}`);
-  await page.waitForFunction(() => document.getElementById('boot')?.classList.contains('done'), null, { timeout: 120000 });
+  await page.waitForFunction(() => document.getElementById('boot')?.classList.contains('done'), null, { timeout: 300000 });
   return { page, errors };
 }
 
@@ -219,10 +221,16 @@ if (checks.includes('drag')) {
 // --- emotes over your own character and a stand-in remote one -------------------------------------
 if (checks.includes('emote')) {
   const { page, errors } = await open('quality=high');
-  await page.waitForTimeout(800);
-  const res = await page.evaluate(async () => {
+  // the frame clock (dt is capped per frame, so on a slow renderer it runs behind the wall clock)
+  await page.evaluate(() => {
+    window.__sim = 0;
+    window.casino.engine.onFrame((dt) => (window.__sim += dt));
+  });
+  const sim = (t) => page.waitForFunction((t) => window.__sim >= t, t, { timeout: 240000, polling: 100 });
+  const bubbles = () => page.evaluate(() => [...document.querySelectorAll('.emote-bubble')].filter((e) => e.isConnected && e.getClientRects().length).length);
+  const shown = await page.evaluate(async () => {
     const { world, engine } = window.casino;
-    // a second character a couple of metres ahead, turned to face us
+    // a second character a couple of metres ahead, facing us
     const p = world.player.position;
     const look = { v: 1, body: 'f', outfit: 'dress', skin: 4, hair: '#2b1a10', top: '#1d5a8a', bottom: '#22252c', shoes: '#111111' };
     await world.characterFactory.load(look).catch(() => {});
@@ -232,23 +240,29 @@ if (checks.includes('emote')) {
     engine.scene.add(other.root);
     engine.onFrame((dt) => other.update(dt));
     world.useRemotes({ character: (id) => (id === 7 ? other : undefined) });
-    world.showEmote('me', 'wave');
-    world.showEmote(7, 'cheer');
-    return { bubbles: document.querySelectorAll('.emote-bubble').length };
+    const unknown = world.showEmote(99, 'wave');
+    const t = window.__sim;
+    return { me: world.showEmote('me', 'wave'), other: world.showEmote(7, 'cheer'), unknown, t };
   });
-  await page.waitForTimeout(650);
+  await sim(shown.t + 0.75);
+  await page.waitForTimeout(400); // the bubble's pop-in runs on the wall clock
+  const first = await bubbles();
   await page.screenshot({ path: `${out}/world2-emote.png` });
-  const later = await page.evaluate(() => {
+  const t2 = await page.evaluate(() => {
     window.casino.world.showEmote('me', 'thumbs');
     window.casino.world.showEmote(7, 'shrug');
+    return window.__sim;
   });
-  await page.waitForTimeout(700);
+  await sim(t2 + 0.8);
+  await page.waitForTimeout(400);
+  const second = await bubbles();
   await page.screenshot({ path: `${out}/world2-emote-2.png` });
-  await page.waitForTimeout(3200);
-  const gone = await page.evaluate(() => [...document.querySelectorAll('.emote-bubble')].filter((e) => !e.hidden && e.isConnected && e.getClientRects().length).length);
-  console.log(JSON.stringify({ check: 'emote', ...res, later, goneAfter: gone, errors: errors.slice(0, 3) }));
-  if (res.bubbles < 2) fail(`expected two emote bubbles, saw ${res.bubbles}`);
-  if (gone !== 0) fail(`${gone} emote bubbles still up after they should have faded`);
+  await sim(t2 + 3.0);
+  const gone = await bubbles();
+  console.log(JSON.stringify({ check: 'emote', shown, first, second, goneAfter: gone, errors: errors.slice(0, 3) }));
+  if (!shown.me || !shown.other || shown.unknown) fail(`showEmote answered ${JSON.stringify(shown)}`);
+  if (first !== 2 || second !== 2) fail(`expected two emote bubbles each time, saw ${first} and ${second}`);
+  if (gone !== 0) fail(`${gone} emote bubbles still up after they should have gone`);
   if (errors.length) fail(`emote: ${errors[0]}`);
   await page.close();
 }
