@@ -1,0 +1,47 @@
+/* Casino War: labels pinned to hands, the War/Surrender bar, the meters, the betting clock and the
+   rules card. Everything sits over the table; the bottom-left corner stays free. */
+
+.wr-hand { display: flex; align-items: baseline; gap: 8px; padding: 3px 10px; border-radius: 4px; font-family: var(--serif); font-size: 14px; font-weight: 600; letter-spacing: 0.04em; white-space: nowrap; color: var(--ink); background: rgba(6, 22, 24, 0.82); border: 1px solid rgba(239, 217, 162, 0.28); pointer-events: none; }
+.wr-hand.mine { font-size: 16px; border-color: var(--line-strong); }
+.wr-hand.dealer { font-size: 15px; }
+.wr-hand .muted { color: var(--ink-3); font-size: 0.86em; font-weight: 400; }
+.wr-hand .net { font-family: var(--ui); font-size: 1.05em; letter-spacing: 0.02em; color: var(--ink-2); }
+.wr-hand .net.up { color: var(--win); }
+.wr-hand .net.down { color: var(--lose); }
+
+.wr-name { padding: 1px 8px; border-radius: 3px; font-size: 13px; letter-spacing: 0.05em; color: var(--ink-2); background: rgba(12, 10, 8, 0.66); white-space: nowrap; pointer-events: none; }
+.wr-name.mine { color: var(--brass-hi); }
+.wr-name.away { opacity: 0.5; }
+
+.wr-tip { padding: 3px 9px; border-radius: 3px; font-size: 13px; letter-spacing: 0.06em; white-space: nowrap; color: var(--ink); background: var(--glass-2); border: 1px solid var(--line); pointer-events: none; }
+
+.tray.wr-away { display: none; }
+
+.wr-decide { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; padding: 10px 14px; }
+.wr-decide[hidden] { display: none; }
+.wr-decide .btn { height: 46px; min-width: 150px; font-size: 19px; }
+.wr-hint { margin-left: 4px; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); }
+
+.wr-meters { position: fixed; top: var(--below-hud); left: 16px; display: grid; grid-template-columns: auto auto; align-items: baseline; gap: 2px 16px; padding: 8px 14px; font-size: 18px; }
+.wr-meters .up { color: var(--win); }
+.wr-meters .down { color: var(--lose); }
+
+.wr-rules-btn { position: fixed; top: calc(var(--below-hud) + 98px); left: 16px; height: 30px; font-size: 14px; }
+.wr-rules { position: fixed; top: calc(var(--below-hud) + 138px); left: 16px; width: 380px; max-height: calc(100vh - var(--below-hud) - 240px); overflow: auto; padding: 12px 16px 14px; font-size: 15px; line-height: 1.38; color: var(--ink-2); }
+.wr-rules[hidden] { display: none; }
+.wr-rules h3 { margin: 2px 0 6px; font-family: var(--serif); font-size: 18px; font-weight: 600; letter-spacing: 0.06em; color: var(--brass-hi); }
+.wr-rules p { margin: 6px 0; }
+.wr-paytable { margin: 8px 0; padding: 6px 10px; border: 1px solid var(--line); border-radius: 4px; }
+.wr-paytable .label { margin-bottom: 3px; letter-spacing: 0.08em; }
+.wr-paytable .row { display: flex; justify-content: space-between; gap: 12px; color: var(--ink); }
+.wr-paytable .row .money { text-align: right; }
+.wr-keys { font-size: 13px; color: var(--ink-3); }
+
+.wr-clock { position: fixed; top: var(--below-hud); left: 50%; width: 48px; height: 48px; transform: translateX(-50%); display: grid; place-items: center; }
+.wr-clock[hidden] { display: none; }
+.wr-ring { position: absolute; inset: 0; width: 100%; height: 100%; }
+.wr-ring circle { fill: rgba(12, 10, 8, 0.7); stroke-width: 3; }
+.wr-ring .track { stroke: rgba(255, 255, 255, 0.14); }
+.wr-ring .left { fill: none; stroke: var(--brass-hi); stroke-linecap: round; transform: rotate(-90deg); transform-origin: 50% 50%; }
+.wr-clock.low .left { stroke: var(--lose); }
+.wr-clock-text { position: relative; font-size: 19px; font-weight: 600; font-variant-numeric: tabular-nums; }
