@@ -455,7 +455,7 @@ export class ChatPanel {
     const label = this.muted ? 'Show chat' : 'Hide chat';
     this.muteBtn.title = this.muted ? 'Chat is hidden: no bubbles, counts or previews. Show chat' : 'Hide chat: no bubbles, counts or previews';
     this.muteBtn.setAttribute('aria-label', label);
-    this.muteBtn.replaceChildren(icon(this.muted ? 'muted' : 'chat'));
+    this.muteBtn.replaceChildren(icon(this.muted ? 'hidden' : 'shown'));
     this.dock.replaceChild(icon(this.muted ? 'muted' : 'chat'), this.dock.firstElementChild!);
   }
 
@@ -582,7 +582,7 @@ function save(key: string, value: string | null): void {
 // style attributes and data: URLs.
 const NS = 'http://www.w3.org/2000/svg';
 
-function icon(name: 'chat' | 'muted' | 'down' | 'send'): SVGSVGElement {
+function icon(name: 'chat' | 'muted' | 'shown' | 'hidden' | 'down' | 'send'): SVGSVGElement {
   const s = document.createElementNS(NS, 'svg');
   s.setAttribute('viewBox', '0 0 24 24');
   s.setAttribute('class', 'chat-ico');
@@ -602,6 +602,12 @@ function icon(name: 'chat' | 'muted' | 'down' | 'send'): SVGSVGElement {
     case 'muted':
       path(bubble);
       path('M4 3.5l16.5 17');
+      break;
+    case 'shown':
+    case 'hidden':
+      path('M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z');
+      path('M12 9.2a2.8 2.8 0 1 0 0 5.6 2.8 2.8 0 1 0 0-5.6z');
+      if (name === 'hidden') path('M4 3.5l16.5 17');
       break;
     case 'down':
       path('M6.5 9.5l5.5 5.5 5.5-5.5');
