@@ -25,10 +25,13 @@ async function open(game, variant, name) {
     localStorage.setItem('casino.quality', 'low');
   });
   await page.goto(`http://localhost:${port}/casino/?dev=table&game=${game}${variant ? `&variant=${variant}` : ''}&name=${name}`);
-  await page.waitForSelector('.modal input[type=number]', { timeout: 90_000 });
-  await page.fill('.modal input[type=number]', '5000');
-  await page.click('.modal .btn.primary');
-  await page.waitForFunction(() => window.casino.table.view && window.casino.table.snapshot?.you?.seat !== null, null, { timeout: 30_000 });
+  // a fixed name comes back to its own seat (a machine keeps its credit); a new one buys in
+  await page.waitForFunction(() => document.querySelector('.modal input[type=number]') || window.casino?.table?.snapshot?.you?.status === 'seated', null, { timeout: 90_000 });
+  if (await page.$('.modal input[type=number]')) {
+    await page.fill('.modal input[type=number]', '5000');
+    await page.click('.modal .btn.primary');
+  }
+  await page.waitForFunction(() => window.casino.table.view && window.casino.table.snapshot?.you?.status === 'seated', null, { timeout: 30_000 });
   await page.waitForTimeout(1500);
   const shots = [];
   const shot = async (label) => {

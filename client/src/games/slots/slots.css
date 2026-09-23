@@ -53,3 +53,7 @@
 .slots-strips summary { cursor: pointer; font-size: 13px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-3); }
 .slots-strips .slots-table { font-size: 14px; }
 .slots-strips .slots-table td:nth-child(n + 2) { text-align: left; }
+
+/* Tips at a machine: beside the cabinet over the deck's right end, so the credit, bet and win
+   meters just above the deck stay in view. */
+.slots-deck ~ .tip-line { left: auto; right: 20px; transform: none; max-width: min(330px, calc(100vw - 40px)); }
