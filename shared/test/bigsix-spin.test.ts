@@ -162,21 +162,24 @@ describe('big six spin', () => {
     }
   });
 
-  it('chooses endings that lean on a peg or hang free, always inside the stop', () => {
-    let leaning = 0;
+  it('chooses endings that die against a peg and roll back, or run out between pegs, always with the flap hanging free', () => {
+    let rocked = 0;
     for (let i = 0; i < 1000; i++) {
       const e = chooseEnding(rand);
       expect(e.gStop).toBeGreaterThan(0);
       expect(e.gRest).toBeLessThan(1);
       expect(e.gRest).toBeGreaterThanOrEqual(e.gStop);
+      // at rest no peg touches the flap: the last one has gone by and the next hasn't reached it
+      expect(e.gRest).toBeGreaterThan(G_TOUCH);
+      expect(contactAngle(angleFor(0, e.gRest))).toBeNull();
       if (e.gRest > e.gStop) {
-        leaning++;
-        expect(e.gRest).toBeLessThan(G_TOUCH);
-      } else {
-        expect(e.gStop).toBeGreaterThan(G_TOUCH);
+        rocked++;
+        // it stopped with a peg bending the leather
+        expect(e.gStop).toBeLessThan(G_TOUCH);
+        expect(contactAngle(angleFor(0, e.gStop))).toBeGreaterThan(0);
       }
     }
-    expect(leaning).toBeGreaterThan(600);
-    expect(leaning).toBeLessThan(850);
+    expect(rocked).toBeGreaterThan(600);
+    expect(rocked).toBeLessThan(850);
   });
 });

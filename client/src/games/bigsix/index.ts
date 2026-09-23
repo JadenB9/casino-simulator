@@ -42,7 +42,7 @@ const LOOKAHEAD_S = 0.12;
 /** Betting: the layout and the whole wheel from behind the players. The spin: the wheel, then close on the clapper. */
 const BET_POSE: Pose = { position: [0, 2.32, 2.25], target: [0, 1.47, -0.25] };
 const WHEEL_POSE: Pose = { position: [0, WHEEL_Y + 0.12, 1.5], target: [0, WHEEL_Y + 0.1, WHEEL_Z] };
-const CLAPPER_POSE: Pose = { position: [0, WHEEL_Y + 0.5, WHEEL_Z + 0.92], target: [0, WHEEL_Y + 0.58, WHEEL_Z] };
+const CLAPPER_POSE: Pose = { position: [0, WHEEL_Y + 0.5, WHEEL_Z + 1.08], target: [0, WHEEL_Y + 0.56, WHEEL_Z] };
 
 const SEATS: { position: [number, number, number]; yaw: number }[] = [
   ...[-0.9, -0.54, -0.18, 0.18, 0.54, 0.9].map((x) => ({ position: [x, 0, TABLE_Z + TABLE_D / 2 + 0.3] as [number, number, number], yaw: Math.PI })),

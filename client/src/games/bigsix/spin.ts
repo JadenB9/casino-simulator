@@ -218,15 +218,18 @@ export class WheelSpin {
 }
 
 /**
- * Choose how a spin ends. Most stop with the last peg leaning into the leather and rock back as it
- * straightens; some run out of speed between pegs. `rand` gives 0..1 values (tests pass a seeded one).
+ * Choose how a spin ends. Most die against a peg that is still bending the leather, and the flap
+ * straightening knocks the wheel back a few degrees until it hangs free just inside the stop;
+ * the rest run out of speed with the flap already hanging between two pegs. Either way the flap
+ * ends clear of both pegs, so the stop it shows is plain to see. `rand` gives 0..1 values (tests
+ * pass a seeded one).
  */
 export function chooseEnding(rand: () => number): { gStop: number; gRest: number } {
   if (rand() < 0.72) {
     const gStop = 0.1 + 0.34 * rand();
-    const gRest = G_TOUCH - 0.02 - 0.09 * rand();
-    return { gStop, gRest: Math.max(gStop, gRest) };
+    const gRest = G_TOUCH + 0.03 + 0.1 * rand();
+    return { gStop, gRest };
   }
-  const g = G_TOUCH + 0.05 + (0.93 - G_TOUCH - 0.05) * rand();
+  const g = G_TOUCH + 0.1 + (0.92 - G_TOUCH - 0.1) * rand();
   return { gStop: g, gRest: g };
 }

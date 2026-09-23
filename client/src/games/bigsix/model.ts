@@ -22,7 +22,8 @@ export const TABLE_D = 0.96;
 export const TABLE_Z = 0.37;
 export const WHEEL_Y = 1.84;
 export const WHEEL_Z = -0.52;
-export const FOOTPRINT = { width: 2.4, depth: 1.7 };
+/** The table, and the wheel's plinth behind it. */
+export const FOOTPRINT = { width: 2.4, depth: 1.9 };
 export const FELT_COLOR = '#0c3b29';
 export const MODEL_FELT = 'bigsix-felt-model';
 export const WHEEL_GROUP = 'bigsix-wheel';
