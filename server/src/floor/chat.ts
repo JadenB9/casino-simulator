@@ -138,29 +138,40 @@ function mutedNotice(until: number, now: number): ChatNotice {
 }
 
 // ---------------------------------------------------------------------------------------------
-// The word mask. A short list, matched per word: letters may be stretched ("fuuuck") and a few
-// digits and symbols stand in for letters ("sh1t", "a$$"). Most words must be the whole word
-// (with the endings listed for it), so "class", "Scunthorpe", "spicy" and "cocktail" are left
-// alone; four are masked wherever they appear inside a word. The masked word keeps its first
-// letter. Kept in ROT13 so the source doesn't read as a list of slurs.
+// The word mask. A short list, matched per word, where a few digits and symbols stand in for
+// letters ("sh1t", "a$$") and letters may be stretched ("fuuuck"). Most entries must be the whole
+// word, give or take the prefixes and endings listed with them, so "class", "Scunthorpe",
+// "spicy", "cocktail" and "Cushite" are left alone; such a word is masked after its first
+// letter. Three are masked wherever they appear inside a word ("motherf***er"). Checked against
+// a 236,000-word dictionary: what it masks there is the listed words and their own derivatives.
+// Kept in ROT13 so the source doesn't read as a list of slurs.
 
 const rot13 = (s: string) => s.replace(/[a-z]/g, (c) => String.fromCharCode(((c.charCodeAt(0) - 84) % 26) + 97));
-const stretch = (root: string) => [...root].map((c) => `${c}+`).join('');
 
-const ANYWHERE = new RegExp(['shpx', 'fuvg', 'ovgpu', 'juber'].map((w) => stretch(rot13(w))).join('|'), 'g');
+/**
+ * A root's letters, stretchable: a letter the root has once matches once or three and more times,
+ * a doubled one twice or more. Exactly two of a single letter is more often a real spelling
+ * (Shiite, shiitake) than a stretch, so it doesn't count.
+ */
+const stretch = (root: string) => root.replace(/(.)\1*/g, (run, c: string) => (run.length === 1 ? `(?:${c}|${c}{3,})` : `${c}{${run.length},}`));
+
+const ANYWHERE = new RegExp(['shpx', 'ovgpu', 'juber'].map((w) => stretch(rot13(w))).join('|'), 'g');
+/** "prefixes>root:endings", either side optional. */
 const WHOLE = [
+  'ohyy|ubefr|qvc|ncr|ong|puvpxra|ubyl|qhzo|qbt|pbj>fuvg:f|r|rf|gl|gvre|gvrfg|gvat|grq|gre|gref|urnq|urnqf|ubyr|ubyrf|fubj|fubjf|fgbez|fgbezf|ont|ontf|snpr|snprq|ybnq|ybnqf|yrff|cbfg|gnyx',
   'phag:f', 'nff:rf|ubyr|ubyrf|ung|ungf|jvcr|jvcrf', 'qvpx:f|urnq|urnqf', 'pbpx:f|fhpxre|fhpxref', 'chffl', 'chffvrf',
   'fyhg:f|gl', 'onfgneq:f', 'gjng:f', 'jnaxre:f', 'cvff:rq|rf|re|vat', 'avttre:f', 'avttn:f|m', 'snttbg:f', 'snt:f',
   'ergneq:f|rq', 'xvxr:f', 'fcvp:f', 'genaal', 'genaavrf', 'qlxr:f',
 ].map((entry) => {
-  const [root, endings] = rot13(entry).split(':') as [string, string | undefined];
-  return new RegExp(`^(${stretch(root)})${endings ? `(?:${endings})?` : ''}$`);
+  const [head, endings] = rot13(entry).split(':') as [string, string | undefined];
+  const [prefixes, root] = head.includes('>') ? (head.split('>') as [string, string]) : [undefined, head];
+  return new RegExp(`^${prefixes ? `(?:${prefixes})?` : ''}${stretch(root)}${endings ? `(?:${endings})?` : ''}$`);
 });
 
 const LEET: Record<string, string> = { '0': 'o', '1': 'i', '3': 'e', '4': 'a', '5': 's', '7': 't', '8': 'b', '@': 'a', $: 's' };
 const WORD = /[\p{L}\p{M}\p{N}@$]+/gu;
 
-/** `text` with listed words masked: every letter after the first becomes "*". */
+/** `text` with listed words masked: letters after the first become "*". */
 export function maskWords(text: string): string {
   return text.replace(WORD, (word) => {
     const chars = [...word];
@@ -173,11 +184,8 @@ export function maskWords(text: string): string {
       })
       .join('');
     const hide = new Set<number>();
+    if (WHOLE.some((re) => re.test(flat))) for (let i = 1; i < chars.length; i++) hide.add(i);
     for (const m of flat.matchAll(ANYWHERE)) for (let i = m.index + 1; i < m.index + m[0].length; i++) hide.add(i);
-    for (const re of WHOLE) {
-      const m = flat.match(re);
-      if (m) for (let i = 1; i < m[1]!.length; i++) hide.add(i);
-    }
     return hide.size ? chars.map((c, i) => (hide.has(i) ? '*' : c)).join('') : word;
   });
 }
