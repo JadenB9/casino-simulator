@@ -118,6 +118,8 @@ export class BaccaratTable implements TableView {
   /** When the last batch finished; a batch that starts right after a rushed one was queued behind it. */
   private lastEnd = 0;
   private shoeNo = 0;
+  /** "No more bets" has been called for the window in the view (it updates only after the coup plays out). */
+  private closed = false;
 
   constructor(private readonly ctx: TableViewCtx) {
     this.root = ctx.stage.root;
@@ -195,6 +197,7 @@ export class BaccaratTable implements TableView {
       switch (e.type) {
         case 'betting':
           await this.sweep();
+          this.closed = false;
           this.ready = false;
           if (this.mode === 'multi') {
             this.ctx.link.ready(false);
@@ -216,6 +219,7 @@ export class BaccaratTable implements TableView {
           if (e.seat === this.mySeat) this.ctx.kit.toast(`Your ${SPOT_NAMES[e.spot]} bet was under the ${formatMoney(limitsFor(this.config, e.spot).min)} minimum and came back.`);
           break;
         case 'nomore':
+          this.closed = true;
           this.hideTip();
           this.ctx.kit.say(wasLastHand ? 'Last hand. No more bets' : 'No more bets', 1800);
           await this.pause(450);
@@ -321,7 +325,7 @@ export class BaccaratTable implements TableView {
 
   update(): void {
     const v = this.view;
-    const betting = this.mode === 'multi' && v?.phase === 'betting' && v.deadline !== null;
+    const betting = this.mode === 'multi' && !this.closed && v?.phase === 'betting' && v.deadline !== null;
     this.timer.obj.visible = betting;
     if (betting) {
       const left = Math.max(0, v.deadline! - serverNow());
@@ -816,6 +820,7 @@ export class BaccaratTable implements TableView {
 
   private draw(v: BaccaratView): void {
     this.view = v;
+    this.closed = v.phase !== 'betting';
     this.clearChips();
     if (v.phase === 'betting') {
       for (const [seat, bets] of Object.entries(v.bets)) this.setBets(Number(seat), bets);
@@ -880,7 +885,8 @@ export class BaccaratTable implements TableView {
   private drawSeats(): void {
     if (this.mode !== 'multi') return;
     const seated = new Map<number, Member>();
-    for (const m of this.members) if (m.seat !== null && m.status !== 'watching') seated.set(m.seat, m);
+    // your own seat is marked by the ring on the felt; its tag would sit under the chip tray
+    for (const m of this.members) if (m.seat !== null && m.status !== 'watching' && m.seat !== this.mySeat) seated.set(m.seat, m);
     for (const [seat, tag] of this.seatTags) {
       if (!seated.has(seat)) {
         tag.el.remove();
