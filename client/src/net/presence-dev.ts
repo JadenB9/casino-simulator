@@ -6,11 +6,12 @@
 
 import * as THREE from 'three';
 import { Engine3D, savedQuality } from '../render/engine3d.ts';
-import { login, socketUrl } from './api.ts';
+import { login, saveLook, socketUrl } from './api.ts';
 import { byteToYaw, FloorLink } from './presence.ts';
 import { CapsuleFactory, RemotePlayers, type SeatPose } from '../world/remote-players.ts';
 import { GAMES } from '../games/index.ts';
 import { variantOf } from '../../../shared/src/games/catalog.ts';
+import type { Look } from '../../../shared/src/look.ts';
 import { el } from '../ui/kit.ts';
 
 const WALK = 1.6; // m/s
@@ -29,10 +30,10 @@ function carpet(): THREE.CanvasTexture {
   const c = document.createElement('canvas');
   c.width = c.height = 256;
   const g = c.getContext('2d')!;
-  g.fillStyle = '#4a1218';
+  g.fillStyle = '#35100f';
   g.fillRect(0, 0, 256, 256);
-  g.strokeStyle = 'rgba(196, 150, 72, 0.55)';
-  g.lineWidth = 3;
+  g.strokeStyle = 'rgba(190, 140, 70, 0.3)';
+  g.lineWidth = 4;
   g.beginPath();
   g.moveTo(128, 0);
   g.lineTo(256, 128);
@@ -40,20 +41,20 @@ function carpet(): THREE.CanvasTexture {
   g.lineTo(0, 128);
   g.closePath();
   g.stroke();
-  g.fillStyle = 'rgba(214, 170, 90, 0.5)';
   for (const [x, y] of [[128, 128], [0, 0], [256, 0], [0, 256], [256, 256]] as const) {
+    g.fillStyle = 'rgba(200, 150, 78, 0.34)';
     g.beginPath();
-    g.arc(x, y, 14, 0, TAU);
+    g.arc(x, y, 18, 0, TAU);
+    g.fill();
+    g.fillStyle = '#4a1418';
+    g.beginPath();
+    g.arc(x, y, 10, 0, TAU);
     g.fill();
   }
-  g.fillStyle = '#5c1820';
-  g.beginPath();
-  g.arc(128, 128, 7, 0, TAU);
-  g.fill();
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  t.repeat.set(14, 14);
+  t.repeat.set(36, 36);
   t.anisotropy = 4;
   return t;
 }
@@ -61,7 +62,7 @@ function carpet(): THREE.CanvasTexture {
 function room(engine: Engine3D): DevStation[] {
   const scene = engine.scene;
   scene.fog = new THREE.Fog('#0b0908', 11, 26);
-  scene.add(new THREE.HemisphereLight('#ffe2b8', '#2a1a10', 0.6));
+  scene.add(new THREE.HemisphereLight('#ffe2b8', '#2a1a10', 0.45));
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(28, 28), new THREE.MeshStandardMaterial({ map: carpet(), roughness: 0.95 }));
   floor.rotation.x = -Math.PI / 2;
   floor.position.set(0, 0, 16);
@@ -94,8 +95,8 @@ function turnToward(a: number, b: number, k: number): number {
 async function run(): Promise<void> {
   const params = new URLSearchParams(location.search);
   const engine = new Engine3D(document.getElementById('scene') as HTMLCanvasElement, document.getElementById('labels')!, savedQuality());
-  engine.camera.position.set(0, 6.2, 23.2);
-  engine.camera.lookAt(0, 0.5, 15.4);
+  engine.camera.position.set(0, 4.3, 21.4);
+  engine.camera.lookAt(0, 0.6, 15.6);
   const stations = room(engine);
   const profile = await login(params.get('name') ?? `dev_${Math.random().toString(36).slice(2, 8)}`);
 
@@ -205,13 +206,14 @@ async function run(): Promise<void> {
   let table: WebSocket | null = null;
   const devApi = {
     ready: hello,
-    me: () => ({ id: link.you?.id ?? null, x: pos.x, z: pos.z, yaw, moving, at: link.you?.at ?? null, online: link.onlineCount, state }),
+    me: () => ({ id: link.you?.id ?? null, x: pos.x, z: pos.z, yaw, moving, at: link.you?.at ?? null, online: link.onlineCount, state, frameMs: engine.frameMs() }),
     remotes: () =>
       [...link.players.values()].map((p) => {
         const root = remotes.character(p.info.id)?.root;
-        return { id: p.info.id, name: p.info.name, at: p.info.at, x: root?.position.x ?? null, z: root?.position.z ?? null, visible: root?.visible ?? false, speed: remotes.speed(p.info.id) };
+        return { id: p.info.id, name: p.info.name, look: p.info.look, at: p.info.at, x: root?.position.x ?? null, z: root?.position.z ?? null, visible: root?.visible ?? false, speed: remotes.speed(p.info.id) };
       }),
     walkTo: (x: number, z: number) => new Promise<void>((done) => (target = { x, z, done })),
+    setLook: (look: Look) => saveLook(look),
     sit: (station: string) =>
       new Promise<void>((resolve, reject) => {
         const ws = new WebSocket(socketUrl('solo/highcard', { station }));
