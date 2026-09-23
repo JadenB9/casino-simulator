@@ -16,8 +16,9 @@ import { BETTING_MS, INSURANCE_MS, TURN_MS } from '../../../../shared/src/games/
 import { advise, insuranceAdvice } from '../../../../shared/src/games/blackjack/advice.ts';
 import { CardMesh, dealCard, flipCard } from '../../table/cards.ts';
 import { ChipStack, slideStack } from '../../table/chips.ts';
-import { celebrate, type Moment } from '../../table/celebrate.ts';
+import { celebrate } from '../../table/celebrate.ts';
 import { dropGlow, handGlow } from './glow.ts';
+import { roundMoment } from './moments.ts';
 import { tween, wait, ease } from '../../table/tween.ts';
 import { ChipTray, button, el } from '../../ui/kit.ts';
 import { serverNow } from '../../net/clock.ts';
@@ -101,25 +102,6 @@ function dealerLabel(cards: readonly (Card | null)[], natural: boolean): { word:
   const t = handTotal(known);
   const value = t.soft && t.total < 17 ? `${t.total - 10}/${t.total}` : String(t.total);
   return { word: 'Dealer', value, cls: t.total > 21 ? ' bust' : '' };
-}
-
-/**
- * The round's moment for a seat, if it is one: a blackjack paid 3 to 2 (big), and a blackjack
- * taken at even money, a double down or a split that came out ahead (nice). Never when the seat
- * got back no more than it put down.
- */
-function roundMoment(sp: SpotView): { m: Omit<Moment, 'glow'>; hands: number[] } | null {
-  const net = sp.returned - sp.wagered;
-  if (net <= 0) return null;
-  const won = formatMoney(net, { sign: true });
-  const bj = sp.hands.findIndex((h) => h.outcome === 'blackjack');
-  if (bj >= 0) return { m: { title: 'Blackjack', sub: `Pays 3 to 2 · ${won}`, tier: 'big' }, hands: [bj] };
-  const even = sp.hands.findIndex((h) => h.outcome === 'evenmoney');
-  if (even >= 0) return { m: { title: 'Blackjack', sub: `Even money · ${won}`, tier: 'nice' }, hands: [even] };
-  const wins = sp.hands.flatMap((h, i) => (h.outcome === 'win' ? [i] : []));
-  if (sp.hands.length > 1 && wins.length) return { m: { title: 'Split', sub: `${wins.length} of ${sp.hands.length} hands win · ${won}`, tier: 'nice' }, hands: wins };
-  if (wins.length && sp.hands[0]!.doubled) return { m: { title: 'Double down', sub: `Pays 1 to 1 · ${won}`, tier: 'nice' }, hands: wins };
-  return null;
 }
 
 export class BlackjackTable implements TableView {

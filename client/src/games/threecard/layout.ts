@@ -8,6 +8,7 @@
 
 import * as THREE from 'three';
 import { Felt, type Region } from '../../table/felt.ts';
+import { CARD_H, CARD_W } from '../../table/cards.ts';
 import type { Paytable } from '../../../../shared/src/games/threecard/rules.ts';
 import { CATEGORY_NAMES } from '../../../../shared/src/games/threecard/rules.ts';
 
@@ -35,8 +36,11 @@ const HAND_R = 0.575;
 const FAN = 0.036;
 const TEXT_R = 0.48;
 
-export const DEALER_CARDS_Z = -0.328;
-export const DEALER_CARD_GAP = 0.074;
+/** The dealer's cards lie a size up from the players', so they read from every seat. */
+export const DEALER_CARD_SCALE = 1.25;
+/** The dealer's card line, just clear of the chip rack. */
+export const DEALER_CARDS_Z = -0.322;
+export const DEALER_CARD_GAP = 0.092;
 export const RACK = { x: 0, z: -0.412, w: 0.44, d: 0.056 };
 export const SHUFFLER = new THREE.Vector3(-0.3, TOP_Y + 0.05, -0.405);
 export const DISCARD = new THREE.Vector3(0.3, TOP_Y + 0.02, -0.405);
@@ -84,6 +88,9 @@ export function handSlot(seat: number, i: number): { pos: THREE.Vector3; yaw: nu
 export function dealerSlot(i: number): THREE.Vector3 {
   return new THREE.Vector3((i - 1) * DEALER_CARD_GAP, TOP_Y + 0.001, DEALER_CARDS_Z);
 }
+
+/** The dealer's hand label sits in front of the cards, between them and the printed arc. */
+export const DEALER_LABEL = new THREE.Vector3(0, TOP_Y + 0.01, DEALER_CARDS_Z + (CARD_H * DEALER_CARD_SCALE) / 2 + 0.04);
 
 /** Toward the player from their play spot, where collected chips go. */
 export function railPoint(seat: number): THREE.Vector3 {
@@ -272,9 +279,11 @@ function paint(pay: Paytable) {
     // the dealer's card line
     g.strokeStyle = INK_SOFT;
     g.lineWidth = px(0.0015);
+    const w = CARD_W * DEALER_CARD_SCALE + 0.008;
+    const h = CARD_H * DEALER_CARD_SCALE + 0.008;
     for (let i = 0; i < 3; i++) {
       const p = dealerSlot(i);
-      roundRect(g, px(p.x - 0.035), px(p.z - 0.048), px(0.07), px(0.096), px(0.006));
+      roundRect(g, px(p.x - w / 2), px(p.z - h / 2), px(w), px(h), px(0.006));
       g.stroke();
     }
 

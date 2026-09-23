@@ -3,7 +3,6 @@
 
 .tc-hand { display: flex; align-items: baseline; gap: 8px; padding: 3px 10px; border-radius: 4px; font-family: var(--serif); font-size: 14px; font-weight: 600; letter-spacing: 0.04em; white-space: nowrap; color: var(--ink); background: rgba(9, 17, 29, 0.8); border: 1px solid rgba(239, 217, 162, 0.28); pointer-events: none; }
 .tc-hand.mine { font-size: 16px; border-color: var(--line-strong); }
-.tc-hand.dealer { font-size: 15px; }
 .tc-hand .muted { color: var(--ink-3); font-size: 0.86em; font-weight: 400; }
 .tc-hand .net { font-family: var(--ui); font-size: 1.05em; letter-spacing: 0.02em; color: var(--ink-2); }
 .tc-hand .net.up { color: var(--win); }
@@ -44,3 +43,8 @@
 .tc-ring .left { fill: none; stroke: var(--brass-hi); stroke-linecap: round; transform: rotate(-90deg); transform-origin: 50% 50%; }
 .tc-clock.low .left { stroke: var(--lose); }
 .tc-clock-text { position: relative; font-size: 19px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* The dealer's hand, in front of the dealer's cards: "Dealer · Jack high". */
+.tc-hand.tc-dealer { gap: 9px; padding: 4px 12px 5px; background: rgba(9, 17, 29, 0.88); border-color: var(--line-strong); }
+.tc-dealer-word { font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-2); }
+.tc-dealer-hand { font-size: 20px; color: var(--ink); }

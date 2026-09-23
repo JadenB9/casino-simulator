@@ -11,6 +11,7 @@
 
 import * as THREE from 'three';
 import type { Spot } from '../../../../shared/src/games/baccarat/rules.ts';
+import { CARD_H, CARD_W } from '../../table/cards.ts';
 
 export const TOP_Y = 0.76;
 /** Centre of the players' arc (x = 0). */
@@ -95,14 +96,22 @@ export function sectorPoints(r0: number, r1: number, a0: number, a1: number, ste
 // The dealer's side
 
 export const CARD_Y = TOP_Y + 0.001;
+/** The hands' cards lie a size up from the usual, so they read from every seat. */
+export const HAND_CARD_SCALE = 1.25;
 
-/** Where each hand's cards land: two upright side by side, the third sideways below them. */
+/** The printed box each hand is dealt into; it reaches back toward the commission boxes. */
+export const HAND_BOX = { player: { x: -0.19, z: -0.16 }, banker: { x: 0.19, z: -0.16 }, w: 0.22, d: 0.24 };
+
+// Two cards upright side by side along the top of the box, the third sideways below them.
+const UP_Z = HAND_BOX.player.z - HAND_BOX.d / 2 + 0.012 + (CARD_H * HAND_CARD_SCALE) / 2;
+const SIDE_Z = UP_Z + (CARD_H * HAND_CARD_SCALE) / 2 + 0.008 + (CARD_W * HAND_CARD_SCALE) / 2;
+const HALF_GAP = (CARD_W * HAND_CARD_SCALE + 0.011) / 2;
+
+/** Where each hand's cards land, as [x, z, sideways]. */
 export const HAND_SLOTS: Record<'player' | 'banker', [number, number, boolean][]> = {
-  player: [[-0.225, -0.185, false], [-0.155, -0.185, false], [-0.19, -0.094, true]],
-  banker: [[0.155, -0.185, false], [0.225, -0.185, false], [0.19, -0.094, true]],
+  player: [[HAND_BOX.player.x - HALF_GAP, UP_Z, false], [HAND_BOX.player.x + HALF_GAP, UP_Z, false], [HAND_BOX.player.x, SIDE_Z, true]],
+  banker: [[HAND_BOX.banker.x - HALF_GAP, UP_Z, false], [HAND_BOX.banker.x + HALF_GAP, UP_Z, false], [HAND_BOX.banker.x, SIDE_Z, true]],
 };
-
-export const HAND_BOX = { player: { x: -0.19, z: -0.145 }, banker: { x: 0.19, z: -0.145 }, w: 0.19, d: 0.2 };
 
 export function handSlot(hand: 'player' | 'banker', i: number): { pos: THREE.Vector3; sideways: boolean } {
   const [x, z, sideways] = HAND_SLOTS[hand][Math.min(i, 2)]!;

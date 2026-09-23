@@ -62,11 +62,11 @@
 .bc-tip-meta { font-size: 13px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
 
 /* pinned to the felt */
-.bc-total { display: inline-flex; align-items: baseline; gap: 7px; padding: 2px 11px 3px; border-radius: 999px; background: var(--glass-2); border: 1px solid var(--line-strong); font-family: var(--serif); font-size: 12px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-2); white-space: nowrap; transition: opacity 0.3s, border-color 0.3s; }
+.bc-total { display: inline-flex; align-items: baseline; gap: 8px; padding: 3px 13px 4px; border-radius: 999px; background: rgba(12, 10, 8, 0.84); border: 1px solid var(--line-strong); font-family: var(--serif); font-size: 13px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-2); white-space: nowrap; transition: opacity 0.3s, border-color 0.3s; }
 .bc-total span::before { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
 .bc-total-player span::before { background: var(--bc-player); }
 .bc-total-banker span::before { background: var(--bc-banker); }
-.bc-total-num { font-family: var(--ui); font-size: 21px; line-height: 1; color: var(--ink); }
+.bc-total-num { font-family: var(--ui); font-size: 25px; line-height: 1; color: var(--ink); }
 .bc-total.win { border-color: var(--brass-hi); box-shadow: 0 0 0 1px rgba(241, 213, 154, 0.4), 0 0 18px rgba(241, 213, 154, 0.25); }
 .bc-total.win .bc-total-num { color: var(--brass-hi); }
 .bc-total.tie { border-color: var(--bc-tie); }
