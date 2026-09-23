@@ -12,7 +12,7 @@ export const ROAD_COLORS = { B: '#c8312f', P: '#2257c5', T: '#2c8a4d' } as const
 const PAPER = '#f4f0e6';
 const GRID = '#d6cebd';
 
-const BEAD_COLS = 10;
+const BEAD_COLS = 8;
 const BIG_COLS = 16;
 
 interface Grid {
@@ -168,7 +168,7 @@ export class Scoreboard {
   }
 
   private resize = (): void => {
-    const cell = innerWidth < 900 ? 12 : innerWidth < 1200 ? 14 : 16;
+    const cell = innerWidth < 900 ? 11 : innerWidth < 1200 ? 12 : 14;
     this.bead.cell = cell;
     this.big.cell = cell;
     this.draw();
@@ -176,7 +176,7 @@ export class Scoreboard {
 
   set(history: readonly RoadEntry[], shoe: ShoeView): void {
     this.history = history;
-    this.shoeLine.textContent = shoe.no > 0 ? `Shoe ${shoe.no} · Coup ${shoe.coups}` : 'New shoe';
+    this.shoeLine.textContent = shoe.no === 0 ? 'New shoe' : shoe.coups > 0 ? `Shoe ${shoe.no} · Coup ${shoe.coups}` : `Shoe ${shoe.no}`;
     const c = roadCounts(history);
     this.counts.replaceChildren(
       ...([['B', c.banker, 'Banker'], ['P', c.player, 'Player'], ['T', c.tie, 'Tie']] as const).map(([k, n, name]) => {

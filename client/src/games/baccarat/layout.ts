@@ -4,7 +4,7 @@
 //
 // The players' side is a half circle (a little more) around CENTRE; seven seats sit around it,
 // numbered 1-7 from the dealer's left (+x) to the dealer's right. Each seat has, from the rail
-// in: its number between the two pair circles, then PLAYER, BANKER and TIE boxes. The two hands
+// in: its number, then the PLAYER box between the two pair circles, then BANKER and TIE. The hands
 // are dealt in the middle, Player on the left as the players see it and Banker on the right, with
 // the shoe at the dealer's left, the discard holder at the dealer's right and the chip rack and
 // numbered commission boxes in front of the dealer.
@@ -43,26 +43,26 @@ export function polar(r: number, a: number): [number, number] {
 // ---------------------------------------------------------------------------------------------
 // Betting spots
 
-/** Half the angular width of a seat's boxes. */
-export const BOX_HALF = 0.15;
-
 export interface Band {
   r0: number;
   r1: number;
+  /** Half the box's angular width. */
+  half: number;
   label: string;
   font: number;
 }
 
+// About 16 cm across each, the same width in every ring.
 export const BANDS: Record<'player' | 'banker' | 'tie', Band> = {
-  player: { r0: 0.765, r1: 0.875, label: 'PLAYER', font: 0.03 },
-  banker: { r0: 0.645, r1: 0.755, label: 'BANKER', font: 0.028 },
-  tie: { r0: 0.55, r1: 0.635, label: 'TIE', font: 0.025 },
+  player: { r0: 0.765, r1: 0.875, half: 0.098, label: 'PLAYER', font: 0.028 },
+  banker: { r0: 0.645, r1: 0.755, half: 0.12, label: 'BANKER', font: 0.027 },
+  tie: { r0: 0.55, r1: 0.635, half: 0.135, label: 'TIE', font: 0.025 },
 };
 
-export const PAIR_R = 0.925;
-export const PAIR_RADIUS = 0.031;
-/** Pair circles sit either side of the seat number: Player Pair on the seated player's left. */
-export const PAIR_OFFSET = 0.105;
+/** Pair circles flank the PLAYER box: Player Pair on the seated player's left, Banker Pair on the right. */
+export const PAIR_R = 0.82;
+export const PAIR_RADIUS = 0.029;
+export const PAIR_OFFSET = 0.148;
 export const NUMBER_R = 0.93;
 
 export function spotCentre(seatNo: number, spot: Spot): [number, number] {
@@ -160,10 +160,13 @@ export function seatPlace(n: number): { position: [number, number, number]; yaw:
   return { position: [x, 0, z], yaw: Math.atan2(-Math.cos(a), -Math.sin(a)) };
 }
 
-/** The camera behind seat n, looking over the felt at the hands. */
+/**
+ * The camera over seat n's rail, looking down across its spots to the hands, steep enough that
+ * the whole layout sits between the scoreboard and the chip tray.
+ */
 export function seatCamera(n: number): { position: [number, number, number]; target: [number, number, number] } {
   const a = seatAngle(n);
-  const [x, z] = polar(1.5, a);
-  const [tx, tz] = polar(0.36, a);
-  return { position: [x, 1.5, z], target: [tx * 0.4, TOP_Y, tz - 0.02] };
+  const [x, z] = polar(1.18, a);
+  const [tx, tz] = polar(0.51, a);
+  return { position: [x, 1.62, z], target: [tx * 0.6, TOP_Y, tz] };
 }

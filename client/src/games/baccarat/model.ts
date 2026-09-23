@@ -1,6 +1,6 @@
 // The mini-baccarat table as it stands on the floor: a kidney top in burgundy felt, a padded
 // leather rail, a wood apron on two pedestals, the dealing shoe on the dealer's left, the clear
-// discard holder on the dealer's right, a chip rack and a lit limit sign. Everything is built in
+// discard holder on the dealer's right, a chip rack and a lit limit placard. Everything is built in
 // code (nothing CC0 exists at this quality, see ASSETS.md §4.3); textures are small canvases,
 // shared by every baccarat table on the floor.
 
@@ -249,32 +249,35 @@ function rollMaterials(value: number, body: string, spots: string, chips: number
   return mats;
 }
 
-/** The lit table-limit sign on a post at the dealer's right. */
+/** The lit limit placard standing on the felt at the dealer's left, beside the shoe. */
 function limitSign(): THREE.Object3D {
   const g = new THREE.Group();
-  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 1.1, 12), brass);
-  pole.position.y = 0.55;
-  const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.11, 0.02, 24), blackAcrylic);
-  foot.position.y = 0.01;
-  const box = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.19, 0.03), blackAcrylic);
-  box.position.y = 1.18;
+  const base = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.014, 0.05), blackAcrylic);
+  base.position.y = 0.007;
+  const panel = new THREE.Group();
+  panel.position.set(0, 0.012, 0.004);
+  panel.rotation.x = -0.32;
+  const back = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.1, 0.006), blackAcrylic);
+  back.position.y = 0.05;
   if (!signTex) {
     const c = document.createElement('canvas');
     c.width = 600;
     c.height = 380;
     const tex = new THREE.CanvasTexture(c);
     tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 4;
     signTex = tex;
     paintWithFonts(() => {
       paintSign(c);
       tex.needsUpdate = true;
     });
   }
-  const face = new THREE.Mesh(new THREE.PlaneGeometry(0.28, 0.177), new THREE.MeshStandardMaterial({ map: signTex, emissive: '#ffffff', emissiveMap: signTex, emissiveIntensity: 0.9, roughness: 0.4 }));
-  face.position.set(0, 1.18, 0.0155);
-  g.add(pole, foot, box, face);
-  g.position.set(-0.98, 0, -0.62);
-  g.rotation.y = 0.35;
+  const face = new THREE.Mesh(new THREE.PlaneGeometry(0.152, 0.096), new THREE.MeshStandardMaterial({ map: signTex, emissive: '#ffffff', emissiveMap: signTex, emissiveIntensity: 0.75, roughness: 0.35 }));
+  face.position.set(0, 0.05, 0.0032);
+  panel.add(back, face);
+  g.add(base, panel);
+  g.position.set(0.86, TOP_Y, -0.455);
+  g.rotation.y = -0.5;
   return g;
 }
 

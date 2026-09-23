@@ -1,5 +1,5 @@
-// The baccarat table view. Bets go down on the felt (your seat's spots), from the bet strip or
-// with P / B / T; the coup plays out to the result the server already decided: "No more bets",
+// The baccarat table view. Bets go down on your seat's spots on the felt, or with P / B / T (and
+// Shift for the pairs); the coup plays out to the result the server already decided: "No more bets",
 // four cards face down from the shoe (Player, Banker, Player, Banker), the Player's two turned
 // over and then the Banker's, the tableau's calls, third cards dealt face up and sideways, the
 // call ("Banker wins, 7 over 5"), losing bets collected, then winners paid from the highest seat
@@ -28,7 +28,7 @@ import { feltSpec, kidneyGeometry } from './felt.ts';
 import { setDiscardHeight } from './model.ts';
 import { Scoreboard } from './scoreboard.ts';
 import {
-  BANDS, BOX_HALF, BURN_SPOT, CUT_SPOT, CZ, DISCARD_TOP, HAND_BOX, NUMBER_R, PAIR_RADIUS, RACK_POINT, SHOE_MOUTH, TOP_Y,
+  BANDS, BURN_SPOT, CUT_SPOT, CZ, DISCARD_TOP, HAND_BOX, NUMBER_R, PAIR_RADIUS, RACK_POINT, SHOE_MOUTH, TOP_Y,
   commissionBox, handSlot, parseRegion, polar, seatAngle, sectorPoints, spotCentre,
 } from './layout.ts';
 import './baccarat.css';
@@ -36,10 +36,9 @@ import './baccarat.css';
 type ResultEvent = Extract<BaccaratEvent, { type: 'result' }>;
 
 const HANDS = ['player', 'banker'] as const;
-const STRIP_ORDER: Spot[] = ['playerPair', 'player', 'tie', 'banker', 'bankerPair'];
-const STRIP_NAME: Record<Spot, string> = { player: 'Player', banker: 'Banker', tie: 'Tie', playerPair: 'P Pair', bankerPair: 'B Pair' };
-const STRIP_PAYS: Record<Spot, string> = { player: '1 to 1', banker: '0.95 to 1', tie: '8 to 1', playerPair: '11 to 1', bankerPair: '11 to 1' };
-const STRIP_KEY: Record<Spot, string> = { player: 'P', banker: 'B', tie: 'T', playerPair: '⇧P', bankerPair: '⇧B' };
+const KEYS: Record<Spot, string> = { player: 'P', banker: 'B', tie: 'T', playerPair: 'Shift P', bankerPair: 'Shift B' };
+/** The $25K chip is above this table's maximum, so the tray hides it (it's the 8th). */
+const HIDDEN_CHIP_KEY = '8';
 const PAYS_LONG: Record<Spot, string> = {
   player: 'pays 1 to 1',
   banker: 'pays 1 to 1 less 5% commission',
@@ -84,8 +83,7 @@ export class BaccaratTable implements TableView {
   private readonly staticFelt: THREE.Object3D | undefined;
   private readonly board = new Scoreboard();
   private readonly tray: ChipTray;
-  private readonly strip = el('div', 'bc-strip panel');
-  private readonly spotButtons = new Map<Spot, { btn: HTMLButtonElement; amt: HTMLElement }>();
+  private readonly metersBox = el('div', 'bc-meters panel');
   private readonly meters = { stack: el('b', 'money'), bet: el('b', 'money'), last: el('b', 'money') };
   private readonly squeezeBtn: HTMLButtonElement;
   private readonly tip = el('div', 'bc-tip panel');
@@ -115,6 +113,11 @@ export class BaccaratTable implements TableView {
   private squeeze = loadSqueeze();
   private members: Member[] = [];
   private disposed = false;
+  /** Set once the session snaps an animation because messages piled up: the rest of the batch plays at once. */
+  private rush = false;
+  /** When the last batch finished; a batch that starts right after a rushed one was queued behind it. */
+  private lastEnd = 0;
+  private shoeNo = 0;
 
   constructor(private readonly ctx: TableViewCtx) {
     this.root = ctx.stage.root;
@@ -146,7 +149,7 @@ export class BaccaratTable implements TableView {
     };
     this.timer = this.makeTimer();
 
-    // DOM: scoreboard, bet strip, chip tray, hover tip
+    // DOM: scoreboard, meters, chip tray, hover tip
     this.tray = new ChipTray({
       undo: () => this.act({ type: 'undo' }),
       clear: () => this.act({ type: 'clear' }),
@@ -154,11 +157,12 @@ export class BaccaratTable implements TableView {
       double: () => this.double(),
       primary: { label: 'Deal', run: () => this.primary() },
     });
+    this.tray.root.classList.add('bc-tray');
     this.squeezeBtn = button('Squeeze', () => this.toggleSqueeze(), { cls: 'ghost bc-squeeze', key: 'S', title: 'Peel the second card of each hand slowly' });
-    this.buildStrip();
+    this.buildMeters();
     this.tip.hidden = true;
     this.tip.setAttribute('role', 'tooltip');
-    ctx.ui.append(this.board.root, this.strip, this.tray.root, this.tip);
+    ctx.ui.append(this.board.root, this.metersBox, this.tray.root, this.tip);
 
     addEventListener('pointerdown', this.onPointerDown);
     addEventListener('pointermove', this.onPointerMove);
@@ -184,6 +188,8 @@ export class BaccaratTable implements TableView {
     const wasLastHand = this.view?.shoe.lastHand ?? false;
     const totals: Record<Hand, number> = { player: 0, banker: 0 };
     let settled = false;
+    // Keep hurrying through a backlog: a batch that was waiting behind a rushed one starts at once.
+    this.rush = this.rush && performance.now() - this.lastEnd < 30;
     for (const e of evs) {
       if (this.disposed) return;
       switch (e.type) {
@@ -200,7 +206,7 @@ export class BaccaratTable implements TableView {
           if (e.seat === this.mySeat) {
             this.myBets = { ...e.bets };
             this.ctx.sfx.play('chip-lay');
-            this.drawStrip();
+            this.drawMeters();
           } else {
             this.ctx.sfx.play('chip-lay', { volume: 0.5 });
           }
@@ -212,7 +218,7 @@ export class BaccaratTable implements TableView {
         case 'nomore':
           this.hideTip();
           this.ctx.kit.say(wasLastHand ? 'Last hand. No more bets' : 'No more bets', 1800);
-          await wait(450);
+          await this.pause(450);
           break;
         case 'shuffle':
           await this.shuffle(e.shoe);
@@ -224,7 +230,7 @@ export class BaccaratTable implements TableView {
           this.ctx.kit.say('Cut card', 1600);
           this.ctx.sfx.play('card-place');
           this.cut.visible = true;
-          await slide(this.cut, SHOE_MOUTH, CUT_SPOT, 420);
+          await this.play(420, (ms) => slide(this.cut, SHOE_MOUTH, CUT_SPOT, ms));
           break;
         case 'card':
           await this.deal(e.hand, e.card, e.faceUp);
@@ -238,25 +244,25 @@ export class BaccaratTable implements TableView {
           await this.reveal(e.hand);
           this.showTotal(e.hand, e.total);
           this.ctx.kit.say(e.hand === 'player' ? `Player ${e.total}` : `Player ${totals.player} · Banker ${e.total}`);
-          await wait(500);
+          await this.pause(500);
           break;
         case 'natural':
           this.ctx.kit.say(naturalLine(e.player, e.banker));
-          await wait(700);
+          await this.pause(700);
           break;
         case 'draw':
           this.ctx.kit.say(`${cap(e.hand)} draws`, 1400);
-          await wait(300);
+          await this.pause(300);
           break;
         case 'stand':
           this.ctx.kit.say(`${cap(e.hand)} stands`, 1400);
-          await wait(500);
+          await this.pause(500);
           break;
         case 'outcome':
           this.markWinner(e.winner);
           this.ctx.kit.say(outcomeLine(e.winner, e.player, e.banker), 3600);
           this.board.set(next.history, next.shoe);
-          await wait(700);
+          await this.pause(700);
           break;
         case 'result':
           if (!settled) {
@@ -265,7 +271,7 @@ export class BaccaratTable implements TableView {
           }
           break;
         case 'lasthand':
-          await wait(400);
+          await this.pause(400);
           this.ctx.kit.say('The cut card is out: one more coup, then a new shoe', 3200);
           break;
         case 'idle':
@@ -273,12 +279,13 @@ export class BaccaratTable implements TableView {
       }
     }
     this.draw(next);
+    this.lastEnd = performance.now();
   }
 
   onSeat(msg: SeatMsg): void {
     this.stack = msg.stack;
     if (msg.seat !== null) this.mySeat = msg.seat;
-    this.drawStrip();
+    this.drawMeters();
   }
 
   onMembers(msg: MembersMsg): void {
@@ -296,6 +303,7 @@ export class BaccaratTable implements TableView {
       return true;
     }
     if (e.metaKey || e.ctrlKey || e.altKey) return false;
+    if (e.key === HIDDEN_CHIP_KEY) return true;
     if (this.tray.key(e)) return true;
     const k = e.key.toLowerCase();
     if (k === 'p') this.bet(e.shiftKey ? 'playerPair' : 'player');
@@ -339,7 +347,7 @@ export class BaccaratTable implements TableView {
     removeEventListener('pointerdown', this.onPointerDown);
     removeEventListener('pointermove', this.onPointerMove);
     this.board.dispose();
-    this.strip.remove();
+    this.metersBox.remove();
     this.tray.root.remove();
     this.tip.remove();
     if (this.staticFelt) this.staticFelt.visible = true;
@@ -358,6 +366,26 @@ export class BaccaratTable implements TableView {
 
   private act(a: Record<string, unknown>): void {
     this.ctx.link.act(a);
+  }
+
+  /** An animation's length, or none while the table is catching up with the server. */
+  private ms(n: number): number {
+    return this.rush ? 0 : n;
+  }
+
+  /**
+   * Run an animation. When the session snaps animations (finishAll, because messages piled up)
+   * one lands early; from then on the rest of this batch plays at once.
+   */
+  private async play(n: number, run: (ms: number) => Promise<unknown>): Promise<void> {
+    const d = this.ms(n);
+    const t0 = performance.now();
+    await run(d);
+    if (d > 0 && performance.now() - t0 < d * 0.5) this.rush = true;
+  }
+
+  private pause(n: number): Promise<void> {
+    return this.play(n, (ms) => wait(ms));
   }
 
   private bet(spot: Spot, amount: Cents = this.tray.selected.value): void {
@@ -388,7 +416,7 @@ export class BaccaratTable implements TableView {
     if (this.view?.phase !== 'betting' || this.ready) return;
     this.ready = true;
     this.ctx.link.ready(true);
-    this.drawStrip();
+    this.drawMeters();
   }
 
   private toggleSqueeze(): void {
@@ -430,7 +458,7 @@ export class BaccaratTable implements TableView {
     const lim = limitsFor(this.config, s.spot);
     const mine = this.myBets[s.spot];
     this.tip.replaceChildren(
-      el('b', '', SPOT_NAMES[s.spot]),
+      el('b', '', `${SPOT_NAMES[s.spot]} (${KEYS[s.spot]})`),
       el('span', '', PAYS_LONG[s.spot]),
       el('span', 'bc-tip-meta', `${formatMoney(lim.min)} to ${formatMoney(lim.max)}${mine ? ` · your bet ${formatMoney(mine)}` : ''}`),
     );
@@ -455,7 +483,7 @@ export class BaccaratTable implements TableView {
       shape.absarc(x, -z, PAIR_RADIUS, 0, Math.PI * 2, false);
     } else {
       const b = BANDS[spot];
-      shape = new THREE.Shape(sectorPoints(b.r0, b.r1, a - BOX_HALF, a + BOX_HALF, 16).map(([x, z]) => new THREE.Vector2(x, -z)));
+      shape = new THREE.Shape(sectorPoints(b.r0, b.r1, a - b.half, a + b.half, 16).map(([x, z]) => new THREE.Vector2(x, -z)));
     }
     m = new THREE.Mesh(new THREE.ShapeGeometry(shape, 24), new THREE.MeshBasicMaterial({ color: '#f6dfa6', transparent: true, opacity: 0.13, depthWrite: false }));
     m.rotation.x = -Math.PI / 2;
@@ -538,7 +566,7 @@ export class BaccaratTable implements TableView {
     this.root.add(m);
     this.cards[hand].push(m);
     this.ctx.sfx.play('card-deal');
-    await dealCard(m, SHOE_MOUTH, slot.pos, { faceUp, ms: faceUp ? 400 : 300, yaw: slot.sideways ? Math.PI / 2 : 0 });
+    await this.play(faceUp ? 400 : 300, (ms) => dealCard(m, SHOE_MOUTH, slot.pos, { faceUp, ms, yaw: slot.sideways ? Math.PI / 2 : 0 }));
   }
 
   private async reveal(hand: Hand): Promise<void> {
@@ -547,8 +575,8 @@ export class BaccaratTable implements TableView {
       if (!m) continue;
       m.setCard(this.faces.get(m)!);
       this.ctx.sfx.play('card-flip');
-      if (m === b && this.squeeze) await this.squeezeCard(m);
-      else await flipCard(m, true, 400);
+      if (m === b && this.squeeze && !this.rush) await this.squeezeCard(m);
+      else await this.play(400, (ms) => flipCard(m, true, ms));
     }
   }
 
@@ -611,8 +639,10 @@ export class BaccaratTable implements TableView {
     const box = el('div', `bc-total bc-total-${hand}`);
     const num = el('b', 'bc-total-num');
     box.append(el('span', '', hand === 'player' ? 'Player' : 'Banker'), num);
+    // beside the hand's box, on the outside, clear of a sideways third card
     const at = HAND_BOX[hand];
-    const obj = this.ctx.stage.label(box, new THREE.Vector3(at.x, TOP_Y + 0.01, at.z - HAND_BOX.d / 2 - 0.028));
+    const side = hand === 'player' ? -1 : 1;
+    const obj = this.ctx.stage.label(box, new THREE.Vector3(at.x + side * (HAND_BOX.w / 2 + 0.085), TOP_Y + 0.012, at.z + 0.02));
     obj.visible = false;
     return { el: box, num, obj };
   }
@@ -656,14 +686,14 @@ export class BaccaratTable implements TableView {
     const jobs: Promise<void>[] = [];
     if (all.length) this.ctx.sfx.play('card-place');
     all.forEach((m, i) => {
-      jobs.push(wait(i * 45).then(() => dealCard(m, m.position.clone(), DISCARD_TOP, { faceUp: false, ms: 380, yaw: 0 })));
+      jobs.push(wait(this.ms(i * 45)).then(() => dealCard(m, m.position.clone(), DISCARD_TOP, { faceUp: false, ms: this.ms(380), yaw: 0 })));
     });
     const chips: { seat: number; stack: ChipStack }[] = [...this.pays];
     for (const [key, stack] of this.stacks) chips.push({ seat: Number(key.split(':')[0]), stack });
     for (const { seat, stack } of chips) {
       if (stack.amount <= 0) continue;
       const [x, z] = polar(1.02, seatAngle(seatNumber(seat)));
-      jobs.push(slideStack(stack, new THREE.Vector3(x, TOP_Y + 0.03, z), 340).then(() => stack.set(0)));
+      jobs.push(slideStack(stack, new THREE.Vector3(x, TOP_Y + 0.03, z), this.ms(340)).then(() => stack.set(0)));
     }
     await Promise.all(jobs);
     this.removeCards();
@@ -681,10 +711,11 @@ export class BaccaratTable implements TableView {
     this.ctx.sfx.play('card-shuffle');
     const pile = this.discardCount(this.view);
     this.cut.visible = false;
-    await tween(900, (k) => this.setDiscard(Math.round(pile * (1 - k))), ease.inOut);
+    await this.play(900, (ms) => tween(ms, (k) => this.setDiscard(Math.round(pile * (1 - k))), ease.inOut));
+    this.shoeNo = shoeNo;
     const fresh: ShoeView = { no: shoeNo, coups: 0, left: 416, used: 0, lastHand: false, shuffleNext: false, burn: null };
     this.board.set([], fresh);
-    await wait(250);
+    await this.pause(250);
   }
 
   /** Turn up the first card, then burn that many face down into the discard. */
@@ -692,19 +723,21 @@ export class BaccaratTable implements TableView {
     const shown = new CardMesh(card);
     this.root.add(shown);
     this.ctx.sfx.play('card-deal');
-    await dealCard(shown, SHOE_MOUTH, BURN_SPOT, { faceUp: true, ms: 420 });
+    await this.play(420, (ms) => dealCard(shown, SHOE_MOUTH, BURN_SPOT, { faceUp: true, ms }));
     this.ctx.kit.say(`Burn: ${count}`, 2200);
-    await wait(650);
+    await this.pause(650);
     for (let i = 0; i < count; i++) {
       const b = new CardMesh(null);
       this.root.add(b);
-      void dealCard(b, SHOE_MOUTH, DISCARD_TOP, { faceUp: false, ms: 260 }).then(() => b.removeFromParent());
+      void dealCard(b, SHOE_MOUTH, DISCARD_TOP, { faceUp: false, ms: this.ms(260) }).then(() => b.removeFromParent());
       this.setDiscard(i + 1);
-      await wait(70);
+      await this.pause(70);
     }
-    await dealCard(shown, BURN_SPOT, DISCARD_TOP, { faceUp: false, ms: 320 });
+    await this.play(320, (ms) => dealCard(shown, BURN_SPOT, DISCARD_TOP, { faceUp: false, ms }));
     shown.removeFromParent();
     this.setDiscard(count + 1);
+    const burned: ShoeView = { no: this.shoeNo, coups: 0, left: 416 - 1 - count, used: 1 + count, lastHand: false, shuffleNext: false, burn: { card, count } };
+    this.board.set([], burned);
   }
 
   // -------------------------------------------------------------------------------------------
@@ -721,20 +754,20 @@ export class BaccaratTable implements TableView {
     }
     if (losers.length) {
       this.ctx.sfx.play('chips-collide');
-      await Promise.all(losers.map((s) => slideStack(s, RACK_POINT, 420).then(() => s.set(0))));
+      await this.play(420, (ms) => Promise.all(losers.map((s) => slideStack(s, RACK_POINT, ms).then(() => s.set(0)))));
       for (const r of results) for (const spot of SPOTS) this.stackFor(r.seat, spot).position.copy(this.spotPos(r.seat, spot));
     }
     for (const r of results) {
-      const paying: Promise<void>[] = [];
+      const paying: { pay: ChipStack; to: THREE.Vector3 }[] = [];
       for (const spot of SPOTS) {
         const sr = r.spots[spot];
         if (sr?.outcome !== 'win') continue;
-        const pay = this.addPay(r.seat, spot, sr.returned - sr.bet, RACK_POINT);
-        paying.push(slideStack(pay, this.payPos(r.seat, spot), 440));
+        paying.push({ pay: this.addPay(r.seat, spot, sr.returned - sr.bet, RACK_POINT), to: this.payPos(r.seat, spot) });
       }
       if (paying.length) {
+        // no celebration unless the seat got back more than it staked
         this.ctx.sfx.play(r.seat === this.mySeat && r.returned > r.wagered ? 'chips-stack' : 'chips-handle', { volume: r.seat === this.mySeat ? 1 : 0.5 });
-        await Promise.all(paying);
+        await this.play(440, (ms) => Promise.all(paying.map(({ pay, to }) => slideStack(pay, to, ms))));
       }
       if (r.commission > 0) this.commission(seatNumber(r.seat), r.commission);
       this.pills(r);
@@ -742,9 +775,9 @@ export class BaccaratTable implements TableView {
         this.lastNet = r.returned - r.wagered;
         this.lastBets = Object.fromEntries(SPOTS.filter((s) => r.spots[s]).map((s) => [s, r.spots[s]!.bet])) as Bets;
       }
-      if (paying.length) await wait(160);
+      if (paying.length) await this.pause(160);
     }
-    this.drawStrip();
+    this.drawMeters();
   }
 
   private pinned(text: string, cls: string, at: THREE.Vector3, ms: number): void {
@@ -817,40 +850,21 @@ export class BaccaratTable implements TableView {
       this.mine.position.set(x, TOP_Y + 0.0015, z);
       this.mine.visible = true;
     }
-    this.drawStrip();
+    this.drawMeters();
   }
 
-  private buildStrip(): void {
-    const spots = el('div', 'bc-spots');
-    for (const spot of STRIP_ORDER) {
-      const btn = el('button', `bc-spot bc-spot-${spot}`);
-      btn.type = 'button';
-      btn.title = `${SPOT_NAMES[spot]}: ${PAYS_LONG[spot]} (${STRIP_KEY[spot]})`;
-      const amt = el('span', 'bc-spot-amt money');
-      btn.append(el('span', 'bc-spot-name', STRIP_NAME[spot]), el('span', 'bc-spot-pays', STRIP_PAYS[spot]), amt, el('span', 'key', STRIP_KEY[spot]));
-      btn.addEventListener('click', () => this.bet(spot));
-      this.spotButtons.set(spot, { btn, amt });
-      spots.append(btn);
-    }
-    const meters = el('div', 'bc-meters');
-    for (const [label, value] of [['Stack', this.meters.stack], ['Bet', this.meters.bet], ['Last', this.meters.last]] as const) {
+  private buildMeters(): void {
+    for (const [label, value] of [['Stack', this.meters.stack], ['On layout', this.meters.bet], ['Last coup', this.meters.last]] as const) {
       const m = el('div', 'bc-meter');
       m.append(el('span', 'label', label), value);
-      meters.append(m);
+      this.metersBox.append(m);
     }
     this.squeezeBtn.setAttribute('aria-pressed', String(this.squeeze));
-    meters.append(this.squeezeBtn);
-    this.strip.append(spots, meters);
+    this.metersBox.append(this.squeezeBtn);
   }
 
-  private drawStrip(): void {
+  private drawMeters(): void {
     const v = this.view;
-    for (const [spot, { btn, amt }] of this.spotButtons) {
-      const a = this.myBets[spot] ?? 0;
-      amt.textContent = a ? formatMoney(a) : '';
-      btn.classList.toggle('has-bet', a > 0);
-      btn.disabled = this.mySeat === null || (this.mode === 'multi' && v?.phase !== 'betting');
-    }
     this.meters.stack.textContent = formatMoney(this.stack);
     this.meters.bet.textContent = formatMoney(betTotal(this.myBets));
     this.meters.last.textContent = this.lastNet === null ? '–' : formatMoney(this.lastNet, { sign: true });

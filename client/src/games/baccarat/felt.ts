@@ -6,11 +6,11 @@ import * as THREE from 'three';
 import type { FeltSpec, Region } from '../../table/felt.ts';
 import { SPOTS } from '../../../../shared/src/games/baccarat/rules.ts';
 import {
-  ARC_OVER, BANDS, BOX_HALF, COMMISSION, CZ, FELT_D, FELT_W, HAND_BOX, NUMBER_R, PAIR_OFFSET, PAIR_R, PAIR_RADIUS, R_FELT, SEAT_COUNT,
+  ARC_OVER, BANDS, COMMISSION, CZ, FELT_D, FELT_W, HAND_BOX, NUMBER_R, PAIR_OFFSET, PAIR_R, PAIR_RADIUS, R_FELT, SEAT_COUNT,
   commissionBox, feltOutline, polar, regionId, seatAngle, sectorPoints, spotCentre,
 } from './layout.ts';
 
-export const FELT_COLOR = '#5b1520';
+export const FELT_COLOR = '#4a1019';
 const INK = 'rgba(234, 203, 139, 0.92)';
 const INK_SOFT = 'rgba(234, 203, 139, 0.6)';
 const SERIF = 'Cinzel, Georgia, serif';
@@ -86,26 +86,26 @@ function paint(g: CanvasRenderingContext2D, px: Px): void {
     g.lineWidth = px(0.0035);
     for (const key of ['player', 'banker', 'tie'] as const) {
       const b = BANDS[key];
-      pathOf(g, px, sectorPoints(b.r0, b.r1, a - BOX_HALF, a + BOX_HALF, 16));
+      pathOf(g, px, sectorPoints(b.r0, b.r1, a - b.half, a + b.half, 16));
       g.stroke();
       const [x, z] = polar((b.r0 + b.r1) / 2, a);
       textAt(g, px, b.label, x, z, a, b.font);
     }
-    // seat number between the pair circles
+    // the seat's number at the rail
     const [nx, nz] = polar(NUMBER_R, a);
     g.lineWidth = px(0.0025);
-    circle(g, px, nx, nz, 0.02);
+    circle(g, px, nx, nz, 0.022);
     g.stroke();
-    textAt(g, px, String(n), nx, nz + 0.0005, a, 0.022, 700, 0);
+    textAt(g, px, String(n), nx, nz + 0.0005, a, 0.024, 700, 0);
     for (const [side, label] of [[1, 'P PAIR'], [-1, 'B PAIR']] as const) {
       const pa = a + side * PAIR_OFFSET;
       const [px0, pz0] = polar(PAIR_R, pa);
       g.lineWidth = px(0.003);
       circle(g, px, px0, pz0, PAIR_RADIUS);
       g.stroke();
-      const up = 0.0075;
-      textAt(g, px, label, px0 - Math.cos(pa) * up, pz0 - Math.sin(pa) * up, pa, 0.0105, 700, 0.06);
-      textAt(g, px, '11 TO 1', px0 + Math.cos(pa) * 0.009, pz0 + Math.sin(pa) * 0.009, pa, 0.0078, 600, 0.08);
+      const up = 0.007;
+      textAt(g, px, label, px0 - Math.cos(pa) * up, pz0 - Math.sin(pa) * up, pa, 0.0098, 700, 0.05);
+      textAt(g, px, '11 TO 1', px0 + Math.cos(pa) * 0.0085, pz0 + Math.sin(pa) * 0.0085, pa, 0.0074, 600, 0.08);
     }
   }
 
@@ -141,7 +141,7 @@ function regions(): Region[] {
         out.push({ id: regionId(n, spot), shape: { kind: 'circle', x: anchor[0], z: anchor[1], r: PAIR_RADIUS + 0.004 }, anchor });
       } else {
         const b = BANDS[spot];
-        out.push({ id: regionId(n, spot), shape: { kind: 'poly', points: sectorPoints(b.r0, b.r1, a - BOX_HALF, a + BOX_HALF, 6) }, anchor });
+        out.push({ id: regionId(n, spot), shape: { kind: 'poly', points: sectorPoints(b.r0, b.r1, a - b.half, a + b.half, 6) }, anchor });
       }
     }
   }
