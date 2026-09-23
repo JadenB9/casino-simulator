@@ -51,7 +51,7 @@
 .bs-player-status.win { color: var(--win); }
 .bs-player-stack { color: var(--ink-2); }
 
-.bs-color-note { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: var(--ink-2); }
+.bs-color-note { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: var(--ink-2); white-space: nowrap; }
 
 /* Tips: a tag pinned over the spot with the lowest house edge */
 .bs-best { padding: 3px 9px; border-radius: 3px; font-size: 13px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--brass-hi); background: rgba(14, 12, 10, 0.78); pointer-events: none; white-space: nowrap; }

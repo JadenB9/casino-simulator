@@ -6,6 +6,8 @@
 // (--multi) two players through the real table host.
 //
 // Usage: node scripts/e2e/bigsix.mjs [port] [outDir] [--quick] [--low] [--tips] [--multi]
+// Players have fixed names, so repeated runs don't use up the new-account limit; B6_SOLO,
+// B6_A, B6_B and B6_VIEW pick others.
 
 import { chromium } from 'playwright';
 import { mkdirSync } from 'node:fs';
@@ -14,6 +16,8 @@ const args = process.argv.slice(2).filter((a) => !a.startsWith('--'));
 const flag = (f) => process.argv.includes(f);
 const [port = '5750', outDir = '/tmp/bigsix-shots'] = args;
 mkdirSync(outDir, { recursive: true });
+const env = process.env;
+const NAMES = { solo: env.B6_SOLO ?? 'b6_solo', a: env.B6_A ?? 'b6_alice', b: env.B6_B ?? 'b6_bob', view: env.B6_VIEW ?? 'b6_viewer' };
 
 const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--autoplay-policy=no-user-gesture-required'] });
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
@@ -38,7 +42,7 @@ if (flag('--multi')) {
   process.exit(0);
 }
 
-await page.goto(`http://localhost:${port}/casino/?dev=table&game=bigsix&name=b6_${Date.now().toString(36).slice(-6)}`);
+await page.goto(`http://localhost:${port}/casino/?dev=table&game=bigsix&name=${NAMES.solo}`);
 await page.waitForSelector('.modal input[type=number]', { timeout: 90000 });
 await page.fill('.modal input[type=number]', '2000');
 await page.click('.modal .btn.primary', { force: true });
@@ -136,8 +140,9 @@ async function multiplayer() {
   const pageB = await ctxB.newPage();
   for (const p of [page, pageB]) await p.goto(`${base}/casino/`);
   const login = (p, name) => p.evaluate(async (n) => (await (await fetch('/casino/api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: n }) })).json()).token, name);
-  const tA = await login(page, `b6A_${Date.now().toString(36).slice(-5)}`);
-  const tB = await login(pageB, `b6B_${Date.now().toString(36).slice(-5)}`);
+  const tA = await login(page, NAMES.a);
+  const tB = await login(pageB, NAMES.b);
+  if (!tA || !tB) throw new Error('login failed (new-account limit?)');
   const { tableId } = await page.evaluate(async (t) => (await (await fetch('/casino/api/tables', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${t}` }, body: JSON.stringify({ game: 'bigsix', variant: '', visibility: 'public' }) })).json()), tA);
   const open = (p, t) =>
     p.evaluate(([id, tok]) => new Promise((res, rej) => {
@@ -158,10 +163,10 @@ async function multiplayer() {
   const [sa, sb] = [await seatOf(page), await seatOf(pageB)];
   await page.evaluate(() => window.b6.act({ type: 'bet', bets: [{ spot: 'one', amount: 500 }, { spot: 'twenty', amount: 1000 }] }));
   await pageB.evaluate(() => window.b6.act({ type: 'bet', bets: [{ spot: 'two', amount: 2500 }, { spot: 'star', amount: 300 }] }));
-  await pageB.evaluate(() => window.b6.act({ type: 'bet', bets: [{ spot: 'joker', amount: 300 }] })); // not a spot: dropped
+  await pageB.evaluate(() => window.b6.act({ type: 'bet', bets: [{ spot: 'joker', amount: 300 }] })); // not a spot: malformed
   await pageB.evaluate(() => window.b6.act({ type: 'bet', bets: [{ spot: 'ten', amount: 60000 }] })); // over the spot limit: refused
-  await wait(pageB, () => window.b6.msgs.some((m) => m.t === 'err'));
-  const errB = await pageB.evaluate(() => window.b6.msgs.find((m) => m.t === 'err'));
+  await wait(pageB, () => window.b6.msgs.filter((m) => m.t === 'err').length >= 2);
+  const errsB = await pageB.evaluate(() => window.b6.msgs.filter((m) => m.t === 'err').map((m) => m.code));
   const t0 = Date.now();
   for (const p of [page, pageB]) await p.evaluate(() => window.b6.act({ type: 'ready', on: true }));
   for (const p of [page, pageB]) await wait(p, () => window.b6.msgs.some((m) => m.t === 'ev' && m.events.some((e) => e.type === 'settle')));
@@ -184,13 +189,14 @@ async function multiplayer() {
     const final = r.stacks.at(-1);
     return { seat, wagered: s.wagered, returned: s.returned, final, ok: final === 50000 - s.wagered + s.returned };
   };
-  console.log(JSON.stringify({ tableId, stop: ra.stop, symbol: ra.symbol, startToRestMs: ra.startToRest, closedEarlyMs, A: check(ra, sa), B: check(rb, sb), overLimitRefused: errB.code, lateBetRefused: ra.err }, null, 1));
-  if (!check(ra, sa).ok || !check(rb, sb).ok || errB.code !== 'LIMIT' || !ra.err.includes('WRONG_PHASE') || closedEarlyMs > 8000) throw new Error('multiplayer check failed');
+  console.log(JSON.stringify({ tableId, stop: ra.stop, symbol: ra.symbol, startToRestMs: ra.startToRest, closedEarlyMs, A: check(ra, sa), B: check(rb, sb), refusedB: errsB, lateBetRefused: ra.err }, null, 1));
+  const refusedRight = errsB.includes('BAD_REQUEST') && errsB.includes('LIMIT');
+  if (!check(ra, sa).ok || !check(rb, sb).ok || !refusedRight || !ra.err.includes('WRONG_PHASE') || closedEarlyMs > 8000) throw new Error('multiplayer check failed');
   for (const p of [page, pageB]) await p.evaluate(() => window.b6.send({ t: 'leave' }));
   await ctxB.close();
 
   // the view with three players' chips, the clock and the player list
-  await page.goto(`${base}/casino/?dev=table&game=bigsix&name=b6M_${Date.now().toString(36).slice(-5)}`);
+  await page.goto(`${base}/casino/?dev=table&game=bigsix&name=${NAMES.view}`);
   await page.waitForSelector('.modal input[type=number]', { timeout: 90000 });
   await page.fill('.modal input[type=number]', '1000');
   await page.click('.modal .btn.primary', { force: true });
