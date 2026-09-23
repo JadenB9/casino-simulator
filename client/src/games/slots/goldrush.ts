@@ -433,7 +433,7 @@ const LAYOUT: SkinLayout = {
   ],
   bevel: 0.01,
   body: { color: '#3b2414', metalness: 0.15, roughness: 0.48 },
-  trim: { color: '#c0913f', metalness: 1, roughness: 0.3 },
+  trim: { color: '#9c7434', metalness: 1, roughness: 0.42 },
   plate: { w: 0.7, h: 0.54, cy: 1.17, zBack: 0.27, depth: 0.062 },
   window: { w: 0.66, h: 4 * CELL_M, cy: 1.205 },
   reels: { count: 5, pitch: (0.66 * (1 - (2 * SIDE_PX) / 1024)) / 5, look: LOOK, zFront: 0.322, rows: 4 },

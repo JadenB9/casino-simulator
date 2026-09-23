@@ -324,11 +324,11 @@ export function drawFruit(g: G, sym: string, w: number, h: number): void {
 
 function backdrop(g: G, w: number, h: number): void {
   const grad = g.createRadialGradient(w / 2, h / 2, 40, w / 2, h / 2, w * 0.6);
-  grad.addColorStop(0, '#d62a36');
-  grad.addColorStop(1, '#6e0712');
+  grad.addColorStop(0, '#a50f1c');
+  grad.addColorStop(1, '#3e040a');
   g.fillStyle = grad;
   g.fillRect(0, 0, w, h);
-  rays(g, w / 2, h / 2, 36, w, 'rgba(255,230,180,0.08)');
+  rays(g, w / 2, h / 2, 36, w, 'rgba(255,220,160,0.07)');
   g.strokeStyle = GOLD;
   g.lineWidth = 6;
   g.strokeRect(12, 12, w - 24, h - 24);
@@ -465,7 +465,7 @@ function wheelParts(scale: number): WheelParts {
   tex.anisotropy = 8;
   const parts = {
     geo: new THREE.CircleGeometry(WHEEL_RADIUS, 64),
-    mat: new THREE.MeshStandardMaterial({ map: tex, emissiveMap: tex, emissive: '#ffffff', emissiveIntensity: 0.45, roughness: 0.45, metalness: 0.05, transparent: true }),
+    mat: new THREE.MeshStandardMaterial({ map: tex, color: '#808080', emissiveMap: tex, emissive: '#ffffff', emissiveIntensity: 0.5, roughness: 0.55, metalness: 0.05, transparent: true }),
   };
   wheelCache.set(scale, parts);
   if (typeof document !== 'undefined' && document.fonts && document.fonts.status !== 'loaded') {

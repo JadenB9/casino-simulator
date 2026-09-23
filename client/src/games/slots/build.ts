@@ -205,7 +205,8 @@ function parts(entry: SkinEntry, quality: Quality): Parts {
     leds: top.leds ?? null,
     bodyMat: new THREE.MeshStandardMaterial(l.body),
     trimMat: new THREE.MeshStandardMaterial(l.trim),
-    printedMat: new THREE.MeshStandardMaterial({ map: atlas, emissiveMap: atlas, emissive: '#ffffff', emissiveIntensity: 0.4, roughness: 0.6, metalness: 0, envMapIntensity: 0.3 }),
+    // backlit glass: most of its light is its own, so the room's warm light doesn't wash it out
+    printedMat: new THREE.MeshStandardMaterial({ map: atlas, color: '#707070', emissiveMap: atlas, emissive: '#ffffff', emissiveIntensity: 0.55, roughness: 0.6, metalness: 0, envMapIntensity: 0.3 }),
     ledMat: new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false }),
     bankGeo: bankGeometry(l.reels.look, l.reels.count, l.reels.pitch),
     bankMat: bankMaterial(strips[0]!.sharp, strips[0]!.blurred, l.reels.count, stops, l.reels.look.curve, skin.tint),

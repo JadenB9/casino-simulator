@@ -214,8 +214,10 @@ export function mountSkinned(ctx: TableViewCtx): TableView {
   refreshTip();
 
   const winAt = winMeterAt(l);
-  const tagAt = new THREE.Vector3(0, l.window.cy + l.window.h / 2 + 0.03, l.plate.zBack + l.plate.depth + 0.02);
-  const lineAt = new THREE.Vector3(0, l.window.cy - l.window.h / 2 - 0.016, l.plate.zBack + l.plate.depth + 0.01);
+  // the line tag sits just over the window and the feature tag above it, clear of the result pill
+  // that hangs over the win meter below the window
+  const tagAt = new THREE.Vector3(0, l.window.cy + l.window.h / 2 + 0.05, l.plate.zBack + l.plate.depth + 0.02);
+  const lineAt = new THREE.Vector3(0, l.window.cy + l.window.h / 2 + 0.015, l.plate.zBack + l.plate.depth + 0.01);
   const pinned = (cls: string, at: THREE.Vector3) => {
     let tag: { obj: THREE.Object3D; el: HTMLElement } | null = null;
     return (text: string | null, color?: string) => {
@@ -573,6 +575,8 @@ export function mountSkinned(ctx: TableViewCtx): TableView {
     const top = lastReels?.combo === 'threeDI';
     const tier = winTier(total, bet);
     if (res.freeSpins > 0) {
+      // back to the base game: the last free game's lines and held wilds go with its reels
+      clearWinShow();
       featureTag(`Free games won ${formatMoney(res.freeWin)}`);
       drawOverlay({ held: [], flash: [] });
       useStrips(0);
