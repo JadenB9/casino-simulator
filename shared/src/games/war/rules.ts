@@ -9,7 +9,7 @@ import type { Rng } from '../../rng.ts';
 
 export const DECKS = 6;
 export const SHOE_CARDS = DECKS * 52;
-/** The cover card goes a quarter of the way up from the bottom (58 Pa. Code 651a.5(d)): 78 cards are never dealt. */
+/** The cover card goes a quarter of the way up from the bottom (58 Pa. Code 651a.5(d)); only the round it comes out in deals past it. */
 export const CUT_FROM_BOTTOM = SHOE_CARDS / 4;
 /** Cards the dealer burns, face down and unseen, before the war deal (651a.9(f)). */
 export const WAR_BURN = 3;
