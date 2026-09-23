@@ -98,6 +98,7 @@ export class ChatPanel {
     tabs.setAttribute('aria-label', 'Chat rooms');
     this.muteBtn.type = 'button';
     this.muteBtn.addEventListener('click', () => this.setMuted(!this.muted));
+    keepTyping(this.muteBtn);
     const close = el('button', 'chat-icon chat-close');
     close.type = 'button';
     close.title = 'Close chat';
@@ -116,6 +117,7 @@ export class ChatPanel {
       badge.hidden = true;
       tab.append(el('span', '', label), badge);
       tab.addEventListener('click', () => this.select(id));
+      keepTyping(tab);
       tabs.append(tab);
       const list = el('div', 'chat-list');
       list.id = `chat-list-${id}`;
@@ -144,14 +146,15 @@ export class ChatPanel {
     this.input.spellcheck = true;
     this.input.enterKeyHint = 'send';
     this.input.setAttribute('aria-label', 'Chat message');
+    // Where the keyboard hold sends focus back to (ui/keyboard.ts focusFirst).
+    this.input.dataset.autofocus = '';
     const send = el('button', 'chat-send');
     send.type = 'button';
     send.title = 'Send (Enter)';
     send.setAttribute('aria-label', 'Send');
     send.append(icon('send'));
-    // Tapping Send mustn't take focus from the line first (on a phone that drops the keyboard).
-    send.addEventListener('pointerdown', (e) => e.preventDefault());
     send.addEventListener('click', () => this.send());
+    keepTyping(send);
     this.status.setAttribute('aria-live', 'polite');
     line.append(this.input, this.status, send);
     this.box.append(head, this.scroller, line);
@@ -225,13 +228,14 @@ export class ChatPanel {
 
   /** A chat message from a room's socket. Returns the lines it added (none for a refusal). */
   receive(id: RoomId, msg: ChatServerMsg): ChatLine[] {
+    // Word from a table already left (its socket lingers a moment) changes nothing.
+    if (id === 'table' && !this.table) return [];
     const room = this.rooms[id];
     if (msg.t === 'chat.no') {
       if (msg.code === 'MUTED' && msg.until) this.serverMute(msg.until - msg.now);
       this.system(id, msg.msg);
       return [];
     }
-    if (id === 'table' && !this.table) return [];
     const reading = this.visible && this.open && this.active === id;
     const stick = this.atBottom();
     const epoch = room.log.epoch;
@@ -477,6 +481,11 @@ export class ChatPanel {
   // --- a mute from the server --------------------------------------------------------------------
 
   private serverMute(ms: number): void {
+    // Disabling a focused field doesn't reliably fire its blur: stop typing first.
+    if (this.release) {
+      this.input.blur();
+      this.typingStopped();
+    }
     this.mutedUntil = performance.now() + ms;
     clearInterval(this.muteTimer);
     this.muteTimer = window.setInterval(() => this.paintMuteClock(), 1000);
@@ -517,21 +526,34 @@ export class ChatPanel {
    */
   private place = (): void => {
     if (!this.visible) return;
-    const vw = innerWidth;
-    const vh = innerHeight;
-    const width = Math.min(360, vw - 32);
-    const x0 = vw - 16 - width;
+    // Where the dock or box sits unlifted, from the CSS's own base (not the live rect: `bottom`
+    // is transitioned, and a reading taken mid-way would be off).
+    const shown = this.open ? this.box : this.dock;
+    const r0 = shown.getBoundingClientRect();
+    if (r0.width === 0) return;
+    const bottom = innerHeight - (parseFloat(getComputedStyle(this.root).getPropertyValue('--chat-base')) || 18);
+    const top = bottom - shown.offsetHeight;
     let lift = 0;
     for (const p of this.deps.root.querySelectorAll<HTMLElement>('.panel')) {
       if (this.root.contains(p)) continue;
       const r = p.getBoundingClientRect();
       if (r.width === 0 || r.height === 0) continue;
-      // Down in the corner: across our column, and low on the screen.
-      if (r.right <= x0 || r.left >= vw - 16 || r.top < vh * 0.55 || r.bottom < vh - 170) continue;
-      lift = Math.max(lift, vh - r.top - 18 + 10);
+      // Only what's low on the screen, in our column, and would be under us.
+      if (r.top < innerHeight * 0.5 || r.right <= r0.left || r.left >= r0.right || r.bottom <= top || r.top >= bottom) continue;
+      lift = Math.max(lift, bottom - r.top + 10);
     }
     this.root.style.setProperty('--chat-lift', `${Math.round(lift)}px`);
   };
+}
+
+/**
+ * A button in the panel that shouldn't take focus from the line when pressed while typing: a tab
+ * switches rooms mid-sentence, and on a phone losing focus would drop the keyboard.
+ */
+function keepTyping(b: HTMLElement): void {
+  b.addEventListener('pointerdown', (e) => {
+    if (document.activeElement?.classList.contains('chat-input')) e.preventDefault();
+  });
 }
 
 /** Keep a log's DOM from growing without end: a few more than the lines kept, for notices. */

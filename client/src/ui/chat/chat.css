@@ -4,11 +4,13 @@
 
 /* ---------------------------------------------------------------- the corner */
 
-/* --chat-lift is set from panel.ts: how far to rise above a table's own panels in this corner. */
+/* --chat-lift is set from panel.ts: how far to rise above a table's own panels in this corner,
+   measured from --chat-base. */
 .chat {
+  --chat-base: 18px;
   position: fixed;
   right: 16px;
-  bottom: calc(18px + var(--chat-lift, 0px));
+  bottom: calc(var(--chat-base) + var(--chat-lift, 0px));
   z-index: 12;
   display: flex;
   flex-direction: column;
@@ -226,7 +228,7 @@
 
 /* Narrow screens: clear of the site's back chip along the bottom edge. */
 @media (max-width: 520px) {
-  .chat { bottom: calc(56px + var(--chat-lift, 0px)); }
+  .chat { --chat-base: 56px; }
   .chat-kc { display: none; }
 }
 

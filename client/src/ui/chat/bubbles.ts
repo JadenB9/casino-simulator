@@ -25,6 +25,12 @@ interface Showing {
 const _cam = new THREE.Vector3();
 const _at = new THREE.Vector3();
 
+function inScene(o: THREE.Object3D): boolean {
+  let top = o;
+  while (top.parent) top = top.parent;
+  return (top as THREE.Scene).isScene === true;
+}
+
 export class SayBubbles {
   private readonly showing = new Map<Character, Showing>();
   /** When each character's emote bubble comes down, on this clock. */
@@ -63,7 +69,8 @@ export class SayBubbles {
     const cam = this.camera?.getWorldPosition(_cam);
     for (const [ch, s] of this.showing) {
       s.left -= dt;
-      if (s.left <= 0) {
+      // Gone with its player (left the floor): take it down now, not when its time is up.
+      if (s.left <= 0 || !inScene(ch.root)) {
         this.clear(ch);
         continue;
       }
