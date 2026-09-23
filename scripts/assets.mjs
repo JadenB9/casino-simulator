@@ -7,7 +7,7 @@
 // The staging folder holds the original downloads (not in this repo). Outputs are committed, so
 // the game builds without it.
 
-import { copyFileSync, mkdirSync, readdirSync, existsSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, readdirSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import ffmpeg from 'ffmpeg-static';
@@ -85,6 +85,16 @@ for (const [name, [pack, re]] of Object.entries(SFX)) {
 }
 writeFileSync(join(sfxOut, 'sfx.json'), JSON.stringify(manifest, null, 1) + '\n');
 credits.push({ what: 'Casino and UI sound effects', file: 'assets/sfx/', author: 'Kenney (kenney.nl)', license: 'CC0 1.0', url: 'https://kenney.nl/assets/casino-audio' });
+
+// The world's models and textures come from scripts/assets-world.mjs, which leaves its own list.
+const worldCredits = join(out, 'assets/models/credits.json');
+if (existsSync(worldCredits)) {
+  for (const c of JSON.parse(readFileSync(worldCredits, 'utf8'))) {
+    const file = join('assets/models', c.file).replace(/\\/g, '/');
+    const what = basename(c.file).replace(/\.(glb|webp)$/, '').replace(/^char-([mf])-/, (_, b) => `Character (${b === 'm' ? 'men' : 'women'}): `).replace(/-/g, ' ');
+    credits.push({ what, file, author: c.author, license: c.license, url: c.url });
+  }
+}
 
 // --- CREDITS.md ---------------------------------------------------------------------------
 const lines = [

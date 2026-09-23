@@ -24,7 +24,7 @@ function rig() {
 }
 
 const player = (id: number, over: Partial<PlayerInfo> = {}): PlayerInfo => ({
-  id, name: `p${id}`, look: DEFAULT_LOOK, x: 0, z: 1800, r: 128, at: null, ...over,
+  id, name: `p${id}`, look: DEFAULT_LOOK, x: 0, z: 1280, r: 128, at: null, ...over,
 });
 const hello = (players: PlayerInfo[] = [], now = 1_000_000) => ({ t: 'hello', v: 1, you: player(1), players, online: players.length + 1, now });
 

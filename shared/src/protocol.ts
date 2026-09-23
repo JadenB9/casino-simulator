@@ -185,7 +185,7 @@ export type FloorServerMsg =
   | { t: 'err'; code: ErrorCode; msg: string };
 
 /** Floor bounds in centimetres; positions outside are clamped. */
-export const FLOOR_BOUNDS = { minX: -3000, maxX: 3000, minZ: -2200, maxZ: 2200 } as const;
+export const FLOOR_BOUNDS = { minX: -2000, maxX: 2000, minZ: -1500, maxZ: 1500 } as const;
 
 export function parseFloorMsg(raw: unknown, isGame: (g: unknown) => g is GameId): FloorClientMsg | null {
   if (!isObj(raw)) return null;

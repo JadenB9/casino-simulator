@@ -23,7 +23,7 @@ export const MAX_SPEED = 900;
  */
 export const MAX_BANK = MAX_SPEED + 50;
 /** Where a new arrival stands, facing into the room (yaw 128 = half a turn). */
-export const SPAWN = { x: 0, z: 1800, r: 128 } as const;
+export const SPAWN = { x: 0, z: 1280, r: 128 } as const;
 
 export interface FloorAtt {
   accountId: number;

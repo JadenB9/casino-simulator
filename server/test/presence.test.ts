@@ -90,17 +90,17 @@ describe('floor presence', () => {
 
     // Walk from the spawn toward the middle of the room at a normal pace.
     for (let i = 1; i <= 5; i++) {
-      a.c.send({ t: 'mv', x: 0, z: 1800 - i * 30, r: 0 });
+      a.c.send({ t: 'mv', x: 0, z: SPAWN.z - i * 30, r: 0 });
       await wait(110);
     }
-    a.c.send({ t: 'st', x: 0, z: 1640, r: 3 });
+    a.c.send({ t: 'st', x: 0, z: SPAWN.z - 160, r: 3 });
     const stop = await b.c.next<any>((m) => m.t === 's' && m.p.some((row: number[]) => row[0] === a.id && row[4] === 0));
     b.c.msgs.push(stop);
     const rows = rowsFor(b.c, a.id);
     // One snapshot per move (they were more than FLUSH_MS apart), each newer than the last.
     expect(rows.map((r) => r.row)).toEqual([
-      ...[1, 2, 3, 4, 5].map((i) => [a.id, 0, 1800 - i * 30, 0, 1]),
-      [a.id, 0, 1640, 3, 0],
+      ...[1, 2, 3, 4, 5].map((i) => [a.id, 0, SPAWN.z - i * 30, 0, 1]),
+      [a.id, 0, SPAWN.z - 160, 3, 0],
     ]);
     for (let i = 1; i < rows.length; i++) expect(rows[i]!.ts).toBeGreaterThan(rows[i - 1]!.ts);
     // Snapshots only carry players who moved: b stood still the whole time.
