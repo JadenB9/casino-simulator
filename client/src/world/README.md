@@ -12,6 +12,7 @@ const world = await createWorld(engine, {
   ui,                         // where the "Press E" prompt goes (default #ui)
   onEscape,                   // Esc while seated: omit and the world stands up by itself
   onProgress: (k) => {},      // 0..1 for the loading bar
+  canCapture: () => true,     // optional extra say on capturing the mouse (see Mouse look)
 });
 engine.onFrame((dt) => world.update(dt));
 ```
@@ -29,11 +30,24 @@ engine.onFrame((dt) => world.update(dt));
 | `exitTable()` | Fly back behind the player and hand the keys back (resolves when landed). |
 | `enter(station, seat)` | Sit down without pressing E (lobby list, reconnect). With a seat, the camera flies to that seat's `playPose` (craps looks at its own end of the table). |
 | `setQuality(q)` | Live switch: bloom, pixel ratio, lights, materials, chandeliers. Station models keep the quality they were built with. |
+| `showEmote(who, e)` | An emote over a player: `'me'` or a floor id. A bubble with the gesture's icon for 2.8 s, and the character acts it out (wave, cheer with a hop, clap, thumbs up, shrug). False when that player has no character drawn. |
+| `useRemotes(source)` | Where `showEmote` finds other players' characters: pass the app's `RemotePlayers` (anything with `character(id)`), `null` to forget it. |
+| `mouse`, `setMouse({ sensitivity, capture })` | Mouse look settings (sensitivity 0.25-3, 1 = default; capture on/off), kept in localStorage (`casino.mouse.*`). |
+| `mouseCaptured`, `releaseMouse()` | Whether a click has captured the mouse; let it go. |
 | `stats()` | `{ calls, triangles, programs, pixelRatio }` of the last frame. |
 | `plan`, `focus`, `teleport`, `dispose` | The floor plan (layout.ts), the station the player is at, respawn, teardown. |
 
 `SPAWN` (exported) is where a new player appears: `(0, 12.8)`, yaw `Math.PI`, on the marble inside
 the doors, facing into the casino.
+
+### Mouse look
+A click on the floor view captures the mouse (Pointer Lock); moving it then turns the camera,
+walking or not, with pitch clamped, and W walks where the camera faces. Esc lets it go. A press
+that drags looks around without capture. The follow camera never swings back behind the walker
+while the mouse is captured, and otherwise only after 3 s without mouse input. There is no
+capture while seated or while the player is disabled (menus, the lobby, the cashier), while
+anything holds the keyboard (`overlayCount() > 0`: sheets, dialogs, the editor, the emote wheel),
+or when `opts.canCapture()` says no; any of those starting lets a captured mouse go.
 
 ### While seated
 The world stops moving the player and does not touch the camera once the fly-in has landed; the
@@ -52,9 +66,10 @@ slots, the bar and the aisles; a 6.6 m coffered ceiling with a warm cove over th
 
 | Zone | Stations |
 |---|---|
-| Table pit, two rows facing out round a roped staff area and podium | north row `rl-us`, `cr-1`, `rl-eu`; south row `bj-1`, `bc-1`, `tc-1`, `bj-2` |
-| Poker room (north-east, navy carpet, ropes) | `he-1`, `he-2` |
-| Slot islands (south-west and by the cashier), 2+2 machines each, LED underglow and toppers | `slots-sevens-1..4`, `slots-wild-1..4`, `slots-neon-1..4` |
+| Table pit, two rows facing out round a roped staff area and podium | north row `rl-us`, `cr-1`, `sb-1`, `rl-eu`; south row `bj-1`, `bc-1`, `wr-1`, `tc-1`, `bj-2` |
+| Feature spot (west wall, between the cashier queue and the cross aisle, facing the pit) | `b6-1`, the Big Six wheel (zone `feature`; about 3 m tall under the 3.4 m ceiling) |
+| Poker room (north-east, navy carpet, ropes) | `he-1`, `he-2` (side on, or one behind the other when the room is short) |
+| Slot islands (south-west), one per slots variant in `CATALOG`, 2+2 machines each, LED underglow and toppers | `slots-<variant>-1..4` for sevens, neon, wild, diamonds, cherries, goldrush; the grid re-flows for any count |
 | Bar (east wall) with video poker set into the counter | `vp-1..4`; bar-top units (model under 0.9 m tall) sit on the counter, taller cabinets stand in gaps in it |
 | Cashier cage (north-west) | `cashier` |
 | Lounge, entrance palms, wayfinding | |
@@ -62,11 +77,15 @@ slots, the bar and the aisles; a 6.6 m coffered ceiling with a warm cove over th
 Spacing comes from each module's `footprint`, so real models re-flow the floor. `checkLayout(plan)`
 reports overlaps, stations in aisles or against walls, and blocked player sides; the dev floor
 logs it and `node scripts/e2e/world.mjs 5400 /tmp/world layout` checks today's footprints and
-typical real ones (both clean).
+typical real ones (both clean). `node scripts/e2e/world2.mjs <port> <dir>` checks the layout with
+three and six slot islands, the views and their draw calls, mouse look (pointer lock and drag),
+the recentring rules and emotes.
 
 ## Rendering
 - Static architecture is merged per material (batch.ts); props are instanced; all signs are one
-  atlas mesh. Floor view with today's stub models: 44-85 draw calls, under 160k triangles.
+  atlas mesh. Stations swap to baked stand-ins past 11 m (machines past 8 m): small textured
+  parts and reel strips bake to their texture's average colour. With six slot islands and the
+  v2 tables, the dev views draw 42-221 calls on High (the slot floor is the busiest).
 - Fixed lights: hemisphere + directional always; four spots on High (two pit rows, poker, and a
   focus spot that follows the table you're at). Warm pools on the carpet are additive decals.
 - High: bloom on anything brighter than 1.0, MSAA, pixel ratio up to 2 with step-down at p90 > 17 ms.
@@ -87,5 +106,7 @@ women's suit): Idle/Walk/Run only, one skinned mesh per outfit, `--compress quan
 
 ## Dev floor
 `/casino/src/world/dev-floor.html` (or `/casino/?dev=floor` once main.ts routes it): walk with
-WASD/arrows, Shift runs, drag to look, wheel to zoom, E to sit, Esc to stand. `&quality=low|high`,
-`&view=overview|slots|pit|cashier|bar|poker|lounge|table`, `&stats=1`, `&lineup=1`.
+WASD/arrows, Shift runs, click to look with the mouse (Esc lets go) or drag, wheel to zoom, E to
+sit, Esc to stand. `&quality=low|high`,
+`&view=overview|slots|pit|cashier|bar|poker|lounge|bigsix|table`, `&stats=1`, `&lineup=1`,
+`&slots=sevens,neon,...` (the slot islands to lay out instead of the catalogue's).
