@@ -3,7 +3,7 @@
 Every game in the casino follows standard Las Vegas Strip rules and pays real odds. This page
 is the summary. The full rules, every paytable, the strategy charts and the sources are in:
 
-- [rules/table-games.md](rules/table-games.md): blackjack, roulette, craps, baccarat
+- [rules/table-games.md](rules/table-games.md): blackjack, roulette, craps, baccarat, Big Six
 - [rules/cards-and-machines.md](rules/cards-and-machines.md): Three Card Poker, video poker,
   slots, Texas Hold'em
 - [math/](math/): the dependency-free Node scripts that enumerate each game exactly
@@ -38,6 +38,9 @@ inside 3. Seeds are fixed, so `npm run test:mc` reproduces these exactly.
 | Roulette (American) | 0 and 00, all inside and outside bets | Every bet but the top line | 5.263% | red 5.229%, odd 5.222%, straight 17 5.748% (3M spins, z −0.59, −0.72, +1.46) |
 | | | Top line (0-00-1-2-3), 6:1 | 7.895% | 7.924% (3M spins, z +0.21) |
 | Roulette (European) | single 0, no la partage | Every bet | 2.703% | red 2.717%, odd 2.601%, straight 17 2.813% (3M spins, z +0.24, −1.77, +0.33) |
+| Big Six Wheel | 54 stops: $1 ×24, $2 ×15, $5 ×7, $10 ×4, $20 ×2, Star and Crown pay 40:1 | $1 (1:1) | 11.111% | 11.109% (10M spins, z −0.08) |
+| | | $2, $5, $10, $20 | 16.667%, 22.222%, 18.519%, 22.222% | 16.705%, 22.147%, 18.492%, 22.299% (10M spins, z +0.91, −1.18, −0.29, +0.61) |
+| | | Star, Crown (40:1) | 24.074% | 23.921%, 24.214% (10M spins, z −0.87, +0.80) |
 | Craps | 3-4-5x odds, field pays 3:1 on 12, buy 4/10 with commission on a win, place bets off on the come-out | Pass line | 1.414% | 1.426% (4M bets, z +0.24) |
 | | | Don't pass (bar 12) | 1.364% | 1.389% (2M bets, z +0.37) |
 | | | Place 6 or 8 (7:6) | 1.515% | 1.658% (2M bets, z +1.87) |

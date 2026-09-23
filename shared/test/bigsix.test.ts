@@ -59,6 +59,9 @@ describe('big six wheel', () => {
       'two', 'one', 'five', 'two', 'one', 'ten', 'one', 'two', 'five', 'one', 'two', 'one',
     ];
     expect(pa).toHaveLength(54);
+    // Pennsylvania's wheel carries 23 × $1 and 8 × $5; one $5 printed as a $1 gives the Las Vegas counts
+    expect(pa.filter((x) => x === 'one')).toHaveLength(23);
+    expect(pa.filter((x) => x === 'five')).toHaveLength(8);
     const changed = stops.filter((i) => WHEEL[i] !== pa[i]);
     expect(changed).toEqual([29]);
     expect(pa[28]).toBe('two');
