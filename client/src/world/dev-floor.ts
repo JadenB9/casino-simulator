@@ -3,9 +3,10 @@
 //   /casino/?dev=floor                   (once main.ts routes it here)
 //   /casino/src/world/dev-floor.html     (works on its own in `npm run dev`)
 //
-// Options: &quality=high|low, &view=entrance|overview|slots|pit|cashier|bar|poker|lounge|table
+// Options: &quality=high|low, &view=entrance|overview|slots|pit|cashier|bar|poker|lounge|bigsix|table
 // (a fixed camera for screenshots), &stats=1 (draw calls and frame time), &lineup=1 (every outfit
-// side by side in debug colours, to check outfits.json).
+// side by side in debug colours, to check outfits.json), &slots=sevens,neon,... (the slot islands
+// to lay out, instead of the catalogue's variants).
 
 import * as THREE from 'three';
 import { Engine3D, savedQuality, type Quality } from '../render/engine3d.ts';
@@ -23,15 +24,20 @@ function views(w: FloorWorld): Record<string, View | 'walk'> {
   const p = w.plan;
   const pitZ = (p.staff.z0 + p.staff.z1) / 2;
   const cross = p.aisles[0]!;
+  const wheel = p.stations.find((s) => s.game === 'bigsix') ?? { x: p.feature.x0 + 1, z: (p.feature.z0 + p.feature.z1) / 2 };
   return {
     entrance: 'walk',
     overview: { pos: [0.8, 1.95, p.entrance.z0 - 2.4], at: [0, 1.1, pitZ] },
-    slots: { pos: [-2.4, 1.85, cross.z1 + 6.2], at: [-12, 0.9, cross.z1 + 4.2] },
+    // from the south-east corner of the slot floor, across the islands toward the north-west
+    slots: { pos: [p.slotsZone.x1 - 3.1, 2.5, p.slotsZone.z1 - 0.7], at: [p.slotsZone.x0 + 3, 0.8, p.slotsZone.z0 + 2] },
     pit: { pos: [5.6, 2.0, cross.z1 - 0.3], at: [-1.2, 0.9, pitZ] },
     cashier: { pos: [p.cashier.x + 4.6, 1.8, p.cashier.z + 1.1], at: [p.cashier.x - 0.4, 1.35, p.cashier.counter.z1] },
     bar: { pos: [p.bar.front - 4.6, 1.75, (p.bar.z0 + p.bar.z1) / 2 + 4.6], at: [p.bar.back, 1.3, (p.bar.z0 + p.bar.z1) / 2 - 1.6] },
-    poker: { pos: [p.pokerRoom.x0 - 2.2, 2.0, p.pokerRoom.z1 + 1.3], at: [p.pokerRoom.x1 - 2.4, 0.9, (p.pokerRoom.z0 + p.pokerRoom.z1) / 2] },
+    // from inside the room's south-west corner (the pit's corner column stands just outside it)
+    poker: { pos: [p.pokerRoom.x0 + 0.5, 2.3, p.pokerRoom.z1 - 0.4], at: [p.pokerRoom.x1 - 1.5, 0.8, p.pokerRoom.z0 + 2.5] },
     lounge: { pos: [p.lounge.x0 - 1.2, 1.75, p.lounge.z0 - 1.0], at: [(p.lounge.x0 + p.lounge.x1) / 2, 0.7, (p.lounge.z0 + p.lounge.z1) / 2] },
+    // in front of the wheel, where its players stand
+    bigsix: { pos: [wheel.x + 5.2, 1.9, wheel.z + 1.4], at: [wheel.x, 1.5, wheel.z] },
   };
 }
 
@@ -43,6 +49,7 @@ export async function runDevFloor(params: URLSearchParams): Promise<FloorWorld> 
   const world = await createWorld(engine, {
     quality,
     name: 'You',
+    slotVariants: params.get('slots')?.split(',').filter(Boolean),
     onProgress: (k) => fill && (fill.style.width = `${Math.round(k * 100)}%`),
   });
   engine.onFrame((dt) => world.update(dt));
@@ -69,7 +76,7 @@ export async function runDevFloor(params: URLSearchParams): Promise<FloorWorld> 
       engine.camera.lookAt(...v.at);
     });
   } else {
-    ui.append(el('div', 'panel world-help', 'WASD or arrows to walk · Shift to run · drag to look · E to sit · Esc to stand'));
+    ui.append(el('div', 'panel world-help', 'WASD or arrows to walk · Shift to run · click to look with the mouse, Esc to let go · or drag to look · E to sit'));
   }
 
   if (params.get('lineup')) lineup(world, engine);

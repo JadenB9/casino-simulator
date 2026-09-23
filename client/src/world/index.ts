@@ -7,7 +7,7 @@ import type { Engine3D, Quality } from '../render/engine3d.ts';
 import { DEFAULT_LOOK, type Look } from '../../../shared/src/look.ts';
 import { GAMES } from '../games/index.ts';
 import type { CashierPoint, Station, World } from './contract.ts';
-import { planFloor, type FloorPlan } from './layout.ts';
+import { planFloor, slotVariants, type FloorPlan } from './layout.ts';
 import { Mats, loadTextures } from './materials.ts';
 import { Batch } from './batch.ts';
 import { Collider } from './collision.ts';
@@ -22,6 +22,9 @@ import { Player } from './player.ts';
 import { Interact } from './interact.ts';
 import { StationLod } from './lod.ts';
 import { Bloom, PixelRatio } from './bloom.ts';
+import type { MouseSettings } from './mouse.ts';
+import { Emotes, OWN_BUBBLE_Y, BUBBLE_Y, type CharacterSource } from './emotes.ts';
+import type { EmoteId } from '../../../shared/src/protocol.ts';
 import './world.css';
 
 export type { WorldStation } from './stations.ts';
@@ -45,6 +48,14 @@ export interface WorldOptions {
   onEscape?: () => void;
   /** Loading progress, 0 to 1. */
   onProgress?: (k: number) => void;
+  /**
+   * A further say on whether a click on the floor may capture the mouse. The world already
+   * refuses while seated, while the player is disabled and while a sheet or dialog holds the
+   * keyboard (overlayCount), and lets go when any of those starts.
+   */
+  canCapture?: () => boolean;
+  /** One slot island per variant; defaults to every slots variant in the catalogue (dev previews). */
+  slotVariants?: string[];
 }
 
 export interface FloorWorld extends World {
@@ -65,6 +76,20 @@ export interface FloorWorld extends World {
   /** Place the player (dev views, respawn). */
   teleport(x: number, z: number, heading: number): void;
   quality: Quality;
+  /** Mouse look: sensitivity (1 = default) and whether a click captures the mouse. Kept in localStorage. */
+  readonly mouse: MouseSettings;
+  setMouse(o: Partial<MouseSettings>): void;
+  /** True while a click has captured the mouse for looking around. */
+  readonly mouseCaptured: boolean;
+  /** Let a captured mouse go (something is opening over the floor). */
+  releaseMouse(): void;
+  /**
+   * Show an emote over a player: 'me' for your own character, or a floor id, found through the
+   * source given to useRemotes(). False when that player has no character drawn.
+   */
+  showEmote(who: number | 'me', e: EmoteId): boolean;
+  /** Where showEmote finds other players' characters (the app's RemotePlayers); null to forget. */
+  useRemotes(source: CharacterSource | null): void;
 }
 
 export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Promise<FloorWorld> {
@@ -80,7 +105,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
   const root = new THREE.Group();
   root.name = 'floor';
   scene.add(root);
-  const plan = planFloor((g) => GAMES[g].footprint);
+  const plan = planFloor((g) => GAMES[g].footprint, opts.slotVariants ?? slotVariants());
   const mats = new Mats(quality, tex, aniso);
   const col = new Collider();
   const batch = new Batch();
@@ -112,7 +137,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
   character.setName('');
   root.add(character.root);
   const canvas = renderer.domElement;
-  const player = new Player(character, engine.camera, col, plan.pit, canvas);
+  const player = new Player(character, engine.camera, col, plan.pit, canvas, () => opts.canCapture?.() ?? true);
   player.spawn(SPAWN.x, SPAWN.z, SPAWN.yaw);
 
   const cashierAnchor = new THREE.Object3D();
@@ -140,6 +165,9 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
     /* compiled lazily instead */
   }
   progress(1);
+
+  const emotes = new Emotes();
+  let remotes: CharacterSource | null = null;
 
   let lastCalls = 0;
   let lastTris = 0;
@@ -191,6 +219,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
       interact.update(dt);
       lod.update(engine.camera, interact.seated);
       character.update(dt);
+      emotes.update(dt);
       const f = world.focus;
       lighting.setFocus(f && f.zone !== 'slots' && f.game !== 'videopoker' ? focusAt.copy(f.anchor.position) : null);
       lighting.update(dt);
@@ -205,7 +234,25 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
     },
     stats: () => ({ calls: lastCalls, triangles: lastTris, programs: renderer.info.programs?.length ?? 0, pixelRatio: renderer.getPixelRatio() }),
     teleport: (x, z, heading) => player.spawn(x, z, heading),
+    get mouse() {
+      return player.mouseSettings;
+    },
+    setMouse: (o) => player.setMouse(o),
+    get mouseCaptured() {
+      return player.captured;
+    },
+    releaseMouse: () => player.release(),
+    showEmote(who, e) {
+      const ch = who === 'me' ? character : remotes?.character(who);
+      if (!ch) return false;
+      emotes.show(ch, e, who === 'me' ? OWN_BUBBLE_Y : BUBBLE_Y);
+      return true;
+    },
+    useRemotes(source) {
+      remotes = source;
+    },
     dispose() {
+      emotes.dispose();
       lod.dispose();
       interact.dispose();
       player.dispose();

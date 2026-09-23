@@ -11,6 +11,7 @@ import type { Character, CharacterFactory } from './contract.ts';
 import { byteToYaw, type FloorLink, type RemotePlayer } from '../net/presence.ts';
 import { serverNow } from '../net/clock.ts';
 import { SKIN_TONES, type Look } from '../../../shared/src/look.ts';
+import type { EmoteId } from '../../../shared/src/protocol.ts';
 import './remote-players.css';
 
 /** Where a seated player is drawn: world metres, and rotation.y in radians. */
@@ -192,6 +193,8 @@ class CapsuleCharacter implements Character {
   private readonly label = document.createElement('div');
   private motion = 0;
   private phase = 0;
+  /** An emote being acted out: a hop for a cheer, a little sway for the rest. */
+  private act: { hop: boolean; t: number } | null = null;
 
   constructor(look: Look, name: string) {
     const s = (shapes ??= makeShapes());
@@ -230,12 +233,23 @@ class CapsuleCharacter implements Character {
     this.label.textContent = name;
   }
 
+  gesture(e: EmoteId): void {
+    this.act = { hop: e === 'cheer', t: 0 };
+  }
+
   update(dt: number): void {
     // A step bob and a little sway, scaled by how much of a walk this is.
     this.phase = (this.phase + dt * 11 * this.motion) % (Math.PI * 2);
     this.body.position.y = Math.abs(Math.sin(this.phase)) * 0.035 * this.motion;
     this.body.rotation.z = Math.sin(this.phase) * 0.04 * this.motion;
     this.body.rotation.x = 0.06 * this.motion;
+    if (this.act) {
+      const a = this.act;
+      a.t += dt;
+      if (a.t > 1.2) this.act = null;
+      else if (a.hop) this.body.position.y += 0.14 * Math.abs(Math.sin((Math.PI * a.t) / 0.4));
+      else this.body.rotation.z += 0.08 * Math.sin(a.t * 12) * (1 - a.t / 1.2);
+    }
   }
 
   dispose(): void {

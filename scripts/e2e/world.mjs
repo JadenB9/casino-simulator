@@ -30,6 +30,7 @@ if (shots.some(([v]) => v === 'layout')) {
       blackjack: { width: 2.5, depth: 2.0 }, baccarat: { width: 2.8, depth: 2.1 }, threecard: { width: 2.5, depth: 2.0 },
       roulette: { width: 3.1, depth: 2.2 }, craps: { width: 4.3, depth: 2.4 }, holdem: { width: 3.0, depth: 2.3 },
       slots: { width: 0.8, depth: 0.9 }, videopoker: { width: 0.7, depth: 0.8 }, highcard: { width: 1.6, depth: 1.6 },
+      war: { width: 2.5, depth: 2.0 }, sicbo: { width: 2.6, depth: 2.1 }, bigsix: { width: 2.6, depth: 1.8 },
     };
     const today = L.checkLayout(L.planFloor((g) => G.GAMES[g].footprint));
     const merged = L.checkLayout(L.planFloor((g) => real[g]));

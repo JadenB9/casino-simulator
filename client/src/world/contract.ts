@@ -5,6 +5,7 @@
 import type * as THREE from 'three';
 import type { GameId } from '../../../shared/src/engine.ts';
 import type { Look } from '../../../shared/src/look.ts';
+import type { EmoteId } from '../../../shared/src/protocol.ts';
 
 export interface Station {
   /** Stable id, sent to the server as "who is sitting where" (e.g. "bj-1", "slots-sevens-3"). */
@@ -23,6 +24,8 @@ export interface Character {
   setName(name: string): void;
   update(dt: number): void;
   dispose(): void;
+  /** Act out an emote for a moment (a wave, a hop), if the character can. */
+  gesture?(e: EmoteId): void;
 }
 
 export interface CharacterFactory {
