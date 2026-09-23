@@ -34,6 +34,17 @@ const shot = async (name) => {
   console.log('shot', path);
 };
 const state = () => page.evaluate(() => window.casino.table.view.debug.state());
+
+/** Buy in, unless this player is still sitting at their solo table from an earlier run. */
+async function sitDown(p, dollars) {
+  const seated = () => window.casino?.table?.view?.debug?.state().stack > 0;
+  await p.waitForFunction(() => !!document.querySelector('.modal input[type=number]') || window.casino?.table?.view?.debug?.state().stack > 0, null, { timeout: 90000, polling: 100 });
+  if (!(await p.evaluate(seated))) {
+    await p.fill('.modal input[type=number]', dollars);
+    await p.click('.modal .btn.primary', { force: true });
+    await p.waitForFunction(seated, null, { timeout: 90000, polling: 100 });
+  }
+}
 const until = (fn, timeout = 120000) => page.waitForFunction(fn, null, { timeout, polling: 50 });
 
 if (flag('--multi')) {
@@ -43,10 +54,7 @@ if (flag('--multi')) {
 }
 
 await page.goto(`http://localhost:${port}/casino/?dev=table&game=bigsix&name=${NAMES.solo}`);
-await page.waitForSelector('.modal input[type=number]', { timeout: 90000 });
-await page.fill('.modal input[type=number]', '2000');
-await page.click('.modal .btn.primary', { force: true });
-await until(() => window.casino?.table?.view?.debug?.state().stack > 0, 90000);
+await sitDown(page, '2000');
 await page.waitForTimeout(800);
 const frame = await page.evaluate(() => ({ ms: window.casino.engine.frameMs(), calls: window.casino.engine.renderer.info.render.calls, tris: window.casino.engine.renderer.info.render.triangles }));
 console.log('frame', JSON.stringify(frame));
@@ -197,10 +205,7 @@ async function multiplayer() {
 
   // the view with three players' chips, the clock and the player list
   await page.goto(`${base}/casino/?dev=table&game=bigsix&name=${NAMES.view}`);
-  await page.waitForSelector('.modal input[type=number]', { timeout: 90000 });
-  await page.fill('.modal input[type=number]', '1000');
-  await page.click('.modal .btn.primary', { force: true });
-  await page.waitForFunction(() => window.casino?.table?.view?.debug?.state().stack > 0, null, { timeout: 90000 });
+  await sitDown(page, '1000');
   await page.evaluate(() => {
     const t = window.casino.table;
     const snap = structuredClone(t.snapshot);

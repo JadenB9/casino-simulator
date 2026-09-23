@@ -57,8 +57,8 @@ export function paintLayout(g: CanvasRenderingContext2D, px: (m: number) => numb
     g.translate(X(side * 0.21), X(TITLE_Z));
     drawStar(g, X(0.02));
     g.restore();
-    g.fillText(side < 0 ? 'STAR PAYS ONLY ON THE STAR' : 'CROWN PAYS ONLY ON THE CROWN', X(side * 0.555), X(TITLE_Z + 0.002));
-    for (const [a, b] of [[0.25, 0.36], [0.75, 0.9]] as const) {
+    g.fillText(side < 0 ? 'STAR PAYS ONLY ON THE STAR' : 'CROWN PAYS ONLY ON THE CROWN', X(side * 0.49), X(TITLE_Z + 0.002));
+    for (const [a, b] of [[0.25, 0.3], [0.68, 0.72]] as const) {
       g.beginPath();
       g.moveTo(X(side * a), X(TITLE_Z));
       g.lineTo(X(side * b), X(TITLE_Z));
