@@ -1,0 +1,62 @@
+/* Big Six table: recent stops, meters, the result plaque beside the wheel, spot tooltips, the
+   betting clock, the players at the wheel and the Tips mark on the best spot. Built on the theme's
+   glass panels and brass lines. The bottom-left corner stays free for the site's back chip. */
+
+.bs-history { position: fixed; top: var(--below-hud); left: 16px; padding: 8px 12px 10px; max-width: min(700px, calc(100vw - 420px)); }
+.bs-history .label { margin-bottom: 6px; }
+.bs-history-row { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+.bs-history-empty { font-size: 14px; color: var(--ink-3); }
+.bs-badge { display: block; flex: none; border-radius: 50%; }
+.bs-history .bs-badge.latest { margin-right: 4px; box-shadow: 0 0 0 2px var(--brass-hi), 0 0 12px rgba(241, 213, 154, 0.35); }
+
+.bs-meters { position: fixed; top: var(--below-party); right: 16px; display: flex; gap: 18px; padding: 9px 16px; }
+.bs-meter { display: grid; gap: 2px; min-width: 78px; }
+.bs-meter-value { font-size: 21px; font-weight: 600; color: var(--ink); }
+
+.bs-result { position: absolute; display: flex; align-items: center; gap: 12px; padding: 10px 18px 10px 10px; pointer-events: none; animation: bs-rise 0.4s var(--ease); white-space: nowrap; }
+.bs-result-badge { display: grid; place-items: center; width: 56px; height: 56px; }
+.bs-result-words { display: grid; gap: 1px; }
+.bs-result-call { font-family: var(--serif); font-size: 25px; font-weight: 700; letter-spacing: 0.06em; color: var(--brass-hi); }
+.bs-result-detail { font-size: 15px; letter-spacing: 0.1em; color: var(--ink-2); }
+.bs-result-net { font-size: 16px; font-weight: 600; letter-spacing: 0.04em; }
+.bs-result-net.win { color: var(--win); }
+.bs-result-net.quiet { color: var(--ink-3); }
+@keyframes bs-rise { from { opacity: 0; transform: translateY(8px); } }
+
+.bs-result[hidden], .bs-clock[hidden], .bs-players[hidden], .bs-tip[hidden], .bs-color-note[hidden], .bs-best[hidden] { display: none; }
+.bs-tip { position: fixed; z-index: 20; padding: 7px 11px; font-size: 15px; line-height: 1.35; pointer-events: none; max-width: 300px; }
+.bs-tip .bs-tip-name { font-weight: 600; color: var(--ink); letter-spacing: 0.03em; }
+.bs-tip .bs-tip-odds { color: var(--ink-2); font-size: 14px; }
+.bs-tip .bs-tip-edge { color: var(--ink-3); font-size: 13px; }
+.bs-tip .bs-tip-mine { color: var(--brass-hi); }
+.bs-tip .bs-tip-other { color: var(--ink-2); }
+
+.bs-clock { position: absolute; display: grid; justify-items: center; gap: 3px; pointer-events: none; }
+.bs-clock-ring { position: relative; width: 58px; height: 58px; }
+.bs-clock-ring svg { width: 100%; height: 100%; display: block; }
+.bs-clock circle { fill: rgba(14, 12, 10, 0.72); stroke-width: 3.5; }
+.bs-clock .track { stroke: rgba(255, 255, 255, 0.14); }
+.bs-clock .left { fill: none; stroke: var(--brass-hi); stroke-linecap: round; transform: rotate(-90deg); transform-origin: 50% 50%; transition: stroke-dashoffset 0.25s linear; }
+.bs-clock.late .left { stroke: #e8a33a; }
+.bs-clock-secs { position: absolute; inset: 0; display: grid; place-items: center; font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.bs-clock-caption { font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-2); text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8); }
+
+.bs-players { position: fixed; top: calc(var(--below-party) + 72px); right: 16px; display: grid; gap: 5px; padding: 9px 12px; min-width: 230px; }
+.bs-player { display: grid; grid-template-columns: 16px 1fr auto auto; align-items: center; gap: 8px; font-size: 16px; }
+.bs-player.you .bs-player-name { color: var(--brass-hi); }
+.bs-player-chip { width: 14px; height: 14px; border-radius: 50%; box-shadow: 0 0 0 2px rgba(247, 242, 234, 0.85) inset, 0 0 0 1px rgba(0, 0, 0, 0.4); }
+.bs-player-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bs-player-status { font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); }
+.bs-player-status.ready { color: var(--brass-hi); }
+.bs-player-status.win { color: var(--win); }
+.bs-player-stack { color: var(--ink-2); }
+
+.bs-color-note { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: var(--ink-2); }
+
+/* Tips: a tag pinned over the spot with the lowest house edge */
+.bs-best { padding: 3px 9px; border-radius: 3px; font-size: 13px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--brass-hi); background: rgba(14, 12, 10, 0.78); pointer-events: none; white-space: nowrap; }
+
+@media (max-width: 900px) {
+  .bs-history { max-width: calc(100vw - 32px); }
+  .bs-meters { gap: 10px; padding: 7px 10px; }
+}
