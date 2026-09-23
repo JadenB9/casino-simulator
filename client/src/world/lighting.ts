@@ -77,7 +77,9 @@ export class Lighting {
     this.focusFrom.lerp(this.focusTo, k);
     this.focus.target.position.set(this.focusFrom.x, 0.78, this.focusFrom.z);
     this.focus.position.set(this.focusFrom.x + 0.3, 3.2, this.focusFrom.z + 0.9);
-    const want = this.focusOn ? 32 : 0;
+    // Bright enough to lift the table out of the room, not so bright that gold felt printing and
+    // brass pass the bloom threshold when the camera is a metre away.
+    const want = this.focusOn ? 16 : 0;
     this.focus.intensity += (want - this.focus.intensity) * (1 - Math.exp(-dt * 4));
   }
 }

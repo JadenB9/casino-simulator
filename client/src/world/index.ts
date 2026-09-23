@@ -186,6 +186,11 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
       const f = world.focus;
       lighting.setFocus(f && f.zone !== 'slots' && f.game !== 'videopoker' ? focusAt.copy(f.anchor.position) : null);
       lighting.update(dt);
+      // Seated, the camera is a metre from lit felt and brass: only real light sources (neon,
+      // bulbs, the machines' glass) should bloom there, not the printing on the table.
+      const close = interact.seated !== null;
+      bloom.pass.threshold = close ? 2.4 : 1.05;
+      bloom.pass.strength = close ? 0.3 : 0.42;
       characters.updateLabels(engine.camera);
       bloom.update(dt);
       pr.update(dt);
