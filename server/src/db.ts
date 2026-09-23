@@ -4,7 +4,7 @@ import { STARTING_BALANCE } from '../../shared/src/money.ts';
 import { lookFromJson, type Look } from '../../shared/src/look.ts';
 import type { GameId, } from '../../shared/src/engine.ts';
 import type { GameStats, Profile } from '../../shared/src/protocol.ts';
-import { isGameId } from '../../shared/src/games/catalog.ts';
+import { CATALOG, isGameId } from '../../shared/src/games/catalog.ts';
 
 export interface AccountRow {
   id: number;
@@ -77,11 +77,9 @@ export function gameOfTable(tableId: string): GameId | null {
     const g = tableId.split(':')[1];
     return isGameId(g) ? g : null;
   }
+  // Lobby ids start with the game's catalog prefix, so every game (new ones included) maps here.
   const prefix = tableId.slice(0, 2);
-  const byPrefix: Record<string, GameId> = {
-    bj: 'blackjack', rl: 'roulette', cr: 'craps', bc: 'baccarat', sl: 'slots', vp: 'videopoker', tc: 'threecard', he: 'holdem', hc: 'highcard',
-  };
-  return byPrefix[prefix] ?? null;
+  return Object.values(CATALOG).find((g) => g.prefix === prefix)?.id ?? null;
 }
 
 /** Everything the profile screen shows, in three reads. */
