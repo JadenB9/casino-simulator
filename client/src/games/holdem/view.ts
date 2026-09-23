@@ -22,7 +22,6 @@ import { serverNow } from '../../net/clock.ts';
 import { session } from '../../app/session.ts';
 import { ActionBar } from './actionbar.ts';
 import { advise, bannerOf, estimateEquity, onBoard, positionOf } from './advice.ts';
-import { feltGlow } from './glow.ts';
 import { holdemFelt, dealerButton, slotPoint, slotEdge, slotYaw, boardPoint, BOARD_SCALE, DEALER_POINT, TOP_Y } from './table.ts';
 import './holdem.css';
 
@@ -35,8 +34,6 @@ const RING_R = 21;
 const RING_C = 2 * Math.PI * RING_R;
 /** How far the five that win a showdown rise off the felt. */
 const LIFT = 0.012;
-/** How long a made hand's cards stay lit, by the size of the moment (the banner's own hold). */
-const GLOW_MS: Record<Tier, number> = { nice: 1800, big: 2600, huge: 3600 };
 const money = (c: Cents) => formatMoney(c);
 
 const MOVE_LABEL: Record<string, string> = {
@@ -594,8 +591,7 @@ export function mountHoldem(ctx: TableViewCtx): TableView {
     marked = cat;
     const tier: Tier = cat >= STRAIGHT_FLUSH ? 'huge' : cat >= FULL_HOUSE ? 'big' : 'nice';
     const { title, sub } = bannerOf(v);
-    celebrate({ stage, ui: ctx.ui, sfx }, { title, sub: sub ?? undefined, tier });
-    glows.push(feltGlow(stage, meshesOf(bestFive([...h, ...b]).map(intCard)), TOP_Y, GLOW_MS[tier]));
+    glows.push(celebrate({ stage, ui: ctx.ui, sfx }, { title, sub: sub ?? undefined, tier, glow: meshesOf(bestFive([...h, ...b]).map(intCard)) }));
   }
 
   /**
@@ -622,16 +618,18 @@ export function mountHoldem(ctx: TableViewCtx): TableView {
     if (size === 0) return;
     const tier = (['nice', 'big', 'huge'] as const)[size - 1]!;
     const banner = value === null ? null : bannerOf(value);
-    celebrate(
-      { stage, ui: ctx.ui, sfx },
-      {
-        title: banner?.title ?? 'Big pot',
-        sub: banner?.sub ? `${banner.sub} · ${money(won)}` : money(won),
-        tier,
-        at: betAt(slot(mySeat)),
-      },
+    glows.push(
+      celebrate(
+        { stage, ui: ctx.ui, sfx },
+        {
+          title: banner?.title ?? 'Big pot',
+          sub: banner?.sub ? `${banner.sub} · ${money(won)}` : money(won),
+          tier,
+          at: betAt(slot(mySeat)),
+          glow: all ? meshesOf(bestFive(all).map(intCard)) : [],
+        },
+      ),
     );
-    if (all) glows.push(feltGlow(stage, meshesOf(bestFive(all).map(intCard)), TOP_Y, GLOW_MS[tier] + 1200));
   }
 
   async function play(e: HoldemEvent, next: HoldemView): Promise<void> {
