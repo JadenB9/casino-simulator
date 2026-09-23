@@ -33,6 +33,8 @@
 }
 
 * { box-sizing: border-box; }
+/* Classes like .btn set display, which would otherwise beat the hidden attribute. */
+[hidden] { display: none !important; }
 html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0908; color: var(--ink); font-family: var(--ui); letter-spacing: 0.01em; }
 button { font: inherit; color: inherit; }
 #scene { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }

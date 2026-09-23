@@ -14,7 +14,7 @@ import { Socket, type SocketState } from './socket.ts';
 import { socketUrl } from './api.ts';
 import { observeServerTime, serverNow } from './clock.ts';
 import { Track, type Pose } from './interp.ts';
-import type { FloorServerMsg, PlayerInfo } from '../../../shared/src/protocol.ts';
+import type { FloorClientMsg, FloorServerMsg, PlayerInfo } from '../../../shared/src/protocol.ts';
 import type { Look } from '../../../shared/src/look.ts';
 
 /** Shortest gap between two `mv` messages, in ms (the protocol's limit). */
@@ -89,6 +89,7 @@ export class FloorLink {
   /** The server last heard `mv` from us, so it shows us walking until a `st`. */
   private walking = false;
   private frame: { x: number; z: number; r: number } | null = null;
+  private readonly raw = new Set<(msg: FloorServerMsg) => void>();
 
   constructor(opts: FloorLinkOptions = {}) {
     const onMessage = (m: unknown) => this.receive(m as FloorServerMsg);
@@ -104,6 +105,17 @@ export class FloorLink {
   on<K extends keyof FloorEvents>(event: K, fn: FloorEvents[K]): () => void {
     this.listeners[event].add(fn);
     return () => this.listeners[event].delete(fn);
+  }
+
+  /** Hear every floor message (the lobby list rides the same socket). */
+  subscribe(fn: (msg: FloorServerMsg) => void): () => void {
+    this.raw.add(fn);
+    return () => this.raw.delete(fn);
+  }
+
+  /** Send something other than movement (a lobby watch). False while reconnecting. */
+  send(msg: FloorClientMsg): boolean {
+    return this.socket.send(msg);
   }
 
   /** Call once per frame with the local player's pose; sends at most one message. */
@@ -140,6 +152,11 @@ export class FloorLink {
   }
 
   private receive(m: FloorServerMsg): void {
+    this.handle(m);
+    for (const fn of this.raw) fn(m);
+  }
+
+  private handle(m: FloorServerMsg): void {
     switch (m.t) {
       case 'hello': {
         observeServerTime(m.now);
