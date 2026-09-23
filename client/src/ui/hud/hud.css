@@ -31,12 +31,41 @@ button.hud-who:focus-visible { outline: 2px solid var(--focus); outline-offset: 
 @media (max-width: 1060px) {
   .hud-session { display: none; }
 }
+@media (max-width: 900px) {
+  .hud-who { display: none; }
+  .hud-online-label { display: none; }
+}
 @media (max-width: 720px) {
   .hud { padding: 10px; }
-  .hud-who { display: none; }
   .hud-stat { padding: 6px 12px 7px; }
   .hud-stat .stat-value { font-size: 17px; }
-  .hud-online-label { display: none; }
+}
+
+/* Touch screens: every control a thumb's width. */
+@media (pointer: coarse) {
+  .hud-btn { width: 44px; height: 44px; }
+  .hud-online { height: 44px; }
+}
+
+/* A phone on its side: one slim row, so the table keeps the height. */
+@media (max-height: 480px) {
+  :root { --below-hud: 64px; }
+  .hud { padding: 8px 12px; }
+  .hud-stat { padding: 4px 12px 5px; }
+  .hud-stat .stat-value { font-size: 17px; }
+}
+
+/* A phone upright: two rows. You, your money and (at a table) Leave on top; who's online and the
+   buttons underneath. The right-hand bar's pieces join the HUD's own rows to wrap freely. */
+@media (max-width: 560px) {
+  :root { --below-hud: 118px; }
+  .hud { flex-wrap: wrap; align-items: center; gap: 8px 6px; }
+  .hud-right { display: contents; }
+  .hud-left { order: -3; }
+  .hud .touch-leave { order: -2; margin-left: auto; }
+  .hud::after { content: ''; order: -1; flex-basis: 100%; }
+  .hud-online { margin-right: auto; }
+  .hud-stat { padding: 5px 12px 6px; }
 }
 
 /* settings */

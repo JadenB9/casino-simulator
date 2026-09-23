@@ -41,11 +41,25 @@ export function saveQuality(q: Quality): void {
 
 export type FrameFn = (dt: number, time: number) => void;
 
+/** Vertical field of view on a landscape or square screen, degrees. */
+export const FOV = 55;
+
+/**
+ * A phone held upright would see a narrow slot of the room at 55 degrees (27 across). The view
+ * opens up as the screen narrows, by the square root of the aspect so it never bulges at the
+ * edges: 75 degrees tall (39 across) on a 390 x 844 phone. Landscape keeps 55.
+ */
+export function fovFor(aspect: number): number {
+  if (!(aspect > 0) || aspect >= 1) return FOV;
+  const half = Math.tan(THREE.MathUtils.degToRad(FOV / 2)) / Math.sqrt(aspect);
+  return THREE.MathUtils.radToDeg(2 * Math.atan(half));
+}
+
 export class Engine3D {
   readonly renderer: THREE.WebGLRenderer;
   readonly labels: CSS2DRenderer;
   readonly scene = new THREE.Scene();
-  readonly camera = new THREE.PerspectiveCamera(55, 1, 0.05, 200);
+  readonly camera = new THREE.PerspectiveCamera(FOV, 1, 0.05, 200);
   readonly timer = new THREE.Timer();
   private frames = new Set<FrameFn>();
   private frameTimes: number[] = [];
@@ -105,6 +119,7 @@ export class Engine3D {
     this.renderer.setSize(w, h, false);
     this.labels.setSize(w, h);
     this.camera.aspect = w / h;
+    this.camera.fov = fovFor(w / h);
     this.camera.updateProjectionMatrix();
   };
 }

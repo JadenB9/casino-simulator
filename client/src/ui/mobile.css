@@ -1,9 +1,13 @@
 /* Phones and tablets. theme.css and each panel's own stylesheet are drawn for a mouse on a laptop
    screen; this sheet adds what a touch screen and a small screen need, as media queries only:
    finger-sized targets, no keyboard hints, no page scroll, callouts or double-tap zoom, and the
-   shared pieces (HUD, chip tray, dialogs, the dealer and tip lines) fitted to 390 x 844 and
-   844 x 390. The floor's touch controls style themselves (world/touch.css); each game's own
-   stylesheet fits its panels. Loaded from index.html, after theme.css. */
+   kit's shared pieces (chip tray, dialogs, the dealer and tip lines, toasts, celebrations) fitted
+   to 390 x 844 and 844 x 390. The HUD, menus and panels fit themselves in their own stylesheets,
+   each game its own bars, and the floor's touch controls are world/touch.css. Loaded from
+   index.html right after theme.css, so it overrides the kit and nothing else.
+
+   The bottom-left corner stays the site's back chip's (14 px in, 30 px tall): upright, the tray
+   sits above it; on its side, the tray moves right of it. */
 
 /* ---------------------------------------------------------------- touch screens */
 
@@ -21,16 +25,61 @@
 
   /* Finger-sized targets: 44 px at the least. */
   .btn { min-height: 44px; }
-  .hud-btn { width: 44px; height: 44px; }
-  .seg-btn { height: 44px; }
-  .x-btn { height: 44px; min-width: 44px; justify-content: center; }
-  .lobby-back { height: 44px; }
-  .lobby-row { height: 48px; }
-  .party-head { height: 44px; }
-  .party-seg button { height: 44px; }
-  .ed-turn-btn { width: 44px; height: 44px; }
-  .sw { width: 40px; height: 40px; }
-  .range { height: 44px; }
-  .range::-webkit-slider-thumb { width: 24px; height: 24px; margin-top: -11px; }
-  .range::-moz-range-thumb { width: 24px; height: 24px; }
+  .chip-btn { min-width: 44px; min-height: 44px; }
+  .modal input[type='number'], .modal input[type='text'] { height: 44px; }
+}
+
+/* ---------------------------------------------------------------- upright screens */
+
+/* A phone or tablet held upright: the tray and the tips line rise clear of the back chip. */
+@media (max-aspect-ratio: 1/1) {
+  :root { --tip-bottom: 150px; }
+  .tray { bottom: 54px; }
+}
+
+/* A phone upright: chips on one row, the tray's buttons on the next. */
+@media (max-width: 560px) {
+  :root { --tip-bottom: 180px; }
+  .tray { flex-wrap: wrap; justify-content: center; gap: 8px; width: calc(100vw - 20px); max-width: 440px; padding: 8px 10px 10px; }
+  .tray .chips { flex: 1 0 100%; justify-content: center; gap: 4px; }
+  .tray .chip-btn { width: 44px; height: 44px; }
+  .tray .sep { display: none; }
+  .tray .acts { gap: 6px; }
+  .tray .btn { padding: 0 11px; }
+
+  .modal { min-width: 0; width: calc(100vw - 24px); max-width: 460px; padding: 16px; }
+  .modal .row .btn { flex: 1 1 auto; }
+  .toasts { max-width: calc(100vw - 32px); }
+  .toast { text-align: center; }
+  .dealer-line { font-size: 16px; padding: 6px 12px; }
+  .tip-line { font-size: 14px; padding: 6px 12px; }
+  .celebrate { max-width: calc(100vw - 24px); padding: 12px 22px; }
+  .celebrate-title { font-size: 24px; text-wrap: balance; }
+  .celebrate.tier-nice .celebrate-title { font-size: 21px; }
+  .celebrate.tier-huge { padding: 16px 26px; }
+  .celebrate.tier-huge .celebrate-title { font-size: 30px; }
+}
+
+/* ---------------------------------------------------------------- phones on their side */
+
+/* 390 px of height: everything slims down and the tray moves right, out of the back chip's way. */
+@media (max-height: 480px) {
+  :root { --tip-bottom: 76px; }
+  .tray { left: auto; right: 10px; bottom: 8px; transform: none; gap: 8px; padding: 6px 10px; }
+  .tray .chips { gap: 4px; }
+  .tray .chip-btn { width: 44px; height: 44px; }
+  .tray .acts { gap: 5px; }
+  .tray .btn { padding: 0 11px; }
+  .chip-btn[aria-pressed='true'] { transform: translateY(-4px); }
+
+  .modal { max-height: calc(100vh - 16px); overflow: auto; padding: 14px 18px; }
+  .modal h2 { font-size: 18px; margin-bottom: 2px; }
+  .modal p { margin: 4px 0; font-size: 15px; }
+  .modal .row { margin-top: 10px; }
+  .toasts { top: calc(var(--below-hud) + 44px); }
+  .dealer-line { font-size: 15px; padding: 5px 14px; }
+  .tip-line { font-size: 14px; padding: 5px 12px; }
+  .celebrate { top: 38%; padding: 10px 26px; }
+  .celebrate-title { font-size: 24px; }
+  .celebrate.tier-huge .celebrate-title { font-size: 32px; }
 }
