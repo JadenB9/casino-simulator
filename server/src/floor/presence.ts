@@ -1,17 +1,29 @@
 // Presence: who is on the floor, where they are standing, and where they are sitting.
 //
-// Each socket's attachment holds that player's identity and last pose, so the roster survives
-// hibernation (the attachment does; memory doesn't). Movement arrives at up to 10 Hz per player
-// while they walk; it is coalesced into snapshots as it arrives, at most one every FLUSH_MS, with
-// no server timer, so the object only bills for handler time and sleeps when nobody moves.
+// Movement arrives at up to 10 Hz per walking player and is coalesced into snapshots as it
+// arrives: at most one every FLUSH_MS, holding only the players who moved since the last one.
+// There is no server timer, so the object bills handler time only and hibernates when nobody
+// walks. A stop is flushed at once, so nobody is left walking in place until someone else moves.
+//
+// Memory is a cache. What has to survive hibernation lives elsewhere: each socket's attachment
+// holds that player's identity and last resting pose (the roster is rebuilt from them on wake),
+// and the station each account sits at is a row in SQLite, because tables report it by account
+// whether or not that account has a floor socket open at that moment.
 
 import type { FloorClientMsg, FloorServerMsg, PlayerInfo } from '../../../shared/src/protocol.ts';
 import { FLOOR_BOUNDS, PROTOCOL_VERSION } from '../../../shared/src/protocol.ts';
 import type { Look } from '../../../shared/src/look.ts';
 
 export const FLUSH_MS = 66;
-/** Fastest a walking character moves, in cm per second, with slack for jitter. */
-const MAX_SPEED = 900;
+/** Fastest anyone may move, in cm/s: well above a character's walk, so honest jitter never trips it. */
+export const MAX_SPEED = 900;
+/**
+ * Unspent movement a player can bank, in cm. Messages bunch up after a network stall and then
+ * arrive all at once; a second's worth of allowance lets that burst through unclamped.
+ */
+export const MAX_BANK = MAX_SPEED + 50;
+/** Where a new arrival stands, facing into the room (yaw 128 = half a turn). */
+export const SPAWN = { x: 0, z: 1800, r: 128 } as const;
 
 export interface FloorAtt {
   accountId: number;
@@ -21,118 +33,207 @@ export interface FloorAtt {
   z: number;
   r: number;
   at: { station: string } | null;
-  /** Game whose lobby list this socket wants pushed (directory.ts). */
+  /** Game whose lobby list this socket wants pushed (directory.ts owns this field). */
   watch: string | null;
   /** Server time of the last accepted position. */
   t: number;
+  /** No position has arrived on this connection yet; the first one places the player. */
+  fresh?: boolean;
 }
 
 type Broadcast = (msg: FloorServerMsg, except?: WebSocket) => void;
 
-const SPAWN = { x: 0, z: 1800, r: 128 };
+/** A connected player while the object is awake. */
+interface Walker {
+  att: FloorAtt;
+  moving: boolean;
+  /** cm this player may still move before the speed check starts clamping. */
+  bank: number;
+}
 
 export class Presence {
-  private dirty = new Set<WebSocket>();
-  private moving = new Map<WebSocket, boolean>();
+  private readonly sql: SqlStorage;
+  private readonly live = new Map<WebSocket, Walker>();
+  private readonly dirty = new Set<WebSocket>();
+  private readonly closed = new WeakSet<WebSocket>();
+  /** Accounts whose socket closed during this turn; a newer tab can still claim them. */
+  private readonly leaving = new Map<number, FloorAtt>();
   private lastFlush = 0;
+  private lastTs = 0;
 
   constructor(
     private readonly ctx: DurableObjectState,
     private readonly broadcast: Broadcast,
-  ) {}
+  ) {
+    this.sql = ctx.storage.sql;
+    this.sql.exec(`CREATE TABLE IF NOT EXISTS seated (account_id INTEGER PRIMARY KEY, station TEXT NOT NULL)`);
+    // After hibernation memory starts empty, but the sockets and their attachments are still there.
+    for (const ws of ctx.getWebSockets()) {
+      const att = ws.deserializeAttachment() as FloorAtt | null;
+      if (att && ws.readyState === WebSocket.OPEN) this.live.set(ws, { att, moving: false, bank: MAX_BANK });
+    }
+  }
 
   onConnect(ws: WebSocket, who: { accountId: number; name: string; look: Look }): void {
     const now = Date.now();
-    const att: FloorAtt = { ...who, ...SPAWN, at: null, watch: null, t: now };
+    // A newer tab taking over from an older one (index.ts closed the old socket a moment ago, in
+    // this same turn) goes on standing where the old one stood, and nobody else hears about it.
+    const prev = this.leaving.get(who.accountId) ?? this.walkerOf(who.accountId)?.att ?? null;
+    this.leaving.delete(who.accountId);
+    const station = this.stationOf(who.accountId);
+    const att: FloorAtt = {
+      ...who,
+      x: prev?.x ?? SPAWN.x,
+      z: prev?.z ?? SPAWN.z,
+      r: prev?.r ?? SPAWN.r,
+      at: station ? { station } : null,
+      watch: null,
+      t: now,
+      fresh: true,
+    };
     ws.serializeAttachment(att);
-    const players: PlayerInfo[] = [];
-    for (const other of this.ctx.getWebSockets()) {
-      if (other === ws) continue;
-      const a = other.deserializeAttachment() as FloorAtt | null;
-      if (a) players.push(info(a));
-    }
+    this.live.set(ws, { att, moving: false, bank: MAX_BANK });
     const online = this.onlineCount();
-    this.send(ws, { t: 'hello', v: PROTOCOL_VERSION, you: info(att), players, online, now });
-    this.broadcast({ t: 'join', player: info(att) }, ws);
-    this.broadcast({ t: 'online', n: online }, ws);
+    this.send(ws, { t: 'hello', v: PROTOCOL_VERSION, you: info(att), players: this.roster(who.accountId), online, now });
+    if (!prev) {
+      this.broadcast({ t: 'join', player: info(att) }, ws);
+      this.broadcast({ t: 'online', n: online }, ws);
+    } else if (JSON.stringify(prev.look) !== JSON.stringify(att.look)) {
+      this.broadcast({ t: 'player', id: who.accountId, look: att.look }, ws);
+    }
   }
 
   onMessage(ws: WebSocket, msg: Exclude<FloorClientMsg, { t: 'watch' }>): void {
-    const att = ws.deserializeAttachment() as FloorAtt | null;
-    if (!att) return;
+    const w = this.live.get(ws);
+    if (!w) return;
+    const a = w.att;
     const now = Date.now();
-    const x = clamp(msg.x, FLOOR_BOUNDS.minX, FLOOR_BOUNDS.maxX);
-    const z = clamp(msg.z, FLOOR_BOUNDS.minZ, FLOOR_BOUNDS.maxZ);
-    // Presence carries no money, so the only checks are the floor bounds and a speed limit:
-    // a jump further than anyone can walk in the elapsed time is clamped along its direction.
-    const dt = Math.max(0.05, (now - att.t) / 1000);
-    const dx = x - att.x;
-    const dz = z - att.z;
-    const dist = Math.hypot(dx, dz);
-    const max = MAX_SPEED * dt + 50;
-    const k = dist > max ? max / dist : 1;
-    att.x = Math.round(att.x + dx * k);
-    att.z = Math.round(att.z + dz * k);
-    att.r = msg.r;
-    att.t = now;
-    ws.serializeAttachment(att);
-    this.moving.set(ws, msg.t === 'mv');
+    let x = clamp(msg.x, FLOOR_BOUNDS.minX, FLOOR_BOUNDS.maxX);
+    let z = clamp(msg.z, FLOOR_BOUNDS.minZ, FLOOR_BOUNDS.maxZ);
+    const placing = a.fresh === true;
+    if (placing) {
+      // The first position on a connection places the player. After a dropped connection the
+      // client kept walking on its own and knows where it is; a first visit echoes the spawn.
+      a.fresh = false;
+    } else {
+      // Presence carries no money, so the only checks are the floor bounds and a speed limit:
+      // allowance accrues at MAX_SPEED up to MAX_BANK, and a move beyond it stops short on its line.
+      w.bank = Math.min(MAX_BANK, w.bank + (MAX_SPEED * Math.max(0, now - a.t)) / 1000);
+      const dx = x - a.x;
+      const dz = z - a.z;
+      const dist = Math.hypot(dx, dz);
+      if (dist > w.bank) {
+        x = Math.round(a.x + (dx * w.bank) / dist);
+        z = Math.round(a.z + (dz * w.bank) / dist);
+      }
+      w.bank = Math.max(0, w.bank - Math.hypot(x - a.x, z - a.z));
+    }
+    a.x = x;
+    a.z = z;
+    a.r = msg.r;
+    a.t = now;
+    w.moving = msg.t === 'mv';
     this.dirty.add(ws);
-    if (msg.t === 'st' || now - this.lastFlush >= FLUSH_MS) this.flush(now);
+    // Only resting poses need to outlive the object: a walking player keeps it awake anyway.
+    if (!w.moving || placing) this.save(ws, a);
+    if (!w.moving || now - this.lastFlush >= FLUSH_MS) this.flush(now);
   }
 
   onClose(ws: WebSocket): void {
-    const att = ws.deserializeAttachment() as FloorAtt | null;
+    // index.ts reports a replaced socket itself, and the runtime reports it again when it closes.
+    if (this.closed.has(ws)) return;
+    this.closed.add(ws);
+    const att = this.live.get(ws)?.att ?? (ws.deserializeAttachment() as FloorAtt | null);
+    this.live.delete(ws);
     this.dirty.delete(ws);
-    this.moving.delete(ws);
     if (!att) return;
-    const stillHere = this.ctx.getWebSockets(`a:${att.accountId}`).some((w) => w !== ws);
-    if (stillHere) return;
-    this.broadcast({ t: 'leave', id: att.accountId }, ws);
-    this.broadcast({ t: 'online', n: this.onlineCount(ws) }, ws);
+    // The leave is settled after this turn. When a newer tab takes over, index.ts closes the old
+    // socket and accepts the new one synchronously, so onConnect gets to claim the departure
+    // first: a tab switch is then invisible to everyone else instead of a leave and a rejoin.
+    this.leaving.set(att.accountId, att);
+    queueMicrotask(() => this.settle(att.accountId));
   }
 
   setStation(accountId: number, station: string | null): void {
-    for (const ws of this.ctx.getWebSockets(`a:${accountId}`)) {
-      const att = ws.deserializeAttachment() as FloorAtt | null;
-      if (!att) continue;
-      att.at = station ? { station } : null;
-      ws.serializeAttachment(att);
-    }
-    this.broadcast({ t: 'player', id: accountId, at: station ? { station } : null });
+    // Tables announce the station on every reconnect; only a change is news.
+    if (this.stationOf(accountId) === station) return;
+    if (station) this.sql.exec(`INSERT OR REPLACE INTO seated (account_id, station) VALUES (?1, ?2)`, accountId, station);
+    else this.sql.exec(`DELETE FROM seated WHERE account_id = ?1`, accountId);
+    const at = station ? { station } : null;
+    if (this.update(accountId, (a) => (a.at = at))) this.broadcast({ t: 'player', id: accountId, at });
   }
 
   setLook(accountId: number, look: Look): void {
-    for (const ws of this.ctx.getWebSockets(`a:${accountId}`)) {
-      const att = ws.deserializeAttachment() as FloorAtt | null;
-      if (!att) continue;
-      att.look = look;
-      ws.serializeAttachment(att);
-    }
-    this.broadcast({ t: 'player', id: accountId, look });
+    if (this.update(accountId, (a) => (a.look = look))) this.broadcast({ t: 'player', id: accountId, look });
   }
 
   /** Accounts with an open floor connection. */
-  onlineCount(except?: WebSocket): number {
+  onlineCount(): number {
     const ids = new Set<number>();
-    for (const ws of this.ctx.getWebSockets()) {
-      if (ws === except) continue;
-      const att = ws.deserializeAttachment() as FloorAtt | null;
-      if (att) ids.add(att.accountId);
-    }
+    for (const [ws, w] of this.live) if (ws.readyState === WebSocket.OPEN) ids.add(w.att.accountId);
     return ids.size;
+  }
+
+  private settle(accountId: number): void {
+    if (!this.leaving.delete(accountId)) return; // a newer connection claimed it
+    if (this.walkerOf(accountId)) return;
+    this.broadcast({ t: 'leave', id: accountId });
+    this.broadcast({ t: 'online', n: this.onlineCount() });
   }
 
   private flush(now: number): void {
     if (this.dirty.size === 0) return;
     const p: [number, number, number, number, 0 | 1][] = [];
     for (const ws of this.dirty) {
-      const a = ws.deserializeAttachment() as FloorAtt | null;
-      if (a) p.push([a.accountId, a.x, a.z, a.r, this.moving.get(ws) ? 1 : 0]);
+      const w = this.live.get(ws);
+      if (w) p.push([w.att.accountId, w.att.x, w.att.z, w.att.r, w.moving ? 1 : 0]);
     }
     this.dirty.clear();
     this.lastFlush = now;
-    if (p.length) this.broadcast({ t: 's', ts: now, p });
+    // Clients drop a sample that isn't newer than the last one, so ts must strictly increase even
+    // when a stop is flushed in the same millisecond as the snapshot before it.
+    this.lastTs = Math.max(now, this.lastTs + 1);
+    if (p.length) this.broadcast({ t: 's', ts: this.lastTs, p });
+  }
+
+  /** Everyone else on the floor, once per account. */
+  private roster(except: number): PlayerInfo[] {
+    const seen = new Set<number>([except]);
+    const players: PlayerInfo[] = [];
+    for (const [ws, w] of this.live) {
+      if (seen.has(w.att.accountId) || ws.readyState !== WebSocket.OPEN) continue;
+      seen.add(w.att.accountId);
+      players.push(info(w.att));
+    }
+    return players;
+  }
+
+  private walkerOf(accountId: number): Walker | undefined {
+    for (const [ws, w] of this.live) if (w.att.accountId === accountId && ws.readyState === WebSocket.OPEN) return w;
+    return undefined;
+  }
+
+  /** Apply a change to every live socket of an account; false if the account isn't on the floor. */
+  private update(accountId: number, change: (a: FloorAtt) => void): boolean {
+    let found = false;
+    for (const [ws, w] of this.live) {
+      if (w.att.accountId !== accountId || ws.readyState !== WebSocket.OPEN) continue;
+      change(w.att);
+      this.save(ws, w.att);
+      found = true;
+    }
+    return found;
+  }
+
+  /** Persist a player's attachment, keeping the lobby watch that directory.ts keeps in it too. */
+  private save(ws: WebSocket, att: FloorAtt): void {
+    const stored = ws.deserializeAttachment() as FloorAtt | null;
+    ws.serializeAttachment({ ...att, watch: stored?.watch ?? null });
+  }
+
+  private stationOf(accountId: number): string | null {
+    const row = this.sql.exec<{ station: string }>(`SELECT station FROM seated WHERE account_id = ?1`, accountId).toArray()[0];
+    return row?.station ?? null;
   }
 
   private send(ws: WebSocket, msg: FloorServerMsg): void {

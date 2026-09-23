@@ -1,0 +1,14 @@
+/* Name tags over the stand-in characters. CSS2DRenderer positions the element with `transform`,
+   so nothing here may set one. */
+.remote-tag {
+  padding: 1px 8px 2px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: rgba(14, 12, 10, 0.66);
+  color: var(--ink);
+  font-family: var(--ui);
+  font-size: 14px;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  pointer-events: none;
+}
