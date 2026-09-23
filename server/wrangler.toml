@@ -1,0 +1,27 @@
+# Local development and tests only. The production config (route, real database id,
+# secrets) lives with the deployment in the site repo, not in this public repo.
+name = "casino-dev"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+
+[vars]
+# comma-separated; a trailing :* matches any port
+ALLOWED_ORIGINS = "http://localhost:*,http://127.0.0.1:*"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "casino-dev"
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"
+
+[[durable_objects.bindings]]
+name = "FLOOR"
+class_name = "CasinoFloor"
+
+[[durable_objects.bindings]]
+name = "TABLE"
+class_name = "CasinoTable"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["CasinoFloor", "CasinoTable"]

@@ -1,0 +1,6 @@
+#!/bin/sh
+# No attribution trailers in this repo's history.
+if grep -Eiq 'co-authored-by|generated with' "$1"; then
+  echo "commit-msg: remove the attribution line from the message" >&2
+  exit 1
+fi
