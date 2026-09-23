@@ -24,9 +24,14 @@ export interface ChatDeps {
   floor: FloorLink;
   /**
    * The character drawn for a floor id, yours included, for the speech bubbles; undefined when
-   * that player isn't drawn. Without it there are no bubbles.
+   * that player isn't drawn.
    */
   character?(id: number): Character | undefined;
+  /**
+   * Draw a floor line over its speaker some other way (a world.showSay, say) instead of the
+   * bubbles here. Called for each new floor line while chat is shown and not hidden.
+   */
+  showSay?(id: number, text: string): void;
   /** Per-frame time for the bubbles (Engine3D.onFrame). */
   onFrame?(fn: (dt: number) => void): () => void;
   /** Bubbles far from this camera are hidden. */
@@ -60,9 +65,13 @@ export function createChat(deps: ChatDeps): Chat {
     deps.floor.on('chat', (msg) => {
       const fresh = panel.receive('floor', msg);
       // Only lines said just now: a backlog is old news, and nothing floats while chat is hidden.
-      if (msg.t !== 'chat' || msg.backlog || !shown || panel.muted || !deps.character) return;
+      if (msg.t !== 'chat' || msg.backlog || !shown || panel.muted) return;
       for (const line of fresh) {
-        const ch = deps.character(line.id);
+        if (deps.showSay) {
+          deps.showSay(line.id, line.text);
+          continue;
+        }
+        const ch = deps.character?.(line.id);
         if (ch) bubbles.show(ch, line.text, line.id === me());
       }
     }),
