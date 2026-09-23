@@ -192,7 +192,7 @@ const selected = (p) => p.getAttribute('.menu-item.sel', 'data-id');
   await p.waitForFunction(() => document.querySelector('.bank-status')?.textContent?.startsWith('Loan made'));
   await p.waitForTimeout(500);
   await shot(p, '16-bank-lent');
-  check('loan shows in the count', (await text(p, '.bank-sheet .sheet-sub')) === 'Loans taken: 3');
+  check('loan shows in the count', (await text(p, '.bank-stats .stat:nth-child(3) .stat-value')) === '3');
   await p.context().close();
 }
 

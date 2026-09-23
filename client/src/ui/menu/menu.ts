@@ -83,7 +83,6 @@ export function mountMenu(deps: MenuDeps): MenuHandle {
     const rounds = p?.stats.total.rounds ?? 0;
     facts.get('profile')!.textContent = `${rounds.toLocaleString('en-US')} ${rounds === 1 ? 'round' : 'rounds'}`;
     facts.get('settings')!.textContent = savedQuality() === 'high' ? 'High graphics' : 'Low graphics';
-    facts.get('logout')!.textContent = p?.name ?? '';
   };
 
   const select = (i: number, focus = true, sound = true) => {

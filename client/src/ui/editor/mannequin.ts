@@ -114,7 +114,7 @@ function build(look: Look): Rig {
   const body = mesh(new THREE.LatheGeometry(torsoProfile(f, longJacket), 40), top);
   body.scale.set(f ? 1.0 : 1.12, 1, f ? 0.76 : 0.72);
   torso.add(body);
-  const shoulderY = f ? 0.4 : 0.43;
+  const shoulderY = f ? 0.39 : 0.415;
   const shoulderX = f ? 0.165 : 0.2;
 
   if (o === 'suit' || o === 'smart') {
@@ -143,7 +143,7 @@ function build(look: Look): Rig {
     const arm = new THREE.Group();
     arm.position.set(side * shoulderX, shoulderY, 0);
     arm.rotation.z = side * 0.09;
-    const cap = mesh(new THREE.SphereGeometry(f ? 0.05 : 0.058, 16, 12), upperMat);
+    const cap = mesh(new THREE.SphereGeometry(f ? 0.045 : 0.052, 16, 12), upperMat);
     const upper = limb(f ? 0.04 : 0.046, 0.3, upperMat);
     const lower = limb(f ? 0.034 : 0.038, 0.27, lowerMat, -0.28);
     const hand = mesh(new THREE.SphereGeometry(f ? 0.036 : 0.042, 14, 10), skin, 0, -0.56, 0.005);

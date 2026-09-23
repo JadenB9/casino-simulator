@@ -32,7 +32,7 @@ export interface EditorDeps {
 
 const PODIUM_TOP = 0.07;
 /** Character height plus some air above and below, for framing. */
-const FRAME_H = 2.0;
+const FRAME_H = 2.15;
 
 function canvasTexture(w: number, h: number, paint: (g: CanvasRenderingContext2D) => void): THREE.CanvasTexture {
   const c = document.createElement('canvas');
@@ -82,7 +82,7 @@ function dressingRoom(at: THREE.Vector3): { group: THREE.Group; pivot: THREE.Gro
       const rad = 4 + rnd() * 16;
       const warm = rnd() < 0.8;
       const col = warm ? '255,200,130' : rnd() < 0.5 ? '255,110,95' : '110,210,200';
-      const a = 0.08 + rnd() * 0.22;
+      const a = 0.05 + rnd() * 0.14;
       const gr = g.createRadialGradient(x, y, 0, x, y, rad);
       gr.addColorStop(0, `rgba(${col},${a})`);
       gr.addColorStop(0.7, `rgba(${col},${a * 0.7})`);
@@ -109,13 +109,13 @@ function dressingRoom(at: THREE.Vector3): { group: THREE.Group; pivot: THREE.Gro
   group.add(podium, inlay, ring);
 
   // Lights with a short reach: 60 m down, they never touch the floor above.
-  const key = new THREE.SpotLight('#ffdcae', 42, 9, 0.55, 0.7, 1.4);
+  const key = new THREE.SpotLight('#fff0dc', 26, 9, 0.55, 0.7, 1.4);
   key.position.set(1.4, 3.0, 2.3);
   key.target.position.set(0, 1.0, 0);
   const rim = new THREE.SpotLight('#ffe9cc', 36, 8, 0.6, 0.75, 1.4);
   rim.position.set(-1.6, 2.5, -1.9);
   rim.target.position.set(0, 1.25, 0);
-  const fill = new THREE.PointLight('#f2c996', 3.2, 7, 1.6);
+  const fill = new THREE.PointLight('#f6dcc0', 6, 7, 1.6);
   fill.position.set(-1.9, 1.3, 2.4);
   group.add(key, key.target, rim, rim.target, fill);
 
@@ -339,13 +339,14 @@ export function openEditor(deps: EditorDeps): Closable {
     const vh = innerHeight;
     const r = panel.getBoundingClientRect();
     const side = r.top < vh * 0.25; // panel down the right side, or a sheet along the bottom
-    const free = side ? { x0: 0, x1: Math.max(1, r.left), y0: 0, y1: vh } : { x0: 0, x1: vw, y0: 0, y1: Math.max(1, r.top) };
+    const reserve = turn.getBoundingClientRect().height + 36; // the turn control under the feet
+    const free = side ? { x0: 0, x1: Math.max(1, r.left), y0: 0, y1: vh - reserve } : { x0: 0, x1: vw, y0: 0, y1: Math.max(1, r.top - reserve) };
     const half = Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2);
     const frac = (free.y1 - free.y0) / vh;
-    const d = FRAME_H / (2 * half * frac * 0.94);
+    const d = FRAME_H / (2 * half * frac * 0.9);
     const cx = ((free.x0 + free.x1) / 2 / vw) * 2 - 1;
     const cy = -((((free.y0 + free.y1) / 2) / vh) * 2 - 1);
-    const focus = room.group.position.clone().add(new THREE.Vector3(0, PODIUM_TOP + 0.9, 0));
+    const focus = room.group.position.clone().add(new THREE.Vector3(0, PODIUM_TOP + 0.86, 0));
     const halfH = d * half;
     const halfW = halfH * (vw / vh);
     cam.position.set(focus.x, focus.y + 0.08, focus.z + d);

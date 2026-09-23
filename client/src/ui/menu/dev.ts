@@ -62,7 +62,8 @@ const online = q.has('online') ? Number(q.get('online')) : 14;
 async function ensureSession(): Promise<void> {
   if (session.profile) return;
   const name = q.get('name') ?? `dev_${Math.random().toString(36).slice(2, 8)}`;
-  session.set(await api.login(name));
+  // A canned player keeps its own name unless the URL asks for another.
+  session.set(fixture && !q.has('name') ? await api.me() : await api.login(name));
 }
 
 let hud: Hud | null = null;

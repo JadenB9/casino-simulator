@@ -115,6 +115,7 @@ export function openProfile(deps: ProfileDeps): Closable {
     },
   });
   const title = sheet.panel.querySelector('.sheet-title')!;
+  title.classList.add('name');
   let status = '';
 
   const render = (p: Profile | null) => {
@@ -146,7 +147,7 @@ export function openProfile(deps: ProfileDeps): Closable {
     left.append(section('Games'), renderGames(p));
     const right = el('div', 'profile-side');
     right.append(section('Chips on tables', String(p.tables.length)), renderTables(p));
-    right.append(section('Loans', `Loans taken: ${p.loansTaken}`), renderLoans(p));
+    right.append(section(`Loans taken: ${p.loansTaken}`), renderLoans(p));
     cols.append(left, right);
     sheet.body.append(summary, cols);
   };

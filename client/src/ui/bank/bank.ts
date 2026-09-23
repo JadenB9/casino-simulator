@@ -35,7 +35,6 @@ export function openBank(deps: BankDeps): Closable {
   let off = () => {};
   const sheet = openSheet(deps.root, {
     title: 'Cashier',
-    subtitle: `Loans taken: ${deps.session.profile?.loansTaken ?? 0}`,
     cls: 'bank-sheet',
     onClose: () => {
       off();
@@ -72,7 +71,6 @@ export function openBank(deps: BankDeps): Closable {
     balance.value.textContent = formatMoney(p.balance);
     onTables.value.textContent = formatMoney(p.inPlay);
     loans.value.textContent = String(p.loansTaken);
-    sheet.sub.textContent = `Loans taken: ${p.loansTaken}`;
     where.replaceChildren();
     for (const t of p.tables) {
       const row = el('div', 'bank-table');
