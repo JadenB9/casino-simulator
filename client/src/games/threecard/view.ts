@@ -25,10 +25,14 @@ import {
   qualifies,
   score,
 } from '../../../../shared/src/games/threecard/rules.ts';
+import { playAdvice } from '../../../../shared/src/games/threecard/advice.ts';
 import { CardMesh, dealCard, flipCard } from '../../table/cards.ts';
 import { ChipStack, slideStack } from '../../table/chips.ts';
+import { celebrate } from '../../table/celebrate.ts';
 import type { Felt } from '../../table/felt.ts';
-import { wait } from '../../table/tween.ts';
+import { ease, tween, wait } from '../../table/tween.ts';
+import { dropGlow, handGlow, raiseBanner } from '../blackjack/celebration.ts';
+import { handMoment } from './moments.ts';
 import { ChipTray, button, el } from '../../ui/kit.ts';
 import { serverNow } from '../../net/clock.ts';
 import {
@@ -36,6 +40,8 @@ import {
   RACK,
   SHUFFLER,
   DISCARD,
+  DEALER_CARD_SCALE,
+  DEALER_LABEL,
   SEAT_COUNT,
   SPOT_RADIUS,
   type SpotKind,
@@ -315,12 +321,34 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
     decideBar.hidden = !deciding;
     tray.root.classList.toggle('tc-away', deciding);
     if (deciding && sv) playBtn.firstChild!.textContent = `Play ${money(sv.ante)}`;
+    renderTip();
     if (mode === 'solo') {
       tray.setPrimary('Deal', !!view && view.phase === 'betting' && mine.ante + mine.pairPlus > 0);
     } else {
       tray.setPrimary(readyOn ? 'Waiting' : 'Ready', !!view && view.phase === 'betting' && me !== null);
     }
     renderMeters();
+  };
+
+  /** Tips: Play or Fold by Q-6-4 for my three cards, while that decision is mine to make. */
+  const renderTip = (): void => {
+    const sv = seatView(me);
+    const cards = ctx.tips.on && !decided && view?.phase === 'deciding' && sv?.decision === 'pending' && sv.cards.length === 3 && sv.cards.every((c) => c !== null) ? (sv.cards as Card[]) : null;
+    const a = cards ? playAdvice(cards) : null;
+    playBtn.classList.toggle('tip-pick', a?.play === true);
+    foldBtn.classList.toggle('tip-pick', a?.play === false);
+    ctx.kit.tip(a ? a.text : null);
+  };
+  const offTips = ctx.tips.subscribe(() => renderTip());
+  const lowerBanner = raiseBanner(ctx.ui);
+
+  /** My hand's moment, if it was one, with the light under my cards. */
+  const celebrateHand = (r: Settlement, cards: Card[]): void => {
+    const m = me === null ? null : handMoment(r, cards, pay);
+    if (!m || me === null) return;
+    const stand = handGlow(hands.get(me) ?? [], TOP_Y + 0.0009);
+    celebrate(ctx, { ...m, at: handSlot(me, 1).pos, glow: stand ? [stand] : [] });
+    dropGlow(stand);
   };
 
   // ---- drawing the whole table from a view (on join, and after each batch of events) ---------
@@ -360,11 +388,17 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
     setLabel(`hand:${seat}`, handLabelPoint(seat), parts, cls);
   };
 
+  /** "Dealer · Jack high · does not qualify", in front of the dealer's cards. */
   const dealerLabel = (cards: Card[]): void => {
     const s = score(cards);
-    const parts: { text: string; cls?: string }[] = [{ text: `Dealer: ${handName(s)}` }];
+    const parts: { text: string; cls?: string }[] = [{ text: 'Dealer', cls: 'tc-dealer-word' }, { text: handName(s), cls: 'tc-dealer-hand' }];
     if (!qualifies(s)) parts.push({ text: 'does not qualify', cls: 'muted' });
-    setLabel('dealer', new THREE.Vector3(0, TOP_Y + 0.01, dealerSlot(1).z - 0.078), parts, 'tc-hand dealer');
+    setLabel('dealer', DEALER_LABEL.clone(), parts, 'tc-hand tc-dealer');
+  };
+
+  const scaleTo = (m: CardMesh, to: number, ms: number): Promise<void> => {
+    const from = m.scale.x;
+    return tween(ms, (k) => m.scale.setScalar(from + (to - from) * k), ease.out);
   };
 
   const clearPayouts = (): void => {
@@ -404,6 +438,7 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
         if (c && m.card !== c) m.setCard(c);
         m.position.copy(dealerSlot(i));
         m.rotation.set(c ? 0 : Math.PI, 0, 0);
+        m.scale.setScalar(DEALER_CARD_SCALE);
       });
       if (v.dealer.every((c) => c !== null)) dealerLabel(v.dealer as Card[]);
       else dropLabel('dealer');
@@ -487,6 +522,7 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
     ctx.sfx.play('ui-click');
     decided = true;
     decideBar.hidden = true;
+    renderTip();
     tray.root.classList.remove('tc-away');
     lastAction = 'other';
     ctx.link.act({ type: choice });
@@ -556,6 +592,7 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
     dropLabel('dealer');
     if (all.length === 0) return;
     ctx.sfx.play('card-place');
+    for (const m of all) if (m.scale.x !== 1) void scaleTo(m, 1, 260);
     await Promise.all(all.map((m, i) => wait(i * 12).then(() => dealCard(m, m.position.clone(), DISCARD, { faceUp: false, ms: 260, yaw: 0 }))));
     removeCards(all);
   };
@@ -589,7 +626,8 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
         const to = target < 0 ? dealerSlot(round) : handSlot(target, round).pos;
         const yaw = target < 0 ? 0 : handSlot(target, round).yaw;
         ctx.sfx.play('card-deal', { delay: delay / 1000, volume: 0.8 });
-        jobs.push(wait(delay).then(() => dealCard(m, SHUFFLER, to, { faceUp: false, ms: 260, yaw })));
+        // the dealer's own cards grow to their larger size on the way out
+        jobs.push(wait(delay).then(() => Promise.all([dealCard(m, SHUFFLER, to, { faceUp: false, ms: 260, yaw }), target < 0 ? scaleTo(m, DEALER_CARD_SCALE, 260) : null]).then(() => {})));
       }
     }
     await Promise.all(jobs);
@@ -805,6 +843,7 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
           settled = true;
           await settleSeat(e.seat, e.result, { ante: sv.ante, pairPlus: sv.pairPlus, play: sv.play });
           handLabel(e.seat, sv);
+          if (e.seat === me && sv.cards.every((c) => c !== null)) celebrateHand(e.result, sv.cards as Card[]);
           if (e.seat === me && dealer && sv.cards.every((c) => c !== null)) await callResult(e.result, sv.cards as Card[], dealer);
           renderMeters();
           break;
@@ -940,6 +979,9 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
     },
 
     dispose() {
+      offTips();
+      lowerBanner();
+      ctx.kit.tip(null);
       removeEventListener('pointerdown', onDown);
       removeEventListener('pointermove', onMove);
       canvas.style.cursor = '';

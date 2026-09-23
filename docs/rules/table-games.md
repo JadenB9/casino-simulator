@@ -3,6 +3,13 @@
 Blackjack, roulette, craps, baccarat and Casino War as this casino deals them. For each game this page lists the
 house rules, every bet's payout, its house edge with a source, and the standard deviation (SD) per
 bet. The Monte Carlo tests use the SD to work out how many rounds they need.
+||||||| 9239b79
+Blackjack, roulette, craps and baccarat as this casino deals them. For each game this page lists the
+house rules, every bet's payout, its house edge with a source, and the standard deviation (SD) per
+bet. The Monte Carlo tests use the SD to work out how many rounds they need.
+Blackjack, roulette, craps, baccarat, Casino War, the Big Six wheel and Sic Bo as this casino deals them. For each game
+this page lists the house rules, every bet's payout, its house edge with a source, and the standard
+deviation (SD) per bet. The Monte Carlo tests use the SD to work out how many rounds they need.
 
 Researched 2026-09-22. Defaults follow standard Las Vegas Strip practice. Where sources disagree,
 both are shown and one is picked, with the reason.
@@ -865,6 +872,105 @@ cut-card effect, so the full-shoe figures are the test targets.
 - W1. Wizard of Odds, "Casino War" (rules; six-deck return tables with no bonus, a bonus equal to the bet, and a 3x bonus; house edge for 1 to 8 decks with and without the bonus, surrendering, and the Tie bet; Tie bet analysis). Updated 2026-08-03. https://wizardofodds.com/games/casino-war/
 - W2. 58 Pa. Code Chapter 651a, Casino War (decks §651a.3, shuffle and cut §651a.5, ranks §651a.6, wagers §651a.7, dealing §651a.8, settlement §651a.9, payout odds §651a.10). https://www.pacodeandbulletin.gov/Display/pacode?file=/secure/pacode/data/058/chapter651a/chap651atoc.html
 - W3. Wikipedia, "Casino War" (game play, the tie in the war, history). https://en.wikipedia.org/wiki/Casino_War
+||||||| 9239b79
+## 8. Big Six Wheel
+
+The money wheel: an upright wheel of 54 stops, a leather clapper at the top, and a layout with one
+spot per symbol. You bet on a symbol; the dealer spins; every bet on the symbol the clapper stops on
+is paid. Researched 2026-09-23; the sources for this section are listed at its end ([B1]–[B3]).
+
+### 8.1 House rules
+
+| Rule | This table |
+|---|---|
+| Wheel | 54 equal stops with a peg on every boundary and a leather clapper at the top ([B2]; [B3] §619a.1) |
+| Symbols | $1 ×24, $2 ×15, $5 ×7, $10 ×4, $20 ×2, and two pictures, one each: the Star and the Crown. Real wheels carry a joker and the casino's logo [B2]; these are generic stand-ins |
+| Payouts | The bills pay the number on the bill to 1. The Star and the Crown pay 40 to 1, each on its own symbol only [B1] |
+| Spin | The server picks the stop first, uniformly over the 54, and the wheel is animated onto it. Every spin turns the wheel at least three times ([B3] §619a.2 asks for three) |
+| Settlement | The stop the clapper comes to rest in wins ([B3] §619a.2). All spots settle at once |
+| Limits | $1 to $500 on each spot, whole dollars, and at most $2,500 on the layout per player per spin |
+| Single player | Place chips, press Spin. The wheel turns from "No more bets" to rest in about 10.5 seconds |
+| Multiplayer | A 20 second betting window once the leader starts the table. It closes early once every connected seated player has pressed Ready (and someone has a bet down). The stop is drawn only when betting closes |
+
+### 8.2 The wheel (stops clockwise from the Star)
+
+```text
+Star, 1, 2, 1, 5, 2, 1, 10, 1, 5, 1, 2, 1, 20, 1, 2, 1, 5, 2, 1,
+10, 1, 2, 5, 1, 2, 1, Crown, 2, 1, 2, 1, 2, 1, 10, 1, 5, 1, 2, 1,
+20, 1, 2, 1, 5, 2, 1, 10, 1, 2, 5, 1, 2, 1
+```
+
+The order is the one written in [B3] §619a.1, which is for a wheel with 23 × $1 and 8 × $5. Its one
+$5 that stands between two $2 stops (position 29, counting the Star as 0) is a $1 here, which gives
+the Las Vegas counts of [B1] and still never puts two $1 stops side by side. The Star and the Crown
+sit directly opposite each other, as do the two $20s and each pair of $10s. A unit test checks the
+order against [B3] stop by stop, the counts, and the neighbours.
+
+### 8.3 Payout table
+
+House edge = (54 − stops × (pays + 1)) ÷ 54, exactly, for every spot.
+
+| Spot | Stops | Pays | P(win) | House edge | SD | Source |
+|---|---|---|---|---|---|---|
+| $1 | 24 | 1:1 | 44.444% | **11.111%** (1/9) | 0.9938 | [B1], [B2] |
+| $2 | 15 | 2:1 | 27.778% | 16.667% (1/6) | 1.3437 | [B1] |
+| $5 | 7 | 5:1 | 12.963% | 22.222% (2/9) | 2.0154 | [B1] |
+| $10 | 4 | 10:1 | 7.407% | 18.519% (5/27) | 2.8808 | [B1] |
+| $20 | 2 | 20:1 | 3.704% | 22.222% (2/9) | 3.9659 | [B1] |
+| Star | 1 | 40:1 | 1.852% | **24.074%** (13/54) | 5.5275 | [B1], [B2] |
+| Crown | 1 | 40:1 | 1.852% | **24.074%** (13/54) | 5.5275 | [B1], [B2] |
+
+The $1 is the best bet on the layout and the pictures the worst. The table's Tips say so. The SDs
+are `(k+1)·sqrt(p·(1−p))` for a spot that pays `k:1` and wins with probability `p`.
+
+### 8.4 Edge cases
+
+1. The Star and the Crown are two different bets. A Star bet loses when the Crown comes up, and the
+   other way round [B1].
+2. A spot wins on any of its stops: the $20 on either $20 stop.
+3. Draw the stop index uniformly with rejection sampling (0..53), then turn the wheel to it. Never
+   generate a wheel angle and read a stop off it.
+4. Chips on the layout before "No more bets" come back to a player who leaves. After it they are
+   already settled.
+5. Every payout is a whole number of dollars on a whole-dollar bet, so nothing needs rounding.
+
+### 8.5 Monte Carlo
+
+One trial = one spin, per spot. `shared/test/bigsix.mc.test.ts` spins drawStop and returnFor (the
+functions the engine settles with) ten million times on seed 20260923, then plays 200,000 spins
+through the whole engine (seed 20260924). Every spot lands within 3 SE of its exact edge:
+
+| Spot | Published | Measured (10M spins) | SE | z |
+|---|---|---|---|---|
+| $1 | 11.1111% | 11.1087% | 0.0314% | −0.08 |
+| $2 | 16.6667% | 16.7051% | 0.0425% | +0.91 |
+| $5 | 22.2222% | 22.1470% | 0.0638% | −1.18 |
+| $10 | 18.5185% | 18.4921% | 0.0911% | −0.29 |
+| $20 | 22.2222% | 22.2992% | 0.1254% | +0.61 |
+| Star | 24.0741% | 23.9212% | 0.1750% | −0.87 |
+| Crown | 24.0741% | 24.2140% | 0.1746% | +0.80 |
+
+The 54 stops came up evenly (chi-square 62.07 over 53 degrees of freedom; the critical value at
+p = 0.001 is 90.57). A $1 bet paying 2:1 or the pictures paying 45:1 would move an edge by 44 or 9
+points, far past 3 SE at these sample sizes.
+
+### 8.6 Where sources disagree
+
+| Topic | Disagreement | Choice and reason |
+|---|---|---|
+| Joker and logo payout | 40 to 1 in Las Vegas [B1] vs 45 to 1 in Atlantic City [B1] and Pennsylvania [B3]. [B2]: "40 to 1 or 45 to 1, depending on local gaming regulations or the practice of the casino" | 40 to 1 (24.07%), the Las Vegas rule. The casino follows Strip rules throughout |
+| Stop counts | 24 × $1 and 7 × $5 in Las Vegas [B1] vs 23 × $1 and 8 × $5 in Pennsylvania [B3] | Las Vegas counts, laid out in [B3]'s order with one $5 printed as a $1 (§7.2) |
+
+### Sources for §7
+
+- [B1] Wizard of Odds, "Big Six" (Las Vegas rules table: stops, pays, probability and house edge per
+  bet; Atlantic City's logos pay 45 to 1). https://wizardofodds.com/games/big-six/
+- [B2] Wikipedia, "Big Six wheel" (the bills and the two special symbols; "40 to 1 or 45 to 1";
+  "11.1% on the $1-bill bet to more than 24% on the joker or logo (when it pays at 40 to 1)"; the
+  pointer on a flexible piece of leather that rubs against the pins). https://en.wikipedia.org/wiki/Big_Six_wheel
+- [B3] 58 Pa. Code Chapter 619a, Big Six Wheel (§619a.1: 54 equally spaced sections, the clockwise
+  sequence, the clapper, at least 5 feet across; §619a.2: "no more bets", at least three
+  revolutions, settled where the clapper comes to rest). https://www.pacodeandbulletin.gov/Display/pacode?file=%2Fsecure%2Fpacode%2Fdata%2F058%2Fchapter619a%2Fchap619atoc.html
 
 ---
 

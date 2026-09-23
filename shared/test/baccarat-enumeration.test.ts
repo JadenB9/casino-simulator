@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import type { Card } from '../src/cards.ts';
 import { RANKS } from '../src/cards.ts';
 import { DECKS, isPair, nextDraw, settleSpot, winnerOf, type Spot, type Winner } from '../src/games/baccarat/rules.ts';
+import { HOUSE_EDGE } from '../src/games/baccarat/advice.ts';
 
 // Exact 8-deck outcome counts over every ordered six-card sequence from a full shoe
 // (416 x 415 x ... x 411 = 4,998,398,275,503,360), as in docs/rules/table-games.md §4.3.
@@ -135,6 +136,13 @@ describe('baccarat exact enumeration (8 decks, full shoe)', () => {
     expect(pct(-Number(banker[0]) / Number(banker[1]))).toBe('1.0579');
     expect(pct(-Number(player[0]) / Number(player[1]))).toBe('1.2351');
     expect(pct(-Number(tie[0]) / Number(tie[1]))).toBe('14.3596');
+  });
+
+  it("matches the edges the table's Tips quote", () => {
+    for (const spot of ['banker', 'player', 'tie'] as const) {
+      const [num, den] = expectedValue(spot, counts, total);
+      expect(HOUSE_EDGE[spot]).toBeCloseTo(-Number(num) / Number(den), 12);
+    }
   });
 
   it('gives the documented standard deviations', () => {

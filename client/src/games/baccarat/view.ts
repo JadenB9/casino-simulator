@@ -18,6 +18,10 @@ import {
   type Bets, type Coup, type Hand, type Spot, SPOTS, SPOT_NAMES, betTotal, handTotal, seatNumber,
 } from '../../../../shared/src/games/baccarat/rules.ts';
 import { engine, limitsFor } from '../../../../shared/src/games/baccarat/engine.ts';
+import { bestBet, bettingTip } from '../../../../shared/src/games/baccarat/advice.ts';
+import { celebrate } from '../../table/celebrate.ts';
+import { dropGlow, handGlow, raiseBanner } from '../blackjack/celebration.ts';
+import { coupMoment } from './moments.ts';
 import { Felt } from '../../table/felt.ts';
 import { CardMesh, CARD_H, dealCard, flipCard } from '../../table/cards.ts';
 import { ChipStack, slideStack } from '../../table/chips.ts';
@@ -28,8 +32,8 @@ import { feltSpec, kidneyGeometry } from './felt.ts';
 import { setDiscardHeight } from './model.ts';
 import { Scoreboard } from './scoreboard.ts';
 import {
-  BANDS, BURN_SPOT, CUT_SPOT, CZ, DISCARD_TOP, HAND_BOX, NUMBER_R, PAIR_RADIUS, RACK_POINT, SHOE_MOUTH, TOP_Y,
-  commissionBox, handSlot, parseRegion, polar, seatAngle, sectorPoints, spotCentre,
+  BANDS, BURN_SPOT, CUT_SPOT, CZ, DISCARD_TOP, HAND_BOX, HAND_CARD_SCALE, NUMBER_R, PAIR_RADIUS, RACK_POINT, SHOE_MOUTH, TOP_Y,
+  commissionBox, handSlot, parseRegion, polar, regionId, seatAngle, sectorPoints, spotCentre,
 } from './layout.ts';
 import './baccarat.css';
 
@@ -120,6 +124,12 @@ export class BaccaratTable implements TableView {
   private shoeNo = 0;
   /** "No more bets" has been called for the window in the view (it updates only after the coup plays out). */
   private closed = false;
+  /** A coup is being dealt: from "No more bets" until its batch has played out. */
+  private dealing = false;
+  /** The Tips mark on your seat's best bet, and which spot it lights. */
+  private tipMark: { mesh: THREE.Mesh; region: string } | null = null;
+  private readonly offTips: () => void;
+  private readonly lowerBanner: () => void;
 
   constructor(private readonly ctx: TableViewCtx) {
     this.root = ctx.stage.root;
@@ -168,6 +178,8 @@ export class BaccaratTable implements TableView {
 
     addEventListener('pointerdown', this.onPointerDown);
     addEventListener('pointermove', this.onPointerMove);
+    this.offTips = ctx.tips.subscribe(() => this.renderTip());
+    this.lowerBanner = raiseBanner(ctx.ui);
   }
 
   // -------------------------------------------------------------------------------------------
@@ -198,6 +210,7 @@ export class BaccaratTable implements TableView {
         case 'betting':
           await this.sweep();
           this.closed = false;
+          this.renderTip();
           this.ready = false;
           if (this.mode === 'multi') {
             this.ctx.link.ready(false);
@@ -220,6 +233,8 @@ export class BaccaratTable implements TableView {
           break;
         case 'nomore':
           this.closed = true;
+          this.dealing = true;
+          this.renderTip();
           this.hideTip();
           this.ctx.kit.say(wasLastHand ? 'Last hand. No more bets' : 'No more bets', 1800);
           await this.pause(450);
@@ -271,7 +286,7 @@ export class BaccaratTable implements TableView {
         case 'result':
           if (!settled) {
             settled = true;
-            await this.settle(results);
+            await this.settle(results, next.coup);
           }
           break;
         case 'lasthand':
@@ -282,6 +297,7 @@ export class BaccaratTable implements TableView {
           break;
       }
     }
+    this.dealing = false;
     this.draw(next);
     this.lastEnd = performance.now();
   }
@@ -290,6 +306,7 @@ export class BaccaratTable implements TableView {
     this.stack = msg.stack;
     if (msg.seat !== null) this.mySeat = msg.seat;
     this.drawMeters();
+    this.renderTip();
   }
 
   onMembers(msg: MembersMsg): void {
@@ -348,6 +365,10 @@ export class BaccaratTable implements TableView {
 
   dispose(): void {
     this.disposed = true;
+    this.offTips();
+    this.lowerBanner();
+    this.ctx.kit.tip(null);
+    this.tipMark?.mesh.removeFromParent();
     removeEventListener('pointerdown', this.onPointerDown);
     removeEventListener('pointermove', this.onPointerMove);
     this.board.dispose();
@@ -478,6 +499,13 @@ export class BaccaratTable implements TableView {
   private highlight(region: string, spot: Spot): THREE.Mesh {
     let m = this.hilite.get(region);
     if (m) return m;
+    m = this.spotMesh(region, spot, '#f6dfa6', 0.13, TOP_Y + 0.0009);
+    this.hilite.set(region, m);
+    return m;
+  }
+
+  /** A flat mesh in the shape of a betting spot on the felt, hidden until shown. */
+  private spotMesh(region: string, spot: Spot, color: string, opacity: number, y: number): THREE.Mesh {
     const r = parseRegion(region)!;
     const a = seatAngle(r.seatNo);
     let shape: THREE.Shape;
@@ -489,13 +517,38 @@ export class BaccaratTable implements TableView {
       const b = BANDS[spot];
       shape = new THREE.Shape(sectorPoints(b.r0, b.r1, a - b.half, a + b.half, 16).map(([x, z]) => new THREE.Vector2(x, -z)));
     }
-    m = new THREE.Mesh(new THREE.ShapeGeometry(shape, 24), new THREE.MeshBasicMaterial({ color: '#f6dfa6', transparent: true, opacity: 0.13, depthWrite: false }));
+    const m = new THREE.Mesh(new THREE.ShapeGeometry(shape, 24), new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthWrite: false }));
     m.rotation.x = -Math.PI / 2;
-    m.position.y = TOP_Y + 0.0009;
+    m.position.y = y;
     m.visible = false;
     this.root.add(m);
-    this.hilite.set(region, m);
     return m;
+  }
+
+  /** Whether you can put chips down now: the window is open (solo: whenever no coup is being dealt). */
+  private canBet(): boolean {
+    if (this.mySeat === null || this.dealing) return false;
+    return this.mode === 'solo' || (this.view?.phase === 'betting' && !this.closed);
+  }
+
+  /**
+   * Tips: while you can bet, which bet gives the house the least and which the most, with your
+   * seat's lowest-edge spot lit in brass on the felt (the bets here are made on the felt, not with
+   * buttons).
+   */
+  private renderTip(): void {
+    const on = this.ctx.tips.on && this.canBet();
+    this.ctx.kit.tip(on ? bettingTip() : null);
+    const region = on ? regionId(seatNumber(this.mySeat!), bestBet()) : null;
+    if (this.tipMark && this.tipMark.region !== region) {
+      this.tipMark.mesh.visible = false;
+      if (region) {
+        this.tipMark.mesh.removeFromParent();
+        this.tipMark = null;
+      }
+    }
+    if (region && !this.tipMark) this.tipMark = { mesh: this.spotMesh(region, bestBet(), '#f1d59a', 0.22, TOP_Y + 0.0008), region };
+    if (this.tipMark) this.tipMark.mesh.visible = !!region;
   }
 
   // -------------------------------------------------------------------------------------------
@@ -558,8 +611,18 @@ export class BaccaratTable implements TableView {
     const slot = handSlot(hand, i);
     m.position.copy(slot.pos);
     m.rotation.y = slot.sideways ? Math.PI / 2 : 0;
+    m.scale.setScalar(HAND_CARD_SCALE);
     this.root.add(m);
     return m;
+  }
+
+  private scaleTo(m: CardMesh, to: number, ms: number): Promise<void> {
+    const from = m.scale.x;
+    if (ms <= 0) {
+      m.scale.setScalar(to);
+      return Promise.resolve();
+    }
+    return tween(ms, (k) => m.scale.setScalar(from + (to - from) * k), ease.out);
   }
 
   private async deal(hand: Hand, card: Card, faceUp: boolean): Promise<void> {
@@ -570,7 +633,8 @@ export class BaccaratTable implements TableView {
     this.root.add(m);
     this.cards[hand].push(m);
     this.ctx.sfx.play('card-deal');
-    await this.play(faceUp ? 400 : 300, (ms) => dealCard(m, SHOE_MOUTH, slot.pos, { faceUp, ms, yaw: slot.sideways ? Math.PI / 2 : 0 }));
+    // a hand's cards grow to their larger size on the way out of the shoe
+    await this.play(faceUp ? 400 : 300, (ms) => Promise.all([dealCard(m, SHOE_MOUTH, slot.pos, { faceUp, ms, yaw: slot.sideways ? Math.PI / 2 : 0 }), this.scaleTo(m, HAND_CARD_SCALE, ms)]));
   }
 
   private async reveal(hand: Hand): Promise<void> {
@@ -587,7 +651,7 @@ export class BaccaratTable implements TableView {
   /** Peel the card up from its near edge slowly, hold, then turn it over. */
   private async squeezeCard(m: CardMesh): Promise<void> {
     const y0 = m.position.y;
-    const lift = () => (m.position.y = y0 + Math.abs(Math.sin(m.rotation.x)) * (CARD_H / 2));
+    const lift = () => (m.position.y = y0 + Math.abs(Math.sin(m.rotation.x)) * ((CARD_H * m.scale.x) / 2));
     const peek = 0.5;
     await tween(1000, (k) => {
       m.rotation.x = Math.PI - peek * k;
@@ -690,7 +754,7 @@ export class BaccaratTable implements TableView {
     const jobs: Promise<void>[] = [];
     if (all.length) this.ctx.sfx.play('card-place');
     all.forEach((m, i) => {
-      jobs.push(wait(this.ms(i * 45)).then(() => dealCard(m, m.position.clone(), DISCARD_TOP, { faceUp: false, ms: this.ms(380), yaw: 0 })));
+      jobs.push(wait(this.ms(i * 45)).then(() => Promise.all([dealCard(m, m.position.clone(), DISCARD_TOP, { faceUp: false, ms: this.ms(380), yaw: 0 }), this.scaleTo(m, 1, this.ms(380))]).then(() => {})));
     });
     const chips: { seat: number; stack: ChipStack }[] = [...this.pays];
     for (const [key, stack] of this.stacks) chips.push({ seat: Number(key.split(':')[0]), stack });
@@ -751,7 +815,7 @@ export class BaccaratTable implements TableView {
    * Losing bets are collected first, all at once; then each seat is paid, highest seat number
    * first (the events arrive in that order), with the commission marked in its box.
    */
-  private async settle(results: ResultEvent[]): Promise<void> {
+  private async settle(results: ResultEvent[], coup: Coup | null): Promise<void> {
     const losers: ChipStack[] = [];
     for (const r of results) {
       for (const spot of SPOTS) if (r.spots[spot]?.outcome === 'lose') losers.push(this.stackFor(r.seat, spot));
@@ -778,10 +842,20 @@ export class BaccaratTable implements TableView {
       if (r.seat === this.mySeat) {
         this.lastNet = r.returned - r.wagered;
         this.lastBets = Object.fromEntries(SPOTS.filter((s) => r.spots[s]).map((s) => [s, r.spots[s]!.bet])) as Bets;
+        if (coup && !this.rush) this.celebrateCoup(r, coup);
       }
       if (paying.length) await this.pause(160);
     }
     this.drawMeters();
+  }
+
+  /** Your coup's moment, if it was one, with the light under the two cards that made it. */
+  private celebrateCoup(r: ResultEvent, coup: Coup): void {
+    const found = coupMoment(r, coup);
+    if (!found) return;
+    const stands = found.hands.map((h) => handGlow(this.cards[h].slice(0, 2), TOP_Y + 0.0007));
+    celebrate(this.ctx, { ...found.m, glow: stands.filter((st): st is THREE.Mesh => !!st) });
+    stands.forEach(dropGlow);
   }
 
   private pinned(text: string, cls: string, at: THREE.Vector3, ms: number): void {
@@ -856,6 +930,7 @@ export class BaccaratTable implements TableView {
       this.mine.visible = true;
     }
     this.drawMeters();
+    this.renderTip();
   }
 
   private buildMeters(): void {

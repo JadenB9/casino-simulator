@@ -52,7 +52,31 @@
 .bj-total.bust { color: var(--lose); }
 .bj-total.settled { opacity: 0.7; }
 .bj-total.active { border-color: var(--brass-hi); box-shadow: 0 0 0 1px rgba(241, 213, 154, 0.35), 0 0 12px rgba(241, 213, 154, 0.25); }
-.bj-total.dealer { font-size: 16px; }
+
+/* The dealer's total, level with the cards on the up card's left. The anchor is a point at the
+   label's right edge, so however long the label gets it grows away from the cards. */
+.bj-dealer-at { width: 0; height: 0; }
+.bj-dealer {
+  position: absolute;
+  right: 0;
+  top: 0;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 3px 11px 4px;
+  border-radius: 6px;
+  border: 1px solid var(--line-strong);
+  background: rgba(12, 10, 8, 0.82);
+  white-space: nowrap;
+}
+.bj-dealer-word { font-family: var(--serif); font-size: 13px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-2); }
+.bj-dealer-value { font-size: 25px; font-weight: 600; line-height: 1; color: var(--ink); font-variant-numeric: tabular-nums; }
+.bj-dealer.bust .bj-dealer-value { color: var(--lose); }
+.bj-dealer.bj { background: var(--brass); border-color: var(--brass-hi); }
+.bj-dealer.bj .bj-dealer-word,
+.bj-dealer.bj .bj-dealer-value { color: #1d140a; }
+.bj-dealer.bj .bj-dealer-value { font-family: var(--serif); font-size: 17px; letter-spacing: 0.1em; text-transform: uppercase; }
 
 .bj-hand-no {
   padding: 1px 6px;

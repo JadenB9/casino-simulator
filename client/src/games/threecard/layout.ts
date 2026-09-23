@@ -8,6 +8,7 @@
 
 import * as THREE from 'three';
 import { Felt, type Region } from '../../table/felt.ts';
+import { CARD_H, CARD_W } from '../../table/cards.ts';
 import type { Paytable } from '../../../../shared/src/games/threecard/rules.ts';
 import { CATEGORY_NAMES } from '../../../../shared/src/games/threecard/rules.ts';
 
@@ -35,8 +36,11 @@ const HAND_R = 0.575;
 const FAN = 0.036;
 const TEXT_R = 0.48;
 
-export const DEALER_CARDS_Z = -0.328;
-export const DEALER_CARD_GAP = 0.074;
+/** The dealer's cards lie a size up from the players', so they read from every seat. */
+export const DEALER_CARD_SCALE = 1.25;
+/** The dealer's card line, just clear of the chip rack. */
+export const DEALER_CARDS_Z = -0.322;
+export const DEALER_CARD_GAP = 0.092;
 export const RACK = { x: 0, z: -0.412, w: 0.44, d: 0.056 };
 export const SHUFFLER = new THREE.Vector3(-0.3, TOP_Y + 0.05, -0.405);
 export const DISCARD = new THREE.Vector3(0.3, TOP_Y + 0.02, -0.405);
@@ -85,6 +89,9 @@ export function dealerSlot(i: number): THREE.Vector3 {
   return new THREE.Vector3((i - 1) * DEALER_CARD_GAP, TOP_Y + 0.001, DEALER_CARDS_Z);
 }
 
+/** The dealer's hand label sits in front of the cards, between them and the printed arc. */
+export const DEALER_LABEL = new THREE.Vector3(0, TOP_Y + 0.01, DEALER_CARDS_Z + (CARD_H * DEALER_CARD_SCALE) / 2 + 0.04);
+
 /** Toward the player from their play spot, where collected chips go. */
 export function railPoint(seat: number): THREE.Vector3 {
   const [x, z] = along(seatAngle(seat), FELT_R + 0.02);
@@ -98,11 +105,19 @@ export function seatPose(seat: number): { position: [number, number, number]; ya
   return { position: [x, 0, z], yaw: a + Math.PI };
 }
 
+/**
+ * The camera over a seat, looking down across its cards to the dealer's: the dealer's cards about
+ * a third of the way down the screen (just below the raised celebration banner) and the Play spot
+ * clear of the controls. It sits further back and aims further toward the dealer at the ends of
+ * the arc, so every seat frames alike.
+ */
 export function cameraPose(seat: number): { position: [number, number, number]; target: [number, number, number] } {
   const a = seatAngle(seat);
-  const [cx, cz] = along(a, 1.45);
-  const [tx, tz] = along(a, 0.55);
-  return { position: [cx, 1.34, cz], target: [tx, TOP_Y, tz] };
+  const t = Math.abs(a) / THREE.MathUtils.degToRad(50);
+  const [cx, cz] = along(a, 1.165 + 0.225 * t);
+  const [hx, hz] = along(a, HAND_R);
+  const k = -0.045 + 0.225 * t;
+  return { position: [cx, 1.78, cz], target: [hx + (0 - hx) * k, TOP_Y, hz + (DEALER_CARDS_Z - hz) * k] };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -272,9 +287,11 @@ function paint(pay: Paytable) {
     // the dealer's card line
     g.strokeStyle = INK_SOFT;
     g.lineWidth = px(0.0015);
+    const w = CARD_W * DEALER_CARD_SCALE + 0.008;
+    const h = CARD_H * DEALER_CARD_SCALE + 0.008;
     for (let i = 0; i < 3; i++) {
       const p = dealerSlot(i);
-      roundRect(g, px(p.x - 0.035), px(p.z - 0.048), px(0.07), px(0.096), px(0.006));
+      roundRect(g, px(p.x - w / 2), px(p.z - h / 2), px(w), px(h), px(0.006));
       g.stroke();
     }
 
