@@ -9,6 +9,18 @@ export type Quality = 'high' | 'low';
 
 const QUALITY_KEY = 'casino.quality';
 
+/**
+ * Phones and tablets: a touch screen is the main pointer. They start on Low graphics and never
+ * render more than 1.5 device pixels per CSS pixel; a 3x phone screen would otherwise ask for
+ * four times the pixels of a laptop's, on a much smaller GPU.
+ */
+export function isMobile(): boolean {
+  return typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches && navigator.maxTouchPoints > 0;
+}
+
+/** The most device pixels per CSS pixel the renderer ever uses. */
+export const MOBILE_MAX_PIXEL_RATIO = 1.5;
+
 export function savedQuality(): Quality {
   try {
     const q = localStorage.getItem(QUALITY_KEY);
@@ -16,7 +28,7 @@ export function savedQuality(): Quality {
   } catch {
     /* storage blocked */
   }
-  return 'high';
+  return isMobile() ? 'low' : 'high';
 }
 
 export function saveQuality(q: Quality): void {
@@ -38,9 +50,17 @@ export class Engine3D {
   private frames = new Set<FrameFn>();
   private frameTimes: number[] = [];
 
+  /** The ceiling on the pixel ratio: 1.5 on phones and tablets, 2 elsewhere. */
+  readonly maxPixelRatio: number;
+
   constructor(canvas: HTMLCanvasElement, labelRoot: HTMLElement, readonly quality: Quality) {
     const high = quality === 'high';
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: high, powerPreference: 'high-performance' });
+    this.maxPixelRatio = isMobile() ? MOBILE_MAX_PIXEL_RATIO : 2;
+    // Everything that sets the ratio later (the floor's adaptive step-down on High) goes through
+    // the same ceiling, so a phone never renders at its full 3x.
+    const setPixelRatio = this.renderer.setPixelRatio.bind(this.renderer);
+    this.renderer.setPixelRatio = (value: number) => setPixelRatio(Math.min(value, this.maxPixelRatio));
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, high ? 2 : 1));
     this.renderer.toneMapping = THREE.NeutralToneMapping;
     this.renderer.toneMappingExposure = 1;

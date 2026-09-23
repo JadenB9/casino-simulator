@@ -1,0 +1,36 @@
+/* Phones and tablets. theme.css and each panel's own stylesheet are drawn for a mouse on a laptop
+   screen; this sheet adds what a touch screen and a small screen need, as media queries only:
+   finger-sized targets, no keyboard hints, no page scroll, callouts or double-tap zoom, and the
+   shared pieces (HUD, chip tray, dialogs, the dealer and tip lines) fitted to 390 x 844 and
+   844 x 390. The floor's touch controls style themselves (world/touch.css); each game's own
+   stylesheet fits its panels. Loaded from index.html, after theme.css. */
+
+/* ---------------------------------------------------------------- touch screens */
+
+@media (pointer: coarse) {
+  html, body { overscroll-behavior: none; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+  body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+  input, textarea { -webkit-user-select: text; user-select: text; }
+  /* No double-tap zoom on anything; the 3D view takes every gesture itself. */
+  * { touch-action: manipulation; }
+  #scene, #labels { touch-action: none; }
+
+  /* Keyboard hints mean nothing without a keyboard (the Leave button in the HUD walks away). */
+  .btn .key, .kc, .lb-key, .emo-key, .menu-hints, .lobby-foot { display: none !important; }
+  .hud-btn[aria-label^='Keyboard'] { display: none; }
+
+  /* Finger-sized targets: 44 px at the least. */
+  .btn { min-height: 44px; }
+  .hud-btn { width: 44px; height: 44px; }
+  .seg-btn { height: 44px; }
+  .x-btn { height: 44px; min-width: 44px; justify-content: center; }
+  .lobby-back { height: 44px; }
+  .lobby-row { height: 48px; }
+  .party-head { height: 44px; }
+  .party-seg button { height: 44px; }
+  .ed-turn-btn { width: 44px; height: 44px; }
+  .sw { width: 40px; height: 40px; }
+  .range { height: 44px; }
+  .range::-webkit-slider-thumb { width: 24px; height: 24px; margin-top: -11px; }
+  .range::-moz-range-thumb { width: 24px; height: 24px; }
+}
