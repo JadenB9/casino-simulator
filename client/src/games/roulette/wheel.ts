@@ -11,7 +11,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { WHEEL, type Variant } from '../../../../shared/src/games/roulette/rules.ts';
 import type { Quality } from '../../render/engine3d.ts';
 import { DIMS, TAU } from './spin.ts';
-import { veneer, rimWood, brushedSteel, numberRing, pocketFloor, VENEER_R0, VENEER_R1 } from './textures.ts';
+import { veneer, plainWood, brushedSteel, numberRing, pocketFloor, VENEER_R0, VENEER_R1 } from './textures.ts';
 import { reflectCasino, buildOnFirstDraw } from './env.ts';
 
 export const WHEEL_R = 0.414;
@@ -286,11 +286,13 @@ function wheelMaterials(q: Quality): WheelMaterials {
   const high = q === 'high';
   const Physical = (p: THREE.MeshPhysicalMaterialParameters) => surface(high, p);
 
-  const rimMaps = rimWood(q);
+  // the table's mahogany, stained nearly black
+  const rimMaps = plainWood(q);
   const rimMap = rimMaps.map.clone();
   const rimSurface = rimMaps.surface.clone();
   for (const t of [rimMap, rimSurface]) t.repeat.set(5, 1);
   const rim = Physical({
+    color: '#5a4038',
     map: rimMap,
     roughness: 1,
     roughnessMap: rimSurface,
@@ -308,8 +310,8 @@ function wheelMaterials(q: Quality): WheelMaterials {
     roughnessMap: ven.surface,
     bumpMap: ven.surface,
     bumpScale: 0.35,
-    clearcoat: 0.4,
-    clearcoatRoughness: 0.12,
+    clearcoat: 0.3,
+    clearcoatRoughness: 0.18,
     side: THREE.DoubleSide,
   });
 
@@ -336,7 +338,7 @@ function wheelMaterials(q: Quality): WheelMaterials {
     [chrome, 1],
     [track, 0.9],
     [rim, 0.75],
-    [veneerMat, 0.75],
+    [veneerMat, 0.55],
     [ball, 0.6],
   ]);
   materialCache.set(q, m);

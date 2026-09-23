@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { Quality } from '../../render/engine3d.ts';
 import { CHIP_R, CHIP_H } from '../../table/chips.ts';
-import { leather, tableWood, chipRolls } from './textures.ts';
+import { leather, plainWood, chipRolls } from './textures.ts';
 
 // ------------------------------------------------------------------------------------------------
 // The armrest
@@ -134,8 +134,8 @@ export function paddedRail(w: number, d: number, gap: [number, number], quality:
   const maps = leather(quality);
   const normal = maps.normal.clone();
   const rough = maps.roughness.clone();
-  // one tile of grain is 5 cm of leather
-  for (const t of [normal, rough]) t.repeat.set(20, 20);
+  // one tile of grain is 2.5 cm of leather
+  for (const t of [normal, rough]) t.repeat.set(40, 40);
   const mat = new THREE.MeshStandardMaterial({
     color: '#15100e',
     roughness: 1,
@@ -155,7 +155,7 @@ export function paddedRail(w: number, d: number, gap: [number, number], quality:
  * rack; `across` turns the grain to run along v (legs).
  */
 export function woodMaterial(quality: Quality, tint = '#ffffff', across = false): THREE.MeshStandardMaterial {
-  const maps = tableWood(quality);
+  const maps = plainWood(quality);
   const map = maps.map.clone();
   const surface = maps.surface.clone();
   for (const t of [map, surface]) {
@@ -167,10 +167,10 @@ export function woodMaterial(quality: Quality, tint = '#ffffff', across = false)
 
 /**
  * The wheel head: a wooden deck the wheel is set into, from the table's end to just short of the
- * layout, so the wheel sits in wood rather than on the cloth. Its edge toward the layout carries a
- * brass bead.
+ * layout, so the wheel sits in wood rather than on the cloth, through a round opening just inside
+ * the bowl's foot. Its edge toward the layout carries a brass bead.
  */
-export function wheelHead(x0: number, x1: number, d: number, quality: Quality, wood: THREE.Material, brass: THREE.Material): THREE.Group {
+export function wheelHead(x0: number, x1: number, d: number, wheel: { x: number; z: number; r: number }, quality: Quality, wood: THREE.Material, brass: THREE.Material): THREE.Group {
   const s = new THREE.Shape();
   const r = 0.07;
   const D = d / 2;
@@ -181,6 +181,10 @@ export function wheelHead(x0: number, x1: number, d: number, quality: Quality, w
   s.lineTo(x0, -D + r);
   s.quadraticCurveTo(x0, -D, x0 + r, -D);
   s.closePath();
+  // the wheel stands in a round opening (the deck is laid flat, so shape y is table −z)
+  const hole = new THREE.Path();
+  hole.absarc(wheel.x, -wheel.z, wheel.r, 0, Math.PI * 2, false);
+  s.holes.push(hole);
   const deck = new THREE.Mesh(
     new THREE.ExtrudeGeometry(s, { depth: 0.005, bevelEnabled: true, bevelThickness: 0.002, bevelSize: 0.002, bevelSegments: quality === 'high' ? 3 : 1, curveSegments: 12 }),
     wood,

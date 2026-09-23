@@ -143,12 +143,12 @@ const smooth = (e0: number, e1: number, x: number) => {
  * the grain, fibres and pores. Returns the tone (0 dark to 1 light) and how deep a pore is there.
  */
 function mahogany(n: Noise, a: number, b: number): [number, number] {
-  const wander = (n.fbm(a * 26, b * 3.5, 3) - 0.5) * 0.022;
+  const wander = (n.fbm(a * 26, b * 3.5, 2) - 0.5) * 0.022;
   const t = (a + wander) * 380;
   const f = t - Math.floor(t);
   const line = (0.5 + 0.5 * Math.cos(TAU * f)) ** 10 * (0.3 + 0.7 * n.at(t * 0.23 + 3.1, b * 6));
   const ribbon = n.fbm(a * 95 + wander * 30, b * 2.4, 2) - 0.5;
-  const flame = Math.sin(TAU * (b * 44 + 3 * n.fbm(a * 14, b * 10, 3))) * Math.max(0, n.fbm(a * 16 + 7, b * 5, 2) - 0.45) * 2;
+  const flame = Math.sin(TAU * (b * 44 + 3 * n.fbm(a * 14, b * 10, 2))) * Math.max(0, n.at(a * 16 + 7, b * 5) - 0.45) * 2;
   const fibre = n.at(a * 1300, b * 40) - 0.5;
   const p = n.at(a * 2400 + 11, b * 150 + 5);
   const pore = Math.max(0, (p - 0.78) * 4.5);
@@ -173,8 +173,10 @@ export function veneer(quality: Quality): WoodMaps {
   const key = `veneer:${quality}`;
   const map = made.get(key);
   if (map) return { map, surface: made.get(`${key}:s`)! };
-  const W = quality === 'high' ? 1024 : 512;
-  const H = quality === 'high' ? 1024 : 512;
+  // 0.6 mm a texel at the apron's edge, finer toward the middle: sharper than the wheel's own
+  // close-up camera needs, and a quarter of the painting a 1024 square would take
+  const W = quality === 'high' ? 512 : 256;
+  const H = quality === 'high' ? 512 : 256;
   const [cc, cg] = canvasOf(W, H);
   const [sc, sg] = canvasOf(W, H);
   const col = cg.createImageData(W, H);
@@ -200,7 +202,7 @@ export function veneer(quality: Quality): WoodMaps {
       } else {
         paint(tone, col.data, i);
         surf.data[i] = 150 - pore * 90;
-        surf.data[i + 1] = 70 + pore * 80;
+        surf.data[i + 1] = 110 + pore * 80;
       }
       surf.data[i + 2] = 0;
       surf.data[i + 3] = 255;
@@ -224,11 +226,12 @@ export function veneer(quality: Quality): WoodMaps {
 }
 
 /**
- * Straight-grained wood that wraps both ways, grain along x: for the dark lacquered rim of the
- * bowl (drawn round its circumference) and the table's edge and skirt. Every frequency is a
- * whole number of cycles per texture, so the tile repeats without a seam.
+ * Straight-grained mahogany that wraps both ways, grain along x: the table's edge, skirt and legs,
+ * and (tinted nearly black) the bowl's lacquered rim, drawn round its circumference. Every
+ * frequency is a whole number of cycles per texture, so the tile repeats without a seam.
  */
-function plainWood(key: string, quality: Quality, seed: number, colors: [string, string, string], contrast: number): WoodMaps {
+export function plainWood(quality: Quality): WoodMaps {
+  const key = `wood:${quality}`;
   const map = made.get(key);
   if (map) return { map, surface: made.get(`${key}:s`)! };
   const W = quality === 'high' ? 1024 : 512;
@@ -237,22 +240,22 @@ function plainWood(key: string, quality: Quality, seed: number, colors: [string,
   const [sc, sg] = canvasOf(W, H);
   const col = cg.createImageData(W, H);
   const surf = sg.createImageData(W, H);
-  const drift = new Noise(seed, 6, 4);
-  const detail = new Noise(seed + 1, 48, 128);
-  const pores = new Noise(seed + 2, 256, 512);
-  const paint = palette(...colors);
+  const drift = new Noise(33, 6, 4);
+  const detail = new Noise(34, 48, 128);
+  const pores = new Noise(35, 256, 512);
+  const paint = palette('#1d0b05', '#3b180b', '#5e2a13');
   for (let y = 0; y < H; y++) {
     const v = y / H;
     for (let x = 0; x < W; x++) {
       const u = x / W;
-      const wander = drift.fbm(u * 6, v * 4, 3) - 0.5;
+      const wander = drift.fbm(u * 6, v * 4, 2) - 0.5;
       const t = (v + wander * 0.08) * 28;
       const f = t - Math.floor(t);
       const line = (0.5 + 0.5 * Math.cos(TAU * f)) ** 8;
       const ribbon = detail.fbm(u * 48, v * 32 + wander * 6, 2) - 0.5;
       const fibre = detail.at(u * 48 + 5, v * 128) - 0.5;
       const pore = Math.max(0, (pores.at(u * 256, v * 512) - 0.8) * 5);
-      const tone = 0.5 + contrast * (0.8 * ribbon + 0.14 * fibre - 0.35 * line - 0.4 * pore);
+      const tone = 0.5 + 0.85 * (0.8 * ribbon + 0.14 * fibre - 0.35 * line - 0.4 * pore);
       const i = (y * W + x) * 4;
       paint(tone, col.data, i);
       surf.data[i] = 150 - pore * 80 - line * 25;
@@ -268,16 +271,6 @@ function plainWood(key: string, quality: Quality, seed: number, colors: [string,
   made.set(key, m);
   made.set(`${key}:s`, s);
   return { map: m, surface: s };
-}
-
-/** The bowl's rim: nearly black mahogany under a deep lacquer. */
-export function rimWood(quality: Quality): WoodMaps {
-  return plainWood(`rim:${quality}`, quality, 21, ['#120604', '#241008', '#3c1a0c'], 0.7);
-}
-
-/** The table's wooden edge, skirt and legs. */
-export function tableWood(quality: Quality): WoodMaps {
-  return plainWood(`table:${quality}`, quality, 33, ['#1d0b05', '#3b180b', '#5e2a13'], 0.85);
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -479,35 +472,46 @@ export function feltWeave(quality: Quality): THREE.Texture {
   });
 }
 
-/** Pebbled leather for the padded rail: rounded grains between fine creases. Normal and roughness. */
+/**
+ * Pebbled leather for the padded rail: rounded grains between fine creases, from a cellular
+ * pattern that wraps (one jittered point per cell). Normal and roughness; one tile is 18 grains.
+ */
 export function leather(quality: Quality): MetalMaps {
   const key = `leather:${quality}`;
   const normal = made.get(key);
   if (normal) return { normal, roughness: made.get(`${key}:r`)! };
-  const S = quality === 'high' ? 512 : 256;
-  const cells = 36;
+  const S = quality === 'high' ? 256 : 128;
+  const cells = 18;
+  let seed = 77;
+  const rand = () => {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    return seed / 4294967296;
+  };
+  const px = new Float32Array(cells * cells);
+  const py = new Float32Array(cells * cells);
+  for (let i = 0; i < cells * cells; i++) {
+    px[i] = 0.15 + 0.7 * rand();
+    py[i] = 0.15 + 0.7 * rand();
+  }
   const h = new Float32Array(S * S);
   const [rc, rg] = canvasOf(S, S);
   const rough = rg.createImageData(S, S);
-  // one jittered feature point per cell, wrapping, for a tiling cellular pattern
-  const jit = new Noise(77, cells, cells);
-  const jit2 = new Noise(78, cells, cells);
-  const fine = new Noise(79, 128, 128);
+  const fine = new Noise(79, 64, 64);
   for (let y = 0; y < S; y++) {
+    const gy = (y / S) * cells;
+    const cy = Math.floor(gy);
     for (let x = 0; x < S; x++) {
       const gx = (x / S) * cells;
-      const gy = (y / S) * cells;
       const cx = Math.floor(gx);
-      const cy = Math.floor(gy);
       let f1 = 9;
       let f2 = 9;
       for (let oy = -1; oy <= 1; oy++) {
+        const ky = cy + oy;
+        const wy = ((ky % cells) + cells) % cells;
         for (let ox = -1; ox <= 1; ox++) {
           const kx = cx + ox;
-          const ky = cy + oy;
-          const px = kx + 0.15 + 0.7 * jit.at(kx + 0.5, ky + 0.5);
-          const py = ky + 0.15 + 0.7 * jit2.at(kx + 0.5, ky + 0.5);
-          const d = Math.hypot(gx - px, gy - py);
+          const k = wy * cells + (((kx % cells) + cells) % cells);
+          const d = Math.hypot(gx - kx - px[k]!, gy - ky - py[k]!);
           if (d < f1) {
             f2 = f1;
             f1 = d;
@@ -515,17 +519,17 @@ export function leather(quality: Quality): MetalMaps {
         }
       }
       const crease = smooth(0, 0.22, f2 - f1);
+      const grain = fine.at((x / S) * 64, (y / S) * 64) - 0.5;
       const i = y * S + x;
-      h[i] = 0.9 * crease - 0.25 * f1 + 0.15 * (fine.at((x / S) * 128, (y / S) * 128) - 0.5);
+      h[i] = 0.9 * crease - 0.25 * f1 + 0.15 * grain;
       const o = i * 4;
-      const r = 0.5 + 0.22 * (1 - crease) + 0.06 * (fine.at((x / S) * 128 + 9, (y / S) * 128) - 0.5);
-      rough.data[o] = rough.data[o + 1] = rough.data[o + 2] = r * 255;
+      rough.data[o] = rough.data[o + 1] = rough.data[o + 2] = (0.5 + 0.22 * (1 - crease) + 0.06 * grain) * 255;
       rough.data[o + 3] = 255;
     }
   }
   const [nc, ng] = canvasOf(S, S);
   const nimg = ng.createImageData(S, S);
-  normals(h, S, S, 2.2, nimg.data);
+  normals(h, S, S, quality === 'high' ? 2.2 : 1.4, nimg.data);
   ng.putImageData(nimg, 0, 0);
   rg.putImageData(rough, 0, 0);
   const n = repeating(texture(nc, false));

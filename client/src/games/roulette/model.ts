@@ -235,7 +235,7 @@ function limitSign(v: Variant): THREE.Mesh {
 /** The table, centred at the origin, players on the +z side, the wheel at −x. */
 export function tableModel(v: Variant, quality: Quality): THREE.Group {
   const g = new THREE.Group();
-  const wood = woodMaterial(quality);
+  const wood = woodMaterial(quality, '#b39486');
   const darkWood = woodMaterial(quality, '#7d5f50');
   const legWood = woodMaterial(quality, '#7d5f50', true);
   const brass = new THREE.MeshStandardMaterial({ color: '#b8923f', roughness: 0.32, metalness: 1 });
@@ -271,7 +271,7 @@ export function tableModel(v: Variant, quality: Quality): THREE.Group {
   felt.mesh.position.y = TOP_Y + 0.0004;
   g.add(felt.mesh);
 
-  const head = wheelHead(-FELT_W / 2 - 0.006, WHEEL_X + WHEEL_R + 0.03, FELT_D + 0.012, quality, wood, brass);
+  const head = wheelHead(-FELT_W / 2 - 0.006, WHEEL_X + WHEEL_R + 0.03, FELT_D + 0.012, { x: WHEEL_X, z: WHEEL_Z, r: WHEEL_R - 0.004 }, quality, wood, brass);
   head.position.y = TOP_Y;
   g.add(head);
   const wheel = buildWheel(v, quality);
