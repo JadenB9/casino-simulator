@@ -458,7 +458,7 @@ function parts(machine: MachineId, quality: Quality): Parts {
     leds: ledParts(l),
     bodyMat: new THREE.MeshStandardMaterial(l.body),
     trimMat: new THREE.MeshStandardMaterial(l.trim),
-    printedMat: new THREE.MeshStandardMaterial({ map: atlas, emissiveMap: atlas, emissive: '#ffffff', emissiveIntensity: 0.4, roughness: 0.34, metalness: 0 }),
+    printedMat: new THREE.MeshStandardMaterial({ map: atlas, emissiveMap: atlas, emissive: '#ffffff', emissiveIntensity: 0.4, roughness: 0.6, metalness: 0, envMapIntensity: 0.3 }),
     ledMat: new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false }),
     reelGeo: reelGeometry(l.reels.look),
     reelMats,
