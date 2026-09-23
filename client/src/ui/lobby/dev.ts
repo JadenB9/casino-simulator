@@ -27,8 +27,8 @@ async function main(): Promise<void> {
   // The room and the table, seen from where a player stands after walking up to it.
   const engine = new Engine3D(document.getElementById('scene') as HTMLCanvasElement, document.getElementById('labels')!, savedQuality());
   devRoom(engine, GAMES[game], variant);
-  engine.camera.position.set(0.95, 1.62, 2.7);
-  engine.camera.lookAt(0.95, 0.72, 0);
+  engine.camera.position.set(0.95, 1.75, 2.5);
+  engine.camera.lookAt(0.95, 0.45, 0);
 
   session.set(await login(params.get('name') ?? `dev_${Math.random().toString(36).slice(2, 8)}`));
   const hud = el('div', 'panel');

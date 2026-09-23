@@ -152,27 +152,38 @@ async function startedTable(buy = 10_000) {
 // ---------------------------------------------------------------------------------------------
 
 describe('the lobby list', () => {
-  it('a new public lobby is pushed to watchers, and fills in its leader when the creator sits down', async () => {
+  it('a public lobby is pushed to watchers once its creator sits down, with them as leader', async () => {
     const { w } = await watcher();
     const a = await player('pub');
     const made = await makeLobby(a, 'public');
     expect(made.pin).toBeNull();
     expect(made.tableId).toMatch(/^hc-[a-z0-9]{10}$/);
-
-    const first = await w.next<any>((m) => m.t === 'lobby' && m.lobby.tableId === made.tableId);
-    expect(first.game).toBe('highcard');
-    expect(first.lobby).toMatchObject({ game: 'highcard', players: 0, max: 6, started: false });
+    // Empty, it isn't listed: nobody else can get there first and take the lead.
+    await sleep(100);
+    expect(w.msgs.some((m) => m.t === 'lobby' && m.lobby.tableId === made.tableId)).toBe(false);
 
     const [, snap] = await enter(a, made.tableId);
     expect(snap.leader).toBe(a.id);
     expect(snap.meta).toMatchObject({ mode: 'multi', visibility: 'public', started: false });
     expect(snap.meta.pin).toBeUndefined();
-    const filled = await w.next<any>((m) => m.t === 'lobby' && m.lobby.tableId === made.tableId && m.lobby.players === 1);
-    expect(filled.lobby.leader).toBe(a.name);
+    const listed = await w.next<any>((m) => m.t === 'lobby' && m.lobby.tableId === made.tableId);
+    expect(listed.game).toBe('highcard');
+    expect(listed.lobby).toMatchObject({ game: 'highcard', variant: '', leader: a.name, players: 1, max: 6, started: false });
 
     // Someone who starts watching now gets it in the list itself.
     const later = await watcher();
     expect(later.list.find((l) => l.tableId === made.tableId)).toMatchObject({ leader: a.name, players: 1, max: 6 });
+  });
+
+  it('a lobby drops off the list the moment its last member leaves', async () => {
+    const a = await player('last');
+    const made = await makeLobby(a, 'public');
+    const [ca] = await enter(a, made.tableId);
+    const { w, list } = await watcher();
+    expect(list.some((l) => l.tableId === made.tableId)).toBe(true);
+    ca.send({ t: 'leave' });
+    await w.next((m) => m.t === 'lobby.gone' && m.tableId === made.tableId);
+    expect((await watcher()).list.some((l) => l.tableId === made.tableId)).toBe(false);
   });
 
   it('a private lobby gets a PIN and never appears on the list', async () => {

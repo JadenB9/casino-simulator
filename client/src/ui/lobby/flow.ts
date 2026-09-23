@@ -165,14 +165,16 @@ class TableFlow {
 
     const join = el('div', 'lobby-section');
     const form = el('form', 'lobby-pin');
+    // The display's unlit segments sit behind the digits, like the machines' meters.
+    const field = el('span', 'lobby-pin-field');
     const input = el('input', 'lobby-pin-input');
     input.type = 'text';
     input.inputMode = 'numeric';
     input.autocomplete = 'off';
     input.spellcheck = false;
     input.maxLength = 4;
-    input.placeholder = '8888';
     input.setAttribute('aria-label', 'Four-digit PIN');
+    field.append(el('span', 'seg-ghost', '8888'), input);
     input.addEventListener('input', () => {
       input.value = input.value.replace(/\D/g, '').slice(0, 4);
       this.setError('');
@@ -181,7 +183,7 @@ class TableFlow {
     go.type = 'submit';
     go.dataset.label = 'Join';
     go.append(el('span', 'txt', 'Join'));
-    form.append(input, go);
+    form.append(field, go);
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       void this.joinPin(input.value, go);
@@ -209,10 +211,12 @@ class TableFlow {
   private renderList(list: LobbySummary[]): void {
     if (!this.listEl || !this.countEl) return;
     const focused = this.listEl.contains(document.activeElement) ? (document.activeElement as HTMLElement).dataset.table : undefined;
-    const head = el('div', 'lobby-cols');
-    head.append(el('span', '', 'Table'), el('span', '', 'Seats'), el('span', ''));
-    const rows: HTMLElement[] = [head, ...list.map((l) => this.row(l))];
-    if (list.length === 0) {
+    const rows: HTMLElement[] = list.map((l) => this.row(l));
+    if (list.length > 0) {
+      const head = el('div', 'lobby-cols');
+      head.append(el('span', '', 'Table'), el('span', '', 'Seats'), el('span', ''));
+      rows.unshift(head);
+    } else {
       const empty = el('div', 'lobby-empty');
       if (!this.watch) empty.append('The list of open tables is unavailable.', el('span', '', 'You can still start one, or join with a PIN.'));
       else if (!this.watch.loaded) empty.append('Looking for open tables…');
@@ -222,7 +226,7 @@ class TableFlow {
     this.listEl.replaceChildren(...rows);
     if (focused) this.listEl.querySelector<HTMLElement>(`[data-table="${focused}"]`)?.focus();
     const open = list.filter((l) => !isFull(l)).length;
-    this.countEl.textContent = this.watch?.loaded ? `${open} open ${open === 1 ? 'table' : 'tables'}` : '';
+    this.countEl.textContent = this.watch?.loaded && list.length > 0 ? `${open} open ${open === 1 ? 'table' : 'tables'}` : '';
   }
 
   private row(l: LobbySummary): HTMLButtonElement {
@@ -315,9 +319,11 @@ class TableFlow {
     } else if (this.step === 'choose' && !typing && (e.key === 'm' || e.key === 'M')) {
       this.showBrowse();
     } else if (this.step === 'browse' && !typing && /^\d$/.test(e.key) && this.pinInput && !this.busy) {
-      // Digits typed anywhere go to the PIN box (the key itself lands there too).
-      this.pinInput.focus();
-      handled = false;
+      // Digits typed anywhere go to the PIN box.
+      const input = this.pinInput;
+      input.focus();
+      if (input.value.length < 4) input.value += e.key;
+      this.setError('');
     } else if (this.step === 'browse' && !typing && (e.key === 'ArrowDown' || e.key === 'ArrowUp') && this.listEl) {
       const rows = [...this.listEl.querySelectorAll<HTMLButtonElement>('.lobby-row:not(:disabled)')];
       if (rows.length) {

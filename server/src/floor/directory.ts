@@ -82,6 +82,9 @@ export class Directory {
   }
 
   upsert(summary: LobbySummary, now: number): void {
+    // Nobody at the table: either its creator hasn't sat down yet (listing it would let a stranger
+    // walk in first and take the lead) or everyone left and it is about to close. Not a lobby to show.
+    if (summary.players === 0) return this.remove(summary.tableId, summary.game, now);
     this.dropStale(now);
     const json = JSON.stringify(summary);
     const before = this.sql.exec<{ summary: string }>(`SELECT summary FROM lobbies WHERE table_id = ?1`, summary.tableId).toArray()[0];

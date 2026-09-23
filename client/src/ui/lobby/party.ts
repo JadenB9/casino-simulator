@@ -137,7 +137,7 @@ export class PartyPanel {
     const title = el('span', 'label', p.started ? 'In play' : 'Party');
     const count = el('span', 'party-count', `${p.members.length}/${p.maxSeats}`);
     const headParts: (HTMLElement | SVGSVGElement)[] = [title, vis];
-    if (p.pin && this.collapsed) headParts.push(el('span', 'party-pin-mini meter', p.pin));
+    if (p.pin && this.collapsed) headParts.push(el('span', 'party-pin-mini', p.pin));
     headParts.push(count, chevron());
     this.head.replaceChildren(...headParts);
     this.head.title = this.collapsed ? 'Show the party' : 'Fold the party away';
@@ -146,7 +146,8 @@ export class PartyPanel {
 
     if (p.pin) {
       const pin = el('div', 'party-pin');
-      const digits = el('span', 'party-pin-digits meter', p.pin);
+      const digits = el('span', 'party-pin-digits seg');
+      digits.append(el('span', 'seg-ghost', '8'.repeat(p.pin.length)), el('span', 'seg-lit', p.pin));
       digits.setAttribute('aria-label', `PIN ${p.pin.split('').join(' ')}`);
       const copy = el('button', 'btn ghost', 'Copy');
       copy.type = 'button';
