@@ -3,9 +3,10 @@
 //   /casino/?dev=floor                   (once main.ts routes it here)
 //   /casino/src/world/dev-floor.html     (works on its own in `npm run dev`)
 //
-// Options: &quality=high|low, &view=entrance|overview|slots|pit|cashier|bar|poker|lounge|table
+// Options: &quality=high|low, &view=entrance|overview|slots|pit|cashier|bar|poker|lounge|bigsix|table
 // (a fixed camera for screenshots), &stats=1 (draw calls and frame time), &lineup=1 (every outfit
-// side by side in debug colours, to check outfits.json).
+// side by side in debug colours, to check outfits.json), &slots=sevens,neon,... (the slot islands
+// to lay out, instead of the catalogue's variants).
 
 import * as THREE from 'three';
 import { Engine3D, savedQuality, type Quality } from '../render/engine3d.ts';
@@ -32,6 +33,7 @@ function views(w: FloorWorld): Record<string, View | 'walk'> {
     bar: { pos: [p.bar.front - 4.6, 1.75, (p.bar.z0 + p.bar.z1) / 2 + 4.6], at: [p.bar.back, 1.3, (p.bar.z0 + p.bar.z1) / 2 - 1.6] },
     poker: { pos: [p.pokerRoom.x0 - 2.2, 2.0, p.pokerRoom.z1 + 1.3], at: [p.pokerRoom.x1 - 2.4, 0.9, (p.pokerRoom.z0 + p.pokerRoom.z1) / 2] },
     lounge: { pos: [p.lounge.x0 - 1.2, 1.75, p.lounge.z0 - 1.0], at: [(p.lounge.x0 + p.lounge.x1) / 2, 0.7, (p.lounge.z0 + p.lounge.z1) / 2] },
+    bigsix: { pos: [p.feature.x1 + 1.2, 1.8, p.feature.z1 + 1.6], at: [p.feature.x0, 1.5, (p.feature.z0 + p.feature.z1) / 2] },
   };
 }
 
@@ -43,6 +45,7 @@ export async function runDevFloor(params: URLSearchParams): Promise<FloorWorld> 
   const world = await createWorld(engine, {
     quality,
     name: 'You',
+    slotVariants: params.get('slots')?.split(',').filter(Boolean),
     onProgress: (k) => fill && (fill.style.width = `${Math.round(k * 100)}%`),
   });
   engine.onFrame((dt) => world.update(dt));

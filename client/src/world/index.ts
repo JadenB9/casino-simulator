@@ -7,7 +7,7 @@ import type { Engine3D, Quality } from '../render/engine3d.ts';
 import { DEFAULT_LOOK, type Look } from '../../../shared/src/look.ts';
 import { GAMES } from '../games/index.ts';
 import type { CashierPoint, Station, World } from './contract.ts';
-import { planFloor, type FloorPlan } from './layout.ts';
+import { planFloor, slotVariants, type FloorPlan } from './layout.ts';
 import { Mats, loadTextures } from './materials.ts';
 import { Batch } from './batch.ts';
 import { Collider } from './collision.ts';
@@ -52,6 +52,8 @@ export interface WorldOptions {
    * keyboard (overlayCount), and lets go when any of those starts.
    */
   canCapture?: () => boolean;
+  /** One slot island per variant; defaults to every slots variant in the catalogue (dev previews). */
+  slotVariants?: string[];
 }
 
 export interface FloorWorld extends World {
@@ -94,7 +96,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
   const root = new THREE.Group();
   root.name = 'floor';
   scene.add(root);
-  const plan = planFloor((g) => GAMES[g].footprint);
+  const plan = planFloor((g) => GAMES[g].footprint, opts.slotVariants ?? slotVariants());
   const mats = new Mats(quality, tex, aniso);
   const col = new Collider();
   const batch = new Batch();

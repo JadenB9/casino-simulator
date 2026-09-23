@@ -12,6 +12,7 @@ import type { Collider } from './collision.ts';
 import { CEILING, type FloorPlan } from './layout.ts';
 import type { WorldStation, VpMode } from './stations.ts';
 import { BAR_TOP } from './stations.ts';
+import { CATALOG } from '../../../shared/src/games/catalog.ts';
 import type { SignSpec } from './signs.ts';
 
 export type PropKind = 'stool' | 'couch' | 'palm' | 'plant-a' | 'plant-b' | 'lamp-floor' | 'bottle-tall' | 'bottle-red' | 'bottle-white' | 'glass-cocktail' | 'door' | 'chandelier';
@@ -37,9 +38,25 @@ export const BANK_COLORS: Record<string, [string, string]> = {
   sevens: ['#ff3b30', '#ffcf5a'],
   neon: ['#ff2bd6', '#35a8ff'],
   wild: ['#2dff7a', '#b46bff'],
+  diamonds: ['#7fdcff', '#f2f6ff'],
+  cherries: ['#ff2d6a', '#7dff6b'],
+  goldrush: ['#ffc23d', '#ff7a1a'],
 };
+/** For a variant added later without its own colours: one of these, by its place in the catalogue. */
+const SPARE_COLORS: [string, string][] = [
+  ['#ff8a3d', '#3dd6ff'],
+  ['#c77dff', '#ffe066'],
+  ['#3dffc5', '#ff5c8a'],
+];
 
-const BANK_TITLES: Record<string, string> = { sevens: 'CLASSIC SEVENS', neon: 'NEON NIGHTS', wild: '5X WILD' };
+function bankColors(variant: string, i: number): [string, string] {
+  return BANK_COLORS[variant] ?? SPARE_COLORS[i % SPARE_COLORS.length]!;
+}
+
+/** The island's topper reads the variant's catalogue name ("CLASSIC SEVENS"). */
+function bankTitle(variant: string): string {
+  return (CATALOG.slots.variants.find((v) => v.id === variant)?.name ?? variant).toUpperCase();
+}
 
 export function buildDecor(plan: FloorPlan, stations: WorldStation[], vpMode: VpMode, b: Batch, m: Mats, col: Collider): Decor {
   const out: Decor = { props: [], signs: [], pools: [] };
@@ -50,8 +67,8 @@ export function buildDecor(plan: FloorPlan, stations: WorldStation[], vpMode: Vp
   const chrome = m.get('chrome');
 
   // --- slot bank islands ---------------------------------------------------------------------
-  for (const bank of plan.banks) {
-    const [c1, c2] = BANK_COLORS[bank.variant] ?? ['#ffffff', '#ffffff'];
+  for (const [bi, bank] of plan.banks.entries()) {
+    const [c1, c2] = bankColors(bank.variant, bi);
     m.define1(`led-${bank.variant}`, () => new THREE.MeshBasicMaterial({ color: hdr(c1, 3.2) }));
     m.define1(`led2-${bank.variant}`, () => new THREE.MeshBasicMaterial({ color: hdr(c2, 2.6) }));
     const led = m.get(`led-${bank.variant}`);
@@ -100,7 +117,7 @@ export function buildDecor(plan: FloorPlan, stations: WorldStation[], vpMode: Vp
     box(0, topY - 0.31, 0, tw + 0.16, 0.025, 0.22, brass);
     for (const side of [1, -1]) {
       const p = at(0, topY, side * 0.095);
-      out.signs.push({ kind: 'neon', text: BANK_TITLES[bank.variant] ?? bank.variant.toUpperCase(), color: c1, font: 'Tilt Neon', at: [p.x, p.y, p.z], ry: bank.yaw + (side > 0 ? 0 : Math.PI), w: tw, h: 0.5 });
+      out.signs.push({ kind: 'neon', text: bankTitle(bank.variant), color: c1, font: 'Tilt Neon', at: [p.x, p.y, p.z], ry: bank.yaw + (side > 0 ? 0 : Math.PI), w: tw, h: 0.5 });
     }
     col.box(bank.x, bank.z, L + 0.62, Dp + 0.2, bank.yaw, 1.95);
     out.pools.push({ x: bank.x, z: bank.z, r: Math.max(L, Dp) * 0.9 + 1.2 });
@@ -256,7 +273,7 @@ export function buildDecor(plan: FloorPlan, stations: WorldStation[], vpMode: Vp
         if (xc - xa > 0.3) plan.ropes.push({ points: [[xa, z], [xc, z]] });
       }
     }
-    for (const s of stations) if (s.zone === 'pit' || s.zone === 'poker') out.pools.push({ x: s.anchor.position.x, z: s.anchor.position.z, r: Math.max(s.footprint.width, s.footprint.depth) * 0.6 + 0.4 });
+    for (const s of stations) if (s.zone === 'pit' || s.zone === 'poker' || s.zone === 'feature') out.pools.push({ x: s.anchor.position.x, z: s.anchor.position.z, r: Math.max(s.footprint.width, s.footprint.depth) * 0.6 + 0.4 });
   }
 
   // --- velvet ropes --------------------------------------------------------------------------

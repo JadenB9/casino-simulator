@@ -1,12 +1,14 @@
 // The floor plan, as data. Everything that stands on the floor is placed from here: the table
-// pit, the slot banks, the video poker bar, the cashier, the poker room, the lounge, the aisles
-// and the columns. Station spacing comes from each game module's footprint, so when a real table
-// or machine replaces a stub the floor re-flows around it and the aisles stay clear.
+// pit, the slot banks (one island per slots variant in the catalogue), the Big Six wheel, the
+// video poker bar, the cashier, the poker room, the lounge, the aisles and the columns. Station
+// spacing comes from each game module's footprint, so when a real table or machine replaces a
+// stub the floor re-flows around it and the aisles stay clear.
 //
 // Coordinates: metres, +x east, +z south (toward the entrance), y up. Station yaw follows
 // Object3D.rotation.y; a station's player side is its local +z, so yaw 0 faces the players south.
 
 import type { GameId } from '../../../shared/src/engine.ts';
+import { CATALOG } from '../../../shared/src/games/catalog.ts';
 
 export interface Footprint {
   width: number;
@@ -20,7 +22,7 @@ export interface Rect {
   z1: number;
 }
 
-export type Zone = 'pit' | 'slots' | 'bar' | 'poker' | 'cashier';
+export type Zone = 'pit' | 'slots' | 'bar' | 'poker' | 'cashier' | 'feature';
 
 export interface Placement {
   id: string;
@@ -68,6 +70,8 @@ export interface FloorPlan {
   door: { x0: number; x1: number; height: number };
   pokerRoom: Rect;
   slotsZone: Rect;
+  /** Where a tall feature (the Big Six wheel) stands against a wall, with its players' room. */
+  feature: Rect;
   barZone: Rect;
   banks: Bank[];
   bar: {
@@ -116,29 +120,42 @@ interface Want {
   variant: string;
 }
 
+// The dice games share the middle of the north row, the roulettes at its ends; Casino War sits
+// mid-row in the south, facing the main aisle and the doors.
 const NORTH_ROW: Want[] = [
   { id: 'rl-us', game: 'roulette', variant: 'american' },
   { id: 'cr-1', game: 'craps', variant: '' },
+  { id: 'sb-1', game: 'sicbo', variant: '' },
   { id: 'rl-eu', game: 'roulette', variant: 'european' },
 ];
 
 const SOUTH_ROW: Want[] = [
   { id: 'bj-1', game: 'blackjack', variant: '' },
   { id: 'bc-1', game: 'baccarat', variant: '' },
+  { id: 'wr-1', game: 'war', variant: '' },
   { id: 'tc-1', game: 'threecard', variant: '' },
   { id: 'bj-2', game: 'blackjack', variant: '' },
 ];
+
+/** The Big Six wheel stands about 3 m tall: against the west wall, facing the pit. */
+const BIG_SIX: Want = { id: 'b6-1', game: 'bigsix', variant: '' };
 
 const POKER: Want[] = [
   { id: 'he-1', game: 'holdem', variant: '' },
   { id: 'he-2', game: 'holdem', variant: '' },
 ];
 
-export const SLOT_VARIANTS = ['sevens', 'neon', 'wild'] as const;
+/** Every slots variant in the catalogue gets an island, in catalogue order. */
+export function slotVariants(): string[] {
+  return CATALOG.slots.variants.map((v) => v.id);
+}
 const PER_SIDE = 2;
 const VP_COUNT = 4;
+/** Walking room between the end caps of neighbouring slot islands, and between facing players. */
+const ISLAND_GAP = 1.6;
+const ISLAND_LANE = 1.3;
 
-export function planFloor(footprint: (game: GameId) => Footprint): FloorPlan {
+export function planFloor(footprint: (game: GameId) => Footprint, slots: readonly string[] = slotVariants()): FloorPlan {
   const stations: Placement[] = [];
   const fp = (g: GameId) => {
     const f = footprint(g);
@@ -181,21 +198,38 @@ export function planFloor(footprint: (game: GameId) => Footprint): FloorPlan {
   const counter: Rect = { x0: ROOM.x0 + WALL, x1: -12.6, z0: ROOM.z0 + WALL, z1: -12.4 };
   const cashier = { counter, x: (counter.x0 + counter.x1) / 2 + 0.4, z: counter.z1 + 0.75, face: Math.PI };
 
-  // --- poker room: north-east, two hold'em tables side on, dealers against the east wall -------
+  // --- poker room: north-east, two hold'em tables. Side on (dealers against the east wall) when
+  // the room is long enough for both with walking room between; otherwise one behind the other.
   const pokerRoom: Rect = { x0: Math.max(pit.x1 + 1.6, 11.4), x1: ROOM.x1 - WALL, z0: ROOM.z0 + WALL, z1: crossZ0 - 0.4 };
   {
     const f = fp('holdem');
-    const x = ROOM.x1 - WALL - 1.6 - f.depth / 2;
-    let z = pokerRoom.z0 + 1.3 + f.width / 2;
-    const room = pokerRoom.z1 - pokerRoom.z0 - 2.6;
-    const gap = Math.max(1.8, (room - 2 * f.width) / 1.4);
-    for (const w of POKER) {
-      stations.push({ ...w, x, z, yaw: -Math.PI / 2, zone: 'poker', fp: f });
-      z += f.width + gap;
+    const long = pokerRoom.z1 - pokerRoom.z0;
+    const sideOn = 2 * f.width + 1.6 + 2 * 0.7 <= long;
+    if (sideOn) {
+      const x = ROOM.x1 - WALL - 1.6 - f.depth / 2;
+      const gap = Math.min(2.6, long - 2 * f.width - 1.4);
+      let z = (pokerRoom.z0 + pokerRoom.z1) / 2 - (f.width + gap / 2);
+      for (const w of POKER) {
+        stations.push({ ...w, x, z: z + f.width / 2, yaw: -Math.PI / 2, zone: 'poker', fp: f });
+        z += f.width + gap;
+      }
+    } else {
+      // players' side south: each table needs its depth plus standing room in front
+      const x = (pokerRoom.x0 + 1.2 + pokerRoom.x1) / 2;
+      const cell = f.depth + PLAYER_ZONE;
+      const gap = Math.max(0.6, Math.min(1.8, (long - 0.5 - 2 * cell) / 2));
+      let z = pokerRoom.z0 + 0.5;
+      for (const w of POKER) {
+        stations.push({ ...w, x, z: z + f.depth / 2, yaw: 0, zone: 'poker', fp: f });
+        z += cell + gap;
+      }
     }
   }
 
-  // --- slots: 'sevens' and 'wild' islands in the south-west, 'neon' by the cashier ------------
+  // --- slots: one island per variant, in a grid on the south-west floor -----------------------
+  // Islands run east-west with machines back to back facing north and south. The grid takes as
+  // few rows as fit the zone's depth (squarish when there's room), spreads the islands evenly
+  // and keeps a lane between every pair of facing players.
   const slotsZone: Rect = { x0: ROOM.x0 + WALL, x1: -3.1, z0: crossZ1, z1: ROOM.z1 - WALL };
   const sf = fp('slots');
   const pitch = sf.width + 0.06;
@@ -232,22 +266,43 @@ export function planFloor(footprint: (game: GameId) => Footprint): FloorPlan {
     banks.push({ variant, x, z, yaw, length: bankLen, depth: bankDepth, ids });
   };
   {
-    const cx = (slotsZone.x0 + slotsZone.x1) / 2 - 0.4;
-    const top = slotsZone.z0 + PLAYER_ZONE + 0.6 + bankDepth / 2;
-    const bottom = slotsZone.z1 - PLAYER_ZONE - 1.6 - bankDepth / 2;
-    const z2 = Math.max(top + bankDepth + LANE, (top + bottom) / 2 + 1.2);
-    addBank('sevens', cx, top, 0);
-    addBank('wild', cx, Math.min(z2, bottom), 0);
+    // an island's size with its end caps and plinth (decor.ts)
+    const islandW = bankLen + 0.62;
+    const colPitch = islandW + ISLAND_GAP;
+    const rowPitch = bankDepth + 2 * PLAYER_ZONE + ISLAND_LANE;
+    const gx0 = slotsZone.x0 + 0.9 + islandW / 2;
+    const gx1 = slotsZone.x1 - 0.9 - islandW / 2;
+    const gz0 = slotsZone.z0 + PLAYER_ZONE + 0.6 + bankDepth / 2;
+    const gz1 = slotsZone.z1 - PLAYER_ZONE - 1.6 - bankDepth / 2;
+    const maxCols = Math.max(1, Math.floor((gx1 - gx0) / colPitch) + 1);
+    const maxRows = Math.max(1, Math.floor((gz1 - gz0) / rowPitch) + 1);
+    const n = slots.length;
+    let rows = Math.max(1, Math.min(maxRows, Math.ceil(Math.sqrt(n))));
+    let cols = Math.ceil(n / rows);
+    while (cols > maxCols && rows < maxRows) cols = Math.ceil(n / ++rows);
+    // spread evenly, but no further apart than looks like one slot floor
+    const dx = cols > 1 ? Math.min((gx1 - gx0) / (cols - 1), colPitch * 1.6) : 0;
+    const dz = rows > 1 ? Math.min((gz1 - gz0) / (rows - 1), rowPitch * 1.5) : 0;
+    const cx = (gx0 + gx1) / 2;
+    const cz = rows > 1 ? (gz0 + gz1) / 2 : gz0;
+    slots.forEach((variant, i) => {
+      const r = Math.floor(i / cols);
+      // a short last row sits in the middle
+      const inRow = Math.min(cols, n - r * cols);
+      const c = i % cols;
+      addBank(variant, cx + (c - (inRow - 1) / 2) * dx, cz + (r - (rows - 1) / 2) * dz, 0);
+    });
   }
-  let neonNorth = 0;
+
+  // --- the feature spot: the Big Six against the west wall, between the cashier's queue and the
+  // cross aisle, facing east toward the pit ------------------------------------------------------
+  const queueEnd = counter.z1 + 3.2;
+  const feature: Rect = { x0: ROOM.x0 + WALL, x1: Math.min(pit.x0, -9.5) - 0.6, z0: queueEnd, z1: crossZ0 - 0.4 };
   {
-    // between the cashier's queue and the cross aisle; when that corner is too tight, the aisle wins
-    const x = (ROOM.x0 + WALL + Math.min(pit.x0, -9.5)) / 2 - 0.4;
-    const queueSide = counter.z1 + 3.2 + PLAYER_ZONE + bankDepth / 2;
-    const aisleSide = crossZ0 - PLAYER_ZONE - 0.4 - bankDepth / 2;
-    const z = queueSide <= aisleSide ? (queueSide + aisleSide) / 2 : aisleSide;
-    addBank('neon', x, z, 0);
-    neonNorth = z - bankDepth / 2 - PLAYER_ZONE;
+    const f = fp(BIG_SIX.game);
+    const x = feature.x0 + 0.35 + f.depth / 2;
+    const z = Math.max(feature.z0 + f.width / 2, (feature.z0 + feature.z1) / 2);
+    stations.push({ ...BIG_SIX, x, z, yaw: Math.PI / 2, zone: 'feature', fp: f });
   }
 
   // --- the bar: counter along the east wall, video poker set into the north end ----------------
@@ -296,8 +351,8 @@ export function planFloor(footprint: (game: GameId) => Footprint): FloorPlan {
     { points: [[staffHalf + 0.35, zN + dN / 2 - 0.2], [staffHalf + 0.35, zS - dS / 2 + 0.2]] },
     { points: [[pokerRoom.x0, pokerRoom.z0 + 1.2], [pokerRoom.x0, (pokerRoom.z0 + pokerRoom.z1) / 2 - 1.0]] },
     { points: [[pokerRoom.x0, (pokerRoom.z0 + pokerRoom.z1) / 2 + 1.0], [pokerRoom.x0, pokerRoom.z1], [pokerRoom.x1 - 0.4, pokerRoom.z1]] },
-    { points: [[cashier.x - 1.5, counter.z1 + 0.25], [cashier.x - 1.5, Math.min(counter.z1 + 2.2, neonNorth - 0.3)]] },
-    { points: [[cashier.x + 1.5, counter.z1 + 0.25], [cashier.x + 1.5, Math.min(counter.z1 + 2.2, neonNorth - 0.3)]] },
+    { points: [[cashier.x - 1.5, counter.z1 + 0.25], [cashier.x - 1.5, counter.z1 + 2.2]] },
+    { points: [[cashier.x + 1.5, counter.z1 + 0.25], [cashier.x + 1.5, counter.z1 + 2.2]] },
   ];
 
   const plants: [number, number, number][] = [
@@ -326,6 +381,7 @@ export function planFloor(footprint: (game: GameId) => Footprint): FloorPlan {
     door: { x0: -1.3, x1: 1.3, height: 2.9 },
     pokerRoom,
     slotsZone,
+    feature,
     barZone,
     banks,
     bar: { front, depth: 0.78, z0: barZ0, z1: barZ1, back, stools, vp },
