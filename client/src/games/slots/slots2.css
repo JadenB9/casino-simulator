@@ -1,0 +1,26 @@
+/* Diamond Line, Lucky Cherries and Gold Rush: the shared slot controls (slots.css) in each
+   machine's own colours, for the feature banners, the count-up meter and the tags on the glass. */
+
+.slots-banner.skin-diamonds { background: rgba(6, 14, 38, 0.9); border-color: rgba(143, 194, 255, 0.8); }
+.slots-banner.skin-diamonds .tier { font-family: var(--serif); letter-spacing: 0.12em; color: #eef7ff; text-shadow: 0 0 12px #5aa2e6, 0 0 26px #2f73c9; }
+.slots-banner.skin-diamonds .amount { font-family: var(--ui); color: #bfe4ff; }
+
+.slots-banner.skin-cherries { background: rgba(62, 6, 12, 0.9); border-color: rgba(242, 193, 74, 0.85); }
+.slots-banner.skin-cherries .tier { font-family: 'Limelight', var(--serif); letter-spacing: 0.06em; color: #fbf1dc; text-shadow: 0 0 12px #d62a36, 0 0 26px #f2c14a; }
+.slots-banner.skin-cherries .amount { font-family: var(--ui); text-transform: none; color: #ffe3a6; }
+
+.slots-banner.skin-goldrush { background: rgba(26, 16, 8, 0.92); border-color: rgba(192, 145, 63, 0.9); }
+.slots-banner.skin-goldrush .tier { font-family: 'Limelight', var(--serif); letter-spacing: 0.06em; color: #f2c14a; text-shadow: 0 0 12px rgba(242, 193, 74, 0.7), 0 0 26px rgba(255, 159, 46, 0.5); }
+.slots-banner.skin-goldrush .amount { font-family: var(--ui); text-transform: none; color: #fbe9c2; }
+
+.slots-countup.skin-diamonds { border-color: rgba(143, 194, 255, 0.55); box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45), 0 0 18px rgba(99, 198, 255, 0.18); }
+.slots-countup.skin-diamonds .amount { color: #63c6ff; text-shadow: 0 0 12px rgba(99, 198, 255, 0.6); }
+.slots-countup.skin-cherries { border-color: rgba(242, 193, 74, 0.55); }
+.slots-countup.skin-goldrush { border-color: rgba(192, 145, 63, 0.6); }
+
+.slots-tag.skin-diamonds { background: rgba(6, 14, 38, 0.88); border-color: rgba(143, 194, 255, 0.7); color: #eef7ff; }
+.slots-tag.skin-cherries { background: rgba(62, 6, 12, 0.88); border-color: rgba(242, 193, 74, 0.75); color: #fbf1dc; }
+.slots-tag.skin-goldrush { background: rgba(26, 16, 8, 0.9); border-color: rgba(192, 145, 63, 0.8); color: #fbe9c2; }
+.slots-line.skin-diamonds { background: rgba(6, 14, 38, 0.88); }
+.slots-line.skin-cherries { background: rgba(62, 6, 12, 0.88); }
+.slots-line.skin-goldrush { background: rgba(26, 16, 8, 0.9); }
