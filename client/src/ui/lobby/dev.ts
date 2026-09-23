@@ -22,6 +22,8 @@ const asked = params.get('game');
 const game = isGameId(asked) ? asked : 'blackjack';
 const variant = variantOf(game, params.get('variant'));
 const ui = document.getElementById('ui')!;
+/** For the headless check: what this page is connected to. */
+const dev: { floor?: LobbyFloor; tableId?: string | null } = {};
 
 async function main(): Promise<void> {
   // The room and the table, seen from where a player stands after walking up to it.
@@ -48,7 +50,8 @@ async function main(): Promise<void> {
       return () => listeners.delete(fn);
     },
   };
-  (window as unknown as { lobbyDev: unknown }).lobbyDev = { floor, session };
+  (window as unknown as { lobbyDev: unknown }).lobbyDev = dev;
+  dev.floor = floor;
   await approach(floor);
 }
 
@@ -66,7 +69,7 @@ async function approach(floor: LobbyFloor): Promise<void> {
 function pressE(floor: LobbyFloor): void {
   const prompt = el('div', 'panel');
   prompt.style.cssText = 'position:fixed;bottom:28px;left:50%;transform:translateX(-50%);padding:8px 14px;font-size:16px;letter-spacing:0.06em';
-  prompt.append(el('span', 'keycap', 'E'), document.createTextNode(`  ${CATALOG[game].name}`));
+  prompt.append(el('span', 'lb-key', 'E'), document.createTextNode(`  ${CATALOG[game].name}`));
   ui.append(prompt);
   const onKey = (e: KeyboardEvent) => {
     if (e.key !== 'e' && e.key !== 'E') return;
@@ -79,6 +82,7 @@ function pressE(floor: LobbyFloor): void {
 
 /** At a lobby table: a table socket feeding the party panel. */
 function sit(tableId: string, floor: LobbyFloor): void {
+  dev.tableId = tableId;
   let snap: TableSnapshot | null = null;
   let aid = 0;
   let party: PartyPanel | null = null;
@@ -100,6 +104,7 @@ function sit(tableId: string, floor: LobbyFloor): void {
       if (code) toast(code === 4005 ? 'That table is full.' : code === 4004 ? 'That table has closed.' : `Table closed (${code}).`, 'err');
       party?.dispose();
       party = null;
+      dev.tableId = null;
       pressE(floor);
     },
   });

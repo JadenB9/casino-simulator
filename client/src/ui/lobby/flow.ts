@@ -110,7 +110,7 @@ class TableFlow {
     const choices = el('div', 'lobby-choices');
     choices.append(solo, multi);
     const foot = el('footer', 'lobby-foot');
-    foot.append(el('span', 'keycap', 'Esc'), el('span', '', 'Walk away'));
+    foot.append(el('span', 'lb-key', 'Esc'), el('span', '', 'Walk away'));
     this.body.replaceChildren(choices, foot);
     this.renderCount();
     solo.focus();
@@ -121,7 +121,7 @@ class TableFlow {
     b.type = 'button';
     const text = el('span', 'lobby-choice-text');
     text.append(el('span', 'lobby-choice-title', title), el('span', 'lobby-choice-note', note));
-    b.append(el('span', 'keycap', key), text);
+    b.append(el('span', 'lb-key', key), text);
     b.addEventListener('click', run);
     return b;
   }
@@ -174,7 +174,7 @@ class TableFlow {
     input.spellcheck = false;
     input.maxLength = 4;
     input.setAttribute('aria-label', 'Four-digit PIN');
-    field.append(el('span', 'seg-ghost', '8888'), input);
+    field.append(el('span', 'lb-seg-ghost', '8888'), input);
     input.addEventListener('input', () => {
       input.value = input.value.replace(/\D/g, '').slice(0, 4);
       this.setError('');
@@ -241,8 +241,8 @@ class TableFlow {
     if (variant) host.append(el('span', 'lobby-tag', variant.name));
     if (l.started) host.append(el('span', 'lobby-tag live', 'In play'));
     const seats = el('span', 'lobby-seats');
-    const pips = el('span', 'pips');
-    for (let i = 0; i < l.max; i++) pips.append(el('span', i < l.players ? 'pip on' : 'pip'));
+    const pips = el('span', 'lb-pips');
+    for (let i = 0; i < l.max; i++) pips.append(el('span', i < l.players ? 'lb-pip on' : 'lb-pip'));
     seats.append(pips, el('span', 'n', `${l.players}/${l.max}`));
     b.append(host, seats, el('span', 'lobby-go', full ? 'Full' : 'Join'));
     b.setAttribute('aria-label', `${l.leader || 'Empty'} table, ${l.players} of ${l.max} seats${l.started ? ', in play' : ''}${full ? ', full' : ''}`);

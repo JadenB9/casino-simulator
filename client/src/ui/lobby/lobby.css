@@ -2,11 +2,11 @@
    the party panel at a lobby table. The kit's glass with brass hairlines, rows on a steady 40px
    rhythm, numbers tabular, PINs on the same seven-segment face as the machines' meters. */
 
-.icon { width: 14px; height: 14px; flex: none; }
-.icon .f { fill: currentColor; }
-.icon .s { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.lb-icon { width: 14px; height: 14px; flex: none; }
+.lb-icon .lb-f { fill: currentColor; }
+.lb-icon .lb-s { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 
-.keycap { display: inline-grid; place-items: center; min-width: 24px; height: 22px; padding: 0 5px; border: 1px solid var(--line-strong); border-radius: 3px; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; color: var(--brass-hi); }
+.lb-key { display: inline-grid; place-items: center; min-width: 24px; height: 22px; padding: 0 5px; border: 1px solid var(--line-strong); border-radius: 3px; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; color: var(--brass-hi); }
 
 /* ---- the station panel ---- */
 
@@ -42,14 +42,14 @@
 .lobby-row:hover:not(:disabled), .lobby-row:focus-visible { background: rgba(216, 176, 106, 0.09); outline: none; box-shadow: inset 2px 0 0 var(--brass); }
 .lobby-row:disabled { cursor: default; opacity: 0.5; }
 .lobby-host { display: flex; align-items: center; gap: 7px; min-width: 0; font-size: 16px; }
-.lobby-host .crown { color: var(--brass); }
+.lobby-host .lb-crown { color: var(--brass); }
 .lobby-host .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lobby-tag { flex: none; padding: 0 5px; border: 1px solid var(--line); border-radius: 3px; font-size: 11px; line-height: 16px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); }
 .lobby-tag.live { border-color: rgba(127, 209, 139, 0.45); color: var(--win); }
 .lobby-seats { display: flex; align-items: center; gap: 7px; font-size: 14px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
-.pips { display: flex; gap: 2px; }
-.pip { width: 5px; height: 10px; border-radius: 1px; background: rgba(255, 255, 255, 0.13); }
-.pip.on { background: var(--brass); }
+.lb-pips { display: flex; gap: 2px; }
+.lb-pip { width: 5px; height: 10px; border-radius: 1px; background: rgba(255, 255, 255, 0.13); }
+.lb-pip.on { background: var(--brass); }
 .lobby-go { justify-self: end; font-size: 13px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--brass-hi); }
 .lobby-row:disabled .lobby-go { color: var(--ink-3); }
 .lobby-empty { padding: 14px 12px; font-size: 15px; color: var(--ink-2); }
@@ -59,18 +59,18 @@
 .lobby-section:last-child { padding-bottom: 16px; }
 .lobby-section > .label { margin-bottom: 7px; }
 .lobby-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.lobby-actions .btn .icon { color: var(--brass); }
+.lobby-actions .btn .lb-icon { color: var(--brass); }
 .lobby-note { margin: 7px 0 0; font-size: 13px; color: var(--ink-3); }
 .lobby-pin { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
 .lobby-pin .btn { min-width: 96px; }
 /* seven-segment digits over their unlit segments, stacked in one grid cell */
-.seg { display: inline-grid; font-family: var(--meter); }
-.seg > *, .lobby-pin-field > * { grid-area: 1 / 1; }
-.seg-ghost { color: rgba(255, 179, 71, 0.11); pointer-events: none; user-select: none; }
-.seg-lit { color: #ffb347; text-shadow: 0 0 6px rgba(255, 150, 40, 0.5); }
+.lb-seg { display: inline-grid; font-family: var(--meter); }
+.lb-seg > *, .lobby-pin-field > * { grid-area: 1 / 1; }
+.lb-seg-ghost { color: rgba(255, 179, 71, 0.11); pointer-events: none; user-select: none; }
+.lb-seg-lit { color: #ffb347; text-shadow: 0 0 6px rgba(255, 150, 40, 0.5); }
 .lobby-pin-field { display: grid; align-items: center; min-width: 0; border: 1px solid var(--line-strong); border-radius: 4px; background: #0d0a08; }
 .lobby-pin-field:focus-within { outline: 2px solid var(--focus); outline-offset: 1px; }
-.lobby-pin-field .seg-ghost, .lobby-pin-input { padding: 0 14px; font-family: var(--meter); font-size: 22px; letter-spacing: 0.42em; }
+.lobby-pin-field .lb-seg-ghost, .lobby-pin-input { padding: 0 14px; font-family: var(--meter); font-size: 22px; letter-spacing: 0.42em; }
 .lobby-pin-input { height: 40px; min-width: 0; border: 0; background: transparent; color: #ffb347; caret-color: #ffb347; text-shadow: 0 0 6px rgba(255, 150, 40, 0.5); outline: none; }
 .lobby-pin-input:disabled { opacity: 0.5; }
 .lobby-pin-input::selection { background: rgba(255, 179, 71, 0.22); color: #ffd28a; }
@@ -83,11 +83,11 @@
 .party-head:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .party-head .label { color: var(--brass-hi); }
 .party-vis { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-2); }
-.party-vis .icon { width: 13px; height: 13px; color: var(--brass); }
+.party-vis .lb-icon { width: 13px; height: 13px; color: var(--brass); }
 .party-pin-mini { font-family: var(--meter); font-size: 13px; letter-spacing: 0.2em; color: #ffb347; }
 .party-count { margin-left: auto; font-size: 14px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
-.party-head .chev { color: var(--ink-3); transition: transform 0.2s var(--ease); }
-.party.collapsed .chev { transform: rotate(-90deg); }
+.party-head .lb-chev { color: var(--ink-3); transition: transform 0.2s var(--ease); }
+.party.collapsed .lb-chev { transform: rotate(-90deg); }
 .party.collapsed .party-body { display: none; }
 .party-body { border-top: 1px solid var(--line); }
 
@@ -100,7 +100,7 @@
 .party-member { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto auto; align-items: center; gap: 8px; height: 34px; padding: 0 12px; font-size: 16px; }
 .party-member.away { opacity: 0.45; }
 .party-mark { display: grid; place-items: center; font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
-.party-mark .crown { width: 15px; height: 15px; color: var(--brass-hi); }
+.party-mark .lb-crown { width: 15px; height: 15px; color: var(--brass-hi); }
 .party-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .party-member.me .party-name { color: var(--brass-hi); }
 .party-you { margin-left: 7px; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-3); }
@@ -112,7 +112,7 @@
 .party-seg { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; border: 1px solid var(--line-strong); border-radius: 4px; }
 .party-seg button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 30px; border: 0; background: none; font-size: 13px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-2); cursor: pointer; }
 .party-seg button + button { border-left: 1px solid var(--line-strong); }
-.party-seg button .icon { width: 13px; height: 13px; }
+.party-seg button .lb-icon { width: 13px; height: 13px; }
 .party-seg button[aria-pressed='true'] { background: rgba(216, 176, 106, 0.16); color: var(--brass-hi); }
 .party-seg button:disabled { cursor: default; opacity: 0.6; }
 .party-seg button:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }

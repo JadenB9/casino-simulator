@@ -3,13 +3,14 @@
 // players. Alice chooses Multiplayer and starts a private table; Bob joins it with the PIN Alice's
 // party panel shows; both sit down; Alice makes the table public and Carol finds it on the live
 // list. Screenshots of each step go to outDir.
-// Usage: node scripts/e2e/lobby.mjs [port] [outDir]   (PORT_BASE=<port> npm run dev first)
+// Usage: node scripts/e2e/lobby.mjs [port] [outDir] [tag]   (PORT_BASE=<port> npm run dev first)
+// Players are alice_<tag>, bob_<tag> and carol_<tag> (tag defaults to e2e), so reruns log back in
+// instead of creating accounts: the API allows only a few new accounts per hour from one address.
 
 import { chromium } from 'playwright';
 
-const [port = '5173', outDir = '/tmp'] = process.argv.slice(2);
+const [port = '5173', outDir = '/tmp', run = 'e2e'] = process.argv.slice(2);
 const page0 = `http://localhost:${port}/casino/src/ui/lobby/dev.html`;
-const run = Date.now().toString(36).slice(-5);
 const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 const errors = [];
 const shots = [];
@@ -51,9 +52,10 @@ try {
 
   await alice.click('.lobby-actions .btn:has-text("Private")');
   await alice.waitForSelector('.party-pin-digits');
-  const pin = (await alice.textContent('.party-pin-digits .seg-lit')).trim();
+  const pin = (await alice.textContent('.party-pin-digits .lb-seg-lit')).trim();
+  const tableId = await alice.evaluate(() => window.lobbyDev.tableId);
   if (!/^\d{4}$/.test(pin)) throw new Error(`no PIN on Alice's panel: "${pin}"`);
-  steps.push(`alice created a private table, PIN ${pin}`);
+  steps.push(`alice created private table ${tableId}, PIN ${pin}`);
 
   const bob = await player('bob');
   await bob.click('.lobby-choice:has-text("Multiplayer")');
@@ -99,8 +101,8 @@ try {
   steps.push('alice made it public; bob sees it');
   const carol = await player('carol');
   await carol.click('.lobby-choice:has-text("Multiplayer")');
-  await carol.waitForSelector(`.lobby-row:has-text("alice_${run}")`, { timeout: 10_000 });
-  const row = (await carol.textContent(`.lobby-row:has-text("alice_${run}")`)).replace(/\s+/g, ' ').trim();
+  await carol.waitForSelector(`.lobby-row[data-table="${tableId}"]`, { timeout: 10_000 });
+  const row = (await carol.textContent(`.lobby-row[data-table="${tableId}"]`)).replace(/\s+/g, ' ').trim();
   steps.push(`carol sees on the list: "${row}"`);
   await carol.waitForTimeout(250);
   await shot(carol, 'lobby-5-carol-list.png');

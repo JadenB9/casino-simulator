@@ -146,8 +146,8 @@ export class PartyPanel {
 
     if (p.pin) {
       const pin = el('div', 'party-pin');
-      const digits = el('span', 'party-pin-digits seg');
-      digits.append(el('span', 'seg-ghost', '8'.repeat(p.pin.length)), el('span', 'seg-lit', p.pin));
+      const digits = el('span', 'party-pin-digits lb-seg');
+      digits.append(el('span', 'lb-seg-ghost', '8'.repeat(p.pin.length)), el('span', 'lb-seg-lit', p.pin));
       digits.setAttribute('aria-label', `PIN ${p.pin.split('').join(' ')}`);
       const copy = el('button', 'btn ghost', 'Copy');
       copy.type = 'button';
