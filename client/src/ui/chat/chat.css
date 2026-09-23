@@ -4,13 +4,13 @@
 
 /* ---------------------------------------------------------------- the corner */
 
-/* --chat-lift is set from panel.ts: how far to rise above a table's own panels in this corner,
-   measured from --chat-base. */
+/* Set from panel.ts: --chat-lift, how far to rise above a table's own panels in this corner
+   (measured from --chat-base), and --chat-kb, the height of a phone's on-screen keyboard. */
 .chat {
   --chat-base: 18px;
   position: fixed;
   right: 16px;
-  bottom: calc(var(--chat-base) + var(--chat-lift, 0px));
+  bottom: calc(var(--chat-base) + var(--chat-lift, 0px) + var(--chat-kb, 0px));
   z-index: 12;
   display: flex;
   flex-direction: column;

@@ -186,11 +186,22 @@ export class ChatPanel {
     addEventListener('pointercancel', up);
     addEventListener('keydown', this.onKey);
     addEventListener('resize', this.place);
+    // A phone's on-screen keyboard covers the bottom of the page without resizing it (iOS): rise
+    // above it while it's up, so the line being typed stays in sight.
+    const vv = window.visualViewport;
+    const keyboard = () => {
+      const kb = vv ? Math.max(0, innerHeight - vv.height - vv.offsetTop) : 0;
+      root.style.setProperty('--chat-kb', `${Math.round(kb)}px`);
+    };
+    vv?.addEventListener('resize', keyboard);
+    vv?.addEventListener('scroll', keyboard);
     this.offs.push(() => {
       removeEventListener('pointerup', up);
       removeEventListener('pointercancel', up);
       removeEventListener('keydown', this.onKey);
       removeEventListener('resize', this.place);
+      vv?.removeEventListener('resize', keyboard);
+      vv?.removeEventListener('scroll', keyboard);
     });
 
     this.select('floor');
