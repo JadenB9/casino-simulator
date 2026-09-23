@@ -1,0 +1,107 @@
+/* Casino Simulator — base theme.
+   Dark glass panels with a brass hairline over the 3D scene; numbers in a condensed face, felt
+   and signage in Cinzel. Games add their own stylesheet next to their view. The site's back chip
+   sits in the bottom-left corner, so nothing here is anchored there. */
+
+@font-face { font-family: 'Barlow Condensed'; src: url('/casino/fonts/barlowcondensed/BarlowCondensed-SemiBold.latin.woff2') format('woff2'); font-weight: 600; font-display: swap; }
+@font-face { font-family: 'Cinzel'; src: url('/casino/fonts/cinzel/Cinzelwght.latin.woff2') format('woff2'); font-weight: 400 900; font-display: swap; }
+@font-face { font-family: 'DSEG7'; src: url('/casino/fonts/dseg/DSEG7Classic-Bold.woff2') format('woff2'); font-weight: 700; font-display: swap; }
+@font-face { font-family: 'Limelight'; src: url('/casino/fonts/limelight/Limelight-Regular.full.woff2') format('woff2'); font-display: swap; }
+@font-face { font-family: 'Tilt Neon'; src: url('/casino/fonts/tiltneon/TiltNeon-Static.latin.woff2') format('woff2'); font-display: swap; }
+
+:root {
+  --ink: #f4efe4;
+  --ink-2: #c9c0ad;
+  --ink-3: #8f8676;
+  --glass: rgba(14, 12, 10, 0.78);
+  --glass-2: rgba(28, 24, 20, 0.86);
+  --line: rgba(214, 178, 110, 0.28);
+  --line-strong: rgba(226, 190, 118, 0.62);
+  --brass: #d8b06a;
+  --brass-hi: #f1d59a;
+  --felt: #1f6b43;
+  --win: #7fd18b;
+  --lose: #e0766b;
+  --push: #c9c0ad;
+  --focus: #f1d59a;
+  --radius: 6px;
+  --ui: 'Barlow Condensed', 'Arial Narrow', system-ui, sans-serif;
+  --serif: 'Cinzel', Georgia, serif;
+  --meter: 'DSEG7', ui-monospace, monospace;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0908; color: var(--ink); font-family: var(--ui); letter-spacing: 0.01em; }
+button { font: inherit; color: inherit; }
+#scene { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+#labels { position: fixed; inset: 0; pointer-events: none; }
+#ui { position: fixed; inset: 0; pointer-events: none; }
+#ui > * { pointer-events: auto; }
+#ui .pass { pointer-events: none; }
+#ui .pass > * { pointer-events: auto; }
+
+.boot { position: fixed; inset: 0; display: grid; place-content: center; gap: 14px; background: radial-gradient(120% 90% at 50% 40%, #2a1c12 0%, #0b0908 70%); z-index: 50; transition: opacity 0.5s var(--ease); }
+.boot.done { opacity: 0; pointer-events: none; }
+.boot-mark { font-family: var(--serif); font-size: 30px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--brass-hi); text-align: center; }
+.boot-bar { width: 260px; height: 2px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+.boot-fill { height: 100%; width: 0; background: var(--brass); transition: width 0.3s var(--ease); }
+.boot-note { font-size: 13px; color: var(--ink-3); text-align: center; letter-spacing: 0.12em; text-transform: uppercase; }
+
+/* panels and controls */
+.panel { background: var(--glass); border: 1px solid var(--line); border-radius: var(--radius); backdrop-filter: blur(10px) saturate(1.2); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45); }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 36px; padding: 0 14px; border-radius: 4px; border: 1px solid var(--line-strong); background: linear-gradient(#2b241c, #1c1712); color: var(--ink); font-size: 16px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; transition: border-color 0.15s, background 0.15s, transform 0.08s; }
+.btn:hover:not(:disabled) { border-color: var(--brass-hi); }
+.btn:active:not(:disabled) { transform: translateY(1px); }
+.btn:disabled { opacity: 0.4; cursor: default; }
+.btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.btn.primary { background: linear-gradient(#e2bf7c, #b98d45); color: #1d140a; border-color: #f1d59a; }
+.btn.ghost { background: transparent; }
+.btn .key { font-size: 11px; opacity: 0.6; border: 1px solid currentColor; border-radius: 3px; padding: 0 3px; }
+.meter { font-family: var(--meter); color: #ffb347; text-shadow: 0 0 6px rgba(255, 150, 40, 0.5); }
+.label { font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-3); }
+.money { font-variant-numeric: tabular-nums; }
+
+/* toasts */
+.toasts { position: fixed; top: 64px; left: 50%; transform: translateX(-50%); display: grid; gap: 8px; z-index: 40; }
+.toast { padding: 9px 14px; font-size: 16px; animation: toast-in 0.25s var(--ease); }
+.toast.err { border-color: rgba(224, 118, 107, 0.6); }
+@keyframes toast-in { from { opacity: 0; transform: translateY(-6px); } }
+
+/* result pills attach to a hand or spot on the table */
+.pill { position: absolute; transform: translate(-50%, -50%); padding: 3px 10px; border-radius: 999px; font-size: 15px; font-weight: 600; letter-spacing: 0.06em; white-space: nowrap; background: var(--glass-2); border: 1px solid var(--line-strong); animation: pill-in 0.35s var(--ease); }
+.pill.win { color: var(--win); border-color: rgba(127, 209, 139, 0.6); }
+.pill.lose { color: var(--lose); }
+.pill.push { color: var(--push); }
+@keyframes pill-in { from { opacity: 0; transform: translate(-50%, -30%) scale(0.9); } }
+
+/* dealer call line */
+.dealer-line { position: fixed; top: 18px; left: 50%; transform: translateX(-50%); padding: 7px 16px; font-family: var(--serif); font-size: 17px; letter-spacing: 0.04em; }
+
+/* chip tray */
+.tray { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; padding: 10px 14px; }
+.tray .chips { display: flex; gap: 6px; }
+.chip-btn { width: 50px; height: 50px; border-radius: 50%; border: 0; padding: 0; cursor: pointer; background-size: cover; transition: transform 0.15s var(--ease); }
+.chip-btn canvas { display: block; width: 100%; height: 100%; border-radius: 50%; }
+.chip-btn[aria-pressed='true'] { transform: translateY(-6px); box-shadow: 0 0 0 2px var(--brass-hi), 0 6px 14px rgba(0, 0, 0, 0.5); }
+.tray .acts { display: flex; gap: 6px; }
+.tray .sep { width: 1px; align-self: stretch; background: var(--line); }
+
+/* modal */
+.scrim { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.45); display: grid; place-items: center; z-index: 30; }
+.modal { min-width: 320px; max-width: 460px; padding: 18px 20px; }
+.modal h2 { margin: 0 0 6px; font-family: var(--serif); font-size: 20px; font-weight: 600; letter-spacing: 0.06em; color: var(--brass-hi); }
+.modal p { margin: 6px 0; color: var(--ink-2); font-size: 16px; }
+.modal .row { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+.modal input[type='number'], .modal input[type='text'] { height: 36px; padding: 0 10px; border-radius: 4px; border: 1px solid var(--line-strong); background: #120f0c; color: var(--ink); font: inherit; font-size: 17px; width: 100%; }
+
+/* timer ring */
+.timer { position: absolute; width: 44px; height: 44px; transform: translate(-50%, -50%); }
+.timer circle { fill: none; stroke-width: 3; }
+.timer .track { stroke: rgba(255, 255, 255, 0.12); }
+.timer .left { stroke: var(--brass-hi); stroke-linecap: round; transform: rotate(-90deg); transform-origin: 50% 50%; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}

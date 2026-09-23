@@ -1,0 +1,62 @@
+{
+ "card-deal": [
+  "card-deal-1.mp3",
+  "card-deal-2.mp3",
+  "card-deal-3.mp3",
+  "card-deal-4.mp3"
+ ],
+ "card-place": [
+  "card-place-1.mp3",
+  "card-place-2.mp3",
+  "card-place-3.mp3",
+  "card-place-4.mp3"
+ ],
+ "card-flip": [
+  "card-flip-1.mp3",
+  "card-flip-2.mp3",
+  "card-flip-3.mp3"
+ ],
+ "card-shuffle": [
+  "card-shuffle-1.mp3"
+ ],
+ "chip-lay": [
+  "chip-lay-1.mp3",
+  "chip-lay-2.mp3",
+  "chip-lay-3.mp3"
+ ],
+ "chips-stack": [
+  "chips-stack-1.mp3",
+  "chips-stack-2.mp3",
+  "chips-stack-3.mp3",
+  "chips-stack-4.mp3"
+ ],
+ "chips-collide": [
+  "chips-collide-1.mp3",
+  "chips-collide-2.mp3",
+  "chips-collide-3.mp3"
+ ],
+ "chips-handle": [
+  "chips-handle-1.mp3",
+  "chips-handle-2.mp3",
+  "chips-handle-3.mp3"
+ ],
+ "dice-shake": [
+  "dice-shake-1.mp3",
+  "dice-shake-2.mp3"
+ ],
+ "dice-throw": [
+  "dice-throw-1.mp3",
+  "dice-throw-2.mp3",
+  "dice-throw-3.mp3"
+ ],
+ "ui-click": [
+  "ui-click-1.mp3",
+  "ui-click-2.mp3",
+  "ui-click-3.mp3"
+ ],
+ "ui-switch": [
+  "ui-switch-1.mp3",
+  "ui-switch-2.mp3",
+  "ui-switch-3.mp3"
+ ]
+}

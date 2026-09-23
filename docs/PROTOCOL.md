@@ -44,6 +44,7 @@ Everything the client and server say to each other. The TypeScript source of tru
 | 4001 | replaced by a newer connection for this account | show "opened in another tab"; don't reconnect |
 | 4003 | missing or expired token | back to login |
 | 4004 | table not found or closed | back to the floor |
+| 4005 | not allowed at this table (full, or another player's solo table) | back to the floor |
 | 4008 | rate limited repeatedly | back off |
 | 4009 | protocol version mismatch | reload the page |
 | anything else (1001, 1006, 1011, 1012, deploys) | transient | reconnect with full jitter |
