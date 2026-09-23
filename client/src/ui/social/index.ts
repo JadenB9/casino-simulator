@@ -4,4 +4,5 @@
 export { openLeaderboard, type LeaderboardApi, type LeaderboardDeps } from './leaderboard.ts';
 export { mountEmotes, type EmoteDeps, type EmoteWheel } from './emotes.ts';
 export { EMOTE_LABELS, emoteGlyph, socialIcon, type SocialIconName } from './icons.ts';
+export { socialButton } from './hud.ts';
 export * as socialApi from './api.ts';

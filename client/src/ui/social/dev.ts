@@ -16,7 +16,7 @@ import { el, toast } from '../kit.ts';
 import { regular } from '../menu/fixtures.ts';
 import { mountHud } from '../menu/index.ts';
 import { fixtureApi } from './fixtures.ts';
-import { EMOTE_LABELS, mountEmotes, openLeaderboard, socialApi, socialIcon, type LeaderboardApi } from './index.ts';
+import { EMOTE_LABELS, mountEmotes, openLeaderboard, socialApi, socialButton, type LeaderboardApi } from './index.ts';
 
 const q = new URLSearchParams(location.search);
 const screen = q.get('screen') ?? 'leaderboard';
@@ -40,26 +40,17 @@ async function ensureSession(): Promise<void> {
   session.set(await realApi.login(q.get('name') ?? `dev_${Math.random().toString(36).slice(2, 8)}`));
 }
 
-function hudButton(icon: 'leaderboard' | 'emotes', label: string, onClick: () => void): HTMLButtonElement {
-  const b = el('button', 'hud-btn');
-  b.type = 'button';
-  b.title = label;
-  b.setAttribute('aria-label', label);
-  b.append(socialIcon(icon));
-  b.addEventListener('click', onClick);
-  return b;
-}
-
 async function start(): Promise<void> {
   await ensureSession();
   const hud = mountHud({ root: ui, session, sfx, onMenu: () => {} });
   hud.setOnline(23);
   const emotes = mountEmotes({ root: ui, send: (e) => toast(`${EMOTE_LABELS[e]} sent`) });
   const openBoards = () => openLeaderboard({ root: ui, api });
-  // Where boot.ts would put them: with the HUD's other buttons, before the bulb.
-  const right = hud.root.querySelector('.hud-right')!;
-  right.insertBefore(hudButton('emotes', 'Emotes (G)', () => emotes.toggle()), right.querySelector('.hud-btn'));
-  right.insertBefore(hudButton('leaderboard', 'Leaderboards', openBoards), right.querySelector('.hud-btn'));
+  // Where boot.ts puts them: with the HUD's other buttons, left of the tips bulb.
+  const bar = hud.root.querySelector('.hud-right')!;
+  const bulb = bar.querySelector('.hud-btn');
+  bar.insertBefore(socialButton('emotes', 'Emotes (G)', () => emotes.toggle()), bulb);
+  bar.insertBefore(socialButton('leaderboard', 'Leaderboards', openBoards), bulb);
 
   const tab = q.get('tab');
   if (screen === 'leaderboard') {
