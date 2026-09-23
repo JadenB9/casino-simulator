@@ -1,5 +1,6 @@
 /* Slot machine controls: a button deck along the bottom, a result tag pinned to the win meter,
-   free-game and line tags on the machine, centre banners for the rare tiers, and the Pays sheet. */
+   free-game and line tags on the machine, the free games' banner, the count-up meter under the
+   celebration banner on big wins, and the Pays sheet. */
 
 .slots-deck { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 10px 12px; }
 .slots-deck .sep { width: 1px; align-self: stretch; background: var(--line); }
@@ -19,9 +20,16 @@
 .slots-banner.feature { border-color: rgba(255, 211, 107, 0.75); }
 .slots-banner.feature .tier { font-size: 44px; text-shadow: 0 0 10px #ffd36b, 0 0 24px #ffd36b; }
 .slots-banner.feature .amount { font-family: 'Tilt Neon', var(--ui); font-size: 30px; text-transform: uppercase; color: #ffe7a8; }
-.slots-banner.jackpot { background: rgba(20, 14, 6, 0.88); border-color: var(--brass-hi); }
-.slots-banner.jackpot .tier { font-family: var(--serif); font-size: 40px; letter-spacing: 0.12em; color: var(--brass-hi); text-shadow: 0 0 16px rgba(241, 213, 154, 0.5); }
 @keyframes slots-in { from { opacity: 0; transform: translate(-50%, -46%) scale(0.94); } }
+
+/* The count-up meter: an LED win meter that sits just under the celebration banner. */
+.slots-countup { position: fixed; top: calc(30% + 68px); left: 50%; transform: translateX(-50%); display: grid; grid-template-columns: auto auto; grid-template-areas: 'label times' 'amount amount'; align-items: baseline; gap: 2px 18px; padding: 10px 26px 12px; border-radius: 8px; background: rgba(10, 8, 6, 0.88); border: 1px solid rgba(255, 179, 71, 0.45); box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45), inset 0 0 18px rgba(255, 140, 30, 0.08); pointer-events: none; z-index: 24; animation: slots-count-in 0.35s var(--ease) both; }
+.slots-countup[hidden] { display: none; }
+.slots-countup .label { grid-area: label; font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-3); }
+.slots-countup .times { grid-area: times; justify-self: end; font-size: 13px; letter-spacing: 0.06em; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.slots-countup .amount { grid-area: amount; justify-self: center; min-width: 7ch; text-align: center; font-family: var(--meter); font-size: 46px; line-height: 1.05; color: #ffb347; text-shadow: 0 0 12px rgba(255, 150, 40, 0.6); font-variant-numeric: tabular-nums; }
+.slots-countup.video { border-color: rgba(64, 214, 255, 0.55); box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45), 0 0 18px rgba(64, 214, 255, 0.18); }
+@keyframes slots-count-in { from { opacity: 0; transform: translate(-50%, 10px); } }
 
 .slots-pays { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(720px, calc(100vw - 32px)); max-height: calc(100vh - 140px); overflow: auto; padding: 16px 20px 20px; z-index: 20; }
 .slots-pays-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
