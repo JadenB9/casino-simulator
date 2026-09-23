@@ -167,10 +167,15 @@ export interface HttpError {
 // ---------------------------------------------------------------------------------------------
 // Floor socket
 
+/** Quick emotes: a gesture over your character that everyone on the floor sees. No free text. */
+export const EMOTES = ['wave', 'cheer', 'clap', 'thumbs', 'shrug'] as const;
+export type EmoteId = (typeof EMOTES)[number];
+
 export type FloorClientMsg =
   | { t: 'mv'; x: number; z: number; r: number }
   | { t: 'st'; x: number; z: number; r: number }
-  | { t: 'watch'; game: GameId | null };
+  | { t: 'watch'; game: GameId | null }
+  | { t: 'emote'; e: EmoteId };
 
 export type FloorServerMsg =
   | { t: 'hello'; v: number; you: PlayerInfo; players: PlayerInfo[]; online: number; now: number }
@@ -182,6 +187,7 @@ export type FloorServerMsg =
   | { t: 'lobbies'; game: GameId; list: LobbySummary[] }
   | { t: 'lobby'; game: GameId; lobby: LobbySummary }
   | { t: 'lobby.gone'; game: GameId; tableId: string }
+  | { t: 'emote'; id: number; e: EmoteId }
   | { t: 'err'; code: ErrorCode; msg: string };
 
 /** Floor bounds in centimetres; positions outside are clamped. */
@@ -197,6 +203,9 @@ export function parseFloorMsg(raw: unknown, isGame: (g: unknown) => g is GameId)
     case 'watch':
       if (raw.game !== null && !isGame(raw.game)) return null;
       return { t: 'watch', game: raw.game as GameId | null };
+    case 'emote':
+      if (!isOneOf(raw.e, EMOTES)) return null;
+      return { t: 'emote', e: raw.e };
     default:
       return null;
   }

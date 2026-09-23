@@ -11,6 +11,7 @@ import type { TableStage } from '../table/stage.ts';
 import { UiKit, toast } from '../ui/kit.ts';
 import type { Sfx } from '../audio/sfx.ts';
 import { session } from './session.ts';
+import { tips } from './tips.ts';
 import type { GameEvent } from '../../../shared/src/engine.ts';
 
 export interface TableTarget {
@@ -131,6 +132,7 @@ export class TableSession {
         kit: this.kit,
         sfx: this.sfx,
         me: { accountId: me.id, name: me.name },
+        tips,
         // The table's own variant: a lobby joined by PIN can be a different wheel than the
         // station's.
         variant: this.snapshot?.meta.variant ?? this.target.variant,

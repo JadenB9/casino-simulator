@@ -58,7 +58,7 @@ export class RemotePlayers {
     private readonly opts: RemotePlayersOptions = {},
   ) {
     this.factory = opts.factory ?? new CapsuleFactory();
-    this.walkSpeed = opts.walkSpeed ?? 1.4;
+    this.walkSpeed = opts.walkSpeed ?? 1.75;
     this.group.name = 'remote-players';
     parent.add(this.group);
     for (const p of link.players.values()) this.add(p);
@@ -122,7 +122,8 @@ export class RemotePlayers {
       root.visible = true;
       root.position.set(x, 0, z);
       root.rotation.y = byteToYaw(pose.r);
-      d.ch.setMotion(Math.min(1, d.speed / this.walkSpeed));
+      // Past a walking pace the blend leans toward the run cycle, as it does for your own character.
+      d.ch.setMotion(Math.min(2, d.speed / this.walkSpeed));
       d.ch.update(dt);
     }
   }

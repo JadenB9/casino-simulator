@@ -6,7 +6,7 @@
 // sockets' attachments; memory is only a cache.
 
 import { DurableObject } from 'cloudflare:workers';
-import { CLOSE, MAX_FLOOR_FRAME, PROTOCOL_VERSION, parseFloorMsg, type FloorServerMsg, type LobbySummary } from '../../../shared/src/protocol.ts';
+import { CLOSE, MAX_FLOOR_FRAME, PROTOCOL_VERSION, parseFloorMsg, type EmoteId, type FloorServerMsg, type LobbySummary } from '../../../shared/src/protocol.ts';
 import { isGameId } from '../../../shared/src/games/catalog.ts';
 import type { GameId } from '../../../shared/src/engine.ts';
 import { lookFromJson, type Look } from '../../../shared/src/look.ts';
@@ -20,7 +20,7 @@ export const MAX_FLOOR = 150;
 export class CasinoFloor extends DurableObject<Env> {
   readonly presence: Presence;
   readonly directory: Directory;
-  private buckets = new Map<WebSocket, { move: Bucket; misc: Bucket; strikes: number }>();
+  private buckets = new Map<WebSocket, { move: Bucket; misc: Bucket; emote: Bucket; strikes: number }>();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -70,12 +70,13 @@ export class CasinoFloor extends DurableObject<Env> {
     const msg = parseFloorMsg(data, isGameId);
     if (!msg) return;
     const b = this.bucketsFor(ws);
-    const ok = msg.t === 'mv' || msg.t === 'st' ? b.move.take() : b.misc.take();
+    const ok = msg.t === 'mv' || msg.t === 'st' ? b.move.take() : msg.t === 'emote' ? b.emote.take() : b.misc.take();
     if (!ok) {
       if (++b.strikes > 200) ws.close(CLOSE.RATE_LIMITED, 'slow down');
       return;
     }
     if (msg.t === 'watch') this.directory.watch(ws, msg.game);
+    else if (msg.t === 'emote') this.emote(ws, msg.e);
     else this.presence.onMessage(ws, msg);
   }
 
@@ -137,12 +138,19 @@ export class CasinoFloor extends DurableObject<Env> {
     return this.directory.joinByPin(p, Date.now());
   }
 
+  /** Everyone on the floor sees the gesture over this player's head. */
+  private emote(ws: WebSocket, e: EmoteId): void {
+    const att = ws.deserializeAttachment() as FloorAtt | null;
+    if (att) this.broadcast({ t: 'emote', id: att.accountId, e });
+  }
+
   // --- plumbing ------------------------------------------------------------------------------
 
   private bucketsFor(ws: WebSocket) {
     let b = this.buckets.get(ws);
     if (!b) {
-      b = { move: new Bucket(30, 16), misc: new Bucket(10, 4), strikes: 0 };
+      // Emotes are a gesture, not a chat: a few in a row, then one every couple of seconds.
+      b = { move: new Bucket(30, 16), misc: new Bucket(10, 4), emote: new Bucket(3, 0.5), strikes: 0 };
       this.buckets.set(ws, b);
     }
     return b;

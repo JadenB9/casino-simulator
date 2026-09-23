@@ -168,12 +168,34 @@ export class UiKit {
   toast = toast;
   askBuyIn = (opts: Parameters<typeof askBuyIn>[0]): Promise<Cents | null> => askBuyIn(opts, this.gone.signal);
 
-  /** The table is going away: close any prompt it asked and its dealer line. */
+  /** The table is going away: close any prompt it asked, its dealer line and its tip. */
   dispose(): void {
     this.gone.abort();
     clearTimeout(this.dealerTimer);
     this.dealer?.remove();
     this.dealer = null;
+    this.tipEl?.remove();
+    this.tipEl = null;
+  }
+
+  private tipEl: HTMLElement | null = null;
+
+  /**
+   * The Tips line above the controls ("Basic strategy: double 11 against a 6"); null hides it.
+   * Views call this only while the player has Tips on.
+   */
+  tip(text: string | null): void {
+    if (text === null) {
+      if (this.tipEl) this.tipEl.hidden = true;
+      return;
+    }
+    if (!this.tipEl) {
+      this.tipEl = el('div', 'tip-line panel');
+      this.tipEl.setAttribute('aria-live', 'polite');
+      this.root.append(this.tipEl);
+    }
+    this.tipEl.replaceChildren(el('span', 'tip-label', 'Tip'), text);
+    this.tipEl.hidden = false;
   }
 
   /** One line of dealer talk at the top of the screen ("Dealer has 16", "No more bets"). */

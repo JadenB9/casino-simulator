@@ -115,3 +115,18 @@ button { font: inherit; color: inherit; }
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+/* Tips: one line above the table's controls, and a ring on the control it recommends. */
+.tip-line { position: fixed; left: 50%; bottom: 104px; transform: translateX(-50%); max-width: min(560px, calc(100vw - 32px)); display: flex; gap: 10px; align-items: baseline; padding: 7px 14px; font-size: 15px; color: var(--ink); text-wrap: balance; pointer-events: none; }
+.tip-label { font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--brass-hi); }
+.tip-pick { box-shadow: 0 0 0 2px var(--brass-hi), 0 0 16px rgba(241, 213, 154, 0.45) !important; }
+
+/* Celebrations: the hand's name over the table, sized to the win. */
+.celebrate { position: fixed; left: 50%; top: 30%; transform: translate(-50%, -50%); display: grid; justify-items: center; gap: 4px; padding: 14px 34px; pointer-events: none; z-index: 25; animation: celebrate-in 0.45s var(--ease) both; text-align: center; }
+.celebrate.out { opacity: 0; transform: translate(-50%, -58%); transition: opacity 0.35s var(--ease), transform 0.35s var(--ease); }
+.celebrate-title { font-family: var(--serif); font-size: 30px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--brass-hi); text-shadow: 0 0 18px rgba(241, 213, 154, 0.45); }
+.celebrate-sub { font-size: 17px; color: var(--ink); }
+.celebrate.tier-nice .celebrate-title { font-size: 24px; }
+.celebrate.tier-huge { padding: 20px 48px; border-color: var(--brass-hi); box-shadow: 0 0 40px rgba(241, 213, 154, 0.35); }
+.celebrate.tier-huge .celebrate-title { font-size: 40px; }
+@keyframes celebrate-in { from { opacity: 0; transform: translate(-50%, -40%) scale(0.92); } }

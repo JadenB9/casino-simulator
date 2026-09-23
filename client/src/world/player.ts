@@ -11,8 +11,12 @@ import type { Collider } from './collision.ts';
 import { CEILING, PIT_CEILING, inRect, type Rect } from './layout.ts';
 
 const RADIUS = 0.3;
-const WALK = 1.75;
-const RUN = 3.9;
+// A brisk default pace (the floor is 40 m across), and Shift for a run.
+const WALK = 2.6;
+const RUN = 4.8;
+/** The speeds the walk and run cycles were made for; the blend between them follows these. */
+const WALK_CYCLE = 1.75;
+const RUN_CYCLE = 3.9;
 const EYE = 1.5;
 
 export class Player {
@@ -119,7 +123,7 @@ export class Player {
       if (this.clock - this.manualAt > 1.5 && iz >= 0) this.camYaw = turn(this.camYaw, this.heading + Math.PI, 1 - Math.exp(-dt * 1.4));
     }
     this.speed = moved;
-    const motion = moved < 0.05 ? 0 : moved <= WALK ? moved / WALK : 1 + (moved - WALK) / (RUN - WALK);
+    const motion = moved < 0.05 ? 0 : moved <= WALK_CYCLE ? moved / WALK_CYCLE : Math.min(2, 1 + (moved - WALK_CYCLE) / (RUN_CYCLE - WALK_CYCLE));
     this.character.setMotion(motion);
     this.syncCharacter();
     this.placeCamera(dt);

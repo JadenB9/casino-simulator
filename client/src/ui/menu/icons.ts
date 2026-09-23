@@ -3,7 +3,7 @@
 
 const NS = 'http://www.w3.org/2000/svg';
 
-export type IconName = 'sound' | 'muted' | 'gear' | 'help' | 'close' | 'menu' | 'turn-left' | 'turn-right';
+export type IconName = 'sound' | 'muted' | 'gear' | 'help' | 'close' | 'menu' | 'turn-left' | 'turn-right' | 'bulb';
 
 function svg(): SVGSVGElement {
   const s = document.createElementNS(NS, 'svg');
@@ -65,6 +65,10 @@ export function icon(name: IconName): SVGSVGElement {
       break;
     case 'close':
       path(s, 'M6.5 6.5l11 11M17.5 6.5l-11 11');
+      break;
+    case 'bulb':
+      path(s, 'M9.2 15.5c-.1-1.3-.8-2.1-1.6-3a4.6 4.6 0 1 1 8.8 0c-.8.9-1.5 1.7-1.6 3z');
+      path(s, 'M9.6 18h4.8M10.6 20.4h2.8');
       break;
     case 'menu':
       path(s, 'M4.5 7.5h15M4.5 12h15M4.5 16.5h15');

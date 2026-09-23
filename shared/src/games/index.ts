@@ -9,6 +9,9 @@ import { engine as slots } from './slots/engine.ts';
 import { engine as videopoker } from './videopoker/engine.ts';
 import { engine as threecard } from './threecard/engine.ts';
 import { engine as holdem } from './holdem/engine.ts';
+import { engine as war } from './war/engine.ts';
+import { engine as bigsix } from './bigsix/engine.ts';
+import { engine as sicbo } from './sicbo/engine.ts';
 import { engine as highcard } from './highcard/engine.ts';
 
 // Each engine keeps its own state/action/view types; the host only ever handles them opaquely.
@@ -24,6 +27,9 @@ export const ENGINES: Record<GameId, AnyEngine> = {
   videopoker,
   threecard,
   holdem,
+  war,
+  bigsix,
+  sicbo,
   highcard,
 };
 

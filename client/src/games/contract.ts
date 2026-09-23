@@ -9,6 +9,7 @@ import type { Quality } from '../render/engine3d.ts';
 import type { TableStage, Pose } from '../table/stage.ts';
 import type { UiKit } from '../ui/kit.ts';
 import type { Sfx } from '../audio/sfx.ts';
+import type { TipsLike } from '../app/tips.ts';
 
 export type TableSnapshot = Extract<TableServerMsg, { t: 'table' }>;
 export type SeatMsg = Extract<TableServerMsg, { t: 'seat' }>;
@@ -34,6 +35,12 @@ export interface TableViewCtx {
   sfx: Sfx;
   me: { accountId: number; name: string };
   variant: string;
+  /**
+   * The player's Tips setting. While it's on, show the best play (or the better bets) with
+   * `kit.tip(text)` and mark the recommended control with the `tip-pick` class; clear both when
+   * it goes off or the decision has passed.
+   */
+  tips: TipsLike;
 }
 
 export interface TableView {

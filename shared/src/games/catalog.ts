@@ -50,6 +50,9 @@ export const CATALOG: Record<GameId, GameInfo> = {
   videopoker: { id: 'videopoker', name: 'Video Poker', prefix: 'vp', seats: { min: 1, max: 1 }, multiplayer: false, variants: [] },
   threecard: { id: 'threecard', name: 'Three Card Poker', prefix: 'tc', seats: { min: 1, max: 6 }, multiplayer: true, variants: [] },
   holdem: { id: 'holdem', name: "Texas Hold'em", prefix: 'he', seats: { min: 2, max: 9 }, multiplayer: true, variants: [] },
+  war: { id: 'war', name: 'Casino War', prefix: 'wr', seats: { min: 1, max: 6 }, multiplayer: true, variants: [] },
+  bigsix: { id: 'bigsix', name: 'Big Six Wheel', prefix: 'b6', seats: { min: 1, max: 8 }, multiplayer: true, variants: [] },
+  sicbo: { id: 'sicbo', name: 'Sic Bo', prefix: 'sb', seats: { min: 1, max: 8 }, multiplayer: true, variants: [] },
   highcard: { id: 'highcard', name: 'High Card', prefix: 'hc', seats: { min: 1, max: 6 }, multiplayer: true, variants: [], dev: true },
 };
 
@@ -69,7 +72,7 @@ export function variantOf(id: GameId, asked: unknown): string {
 }
 
 /** Lobby tables: game prefix + 10 base-36 characters (about 52 bits), so they can't be guessed. */
-export const TABLE_ID_RE = /^(bj|rl|cr|bc|sl|vp|tc|he|hc)-[a-z0-9]{10}$/;
+export const TABLE_ID_RE = /^(bj|rl|cr|bc|sl|vp|tc|he|hc|wr|b6|sb)-[a-z0-9]{10}$/;
 
 /** Solo sessions are named by the server from the player's token, never by the client. */
 export function soloTableName(game: GameId, variant: string, accountId: number): string {

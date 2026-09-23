@@ -2,6 +2,7 @@
 // is saved now and used from the next load; sound changes are heard straight away.
 
 import './hud.css';
+import { tips } from '../../app/tips.ts';
 import { savedQuality, saveQuality, type Quality } from '../../render/engine3d.ts';
 import { el } from '../kit.ts';
 import type { Closable, SfxLike } from '../menu/deps.ts';
@@ -86,7 +87,10 @@ export function openSettings(deps: SettingsDeps): Closable {
   });
   volWrap.append(volume, volValue);
 
+  const tipsCtl = segmented<'on' | 'off'>('Tips', [{ id: 'on', label: 'On' }, { id: 'off', label: 'Off' }], tips.on ? 'on' : 'off', (v) => tips.set(v === 'on'));
   sheet.body.append(
+    el('h3', 'section-label', 'Tables'),
+    row('Tips', tipsCtl.root, el('p', 'set-note', 'Shows the best play where a game has one (basic strategy, the video poker holds, Q-6-4) and which bets are better elsewhere.')),
     el('h3', 'section-label', 'Graphics'),
     row('Quality', quality.root, qBox),
     el('h3', 'section-label', 'Audio'),

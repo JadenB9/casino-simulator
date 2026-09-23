@@ -12,9 +12,12 @@ import { slots } from './slots/index.ts';
 import { videopoker } from './videopoker/index.ts';
 import { threecard } from './threecard/index.ts';
 import { holdem } from './holdem/index.ts';
+import { war } from './war/index.ts';
+import { bigsix } from './bigsix/index.ts';
+import { sicbo } from './sicbo/index.ts';
 
 export const GAMES: Record<GameId, GameClientModule> = {
-  blackjack, roulette, craps, baccarat, slots, videopoker, threecard, holdem, highcard,
+  blackjack, roulette, craps, baccarat, slots, videopoker, threecard, holdem, war, bigsix, sicbo, highcard,
 };
 
 export { stubModule };

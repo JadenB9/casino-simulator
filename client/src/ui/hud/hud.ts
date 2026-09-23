@@ -4,6 +4,7 @@
 // top centre belongs to the dealer's line and the bottom-left corner to the site's back chip.
 
 import './hud.css';
+import { tips } from '../../app/tips.ts';
 import { isTyping } from '../keyboard.ts';
 import { LOAN_AMOUNT, formatMoney, type Cents } from '../../../../shared/src/money.ts';
 import type { Profile } from '../../../../shared/src/protocol.ts';
@@ -109,7 +110,16 @@ export function mountHud(deps: HudDeps): Hud {
   const mute = iconButton(deps.sfx.muted ? 'muted' : 'sound', 'Mute (M)', () => toggleMute());
   const settings = iconButton('gear', 'Settings', () => (deps.onSettings ? deps.onSettings() : openSettings({ root: deps.root, sfx: deps.sfx, onClose: paintMute })));
   const help = iconButton('help', 'Keyboard shortcuts (?)', () => toggleShortcuts());
-  right.append(online, mute, settings, help);
+  // Tips at the tables: the best play where a game has one. Lit while it's on.
+  const bulb = iconButton('bulb', 'Tips at the tables', () => tips.toggle());
+  const paintTips = () => {
+    bulb.classList.toggle('on', tips.on);
+    bulb.setAttribute('aria-pressed', String(tips.on));
+    bulb.title = tips.on ? 'Tips at the tables: on' : 'Tips at the tables: off';
+  };
+  paintTips();
+  const offTips = tips.subscribe(paintTips);
+  right.append(online, bulb, mute, settings, help);
   if (deps.onMenu) right.append(iconButton('menu', 'Menu', () => deps.onMenu?.()));
   root.append(left, right);
   deps.root.append(root);

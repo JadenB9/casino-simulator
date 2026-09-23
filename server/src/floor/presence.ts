@@ -103,7 +103,7 @@ export class Presence {
     }
   }
 
-  onMessage(ws: WebSocket, msg: Exclude<FloorClientMsg, { t: 'watch' }>): void {
+  onMessage(ws: WebSocket, msg: Exclude<FloorClientMsg, { t: 'watch' } | { t: 'emote' }>): void {
     const w = this.live.get(ws);
     if (!w) return;
     const a = w.att;

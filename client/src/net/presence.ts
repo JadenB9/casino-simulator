@@ -14,7 +14,7 @@ import { Socket, type SocketState } from './socket.ts';
 import { socketUrl } from './api.ts';
 import { observeServerTime, serverNow } from './clock.ts';
 import { Track, type Pose } from './interp.ts';
-import type { FloorClientMsg, FloorServerMsg, PlayerInfo } from '../../../shared/src/protocol.ts';
+import type { EmoteId, FloorClientMsg, FloorServerMsg, PlayerInfo } from '../../../shared/src/protocol.ts';
 import type { Look } from '../../../shared/src/look.ts';
 
 /** Shortest gap between two `mv` messages, in ms (the protocol's limit). */
@@ -61,6 +61,8 @@ export interface FloorEvents {
   state: (state: SocketState, code?: number) => void;
   /** Every message, after the roster has taken what it needs (the lobby list rides this socket). */
   message: (msg: FloorServerMsg) => void;
+  /** Someone (you included) made a gesture. */
+  emote: (id: number, e: EmoteId) => void;
 }
 
 type Listeners = { [K in keyof FloorEvents]: Set<FloorEvents[K]> };
@@ -83,7 +85,7 @@ export class FloorLink {
   you: PlayerInfo | null = null;
   onlineCount = 0;
   private readonly socket: FloorTransport;
-  private readonly listeners: Listeners = { hello: new Set(), join: new Set(), leave: new Set(), look: new Set(), at: new Set(), online: new Set(), state: new Set(), message: new Set() };
+  private readonly listeners: Listeners = { hello: new Set(), join: new Set(), leave: new Set(), look: new Set(), at: new Set(), online: new Set(), state: new Set(), message: new Set(), emote: new Set() };
   private connected = false;
   private placed = false;
   private sent: { x: number; z: number; r: number } | null = null;
@@ -111,6 +113,11 @@ export class FloorLink {
   /** Hear every floor message (the lobby list rides the same socket). */
   subscribe(fn: (msg: FloorServerMsg) => void): () => void {
     return this.on('message', fn);
+  }
+
+  /** Make a gesture everyone on the floor sees (the server echoes it back to you too). */
+  emote(e: EmoteId): boolean {
+    return this.socket.send({ t: 'emote', e } satisfies FloorClientMsg);
   }
 
   /** Send something other than movement (a lobby watch). False while reconnecting. */
@@ -200,6 +207,9 @@ export class FloorLink {
       case 'online':
         this.onlineCount = m.n;
         this.emit('online', m.n);
+        break;
+      case 'emote':
+        this.emit('emote', m.id, m.e);
         break;
     }
     this.emit('message', m);
