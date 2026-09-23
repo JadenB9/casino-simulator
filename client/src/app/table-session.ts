@@ -82,11 +82,17 @@ export class TableSession {
   }
 
   leave(): void {
+    // Nothing more is asked of a player on the way out (the last seat message says "watching,
+    // $0", which would otherwise offer a buy-in at the table just left).
+    this.leaving = true;
+    this.kit.dispose();
     this.socket.send({ t: 'leave' });
     setTimeout(() => this.close(), 150);
   }
 
   close(): void {
+    this.leaving = true;
+    this.kit.dispose();
     this.socket.close();
     this.offFrame();
     this.view?.dispose();
@@ -157,11 +163,12 @@ export class TableSession {
   }
 
   private prompting = false;
+  private leaving = false;
 
   async promptBuyIn(): Promise<void> {
     const snap = this.snapshot;
     const p = session.profile;
-    if (this.prompting || !snap || !p) return;
+    if (this.prompting || this.leaving || !snap || !p) return;
     this.prompting = true;
     const amount = await this.kit.askBuyIn({ min: snap.meta.config.buyIn.min, max: snap.meta.config.buyIn.max, balance: p.balance });
     this.prompting = false;

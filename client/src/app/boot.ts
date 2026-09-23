@@ -338,7 +338,7 @@ class App {
       this.ui,
       this.sfx,
       (fn) => this.engine.onFrame(fn),
-      (code) => this.tableClosed(code),
+      (code) => this.tableClosed(table!, code),
       {
         onLeave: () => void this.leaveTable(),
         onTable: (snap) => this.poseForSeat(snap.you.seat),
@@ -429,9 +429,10 @@ class App {
     await this.world.exitTable();
   }
 
-  private tableClosed(code?: number): void {
+  private tableClosed(closed: TableSession, code?: number): void {
     const open = this.table;
-    if (!open) return;
+    // A table already left can still report its socket closing; only the current one matters.
+    if (!open || open.session !== closed) return;
     if (code === CLOSE.REPLACED) return this.openedElsewhere();
     if (code === CLOSE.UNAUTHORIZED) return this.sessionEnded();
     if (code === CLOSE.VERSION) return this.needsReload();

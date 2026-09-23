@@ -53,8 +53,9 @@ export function modal(title: string, body: (HTMLElement | string)[], actions: HT
 }
 
 /** Ask how much to bring to the table. Resolves with cents, or null if cancelled. */
-export function askBuyIn(opts: { min: Cents; max: Cents; balance: Cents; suggested?: Cents; verb?: string }): Promise<Cents | null> {
+export function askBuyIn(opts: { min: Cents; max: Cents; balance: Cents; suggested?: Cents; verb?: string }, signal?: AbortSignal): Promise<Cents | null> {
   return new Promise((resolve) => {
+    if (signal?.aborted) return resolve(null);
     const max = Math.min(opts.max, Math.floor(opts.balance / 100) * 100);
     const picks = [opts.min, opts.min * 5, opts.min * 20, max].filter((v, i, a) => v >= opts.min && v <= max && a.indexOf(v) === i);
     const input = el('input');
@@ -69,9 +70,13 @@ export function askBuyIn(opts: { min: Cents; max: Cents; balance: Cents; suggest
     for (const v of picks) quick.append(button(formatMoney(v), () => (input.value = String(v / 100)), { cls: 'ghost' }));
     let m: { close: () => void };
     const done = (v: Cents | null) => {
+      signal?.removeEventListener('abort', cancel);
       m.close();
       resolve(v);
     };
+    // The table this was asked for has gone (left, closed): take the question away with it.
+    const cancel = () => done(null);
+    signal?.addEventListener('abort', cancel, { once: true });
     const ok = button(opts.verb ?? 'Buy in', () => {
       const v = Math.round(Number(input.value)) * 100;
       if (!Number.isFinite(v) || v < opts.min || v > max) {
@@ -147,11 +152,20 @@ export class ChipTray {
 export class UiKit {
   private dealer: HTMLElement | null = null;
   private dealerTimer = 0;
+  private readonly gone = new AbortController();
 
   constructor(private readonly root: HTMLElement) {}
 
   toast = toast;
-  askBuyIn = askBuyIn;
+  askBuyIn = (opts: Parameters<typeof askBuyIn>[0]): Promise<Cents | null> => askBuyIn(opts, this.gone.signal);
+
+  /** The table is going away: close any prompt it asked and its dealer line. */
+  dispose(): void {
+    this.gone.abort();
+    clearTimeout(this.dealerTimer);
+    this.dealer?.remove();
+    this.dealer = null;
+  }
 
   /** One line of dealer talk at the top of the screen ("Dealer has 16", "No more bets"). */
   say(text: string, ms = 2600): void {
