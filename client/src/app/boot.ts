@@ -216,6 +216,9 @@ class App {
       factory: this.world.characterFactory,
       seatOf: (station, slot) => this.seatOf(station, slot),
     });
+    // Gestures show over whoever made them, you included (the server echoes yours back).
+    this.world.useRemotes(this.remotes);
+    link.on('emote', (id, e) => void this.world.showEmote(id === link.you?.id ? 'me' : id, e));
     link.on('hello', (you, first) => {
       // A tab that takes over from another one carries on where that one stood.
       if (first && !this.table) this.world.player.teleport(you.x / 100, you.z / 100, byteToYaw(you.r));
@@ -228,6 +231,7 @@ class App {
   }
 
   private disconnectFloor(): void {
+    this.world.useRemotes(null);
     this.remotes?.dispose();
     this.remotes = null;
     this.link?.close();

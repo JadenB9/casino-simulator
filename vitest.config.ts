@@ -13,6 +13,9 @@ export default defineConfig({
           include: ['shared/test/**/*.test.ts', 'shared/src/**/*.test.ts', 'client/test/**/*.test.ts'],
           exclude: ['**/*.mc.test.ts'],
           environment: 'node',
+          // A few tests enumerate or simulate a lot (the roulette ball flights, Hold'em chip
+          // conservation); on a busy machine they need more than the default 5 s.
+          testTimeout: 30_000,
         },
       },
       {
