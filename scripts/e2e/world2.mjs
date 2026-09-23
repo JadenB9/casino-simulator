@@ -29,7 +29,7 @@ async function open(query) {
   page.on('console', (m) => m.type() === 'error' && !m.location()?.url?.endsWith('/favicon.ico') && errors.push(`${m.text()} ${m.location()?.url ?? ''}`.trim()));
   page.on('pageerror', (e) => errors.push(String(e)));
   page.on('response', (r) => r.status() >= 400 && errors.push(`${r.status()} ${r.url()}`));
-  await page.goto(`${base}?${query}`);
+  await page.goto(`${base}?${query}`, { timeout: 180000 });
   await page.waitForFunction(() => document.getElementById('boot')?.classList.contains('done'), null, { timeout: 300000 });
   return { page, errors };
 }

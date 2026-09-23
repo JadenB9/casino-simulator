@@ -1,6 +1,7 @@
 // Far stand-ins for the station models. Up close a table or machine is 10-50 meshes (buttons,
 // chips in the rack, rails, the wheel's frets), which is right for playing and far too many draw
-// calls across a whole floor. Past FAR_M each station swaps to a copy baked once at load:
+// calls across a whole floor. Past FAR_M (MACHINE_FAR_M for the small cabinets) each station
+// swaps to a copy baked once at load:
 //   - parts smaller than a few centimetres are dropped (nobody can see them from there),
 //   - untextured parts are merged into one mesh coloured per vertex, and the glowing ones into
 //     one more, so they cost two draw calls however many parts they came from,
@@ -18,6 +19,12 @@ import type { WorldStation } from './stations.ts';
 
 const FAR_M = 11;
 const NEAR_M = 10;
+/**
+ * Machines (slots, video poker) are small and stand in dozens: their stand-in is plenty from
+ * nearer, which keeps a floor of six slot islands inside the draw-call budget.
+ */
+const MACHINE_FAR_M = 8;
+const MACHINE_NEAR_M = 7;
 /** Parts whose bounding sphere is smaller than this (metres) are left out of the far copy. */
 const TINY_M = 0.035;
 /** Textured parts smaller than this (bounding sphere, metres) are drawn in their average colour. */
@@ -31,6 +38,9 @@ interface Entry {
   copy: THREE.Object3D;
   x: number;
   z: number;
+  /** Squared distances: swap to the stand-in past far2, back to the model inside near2. */
+  far2: number;
+  near2: number;
 }
 
 export class StationLod {
@@ -52,17 +62,20 @@ export class StationLod {
       copy.visible = false;
       s.model.parent!.add(copy);
       s.anchor.getWorldPosition(at);
-      this.entries.push({ station: s, copy, x: at.x, z: at.z });
+      const machine = s.zone === 'slots' || s.zone === 'bar';
+      const far = machine ? MACHINE_FAR_M : FAR_M;
+      const near = machine ? MACHINE_NEAR_M : NEAR_M;
+      this.entries.push({ station: s, copy, x: at.x, z: at.z, far2: far * far, near2: near * near });
     }
   }
 
   /** Show the real model near the camera and the stand-in further away. */
   update(camera: THREE.Camera, seated: WorldStation | null): void {
     camera.getWorldPosition(this.cam);
-    for (const { station, copy, x, z } of this.entries) {
+    for (const { station, copy, x, z, far2, near2 } of this.entries) {
       const d2 = (x - this.cam.x) ** 2 + (z - this.cam.z) ** 2;
       const was = copy.visible;
-      const far = station !== seated && (was ? d2 > NEAR_M * NEAR_M : d2 > FAR_M * FAR_M);
+      const far = station !== seated && (was ? d2 > near2 : d2 > far2);
       if (far === was) continue;
       station.model.visible = !far;
       copy.visible = far;
