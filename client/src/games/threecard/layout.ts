@@ -28,7 +28,7 @@ const POSITION_DEG = [50, 30, 10, -10, -30, -50];
 const SEAT_POSITION = [2, 3, 1, 4, 0, 5];
 export const SEAT_COUNT = 6;
 
-export const SPOT_R = { pairPlus: 0.715, ante: 0.835, play: 0.955 } as const;
+export const SPOT_R = { pairPlus: 0.745, ante: 0.862, play: 0.98 } as const;
 export type SpotKind = keyof typeof SPOT_R;
 export const SPOT_RADIUS = 0.044;
 const HAND_R = 0.575;
@@ -100,15 +100,13 @@ export function seatPose(seat: number): { position: [number, number, number]; ya
 
 export function cameraPose(seat: number): { position: [number, number, number]; target: [number, number, number] } {
   const a = seatAngle(seat);
-  const [cx, cz] = along(a, 1.66);
-  const [tx, tz] = along(a, 0.4);
-  return { position: [cx, 1.42, cz], target: [tx, TOP_Y, tz] };
+  const [cx, cz] = along(a, 1.45);
+  const [tx, tz] = along(a, 0.55);
+  return { position: [cx, 1.34, cz], target: [tx, TOP_Y, tz] };
 }
 
 // ---------------------------------------------------------------------------------------------
 // The D outline
-
-const halfArc = Math.acos((DEALER_Z - CENTER_Z) / FELT_R);
 
 /** The table's outline as a shape in the felt's plane (x, -z), for the felt mesh and the table top. */
 export function dShape(r = FELT_R, dealerZ = DEALER_Z): THREE.Shape {
@@ -303,4 +301,3 @@ export function makeFelt(pay: Paytable, resolution: number): Felt {
   return felt;
 }
 
-export { halfArc };
