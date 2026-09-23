@@ -512,7 +512,6 @@ export class CrapsTable implements TableView {
 
     // ...then pay the winners beside their bets, and push winnings (and bets that come down) to the rail.
     const payouts: ChipStack[] = [];
-    const paidMine = new Map<string, ChipStack>();
     const pay: Promise<void>[] = [];
     for (const r of results) {
       const win = Number(r.win);
@@ -525,7 +524,6 @@ export class CrapsTable implements TableView {
       p.position.copy(bank(seat));
       this.ctx.stage.root.add(p);
       payouts.push(p);
-      if (seat === this.mySeat) paidMine.set(id, p);
       pay.push(slideStack(p, at, 480));
       if (seat === this.mySeat) this.ctx.kit.pill(this.ctx.stage, at.clone().setY(SURFACE + 0.035), `WIN ${formatMoney(win, { sign: true })}`, 'win', 2400);
     }
@@ -535,7 +533,7 @@ export class CrapsTable implements TableView {
     if (pay.length) {
       this.ctx.sfx.play('chips-stack');
       await Promise.all(pay);
-      const moment = decided && this.celebrateRoll(results, faces[0] + faces[1], net, paidMine);
+      const moment = decided && this.celebrateRoll(results, faces[0] + faces[1], net);
       await wait(moment ? 1100 : 260);
       const home: Promise<void>[] = [];
       for (const r of results) {
@@ -574,10 +572,10 @@ export class CrapsTable implements TableView {
   }
 
   /**
-   * A point made with odds, a hardway or a high prop: the banner, and light under the bet and
-   * what it was paid. Only when the roll as a whole gave the player more than it took.
+   * A point made with odds, a hardway or a high prop: the banner, and the printed spot the bet
+   * won on lit up. Only when the roll as a whole gave the player more than it took.
    */
-  private celebrateRoll(results: GameEvent[], total: number, net: number, paid: Map<string, ChipStack>): boolean {
+  private celebrateRoll(results: GameEvent[], total: number, net: number): boolean {
     const seat = this.mySeat;
     if (seat === null) return false;
     const decided: Decided[] = [];
@@ -587,22 +585,18 @@ export class CrapsTable implements TableView {
     }
     const m = crapsMoment(decided, total, net);
     if (!m) return false;
-    // light the printed spot the bet won on (the kit rings an object's bounds 35% wider, so a
-    // stand-in that much smaller makes the light fill the box); fall back to the chips
+    // the kit rings an object's bounds 35% wider, so an unseen stand-in that much smaller than
+    // the printed box makes the light fill the box
     const r = spotRect(m.id, this.solo ? 1 : seatEnd(seat));
-    const stand = r ? new THREE.Mesh(new THREE.PlaneGeometry((r[2] - r[0]) / 1.35, (r[3] - r[1]) / 1.35)) : null;
-    if (stand && r) {
-      stand.visible = false;
-      stand.rotation.x = -Math.PI / 2;
-      stand.position.set((r[0] + r[2]) / 2, SURFACE, (r[1] + r[3]) / 2);
-      this.ctx.stage.root.add(stand);
-    }
-    const glow = stand ? [stand] : [this.stacks.get(`${seat}|${m.id}|flat`), paid.get(m.id)].filter((o): o is ChipStack => !!o);
-    celebrate({ stage: this.ctx.stage, ui: this.ctx.ui, sfx: this.ctx.sfx }, { title: m.title, sub: m.sub, tier: m.tier, glow });
-    if (stand) {
-      stand.removeFromParent();
-      stand.geometry.dispose();
-    }
+    const stand = new THREE.Mesh(new THREE.PlaneGeometry(r ? (r[2] - r[0]) / 1.35 : 0.05, r ? (r[3] - r[1]) / 1.35 : 0.05));
+    stand.visible = false;
+    stand.rotation.x = -Math.PI / 2;
+    if (r) stand.position.set((r[0] + r[2]) / 2, SURFACE, (r[1] + r[3]) / 2);
+    else stand.position.copy(this.spot(seat, m.id, 'flat'));
+    this.ctx.stage.root.add(stand);
+    celebrate({ stage: this.ctx.stage, ui: this.ctx.ui, sfx: this.ctx.sfx }, { title: m.title, sub: m.sub, tier: m.tier, glow: [stand] });
+    stand.removeFromParent();
+    stand.geometry.dispose();
     return true;
   }
 
