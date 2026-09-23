@@ -108,10 +108,10 @@ export function mountHoldem(ctx: TableViewCtx): TableView {
   let pre = { raises: 0, raisers: new Set<number>(), level: 0, open: true };
   /** A batch is still playing out: tips wait for it, so a flop isn't read out before it lands. */
   let animating = false;
-  // Celebrations: the best category already marked this hand (a hand is marked each time it
-  // improves), the cards lifted at showdown, glows still lit, and what you collect in this batch.
+  // Celebrations: the best category already marked in which hand (a hand is marked each time it
+  // improves), glows still lit, and what you collect in this batch.
   let marked = 0;
-  const lifted = new Set<Card>();
+  let markedHand = 0;
   const glows: (() => void)[] = [];
   let myWins = { left: 0, won: 0 };
 
@@ -585,6 +585,11 @@ export function mountHoldem(ctx: TableViewCtx): TableView {
     const b = shown.map(cardInt);
     const v = evaluate([...h, ...b]);
     const cat = v >> 20;
+    // Keyed to the hand, so a table joined or redrawn mid-hand starts its count fresh.
+    if (markedHand !== next.handId) {
+      markedHand = next.handId;
+      marked = 0;
+    }
     if (cat < TRIPS || cat <= marked || onBoard(h, b, v)) return;
     marked = cat;
     const tier: Tier = cat >= STRAIGHT_FLUSH ? 'huge' : cat >= FULL_HOUSE ? 'big' : 'nice';
@@ -633,7 +638,6 @@ export function mountHoldem(ctx: TableViewCtx): TableView {
     switch (e.type) {
       case 'hand': {
         put = {};
-        marked = 0;
         for (const stop of glows.splice(0)) stop();
         for (const o of seats) {
           clearCards(o);
