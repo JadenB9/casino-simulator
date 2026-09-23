@@ -1,11 +1,11 @@
 // What the slot machines send and accept. One action: spin. The server settles the spin (and
-// any free games it starts) before anything is shown, then sends the stops for the client to
-// spin the reels to.
+// any free games or bonus it starts) before anything is shown, then sends the stops for the
+// client to spin the reels to.
 //
 // Events for one paid spin, in order:
 //   spin    the bet leaves the credit meter (`credit` is the stack right after the bet)
-//   reels   the paid spin's stops and what it paid
-//   reels   ...one per free game on Neon Nights, in play order (`spin` 1, 2, ...)
+//   reels   the paid spin's stops and what it paid (Lucky Cherries: and its Cherry Wheel spin)
+//   reels   ...one per free game on Neon Nights and Gold Rush, in play order (`spin` 1, 2, ...)
 //   result  the total paid for the spin, free games included, and the stack after it
 //
 // Free games play out inside the paid spin's round: the server draws them one after another
@@ -15,7 +15,7 @@
 // sending them together gives nothing away.
 
 import type { Cents } from '../../money.ts';
-import type { MachineId } from './machines.ts';
+import type { SlotId } from './lineup.ts';
 
 export type SlotsAction = {
   type: 'spin';
@@ -50,7 +50,7 @@ export type SpinEvent = {
 
 export type ReelsEvent = {
   type: 'reels';
-  /** 3-reel: the physical stop on the payline (0-21). 5-reel: the top-row stop (0-31). */
+  /** 3-reel: the physical stop on the payline (0-21). 5-reel: the top-row stop (0 to the strip length - 1). */
   stops: number[];
   /** 0 for the paid spin, then 1, 2, ... for free games. */
   spin: number;
@@ -61,7 +61,7 @@ export type ReelsEvent = {
   hits: boolean[];
   /** 3-reel: the pay glass row that paid, if any. */
   combo: string | null;
-  /** 5x Wild: how many 5X multiplied the win. */
+  /** 5x Wild and Diamond Line: how many wilds multiplied the win (3 is the top award). */
   wilds: number;
   scatters: number;
   scatterWin: Cents;
@@ -69,9 +69,25 @@ export type ReelsEvent = {
   win: Cents;
   /** Free games were started (or added to) by this spin. */
   trigger: boolean;
-  /** 3 on free games, 1 otherwise. */
+  /** What each win was multiplied by: 3 on Neon Nights free games, 2 or 4 for Diamond Line diamonds, else 1. */
   multiplier: number;
+  /** Gold Rush free games: the cells held WILD through this game (reel * 4 + row), not counting any that land in it. */
+  held?: number[];
+  /** Lucky Cherries: the Cherry Wheel this spin's BONUS symbols started. */
+  wheel?: WheelSpin;
 };
+
+/** One spin of the Cherry Wheel. */
+export interface WheelSpin {
+  /** The segment under the pointer, 0-19 clockwise from the top. */
+  segment: number;
+  /** That segment's prize, in total bets. */
+  prize: number;
+  /** 1, 2 or 5 for three, four or five BONUS symbols. */
+  mult: number;
+  /** Cents: prize x mult x the total bet. Included in the event's `win`. */
+  win: Cents;
+}
 
 export type ResultEvent = {
   type: 'result';
@@ -87,8 +103,20 @@ export type ResultEvent = {
 
 export type SlotsEvent = SpinEvent | ReelsEvent | ResultEvent;
 
+/** What a machine's settle function hands the engine for one paid spin (the newer machines). */
+export interface SpinSettlement {
+  /** The paid spin's reels event, then one per free game. */
+  reels: ReelsEvent[];
+  /** Everything the spin paid, free games included. */
+  win: Cents;
+  freeSpins: number;
+  freeWin: Cents;
+  /** What the reels show once it's all over. */
+  stops: number[];
+}
+
 export interface SlotsView {
-  machine: MachineId;
+  machine: SlotId;
   round: number;
   /** The last spin's coin value and coins, so a reload keeps the bet. */
   denom: Cents;
