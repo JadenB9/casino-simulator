@@ -185,7 +185,7 @@ folder documents the final shapes):
 | blackjack | `bet {amount}`, `undo`, `clear`, `deal` (solo), `insurance {take}`, `hit`, `stand`, `double`, `split`, `surrender` |
 | roulette | `bet {bets: {kind, numbers?, amount}[]}` (at most 40), `undo`, `clear`, `rebet {double}`, `ready {on}`, `spin` (solo) |
 | craps | `bet {bets: {kind, number?, amount}[]}`, `odds {on, amount}`, `down {id, part?, amount?}`, `working {id, on}`, `roll` (shooter) |
-| baccarat | `bet {bets: {player?, banker?, tie?, playerPair?, bankerPair?}}`, `undo`, `clear`, `deal` (solo) |
+| baccarat | `bet {player?, banker?, tie?, playerPair?, bankerPair?}` (adds to the spots named), `undo`, `clear`, `deal` (solo) |
 | slots | `spin {coins, denom}` (free games play out inside the paid spin) |
 | videopoker | `deal {coins, denom?}`, `draw {hold: boolean[5]}` |
 | threecard | `bet {ante, pairPlus}`, `deal` (solo), `play`, `fold` |

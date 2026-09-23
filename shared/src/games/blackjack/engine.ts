@@ -335,7 +335,9 @@ export const engine: GameEngine<BlackjackState, BlackjackAction, BlackjackView> 
         const readyNow = new Set(ctx.seats.filter((x) => x.ready).map((x) => x.seat));
         const stale = state.staleReady.filter((seat) => readyNow.has(seat));
         const bettors = Object.keys(state.bets).map(Number);
-        const allReady = bettors.length > 0 && bettors.every((seat) => readyNow.has(seat) && !stale.includes(seat));
+        // Everyone connected must say so, bet down or not: one player's Ready must not deal the
+        // hand while another is still reaching for chips.
+        const allReady = bettors.length > 0 && ctx.seats.every((x) => !x.connected || (readyNow.has(x.seat) && !stale.includes(x.seat)));
         if (due || allReady) return closeBetting(state, ctx);
         if (stale.length !== state.staleReady.length) return { state: { ...state, staleReady: stale }, events: [] };
         return null;

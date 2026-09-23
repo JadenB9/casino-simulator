@@ -10,6 +10,10 @@
 @font-face { font-family: 'Tilt Neon'; src: url('/casino/fonts/tiltneon/TiltNeon-Static.latin.woff2') format('woff2'); font-display: swap; }
 
 :root {
+  /* The HUD owns the top of the screen; game panels start below it (the party panel, in a
+     lobby, sits under the HUD's right-hand buttons). */
+  --below-hud: 82px;
+  --below-party: 116px;
   --ink: #f4efe4;
   --ink-2: #c9c0ad;
   --ink-3: #8f8676;

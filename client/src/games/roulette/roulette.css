@@ -2,7 +2,7 @@
    betting clock and the players at the wheel. Built on the theme's glass panels and brass lines.
    The bottom-left corner stays free for the site's back chip. */
 
-.rl-history { position: fixed; top: 16px; left: 16px; padding: 8px 12px 10px; max-width: min(640px, calc(100vw - 420px)); }
+.rl-history { position: fixed; top: var(--below-hud); left: 16px; padding: 8px 12px 10px; max-width: min(640px, calc(100vw - 420px)); }
 .rl-history .label { margin-bottom: 6px; }
 .rl-history-row { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 .rl-history-empty { font-size: 14px; color: var(--ink-3); }
@@ -12,7 +12,7 @@
 .rl-num.green { background: #0d6a39; }
 .rl-num.latest { min-width: 38px; height: 38px; font-size: 21px; box-shadow: 0 0 0 1px var(--brass-hi); margin-right: 4px; }
 
-.rl-meters { position: fixed; top: 64px; right: 16px; display: flex; gap: 18px; padding: 9px 16px; }
+.rl-meters { position: fixed; top: var(--below-party); right: 16px; display: flex; gap: 18px; padding: 9px 16px; }
 .rl-meter { display: grid; gap: 2px; min-width: 78px; }
 .rl-meter-value { font-size: 21px; font-weight: 600; color: var(--ink); }
 
@@ -48,7 +48,7 @@
 .rl-clock-secs { position: absolute; inset: 0; display: grid; place-items: center; font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .rl-clock-caption { font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-2); text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8); }
 
-.rl-players { position: fixed; top: 136px; right: 16px; display: grid; gap: 5px; padding: 9px 12px; min-width: 230px; }
+.rl-players { position: fixed; top: calc(var(--below-party) + 72px); right: 16px; display: grid; gap: 5px; padding: 9px 12px; min-width: 230px; }
 .rl-player { display: grid; grid-template-columns: 16px 1fr auto auto; align-items: center; gap: 8px; font-size: 16px; }
 .rl-player.you .rl-player-name { color: var(--brass-hi); }
 .rl-player-chip { width: 14px; height: 14px; border-radius: 50%; box-shadow: 0 0 0 2px rgba(247, 242, 234, 0.85) inset, 0 0 0 1px rgba(0, 0, 0, 0.4); }

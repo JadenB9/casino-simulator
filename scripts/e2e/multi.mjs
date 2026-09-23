@@ -13,7 +13,9 @@ const [port = '5173', out = '/tmp/casino-multi', ...only] = process.argv.slice(2
 mkdirSync(out, { recursive: true });
 const TABLES = { blackjack: 'bj-1', roulette: 'rl-us', craps: 'cr-1', baccarat: 'bc-1', threecard: 'tc-1', holdem: 'he-1' };
 const games = only.length ? only : Object.keys(TABLES);
-const tag = Date.now().toString(36).slice(-5);
+// Fixed names by default so reruns log back in: the API allows only a few new accounts per hour
+// from one address.
+const tag = process.env.TAG ?? 'e2e';
 const errors = [];
 const steps = [];
 const log = (s) => {
@@ -25,6 +27,10 @@ const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--ena
 
 async function player(name) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  // Two players share one software-rendered browser, so they play at low graphics unless
+  // QUALITY=high asks otherwise; this check is about the tables, not the lights.
+  const quality = process.env.QUALITY ?? 'low';
+  await ctx.addInitScript((q) => localStorage.setItem('casino.quality', q), quality);
   const page = await ctx.newPage();
   page.on('console', (m) => {
     // Refused moves while a bot guesses at turns show up as the table's toasts, not errors;
@@ -33,7 +39,7 @@ async function player(name) {
   });
   page.on('pageerror', (e) => errors.push(`${name}: ${e}`));
   await page.goto(`http://localhost:${port}/casino/`);
-  await page.waitForSelector('.name-input', { timeout: 60_000 });
+  await page.waitForSelector('.name-input', { timeout: 180_000 });
   await page.fill('.name-input', name);
   await page.click('.enter-btn');
   await page.waitForSelector('.menu-item', { timeout: 20_000 });
@@ -55,7 +61,10 @@ async function arm(p, game) {
     const orig = s.onMessage.bind(s);
     s.onMessage = (m) => {
       orig(m);
+      if (m.t === 'err') (window.__evlog ??= []).push(`ERR ${m.code}: ${m.msg}`);
       if (m.t !== 'ev') return;
+      s.__lastView = m.view;
+      (window.__evlog ??= []).push(m.events.map((e) => e.type).join(','));
       const me = mine();
       for (const e of m.events) {
         const t = e.type;
@@ -73,7 +82,7 @@ async function arm(p, game) {
           }
         } else if (game === 'baccarat') {
           if (t === 'betting') {
-            act({ type: 'bet', bets: { banker: 2500 } });
+            act({ type: 'bet', banker: 2500 });
             s.link.ready(true);
           }
         } else if (game === 'threecard') {
@@ -82,16 +91,25 @@ async function arm(p, game) {
             s.link.ready(true);
           } else if (t === 'decide') act({ type: 'play' });
         } else if (game === 'craps') {
-          if (t === 'open' || t === 'pause' || t === 'result') {
-            const v = m.view;
-            const field = v?.bets?.[me]?.some?.((b) => b.kind === 'field');
-            if (!field) act({ type: 'bet', bets: [{ kind: 'field', amount: 500 }] });
+          // A shooter needs a line bet on the come-out; the field is decided by every roll.
+          if (t === 'open' || t === 'pause' || t === 'result' || t === 'shooter') {
+            const mineBets = m.view?.bets?.[me] ?? {};
+            const want = [];
+            if (m.view?.point == null && !mineBets.pass) want.push({ kind: 'pass', amount: 1000 });
+            if (!mineBets.field) want.push({ kind: 'field', amount: 1000 });
+            if (want.length) act({ type: 'bet', bets: want });
             s.link.ready(true);
           }
           if (m.view?.shooter === me) setTimeout(() => act({ type: 'roll' }), 3200);
         } else if (game === 'holdem') {
-          const v = m.view;
-          if (v && v.toAct === me) act(v.toCall > 0 ? { type: 'call' } : { type: 'check' });
+          // Check when it's free, call when it isn't: a refused check is followed by a call.
+          if (m.view?.turn?.seat === me && s.__turnAt !== m.view.turn.deadline) {
+            s.__turnAt = m.view.turn.deadline;
+            act({ type: 'check' });
+            setTimeout(() => {
+              if (s.__lastView?.turn?.seat === me && s.__lastView.turn.deadline === s.__turnAt) act({ type: 'call' });
+            }, 700);
+          }
         }
       }
     };
@@ -180,6 +198,7 @@ try {
       });
     }
     while (Date.now() - t0 < 120_000 && !((await settled(a)) && (await settled(b)))) await a.page.waitForTimeout(1000);
+    if (process.env.DEBUG) for (const p of [a, b]) console.log(game, p.name, (await p.page.evaluate(() => (window.__evlog ?? []).slice(-40).join(' | '))).slice(0, 3000));
     await shot(a, `multi-${game}-a`);
     await shot(b, `multi-${game}-b`);
     log(`${game}: round settled after ${((Date.now() - t0) / 1000).toFixed(0)} s`);
@@ -189,7 +208,12 @@ try {
       const leave = await p.page.waitForSelector('.modal .btn.primary', { timeout: 3000 }).catch(() => null);
       if (leave) await leave.click();
     }
-    await a.page.waitForTimeout(2500);
+    // Chips come home once nothing of yours is live; a craps line bet with a point stays up (it
+    // can't be taken down) and the table rolls on its own until it's decided.
+    for (const p of [a, b]) {
+      const t1 = Date.now();
+      while (Date.now() - t1 < 120_000 && (await statsOf(p)).inPlay !== 0) await p.page.waitForTimeout(2000);
+    }
     for (const p of [a, b]) {
       const prof = await statsOf(p);
       const rounds = prof.stats.games[game]?.rounds ?? 0;

@@ -253,8 +253,14 @@ class App {
     this.link = null;
   }
 
-  /** Where someone sitting at a station is drawn: that game's seats, in the station's frame. */
+  /**
+   * Where someone sitting at a station is drawn: that game's seats, in the station's frame. At
+   * your own table nobody is drawn: presence knows the table but not the chair, so a guessed chair
+   * could be yours and stand in front of the camera, and the table view already shows everyone
+   * at their real seats.
+   */
   private seatOf(stationId: string, slot: number): SeatPose | null {
+    if (this.table?.station.id === stationId) return null;
     const st = this.world.stations.find((s) => s.id === stationId);
     if (!st) return null;
     const seats = GAMES[st.game].seats(st.variant);

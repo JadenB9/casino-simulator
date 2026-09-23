@@ -9,7 +9,7 @@
 }
 
 /* scoreboard */
-.bc-board { position: fixed; top: 12px; left: 12px; padding: 8px 10px 7px; display: grid; gap: 6px; z-index: 5; }
+.bc-board { position: fixed; top: var(--below-hud); left: 16px; padding: 8px 10px 7px; display: grid; gap: 6px; z-index: 5; }
 .bc-board-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
 .bc-board-shoe { font-family: var(--serif); font-size: 14px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--brass-hi); white-space: nowrap; }
 .bc-board-counts { display: flex; gap: 10px; align-items: center; font-size: 15px; font-variant-numeric: tabular-nums; white-space: nowrap; }

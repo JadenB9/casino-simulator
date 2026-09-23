@@ -142,7 +142,7 @@
 .he-back { justify-self: center; }
 
 /* hand history: a drawer on the right */
-.he-history { position: fixed; right: 12px; top: 64px; width: 300px; padding: 0; overflow: hidden; }
+.he-history { position: fixed; right: 16px; top: var(--below-party); width: 300px; padding: 0; overflow: hidden; }
 .he-history-head {
   display: flex;
   width: 100%;

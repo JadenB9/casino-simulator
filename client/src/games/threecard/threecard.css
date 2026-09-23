@@ -22,12 +22,12 @@
 .tc-decide .btn { height: 46px; min-width: 150px; font-size: 19px; }
 .tc-hint { margin-left: 4px; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); }
 
-.tc-meters { position: fixed; top: 14px; left: 16px; display: grid; grid-template-columns: auto auto; align-items: baseline; gap: 2px 16px; padding: 8px 14px; font-size: 18px; }
+.tc-meters { position: fixed; top: var(--below-hud); left: 16px; display: grid; grid-template-columns: auto auto; align-items: baseline; gap: 2px 16px; padding: 8px 14px; font-size: 18px; }
 .tc-meters .up { color: var(--win); }
 .tc-meters .down { color: var(--lose); }
 
-.tc-rules-btn { position: fixed; top: 112px; left: 16px; height: 30px; font-size: 14px; }
-.tc-rules { position: fixed; top: 152px; left: 16px; width: 360px; max-height: calc(100vh - 250px); overflow: auto; padding: 12px 16px 14px; font-size: 15px; line-height: 1.38; color: var(--ink-2); }
+.tc-rules-btn { position: fixed; top: calc(var(--below-hud) + 98px); left: 16px; height: 30px; font-size: 14px; }
+.tc-rules { position: fixed; top: calc(var(--below-hud) + 138px); left: 16px; width: 360px; max-height: calc(100vh - var(--below-hud) - 240px); overflow: auto; padding: 12px 16px 14px; font-size: 15px; line-height: 1.38; color: var(--ink-2); }
 .tc-rules[hidden] { display: none; }
 .tc-rules h3 { margin: 2px 0 6px; font-family: var(--serif); font-size: 18px; font-weight: 600; letter-spacing: 0.06em; color: var(--brass-hi); }
 .tc-rules p { margin: 6px 0; }
@@ -36,7 +36,7 @@
 .tc-paytable .row { display: flex; justify-content: space-between; gap: 12px; color: var(--ink); }
 .tc-keys { font-size: 13px; color: var(--ink-3); }
 
-.tc-clock { position: fixed; top: 60px; left: 50%; width: 48px; height: 48px; transform: translateX(-50%); display: grid; place-items: center; }
+.tc-clock { position: fixed; top: var(--below-hud); left: 50%; width: 48px; height: 48px; transform: translateX(-50%); display: grid; place-items: center; }
 .tc-clock[hidden] { display: none; }
 .tc-ring { position: absolute; inset: 0; width: 100%; height: 100%; }
 .tc-ring circle { fill: rgba(12, 10, 8, 0.7); stroke-width: 3; }

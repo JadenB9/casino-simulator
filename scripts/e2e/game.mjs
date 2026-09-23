@@ -17,7 +17,7 @@ page.on('pageerror', (e) => errors.push(String(e)));
 const shot = (name) => page.screenshot({ path: `${out}/${name}.png` });
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
 
-const name = process.env.NAME ?? `e2e_${Date.now().toString(36).slice(-6)}`;
+const name = process.env.NAME ?? 'walker_e2e';
 await page.goto(`http://localhost:${port}/casino/`);
 await page.waitForSelector('.name-input', { timeout: 60000 });
 await page.waitForTimeout(1500);

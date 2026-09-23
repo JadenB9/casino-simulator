@@ -499,7 +499,7 @@ describe('blackjack multiplayer', () => {
     expect(refused(sim, 3, { type: 'bet', amount: 2500 })).toBe('WRONG_PHASE');
   });
 
-  it('closes early once everyone with a bet is ready, but not on a ready flag left over from last round', () => {
+  it('closes early once everyone at the table is ready, but not on a ready flag left over from last round', () => {
     const sim = new TableSim(engine, seededRng(4), 'multi', [{ seat: 0, stack: 10_000, ready: true }, { seat: 1, stack: 10_000 }]) as Sim;
     sim.started = true;
     sim.advance(0);
@@ -510,8 +510,11 @@ describe('blackjack multiplayer', () => {
     sim.advance(0);
     expect(sim.state.staleReady).toEqual([]);
     expect(view(sim, null).phase).toBe('betting');
-    // Seat 1 hasn't bet, so it doesn't hold the table up.
+    // Seat 1 hasn't bet or said it's ready: the hand waits for it rather than dealing it out.
     sim.seats.get(0)!.ready = true;
+    sim.advance(0);
+    expect(view(sim, null).phase).toBe('betting');
+    sim.seats.get(1)!.ready = true;
     rig(sim, 'Ts 9d 8h 7c 5s');
     sim.advance(0);
     expect(view(sim, null).phase).toBe('play');
