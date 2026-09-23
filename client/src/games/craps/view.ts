@@ -20,10 +20,13 @@ import { Die, throwDie } from '../../table/dice.ts';
 import { tween, wait, ease } from '../../table/tween.ts';
 import { ChipTray } from '../../ui/kit.ts';
 import { serverNow } from '../../net/clock.ts';
-import { feltSpec, parseRegion, chipSpot, puckSpot, DICE_REST, FELT_W } from './layout.ts';
+import { feltSpec, parseRegion, chipSpot, puckSpot, spotRect, DICE_REST, FELT_W } from './layout.ts';
 import { BED_Y } from './model.ts';
 import { seatEnd, slotOffset, railSpot, handSpot } from './seats.ts';
 import { CrapsHud } from './hud.ts';
+import { SpotRing } from './ring.ts';
+import { crapsAdvice, crapsMoment, edgeLine, spotEdge, type Decided } from './advice.ts';
+import { celebrate } from '../../table/celebrate.ts';
 import './craps.css';
 
 const SURFACE = BED_Y + 0.0006;
@@ -131,6 +134,9 @@ export class CrapsTable implements TableView {
   private lost: { kind: BetKind; number?: number; amount: Cents }[] = [];
   private floorFelt: THREE.Object3D | null = null;
   private hoverAt: { x: number; y: number } | null = null;
+  /** Tips: the ring on the recommended spot, and the unsubscribe from the setting. */
+  private readonly ring = new SpotRing(SURFACE + 0.0003);
+  private readonly unTips: () => void;
 
   constructor(private readonly ctx: TableViewCtx) {
     ctx.stage.addFelt(this.felt, SURFACE - 0.0004);
@@ -151,6 +157,8 @@ export class CrapsTable implements TableView {
       primary: { label: 'Roll', run: () => this.primary() },
     });
     ctx.ui.append(this.tray.root);
+    ctx.stage.root.add(this.ring.root);
+    this.unTips = ctx.tips.subscribe(() => this.refreshAdvice());
     addEventListener('pointerdown', this.onPointerDown);
     addEventListener('pointermove', this.onPointerMove);
     addEventListener('contextmenu', this.onContextMenu);
@@ -282,6 +290,21 @@ export class CrapsTable implements TableView {
         leaving: this.mySeat !== null && v.leaving.includes(this.mySeat),
       });
     }
+    this.refreshAdvice();
+  }
+
+  /** Tips: the best bets (or the odds nudge) while bets can go down; nothing while the dice fly. */
+  private refreshAdvice(): void {
+    const v = this.v;
+    const leaving = v !== null && this.mySeat !== null && v.leaving.includes(this.mySeat);
+    if (!this.ctx.tips.on || !v || this.mySeat === null || this.rolling || leaving) {
+      this.ctx.kit.tip(null);
+      this.ring.set(null, this.myEnd);
+      return;
+    }
+    const a = crapsAdvice(v.point, this.mine(), (lay, n) => this.limits(oddsLimitKey(lay, n)).step);
+    this.ctx.kit.tip(a.text);
+    this.ring.set(a.pick, this.myEnd);
   }
 
   // -------------------------------------------------------------------------------------------
@@ -510,7 +533,8 @@ export class CrapsTable implements TableView {
     if (pay.length) {
       this.ctx.sfx.play('chips-stack');
       await Promise.all(pay);
-      await wait(260);
+      const moment = decided && this.celebrateRoll(results, faces[0] + faces[1], net);
+      await wait(moment ? 1100 : 260);
       const home: Promise<void>[] = [];
       for (const r of results) {
         if (!(Number(r.win) > 0) && r.odds !== 'returned' && r.flat !== 'push') continue;
@@ -545,6 +569,35 @@ export class CrapsTable implements TableView {
     const puck = next.point !== before ? this.placePuck(next.point, true) : Promise.resolve();
     await Promise.all([...travel, puck]);
     this.rolling = false;
+  }
+
+  /**
+   * A point made with odds, a hardway or a high prop: the banner, and the printed spot the bet
+   * won on lit up. Only when the roll as a whole gave the player more than it took.
+   */
+  private celebrateRoll(results: GameEvent[], total: number, net: number): boolean {
+    const seat = this.mySeat;
+    if (seat === null) return false;
+    const decided: Decided[] = [];
+    for (const r of results) {
+      const bet = r.seat === seat ? this.v?.bets[seat]?.[String(r.id)] : undefined;
+      if (bet) decided.push({ id: String(r.id), flat: String(r.flat), win: Number(r.win), bet, ...(r.odds ? { odds: String(r.odds) } : {}) });
+    }
+    const m = crapsMoment(decided, total, net);
+    if (!m) return false;
+    // the kit rings an object's bounds 35% wider, so an unseen stand-in that much smaller than
+    // the printed box makes the light fill the box
+    const r = spotRect(m.id, this.solo ? 1 : seatEnd(seat));
+    const stand = new THREE.Mesh(new THREE.PlaneGeometry(r ? (r[2] - r[0]) / 1.35 : 0.05, r ? (r[3] - r[1]) / 1.35 : 0.05));
+    stand.visible = false;
+    stand.rotation.x = -Math.PI / 2;
+    if (r) stand.position.set((r[0] + r[2]) / 2, SURFACE, (r[1] + r[3]) / 2);
+    else stand.position.copy(this.spot(seat, m.id, 'flat'));
+    this.ctx.stage.root.add(stand);
+    celebrate({ stage: this.ctx.stage, ui: this.ctx.ui, sfx: this.ctx.sfx }, { title: m.title, sub: m.sub, tier: m.tier, glow: [stand] });
+    stand.removeFromParent();
+    stand.geometry.dispose();
+    return true;
   }
 
   // -------------------------------------------------------------------------------------------
@@ -587,6 +640,7 @@ export class CrapsTable implements TableView {
       return;
     }
     const lines = [d[0], d[1]];
+    const edge = this.ctx.tips.on ? spotEdge(spot, this.mine(), this.v.point, !!this.v.lay) : null;
     const b = spotBet(spot, this.mine(), this.v.point);
     const bet = b && this.mine()[b.id];
     if (b && bet) {
@@ -595,7 +649,7 @@ export class CrapsTable implements TableView {
       if (amount > 0) lines.push(`Your ${b.part === 'odds' ? 'odds' : 'bet'}: ${formatMoney(amount)}${off ? ' (off)' : ''}`);
       lines.push(canToggle(b.id) ? 'Right-click takes it down. Shift-click calls it on or off.' : 'Right-click takes it down.');
     }
-    this.hud.showTip(lines, at.x, at.y);
+    this.hud.showTip(lines, at.x, at.y, edge ? edgeLine(edge) : null);
   }
 
   // -------------------------------------------------------------------------------------------
@@ -667,8 +721,9 @@ export class CrapsTable implements TableView {
     return false;
   }
 
-  update(): void {
+  update(dt: number): void {
     this.updateTip();
+    this.ring.update(dt);
     this.hud.tick(this.v, serverNow(), this.v?.shooter === this.mySeat);
   }
 
@@ -684,6 +739,9 @@ export class CrapsTable implements TableView {
     this.puck.mesh.removeFromParent();
     for (const d of this.dice) d.removeFromParent();
     if (this.floorFelt) this.floorFelt.visible = true;
+    this.unTips();
+    this.ctx.kit.tip(null);
+    this.ring.dispose();
     this.hud.dispose();
     this.tray.root.remove();
   }

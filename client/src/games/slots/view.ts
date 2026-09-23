@@ -1,9 +1,11 @@
 // A slot machine at play. The server has settled every spin before a reel moves; this view spins
 // the reels to the stops it sent, left to right, then presents what the spin paid by the rules in
 // FEATURES.md §2: nothing for nothing, a quiet "Paid $X" when the return is no more than the bet,
-// a line highlight, short jingle and rollup for a real win, bells and a flashing candle for a big
-// win on the steppers, BIG/MEGA/EPIC WIN banners on the 5-reel only, and a hand pay for the top
-// award or $2,000 and up. No autoplay, no turbo, no near-miss anything.
+// a line highlight, short jingle and rollup for a real win; from 10 bets a big win (50 bets a
+// huge one) with the table's celebration banner, a count-up meter and the cabinet lights chasing
+// (bells and the candle too on the steppers), and a hand pay for the top award or $2,000 and up.
+// Neon Nights' free games get their own moment when they start. No autoplay, no turbo, no
+// near-miss anything.
 
 import * as THREE from 'three';
 import type { TableView, TableViewCtx } from '../contract.ts';
@@ -19,12 +21,15 @@ import { buildCabinet, bulbMaterial, buttonAtUv, candleColor, payGlassPlacement,
 import { lineColor, paintMeters, paintOverlay, COIN_COLUMNS, type MeterValues } from './glass.ts';
 import { MachineSound } from './sound.ts';
 import { openPays } from './pays.ts';
+import { winTier, slotsTip, timesBet, neonHand } from './moments.ts';
+import { celebrate } from '../../table/celebrate.ts';
 
 /** IRS W-2G slot threshold from 2026: an attendant pays this by hand. */
 const HAND_PAY: Cents = 200_000;
-const BIG = 10;
-const MEGA = 25;
-const EPIC = 50;
+/** Bulb modes (cabinet.ts): idle chase, alternate flash, slow pulse, fast win chase. */
+const IDLE = 0;
+const FLASH = 1;
+const CHASE = 3;
 
 function findCabinet(ctx: TableViewCtx, machine: MachineId): { handle: CabinetHandle; owned: boolean } {
   for (const child of ctx.stage.anchor.children) {
@@ -149,6 +154,26 @@ export function mountSlots(ctx: TableViewCtx): TableView {
   const bannerAmount = el('div', 'amount');
   banner.append(bannerTier, bannerAmount);
   ctx.ui.append(banner);
+
+  // the count-up meter under the celebration banner: the win climbing, and how many bets it is
+  const countup = el('div', `slots-countup ${video ? 'video' : 'stepper'}`);
+  countup.hidden = true;
+  const countLabel = el('div', 'label', 'Win');
+  const countAmount = el('div', 'amount');
+  const countTimes = el('div', 'times');
+  countup.append(countLabel, countAmount, countTimes);
+  ctx.ui.append(countup);
+  const showCount = (label: string, win: Cents, bet: Cents) => {
+    countLabel.textContent = label;
+    countAmount.textContent = formatMoney(win);
+    countTimes.textContent = win >= bet ? timesBet(win, bet) : '';
+    countup.hidden = false;
+  };
+
+  // Tips: the one honest line, for as long as the player wants tips
+  const refreshTip = () => ctx.kit.tip(ctx.tips.on ? slotsTip(m) : null);
+  const unTips = ctx.tips.subscribe(refreshTip);
+  refreshTip();
 
   const winAt = new THREE.Vector3(((840 / 1024) - 0.5) * l.meters.w, l.meters.cy + l.meters.h / 2 + 0.028, l.plate.zBack + l.plate.depth + 0.02);
   let resultTag: { obj: THREE.Object3D; el: HTMLElement } | null = null;
@@ -433,21 +458,38 @@ export function mountSlots(ctx: TableViewCtx): TableView {
       await rollup({ win: before, credit: r.credit }, { win: r.running, credit: r.credit }, celebrate ? Math.min(1.4, 0.5 + (e.win / r.bet) * 0.05) : 0.4, celebrate);
     } else if (e.spin > 0) setMeters({ win: r.running });
     if (e.trigger) {
-      r.awarded += 10;
+      // the free games' own moment: the scatters that did it lit on the glass, the bulbs flashing
+      // in turn, the feature banner, then the reels take on the free games' tint
+      const free = m.kind === 'video' ? m.freeSpins : 10;
+      const times = m.kind === 'video' ? m.freeMultiplier : 1;
+      r.awarded += free;
       sound.feature();
-      await showBanner(e.spin === 0 ? `${e.scatters} scatters` : 'Retrigger', e.spin === 0 ? '10 free games' : '+10 free games', 'feature', 1900);
+      drawOverlay(lineCycle?.lines ?? [], scatterCells(e.stops));
+      bulbMode.value = FLASH;
+      await showBanner(e.spin === 0 ? 'Free games' : 'Retrigger', e.spin === 0 ? `${e.scatters} scatters · ${free} games, wins x${times}` : `${e.scatters} scatters · +${free} games`, 'feature', 2600);
+      bulbMode.value = IDLE;
       if (e.spin === 0) reelMats.forEach((mat) => mat.uniforms.uTint.value.set('#f3dcff'));
     }
     if (e.spin > 0) setFeatureTag(`Free game ${e.spin} of ${r.awarded} · won ${formatMoney(r.running)}`);
   };
 
-  const showBanner = async (tier: string, amount: string, kind: 'feature' | 'big' | 'jackpot', ms: number) => {
+  const showBanner = async (tier: string, amount: string, kind: 'feature', ms: number) => {
     banner.className = `slots-banner ${kind}`;
     bannerTier.textContent = tier;
     bannerAmount.textContent = amount;
     banner.hidden = false;
     await wait(ms);
     banner.hidden = true;
+  };
+
+  const party = { stage: ctx.stage, ui: ctx.ui, sfx: ctx.sfx };
+
+  /** What paid, in the machine's words: the pay glass row, the best line, or the free games. */
+  const handOf = (res: ResultEvent, last: ReelsEvent | null): string => {
+    if (res.freeSpins > 0) return `${res.freeSpins} free games`;
+    if (!last) return 'Win';
+    if (!video) return m.pays.find((p) => p.combo === last.combo)?.label ?? 'Win';
+    return neonHand(last.lines) ?? (last.scatters ? `${last.scatters} scatters` : 'Win');
   };
 
   const finish = async (res: ResultEvent) => {
@@ -457,6 +499,7 @@ export function mountSlots(ctx: TableViewCtx): TableView {
     const ratio = total / bet;
     const lastReels = lastReelsEvent;
     const top = lastReels && (lastReels.combo === 'three7' || lastReels.combo === 'threeWX') && lastReels.spin === 0;
+    const tier = winTier(total, bet);
     if (res.freeSpins > 0) {
       setFeatureTag(`Free games won ${formatMoney(res.freeWin)}`);
       reelMats.forEach((mat) => mat.uniforms.uTint.value.set(video ? '#ffffff' : '#fff4e2'));
@@ -464,66 +507,53 @@ export function mountSlots(ctx: TableViewCtx): TableView {
 
     if (total === 0) {
       setMeters({ win: null, credit: res.credit });
-    } else if (total >= HAND_PAY || top) {
-      // hand pay: the tower light flashes slowly, then the credits land
-      bulbMode.value = 2;
-      candleFlash = 2;
-      sound.handPayBell(6);
-      banner.className = 'slots-banner jackpot';
-      bannerTier.textContent = 'Jackpot · Hand pay';
-      bannerAmount.textContent = formatMoney(total);
-      banner.hidden = false;
-      await skippable(4200, 1500);
-      banner.hidden = true;
-      setMeters({ win: total, credit: res.credit });
-      showResult(`Hand pay ${formatMoney(total)} · ${formatMoney(total - bet, { sign: true })}`, 'win');
-      bulbMode.value = 1;
-      await wait(1200);
-      bulbMode.value = 0;
-      candleFlash = 0;
     } else if (total <= bet) {
       // a return that doesn't beat the stake: pay it quietly and show the net
       await rollup({ win: 0, credit: res.credit - total }, { win: total, credit: res.credit }, 0.45, false);
       showResult(`Paid ${formatMoney(total)} · ${formatMoney(total - bet, { sign: true })}`, 'push');
-    } else if (ratio < BIG) {
+    } else if (total >= HAND_PAY || top) {
+      // hand pay: the machine locks up with the amount showing, the tower light flashes slowly and
+      // the bulbs chase until the attendant has paid it; then the credits land all at once
+      bulbMode.value = CHASE;
+      candleFlash = 2;
+      sound.handPayBell(6);
+      celebrate(party, { title: 'Jackpot · Hand pay', sub: `${handOf(res, lastReels)} · ${timesBet(total, bet)}`, tier: tier ?? 'big' });
+      showCount('Hand pay', total, bet);
+      await skippable(4200, 1500);
+      countup.hidden = true;
+      setMeters({ win: total, credit: res.credit });
+      showResult(`Hand pay ${formatMoney(total)} · ${formatMoney(total - bet, { sign: true })}`, 'win');
+      await wait(1200);
+      bulbMode.value = IDLE;
+      candleFlash = 0;
+    } else if (!tier) {
       if (res.freeSpins === 0) sound.jingle(ratio >= 4 ? 5 : 3);
       const from = res.freeSpins > 0 ? total : 0;
       await rollup({ win: from, credit: res.credit - total }, { win: total, credit: res.credit }, Math.min(1.5, 0.6 + ratio * 0.12), true);
       showResult(`Paid ${formatMoney(total)} · ${formatMoney(total - bet, { sign: true })}`, 'win');
-    } else if (!video) {
-      // a big win on a stepper: a long bell rollup and the candle flashing, no banner
-      candleFlash = 1;
-      bulbMode.value = 1;
-      sound.jingle(6);
-      const seconds = Math.min(6, 3.2 + ratio / 40);
-      await Promise.race([rollup({ win: 0, credit: res.credit - total }, { win: total, credit: res.credit }, seconds, true), skippable(seconds * 1000, 1000)]);
-      setMeters({ win: total, credit: res.credit });
-      showResult(`Paid ${formatMoney(total)} · ${formatMoney(total - bet, { sign: true })}`, 'win');
-      await wait(900);
-      candleFlash = 0;
-      bulbMode.value = 0;
     } else {
-      // the 5-reel's tiers climb with the count: BIG, then MEGA, then EPIC
-      bulbMode.value = 1;
-      banner.className = 'slots-banner big';
-      banner.hidden = false;
-      const tierFor = (v: number) => (v >= EPIC * bet ? 'Epic win' : v >= MEGA * bet ? 'Mega win' : 'Big win');
-      sound.jingle(7);
-      const seconds = Math.min(8, 4 + ratio / 25);
-      const from = 0;
+      // big from 10 bets, huge from 50: the banner names it, the meter counts it up, the bulbs
+      // chase (and on the steppers the candle flashes with the bells)
+      bulbMode.value = CHASE;
+      if (!video) candleFlash = 1;
+      sound.jingle(video ? 7 : 6);
+      celebrate(party, { title: tier === 'huge' ? 'Huge win' : 'Big win', sub: `${handOf(res, lastReels)} · ${timesBet(total, bet)}`, tier });
+      const seconds = video ? Math.min(8, 4 + ratio / 25) : Math.min(6, 3.2 + ratio / 40);
+      let counted = false;
+      showCount('Win', 0, bet);
       await Promise.race([
-        rollup({ win: from, credit: res.credit - total }, { win: total, credit: res.credit }, seconds, true, (v) => {
-          bannerTier.textContent = tierFor(Math.max(v, BIG * bet));
-          bannerAmount.textContent = formatMoney(v);
+        rollup({ win: 0, credit: res.credit - total }, { win: total, credit: res.credit }, seconds, true, (v) => {
+          if (!counted) showCount('Win', v, bet);
         }),
         skippable(seconds * 1000, 1000),
       ]);
+      counted = true;
       setMeters({ win: total, credit: res.credit });
-      bannerTier.textContent = tierFor(total);
-      bannerAmount.textContent = formatMoney(total);
-      await skippable(1600, 0);
-      banner.hidden = true;
-      bulbMode.value = 0;
+      showCount('Win', total, bet);
+      await skippable(1400, 0);
+      countup.hidden = true;
+      bulbMode.value = IDLE;
+      candleFlash = 0;
       showResult(`Paid ${formatMoney(total)} · ${formatMoney(total - bet, { sign: true })}`, 'win');
     }
     lastWin = total > 0 ? total : null;
@@ -558,7 +588,8 @@ export function mountSlots(ctx: TableViewCtx): TableView {
       lastWin = v.last && v.last.win > 0 ? v.last.win : null;
       clearWinShow();
       banner.hidden = true;
-      bulbMode.value = 0;
+      countup.hidden = true;
+      bulbMode.value = IDLE;
       candleFlash = 0;
       refreshBet();
       settle(v);
@@ -660,10 +691,13 @@ export function mountSlots(ctx: TableViewCtx): TableView {
 
     dispose() {
       disposed = true;
+      unTips();
+      ctx.kit.tip(null);
       removeEventListener('pointerdown', onPointer);
       pays?.close();
       deck.remove();
       banner.remove();
+      countup.remove();
       clearResult();
       setFeatureTag(null);
       lineTag(null);

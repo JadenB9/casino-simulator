@@ -126,6 +126,21 @@ function centerRegions(): Region[] {
 
 export const REGIONS: Region[] = [...endRegions('R'), ...endRegions('L'), ...centerRegions()];
 
+/**
+ * The printed box a bet sits in, as [x0, z0, x1, z1] on the felt, for lighting it up: the pass
+ * line's long strip along the rail, a come bet's number box, a hardway or prop cell.
+ */
+export function spotRect(id: string, end: 1 | -1): [number, number, number, number] | null {
+  if (id === 'pass') {
+    const [x0, x1] = end === 1 ? [X_IN, PASS.x[1]] : [-PASS.x[1], -X_IN];
+    return [x0, PASS.z[0], x1, PASS.z[1]];
+  }
+  const come = /^come(\d+)$/.exec(id);
+  const key = come ? `${end === 1 ? 'R' : 'L'}|box${come[1]}` : `C|${id}`;
+  const s = REGIONS.find((r) => r.id === key)?.shape;
+  return s?.kind === 'rect' ? [s.x - s.w / 2, s.z - s.d / 2, s.x + s.w / 2, s.z + s.d / 2] : null;
+}
+
 /** A region id -> which end it's on and which spot it is ('R|box6' -> { end: 1, spot: 'box6' }). */
 export function parseRegion(id: string): { end: 1 | -1 | 0; spot: string } {
   const [e, rest] = id.split('|') as [string, string];

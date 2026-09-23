@@ -229,7 +229,8 @@ function deckMatrix(l: Layout, x: number, lift: number): THREE.Matrix4 {
 // ---------------------------------------------------------------------------------------------
 // bulbs: an instanced ring whose chase runs in the shader, from one shared clock
 
-export type BulbMode = 0 | 1 | 2;
+/** 0 idle chase, 1 alternate flash (free games starting), 2 slow pulse, 3 fast win chase. */
+export type BulbMode = 0 | 1 | 2 | 3;
 
 export function bulbMaterial(time: { value: number }, mode: { value: number }): THREE.MeshBasicMaterial {
   const m = new THREE.MeshBasicMaterial({ color: '#ffffff', toneMapped: false });
@@ -245,7 +246,9 @@ export function bulbMaterial(time: { value: number }, mode: { value: number }): 
         float chase = step(0.62, fract(bulbId / 3.0 - uTime * 2.4));
         float flash = step(0.5, fract(uTime * 3.0 + mod(bulbId, 2.0) * 0.5));
         float pulse = 0.5 + 0.5 * cos(uTime * 3.14159);
-        vLit = uMode < 0.5 ? 0.3 + 0.7 * chase : (uMode < 1.5 ? 0.22 + 0.78 * flash : 0.15 + 0.85 * pulse);`,
+        float run = fract(bulbId / 7.0 - uTime * 4.2);
+        float comet = 0.12 + 1.25 * run * run * run;
+        vLit = uMode < 0.5 ? 0.3 + 0.7 * chase : (uMode < 1.5 ? 0.22 + 0.78 * flash : (uMode < 2.5 ? 0.15 + 0.85 * pulse : comet));`,
       );
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', '#include <common>\nvarying float vLit;')
