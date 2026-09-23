@@ -43,7 +43,7 @@ within three standard errors of the published one:
 | | Pair Plus (40-30-6-3-1) | 7.276% | 7.264% (10M hands) |
 | Video poker, Jacks or Better 9/6 | Optimal holds | 0.456% (99.544% RTP) | 99.447% RTP (20M hands) |
 | Slots: Classic Sevens / Neon Nights / 5x Wild | | 94.428% / 95.374% / 89.820% RTP | 94.563% / 95.325% / 89.968% RTP |
-| Texas Hold'em | | no house edge, no rake | |
+| Texas Hold'em | | no house edge, no rake | 0 per seat within 1.2 SE (300K hands, 6 seats) |
 
 Where the outcome space is small enough the engines are also enumerated exactly (every roulette
 spot, every craps bet, all 4,998,398,275,503,360 baccarat six-card sequences, all 407,170,400
