@@ -22,3 +22,28 @@ export class Bucket {
     return true;
   }
 }
+
+/**
+ * One bucket per key (an account, an address), for limits that have to hold across sockets:
+ * how often someone may open a connection, say. The map is capped; past the cap the oldest key
+ * is forgotten, which only ever errs on the side of letting someone in.
+ */
+export class KeyedBuckets {
+  private readonly map = new Map<string, Bucket>();
+
+  constructor(
+    private readonly capacity: number,
+    private readonly perSecond: number,
+    private readonly maxKeys = 5_000,
+  ) {}
+
+  take(key: string, n = 1): boolean {
+    let b = this.map.get(key);
+    if (!b) {
+      if (this.map.size >= this.maxKeys) this.map.delete(this.map.keys().next().value!);
+      b = new Bucket(this.capacity, this.perSecond);
+      this.map.set(key, b);
+    }
+    return b.take(n);
+  }
+}
