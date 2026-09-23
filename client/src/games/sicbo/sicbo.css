@@ -1,0 +1,81 @@
+/* Sic Bo table: the last-rolls board, meters, the result board over the shaker, bet tooltips, the
+   betting clock and the players at the table. Built on the theme's glass panels and brass lines.
+   Small rolls are marked blue, big ones red and triples gold, as on the tables' result boards.
+   The bottom-left corner stays free for the site's back chip. */
+
+.sb-die { position: relative; display: inline-block; flex: none; width: 13px; height: 13px; border-radius: 3px; background: #f4efe3; box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.22), 0 1px 2px rgba(0, 0, 0, 0.5); }
+.sb-die .sb-pip { position: absolute; width: 21%; height: 21%; border-radius: 50%; background: #17130f; transform: translate(-50%, -50%); }
+.sb-die.f1 .sb-pip { width: 30%; height: 30%; }
+.sb-die.f1 .sb-pip, .sb-die.f4 .sb-pip { background: #b3141b; }
+.sb-die.big { width: 34px; height: 34px; border-radius: 7px; box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.18), 0 2px 5px rgba(0, 0, 0, 0.55); }
+
+.sb-history { position: fixed; top: var(--below-hud); left: 16px; padding: 8px 12px 10px; max-width: min(620px, calc(100vw - 420px)); }
+.sb-history .label { margin-bottom: 6px; }
+.sb-history-row { display: flex; flex-wrap: wrap; gap: 5px; align-items: flex-end; }
+.sb-history-empty { font-size: 14px; color: var(--ink-3); }
+.sb-roll { display: inline-grid; justify-items: center; gap: 3px; padding: 4px 4px 3px; border-radius: 4px; border: 1px solid rgba(255, 255, 255, 0.08); background: rgba(0, 0, 0, 0.25); }
+.sb-roll-dice { display: flex; gap: 2px; }
+.sb-roll-total { font-size: 15px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
+.sb-roll.small .sb-roll-total { color: #8fb8ff; }
+.sb-roll.big .sb-roll-total { color: #f08a7e; }
+.sb-roll.triple .sb-roll-total { color: var(--brass-hi); }
+.sb-roll.triple { border-color: rgba(241, 213, 154, 0.55); }
+.sb-roll.latest { padding: 5px 6px 4px; border-color: var(--brass-hi); margin-right: 4px; }
+.sb-roll.latest .sb-die { width: 17px; height: 17px; }
+.sb-roll.latest .sb-roll-total { font-size: 19px; }
+
+.sb-meters { position: fixed; top: var(--below-party); right: 16px; display: flex; gap: 18px; padding: 9px 16px; }
+.sb-meter { display: grid; gap: 2px; min-width: 78px; }
+.sb-meter-value { font-size: 21px; font-weight: 600; color: var(--ink); }
+
+.sb-board { position: absolute; display: flex; align-items: center; gap: 14px; padding: 10px 18px 10px 12px; pointer-events: none; animation: sb-rise 0.4s var(--ease); white-space: nowrap; }
+.sb-board-dice { display: flex; gap: 7px; }
+.sb-board-words { display: grid; gap: 2px; }
+.sb-board-head { display: flex; align-items: baseline; gap: 10px; }
+.sb-board-total { font-family: var(--serif); font-size: 34px; font-weight: 700; line-height: 1; color: var(--brass-hi); }
+.sb-board-tag { font-size: 19px; font-weight: 600; letter-spacing: 0.14em; }
+.sb-board-tag.small { color: #8fb8ff; }
+.sb-board-tag.big { color: #f08a7e; }
+.sb-board-tag.triple { color: var(--brass-hi); }
+.sb-board-detail { font-size: 14px; letter-spacing: 0.1em; color: var(--ink-2); }
+.sb-board-net { font-size: 16px; font-weight: 600; letter-spacing: 0.04em; }
+.sb-board-net.win { color: var(--win); }
+.sb-board-net.quiet { color: var(--ink-3); }
+@keyframes sb-rise { from { opacity: 0; transform: translateY(8px); } }
+
+.sb-board[hidden], .sb-clock[hidden], .sb-players[hidden], .sb-tip[hidden], .sb-color-note[hidden] { display: none; }
+#ui .sb-tip { pointer-events: none; }
+.sb-tip { position: fixed; z-index: 20; padding: 7px 11px; font-size: 15px; line-height: 1.35; max-width: 300px; }
+.sb-tip .sb-tip-name { font-weight: 600; color: var(--ink); letter-spacing: 0.03em; }
+.sb-tip .sb-tip-pays { color: var(--brass-hi); }
+.sb-tip .sb-tip-rule { color: var(--ink-2); font-size: 14px; }
+.sb-tip .sb-tip-edge { color: var(--ink-3); font-size: 13px; }
+.sb-tip .sb-tip-mine { color: var(--ink); }
+.sb-tip .sb-tip-other { color: var(--ink-2); }
+
+.sb-clock { position: absolute; display: grid; justify-items: center; gap: 3px; pointer-events: none; }
+.sb-clock-ring { position: relative; width: 58px; height: 58px; }
+.sb-clock-ring svg { width: 100%; height: 100%; display: block; }
+.sb-clock circle { fill: rgba(14, 12, 10, 0.72); stroke-width: 3.5; }
+.sb-clock .track { stroke: rgba(255, 255, 255, 0.14); }
+.sb-clock .left { fill: none; stroke: var(--brass-hi); stroke-linecap: round; transform: rotate(-90deg); transform-origin: 50% 50%; transition: stroke-dashoffset 0.25s linear; }
+.sb-clock.late .left { stroke: #e8a33a; }
+.sb-clock-secs { position: absolute; inset: 0; display: grid; place-items: center; font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.sb-clock-caption { font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-2); text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8); }
+
+.sb-players { position: fixed; top: calc(var(--below-party) + 72px); right: 16px; display: grid; gap: 5px; padding: 9px 12px; min-width: 230px; }
+.sb-player { display: grid; grid-template-columns: 16px 1fr auto auto; align-items: center; gap: 8px; font-size: 16px; }
+.sb-player.you .sb-player-name { color: var(--brass-hi); }
+.sb-player-chip { width: 14px; height: 14px; border-radius: 50%; box-shadow: 0 0 0 2px rgba(247, 242, 234, 0.85) inset, 0 0 0 1px rgba(0, 0, 0, 0.4); }
+.sb-player-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sb-player-status { font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); }
+.sb-player-status.ready { color: var(--brass-hi); }
+.sb-player-status.win { color: var(--win); }
+.sb-player-stack { color: var(--ink-2); }
+
+.sb-color-note { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: var(--ink-2); }
+
+@media (max-width: 900px) {
+  .sb-history { max-width: calc(100vw - 32px); }
+  .sb-meters { gap: 10px; padding: 7px 10px; }
+}
