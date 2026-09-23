@@ -8,7 +8,9 @@
 // shared is ever mutated, the per-instance colours live in that character's own buffer).
 //
 // Motion blends Idle, Walk and Run by weight (setMotion 0 = idle, 1 = walk, 2 = run) and the name
-// floats over the head as a CSS2D label.
+// floats over the head as a CSS2D label. Emotes are acted out on top of that (gesture): the arms
+// are turned by hand after the mixer has posed them, in the character's own frame, so a wave or
+// a cheer works whatever the bones' local axes are, and a cheer hops.
 
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -18,6 +20,7 @@ import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { DEFAULT_LOOK, OUTFITS, SKIN_TONES, type Look } from '../../../shared/src/look.ts';
 import type { Quality } from '../render/engine3d.ts';
 import type { Character, CharacterFactory } from './contract.ts';
+import type { EmoteId } from '../../../shared/src/protocol.ts';
 
 export const MODEL_BASE = `${import.meta.env.BASE_URL}assets/models/`;
 
@@ -205,6 +208,11 @@ class Person implements Character {
   private shownKey = '';
   private disposed = false;
   private tagOn = true;
+  private bones: Partial<Record<BoneKey, THREE.Object3D>> = {};
+  /** Bones this frame's gesture turned, and the mixer's pose for them (put back next frame). */
+  private readonly posed = new Map<THREE.Object3D, THREE.Quaternion>();
+  private act: { e: EmoteId; t: number } | null = null;
+  private modelY = 0;
 
   constructor(
     private readonly factory: Characters,
@@ -268,8 +276,15 @@ class Person implements Character {
     if (this.mesh) this.mesh.material = m;
   }
 
+  gesture(e: EmoteId): void {
+    this.act = { e, t: 0 };
+  }
+
   update(dt: number): void {
     if (!this.mixer) return;
+    // the mixer only rewrites bones its clips move: undo last frame's gesture first
+    for (const [bone, q] of this.posed) bone.quaternion.copy(q);
+    this.posed.clear();
     // idle -> walk -> run by weight, eased so starts and stops cross-fade
     const s = this.speed;
     const target = s <= 1 ? [1 - s, s, 0] : [0, 2 - s, s - 1];
@@ -281,6 +296,39 @@ class Person implements Character {
     const walk = this.actions[1];
     if (walk) walk.timeScale = 0.85 + 0.3 * Math.min(1, s);
     this.mixer.update(dt);
+    if (this.act) this.perform(dt);
+  }
+
+  /** Turn the arms (and hop) for the emote being acted out, on top of the mixer's pose. */
+  private perform(dt: number): void {
+    const act = this.act!;
+    const g = GESTURES[act.e];
+    act.t += dt;
+    if (!g || act.t >= g.dur || !this.model) {
+      this.act = null;
+      if (this.model) this.model.position.y = this.modelY;
+      return;
+    }
+    // ease into the pose and back out of it
+    const k = smooth(Math.min(1, act.t / 0.22)) * smooth(Math.min(1, (g.dur - act.t) / 0.3));
+    const pose = g.pose(act.t);
+    this.root.updateWorldMatrix(true, false);
+    this.root.getWorldQuaternion(_rootQ).invert();
+    for (const key of BONE_ORDER) {
+      const turn = pose[key];
+      const bone = this.bones[key];
+      if (!turn || !bone?.parent) continue;
+      // the turn is about the character's own axes (x left, y up, z forward): carry it into the
+      // bone's parent frame and put it in front of the bone's local rotation
+      bone.parent.updateWorldMatrix(true, false);
+      bone.parent.getWorldQuaternion(_parentQ).premultiply(_rootQ);
+      _turnQ.setFromEuler(_euler.set(turn[0] * k, turn[1] * k, turn[2] * k, 'YXZ'));
+      _turnQ.premultiply(_invQ.copy(_parentQ).invert()).multiply(_parentQ);
+      this.posed.set(bone, bone.quaternion.clone());
+      bone.quaternion.premultiply(_turnQ);
+      bone.updateMatrixWorld(true);
+    }
+    this.model.position.y = this.modelY + (pose.hop ?? 0) * k;
   }
 
   dispose(): void {
@@ -321,6 +369,14 @@ class Person implements Character {
     // skinned bounds don't follow the animation; the character is small, so never cull it alone
     m.frustumCulled = false;
     this.model = model;
+    this.modelY = model.position.y;
+    this.bones = {};
+    this.posed.clear();
+    for (const [key, name] of Object.entries(BONE_NAMES) as [BoneKey, string][]) {
+      // GLTFLoader drops the dots from node names ("UpperArm.R" becomes "UpperArmR")
+      const b = model.getObjectByName(name) ?? model.getObjectByName(name.replace('.', ''));
+      if (b) this.bones[key] = b;
+    }
     this.mesh = m;
     this.shownKey = key;
     this.template = tpl;
@@ -366,6 +422,78 @@ class Person implements Character {
     attr.needsUpdate = true;
   }
 }
+
+// --- gestures ---------------------------------------------------------------------------------
+
+type BoneKey = 'shoulderR' | 'upperR' | 'lowerR' | 'shoulderL' | 'upperL' | 'lowerL' | 'head';
+const BONE_NAMES: Record<BoneKey, string> = {
+  shoulderR: 'Shoulder.R',
+  upperR: 'UpperArm.R',
+  lowerR: 'LowerArm.R',
+  shoulderL: 'Shoulder.L',
+  upperL: 'UpperArm.L',
+  lowerL: 'LowerArm.L',
+  head: 'Head',
+};
+/** Parents before children, so each turn starts from its parent's new pose. */
+const BONE_ORDER: BoneKey[] = ['shoulderR', 'upperR', 'lowerR', 'shoulderL', 'upperL', 'lowerL', 'head'];
+
+/** Radians about the character's x (left), y (up) and z (forward) axes, applied z, then x, then y. */
+type Turn = [number, number, number];
+type Pose = Partial<Record<BoneKey, Turn>> & { hop?: number };
+
+/** The same turn for the left side: x stays, y and z change sign. */
+const mirror = (t: Turn): Turn => [t[0], -t[1], -t[2]];
+
+/**
+ * The character faces +z with its right hand on -x, so turning a hanging right arm by a negative
+ * angle about z raises it out to the side, and a negative angle about x swings it forward.
+ */
+const GESTURES: Record<EmoteId, { dur: number; pose: (t: number) => Pose }> = {
+  wave: {
+    dur: 2.4,
+    pose: (t) => ({ upperR: [-0.2, 0, -2.45], lowerR: [0, 0, 0.45 + 0.38 * Math.sin(t * 13)], head: [0, 0, 0.08] }),
+  },
+  cheer: {
+    dur: 1.7,
+    pose: (t) => {
+      const up: Turn = [-0.1, 0, -2.7];
+      const shake: Turn = [0, 0, 0.2 * Math.sin(t * 16)];
+      return { upperR: up, upperL: mirror(up), lowerR: shake, lowerL: mirror(shake), hop: t < 0.9 ? 0.15 * Math.abs(Math.sin((Math.PI * t) / 0.45)) : 0 };
+    },
+  },
+  clap: {
+    dur: 1.9,
+    pose: (t) => {
+      const upper: Turn = [-1.05, 0, -0.12];
+      const lower: Turn = [-0.55, 0.8 + 0.26 * Math.sin(t * 19), 0];
+      return { upperR: upper, upperL: mirror(upper), lowerR: lower, lowerL: mirror(lower) };
+    },
+  },
+  thumbs: {
+    dur: 1.9,
+    pose: () => ({ upperR: [-0.75, 0, -0.3], lowerR: [-1.25, 0.2, 0], head: [0.06, 0, 0] }),
+  },
+  shrug: {
+    dur: 1.7,
+    pose: () => {
+      const shoulder: Turn = [0, 0, -0.24];
+      const upper: Turn = [-0.15, 0, -0.32];
+      const lower: Turn = [-1.05, -0.55, 0];
+      return { shoulderR: shoulder, shoulderL: mirror(shoulder), upperR: upper, upperL: mirror(upper), lowerR: lower, lowerL: mirror(lower), head: [0, 0, 0.2] };
+    },
+  },
+};
+
+function smooth(x: number): number {
+  return x * x * (3 - 2 * x);
+}
+
+const _rootQ = new THREE.Quaternion();
+const _parentQ = new THREE.Quaternion();
+const _invQ = new THREE.Quaternion();
+const _turnQ = new THREE.Quaternion();
+const _euler = new THREE.Euler();
 
 /** Every outfit id per body, for pickers and checks. */
 export const ALL_OUTFITS = OUTFITS;

@@ -23,6 +23,8 @@ import { Interact } from './interact.ts';
 import { StationLod } from './lod.ts';
 import { Bloom, PixelRatio } from './bloom.ts';
 import type { MouseSettings } from './mouse.ts';
+import { Emotes, type CharacterSource } from './emotes.ts';
+import type { EmoteId } from '../../../shared/src/protocol.ts';
 import './world.css';
 
 export type { WorldStation } from './stations.ts';
@@ -81,6 +83,13 @@ export interface FloorWorld extends World {
   readonly mouseCaptured: boolean;
   /** Let a captured mouse go (something is opening over the floor). */
   releaseMouse(): void;
+  /**
+   * Show an emote over a player: 'me' for your own character, or a floor id, found through the
+   * source given to useRemotes(). False when that player has no character drawn.
+   */
+  showEmote(who: number | 'me', e: EmoteId): boolean;
+  /** Where showEmote finds other players' characters (the app's RemotePlayers); null to forget. */
+  useRemotes(source: CharacterSource | null): void;
 }
 
 export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Promise<FloorWorld> {
@@ -157,6 +166,9 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
   }
   progress(1);
 
+  const emotes = new Emotes();
+  let remotes: CharacterSource | null = null;
+
   let lastCalls = 0;
   let lastTris = 0;
   const focusAt = new THREE.Vector3();
@@ -207,6 +219,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
       interact.update(dt);
       lod.update(engine.camera, interact.seated);
       character.update(dt);
+      emotes.update(dt);
       const f = world.focus;
       lighting.setFocus(f && f.zone !== 'slots' && f.game !== 'videopoker' ? focusAt.copy(f.anchor.position) : null);
       lighting.update(dt);
@@ -229,7 +242,17 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
       return player.captured;
     },
     releaseMouse: () => player.release(),
+    showEmote(who, e) {
+      const ch = who === 'me' ? character : remotes?.character(who);
+      if (!ch) return false;
+      emotes.show(ch, e);
+      return true;
+    },
+    useRemotes(source) {
+      remotes = source;
+    },
     dispose() {
+      emotes.dispose();
       lod.dispose();
       interact.dispose();
       player.dispose();
