@@ -7,7 +7,7 @@ import { env, exports } from 'cloudflare:workers';
 import { signToken } from '../src/auth.ts';
 import { DEFAULT_LOOK } from '../../shared/src/look.ts';
 import { LOAN_AMOUNT, STARTING_BALANCE } from '../../shared/src/money.ts';
-import { ORIGIN, api, connect, type Client } from './helpers.ts';
+import { ORIGIN, TEST_PASSWORD, api, connect, type Client } from './helpers.ts';
 
 let ipSeq = 0;
 const freshIp = () => `198.51.100.${++ipSeq}`;
@@ -22,7 +22,7 @@ function loginRaw(body: string, ip: string, origin = ORIGIN): Promise<Response> 
   );
 }
 
-const loginAs = (name: unknown, ip = freshIp()) => loginRaw(JSON.stringify({ name }), ip);
+const loginAs = (name: unknown, ip = freshIp(), password: unknown = TEST_PASSWORD) => loginRaw(JSON.stringify({ name, password }), ip);
 
 async function account(name: string, ip = freshIp()): Promise<{ token: string; profile: any }> {
   const res = await loginAs(name, ip);

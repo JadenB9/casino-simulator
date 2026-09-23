@@ -4,12 +4,13 @@
 
 import { CLOSE, PROTOCOL_VERSION, type CreateTableResponse, type JoinByPinResponse, type LoanResponse, type LoginResponse, type MeResponse } from '../../shared/src/protocol.ts';
 import { isValidName } from '../../shared/src/names.ts';
+import { PASSWORD_MAX, PASSWORD_MIN, isValidPassword } from '../../shared/src/password.ts';
 import { parseLook, lookFromJson } from '../../shared/src/look.ts';
 import { CATALOG, isGameId, soloTableName, TABLE_ID_RE, variantOf } from '../../shared/src/games/catalog.ts';
 import { LOAN_AMOUNT } from '../../shared/src/money.ts';
 import { closeWith, corsHeaders, fail, json, originAllowed, readJson } from './http.ts';
-import { bearer, signToken, verifyToken, type Claims } from './auth.ts';
-import { bumpRate, escrowsOf, getAccount, loadProfile, loginAccount, setLook } from './db.ts';
+import { bearer, logIn, signToken, verifyToken, type Claims } from './auth.ts';
+import { bumpRate, escrowsOf, getAccount, loadProfile, setLook } from './db.ts';
 import { takeLoan } from './transfer.ts';
 import { leaderboard } from './leaderboard.ts';
 import type { CasinoFloor } from './floor/index.ts';
@@ -59,16 +60,20 @@ async function handleApi(request: Request, env: Env, route: string, cors: Record
 
   if (route === 'login' && request.method === 'POST') {
     if (!(await bumpRate(env.DB, 'casino-login', ip, 30, 60_000, now))) return fail(429, 'RATE_LIMITED', 'Too many logins. Try again in a minute.', cors);
-    const body = await readJson(request);
-    const name = (body as { name?: unknown } | null)?.name;
+    const body = (await readJson(request)) as { name?: unknown; password?: unknown } | null;
+    const name = body?.name;
     if (!isValidName(name)) return fail(400, 'BAD_NAME', 'Names are 3-16 letters, numbers or _.', cors);
-    const existing = await env.DB.prepare(`SELECT 1 AS hit FROM casino_accounts WHERE name = ?1`).bind(name).first();
-    if (!existing && !(await bumpRate(env.DB, 'casino-new', ip, 10, 3_600_000, now))) {
+    const password = body?.password;
+    if (!isValidPassword(password)) return fail(400, 'BAD_REQUEST', `Passwords are ${PASSWORD_MIN} to ${PASSWORD_MAX} characters.`, cors);
+    const r = await logIn(env.DB, name, password, ip, now);
+    if (!r.ok) {
+      // One message for a wrong password whichever part was wrong, and nothing about the account.
+      if (r.why === 'wrong') return fail(401, 'UNAUTHORIZED', 'Wrong name or password.', cors);
+      if (r.why === 'locked') return fail(429, 'RATE_LIMITED', 'Too many tries. Wait a few minutes and try again.', cors);
       return fail(429, 'RATE_LIMITED', 'Too many new accounts from here. Try again later.', cors);
     }
-    const { account } = await loginAccount(env.DB, name, now);
-    const token = await signToken(env.CASINO_TOKEN_SECRET, account.id, account.name, now);
-    const profile = await loadProfile(env.DB, account.id);
+    const token = await signToken(env.CASINO_TOKEN_SECRET, r.account.id, r.account.name, now);
+    const profile = await loadProfile(env.DB, r.account.id);
     return json({ token, profile: profile! } satisfies LoginResponse, 200, cors);
   }
 

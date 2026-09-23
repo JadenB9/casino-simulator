@@ -1,17 +1,21 @@
 import { describe, it, expect } from 'vitest';
 import { env } from 'cloudflare:workers';
 import { applyTransfer, buyInStatements, cashOutStatements, takeLoan } from '../src/transfer.ts';
-import { loginAccount } from '../src/db.ts';
+import { createAccount } from '../src/db.ts';
+
+// The hash doesn't matter to money; each account gets a salt of its own, as real ones do.
+const pass = () => ({ hash: `pbkdf2:1:${'0'.repeat(64)}`, salt: crypto.randomUUID().replace(/-/g, '') });
 
 async function account(name: string) {
-  return (await loginAccount(env.DB, name, Date.now())).account;
+  return (await createAccount(env.DB, name, pass(), Date.now()))!;
 }
 
 describe('D1 transfers', () => {
   it('a new account gets $50,000 and a grant row, once', async () => {
     const a = await account('grant_me');
     expect(a.balance).toBe(5_000_000);
-    await loginAccount(env.DB, 'GRANT_ME', Date.now() + 5);
+    // The same name in other letters is the same account: nothing new, no second grant.
+    expect(await createAccount(env.DB, 'GRANT_ME', pass(), Date.now() + 5)).toBeNull();
     const rows = await env.DB.prepare(`SELECT kind, amount FROM casino_ledger WHERE account_id = ?1`).bind(a.id).all();
     expect(rows.results).toEqual([{ kind: 'grant', amount: 5_000_000 }]);
   });
