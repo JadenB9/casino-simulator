@@ -187,34 +187,37 @@ if (checks.includes('lock')) {
   await page.close();
 }
 
-// --- drag-to-look without capture, and the recentre after a few seconds ---------------------------
+// --- drag-to-look without capture, and the recentre after a few seconds of no mouse ---------------
 if (checks.includes('drag')) {
   const { page } = await open('quality=low');
+  await page.evaluate(() => {
+    window.__sim = 0;
+    window.casino.engine.onFrame((dt) => (window.__sim += dt));
+  });
+  const sim = (t) => page.waitForFunction((t) => window.__sim >= t, t, { timeout: 240000, polling: 50 });
   await page.waitForTimeout(800);
   const start = await camYaw(page);
   await page.mouse.move(640, 420);
   await page.mouse.down();
   for (let i = 1; i <= 10; i++) await page.mouse.move(640 + i * 12, 420);
   await page.mouse.up();
-  await page.waitForTimeout(200);
+  const t0 = await page.evaluate(() => window.__sim);
   const dragged = await camYaw(page);
   const captured = await page.evaluate(() => window.casino.world.mouseCaptured);
-  // walk: for a moment the camera keeps the dragged heading, then swings in behind
-  await page.keyboard.down('KeyW');
-  await page.waitForTimeout(1200);
-  const early = await camYaw(page);
-  await page.keyboard.up('KeyW');
+  // walk sideways (D): the walker turns away from the camera; for the first seconds after the
+  // drag the camera stays where the mouse left it, then it swings round behind the walker
   await page.keyboard.down('KeyD');
-  await page.waitForTimeout(700);
-  await page.keyboard.up('KeyD');
-  await page.keyboard.down('KeyW');
-  await page.waitForTimeout(3500);
+  await sim(t0 + 2.2);
+  const early = await camYaw(page);
+  await sim(t0 + 7);
   const late = await camYaw(page);
-  await page.keyboard.up('KeyW');
+  await page.keyboard.up('KeyD');
+  const drift = (a, b) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
   console.log(JSON.stringify({ check: 'drag', start, dragged, captured, early, late }));
-  if (Math.abs(dragged.yaw - start.yaw) < 0.3) fail('drag did not turn the camera');
+  if (drift(dragged.yaw, start.yaw) < 0.3) fail('drag did not turn the camera');
   if (captured) fail('a drag captured the mouse');
-  if (Math.abs(early.yaw - dragged.yaw) > 0.05) fail('camera recentred within seconds of a drag');
+  if (drift(early.yaw, dragged.yaw) > 0.05) fail(`camera recentred within seconds of a drag (${dragged.yaw} -> ${early.yaw})`);
+  if (drift(late.yaw, dragged.yaw) < 0.3) fail(`camera never swung back behind the walker (${dragged.yaw} -> ${late.yaw})`);
   await page.close();
 }
 
