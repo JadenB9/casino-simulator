@@ -1,20 +1,25 @@
-// Slot machines: three one-player machines, one variant each (see machines.ts). A spin is one
-// action and one round: the bet comes off the stack, the reels are drawn and scored, the win
-// goes back on, all in the same step. There is no betting window, no timer and nothing live
-// between spins, so leaving is always clean.
+// Slot machines: six one-player machines, one variant each (see lineup.ts). A spin is one action
+// and one round: the bet comes off the stack, the reels are drawn and scored, the win goes back
+// on, all in the same step. There is no betting window, no timer and nothing live between spins,
+// so leaving is always clean.
 
 import { type Cents, DOLLAR, checkBet } from '../../money.ts';
 import { randInt } from '../../rng.ts';
 import type { EngineCtx, GameEngine, Refusal, Step, TableConfig, TableMode } from '../../engine.ts';
 import { refuse, seatOf } from '../../engine.ts';
 import { isInt, isObj } from '../../protocol.ts';
-import { MACHINES, NEON, betOf, isMachineId, type Machine, type MachineId } from './machines.ts';
+import type { Rng } from '../../rng.ts';
+import { NEON, betOf } from './machines.ts';
 import { neonLineWins, playNeon, spinSevens, spinWild, type NeonSpin } from './rules.ts';
-import type { LineWinView, ReelsEvent, ResultEvent, SlotsAction, SlotsView, SpinEvent } from './protocol.ts';
+import { LINEUP, isSlotId, reelLengths, type AnyMachine, type SlotId } from './lineup.ts';
+import { settleDiamonds } from './diamonds.ts';
+import { settleCherries } from './cherries.ts';
+import { settleGoldRush } from './goldrush.ts';
+import type { LineWinView, ReelsEvent, ResultEvent, SlotsAction, SlotsView, SpinEvent, SpinSettlement } from './protocol.ts';
 
 export interface SlotsState {
   cfg: TableConfig;
-  machine: MachineId;
+  machine: SlotId;
   round: number;
   denom: Cents;
   coins: number;
@@ -22,12 +27,19 @@ export interface SlotsState {
   last: SlotsView['last'];
 }
 
-function machineOf(variant: string): Machine {
-  return MACHINES[isMachineId(variant) ? variant : 'sevens'];
+function machineOf(variant: string): AnyMachine {
+  return LINEUP[isSlotId(variant) ? variant : 'sevens'];
 }
 
+/** The machines that settle a spin in their own file: the reels events, the win, the final stops. */
+const SETTLE: Partial<Record<SlotId, (rng: Rng, unit: Cents) => SpinSettlement>> = {
+  diamonds: settleDiamonds,
+  cherries: settleCherries,
+  goldrush: settleGoldRush,
+};
+
 /** Every bet this machine can take, for the limits: smallest, largest and their common step. */
-function betRange(m: Machine): { min: Cents; max: Cents; step: Cents } {
+function betRange(m: AnyMachine): { min: Cents; max: Cents; step: Cents } {
   const bets: Cents[] = [];
   for (const d of m.denoms) for (let c = 1; c <= m.maxCoins; c++) bets.push(betOf(m, c, d));
   const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
@@ -54,9 +66,8 @@ function parseAction(raw: unknown): SlotsAction | null {
 }
 
 /** The window a new machine shows before its first spin. Cosmetic only; nothing is paid on it. */
-function idleStops(m: Machine, ctx: EngineCtx): number[] {
-  const lengths = m.kind === 'video' ? m.strips.map((r) => r.length) : m.reels.map((r) => r.length);
-  return lengths.map((n) => randInt(ctx.rng, n));
+function idleStops(m: AnyMachine, ctx: EngineCtx): number[] {
+  return reelLengths(m).map((n) => randInt(ctx.rng, n));
 }
 
 /** The symbol a 3-reel pay glass row is about ('BAR' for any three bars). */
@@ -94,7 +105,7 @@ function stepperHits(symbols: readonly string[], combo: string | null): boolean[
 }
 
 function spin(s: SlotsState, seat: number, a: SlotsAction, stack: Cents, ctx: EngineCtx): Step<SlotsState> {
-  const m = MACHINES[s.machine];
+  const m = LINEUP[s.machine];
   const bet = betOf(m, a.coins, a.denom);
   const credit = stack - bet;
   s.round++;
@@ -107,8 +118,16 @@ function spin(s: SlotsState, seat: number, a: SlotsAction, stack: Cents, ctx: En
   let win = 0;
   let freeWin = 0;
   let freeSpins = 0;
+  const settle = SETTLE[s.machine];
 
-  if (m.kind === 'video') {
+  if (settle) {
+    const r = settle(ctx.rng, unit);
+    events.push(...r.reels);
+    win = r.win;
+    freeWin = r.freeWin;
+    freeSpins = r.freeSpins;
+    s.stops = r.stops;
+  } else if (m.id === 'neon') {
     const play = playNeon(ctx.rng);
     win = play.credits * unit;
     events.push(reelsFromNeon(play.base, 0, play.free.length, unit, 1));
@@ -119,7 +138,7 @@ function spin(s: SlotsState, seat: number, a: SlotsAction, stack: Cents, ctx: En
     });
     freeSpins = play.free.length;
     s.stops = (play.free.at(-1) ?? play.base).stops;
-  } else {
+  } else if (m.id === 'sevens' || m.id === 'wild') {
     const r = m.id === 'sevens' ? spinSevens(ctx.rng) : spinWild(ctx.rng);
     win = r.pay * unit;
     const hits = stepperHits(r.symbols, r.combo);
@@ -167,10 +186,10 @@ export const engine: GameEngine<SlotsState, SlotsAction, SlotsView> = {
   act(state, seat, action, ctx): Step<SlotsState> | Refusal {
     const me = seatOf(ctx, seat);
     if (!me) return refuse('NOT_SEATED', 'Insert money first.');
-    const m = MACHINES[state.machine];
+    const m = LINEUP[state.machine];
     if (!m.denoms.includes(action.denom)) return refuse('BAD_REQUEST', "That coin value isn't on this machine.");
     if (action.coins < 1 || action.coins > m.maxCoins) {
-      return refuse('BAD_REQUEST', m.kind === 'video' ? `Bet 1 to ${m.maxCoins} credits per line.` : `Bet 1 to ${m.maxCoins} coins.`);
+      return refuse('BAD_REQUEST', m.kind === 'stepper' ? `Bet 1 to ${m.maxCoins} coins.` : `Bet 1 to ${m.maxCoins} credits per line.`);
     }
     const bet = betOf(m, action.coins, action.denom);
     if (checkBet(bet, state.cfg.limits.default)) return refuse('LIMIT', "That bet is outside this machine's limits.");

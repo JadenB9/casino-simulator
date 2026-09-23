@@ -55,7 +55,7 @@ inside 3. Seeds are fixed, so `npm run test:mc` reproduces these exactly.
 | | | Bet, surrendering every tie | 3.698% | 3.719% (10M rounds, z +0.69) |
 | | | Tie bet | 18.650% | 18.642% (10M rounds, z −0.08) |
 | Video poker | Jacks or Better 9/6, 5 coins, optimal hold list | | 99.544% RTP | 99.447% (20M hands, z −1.00) |
-| Slots | three machines, published reel strips | A "Classic Sevens" (3 reels) | 94.428% RTP | 94.563% (10M spins, z +0.65) |
+| Slots | six machines, published reel strips | A "Classic Sevens" (3 reels) | 94.428% RTP | 94.563% (10M spins, z +0.65) |
 | | | B "Neon Nights" (5x3, 20 lines, free spins) | 95.374% RTP | 95.325% (10M spins, z −0.41) |
 | | | C "5x Wild" (3 reels, high volatility) | 89.820% RTP | 89.968% (50M spins, z +0.39) |
 | Sic Bo | three dice in an automated shaker, US (Atlantic City) pay table, Odd and Even offered | Small, Big, Odd, Even (lose to any triple) | 2.778% | 2.755%, 2.781%, 2.754%, 2.782% (4M rolls, z −0.46, +0.06, −0.48, +0.08) |
@@ -63,6 +63,10 @@ inside 3. Seeds are fixed, so `npm run test:mc` reproduces these exactly.
 | | | Totals: 7 or 14 at 12:1 (best) to 9 or 12 at 6:1 (worst) | 9.722% to 18.981% | 9.507% on 7, 19.080% on 9 (4M rolls, z −1.30, +0.88) |
 | | | Specific triple (180:1) / any triple (30:1) | 16.204% / 13.889% | 15.799% on 6-6-6, 14.197% (4M rolls, z −0.66, +1.21) |
 | | | Double (10:1) / two-dice combination (5:1) | 18.519% / 16.667% | 18.524% on 5-5, 16.857% on 2-5 (4M rolls, z +0.04, +1.84) |
+||||||| 98527a4
+| | | D "Diamond Line" (3 reels, doubling diamond wild) | 94.983% RTP | 94.929% (10M spins, z −0.28) |
+| | | E "Lucky Cherries" (5x3, 10 lines, Cherry Wheel) | 94.028% RTP | 94.126% (10M spins, z +0.90) |
+| | | F "Gold Rush" (5x4, 40 lines, sticky-wild free games) | 92.994% RTP | 93.138% (10M spins, z +1.22) |
 | Texas Hold'em | no-limit, blinds, Poker TDA rules, no rake | | no house edge | every seat within 1.2 SE of 0 (300K hands, 6 seats); deals uniform (chi-square z 0.45, 2M deals) |
 
 The blackjack figure is for exactly these rules. The often-quoted 0.26-0.28% assumes aces can be

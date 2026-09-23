@@ -1,8 +1,9 @@
-// The three cabinets, built in code: a side profile extruded to the cabinet's width, a bezel plate
+// The first three cabinets, built in code: a side profile extruded to the cabinet's width, a bezel plate
 // with the reel window cut out of it, printed glass (pay glass, belly, topper face, deck buttons)
 // from one atlas, the reels, the meters, a bulb ring and a candle. Geometry is merged by material
 // and cached per machine, so a bank of twenty machines on the floor costs about a dozen draw
-// calls each and shares every buffer and texture.
+// calls each and shares every buffer and texture. The geometry helpers are exported for the
+// later machines' cabinets (build.ts).
 
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -113,7 +114,7 @@ export function candleColor(denom: number): string {
 // ---------------------------------------------------------------------------------------------
 // geometry helpers
 
-function extrudeProfile(points: ZY[], width: number, bevel: number): THREE.BufferGeometry {
+export function extrudeProfile(points: ZY[], width: number, bevel: number): THREE.BufferGeometry {
   const shape = new THREE.Shape(points.map(([z, y]) => new THREE.Vector2(z, y)));
   const depth = width - 2 * bevel;
   const g = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: true, bevelSize: bevel, bevelThickness: bevel, bevelSegments: 2, curveSegments: 4 });
@@ -123,7 +124,7 @@ function extrudeProfile(points: ZY[], width: number, bevel: number): THREE.Buffe
   return g;
 }
 
-function roundedRect(path: THREE.Path, x: number, y: number, w: number, h: number, r: number): void {
+export function roundedRect(path: THREE.Path, x: number, y: number, w: number, h: number, r: number): void {
   path.moveTo(x + r, y);
   path.lineTo(x + w - r, y);
   path.quadraticCurveTo(x + w, y, x + w, y + r);
@@ -136,14 +137,14 @@ function roundedRect(path: THREE.Path, x: number, y: number, w: number, h: numbe
 }
 
 /** A slab extruded toward +z from zBack, with optional holes. */
-function slab(outline: THREE.Shape, depth: number, bevel: number, zBack: number): THREE.BufferGeometry {
+export function slab(outline: THREE.Shape, depth: number, bevel: number, zBack: number): THREE.BufferGeometry {
   const g = new THREE.ExtrudeGeometry(outline, { depth: depth - 2 * bevel, bevelEnabled: true, bevelSize: bevel, bevelThickness: bevel, bevelSegments: 2, curveSegments: 8 });
   g.translate(0, 0, zBack + bevel);
   return g;
 }
 
 /** Point every uv of a flat (x, y) shape into an atlas rectangle, by position within its bounds. */
-function uvFromBounds(g: THREE.BufferGeometry, rect: Rect): void {
+export function uvFromBounds(g: THREE.BufferGeometry, rect: Rect): void {
   g.computeBoundingBox();
   const b = g.boundingBox!;
   const pos = g.getAttribute('position');
@@ -156,14 +157,14 @@ function uvFromBounds(g: THREE.BufferGeometry, rect: Rect): void {
 }
 
 /** A flat printed panel of size w x h, its uvs covering `rect` of the atlas. */
-function panel(w: number, h: number, rect: Rect, m: THREE.Matrix4): THREE.BufferGeometry {
+export function panel(w: number, h: number, rect: Rect, m: THREE.Matrix4): THREE.BufferGeometry {
   const g = new THREE.PlaneGeometry(w, h).toNonIndexed();
   uvFromBounds(g, rect);
   g.applyMatrix4(m);
   return g;
 }
 
-function solid(g: THREE.BufferGeometry, rect: Rect): THREE.BufferGeometry {
+export function solid(g: THREE.BufferGeometry, rect: Rect): THREE.BufferGeometry {
   const uv = g.getAttribute('uv');
   const u = (rect.x + rect.w / 2) / ATLAS_W;
   const v = 1 - (rect.y + rect.h / 2) / ATLAS_H;
@@ -171,20 +172,20 @@ function solid(g: THREE.BufferGeometry, rect: Rect): THREE.BufferGeometry {
   return g;
 }
 
-const M = () => new THREE.Matrix4();
-const at = (x: number, y: number, z: number, rx = 0, ry = 0, rz = 0) =>
+export const M = () => new THREE.Matrix4();
+export const at = (x: number, y: number, z: number, rx = 0, ry = 0, rz = 0) =>
   M().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz)), new THREE.Vector3(1, 1, 1));
 
-function box(w: number, h: number, d: number, m: THREE.Matrix4): THREE.BufferGeometry {
+export function box(w: number, h: number, d: number, m: THREE.Matrix4): THREE.BufferGeometry {
   return new THREE.BoxGeometry(w, h, d).toNonIndexed().applyMatrix4(m);
 }
 
-function cyl(r: number, h: number, m: THREE.Matrix4, seg = 20): THREE.BufferGeometry {
+export function cyl(r: number, h: number, m: THREE.Matrix4, seg = 20): THREE.BufferGeometry {
   return new THREE.CylinderGeometry(r, r, h, seg).toNonIndexed().applyMatrix4(m);
 }
 
 /** A thin frame of four bars around a w x h panel. */
-function frame(w: number, h: number, t: number, d: number, m: THREE.Matrix4): THREE.BufferGeometry[] {
+export function frame(w: number, h: number, t: number, d: number, m: THREE.Matrix4): THREE.BufferGeometry[] {
   return [
     box(w + 2 * t, t, d, M().multiplyMatrices(m, at(0, h / 2 + t / 2, 0))),
     box(w + 2 * t, t, d, M().multiplyMatrices(m, at(0, -h / 2 - t / 2, 0))),
@@ -193,7 +194,7 @@ function frame(w: number, h: number, t: number, d: number, m: THREE.Matrix4): TH
   ];
 }
 
-function merge(parts: THREE.BufferGeometry[]): THREE.BufferGeometry {
+export function merge(parts: THREE.BufferGeometry[]): THREE.BufferGeometry {
   // every part must carry the same attributes, unindexed
   const clean = parts.map((p) => {
     const g = p.index ? p.toNonIndexed() : p;

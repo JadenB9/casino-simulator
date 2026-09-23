@@ -9,7 +9,7 @@ enumerates the game exactly. Where both exist, they agree to the digits shown.
 |---|---|---|
 | [1](#1-three-card-poker) | Three Card Poker (Ante/Play with 1/4/5 Ante Bonus, Pair Plus 40-30-6-3-1) | Ante house edge 3.3730% with Q-6-4 strategy; Pair Plus 7.2760% |
 | [2](#2-video-poker-jacks-or-better-96) | Video poker, Jacks or Better 9/6 | 99.5439% with the hold list in 2.4 (5 coins) |
-| [3](#3-slot-machines) | Slots: three machines with published reel strips | A 94.4275%, B 95.3741%, C 89.8204% |
+| [3](#3-slot-machines) | Slots: six machines with published reel strips | A 94.4275%, B 95.3741%, C 89.8204%, D 94.9829%, E 94.0280%, F 92.9936% |
 | [4](#4-texas-holdem-no-limit-cash-game) | Texas Hold'em, no-limit, blinds, no rake | No house edge; rules follow the Poker TDA and Robert's Rules |
 
 ## 0. Conventions and test targets
@@ -456,9 +456,9 @@ Reproduce any row with `node video-poker-job96.mjs --hand=As,Ks,Qs,Js,5s`.
 | Multi-denomination | 7.61% | 92.4% |
 | All slots | 7.83% | 92.2% |
 
-These are actual results over a year, not theoretical returns, so they are approximate. Our three machines
-(89.8%, 94.4% and 95.4%) span about the same range as the Strip's denominations (roughly 88.7% to 95.1%)
-and are far above both legal minimums.
+These are actual results over a year, not theoretical returns, so they are approximate. Our six machines
+(89.8% to 95.4%) span about the same range as the Strip's denominations (roughly 88.7% to 95.1%) and are
+far above both legal minimums.
 
 ### 3.3 Machine A: "Classic Sevens" (3 reels, 1 line, weighted virtual reels)
 
@@ -847,6 +847,465 @@ Top award (three 5X): 1 in 93312 spins
   formulas above do; the per-spin SD then includes the feature.
 - **Money:** win (cents) = pay (coins) x coins bet x denomination (cents). For B,
   win = pay x credits per line x denomination. Progressive jackpots are out of scope.
+
+### 3.7 Machine D: "Diamond Line" (3 reels, 1 line, doubling diamond wild)
+
+- **Format:** 3 reels, 22 physical stops (11 symbols alternating with 11 blanks), **64 virtual stops per
+  reel**, one center payline, 1-3 coins at $1, $2 or $5. Pays are per coin and linear, so one RTP covers
+  every bet. Cycle: 64^3 = 262,144.
+- **Diamond wild:** the DIAMOND substitutes for every symbol, cherries included, and each DIAMOND in a win
+  doubles it: one pays x2, two pay x4. Three DIAMONDs pay the top award.
+- **Cherries** pay anywhere on the line: one pays 2, two pay 5, three pay 10. A DIAMOND counts as a
+  cherry, so a DIAMOND on its own pays one cherry doubled (4), and two DIAMONDs with any other symbol pay
+  two cherries x4 (20) unless they make something better.
+- **Evaluation:** only the highest win on the line is paid. "Any three bars" is any mix of single, double
+  and triple bars.
+- **No near-miss weighting:** the blanks beside the DIAMOND and the Seven weigh 3, below each reel's
+  average blank weight (39/11 or 40/11).
+
+| Payline | Pays per coin | With one diamond | With two diamonds |
+|---|---:|---:|---:|
+| Diamond Diamond Diamond | 1,000 | | |
+| Seven x3 | 80 | 160 | 320 |
+| Triple bar x3 | 40 | 80 | 160 |
+| Double bar x3 | 25 | 50 | 100 |
+| Single bar x3 | 10 | 20 | 40 |
+| Any three bars | 5 | 10 | (two diamonds and a bar make three of that bar) |
+| Three cherries | 10 | 20 | 40 |
+| Any two cherries | 5 | 10 | 20 |
+| Any one cherry | 2 | 4 | |
+
+**Reel strips and weights** (weight = virtual stops out of 64):
+
+| Stop | Reel 1 | Weight | Reel 2 | Weight | Reel 3 | Weight |
+|---:|:---|---:|:---|---:|:---|---:|
+| 0 | Diamond | 2 | Diamond | 2 | Diamond | 1 |
+| 1 | blank | 3 | blank | 3 | blank | 3 |
+| 2 | Single bar | 3 | Double bar | 3 | Single bar | 3 |
+| 3 | blank | 4 | blank | 4 | blank | 4 |
+| 4 | Cherry | 2 | Single bar | 3 | Triple bar | 2 |
+| 5 | blank | 4 | blank | 4 | blank | 4 |
+| 6 | Double bar | 3 | Triple bar | 2 | Double bar | 3 |
+| 7 | blank | 4 | blank | 3 | blank | 4 |
+| 8 | Single bar | 3 | Cherry | 2 | Cherry | 1 |
+| 9 | blank | 3 | blank | 4 | blank | 3 |
+| 10 | Seven | 2 | Single bar | 3 | Seven | 2 |
+| 11 | blank | 3 | blank | 3 | blank | 3 |
+| 12 | Triple bar | 2 | Seven | 2 | Single bar | 3 |
+| 13 | blank | 4 | blank | 3 | blank | 4 |
+| 14 | Single bar | 3 | Double bar | 2 | Double bar | 3 |
+| 15 | blank | 4 | blank | 4 | blank | 4 |
+| 16 | Double bar | 2 | Single bar | 3 | Triple bar | 2 |
+| 17 | blank | 3 | blank | 4 | blank | 4 |
+| 18 | Cherry | 1 | Triple bar | 2 | Single bar | 3 |
+| 19 | blank | 4 | blank | 4 | blank | 4 |
+| 20 | Triple bar | 2 | Cherry | 1 | Cherry | 1 |
+| 21 | blank | 3 | blank | 3 | blank | 3 |
+| **Total** | | **64** | | **64** | | **64** |
+
+**Exact results** (all 262,144 virtual-stop combinations, through the engine's `spinDiamonds`):
+
+| | Value |
+|---|---|
+| RTP | **248,992 / 262,144 = 94.9829%** |
+| Hit frequency | 55,967 / 262,144 = 21.3497% |
+| SD per spin | 6.0563 (units of the amount bet) |
+| Top award (three diamonds) | 1 in 65,536 spins |
+
+A lone diamond (4 per coin, a quarter of the return) and a lone cherry (2 per coin) carry half the return
+between them, so this is a steady machine; the top award and the x4 wins give it its reach.
+
+```text
+MACHINE D - Diamond Line (3 reels, 1 line, 64 virtual stops per reel)
+Symbol weights per reel (of 64):
+  DI  weights  2  2  1   physical stops 1 1 1
+  7   weights  2  2  2   physical stops 1 1 1
+  3B  weights  4  4  4   physical stops 2 2 2
+  2B  weights  5  5  6   physical stops 2 2 2
+  1B  weights  9  9  9   physical stops 3 3 3
+  CH  weights  3  3  2   physical stops 2 2 2
+  BL  weights 39 39 40   physical stops 11 11 11
+
+Combination                       Pays   Count  Probability    Return
+Diamond Diamond Diamond           1000       4   0.00001526  0.015259
+Three 7 with 2 diamonds            320      16   0.00006104  0.019531
+Three 3B with 2 diamonds           160      32   0.00012207  0.019531
+Three 7 with 1 diamond             160      20   0.00007629  0.012207
+Three 2B with 2 diamonds           100      44   0.00016785  0.016785
+Three 3B with 1 diamond             80      80   0.00030518  0.024414
+Three 7                             80       8   0.00003052  0.002441
+Three 2B with 1 diamond             50     145   0.00055313  0.027657
+Three 1B with 2 diamonds            40      72   0.00027466  0.010986
+Three 3B                            40      64   0.00024414  0.009766
+Three cherries with 2 diamonds      40      20   0.00007629  0.003052
+Three 2B                            25     150   0.00057220  0.014305
+Three 1B with 1 diamond             20     405   0.00154495  0.030899
+Two cherries with 2 diamonds        20     316   0.00120544  0.024109
+Three cherries with 1 diamond       20      33   0.00012589  0.002518
+Two cherries with 1 diamond         10    1558   0.00594330  0.059433
+Any three bars with 1 diamond       10    1062   0.00405121  0.040512
+Three 1B                            10     729   0.00278091  0.027809
+Three cherries                      10      18   0.00006866  0.000687
+Any three bars                       5    5213   0.01988602  0.099430
+Two cherries                         5    1257   0.00479507  0.023975
+One cherry with 1 diamond            4   16165   0.06166458  0.246658
+One cherry                           2   28556   0.10893250  0.217865
+No win                               0  206177   0.78650284  0.000000
+Total                                   262144
+
+Return to player: 248992 / 262144 = 94.9829%
+Hit frequency:    55967 / 262144 = 21.3497%
+Standard deviation per spin: 6.0563 (units of the amount bet)
+Top award (three diamonds): 1 in 65536 spins
+```
+
+### 3.8 Machine E: "Lucky Cherries" (5x3 video slot, 10 lines, Cherry Wheel)
+
+- **Format:** 5 reels x 3 rows, 10 fixed lines, 1-5 credits per line at 1, 5 or 25 cents (the total bet
+  is 10 x credits x coin value; every pay scales with it). Each reel is a 30-stop strip; the server draws
+  each reel's stop `s` uniformly from 0-29 and the reel shows `strip[s]`, `strip[s+1]` and `strip[s+2]`.
+  Cycle: 30^5 = 24,300,000.
+- **Symbols:** Seven, Bell, Melon, Grapes, Plum, Orange, Lemon, Cherry, and BONUS (one on every reel). No
+  wild.
+- **Line wins:** adjacent matches from reel 1, paid per credit on the line. Cherries pay from two, every
+  other fruit from three. BONUS never completes a line. Line wins on different lines add up.
+- **Cherry Wheel:** 3, 4 or 5 BONUS symbols anywhere spin the wheel on the top box. It has 20 equal
+  segments, each equally likely and drawn after the window (so it is independent of it), clockwise from
+  the pointer: 5, 10, 6, 15, 5, 10, 6, 20, 5, 12, 6, 25, 5, 10, 6, 15, 5, 12, 6, 100 (mean 14.2). The
+  prize is paid in total bets, times 1, 2 or 5 for three, four or five BONUS, on top of the line wins.
+- **Math:** the lines by enumeration of every window (and again from symbol counts, since every line sees
+  the same distribution); the wheel in closed form from the BONUS count distribution:
+  E[wheel] = sum over k of P(K = k) m(k) E[V]; for the SD,
+  E[X^2] = E[W^2] + 2 sum_k E[W 1(K = k)] m(k) E[V] + sum_k P(K = k) m(k)^2 E[V^2].
+
+| Fruit | 5 | 4 | 3 | 2 |
+|---|---:|---:|---:|---:|
+| Seven | 5,000 | 750 | 150 | |
+| Bell | 1,000 | 250 | 60 | |
+| Melon | 750 | 200 | 50 | |
+| Grapes | 500 | 150 | 40 | |
+| Plum | 250 | 75 | 25 | |
+| Orange | 200 | 60 | 20 | |
+| Lemon | 150 | 50 | 15 | |
+| Cherry | 200 | 50 | 10 | 3 |
+
+| BONUS symbols | Chance per spin | Wheel prize |
+|---|---:|---|
+| 3 | 0.810000% | segment x1 the total bet |
+| 4 | 0.045000% | segment x2 |
+| 5 | 0.001000% | segment x5 |
+
+Lines (rows 0-2 on reels 1-5): 1 = 11111, 2 = 00000, 3 = 22222, 4 = 01210, 5 = 21012, 6 = 10001,
+7 = 12221, 8 = 00122, 9 = 22100, 10 = 12101.
+
+**Reel strips** (30 stops each):
+
+| Stop | Reel 1 | Reel 2 | Reel 3 | Reel 4 | Reel 5 |
+|---:|:---|:---|:---|:---|:---|
+| 0 | Cherry | Cherry | Seven | Bell | Lemon |
+| 1 | Lemon | Orange | Lemon | Orange | Plum |
+| 2 | Seven | Plum | Cherry | Lemon | Bell |
+| 3 | Plum | Cherry | Orange | Grapes | Orange |
+| 4 | Cherry | Grapes | Grapes | Cherry | Grapes |
+| 5 | Orange | Lemon | Plum | Plum | Lemon |
+| 6 | Melon | Bell | Lemon | Melon | Cherry |
+| 7 | Grapes | Cherry | Melon | Orange | Plum |
+| 8 | Cherry | Melon | Cherry | Lemon | Melon |
+| 9 | Lemon | Orange | Orange | BONUS | Orange |
+| 10 | Bell | Lemon | Bell | Grapes | Seven |
+| 11 | Cherry | Cherry | Grapes | Bell | Lemon |
+| 12 | Plum | Plum | Lemon | Plum | Grapes |
+| 13 | Orange | Seven | Plum | Cherry | Plum |
+| 14 | BONUS | Grapes | Cherry | Orange | Bell |
+| 15 | Cherry | Cherry | Orange | Lemon | Orange |
+| 16 | Grapes | Orange | BONUS | Melon | Cherry |
+| 17 | Lemon | Melon | Melon | Seven | Lemon |
+| 18 | Melon | Cherry | Lemon | Grapes | Melon |
+| 19 | Cherry | Lemon | Grapes | Plum | Plum |
+| 20 | Plum | BONUS | Cherry | Orange | Grapes |
+| 21 | Orange | Plum | Plum | Cherry | BONUS |
+| 22 | Bell | Cherry | Orange | Bell | Orange |
+| 23 | Cherry | Bell | Bell | Lemon | Bell |
+| 24 | Grapes | Grapes | Lemon | Melon | Lemon |
+| 25 | Lemon | Orange | Grapes | Grapes | Plum |
+| 26 | Cherry | Cherry | Cherry | Orange | Cherry |
+| 27 | Melon | Lemon | Orange | Plum | Grapes |
+| 28 | Orange | Melon | Melon | Cherry | Orange |
+| 29 | Plum | Plum | Plum | Lemon | Melon |
+
+**Exact results:**
+
+| | Value |
+|---|---|
+| RTP | **94.027955%** (lines 81.176955%, wheel 12.851000%) |
+| Wheel spins | 1 in 116.82 paid spins |
+| Hit frequency (anything paid) | 56.2234% |
+| SD per paid spin (wheel included) | 3.4151 x the total bet |
+| Largest line win | 5,025 credits (502.5 x the total bet), 1 way in 30^5 |
+
+```text
+MACHINE E - Lucky Cherries (5x3, 10 lines, Cherry Wheel)
+Enumerated 24,300,000 windows in 2527 ms
+
+Symbol counts per reel (of 30):
+  SEVEN    1  1  1  1  1
+  BELL     2  2  2  3  3
+  MELON    3  3  3  3  3
+  GRAPES   3  3  4  4  4
+  PLUM     4  4  4  4  5
+  ORANGE   4  4  5  5  5
+  LEMON    4  4  5  5  5
+  CHERRY   8  8  5  4  3
+  BONUS    1  1  1  1  1
+
+Line pays from counts (per line, per credit):
+  Symbol  n  Pays         Ways       Return
+  SEVEN   3   150          870     0.005370
+  SEVEN   4   750           29     0.000895
+  SEVEN   5  5000            1     0.000206
+  BELL    3    60         6480     0.016000
+  BELL    4   250          648     0.006667
+  BELL    5  1000           72     0.002963
+  MELON   3    50        21870     0.045000
+  MELON   4   200         2187     0.018000
+  MELON   5   750          243     0.007500
+  GRAPES  3    40        28080     0.046222
+  GRAPES  4   150         3744     0.023111
+  GRAPES  5   500          576     0.011852
+  PLUM    3    25        49920     0.051358
+  PLUM    4    75         6400     0.019753
+  PLUM    5   250         1280     0.013169
+  ORANGE  3    20        60000     0.049383
+  ORANGE  4    60        10000     0.024691
+  ORANGE  5   200         2000     0.016461
+  LEMON   3    15        60000     0.037037
+  LEMON   4    50        10000     0.020576
+  LEMON   5   150         2000     0.012346
+  CHERRY  2     3      1440000     0.177778
+  CHERRY  3    10       249600     0.102716
+  CHERRY  4    50        34560     0.071111
+  CHERRY  5   200         3840     0.031605
+  line return from counts:      81.176955%
+  line return from enumeration: 81.176955%  (19726000 per line of 30^5)
+
+BONUS symbols in the window:
+  0:  14348907  59.049000%
+  1:   7971615  32.805000%
+  2:   1771470  7.290000%
+  3:    196830  0.810000%
+  4:     10935  0.045000%
+  5:       243  0.001000%
+
+Wheel: mean prize 14.2 x total bet, multiplier 1/2/5 for 3/4/5 BONUS
+Wheel spins:                   1 in 116.82 paid spins
+Line return:                   81.176955%
+Wheel return:                  12.851000%
+TOTAL RETURN TO PLAYER:        94.027955%
+Hit frequency (anything paid): 56.2234%
+Standard deviation per paid spin (wheel included): 3.4151 x total bet
+Largest line win: 5025 credits (502.5 x total bet), 1 way(s) in 30^5
+
+Simulation, 20,000,000 paid spins (seeded sfc32), 7.0 s:
+  measured return 94.0454% +/- 0.0763% (1 SE); SD per spin 3.4116
+  wheel spins 171379 (1 in 116.7)
+  difference from exact: 0.23 SE
+```
+
+### 3.9 Machine F: "Gold Rush" (5x4 video slot, 40 lines, sticky-wild free games)
+
+- **Format:** 5 reels x 4 rows, 40 fixed lines, 1-5 credits per line at 1, 5 or 10 cents (total bet 40 x
+  credits x coin value). Each reel is a 32-stop strip drawn uniformly; the window shows `strip[s]` to
+  `strip[s+3]`. Cycle: 32^5 = 33,554,432.
+- **Symbols:** WILD (reels 2-5 only), NUGGET (one on every reel), Cart, Pickaxe, Lantern, Pan, A, K, Q, J,
+  10.
+- **Line wins:** 3, 4 or 5 of a kind on adjacent reels from reel 1, paid per credit on the line. WILD
+  stands in for everything but NUGGET and pays nothing on its own; reel 1 has no WILD, so each line has
+  one candidate symbol.
+- **Free games:** 3, 4 or 5 NUGGETs anywhere start **8, 10 or 15 free games** on the same bet. Every WILD
+  that lands during them **sticks** in its cell until they end. The free games spin their own strips (one
+  WILD on each of reels 2-5, no NUGGET), so they cannot retrigger, and they are paid with the spin that
+  started them.
+- **Math, exact:** the base game by enumeration of every window (and again from symbol counts). The free
+  games in closed form: a line reads one cell per reel; a cell's symbol and its sticky history depend only
+  on its own reel; the reels are independent; and every row of a uniformly stopped strip shows the same
+  distribution. So in free game t (counting from 1) a cell on reel r >= 2 reads WILD with probability
+  1 - (1 - q_r)^t (q_r = WILDs on the free strip / 32: one landed there in this game or an earlier one)
+  and shows symbol X with probability (1 - q_r)^(t-1) f_r(X), and every line has the same expected pay,
+  e(t) = sum over X and n of pay(X, n) f_1(X) prod_{r=2..n} a_r(t, X) (1 - a_{n+1}(t, X)), with
+  a_r(t, X) = 1 - (1 - q_r)^t + (1 - q_r)^(t-1) f_r(X). A feature of T games is worth e(1) + ... + e(T)
+  total bets. The tests check a_r(t, X) by brute force over every stop sequence of a reel (t up to 3),
+  and the Monte Carlo plays whole features against e(1) + ... + e(T).
+
+| Symbol | 5 | 4 | 3 |
+|---|---:|---:|---:|
+| Cart | 1,000 | 250 | 75 |
+| Pickaxe | 500 | 150 | 50 |
+| Lantern | 400 | 100 | 30 |
+| Pan | 250 | 75 | 25 |
+| A | 150 | 40 | 12 |
+| K | 125 | 35 | 12 |
+| Q | 100 | 25 | 5 |
+| J | 80 | 20 | 5 |
+| 10 | 60 | 15 | 5 |
+
+| NUGGETs | Chance per spin | Free games | Worth (total bets) |
+|---|---:|---:|---:|
+| 3 | 1.495361% | 8 | 15.397699 |
+| 4 | 0.106812% | 10 | 26.508102 |
+| 5 | 0.003052% | 15 | 76.891374 |
+
+Lines (rows 0-3 on reels 1-5): 1: 11111, 2: 22222, 3: 00000, 4: 33333, 5: 01210, 6: 32123, 7: 12321, 8: 21012, 9: 01110, 10: 32223, 11: 10001, 12: 23332, 13: 12221, 14: 21112, 15: 00100, 16: 33233, 17: 11011, 18: 22322, 19: 11211, 20: 22122, 21: 01010, 22: 32323, 23: 10101, 24: 23232, 25: 12121, 26: 21212, 27: 00123, 28: 33210, 29: 01233, 30: 32100, 31: 10121, 32: 23212, 33: 01222, 34: 32111, 35: 11100, 36: 22233, 37: 00012, 38: 33321, 39: 12101, 40: 21232.
+
+**Base-game strips** (32 stops each):
+
+| Stop | Reel 1 | Reel 2 | Reel 3 | Reel 4 | Reel 5 |
+|---:|:---|:---|:---|:---|:---|
+| 0 | Cart | WILD | K | J | A |
+| 1 | Ten | Q | A | Pan | Lantern |
+| 2 | A | A | WILD | K | Q |
+| 3 | J | Pan | J | A | K |
+| 4 | Pan | J | Lantern | NUGGET | Ten |
+| 5 | K | K | Q | Q | WILD |
+| 6 | Q | Cart | Ten | WILD | J |
+| 7 | Lantern | Ten | Pick | Ten | Pan |
+| 8 | Ten | A | A | Cart | A |
+| 9 | A | Lantern | K | J | Pick |
+| 10 | Pick | Q | Pan | Lantern | Q |
+| 11 | J | J | J | K | K |
+| 12 | K | Pick | Cart | A | Cart |
+| 13 | Ten | K | Q | Pick | J |
+| 14 | Q | NUGGET | A | Q | Lantern |
+| 15 | Pan | A | Ten | Pan | Ten |
+| 16 | NUGGET | WILD | Lantern | Ten | A |
+| 17 | A | Ten | K | J | NUGGET |
+| 18 | Lantern | Pan | WILD | K | Q |
+| 19 | J | Q | J | Lantern | Pan |
+| 20 | K | Lantern | Pan | A | K |
+| 21 | Cart | J | NUGGET | Q | WILD |
+| 22 | Q | K | Q | WILD | J |
+| 23 | Ten | Cart | A | Cart | A |
+| 24 | Pan | A | Pick | J | Ten |
+| 25 | A | Ten | K | Ten | Pick |
+| 26 | J | Q | Ten | Pan | Q |
+| 27 | Pick | Pick | J | K | Lantern |
+| 28 | K | J | Cart | A | K |
+| 29 | Lantern | Pan | Q | Pick | Cart |
+| 30 | Q | K | Pan | Q | J |
+| 31 | Ten | Lantern | Lantern | Lantern | Pan |
+
+**Free-game strips** (32 stops each):
+
+| Stop | Reel 1 | Reel 2 | Reel 3 | Reel 4 | Reel 5 |
+|---:|:---|:---|:---|:---|:---|
+| 0 | Cart | WILD | Q | K | J |
+| 1 | J | J | A | Ten | Pan |
+| 2 | A | K | J | J | Q |
+| 3 | Q | Pan | Lantern | A | A |
+| 4 | Pan | A | Ten | Cart | Ten |
+| 5 | Ten | Ten | K | Q | Lantern |
+| 6 | K | Q | Pick | Lantern | K |
+| 7 | Lantern | Cart | J | J | J |
+| 8 | J | J | A | Pan | Cart |
+| 9 | Q | Lantern | Pan | K | Q |
+| 10 | Pick | K | Q | Ten | A |
+| 11 | A | A | WILD | A | Pick |
+| 12 | Ten | Pick | Ten | Pick | Ten |
+| 13 | K | Ten | K | J | J |
+| 14 | J | J | J | Q | K |
+| 15 | Pan | Q | Cart | Lantern | Pan |
+| 16 | Q | Pan | A | K | Q |
+| 17 | Lantern | A | Lantern | A | Lantern |
+| 18 | A | Lantern | Q | Ten | A |
+| 19 | Cart | K | Pan | J | J |
+| 20 | J | J | J | WILD | Ten |
+| 21 | Ten | Ten | Ten | Q | K |
+| 22 | K | Cart | K | Pan | Cart |
+| 23 | Q | Q | Pick | A | Q |
+| 24 | Pick | A | A | Cart | Pick |
+| 25 | Pan | Pick | Q | K | J |
+| 26 | A | J | Lantern | J | A |
+| 27 | J | K | J | Pick | WILD |
+| 28 | Lantern | Pan | Cart | Ten | Ten |
+| 29 | K | Ten | K | Q | K |
+| 30 | Q | Q | Ten | Lantern | Lantern |
+| 31 | Ten | Lantern | Pan | Pan | Pan |
+
+**Exact results:**
+
+| | Value |
+|---|---|
+| RTP | **92.993553%** (base game 66.902405%, free games 26.091148%) |
+| Free games started | 1 in 62.30 paid spins |
+| Hit frequency (a line win or free games) | 47.1153% |
+| SD per spin, base game only | 1.6239 x the total bet |
+| SD per paid spin, free games included | about 3.73 x the total bet (simulated; the sticky wilds tie the free games together) |
+| Largest base-game line win | 2,367 credits (59.2 x the total bet), 1 way in 32^5 |
+
+```text
+MACHINE F - Gold Rush (5x4, 40 lines, sticky-wild free games)
+Enumerated 33,554,432 windows in 13435 ms
+
+Symbol counts per reel (of 32), base / free:
+  WILD      0  2  2  2  2   /   0  1  1  1  1
+  NUGGET    1  1  1  1  1   /   0  0  0  0  0
+  CART      2  2  2  2  2   /   2  2  2  2  2
+  PICK      2  2  2  2  2   /   2  2  2  2  2
+  LANTERN   3  3  3  3  3   /   3  3  3  3  3
+  PAN       3  3  3  3  3   /   3  3  3  3  3
+  A         4  4  4  4  4   /   4  4  4  4  4
+  K         4  4  4  4  4   /   4  4  4  4  4
+  Q         4  4  4  4  4   /   5  4  4  4  4
+  J         4  4  4  4  4   /   5  5  5  5  5
+  10        5  3  3  3  3   /   4  4  4  4  4
+
+Line return from counts:      66.902405%
+Line return from enumeration: 66.902405%  (22448722 per line of 32^5)
+
+NUGGETs in the window:
+  0:  17210368  51.290894%
+  1:  12293120  36.636353%
+  2:   3512320  10.467529%
+  3:    501760  1.495361%
+  4:     35840  0.106812%
+  5:      1024  0.003052%
+
+Free games (sticky wilds), expected line pay per line per game:
+  game  1: 0.429872
+  game  2: 0.683163
+  game  3: 1.013870
+  game  4: 1.430176
+  game  5: 1.939602
+  game  6: 2.548831
+  game  7: 3.263592
+  game  8: 4.088593
+  game  9: 5.027494
+  game 10: 6.082910
+  game 11: 7.256443
+  game 12: 8.548723
+  game 13: 9.959468
+  game 14: 11.487555
+  game 15: 13.131084
+  3 NUGGETs: 8 free games worth 15.397699 x total bet
+  4 NUGGETs: 10 free games worth 26.508102 x total bet
+  5 NUGGETs: 15 free games worth 76.891374 x total bet
+
+Feature started:               1 in 62.30 paid spins
+Base game return:              66.902405%
+Free-game return:              26.091148%
+TOTAL RETURN TO PLAYER:        92.993553%
+Base hit frequency (a line win or a feature): 47.1153%
+Standard deviation per spin, base game only: 1.6239 x total bet
+Largest base-game line win: 2367 credits (59.175 x total bet), 1 way(s) in 32^5
+
+Simulation, 20,000,000 paid spins (seeded sfc32), 21.3 s:
+  measured return 92.9076% +/- 0.0833% (1 SE); SD per spin 3.7253
+  features 320549 (1 in 62.4), 16.254 x total bet each
+  difference from exact: -1.03 SE
+```
+
+The three later machines follow the implementation notes of 3.6: the tables are data in
+`shared/src/games/slots/{diamonds,cherries,goldrush}.ts`, checked stop for stop against the scripts above,
+and the tests enumerate through the engine's own scoring (`shared/test/slots-{diamonds,cherries,goldrush}.test.ts`).
 
 ---
 
@@ -2385,6 +2844,11 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) main();
 ```
 
 </details>
+
+### Slot machines D, E and F: `slot-d-diamond-line.mjs`, `slot-e-lucky-cherries.mjs`, `slot-f-gold-rush.mjs`
+
+Their output is in 3.7, 3.8 and 3.9; the scripts are in [../math/](../math/) (`node docs/math/slot-e-lucky-cherries.mjs --simulate=20000000`
+adds a seeded simulation of that many paid spins).
 
 ### Poker hand counts: `holdem-hand-counts.mjs`
 
