@@ -203,6 +203,34 @@ export interface LeaderboardResponse {
 export const EMOTES = ['wave', 'cheer', 'clap', 'thumbs', 'shrug'] as const;
 export type EmoteId = (typeof EMOTES)[number];
 
+/**
+ * A round the floor announces (server/src/floor/wins.ts): it returned at least 25 times the stake
+ * and $100 or more, or won $5,000 or more.
+ */
+export interface BigWin {
+  name: string;
+  game: GameId;
+  /** Cents won in the round: returned minus wagered, the way the leaderboard counts a win. */
+  amount: Cents;
+  /** What paid, in a few words: "Straight 17", "Royal Flush", "Neon Nights, 250x". */
+  what: string;
+  /**
+   * Server time the result shows at its table (the ball drops, the reels stop). Clients hold the
+   * news until then, so nobody hears about a win before the winner sees it.
+   */
+  at: number;
+  /** The floor station it happened at ("slots-neon-2", "rl-us"), when the table has one. */
+  station?: string;
+}
+
+/** Every big win so far today, casino time (Las Vegas), announced or not. */
+export interface WinsToday {
+  /** YYYY-MM-DD. */
+  day: string;
+  total: Cents;
+  count: number;
+}
+
 export type FloorClientMsg =
   | { t: 'mv'; x: number; z: number; r: number }
   | { t: 'st'; x: number; z: number; r: number }
@@ -220,6 +248,9 @@ export type FloorServerMsg =
   | { t: 'lobby'; game: GameId; lobby: LobbySummary }
   | { t: 'lobby.gone'; game: GameId; tableId: string }
   | { t: 'emote'; id: number; e: EmoteId }
+  // big wins: one as it happens, and the recent ones (newest first) right after hello
+  | ({ t: 'bigwin'; today: WinsToday } & BigWin)
+  | { t: 'bigwins'; list: BigWin[]; today: WinsToday }
   | { t: 'err'; code: ErrorCode; msg: string };
 
 /** Floor bounds in centimetres; positions outside are clamped. */
