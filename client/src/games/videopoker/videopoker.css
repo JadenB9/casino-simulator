@@ -1,0 +1,98 @@
+/* Video poker machine screen. Built at 800 x 600 and mapped onto the cabinet by a transform, so
+   every size here is in screen pixels of that design. The look follows the classic bar-top
+   poker screens: saturated blue glass, yellow type, the bet column in red. */
+
+.vp-layer { position: fixed; left: 0; top: 0; width: 0; height: 0; }
+
+.vp-screen {
+  position: absolute; left: 0; top: 0; width: 800px; height: 600px;
+  transform-origin: 0 0;
+  display: grid; grid-template-rows: 262px 48px 1fr 62px;
+  background: #0a1672; color: #ffe600;
+  font-family: var(--ui); text-transform: uppercase; letter-spacing: 0.03em;
+  overflow: hidden; user-select: none; -webkit-user-select: none;
+}
+.vp-screen[hidden] { display: none; }
+
+/* Pay glass */
+.vp-pays {
+  display: grid; grid-template-columns: 250px repeat(5, 1fr); align-content: start;
+  margin: 10px 12px 0; background: #1d3fd8; border: 2px solid #0b1a6e;
+}
+.vp-row { display: contents; }
+.vp-name, .vp-cell { height: 27px; line-height: 28px; font-size: 23px; border-bottom: 1px solid #0b1a6e; }
+.vp-name { padding-left: 12px; }
+.vp-cell { text-align: right; padding-right: 14px; border-left: 2px solid #0b1a6e; }
+.vp-cell.on { background: #d4141f; color: #fff49a; }
+.vp-row.made > * { background: #3553e8; }
+.vp-row.made > .vp-cell.on { background: #e0333d; }
+.vp-row.paid > * { background: #fff49a; color: #0b1a6e; }
+.vp-row.win > * { animation: vp-flash 0.44s steps(1) infinite; }
+.vp-row.win > .vp-cell.on { animation-name: vp-flash-on; }
+@keyframes vp-flash { 0% { background: #fff49a; color: #0b1a6e; } 50% { background: #1d3fd8; color: #ffe600; } }
+@keyframes vp-flash-on { 0% { background: #fff49a; color: #0b1a6e; } 50% { background: #d4141f; color: #fff49a; } }
+
+/* Status line: the hand's name, WIN, or GAME OVER */
+.vp-status { align-self: center; text-align: center; font-size: 36px; line-height: 48px; letter-spacing: 0.08em; }
+.vp-status.over { color: #ff4a3d; }
+.vp-status.dim { color: #b9c4ff; }
+.vp-status.info { color: #ffffff; font-size: 26px; letter-spacing: 0.1em; }
+
+/* Cards */
+.vp-cards { display: flex; justify-content: center; gap: 14px; align-items: flex-end; padding-bottom: 6px; }
+.vp-slot {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 0; border: 0; background: none; cursor: pointer; font: inherit; color: inherit;
+}
+.vp-slot:disabled { cursor: default; }
+.vp-slot:focus-visible { outline: 3px solid #fff49a; outline-offset: 2px; }
+.vp-held { height: 28px; font-size: 26px; line-height: 28px; letter-spacing: 0.14em; color: #ffffff; visibility: hidden; }
+.vp-held.on { visibility: visible; }
+.vp-card { width: 136px; height: 190px; border-radius: 9px; background: #fff; box-shadow: 0 3px 0 #050c40; transform-origin: 50% 50%; }
+
+/* Meters */
+.vp-bar { display: grid; grid-template-columns: 96px 1fr 150px 250px; align-items: center; gap: 10px; padding: 0 16px 0 12px; background: #081159; border-top: 2px solid #1d3fd8; }
+.vp-meter { display: flex; align-items: baseline; gap: 10px; font-size: 30px; white-space: nowrap; }
+.vp-meter:last-child { justify-content: flex-end; }
+.vp-label { color: #ffe600; }
+.vp-value { color: #ffffff; min-width: 1ch; }
+.vp-cash { font-size: 19px; color: #b9c4ff; }
+.vp-denom {
+  height: 44px; border-radius: 22px; border: 3px solid #ffe600; background: #d4141f; color: #ffffff;
+  font: inherit; font-size: 26px; letter-spacing: 0.02em; cursor: pointer;
+}
+.vp-denom:disabled { opacity: 0.55; cursor: default; }
+.vp-denom:focus-visible { outline: 3px solid #fff49a; outline-offset: 2px; }
+
+/* SEE PAYS: rules and return over the card area */
+.vp-help {
+  position: absolute; left: 40px; right: 40px; top: 300px; bottom: 72px; padding: 14px 22px;
+  background: #081159; border: 2px solid #ffe600; color: #ffffff; text-transform: none; font-size: 21px; line-height: 1.3;
+}
+.vp-help[hidden] { display: none; }
+.vp-help h3 { margin: 0 0 8px; color: #ffe600; font-size: 26px; font-weight: 600; letter-spacing: 0.08em; }
+.vp-help p { margin: 0 0 8px; }
+.vp-help .vp-keys { color: #ffe600; font-size: 18px; letter-spacing: 0.04em; }
+
+/* The center moment, for four of a kind and better only */
+.vp-moment {
+  position: fixed; left: 50%; top: 34%; transform: translate(-50%, -50%);
+  text-align: center; pointer-events: none; white-space: nowrap;
+  animation: vp-moment-in 0.5s var(--ease) both;
+}
+.vp-moment.out { animation: vp-moment-out 0.6s ease forwards; }
+.vp-moment .vp-moment-hand {
+  font-family: var(--serif); font-weight: 700; font-size: 60px; letter-spacing: 0.14em; color: var(--brass-hi);
+  text-shadow: 0 2px 0 #3b2a12, 0 0 28px rgba(241, 213, 154, 0.35);
+}
+.vp-moment .vp-moment-amount { margin-top: 6px; font-size: 26px; letter-spacing: 0.22em; color: var(--ink); }
+.vp-moment::before, .vp-moment::after { content: ''; display: block; height: 1px; margin: 10px auto; width: 70%; background: var(--line-strong); }
+/* #ui turns pointer events back on for its children; the moment must never eat a click. */
+#ui .vp-moment { pointer-events: none; }
+@keyframes vp-moment-in { from { opacity: 0; transform: translate(-50%, -46%) scale(0.96); } to { opacity: 1; transform: translate(-50%, -50%); } }
+@keyframes vp-moment-out { to { opacity: 0; transform: translate(-50%, -54%); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .vp-row.win > * { animation: none; background: #fff49a; color: #0b1a6e; }
+  .vp-moment, .vp-moment.out { animation: none; }
+}
