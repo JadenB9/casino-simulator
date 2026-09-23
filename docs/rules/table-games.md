@@ -1,6 +1,6 @@
 # Table Game Rules and Odds
 
-Blackjack, roulette, craps and baccarat as this casino deals them. For each game this page lists the
+Blackjack, roulette, craps, baccarat and Casino War as this casino deals them. For each game this page lists the
 house rules, every bet's payout, its house edge with a source, and the standard deviation (SD) per
 bet. The Monte Carlo tests use the SD to work out how many rounds they need.
 
@@ -748,6 +748,123 @@ Test definitions. These decide whether the published number applies.
 | Baccarat cut card | 16 from the bottom [24] vs at least 14 [25] | 16 |
 | Baccarat pair payout | Rules text "10 to 1" vs return table 11:1 in [24] | 11:1 (10.36%) |
 | Big 6/8 on the come-out | Only a secondary source [26] | Always working. No effect on the per-bet edge |
+
+---
+
+## 7. Casino War
+
+Researched 2026-09-23. Casino War is a high-card game developed by Bet Technology (patent filed
+1993) and distributed by Shuffle Master since 2004 [W3]. This section's sources are W1 to W3,
+listed at its end.
+
+### 7.1 House rules and dealing procedure
+
+| Rule | Setting | Source |
+|---|---|---|
+| Decks | 6 (312 cards). Pennsylvania allows 6 or 8 | [W1], [W2] §651a.3(a) |
+| Card ranks | Ace high, down to 2. Suits never matter | [W1], [W2] §651a.6 |
+| Cover card | A quarter of the way up from the bottom (78 cards). Pennsylvania requires at least a quarter | [W2] §651a.5(d) |
+| Burn | The first card after each shuffle, face down and unseen | [W2] §651a.8(b) |
+| Bets | The bet (the Initial Wager), $10 to $1,000 in whole dollars, and an optional Tie bet placed with it, $1 to $100 | [W2] §651a.7 |
+| Deal | One card face up to each player with a bet, first base first, then one face up to the dealer | [W1], [W2] §651a.8(c) |
+| Higher card | The bet wins 1:1 and the Tie bet loses | [W1], [W2] §651a.9(a)(2) |
+| Lower card | The bet and the Tie bet lose | [W1], [W2] §651a.9(a)(1) |
+| Tie | The Tie bet wins 10:1. The player surrenders (half the bet comes back) or goes to war | [W1], [W2] §651a.9(a)(3), (c) |
+| Going to war | Raise by the amount of the bet. The dealer burns three cards face down, then deals one card face up to each player at war and one to the dealer | [W1], [W2] §651a.9(e)–(f) |
+| War result | Higher war card: the bet pushes and the raise wins 1:1. **A tie in the war: the bet pushes and the raise wins 2:1.** Lower: the bet and the raise lose | [W2] §651a.9(g), §651a.10(a)(3); [W1]; [W3] |
+| Settlement | Each spot in turn from the dealer's right: losers collected, winners paid | [W2] §651a.9(a), (g) |
+| End of shoe | When the cover card comes out, finish the round, then shuffle. A table nobody is playing has its cards picked up and reshuffled | [W2] §651a.8(d), §651a.5(g) |
+| Tie bet on the war deal | Not offered (Pennsylvania lets a player at war add one) | [W2] §651a.9(e) |
+
+A bet is only taken with its match still in the stack, so a player with a tie can always go to war.
+At a multiplayer table every tie is decided at once within 12 seconds. A timeout, or a player
+leaving during a tie, goes to war (the better play, §7.2), or surrenders if the stack no longer
+covers the raise.
+
+### 7.2 Outcomes and the best play
+
+Every order of a shuffled shoe is equally likely, so one seat's deal is two cards from 312: they
+tie 13·24·23 / (312·311) = 23/311 of the time. The three burned cards are never seen, so after a
+tie the war cards are two cards from the other 310, which hold 22 of the tied rank and 24 of every
+other. They tie with probability t = (22·21 + 12·24·23) / (310·309) = 1181/15965, and each side
+wins half of the rest.
+
+| Outcome (going to war on every tie) | Net, units of the bet | Probability |
+|---|---|---|
+| Higher card on the deal | +1 | 144/311 = 0.463023 |
+| Lower card on the deal | −1 | 144/311 = 0.463023 |
+| Tie, then win the war | +1 | 0.034242 |
+| Tie, then tie the war | +2 | 0.005471 |
+| Tie, then lose the war | −2 | 0.034242 |
+| **Expected result** | **−23138/993023 = −0.023301** | 1 |
+
+These are the rows of Wizard of Odds' six-deck "liberal rules" table, to the last digit [W1].
+
+**Always go to war.** The two war cards are dealt blind from the same shoe, so the player wins and
+loses the war equally often: (1 − t)/2 each. Going to war returns (1 − t)/2 + 2t − 2(1 − t)/2 =
+−½ + 2½·t of the bet (−½ + 1½·t without the bonus), and surrendering returns −½. Going to war is
+better whenever the war cards can tie at all, whatever rank tied and whatever the shoe has left.
+From a full shoe a war returns −0.3151 of the bet (−0.3890 without the bonus) against −0.5.
+
+### 7.3 Payout table and house edges
+
+House edge is per unit of the bet, as in §0: the raise is money added after the first wager and is
+not in the denominator.
+
+| Bet | Pays | House edge | Exact EV per unit | SD | Source |
+|---|---|---|---|---|---|
+| Bet, going to war on every tie | 1:1; the raise 1:1, or 2:1 on a tie in the war | **2.3301%** | −23138/993023 | 1.0576 | [W1] 2.33%, SD 1.057637 |
+| Bet, surrendering every tie | 1:1; half back on a tie | **3.6977%** | −23/622 | 0.9712 | [W1] 3.70% |
+| Bet, going to war, no bonus (variant, off) | 1:1; the raise 1:1 on a won or tied war | 2.8771% | −142853/4965115 | 1.0497 | [W1] 2.88%, SD 1.05 |
+| Tie | 10:1 | **18.6495%** | −58/311 | 2.8787 | [W1] 18.65% |
+| Tie at 11:1 (variant, off) | 11:1 | 11.2540% | −35/311 | 3.1404 | [W1] 11.25% |
+
+As a share of everything bet, the raise included (the element of risk), going to war costs 2.170%
+with the bonus and 2.679% without. `exactOdds()` in shared/src/games/war/rules.ts computes these in
+closed form, and shared/test/war.test.ts checks them against an enumeration of every rank
+combination through `settle()`, the same function the table pays with.
+
+### 7.4 Edge cases (each one has a unit test)
+
+1. Surrendering gives back exactly half the bet (a whole-dollar bet halves to the cent) and burns
+   nothing. When every tie surrenders there is no war deal.
+2. The Tie bet is paid 10:1 as soon as the tie is dealt, whatever the player then does, and loses on
+   any other deal. It can only go down with a bet.
+3. A won war returns the bet and pays the raise 1:1. A tied war returns the bet and pays the raise
+   2:1. A lost war takes both.
+4. One dealer war card serves every player at war, and the three cards are burned once per war
+   deal, not once per player.
+5. The shoe is shuffled before its first deal and once the card behind the cover card has been dealt.
+   The cover card can come out mid-round, even during a war, and the round is finished first.
+6. Every card is dealt face up, so every seat sees every card. The burned cards and the shoe order
+   never leave the server.
+
+### 7.5 Monte Carlo and the shoe
+
+The test deals 10⁷ rounds with the table's own shoe procedure (six decks, the cover card a quarter
+from the bottom, a burn after each shuffle and three before each war), goes to war on every tie,
+and settles each deal three ways plus the Tie bet. SE at N = 10⁷ is about 0.033% for the bet and
+0.091% for the Tie bet. Paying a tie in the war 1:1 instead of 2:1 moves the edge by 0.547 points,
+which `(5·SD/δ)²` says 9.4×10⁵ rounds catch; the enumeration catches it exactly.
+
+**Shoe check.** 4×10⁸ rounds dealt from the shoe this way measured 2.3331% ± 0.0053% for going to
+war, against 2.3301% from a full shoe (z +0.57). Like baccarat, Casino War shows no measurable
+cut-card effect, so the full-shoe figures are the test targets.
+
+### 7.6 Where sources differ
+
+| Topic | Disagreement | Choice and reason |
+|---|---|---|
+| A tie in the war | The raise pays 2:1 ([W2] §651a.10(a)(3)), which is the bonus equal to the bet that the Mirage and Casino Niagara pay [W1], and the "wins the amount of their doubled wager" of [W3]; vs the raise paying only 1:1, Wizard of Odds' "stingy rules" [W1] | 2:1 (2.33%): the regulated rule. 1:1 stays a table option (`warTiePays: 1`, 2.88%), and 2.88% is the figure most often quoted for the game |
+| No-bonus figure | Wizard of Odds' text calls 2.70% the element of risk of the no-bonus game; its house-edge table says 2.88% [W1] | 2.88% is the house edge per bet. The same expected loss divided by the average amount bet (1 + 23/311) is 2.679%, not 2.70% |
+| Decks | 6 [W1], [W3]; 6 or 8 [W2] | 6. Eight decks would be 2.34% with the bonus [W1] |
+| Tie bet | 10:1 [W1], [W2], [W3]; 11:1 at some online casinos [W1] | 10:1 (18.65%); `tiePays` is a table option |
+
+**Sources for this section**
+
+- W1. Wizard of Odds, "Casino War" (rules; six-deck return tables with no bonus, a bonus equal to the bet, and a 3x bonus; house edge for 1 to 8 decks with and without the bonus, surrendering, and the Tie bet; Tie bet analysis). Updated 2026-08-03. https://wizardofodds.com/games/casino-war/
+- W2. 58 Pa. Code Chapter 651a, Casino War (decks §651a.3, shuffle and cut §651a.5, ranks §651a.6, wagers §651a.7, dealing §651a.8, settlement §651a.9, payout odds §651a.10). https://www.pacodeandbulletin.gov/Display/pacode?file=/secure/pacode/data/058/chapter651a/chap651atoc.html
+- W3. Wikipedia, "Casino War" (game play, the tie in the war, history). https://en.wikipedia.org/wiki/Casino_War
 
 ---
 

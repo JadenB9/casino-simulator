@@ -4,6 +4,9 @@ Every game in the casino follows standard Las Vegas Strip rules and pays real od
 is the summary. The full rules, every paytable, the strategy charts and the sources are in:
 
 - [rules/table-games.md](rules/table-games.md): blackjack, roulette, craps, baccarat, Sic Bo
+||||||| 9239b79
+- [rules/table-games.md](rules/table-games.md): blackjack, roulette, craps, baccarat
+- [rules/table-games.md](rules/table-games.md): blackjack, roulette, craps, baccarat, Casino War
 - [rules/cards-and-machines.md](rules/cards-and-machines.md): Three Card Poker, video poker,
   slots, Texas Hold'em
 - [math/](math/): the dependency-free Node scripts that enumerate each game exactly
@@ -48,6 +51,9 @@ inside 3. Seeds are fixed, so `npm run test:mc` reproduces these exactly.
 | | | Tie | 14.360% | 14.300% (10M coups, z −0.72) |
 | Three Card Poker | dealer qualifies with queen high; Ante Bonus 5-4-1; Pair Plus 40-30-6-3-1 | Ante and Play, Q-6-4 strategy | 3.373% | 3.384% (10M hands, z +0.20) |
 | | | Pair Plus | 7.276% | 7.264% (10M hands, z −0.14) |
+| Casino War | 6 decks, cover card a quarter from the bottom; on a tie surrender half or go to war (raise equal to the bet, burn three); a tie in the war pays the raise 2:1; Tie bet 10:1 | Bet, going to war on every tie | 2.330% | 2.323% (10M rounds, z −0.21) |
+| | | Bet, surrendering every tie | 3.698% | 3.719% (10M rounds, z +0.69) |
+| | | Tie bet | 18.650% | 18.642% (10M rounds, z −0.08) |
 | Video poker | Jacks or Better 9/6, 5 coins, optimal hold list | | 99.544% RTP | 99.447% (20M hands, z −1.00) |
 | Slots | three machines, published reel strips | A "Classic Sevens" (3 reels) | 94.428% RTP | 94.563% (10M spins, z +0.65) |
 | | | B "Neon Nights" (5x3, 20 lines, free spins) | 95.374% RTP | 95.325% (10M spins, z −0.41) |
@@ -62,3 +68,7 @@ inside 3. Seeds are fixed, so `npm run test:mc` reproduces these exactly.
 The blackjack figure is for exactly these rules. The often-quoted 0.26-0.28% assumes aces can be
 resplit, which this table doesn't allow, and a cut card adds about 0.02 points over dealing each
 round from a fresh shoe (0.334%).
+
+The Casino War figure most often quoted, 2.88%, is for tables that pay a tie in the war only even
+money on the raise. Pennsylvania's rules and the Mirage pay it 2:1 (a bonus equal to the bet), which
+brings the edge down to 2.33%. Going to war always beats surrendering, whatever rank tied.
