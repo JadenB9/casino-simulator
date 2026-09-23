@@ -1,0 +1,548 @@
+{
+ "version": 1,
+ "clips": [
+  "Idle",
+  "Walk",
+  "Run"
+ ],
+ "m": {
+  "suit": {
+   "file": "char-m-suit.glb",
+   "parts": {
+    "Suit_Body/Suit": "top",
+    "Suit_Legs/Suit": "bottom",
+    "Suit_Feet/Black": "shoes",
+    "*/Skin": "skin",
+    "Suit_Head/Hair": "hair",
+    "Suit_Head/Eyebrows": "brows"
+   },
+   "prims": [
+    {
+     "part": "Suit_Legs",
+     "material": "Suit",
+     "slot": "bottom"
+    },
+    {
+     "part": "Suit_Feet",
+     "material": "Black",
+     "slot": "shoes"
+    },
+    {
+     "part": "Suit_Body",
+     "material": "Suit",
+     "slot": "top"
+    },
+    {
+     "part": "Suit_Body",
+     "material": "White",
+     "slot": null
+    },
+    {
+     "part": "Suit_Body",
+     "material": "Tie",
+     "slot": null
+    },
+    {
+     "part": "Suit_Body",
+     "material": "Skin",
+     "slot": "skin"
+    },
+    {
+     "part": "Suit_Head",
+     "material": "Skin",
+     "slot": "skin"
+    },
+    {
+     "part": "Suit_Head",
+     "material": "Hair",
+     "slot": "hair"
+    },
+    {
+     "part": "Suit_Head",
+     "material": "Eyebrows",
+     "slot": "brows"
+    },
+    {
+     "part": "Suit_Head",
+     "material": "Eye",
+     "slot": null
+    }
+   ]
+  },
+  "casual": {
+   "file": "char-m-casual.glb",
+   "parts": {
+    "Casual2_Body/LightBrown": "top",
+    "Casual2_Legs/LightBlue": "bottom",
+    "Casual2_Feet/Red_Dark": "shoes",
+    "*/Skin": "skin",
+    "Casual2_Head/Skin_Darker": "skinShade",
+    "Casual2_Head/Hair": "hair",
+    "Casual2_Head/Eyebrows": "brows"
+   },
+   "prims": [
+    {
+     "part": "Casual2_Feet",
+     "material": "White",
+     "slot": null
+    },
+    {
+     "part": "Casual2_Feet",
+     "material": "Red_Dark",
+     "slot": "shoes"
+    },
+    {
+     "part": "Casual2_Body",
+     "material": "LightBrown",
+     "slot": "top"
+    },
+    {
+     "part": "Casual2_Body",
+     "material": "Skin",
+     "slot": "skin"
+    },
+    {
+     "part": "Casual2_Head",
+     "material": "Skin",
+     "slot": "skin"
+    },
+    {
+     "part": "Casual2_Head",
+     "material": "Skin_Darker",
+     "slot": "skinShade"
+    },
+    {
+     "part": "Casual2_Head",
+     "material": "Eyebrows",
+     "slot": "brows"
+    },
+    {
+     "part": "Casual2_Head",
+     "material": "Eye",
+     "slot": null
+    },
+    {
+     "part": "Casual2_Head",
+     "material": "Hair",
+     "slot": "hair"
+    },
+    {
+     "part": "Casual2_Legs",
+     "material": "LightBlue",
+     "slot": "bottom"
+    }
+   ]
+  },
+  "hoodie": {
+   "file": "char-m-hoodie.glb",
+   "parts": {
+    "Casual_Body/Purple": "top",
+    "Casual_Legs/LightBlue": "bottom",
+    "Casual_Feet/Purple": "shoes",
+    "*/Skin": "skin",
+    "Casual_Head/Hair": "hair",
+    "Casual_Head/Eyebrows": "brows"
+   },
+   "prims": [
+    {
+     "part": "Casual_Feet",
+     "material": "White",
+     "slot": null
+    },
+    {
+     "part": "Casual_Feet",
+     "material": "Purple",
+     "slot": "shoes"
+    },
+    {
+     "part": "Casual_Legs",
+     "material": "Skin",
+     "slot": "skin"
+    },
+    {
+     "part": "Casual_Legs",
+     "material": "LightBlue",
+     "slot": "bottom"
+    },
+    {
+     "part": "Casual_Head",
+     "material": "Skin",
+     "slot": "skin"
+    },
+    {
+     "part": "Casual_Head",
+     "material": "Eyebrows",
+     "slot": "brows"
+    },
+    {
+     "part": "Casual_Head",
+     "material": "Eye",
+     "slot": null
+    },
+    {
+     "part": "Casual_Head",
+     "material": "Hair",
+     "slot": "hair"
+    },
+    {
+     "part": "Casual_Body",
+     "material": "Purple",
+     "slot": "top"
+    },
+    {
+     "part": "Casual_Body",
+     "material": "Skin",
+     "slot": "skin"
+    }
+   ]
+  },
+  "punk": {
+   "file": "char-m-punk.glb",
+   "parts": {
+    "Punk_Body/Black": "top",
+    "Punk_Legs/LightBlue": "bottom",
+    "Punk_Feet/Black": "shoes",
+    "*/Skin": "skin",
+    "Punk_Head/Red": "hair",
+    "Punk_Head/Red_Dark": "hairShade",
+    "Punk_Head/Eyebrows": "brows"
+   },
+   "prims": [
+    {
+     "part": "Punk_Feet",
+     "material": "Black",
+     "slot": "shoes"
+    },
+    {
+     "part": "Punk_Feet",
+     "material": "Skin",
+     "slot": "skin"
+    },
+    {
+     "part": "Punk_Legs",
+     "material": "Skin",
+     "slot": "skin"
+    },
+    {
+     "part": "Punk_Legs",
+     "material": "LightBlue",
+     "slot": "bottom"
+    },
+    {
+     "part": "Punk_Body",
+     "material": "Black",
+     "slot": "top"
+    },
+    {
+     "part": "Punk_Body",
+     "material": "Skin",
+     "slot": "skin"
+    },
+    {
+     "part": "Punk_Body",
+     "material": "White",
+     "slot": null
+    },
+    {
+     "part": "Punk_Head",
+     "material": "Skin",
+     "slot": "skin"
+    },
+    {
+     "part": "Punk_Head",
+     "material": "Red_Dark",
+     "slot": "hairShade"
+    },
+    {
+     "part": "Punk_Head",
+     "material": "Earrings",
+     "slot": null
+    },
+    {
+     "part": "Punk_Head",
+     "material": "Red",
+     "slot": "hair"
+    },
+    {
+     "part": "Punk_Head",
+     "material": "Eyebrows",
+     "slot": "brows"
+    },
+    {
+     "part": "Punk_Head",
+     "material": "Eye",
+     "slot": null
+    }
+   ]
+  },
+  "beach": {
+   "file": "char-m-beach.glb",
+   "parts": {
+    "Beach_Body/LightBrown": "top",
+    "Beach_Legs/Red_Dark": "bottom",
+    "Beach_Feet/Red_Dark": "shoes",
+    "*/Skin": "skin",
+    "Beach_Head/Hair": "hair",
+    "Beach_Head/Eyebrows": "brows"
+   },
+   "prims": [
+    {
+     "part": "Beach_Feet",
+     "material": "Skin",
+     "slot": "skin"
+    },
+    {
+     "part": "Beach_Feet",
+     "material": "Red_Dark",
+     "slot": "shoes"
+    },
+    {
+     "part": "Beach_Legs",
+     "material": "Skin",
+     "slot": "skin"
+    },
+    {
+     "part": "Beach_Legs",
+     "material": "Red_Dark",
+     "slot": "bottom"
+    },
+    {
+     "part": "Beach_Legs",
+     "material": "White",
+     "slot": null
+    },
+    {
+     "part": "Beach_Body",
+     "material": "Skin",
+     "slot": "skin"
+    },
+    {
+     "part": "Beach_Body",
+     "material": "LightBrown",
+     "slot": "top"
+    },
+    {
+     "part": "Beach_Head",
+     "material": "Skin",
+     "slot": "skin"
+    },
+    {
+     "part": "Beach_Head",
+     "material": "Eyebrows",
+     "slot": "brows"
+    },
+    {
+     "part": "Beach_Head",
+     "material": "Eye",
+     "slot": null
+    },
+    {
+     "part": "Beach_Head",
+     "material": "Hair",
+     "slot": "hair"
+    },
+    {
+     "part": "Beach_Head",
+     "material": "Earrings",
+     "slot": null
+    }
+   ]
+  }
+ },
+ "f": {
+  "dress": {
+   "file": "char-f-dress.glb",
+   "parts": {
+    "Formal_Body/LimeGreen": "top",
+    "Formal_Legs/LimeGreen": "top",
+    "Formal_Feet/Red": "shoes",
+    "*/Skin": "skin",
+    "Formad_Head/Red": "hair",
+    "Formad_Head/Brown": "brows"
+   },
+   "prims": [
+    {
+     "part": "Formad_Head",
+     "material": "Skin",
+     "slot": "skin"
+    },
+    {
+     "part": "Formad_Head",
+     "material": "Red",
+     "slot": "hair"
+    },
+    {
+     "part": "Formad_Head",
+     "material": "Brown",
+     "slot": "brows"
+    },
+    {
+     "part": "Formal_Body",
+     "material": "Skin",
+     "slot": "skin"
+    },
+    {
+     "part": "Formal_Body",
+     "material": "LimeGreen",
+     "slot": "top"
+    },
+    {
+     "part": "Formal_Body",
+     "material": "Gold",
+     "slot": null
+    },
+    {
+     "part": "Formal_Feet",
+     "material": "Skin",
+     "slot": "skin"
+    },
+    {
+     "part": "Formal_Feet",
+     "material": "Red",
+     "slot": "shoes"
+    },
+    {
+     "part": "Formal_Legs",
+     "material": "Skin",
+     "slot": "skin"
+    },
+    {
+     "part": "Formal_Legs",
+     "material": "LimeGreen",
+     "slot": "top"
+    }
+   ]
+  },
+  "smart": {
+   "file": "char-f-smart.glb",
+   "parts": {
+    "Casual_Body/White": "top",
+    "Casual_Legs/Orange": "bottom",
+    "Casual_Feet/Grey": "shoes",
+    "*/Skin": "skin",
+    "Casual_Head/Hair_Blond": "hair",
+    "Casual_Head/Hair_Brown": "brows"
+   },
+   "prims": [
+    {
+     "part": "Casual_Body",
+     "material": "White",
+     "slot": "top"
+    },
+    {
+     "part": "Casual_Body",
+     "material": "Skin",
+     "slot": "skin"
+    },
+    {
+     "part": "Casual_Feet",
+     "material": "Skin",
+     "slot": "skin"
+    },
+    {
+     "part": "Casual_Feet",
+     "material": "Grey",
+     "slot": "shoes"
+    },
+    {
+     "part": "Casual_Head",
+     "material": "Skin",
+     "slot": "skin"
+    },
+    {
+     "part": "Casual_Head",
+     "material": "Hair_Blond",
+     "slot": "hair"
+    },
+    {
+     "part": "Casual_Head",
+     "material": "Hair_Brown",
+     "slot": "brows"
+    },
+    {
+     "part": "Casual_Head",
+     "material": "Brown",
+     "slot": null
+    },
+    {
+     "part": "Casual_Legs",
+     "material": "Orange",
+     "slot": "bottom"
+    }
+   ]
+  },
+  "punk": {
+   "file": "char-f-punk.glb",
+   "parts": {
+    "Punk_Body/Pink": "top",
+    "Punk_Legs/Black": "bottom",
+    "Punk_Feet/Black": "shoes",
+    "*/Skin": "skin",
+    "Punk_Head/Pink": "hair",
+    "Punk_Head/Hair_Brown": "brows"
+   },
+   "prims": [
+    {
+     "part": "Punk_Body",
+     "material": "Skin",
+     "slot": "skin"
+    },
+    {
+     "part": "Punk_Body",
+     "material": "Pink",
+     "slot": "top"
+    },
+    {
+     "part": "Punk_Body",
+     "material": "Black",
+     "slot": null
+    },
+    {
+     "part": "Punk_Feet",
+     "material": "Black",
+     "slot": "shoes"
+    },
+    {
+     "part": "Punk_Feet",
+     "material": "Grey",
+     "slot": null
+    },
+    {
+     "part": "Punk_Head",
+     "material": "Skin",
+     "slot": "skin"
+    },
+    {
+     "part": "Punk_Head",
+     "material": "Pink",
+     "slot": "hair"
+    },
+    {
+     "part": "Punk_Head",
+     "material": "Black",
+     "slot": null
+    },
+    {
+     "part": "Punk_Head",
+     "material": "Hair_Brown",
+     "slot": "brows"
+    },
+    {
+     "part": "Punk_Head",
+     "material": "Brown",
+     "slot": null
+    },
+    {
+     "part": "Punk_Legs",
+     "material": "Skin",
+     "slot": "skin"
+    },
+    {
+     "part": "Punk_Legs",
+     "material": "Black",
+     "slot": "bottom"
+    }
+   ]
+  }
+ }
+}

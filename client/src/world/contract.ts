@@ -28,3 +28,46 @@ export interface Character {
 export interface CharacterFactory {
   create(look: Look, name: string): Character;
 }
+
+// --- added by the world module (additive) ------------------------------------------------------
+
+/** The cashier counter: game-less, so it isn't a Station; using it fires World.onCashier. */
+export interface CashierPoint {
+  id: 'cashier';
+  /** A marker at the middle of the counter's front (floor level, facing the player). */
+  anchor: THREE.Object3D;
+  /** Where a player stands to use it (floor level). */
+  position: THREE.Vector3;
+}
+
+export interface CharacterFactoryExt extends CharacterFactory {
+  /** Resolves once the model for this look is loaded (create() never waits; it fills in when ready). */
+  load(look: Look): Promise<void>;
+}
+
+/** What createWorld() returns; see client/src/world/README.md. */
+export interface World {
+  stations: (Station & { name: string; limits: string; footprint: { width: number; depth: number } })[];
+  cashier: CashierPoint;
+  characterFactory: CharacterFactoryExt;
+  player: {
+    character: Character;
+    /** Live position (floor level); read it, don't write it. */
+    position: THREE.Vector3;
+    /** Hand the keyboard and camera to someone else (a panel, a table) and back. */
+    setEnabled(on: boolean): void;
+    /** For presence, every frame: floor position, facing (Object3D.rotation.y; PI faces -z) and whether walking. */
+    state(): { x: number; z: number; yaw: number; moving: boolean };
+    /** Put the player somewhere (the server's spawn in the first hello). The camera snaps behind. */
+    teleport(x: number, z: number, yaw: number): void;
+  };
+  /** The player pressed E at a station; the camera is already flying to its play pose. */
+  onEnter(cb: (station: Station) => void): () => void;
+  /** The player pressed E at the cashier. */
+  onCashier(cb: () => void): () => void;
+  /** Leave the table: the camera flies back and walking resumes. */
+  exitTable(): Promise<void>;
+  setQuality(q: 'high' | 'low'): void;
+  update(dt: number): void;
+  dispose(): void;
+}

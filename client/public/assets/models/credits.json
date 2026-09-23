@@ -1,0 +1,191 @@
+[
+ {
+  "file": "char-m-suit.glb",
+  "from": "modular-men/BusinessMan.glb",
+  "author": "Quaternius",
+  "license": "CC0 1.0",
+  "url": "https://poly.pizza/m/JFrLIKqvCH"
+ },
+ {
+  "file": "char-m-casual.glb",
+  "from": "modular-men/CasualCharacter.glb",
+  "author": "Quaternius",
+  "license": "CC0 1.0",
+  "url": "https://poly.pizza/m/kZ3DmIoGip"
+ },
+ {
+  "file": "char-m-hoodie.glb",
+  "from": "modular-men/HoodieCharacter.glb",
+  "author": "Quaternius",
+  "license": "CC0 1.0",
+  "url": "https://poly.pizza/m/gKLBoRsyKe"
+ },
+ {
+  "file": "char-m-punk.glb",
+  "from": "modular-men/Punk.glb",
+  "author": "Quaternius",
+  "license": "CC0 1.0",
+  "url": "https://poly.pizza/m/BTALZymknF"
+ },
+ {
+  "file": "char-m-beach.glb",
+  "from": "modular-men/BeachCharacter.glb",
+  "author": "Quaternius",
+  "license": "CC0 1.0",
+  "url": "https://poly.pizza/m/DojKLcO34E"
+ },
+ {
+  "file": "char-f-dress.glb",
+  "from": "modular-women/AnimatedWoman_nIItLV9nxS.glb",
+  "author": "Quaternius",
+  "license": "CC0 1.0",
+  "url": "https://poly.pizza/m/nIItLV9nxS"
+ },
+ {
+  "file": "char-f-smart.glb",
+  "from": "modular-women/AnimatedWoman_qJ2gsTUBHL.glb",
+  "author": "Quaternius",
+  "license": "CC0 1.0",
+  "url": "https://poly.pizza/m/qJ2gsTUBHL"
+ },
+ {
+  "file": "char-f-punk.glb",
+  "from": "modular-women/Punk.glb",
+  "author": "Quaternius",
+  "license": "CC0 1.0",
+  "url": "https://poly.pizza/m/djXoqejw6w"
+ },
+ {
+  "file": "palm.glb",
+  "from": "polypizza-props/PalmTree__Quaternius__A6cKJYFsIb.glb",
+  "author": "Quaternius",
+  "license": "CC0 1.0",
+  "url": "https://poly.pizza/m/A6cKJYFsIb"
+ },
+ {
+  "file": "plant-a.glb",
+  "from": "quaternius-polypizza/house-interior/Houseplant__IBLX2Jz90O.glb",
+  "author": "Quaternius",
+  "license": "CC0 1.0",
+  "url": "https://poly.pizza/m/IBLX2Jz90O"
+ },
+ {
+  "file": "plant-b.glb",
+  "from": "polypizza-props/Houseplant__Quaternius__bfLOqIV5uP.glb",
+  "author": "Quaternius",
+  "license": "CC0 1.0",
+  "url": "https://poly.pizza/m/bfLOqIV5uP"
+ },
+ {
+  "file": "stool.glb",
+  "from": "quaternius-polypizza/house-interior/Stool__TvaOenUAni.glb",
+  "author": "Quaternius",
+  "license": "CC0 1.0",
+  "url": "https://poly.pizza/m/TvaOenUAni"
+ },
+ {
+  "file": "couch.glb",
+  "from": "quaternius-polypizza/house-interior/CouchLarge__6MoOyPtetL.glb",
+  "author": "Quaternius",
+  "license": "CC0 1.0",
+  "url": "https://poly.pizza/m/6MoOyPtetL"
+ },
+ {
+  "file": "lamp-floor.glb",
+  "from": "quaternius-polypizza/house-interior/LightFloor__sRBBvofo58.glb",
+  "author": "Quaternius",
+  "license": "CC0 1.0",
+  "url": "https://poly.pizza/m/sRBBvofo58"
+ },
+ {
+  "file": "door.glb",
+  "from": "quaternius-polypizza/house-interior/DoorDouble__blrNJIEdns.glb",
+  "author": "Quaternius",
+  "license": "CC0 1.0",
+  "url": "https://poly.pizza/m/blrNJIEdns"
+ },
+ {
+  "file": "chandelier-low.glb",
+  "from": "polypizza-props/LightChandelier__Quaternius__q3k8I8YYX9.glb",
+  "author": "Quaternius",
+  "license": "CC0 1.0",
+  "url": "https://poly.pizza/m/q3k8I8YYX9"
+ },
+ {
+  "file": "bottle-tall.glb",
+  "from": "polypizza-props/Bottle__Quaternius__FAHsHFXfTf.glb",
+  "author": "Quaternius",
+  "license": "CC0 1.0",
+  "url": "https://poly.pizza/m/FAHsHFXfTf"
+ },
+ {
+  "file": "bottle-red.glb",
+  "from": "kenney-food-kit/Models/GLB format/wine-red.glb",
+  "author": "Kenney",
+  "license": "CC0 1.0",
+  "url": "https://kenney.nl/assets/food-kit"
+ },
+ {
+  "file": "bottle-white.glb",
+  "from": "kenney-food-kit/Models/GLB format/wine-white.glb",
+  "author": "Kenney",
+  "license": "CC0 1.0",
+  "url": "https://kenney.nl/assets/food-kit"
+ },
+ {
+  "file": "glass-cocktail.glb",
+  "from": "kenney-food-kit/Models/GLB format/cocktail.glb",
+  "author": "Kenney",
+  "license": "CC0 1.0",
+  "url": "https://kenney.nl/assets/food-kit"
+ },
+ {
+  "file": "chandelier-high.glb",
+  "from": "polyhaven-models/Chandelier_02/Chandelier_02_1k.gltf",
+  "author": "Poly Haven",
+  "license": "CC0 1.0",
+  "url": "https://polyhaven.com/a/Chandelier_02"
+ },
+ {
+  "file": "../textures/marble-tiles.webp",
+  "from": "polyhaven-textures/marble_01/marble_01_diff_1k.jpg",
+  "author": "Poly Haven",
+  "license": "CC0 1.0",
+  "url": "https://polyhaven.com/a/marble_01"
+ },
+ {
+  "file": "../textures/marble-black.webp",
+  "from": "ambientcg/Marble006/Marble006_1K-JPG_Color.jpg",
+  "author": "ambientCG",
+  "license": "CC0 1.0",
+  "url": "https://ambientcg.com/view?id=Marble006"
+ },
+ {
+  "file": "../textures/wood-dark.webp",
+  "from": "polyhaven-textures/dark_wood/dark_wood_diff_1k.jpg",
+  "author": "Poly Haven",
+  "license": "CC0 1.0",
+  "url": "https://polyhaven.com/a/dark_wood"
+ },
+ {
+  "file": "../textures/wood-panel.webp",
+  "from": "polyhaven-textures/dark_paneled_wood/dark_paneled_wood_diff_1k.jpg",
+  "author": "Poly Haven",
+  "license": "CC0 1.0",
+  "url": "https://polyhaven.com/a/dark_paneled_wood"
+ },
+ {
+  "file": "../textures/velvet.webp",
+  "from": "polyhaven-textures/velour_velvet/velour_velvet_diff_1k.jpg",
+  "author": "Poly Haven",
+  "license": "CC0 1.0",
+  "url": "https://polyhaven.com/a/velour_velvet"
+ },
+ {
+  "file": "../textures/carpet-normal.webp",
+  "from": "ambientcg/Carpet013/Carpet013_1K-JPG_NormalGL.jpg",
+  "author": "ambientCG",
+  "license": "CC0 1.0",
+  "url": "https://ambientcg.com/view?id=Carpet013"
+ }
+]
