@@ -28,7 +28,7 @@ export interface Area {
 export const LW = 2.1;
 export const X0 = -LW / 2;
 /** Row edges, dealer side to players: the top row, totals, combinations, singles. */
-export const ZA = -0.25;
+export const ZA = -0.22;
 export const ZB = ZA + 0.28;
 export const ZC = ZB + 0.15;
 export const ZD = ZC + 0.15;
