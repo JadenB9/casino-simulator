@@ -12,6 +12,7 @@ import { WHEEL, type Variant } from '../../../../shared/src/games/roulette/rules
 import type { Quality } from '../../render/engine3d.ts';
 import { DIMS, TAU } from './spin.ts';
 import { veneer, rimWood, brushedSteel, numberRing, pocketFloor, VENEER_R0, VENEER_R1 } from './textures.ts';
+import { reflectCasino, buildOnFirstDraw } from './env.ts';
 
 export const WHEEL_R = 0.414;
 export const ROTOR_NAME = 'roulette-rotor';
@@ -226,17 +227,17 @@ function prism(poly: [number, number][], z0: number, z1: number, lift = 0, topFr
 }
 
 /**
- * A diamond deflector: a rhombus base, long axis along x, rising in four facets to a smaller flat
- * rhombus on top, like a cut stone. Flat-shaded.
+ * A diamond deflector: a rhombus base, long axis along x, rising in four facets to a narrow crown
+ * (topL and topW of the base's length and width), nearly a ridge, like a cut stone. Flat-shaded.
  */
-function diamondGeometry(length: number, width: number, height: number, top: number): THREE.BufferGeometry {
+function diamondGeometry(length: number, width: number, height: number, topL: number, topW: number): THREE.BufferGeometry {
   const base = [
     new THREE.Vector3(length / 2, 0, 0),
     new THREE.Vector3(0, 0, width / 2),
     new THREE.Vector3(-length / 2, 0, 0),
     new THREE.Vector3(0, 0, -width / 2),
   ];
-  const crown = base.map((p) => new THREE.Vector3(p.x * top, height, p.z * top));
+  const crown = base.map((p) => new THREE.Vector3(p.x * topL, height, p.z * topW));
   const pos: number[] = [];
   const tri = (a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3) => pos.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
   for (let i = 0; i < 4; i++) {
@@ -264,7 +265,7 @@ interface WheelMaterials {
 }
 
 const materialCache = new Map<Quality, WheelMaterials>();
-const PHYSICAL_ONLY = ['clearcoat', 'clearcoatRoughness', 'sheen', 'sheenColor', 'sheenRoughness', 'anisotropy', 'anisotropyRotation'] as const;
+const PHYSICAL_ONLY = ['clearcoat', 'clearcoatRoughness', 'sheen', 'sheenColor', 'sheenRoughness'] as const;
 
 /** A physical material on High; on Low the standard one, without the physical-only layers. */
 function surface(high: boolean, p: THREE.MeshPhysicalMaterialParameters): THREE.MeshStandardMaterial {
@@ -276,9 +277,8 @@ function surface(high: boolean, p: THREE.MeshPhysicalMaterialParameters): THREE.
 const faceCache = new Map<string, { ring: THREE.Material; pockets: THREE.Material }>();
 
 /**
- * On High the lacquered wood is a physical material with a thin clear coat over the grain, the
- * steel track is brushed (anisotropic) and the ball has a soft sheen; on Low they're standard
- * materials with the same maps.
+ * On High the lacquered wood is a physical material with a thin clear coat over the grain and the
+ * ball has a soft sheen; on Low they're standard materials with the same maps.
  */
 function wheelMaterials(q: Quality): WheelMaterials {
   const cached = materialCache.get(q);
@@ -317,21 +317,28 @@ function wheelMaterials(q: Quality): WheelMaterials {
   const steelNormal = steel.normal.clone();
   const steelRough = steel.roughness.clone();
   for (const t of [steelNormal, steelRough]) t.repeat.set(16, 1);
-  const track = Physical({
-    color: '#c4c8cd',
+  // Brushed, but isotropic: an anisotropic lobe smears the lamp's highlight right round the
+  // ring into a white band, where real steel shows a thin bright line and dark metal.
+  const track = new THREE.MeshStandardMaterial({
+    color: '#a9adb3',
     metalness: 1,
-    roughness: 1,
+    roughness: 0.62,
     roughnessMap: steelRough,
     normalMap: steelNormal,
     normalScale: new THREE.Vector2(0.5, 0.5),
-    anisotropy: 0.6,
-    anisotropyRotation: Math.PI / 2,
     side: THREE.DoubleSide,
   });
 
   const chrome = new THREE.MeshStandardMaterial({ color: '#dde0e4', metalness: 1, roughness: 0.1, side: THREE.DoubleSide });
   const ball = Physical({ color: '#efe8d8', roughness: 0.16, sheen: 0.5, sheenColor: new THREE.Color('#fff4e2'), sheenRoughness: 0.45 });
   const m = { rim, track, veneer: veneerMat, chrome, ball };
+  reflectCasino([
+    [chrome, 1],
+    [track, 0.9],
+    [rim, 0.75],
+    [veneerMat, 0.75],
+    [ball, 0.6],
+  ]);
   materialCache.set(q, m);
   return m;
 }
@@ -340,10 +347,9 @@ function faceMaterials(v: Variant, q: Quality): { ring: THREE.Material; pockets:
   const key = `${v}:${q}`;
   let m = faceCache.get(key);
   if (!m) {
-    m = {
-      ring: new THREE.MeshStandardMaterial({ map: numberRing(v, q), roughness: 0.3, side: THREE.DoubleSide }),
-      pockets: new THREE.MeshStandardMaterial({ map: pocketFloor(v, q), roughness: 0.95, side: THREE.DoubleSide }),
-    };
+    const ring = new THREE.MeshStandardMaterial({ map: numberRing(v, q), roughness: 0.3, side: THREE.DoubleSide });
+    m = { ring, pockets: new THREE.MeshStandardMaterial({ map: pocketFloor(v, q), roughness: 0.95, side: THREE.DoubleSide }) };
+    reflectCasino([[ring, 0.5]]);
     faceCache.set(key, m);
   }
   return m;
@@ -372,7 +378,7 @@ export function buildWheel(v: Variant, quality: Quality): THREE.Group {
   const slope = (DIMS.apron[1]![1] - DIMS.apron[2]![1]) / (DIMS.apron[1]![0] - DIMS.apron[2]![0]);
   const r = DIMS.deflectorR;
   const surf = DIMS.apron[2]![1] + (r - DIMS.apron[2]![0]) * slope;
-  const diamonds = new THREE.InstancedMesh(diamondGeometry(0.036, 0.0135, 0.0064, 0.42), m.chrome, DEFLECTORS.length);
+  const diamonds = new THREE.InstancedMesh(diamondGeometry(0.044, 0.016, 0.0075, 0.55, 0.1), m.chrome, DEFLECTORS.length);
   const tangent = new THREE.Vector3();
   const normal = new THREE.Vector3();
   const radial = new THREE.Vector3();
@@ -402,7 +408,9 @@ export function buildWheel(v: Variant, quality: Quality): THREE.Group {
       .translate(0, ARM_Y, 0),
   );
   const chromeParts = [lathe(ROTOR_RIM, seg), lathe(POCKET_OUTER, seg), lathe(POCKET_INNER, seg), lathe(TURRET, high ? 64 : 32), ...arms];
-  rotor.add(new THREE.Mesh(mergeGeometries(chromeParts), m.chrome));
+  const chromeMesh = new THREE.Mesh(mergeGeometries(chromeParts), m.chrome);
+  buildOnFirstDraw(chromeMesh);
+  rotor.add(chromeMesh);
 
   rotor.add(
     new THREE.Mesh(

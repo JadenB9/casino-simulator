@@ -148,11 +148,11 @@ function mahogany(n: Noise, a: number, b: number): [number, number] {
   const f = t - Math.floor(t);
   const line = (0.5 + 0.5 * Math.cos(TAU * f)) ** 10 * (0.3 + 0.7 * n.at(t * 0.23 + 3.1, b * 6));
   const ribbon = n.fbm(a * 95 + wander * 30, b * 2.4, 2) - 0.5;
-  const flame = Math.sin(TAU * (b * 48 + 2.4 * n.fbm(a * 16, b * 12, 2))) * Math.max(0, n.at(a * 20 + 7, b * 7) - 0.3);
+  const flame = Math.sin(TAU * (b * 44 + 3 * n.fbm(a * 14, b * 10, 3))) * Math.max(0, n.fbm(a * 16 + 7, b * 5, 2) - 0.45) * 2;
   const fibre = n.at(a * 1300, b * 40) - 0.5;
   const p = n.at(a * 2400 + 11, b * 150 + 5);
   const pore = Math.max(0, (p - 0.78) * 4.5);
-  const tone = 0.5 + 0.5 * ribbon + 0.16 * flame + 0.08 * fibre - 0.2 * line - 0.3 * pore;
+  const tone = 0.5 + 0.55 * ribbon + 0.1 * flame + 0.08 * fibre - 0.2 * line - 0.3 * pore;
   return [tone, Math.min(1, pore + line * 0.25)];
 }
 
@@ -180,7 +180,7 @@ export function veneer(quality: Quality): WoodMaps {
   const col = cg.createImageData(W, H);
   const surf = sg.createImageData(W, H);
   const n = new Noise(7, 512, 512);
-  const paint = palette('#2a0b04', '#5a1f0e', '#8c3a1b');
+  const paint = palette('#1d0703', '#44170a', '#6e2b13');
   const half = Math.PI / VENEER_WEDGES;
   for (let y = 0; y < H; y++) {
     const r = VENEER_R1 - ((y + 0.5) / H) * (VENEER_R1 - VENEER_R0);

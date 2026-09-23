@@ -52,9 +52,12 @@ if (floor) {
 } else {
   await page.goto(`http://localhost:${port}/casino/?dev=table&game=roulette&variant=${variant}&name=rl3shots`);
 }
-await page.waitForSelector('.modal input[type=number]', { timeout: 30000 });
-await page.fill('.modal input[type=number]', '2000');
-await page.click('.modal .btn.primary');
+// a table left open by an earlier run comes back seated, with no buy-in to answer
+await page.waitForFunction(() => document.querySelector('.modal input[type=number]') || (window.casino?.table ?? window.casino?.app?.table?.session)?.view?.debug?.state().stack > 0, null, { timeout: 30000 });
+if (await page.$('.modal input[type=number]')) {
+  await page.fill('.modal input[type=number]', '2000');
+  await page.click('.modal .btn.primary');
+}
 await page.evaluate(() => (window.__rv = () => (window.casino.table ?? window.casino.app?.table?.session)?.view));
 await until(() => window.__rv()?.debug?.state().stack > 0, 20000);
 await page.waitForTimeout(1200);
