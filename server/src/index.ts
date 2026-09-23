@@ -7,7 +7,8 @@ import { isValidName } from '../../shared/src/names.ts';
 import { PASSWORD_MAX, PASSWORD_MIN, isValidPassword } from '../../shared/src/password.ts';
 import { parseLook, lookFromJson } from '../../shared/src/look.ts';
 import { CATALOG, isGameId, soloTableName, TABLE_ID_RE, variantOf } from '../../shared/src/games/catalog.ts';
-import { LOAN_AMOUNT } from '../../shared/src/money.ts';
+import { formatMoney } from '../../shared/src/money.ts';
+import { REFILL_BELOW } from '../../shared/src/bank.ts';
 import { closeWith, corsHeaders, fail, json, originAllowed, readJson } from './http.ts';
 import { bearer, logIn, signToken, verifyToken, type Claims } from './auth.ts';
 import { bumpRate, escrowsOf, getAccount, loadProfile, setLook } from './db.ts';
@@ -20,7 +21,7 @@ export { CasinoFloor } from './floor/index.ts';
 export { CasinoTable } from './table/host.ts';
 
 const PREFIX = '/casino';
-/** An escrow older than this gets its table asked to reconcile before a profile or loan. */
+/** An escrow older than this gets its table asked to reconcile before a profile (the bank asks every table). */
 const STALE_ESCROW_MS = 120_000;
 const STATION_RE = /^[a-z0-9-]{1,24}$/;
 
@@ -104,18 +105,24 @@ async function handleApi(request: Request, env: Env, route: string, cors: Record
     return json({ look }, 200, cors);
   }
 
+  // The cashier: under $10,000 in all, chips on tables included, a top-up to $50,000.
   if (route === 'bank/loan' && request.method === 'POST') {
-    await reconcileStale(env, claims.a, now, true);
-    const { granted } = await takeLoan(env.DB, claims.a, now, `loan:${claims.a}:${crypto.randomUUID()}`);
-    const profile = await loadProfile(env.DB, claims.a);
+    const counted = await chipsOnTables(env, claims.a);
+    if (!counted) return fail(409, 'BUSY', STILL_MOVING, cors);
+    const loan = await takeLoan(env.DB, { opId: `loan:${claims.a}:${crypto.randomUUID()}`, accountId: claims.a, chips: counted.chips, inPlay: counted.inPlay, now });
+    const profile = await loadProfile(env.DB, claims.a, counted.stacks);
     if (!profile) return fail(401, 'UNAUTHORIZED', 'That account is gone.', cors);
-    if (!granted) {
-      return fail(409, 'NOT_ELIGIBLE', 'The bank only lends when you have nothing left, on the tables included.', cors, {
+    if (!loan.granted) {
+      // A buy-in or cash-out landed between the count and the loan: the count is stale.
+      if (profile.inPlay !== counted.inPlay) return fail(409, 'BUSY', STILL_MOVING, cors);
+      const total = profile.balance + counted.chips;
+      const onTables = counted.chips > 0 ? `, ${formatMoney(counted.chips)} of it in chips on tables` : '';
+      return fail(409, 'NOT_ELIGIBLE', `You have ${formatMoney(total)} in all${onTables}. The bank tops you up when that is under ${formatMoney(REFILL_BELOW)}.`, cors, {
         balance: profile.balance,
         inPlay: profile.inPlay,
       });
     }
-    return json({ profile, loan: { amount: LOAN_AMOUNT, at: now } } satisfies LoanResponse, 200, cors);
+    return json({ profile, loan: { amount: loan.amount!, at: now } } satisfies LoanResponse, 200, cors);
   }
 
   if (route === 'tables' && request.method === 'POST') {
@@ -145,16 +152,56 @@ async function handleApi(request: Request, env: Env, route: string, cors: Record
   return fail(404, 'NOT_FOUND', 'Not here.', cors);
 }
 
+const STILL_MOVING = 'Chips are still moving at one of your tables. Try again in a moment.';
+
+/**
+ * What the bank counts on a player's tables. Every table holding one of their escrows is asked
+ * (which also cashes out a seat past its grace and refunds an escrow its table lost track of),
+ * and each seat counts at its stack plus the bets it has out, so chips put on the felt still
+ * count. Null while chips are moving to or from any of those tables, or one doesn't answer:
+ * the bank waits rather than guess. `inPlay` is D1's figure read with what's left, for the
+ * loan to pin.
+ */
+async function chipsOnTables(env: Env, accountId: number): Promise<{ chips: number; inPlay: number; stacks: Map<string, number> } | null> {
+  const reports = new Map<string, { stack?: number; live?: number; pending?: true }>();
+  let unsure = false;
+  await Promise.all(
+    (await escrowsOf(env.DB, accountId)).map(async (e) => {
+      try {
+        reports.set(e.table_id, await table(env, e.table_id).reconcile(accountId));
+      } catch (err) {
+        console.error('reconcile failed', e.table_id, err);
+        unsure = true;
+      }
+    }),
+  );
+  if (unsure) return null;
+  const [acct, left] = await env.DB.batch<{ in_play?: number; table_id?: string }>([
+    env.DB.prepare(`SELECT in_play FROM casino_accounts WHERE id = ?1`).bind(accountId),
+    env.DB.prepare(`SELECT table_id FROM casino_escrow WHERE account_id = ?1`).bind(accountId),
+  ]);
+  let chips = 0;
+  const stacks = new Map<string, number>();
+  for (const { table_id } of left!.results) {
+    const r = reports.get(table_id!);
+    // Chips in flight, an escrow its table couldn't settle, or a table opened since we asked.
+    if (!r || r.pending || r.stack === undefined) return null;
+    chips += r.stack + (r.live ?? 0);
+    stacks.set(table_id!, r.stack);
+  }
+  return { chips, inPlay: acct!.results[0]?.in_play ?? 0, stacks };
+}
+
 /**
  * Ask each table holding an escrow for this account that has been open a while to report or
  * resolve it. Returns the live stacks it learned, for the profile's "chips on tables".
  */
-async function reconcileStale(env: Env, accountId: number, now: number, all = false): Promise<Map<string, number>> {
+async function reconcileStale(env: Env, accountId: number, now: number): Promise<Map<string, number>> {
   const stacks = new Map<string, number>();
   const escrows = await escrowsOf(env.DB, accountId);
   await Promise.all(
     escrows
-      .filter((e) => all || now - e.updated_at > STALE_ESCROW_MS)
+      .filter((e) => now - e.updated_at > STALE_ESCROW_MS)
       .map(async (e) => {
         try {
           const r = await table(env, e.table_id).reconcile(accountId);

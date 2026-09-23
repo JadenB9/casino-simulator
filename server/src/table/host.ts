@@ -273,10 +273,12 @@ export class CasinoTable extends DurableObject<Env> {
   }
 
   /**
-   * Called by /me and /bank/loan for an escrow that has been open a while: report the live stack,
-   * cash out a seat nobody is using, or refund an escrow this table has no record of.
+   * Called by /me and /bank/loan for an escrow that has been open a while: report the live stack
+   * and the bets it has out, cash out a seat nobody is using, or refund an escrow this table has
+   * no record of. `pending` means chips are still moving to or from D1 (a buy-in, a top-up, a
+   * cash-out), so the bank waits rather than count them.
    */
-  async reconcile(accountId: number): Promise<{ stack?: Cents; pending?: true; refunded?: true }> {
+  async reconcile(accountId: number): Promise<{ stack?: Cents; live?: Cents; pending?: true; refunded?: true }> {
     const mem = this.members.get(accountId);
     const now = Date.now();
     if (mem) {
@@ -285,7 +287,9 @@ export class CasinoTable extends DurableObject<Env> {
         await this.pump();
       }
       const again = this.members.get(accountId);
-      return again ? { stack: again.stack, pending: again.status !== 'seated' ? true : undefined } : { pending: true };
+      if (!again) return { pending: true };
+      const moving = again.status !== 'seated' || this.topUpPending(accountId);
+      return { stack: again.stack, live: again.live, pending: moving ? true : undefined };
     }
     const pending = this.sql.exec<{ n: number }>(`SELECT count(*) AS n FROM outbox WHERE account_id = ?1 AND state = 'pending'`, accountId).one().n;
     if (pending > 0) {

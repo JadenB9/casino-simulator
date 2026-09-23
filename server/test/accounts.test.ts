@@ -1,12 +1,16 @@
-// The account API: login rules and rate limits, the profile, looks, and the bank's loan rule,
-// including chips sitting on a table. Storage is shared by every test in this file, so each test
-// uses its own names and its own client IP (the rate limits are per IP).
+// The account API: login rules and rate limits, the profile, looks, and the bank's top-up rule,
+// including chips sitting on a table (and bets out on its felt). Storage is shared by every test
+// in this file, so each test uses its own names and its own client IP (the rate limits are per IP).
+// Passwords themselves are in auth.test.ts.
 
 import { describe, it, expect } from 'vitest';
 import { env, exports } from 'cloudflare:workers';
+import { runInDurableObject } from 'cloudflare:test';
 import { signToken } from '../src/auth.ts';
+import type { CasinoTable } from '../src/table/host.ts';
 import { DEFAULT_LOOK } from '../../shared/src/look.ts';
 import { LOAN_AMOUNT, STARTING_BALANCE } from '../../shared/src/money.ts';
+import { REFILL_BELOW, REFILL_TO } from '../../shared/src/bank.ts';
 import { ORIGIN, TEST_PASSWORD, api, connect, type Client } from './helpers.ts';
 
 let ipSeq = 0;
@@ -243,50 +247,106 @@ describe('look', () => {
 });
 
 describe('bank', () => {
-  it('refuses a loan while there is money, and says how much', async () => {
+  const setBalance = (id: number, cents: number) => env.DB.prepare(`UPDATE casino_accounts SET balance = ?2 WHERE id = ?1`).bind(id, cents).run();
+  const soloTable = (id: number): DurableObjectStub<CasinoTable> => env.TABLE.get(env.TABLE.idFromName(`solo:highcard:-:${id}`));
+
+  it('refuses a top-up at $10,000 or more in all, and says how much there is', async () => {
     const { token, profile } = await account('Solvent_1');
     const res = await loan(token);
     expect(res.status).toBe(409);
-    expect(await res.json<any>()).toMatchObject({ error: 'NOT_ELIGIBLE', balance: STARTING_BALANCE, inPlay: 0 });
+    expect(await res.json<any>()).toEqual({
+      error: 'NOT_ELIGIBLE',
+      msg: 'You have $50,000 in all. The bank tops you up when that is under $10,000.',
+      balance: STARTING_BALANCE,
+      inPlay: 0,
+    });
+    await setBalance(profile.id, REFILL_BELOW);
+    expect((await loan(token)).status).toBe(409);
     expect(await count(`SELECT count(*) AS n FROM casino_loans WHERE account_id = ?1`, profile.id)).toBe(0);
     expect((await me(token)).loansTaken).toBe(0);
   });
 
-  it('counts chips on a table: $0 in the balance is not enough until the escrow closes', async () => {
-    const { token, profile } = await account('Escrowed_1');
+  it('tops $9,999.99 up to exactly $50,000, counts the loan, and does it again next time', async () => {
+    const { token, profile } = await account('Refill_1');
+    await setBalance(profile.id, 999_999);
+    const res = await loan(token);
+    expect(res.status).toBe(200);
+    const body = await res.json<any>();
+    expect(body.loan.amount).toBe(4_000_001);
+    expect(body.profile).toMatchObject({ balance: REFILL_TO, inPlay: 0, loansTaken: 1 });
+    expect(body.profile.loans).toEqual([{ amount: 4_000_001, at: body.loan.at }]);
+    // At $50,000 there's nothing more to ask for...
+    expect((await loan(token)).status).toBe(409);
+    // ...until the player is under the line again.
+    await setBalance(profile.id, 0);
+    const again = await (await loan(token)).json<any>();
+    expect(again.loan.amount).toBe(LOAN_AMOUNT);
+    expect(again.profile.loansTaken).toBe(2);
+    expect(again.profile.loans.map((l: any) => l.amount)).toEqual([LOAN_AMOUNT, 4_000_001]);
+    expect(await count(`SELECT count(*) AS n FROM casino_ledger WHERE account_id = ?1 AND kind = 'loan'`, profile.id)).toBe(2);
+  });
+
+  it('counts chips on a table, and tops up while the player stays seated', async () => {
+    const { token, profile } = await account('Seated_1');
     const c = await seatAtHighCard(token, 100_000);
-    expect(await money(profile.id)).toEqual({ balance: STARTING_BALANCE - 100_000, in_play: 100_000 });
+    // $1,000 at the table and nothing else.
+    await setBalance(profile.id, 0);
+    const res = await loan(token);
+    expect(res.status).toBe(200);
+    const body = await res.json<any>();
+    expect(body.loan.amount).toBe(4_900_000);
+    expect(body.profile).toMatchObject({ balance: 4_900_000, inPlay: 100_000, loansTaken: 1 });
 
-    // The rest of the balance is gone; only the chips on the table remain.
-    await env.DB.prepare(`UPDATE casino_accounts SET balance = 0 WHERE id = ?1`).bind(profile.id).run();
-    const refused = await loan(token);
-    expect(refused.status).toBe(409);
-    expect(await refused.json<any>()).toMatchObject({ error: 'NOT_ELIGIBLE', balance: 0, inPlay: 100_000 });
-
-    // Asking the bank didn't disturb the seat.
+    // The seat didn't notice.
     c.send({ t: 'sync' });
     const snap = await c.next<any>((m) => m.t === 'table');
     expect(snap.you).toMatchObject({ status: 'seated', stack: 100_000 });
 
-    // Cashing out brings the chips back to the balance, so there is still nothing to lend.
-    c.send({ t: 'cashout', aid: 'out1' });
-    const bal = await c.next<any>((m) => m.t === 'balance' && m.inPlay === 0, 5000);
-    expect(bal.balance).toBe(100_000);
-    const stillRefused = await loan(token);
-    expect(stillRefused.status).toBe(409);
-    expect(await stillRefused.json<any>()).toMatchObject({ balance: 100_000, inPlay: 0 });
+    // $49,000 here and $1,000 on the table is $50,000 in all.
+    const refused = await loan(token);
+    expect(refused.status).toBe(409);
+    expect((await refused.json<any>()).msg).toBe('You have $50,000 in all, $1,000 of it in chips on tables. The bank tops you up when that is under $10,000.');
+    c.ws.close();
+  });
 
-    // Once that is spent too, the bank lends, once.
-    await env.DB.prepare(`UPDATE casino_accounts SET balance = 0 WHERE id = ?1`).bind(profile.id).run();
-    const granted = await loan(token);
-    expect(granted.status).toBe(200);
-    const body = await granted.json<any>();
-    expect(body.loan.amount).toBe(LOAN_AMOUNT);
-    expect(body.profile).toMatchObject({ balance: LOAN_AMOUNT, inPlay: 0, loansTaken: 1 });
-    expect(body.profile.loans).toEqual([{ amount: LOAN_AMOUNT, at: body.loan.at }]);
-    expect((await loan(token)).status).toBe(409);
-    expect(await count(`SELECT count(*) AS n FROM casino_loans WHERE account_id = ?1`, profile.id)).toBe(1);
-    expect(await count(`SELECT count(*) AS n FROM casino_ledger WHERE account_id = ?1 AND kind = 'loan'`, profile.id)).toBe(1);
+  it('counts bets out on the felt, so chips put down for a moment still count', async () => {
+    const { token, profile } = await account('Felt_1');
+    const c = await seatAtHighCard(token, 150_000);
+    c.send({ t: 'act', aid: 'bet1', a: { type: 'bet', amount: 100_000 } });
+    await c.next<any>((m) => m.t === 'seat' && m.stack === 50_000);
+    // $8,500 in the balance, $500 in hand and $1,000 on the felt: $10,000 exactly.
+    await setBalance(profile.id, 850_000);
+    const res = await loan(token);
+    expect(res.status).toBe(409);
+    expect((await res.json<any>()).msg).toBe('You have $10,000 in all, $1,500 of it in chips on tables. The bank tops you up when that is under $10,000.');
+    // A cent less, and the top-up brings it all to exactly $50,000.
+    await setBalance(profile.id, 849_999);
+    const ok = await (await loan(token)).json<any>();
+    expect(ok.loan.amount).toBe(4_000_001);
+    expect(ok.profile.balance).toBe(4_850_000);
+    c.ws.close();
+  });
+
+  it('waits, and says so, while chips are on their way to or from a table', async () => {
+    const { token, profile } = await account('Moving_1');
+    const c = await seatAtHighCard(token, 100_000);
+    await setBalance(profile.id, 0);
+    // A top-up the table has recorded but not yet brought in from D1 (not due during this test).
+    await runInDurableObject(soloTable(profile.id), (_t, state) => {
+      const now = Date.now();
+      state.storage.sql.exec(
+        `INSERT INTO outbox (op_id, kind, account_id, amount, payload, state, attempts, next_at, created_at) VALUES ('test:topup', 'topup', ?1, 100000, NULL, 'pending', 0, ?2, ?3)`,
+        profile.id, now + 3_600_000, now,
+      );
+    });
+    const res = await loan(token);
+    expect(res.status).toBe(409);
+    expect(await res.json<any>()).toEqual({ error: 'BUSY', msg: 'Chips are still moving at one of your tables. Try again in a moment.' });
+    expect(await count(`SELECT count(*) AS n FROM casino_loans WHERE account_id = ?1`, profile.id)).toBe(0);
+    await runInDurableObject(soloTable(profile.id), (_t, state) => {
+      state.storage.sql.exec(`DELETE FROM outbox WHERE op_id = 'test:topup'`);
+    });
+    expect((await loan(token)).status).toBe(200);
     c.ws.close();
   });
 
@@ -296,7 +356,6 @@ describe('bank', () => {
     await env.DB.prepare(`UPDATE casino_accounts SET balance = 1000 WHERE id = ?1`).bind(profile.id).run();
     const c = await seatAtHighCard(token, 1_000);
     expect(await money(profile.id)).toEqual({ balance: 0, in_play: 1_000 });
-    expect((await loan(token)).status).toBe(409);
 
     // Bet the whole stack until it's gone. Each round is close to a coin flip, so this ends fast.
     let stack = 1_000;
