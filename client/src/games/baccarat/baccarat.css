@@ -1,0 +1,109 @@
+/* Baccarat table UI: the scoreboard (top left), the bet strip over the chip tray, and the labels
+   pinned to the felt. Built on the theme's glass panels and brass hairlines. Red is Banker, blue
+   is Player, green is Tie, everywhere. */
+
+:root {
+  --bc-banker: #d2433b;
+  --bc-player: #4a7de0;
+  --bc-tie: #37a462;
+  --bc-cloth: #4d121b;
+  --bc-print: rgba(234, 203, 139, 0.92);
+}
+
+/* scoreboard */
+.bc-board { position: fixed; top: 12px; left: 12px; padding: 9px 11px 8px; display: grid; gap: 7px; z-index: 5; }
+.bc-board-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+.bc-board-shoe { font-family: var(--serif); font-size: 14px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--brass-hi); white-space: nowrap; }
+.bc-board-counts { display: flex; gap: 10px; align-items: center; font-size: 15px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bc-count { display: inline-flex; align-items: center; gap: 4px; color: var(--ink); }
+.bc-count b { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; font-size: 11px; color: #fff; }
+.bc-b b { background: var(--bc-banker); }
+.bc-p b { background: var(--bc-player); }
+.bc-t b { background: var(--bc-tie); }
+.bc-pairs { color: var(--ink-3); font-size: 13px; }
+.bc-board-roads { display: flex; gap: 10px; align-items: flex-start; }
+.bc-road-box { margin: 0; display: grid; gap: 3px; }
+.bc-road-box .label { font-size: 11px; }
+.bc-road { display: block; border: 1px solid #b7ad98; border-radius: 2px; }
+.bc-bead { width: 160px; height: 96px; }
+.bc-big { width: 256px; height: 96px; }
+.bc-board-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 20px; }
+.bc-board-note { font-size: 13px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.bc-board-badge { font-size: 12px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: #1d140a; background: var(--brass-hi); border-radius: 3px; padding: 1px 7px; }
+
+@media (max-width: 1199px) {
+  .bc-bead { width: 140px; height: 84px; }
+  .bc-big { width: 224px; height: 84px; }
+}
+@media (max-width: 899px) {
+  .bc-bead { width: 120px; height: 72px; }
+  .bc-big { width: 192px; height: 72px; }
+  .bc-board-counts { font-size: 13px; gap: 7px; }
+}
+
+/* bet strip: the spots as a flat layout, your bet on each, and the meters */
+.bc-strip { position: fixed; left: 50%; bottom: 102px; transform: translateX(-50%); display: flex; align-items: stretch; gap: 12px; padding: 7px 9px; z-index: 4; }
+.bc-spots { display: flex; gap: 5px; }
+.bc-spot { position: relative; display: grid; grid-template-rows: auto auto 1fr; justify-items: center; align-content: start; gap: 1px; width: 92px; min-height: 60px; padding: 7px 6px 5px; border-radius: 5px; border: 1px solid rgba(234, 203, 139, 0.38); border-top: 3px solid var(--bc-accent, var(--brass)); background: var(--bc-cloth); color: var(--bc-print); cursor: pointer; transition: border-color 0.15s, background 0.15s, transform 0.08s; }
+.bc-spot:hover:not(:disabled) { background: #5e1823; border-color: rgba(241, 213, 154, 0.8); border-top-color: var(--bc-accent); }
+.bc-spot:active:not(:disabled) { transform: translateY(1px); }
+.bc-spot:disabled { opacity: 0.45; cursor: default; }
+.bc-spot:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.bc-spot-player { --bc-accent: var(--bc-player); width: 108px; }
+.bc-spot-banker { --bc-accent: var(--bc-banker); width: 108px; }
+.bc-spot-tie { --bc-accent: var(--bc-tie); }
+.bc-spot-playerPair { --bc-accent: #36579a; width: 80px; }
+.bc-spot-bankerPair { --bc-accent: #973029; width: 80px; }
+.bc-spot-name { font-family: var(--serif); font-size: 14px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+.bc-spot-pays { font-size: 12px; letter-spacing: 0.04em; color: rgba(234, 203, 139, 0.62); }
+.bc-spot-amt { align-self: end; font-size: 16px; color: #fff; font-variant-numeric: tabular-nums; }
+.bc-spot.has-bet { border-color: var(--brass-hi); box-shadow: inset 0 0 0 1px rgba(241, 213, 154, 0.35); }
+.bc-spot .key { position: absolute; top: 3px; right: 4px; font-size: 10px; line-height: 1.2; opacity: 0.55; border: 1px solid currentColor; border-radius: 3px; padding: 0 3px; }
+.bc-meters { display: flex; align-items: center; gap: 14px; padding-left: 12px; border-left: 1px solid var(--line); }
+.bc-meter { display: grid; gap: 1px; min-width: 64px; }
+.bc-meter .label { font-size: 11px; }
+.bc-meter b { font-size: 19px; font-weight: 600; color: var(--ink); white-space: nowrap; }
+.bc-meter b.up { color: var(--win); }
+.bc-meter b.down { color: var(--lose); }
+.bc-squeeze { height: 30px; font-size: 13px; padding: 0 10px; }
+.bc-squeeze[aria-pressed='true'] { border-color: var(--brass-hi); color: var(--brass-hi); }
+
+@media (max-width: 1099px) {
+  .bc-spot { width: 80px; }
+  .bc-spot-player, .bc-spot-banker { width: 92px; }
+  .bc-spot-playerPair, .bc-spot-bankerPair { width: 68px; }
+  .bc-spot-name { font-size: 12px; }
+  .bc-meters { gap: 10px; }
+}
+@media (max-width: 859px) {
+  .bc-strip { bottom: 96px; }
+  .bc-spot-pays { display: none; }
+  .bc-meter:last-of-type, .bc-squeeze { display: none; }
+}
+
+/* hover tip over a betting spot */
+.bc-tip { position: fixed; z-index: 20; max-width: 250px; padding: 7px 10px; display: grid; gap: 2px; font-size: 14px; color: var(--ink-2); pointer-events: none; }
+.bc-tip b { font-family: var(--serif); font-size: 14px; letter-spacing: 0.06em; color: var(--brass-hi); }
+.bc-tip-meta { font-size: 13px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+
+/* pinned to the felt */
+.bc-total { display: inline-flex; align-items: baseline; gap: 7px; padding: 2px 11px 3px; border-radius: 999px; background: var(--glass-2); border: 1px solid var(--line-strong); font-family: var(--serif); font-size: 12px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-2); white-space: nowrap; transition: opacity 0.3s, border-color 0.3s; }
+.bc-total span::before { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
+.bc-total-player span::before { background: var(--bc-player); }
+.bc-total-banker span::before { background: var(--bc-banker); }
+.bc-total-num { font-family: var(--ui); font-size: 21px; line-height: 1; color: var(--ink); }
+.bc-total.win { border-color: var(--brass-hi); box-shadow: 0 0 0 1px rgba(241, 213, 154, 0.4), 0 0 18px rgba(241, 213, 154, 0.25); }
+.bc-total.win .bc-total-num { color: var(--brass-hi); }
+.bc-total.tie { border-color: var(--bc-tie); }
+.bc-total.lose { opacity: 0.55; }
+.bc-comm { padding: 1px 5px; border-radius: 3px; border: 1px solid var(--brass); background: rgba(14, 11, 9, 0.9); color: var(--brass-hi); font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; animation: pill-in 0.3s var(--ease); }
+.pill.bc-other { font-size: 13px; padding: 1px 8px; }
+.bc-timer { position: relative; }
+.bc-timer svg { width: 44px; height: 44px; display: block; }
+.bc-timer-num { position: absolute; inset: 0; display: grid; place-items: center; font-size: 18px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.bc-timer.late .left { stroke: var(--lose); }
+.bc-seat { display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px 2px 3px; border-radius: 999px; background: var(--glass); border: 1px solid var(--line); font-size: 13px; color: var(--ink-2); white-space: nowrap; }
+.bc-seat b { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: rgba(234, 203, 139, 0.16); color: var(--brass-hi); font-size: 12px; }
+.bc-seat.me { border-color: var(--brass-hi); color: var(--ink); }
+.bc-seat.away { opacity: 0.5; }
+.bc-ready { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--win); }
