@@ -77,7 +77,7 @@ class TableFlow {
     // Listen from the start, so the Multiplayer row can already say how many tables are open.
     if (opts.floor) {
       this.watch = new LobbyWatch(opts.floor, opts.game);
-      this.watch.on((list) => (this.step === 'choose' ? this.renderCount() : this.renderList(list)));
+      this.watch.on((list) => (this.step === 'choose' ? this.renderCount() : this.renderList(this.sameVariant(list))));
     }
     addEventListener('keydown', this.onKey, true);
     this.showChoose();
@@ -132,7 +132,7 @@ class TableFlow {
     let open = 0;
     if (this.watch && !this.watch.loaded) text = '…';
     else if (this.watch) {
-      open = this.watch.list.filter((l) => !isFull(l)).length;
+      open = this.sameVariant(this.watch.list).filter((l) => !isFull(l)).length;
       text = open === 0 ? 'None open' : `${open} open`;
     }
     this.liveCount.textContent = text;
@@ -195,7 +195,7 @@ class TableFlow {
     join.append(el('div', 'label', 'Join with a PIN'), form, this.errorEl);
 
     this.body.replaceChildren(bar, this.listEl, create, join);
-    this.renderList(this.watch?.list ?? []);
+    this.renderList(this.sameVariant(this.watch?.list ?? []));
     (this.listEl.querySelector<HTMLButtonElement>('.lobby-row:not(:disabled)') ?? input).focus();
   }
 
@@ -206,6 +206,12 @@ class TableFlow {
     b.append(icon, el('span', 'txt', label));
     b.addEventListener('click', run);
     return b;
+  }
+
+  /** Lobbies at this station's kind of table (an American wheel's list shows American wheels). */
+  private sameVariant(list: LobbySummary[]): LobbySummary[] {
+    const v = this.opts.variant;
+    return v ? list.filter((l) => !l.variant || l.variant === v) : list;
   }
 
   private renderList(list: LobbySummary[]): void {
@@ -296,7 +302,7 @@ class TableFlow {
       const txt = b.querySelector('.txt');
       if (txt) txt.textContent = b === btn ? label : (b.dataset.label ?? '');
     }
-    this.renderList(this.watch?.list ?? []);
+    this.renderList(this.sameVariant(this.watch?.list ?? []));
   }
 
   private setError(msg: string): void {

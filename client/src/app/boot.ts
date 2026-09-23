@@ -262,6 +262,7 @@ class App {
   }
 
   private async backToMenu(): Promise<void> {
+    if (!this.hud) return;
     if (this.table) await this.leaveTable();
     this.hud?.close();
     this.hud = null;
@@ -318,7 +319,14 @@ class App {
       (code) => this.tableClosed(table!, code),
       {
         onLeave: () => current() && void this.leaveTable(),
-        onTable: (snap) => current() && this.poseForSeat(snap.you.seat),
+        onTable: (snap) => {
+          if (!current()) return;
+          // A reconnect sends only the snapshot: it says whether you're seated and with what.
+          const seated = snap.you.status !== 'watching';
+          this.table!.seated = seated;
+          this.hud?.setTableChips(seated ? snap.you.stack : null);
+          this.poseForSeat(snap.you.seat);
+        },
         onSeat: (m) => {
           if (!current()) return;
           const seated = m.status !== 'watching';
@@ -354,6 +362,7 @@ class App {
       void this.leaveTable();
       return;
     }
+    const stay = button('Stay', () => m.close(), { cls: 'ghost' });
     const m = modal(
       'Leave the table?',
       ['Your chips go back to your balance. Anything still in play is settled first: undealt bets come back, hands in progress are stood or folded.'],
@@ -362,10 +371,12 @@ class App {
           m.close();
           void this.leaveTable();
         }, { cls: 'primary' }),
-        button('Stay', () => m.close(), { cls: 'ghost' }),
+        stay,
       ],
       () => m.close(),
     );
+    // Space deals or rolls at every table; a reflex press here must not stand you up.
+    stay.focus();
   }
 
   private async leaveTable(): Promise<void> {
@@ -376,7 +387,25 @@ class App {
     open.session.leave();
     open.party?.dispose();
     this.hud?.setTableChips(null);
+    void this.refreshProfile();
     await this.world.exitTable();
+  }
+
+  /**
+   * The cash-out's balance message can land after the table's socket has closed (it waits on D1,
+   * and on any bets still in play), so ask for the profile until the chips have come home.
+   */
+  private async refreshProfile(): Promise<void> {
+    for (const wait of [800, 2500, 6000, 15_000]) {
+      await new Promise((r) => setTimeout(r, wait));
+      try {
+        const p = await api.me();
+        session.set(p);
+        if (p.inPlay === 0) return;
+      } catch {
+        return;
+      }
+    }
   }
 
   private tableClosed(closed: TableSession, code?: number): void {

@@ -476,7 +476,8 @@ export class BlackjackTable implements TableView {
     this.tray.root.hidden = !betting;
     if (betting) {
       const bet = this.myBet();
-      if (this.mode === 'multi') this.tray.setPrimary(this.ready ? 'Ready ✓' : 'Ready', bet > 0);
+      // Ready works without a bet too: sitting a round out still lets the others' hand go.
+      if (this.mode === 'multi') this.tray.setPrimary(this.ready ? 'Ready ✓' : 'Ready', true);
       else if (bet === 0 && this.lastBet > 0) this.tray.setPrimary(`Deal ${formatMoney(this.lastBet)}`, this.lastBet <= this.stack);
       else this.tray.setPrimary('Deal', bet >= this.limits.min);
     }

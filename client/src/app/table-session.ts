@@ -56,12 +56,15 @@ export class TableSession {
     const params: Record<string, string> = {};
     if (target.kind === 'solo' && target.variant) params.variant = target.variant;
     if (target.station) params.station = target.station;
-    if (target.pin) params.pin = target.pin;
+    this.pin = target.pin ?? null;
     this.socket = new Socket({
-      url: () => socketUrl(path, params),
+      // Rebuilt for every connection: a reconnect brings the lobby's current PIN (a watcher who
+      // drops is let back in like a newcomer, and the PIN may have changed since joining).
+      url: () => socketUrl(path, this.pin ? { ...params, pin: this.pin } : params),
       onMessage: (m) => this.onMessage(m),
       onState: (s, code) => {
         if (s === 'reconnecting') this.kit.say('Reconnecting…', 4000);
+        if (s === 'open' && this.leavePending) this.sendLeave();
         // A close this session asked for (leaving, closing) isn't news to the app.
         if (s === 'closed' && !this.ended) this.onClosed(code);
       },
@@ -87,6 +90,18 @@ export class TableSession {
     // seat message says "watching, $0", which would otherwise offer a buy-in at the table just left).
     this.ended = true;
     this.kit.dispose();
+    // A leave pressed while reconnecting goes out as soon as the socket is back (or the seat is
+    // held for the grace period and its bets play on timeouts); give up after a while.
+    if (!this.socket.send({ t: 'leave' })) {
+      this.leavePending = true;
+      setTimeout(() => this.close(), 15_000);
+      return;
+    }
+    setTimeout(() => this.close(), 150);
+  }
+
+  private sendLeave(): void {
+    this.leavePending = false;
     this.socket.send({ t: 'leave' });
     setTimeout(() => this.close(), 150);
   }
@@ -116,7 +131,9 @@ export class TableSession {
         kit: this.kit,
         sfx: this.sfx,
         me: { accountId: me.id, name: me.name },
-        variant: this.target.variant,
+        // The table's own variant: a lobby joined by PIN can be a different wheel than the
+        // station's.
+        variant: this.snapshot?.meta.variant ?? this.target.variant,
       });
     }
     return this.view;
@@ -127,6 +144,9 @@ export class TableSession {
     switch (m.t) {
       case 'table': {
         finishAll();
+        // A fresh snapshot supersedes whatever was still queued from before it (a reconnect).
+        this.gen++;
+        if (m.meta.pin) this.pin = m.meta.pin;
         this.snapshot = m;
         const view = this.mountIfNeeded();
         view.onTable(m);
@@ -138,8 +158,9 @@ export class TableSession {
         if (this.pending > 1) finishAll();
         this.pending++;
         const events = m.events as GameEvent[];
+        const gen = this.gen;
         this.queue = this.queue
-          .then(() => this.view?.onEvents(events, m.view))
+          .then(() => (gen === this.gen ? this.view?.onEvents(events, m.view) : undefined))
           .catch((err) => console.error('table animation failed', err))
           .finally(() => this.pending--);
         break;
@@ -153,6 +174,7 @@ export class TableSession {
         session.balance(m.balance, m.inPlay, m.rev);
         break;
       case 'members':
+        if (m.pin) this.pin = m.pin;
         this.view?.onMembers?.(m);
         break;
       case 'err':
@@ -166,6 +188,11 @@ export class TableSession {
   }
 
   private prompting = false;
+  /** The lobby's PIN as last heard (members are told it), for reconnecting. */
+  private pin: string | null = null;
+  private leavePending = false;
+  /** Bumped by each full snapshot; event batches queued before it are skipped. */
+  private gen = 0;
   /** Left or closed: nothing more is reported to the app. */
   private ended = false;
 

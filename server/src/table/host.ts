@@ -123,8 +123,6 @@ export class CasinoTable extends DurableObject<Env> {
   private pumping: Promise<void> | null = null;
   private alarmAt: number | null = null;
   private buckets = new Map<WebSocket, { act: Bucket; misc: Bucket; money: Bucket; strikes: number }>();
-  /** Wrong PIN attempts per account. In memory: losing it on eviction only resets a limit. */
-  private pinMisses = new Map<number, { n: number; until: number }>();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -145,6 +143,8 @@ export class CasinoTable extends DurableObject<Env> {
       payload TEXT, state TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, next_at INTEGER NOT NULL,
       created_at INTEGER NOT NULL) WITHOUT ROWID`);
     this.sql.exec(`CREATE TABLE IF NOT EXISTS deadlines (name TEXT PRIMARY KEY, at INTEGER NOT NULL) WITHOUT ROWID`);
+    // Wrong PINs per account and per address, stored so an eviction doesn't reset the count.
+    this.sql.exec(`CREATE TABLE IF NOT EXISTS pin_misses (who TEXT PRIMARY KEY, n INTEGER NOT NULL, until INTEGER NOT NULL) WITHOUT ROWID`);
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
     this.load();
   }
@@ -325,11 +325,15 @@ export class CasinoTable extends DurableObject<Env> {
       // A private lobby lets in only people who bring its PIN. Members already inside when it
       // went private stay members; everyone else, even someone who saw it listed, needs the PIN.
       if (m.mode === 'multi' && m.visibility === 'private') {
-        const refused = this.checkPin(accountId, request.headers.get('x-casino-pin'), now);
+        const refused = this.checkPin(accountId, request.headers.get('x-casino-ip') ?? '', request.headers.get('x-casino-pin'), now);
         // FORBIDDEN either way: the client must not keep retrying a lobby it can't enter.
         if (refused) return closeWith(CLOSE.FORBIDDEN, refused === 'locked' ? 'too many tries' : 'wrong pin');
       }
       mem = this.addMember(accountId, name, look, station, now);
+    } else if (mem.leaving) {
+      // Still settling the bets left behind when they stood up (a craps point, say): the seat is
+      // on its way out and can't be reopened until that's done and it has cashed out.
+      return closeWith(CLOSE.FORBIDDEN, 'still leaving');
     } else {
       mem.name = name || mem.name;
       mem.look = look;
@@ -365,14 +369,16 @@ export class CasinoTable extends DurableObject<Env> {
   }
 
   /** Null if this PIN opens the table; otherwise why not. */
-  private checkPin(accountId: number, pin: string | null, now: number): 'wrong' | 'locked' | null {
-    const miss = this.pinMisses.get(accountId);
-    if (miss && miss.until <= now) this.pinMisses.delete(accountId);
-    const held = this.pinMisses.get(accountId);
-    if (held && held.n >= PIN_MISSES) return 'locked';
+  private checkPin(accountId: number, ip: string, pin: string | null, now: number): 'wrong' | 'locked' | null {
+    // Names are free, so the address counts too (when the edge gave us one).
+    const keys = [`a:${accountId}`, ...(ip ? [`ip:${ip}`] : [])];
+    this.sql.exec(`DELETE FROM pin_misses WHERE until <= ?1`, now);
+    const misses = (who: string) => this.sql.exec<{ n: number }>(`SELECT n FROM pin_misses WHERE who = ?1`, who).toArray()[0]?.n ?? 0;
+    if (keys.some((k) => misses(k) >= PIN_MISSES)) return 'locked';
     if (pin !== null && pin === this.meta!.pin) return null;
-    if (held) held.n++;
-    else this.pinMisses.set(accountId, { n: 1, until: now + PIN_LOCK_MS });
+    for (const k of keys) {
+      this.sql.exec(`INSERT INTO pin_misses (who, n, until) VALUES (?1, 1, ?2) ON CONFLICT(who) DO UPDATE SET n = n + 1`, k, now + PIN_LOCK_MS);
+    }
     return 'wrong';
   }
 
@@ -555,7 +561,11 @@ export class CasinoTable extends DurableObject<Env> {
     const m = this.meta!;
     if (m.mode !== 'multi' || m.leader === null || this.isConnected(m.leader)) return;
     const next = this.nextLeader(m.leader);
-    if (!next || !this.isConnected(next.account_id)) return;
+    if (!next || !this.isConnected(next.account_id)) {
+      // Nobody here to take it yet: look again in a while rather than never.
+      this.setDeadline('leader', Date.now() + LEADER_HANDOFF_MS);
+      return;
+    }
     m.leader = next.account_id;
     this.putMeta('leader', m.leader);
     this.broadcastMembers();
@@ -576,8 +586,15 @@ export class CasinoTable extends DurableObject<Env> {
       }
       if (this.members.size === 0 && m.mode === 'multi') this.setDeadline('close', now + EMPTY_CLOSE_MS);
     });
+    // Say so, then close: someone who has left the table sees nothing more of it (its PIN,
+    // who is at it, its play) through a socket left open.
     for (const ws of this.ctx.getWebSockets(`a:${mem.account_id}`)) {
       this.send(ws, { t: 'seat', status: 'watching', stack: 0, escrow: 0, seat: null });
+      try {
+        ws.close(1000, 'left the table');
+      } catch {
+        /* already closing */
+      }
     }
     this.broadcastMembers();
     this.ctx.waitUntil(this.noteFloor(mem.account_id, null));
@@ -770,8 +787,9 @@ export class CasinoTable extends DurableObject<Env> {
           job.op_id,
         );
         if (out.kind !== 'applied') throw new Error('cash-out refused');
-        this.finishCashOut(job, Date.now());
+        // The balance first: finishing a leaving seat's cash-out closes its socket.
         await this.sendBalance(job.account_id, out);
+        this.finishCashOut(job, Date.now());
       } else {
         try {
           await applyTransfer(db, refundStatements(db, { opId: job.op_id, accountId: job.account_id, tableId: m.name, now }), job.op_id);
@@ -805,6 +823,8 @@ export class CasinoTable extends DurableObject<Env> {
         mem.escrow += job.amount;
       }
       if (job.kind === 'buyin') mem.status = applied ? 'seated' : 'watching';
+      // Builds before this one parked a topping-up seat in 'buying_in'; bring it back.
+      else if (mem.status === 'buying_in') mem.status = 'seated';
       this.sql.exec(`UPDATE members SET stack = ?1, escrow = ?2, status = ?3 WHERE account_id = ?4`, mem.stack, mem.escrow, mem.status, mem.account_id);
     });
     if (!mem) return;
@@ -817,8 +837,10 @@ export class CasinoTable extends DurableObject<Env> {
       this.commit(engine.seatJoined(this.state, mem.seat!, this.engineCtx(now)), now);
       this.runTicks(now);
     } else if (job.kind === 'topup') {
-      // A seat that was leaving (or went bust) while this was in flight can cash out now.
-      this.sweepLeavers(now);
+      // A seat that stood up while this was in flight leaves now, bets and all (the sweep alone
+      // would wait on bets nobody took down); one that went bust is picked up by the sweep.
+      if (mem.leaving) this.startCashOut(mem, now, true);
+      else this.sweepLeavers(now);
     }
   }
 
@@ -1077,6 +1099,9 @@ export class CasinoTable extends DurableObject<Env> {
       started: m.started,
     } satisfies TableServerMsg);
     for (const ws of this.ctx.getWebSockets()) {
+      // Only members hear the party (the PIN included).
+      const att = ws.deserializeAttachment() as Att | null;
+      if (!att || !this.members.has(att.accountId)) continue;
       try {
         ws.send(msg);
       } catch {
@@ -1092,7 +1117,8 @@ export class CasinoTable extends DurableObject<Env> {
       const att = ws.deserializeAttachment() as Att | null;
       if (!att) continue;
       const mem = this.members.get(att.accountId);
-      const seat = mem && mem.status !== 'watching' ? mem.seat : null;
+      if (!mem) continue;
+      const seat = mem.status !== 'watching' ? mem.seat : null;
       const mine = events.filter((e) => e.to === undefined || e.to === 'all' || e.to === seat);
       this.send(ws, { t: 'ev', seq: m.seq, events: mine, view: engine.view(this.state, seat), now });
     }
