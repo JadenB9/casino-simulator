@@ -5,7 +5,7 @@
 
 import * as THREE from 'three';
 import { Felt } from '../../table/felt.ts';
-import { CARD_W } from '../../table/cards.ts';
+import { CARD_W, CARD_H } from '../../table/cards.ts';
 import { formatMoney, type Cents } from '../../../../shared/src/money.ts';
 
 export const TOP_Y = 0.76;
@@ -69,9 +69,15 @@ export function slotYaw(k: number, n: number): number {
 
 export const DEALER_POINT = new THREE.Vector3(0, TOP_Y + 0.03, -RR + 0.14);
 export const POT_POINT = new THREE.Vector3(0, TOP_Y, 0.2);
-const BOARD_Z = -0.02;
+/**
+ * The board is dealt larger than life: everyone reads it from across the table, and it's the
+ * part of the felt every decision turns on. The printed card spots use the same size.
+ */
+export const BOARD_SCALE = 1.6;
+const BOARD_Z = -0.035;
+const BOARD_GAP = 0.014;
 export function boardPoint(i: number): THREE.Vector3 {
-  return new THREE.Vector3((i - 2) * (CARD_W + 0.012), TOP_Y + 0.0012, BOARD_Z);
+  return new THREE.Vector3((i - 2) * (CARD_W * BOARD_SCALE + BOARD_GAP), TOP_Y + 0.0012, BOARD_Z);
 }
 
 function ovalPoints(r: number, n = 160): EdgePoint[] {
@@ -163,9 +169,11 @@ export function holdemFelt(blinds: { sb: Cents; bb: Cents }, seats: number): Fel
       // five card spots for the board
       g.strokeStyle = 'rgba(226, 196, 132, 0.4)';
       g.lineWidth = px(0.002);
+      const w = CARD_W * BOARD_SCALE;
+      const h = CARD_H * BOARD_SCALE;
       for (let i = 0; i < 5; i++) {
         const b = boardPoint(i);
-        roundRect(g, px(b.x - CARD_W / 2 - 0.004), px(b.z - 0.0889 / 2 - 0.004), px(CARD_W + 0.008), px(0.0889 + 0.008), px(0.006));
+        roundRect(g, px(b.x - w / 2 - 0.004), px(b.z - h / 2 - 0.004), px(w + 0.008), px(h + 0.008), px(0.007));
         g.stroke();
       }
 
@@ -173,10 +181,10 @@ export function holdemFelt(blinds: { sb: Cents; bb: Cents }, seats: number): Fel
       g.textBaseline = 'middle';
       g.fillStyle = 'rgba(234, 206, 146, 0.8)';
       g.font = `600 ${px(0.052)}px Cinzel, Georgia, serif`;
-      g.fillText("TEXAS HOLD'EM", 0, px(-0.2));
+      g.fillText("TEXAS HOLD'EM", 0, px(-0.222));
       g.font = `500 ${px(0.024)}px Cinzel, Georgia, serif`;
       g.fillStyle = 'rgba(234, 206, 146, 0.62)';
-      g.fillText(`NO LIMIT  ·  BLINDS ${formatMoney(blinds.sb)} / ${formatMoney(blinds.bb)}  ·  ${seats} SEATS`, 0, px(-0.145));
+      g.fillText(`NO LIMIT  ·  BLINDS ${formatMoney(blinds.sb)} / ${formatMoney(blinds.bb)}  ·  ${seats} SEATS`, 0, px(-0.162));
     },
     regions: [],
   });

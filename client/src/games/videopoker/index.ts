@@ -1,8 +1,9 @@
 // Video poker: the machine on the floor and the view for playing it. The cabinet is a 3D model;
 // its screen is DOM laid over the model's screen (see screen.ts) and its deck buttons are the
 // model's own, lit and pressed from here. Cards deal left to right, held cards stay put, draws
-// flip in, and a win rolls up the WIN and CREDITS meters. Only four of a kind and better get the
-// center moment, and a pay that only returns the bet is shown without any celebration.
+// flip in, and a win rolls up the WIN and CREDITS meters while its pay row flashes. A full house
+// and better also flash the hand's name and get the table's celebration (chips on the deck for a
+// straight flush or royal); a pay that only returns the bet is shown without any celebration.
 
 import * as THREE from 'three';
 import './videopoker.css';
@@ -10,20 +11,30 @@ import type { GameClientModule, TableView } from '../contract.ts';
 import type { GameEvent } from '../../../../shared/src/engine.ts';
 import type { Card } from '../../../../shared/src/cards.ts';
 import { DENOMS, type VideoPokerView } from '../../../../shared/src/games/videopoker/engine.ts';
-import { MAX_COINS, JACKS_OR_BETTER, FOUR_OF_A_KIND, STRAIGHT_FLUSH, ROYAL_FLUSH } from '../../../../shared/src/games/videopoker/hands.ts';
+import { MAX_COINS, JACKS_OR_BETTER, FULL_HOUSE, FOUR_OF_A_KIND, STRAIGHT_FLUSH, ROYAL_FLUSH } from '../../../../shared/src/games/videopoker/hands.ts';
 import { formatMoney, type Cents } from '../../../../shared/src/money.ts';
-import { el } from '../../ui/kit.ts';
 import { tween, wait, ease, finishAll } from '../../table/tween.ts';
-import { cabinetModel, machinePose, screenCorners, BUTTONS, FOOTPRINT, SEAT, type ButtonId } from './cabinet.ts';
+import { celebrate } from '../../table/celebrate.ts';
+import { el } from '../../ui/kit.ts';
+import { cabinetModel, machinePose, screenCorners, BUTTONS, FOOTPRINT, SEAT, DECK_POINT, type ButtonId } from './cabinet.ts';
 import { MachineScreen, GLASS_NAMES, toScreen } from './screen.ts';
 import { MachineSounds } from './sounds.ts';
+import { holdAdvice, betAdvice } from './advice.ts';
+
+/** The celebration's title for the pays that get one. */
+const BANNER: Record<number, string> = {
+  [ROYAL_FLUSH]: 'Royal flush',
+  [STRAIGHT_FLUSH]: 'Straight flush',
+  [FOUR_OF_A_KIND]: 'Four of a kind',
+  [FULL_HOUSE]: 'Full house',
+};
 
 const LIT = 1;
 const DARK = 0.04;
 
 /** How long the meters take to count a win up: 1-2 s for ordinary pays, 3.5-8 s for the big ones. */
-function rollupMs(rank: number, credits: number, celebrate: boolean): number {
-  if (!celebrate) return 450;
+function rollupMs(rank: number, credits: number, winning: boolean): number {
+  if (!winning) return 450;
   if (rank === ROYAL_FLUSH) return 8000;
   if (rank === STRAIGHT_FLUSH) return 5000;
   if (rank === FOUR_OF_A_KIND) return 3500;
@@ -81,10 +92,33 @@ export const videopoker: GameClientModule = {
     let animating = false;
     let rolling = false;
     let dealAfterRollup = false;
-    let moment: HTMLElement | null = null;
-    let momentTimers: number[] = [];
+    /** The five cards on the screen. */
+    let hand: Card[] = [];
+    let tipShown = false;
 
     const renderMeters = () => screen.setMeters(win, Math.floor(shown / denom), formatMoney(shown));
+
+    // Tips: on a deal, the strategy list's hold with those cards ringed on the screen; before a
+    // deal, the fifth coin when the bet is short of it. Gone while a deal or draw is under way.
+    const clearTip = () => {
+      if (!tipShown) return;
+      tipShown = false;
+      ctx.kit.tip(null);
+      screen.pick(0);
+    };
+    const tipFor = () => {
+      let text: string | null = null;
+      let mask = 0;
+      if (ctx.tips.on && !busy && !animating) {
+        if (phase === 'dealt' && hand.length === 5) ({ text, mask } = holdAdvice(hand));
+        else if (phase !== 'dealt') text = betAdvice(coins);
+      }
+      if (text === null) return clearTip();
+      tipShown = true;
+      ctx.kit.tip(text);
+      screen.pick(mask);
+    };
+    const offTips = ctx.tips.subscribe(tipFor);
 
     const light = () => {
       const dealt = phase === 'dealt';
@@ -128,6 +162,7 @@ export const videopoker: GameClientModule = {
         ctx.link.act({ type: 'deal', coins, denom });
       }
       light();
+      tipFor();
     };
 
     const toggleHold = (i: number) => {
@@ -145,6 +180,7 @@ export const videopoker: GameClientModule = {
       screen.setCoins(coins);
       sounds.bet(coins);
       idleStatus();
+      tipFor();
     };
 
     const betMax = () => {
@@ -164,23 +200,12 @@ export const videopoker: GameClientModule = {
       light();
     };
 
-    const showMoment = (rank: number, credits: number, payout: Cents) => {
-      moment?.remove();
-      momentTimers.forEach(clearTimeout);
-      const m = el('div', 'vp-moment');
-      m.setAttribute('role', 'status');
-      m.append(el('div', 'vp-moment-hand', `${GLASS_NAMES[rank]} · ${credits}`), el('div', 'vp-moment-amount', formatMoney(payout)));
-      ctx.ui.append(m);
-      moment = m;
-      const hold = rank === ROYAL_FLUSH ? 7000 : 3200;
-      momentTimers = [window.setTimeout(() => m.classList.add('out'), hold), window.setTimeout(() => m.remove(), hold + 700)];
-    };
-
     /** Draw everything from a view with no animation (joining, reconnecting). */
     const redraw = (v: VideoPokerView) => {
       if (v.round !== round) held = [false, false, false, false, false];
       round = v.round;
       phase = v.phase;
+      hand = v.hand.slice();
       if (v.phase !== 'idle') {
         coins = v.coins;
         denom = v.denom;
@@ -209,10 +234,12 @@ export const videopoker: GameClientModule = {
       shown = stack;
       renderMeters();
       light();
+      tipFor();
     };
 
     const playDeal = async (e: GameEvent) => {
       const cards = e.cards as Card[];
+      hand = cards.slice();
       coins = Number(e.coins);
       denom = Number(e.denom);
       round = Number(e.round);
@@ -271,24 +298,32 @@ export const videopoker: GameClientModule = {
         return;
       }
       // Jacks or better only hands the bet back: shown and credited, never celebrated.
-      const celebrate = payout > bet;
-      screen.setRow(rank, celebrate ? 'win' : 'paid');
-      screen.setStatus(GLASS_NAMES[rank]!, 'hand');
-      if (rank >= FOUR_OF_A_KIND) showMoment(rank, credits, payout);
-      if (celebrate) sounds.win(rank >= FOUR_OF_A_KIND);
+      const winning = payout > bet;
+      // A full house and better flash the hand's name too, and get the table's celebration:
+      // big for four of a kind or a full house, huge (chips on the deck) for a straight flush or royal.
+      const moment = winning && rank >= FULL_HOUSE;
+      screen.setRow(rank, winning ? 'win' : 'paid');
+      screen.setStatus(GLASS_NAMES[rank]!, moment ? 'win' : 'hand');
+      if (moment) {
+        celebrate(
+          { stage: ctx.stage, ui: ctx.ui, sfx: ctx.sfx },
+          { title: BANNER[rank]!, sub: `${credits.toLocaleString('en-US')} credits · ${formatMoney(payout)}`, tier: rank >= STRAIGHT_FLUSH ? 'huge' : 'big', at: DECK_POINT.clone() },
+        );
+      }
+      if (winning) sounds.win(rank >= FOUR_OF_A_KIND);
       const from = shown;
       const unit = Number(e.denom);
       let lastStep = -1;
       rolling = true;
       await tween(
-        rollupMs(rank, credits, celebrate),
+        rollupMs(rank, credits, winning),
         (k) => {
           const c = Math.round(credits * k);
           win = c;
           shown = from + c * unit;
           renderMeters();
           const step = Math.floor(k * 40);
-          if (celebrate && step !== lastStep && c < credits) {
+          if (winning && step !== lastStep && c < credits) {
             lastStep = step;
             sounds.tick(k);
           }
@@ -346,9 +381,11 @@ export const videopoker: GameClientModule = {
           phase = next.phase;
           round = next.round;
           for (let i = 0; i < 5; i++) screen.setCard(i, (next.hand[i] as Card | undefined) ?? null);
+          hand = next.hand.slice();
           shown = stack;
           renderMeters();
           light();
+          tipFor();
         }
         if (dealAfterRollup) {
           dealAfterRollup = false;
@@ -369,6 +406,7 @@ export const videopoker: GameClientModule = {
         dealAfterRollup = false;
         sounds.refuse();
         light();
+        tipFor();
       },
 
       keydown(e) {
@@ -407,8 +445,8 @@ export const videopoker: GameClientModule = {
         removeEventListener('pointerdown', onPointerDown);
         removeEventListener('pointermove', onPointerMove);
         canvas.style.cursor = '';
-        momentTimers.forEach(clearTimeout);
-        moment?.remove();
+        offTips();
+        clearTip();
         layer.remove();
         if (glassMat) {
           glassMat.map = attract;

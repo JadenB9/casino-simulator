@@ -94,6 +94,7 @@ export class ActionBar {
     if (!legal) {
       this.clock.textContent = '';
       this.armed = 0;
+      this.pick(null);
       return;
     }
     this.fold.disabled = !legal.fold;
@@ -120,10 +121,18 @@ export class ActionBar {
     }
   }
 
+  /** Ring the move Tips recommends; null clears it. */
+  pick(move: 'fold' | 'check' | 'call' | 'raise' | null): void {
+    this.fold.classList.toggle('tip-pick', move === 'fold');
+    this.call.classList.toggle('tip-pick', move === 'call' || move === 'check');
+    this.raise.classList.toggle('tip-pick', move === 'raise');
+  }
+
   /** After sending a move: nothing more can be sent until the table answers with the next view. */
   lock(): void {
     this.legal = null;
     this.armed = 0;
+    this.pick(null);
     this.allin.classList.remove('he-armed');
     for (const b of [this.fold, this.call, this.raise, this.allin, ...this.presets]) b.disabled = true;
     this.slider.disabled = true;

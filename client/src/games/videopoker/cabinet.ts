@@ -20,6 +20,8 @@ const SHIFT_Z = -0.31;
 /** Footprint of machine and stool, and where the player sits, in the shifted (local) frame. */
 export const FOOTPRINT = { width: 0.74, depth: 1.36 };
 export const SEAT: [number, number, number] = [0, 0, 0.78 + SHIFT_Z];
+/** On the button deck between the buttons and the armrest, where a big win's chips land. */
+export const DECK_POINT = new THREE.Vector3(0, DECK_TOP + 0.002, 0.3 + SHIFT_Z);
 
 /** The screen's corners in machine coordinates: top-left, top-right, bottom-right, bottom-left. */
 export function screenCorners(): THREE.Vector3[] {
