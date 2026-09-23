@@ -101,7 +101,7 @@ export function rays(g: G, cx: number, cy: number, n: number, r: number, color: 
   g.restore();
 }
 
-export function text(g: G, s: string, x: number, y: number, font: string, fill: string, opts: { align?: CanvasTextAlign; stroke?: string; strokeWidth?: number; glow?: string } = {}): void {
+export function text(g: G, s: string, x: number, y: number, font: string, fill: string | CanvasGradient, opts: { align?: CanvasTextAlign; stroke?: string; strokeWidth?: number; glow?: string } = {}): void {
   g.save();
   g.font = font;
   g.textAlign = opts.align ?? 'center';
