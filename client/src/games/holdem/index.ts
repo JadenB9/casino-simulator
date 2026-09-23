@@ -19,8 +19,10 @@ export const holdem: GameClientModule = {
       return { position: [e.x, 0, e.z] as [number, number, number], yaw: Math.atan2(-e.nx, -e.nz) };
     }),
 
-  // Behind and above the near seat, looking across the felt so every seat and the board are in view.
-  playPose: () => ({ position: [0, TOP_Y + 1.12, RR + 1.02], target: [0, TOP_Y - 0.12, -0.12] }),
+  // High over the near seat and looking well down, so the board and your own two cards sit
+  // together in the middle of the screen, large enough to read, with every seat still in view
+  // and your nameplate clear of the tips line and the action bar below it.
+  playPose: () => ({ position: [0, TOP_Y + 1.39, RR + 0.45], target: [0, TOP_Y - 0.2, 0.1] }),
 
   mount: (ctx) => mountHoldem(ctx),
 

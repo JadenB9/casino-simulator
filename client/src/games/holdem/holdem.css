@@ -170,3 +170,8 @@
 .he-seat-title { font-family: var(--serif); font-size: 18px; letter-spacing: 0.06em; color: var(--brass-hi); }
 .he-seat-note { margin: 4px 0 10px; font-size: 15px; color: var(--ink-2); }
 .he-seat .row { display: flex; gap: 8px; }
+
+/* Tips: the kit's line sits just above the action bar (its sizing row makes it taller than most). */
+.he-bar.he-live ~ .tip-line { bottom: 158px; }
+/* The kit's ring hugs the button; on the gold Raise button it all but disappears, so stand it off a little. */
+.he-acts .btn.tip-pick { outline: 2px solid var(--brass-hi); outline-offset: 3px; }
