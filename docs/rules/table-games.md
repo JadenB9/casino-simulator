@@ -780,3 +780,109 @@ Test definitions. These decide whether the published number applies.
 25. 58 Pa. Code Chapter 627a, Minibaccarat (shuffle, burn and cut §627a.5, dealing §627a.8–9, drawing rules §627a.10, payouts §627a.12). https://pacodeandbulletin.gov/Display/pacode?d=&file=%2Fsecure%2Fpacode%2Fdata%2F058%2Fchapter627a%2Fchap627atoc.html
 26. Casino News Daily, "The Big Six and Big Eight Craps Bets" ("The Big Six and Eight are always working"). https://www.casinonewsdaily.com/craps-guide/big-six-big-eight/
 27. Art of Craps, "Hardways Bets in Craps" (players call "hardways off" before the come-out). https://www.artofcraps.com/craps-bets/hardways-bets/
+
+---
+
+## Sic Bo
+
+Three dice shaken under a glass dome, and 52 places to bet on how they land. Researched
+2026-09-23. This section keeps its own sources, [S1] to [S2], listed at its end.
+
+### House rules
+
+| Rule | Setting | Source |
+|---|---|---|
+| Dice | Three standard dice, each drawn uniformly and independently with rejection sampling | [S2] §625a.2 |
+| Shaker | Automated, under a clear dome with no cover: every bet goes down before it runs | [S2] §625a.1(d)(2), §625a.5(g) |
+| Procedure | "No more bets", the shake, the dealer calls each die, the winning boxes light up, losers are collected, then winners paid, then the lights go off | [S2] §625a.5(c)–(f) |
+| No roll | Never. A live shaker calls "no roll" when a die doesn't land flat ([S2] §625a.7(a)); here the server's roll is final and the dice are animated onto it | |
+| Pay table | The usual US table: the Wizard of Odds "Atlantic City" column (below) | [S1] |
+| Odd and Even | Offered at 1:1, losing to any triple. It is a Macau bet; [S1] has "only seen [it] in Macau, never in the United States" | [S1] |
+| Limits | Small, Big, Odd, Even $5–$5,000. Single numbers $1–$1,000. Totals, two-dice combinations, doubles and Any triple $1–$500. Specific triples $1–$100. At most $10,000 on the layout per player per roll | this casino |
+
+Multiplayer tables open a 20 second betting window after the leader starts them. It closes early
+once everyone connected has pressed Ready with chips down; the dice are drawn only when it closes.
+
+### Payout table and house edge
+
+All 216 ordered rolls of three dice are equally likely, so every figure here is exact: the wins
+are counted over the 216 rolls, and the edge is the units lost per 216 one-unit bets. The unit tests
+enumerate the same 216 rolls for every one of the 52 bets.
+
+| Bet | Wins when | Pays | Winning rolls | P(win) | House edge | SD |
+|---|---|---|---|---|---|---|
+| Small / Big | Total 4–10 / 11–17, and not a triple | 1:1 | 105 | 48.61% | **2.78%** (6/216) | 0.9996 |
+| Odd / Even | Odd / even total, and not a triple | 1:1 | 105 | 48.61% | **2.78%** (6/216) | 0.9996 |
+| Total 4 or 17 | The three dice add up to it | 60:1 | 3 | 1.39% | 15.28% (33/216) | 7.139 |
+| Total 5 or 16 | | 30:1 | 6 | 2.78% | 13.89% (30/216) | 5.094 |
+| Total 6 or 15 | | 17:1 | 10 | 4.63% | 16.67% (36/216) | 3.782 |
+| Total 7 or 14 | | 12:1 | 15 | 6.94% | 9.72% (21/216) | 3.305 |
+| Total 8 or 13 | | 8:1 | 21 | 9.72% | 12.50% (27/216) | 2.666 |
+| Total 9 or 12 | | 6:1 | 25 | 11.57% | 18.98% (41/216) | 2.239 |
+| Total 10 or 11 | | 6:1 | 27 | 12.50% | 12.50% (27/216) | 2.315 |
+| Specific triple (e.g. 6-6-6) | All three dice show it | 180:1 | 1 | 0.46% | 16.20% (35/216) | 12.29 |
+| Any triple | All three dice match | 30:1 | 6 | 2.78% | 13.89% (30/216) | 5.094 |
+| Specific double (e.g. 3-3) | At least two dice show it | 10:1 | 16 | 7.41% | 18.52% (40/216) | 2.881 |
+| Two-dice combination (e.g. 2-5) | Both faces show | 5:1 | 30 | 13.89% | 16.67% (36/216) | 2.075 |
+| Single number (e.g. 4) | One, two or three dice show it | 1:1, 2:1, 3:1 | 75, 15, 1 | 42.13% | 7.87% (17/216) | 1.113 |
+
+Every edge matches [S1]'s Atlantic City table to the two decimals it prints. The SD of a bet that
+pays `k:1` with probability `p` is `(k+1)·sqrt(p(1−p))`; the single number's is worked from its
+four outcomes (−1, +1, +2, +3 on 125, 75, 15 and 1 rolls).
+
+**Which bets are good.** Small, Big, Odd and Even give the house 2.78%. Everything else gives it far
+more: a single number 7.87%, the totals 9.72% (7 and 14) to 18.98% (9 and 12), the triples 13.89%
+and 16.20%, a double 18.52%. The table's Tips say so.
+
+**Pay tables vary** ([S1]: "In Vegas and on the Internet casinos, anything is possible"). Macau pays
+150:1 on a specific triple, 24:1 any triple, 8:1 a double, and 50, 18 and 14 to 1 on 4/17, 5/16 and
+6/15, which puts Total 5 at a 47.22% edge. Pennsylvania lets a casino choose between two tables
+([S2] §625a.6): A is the Macau table, and B pays 180, 31 and 11 to 1 on triples and doubles,
+62/31/18 to 1 on the outer totals, 7:1 on 9 and 12, 6:1 on two-dice combinations and 12:1 when a
+single number shows on all three dice. This table uses the Atlantic City column, the usual US
+table.
+
+### Settlement edge cases (each one has a unit test)
+
+1. A triple loses Small, Big, Odd and Even ([S2] §625a.3(6)–(7); [S1]). It still makes its total:
+   2-2-2 wins Total 6 at 17:1.
+2. A triple also wins the specific double of its number: 5-5-5 pays Double 5-5 (16 winning rolls,
+   the 0.074074 in [S1]).
+3. A two-dice combination is paid once, however many of either face show: 1-1-2 pays 1-2 at 5:1.
+4. A single number pays 1:1, 2:1 or 3:1 by how many dice show it ([S2] §625a.6(b), paytable A).
+5. 3 and 18 aren't total bets: they are only 1-1-1 and 6-6-6, which the triples already cover.
+6. Nothing comes down after "No more bets". A player who leaves before it takes their chips back.
+
+### Monte Carlo test
+
+One trial = one roll, per bet. `shared/test/sicbo.mc.test.ts` draws 4,000,000 rolls (seed
+20260923) through `rollDice` and `returnFor`, the functions the engine settles with, and tallies
+all 52 bets on the same rolls; each must land within 3 SE of its exact edge. All 52 do; the largest
+|z| is 2.61 (Single 2). The 216 ordered outcomes pass a chi-square test (222.30 on 215 degrees of
+freedom, critical 284.82 at p = 0.001), as does each die's six faces. A second run plays 300,000
+rounds through the whole engine (bet, shake, settle, chip moves).
+
+| Bet | Published | Measured (4M rolls) | SE | z |
+|---|---|---|---|---|
+| Small | 2.778% | 2.755% | 0.050% | −0.46 |
+| Big | 2.778% | 2.781% | 0.050% | +0.06 |
+| Odd | 2.778% | 2.754% | 0.050% | −0.48 |
+| Even | 2.778% | 2.782% | 0.050% | +0.08 |
+| Total 4 | 15.278% | 15.294% | 0.357% | +0.05 |
+| Total 7 | 9.722% | 9.507% | 0.165% | −1.30 |
+| Total 9 | 18.981% | 19.080% | 0.112% | +0.88 |
+| Total 10 | 12.500% | 12.467% | 0.116% | −0.28 |
+| Triple 6-6-6 | 16.204% | 15.799% | 0.616% | −0.66 |
+| Any triple | 13.889% | 14.197% | 0.254% | +1.21 |
+| Double 5-5 | 18.519% | 18.524% | 0.144% | +0.04 |
+| Two dice 2-5 | 16.667% | 16.857% | 0.104% | +1.84 |
+| Single 4 | 7.870% | 7.814% | 0.056% | −1.01 |
+
+### Sources
+
+- [S1] Wizard of Odds, "Sic Bo" (Atlantic City, Macau and Australia pay tables with winning
+  combinations and returns; Odd and Even as a Macau bet), updated 2026-08-03.
+  https://wizardofodds.com/games/sic-bo/
+- [S2] 58 Pa. Code Chapter 625a, Sic Bo (shaker §625a.1, dice §625a.2, wagers §625a.3, procedure
+  §625a.5, payout odds §625a.6, irregularities §625a.7).
+  https://www.pacodeandbulletin.gov/Display/pacode?file=%2Fsecure%2Fpacode%2Fdata%2F058%2Fchapter625a%2Fchap625atoc.html
