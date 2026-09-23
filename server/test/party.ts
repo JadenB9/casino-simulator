@@ -77,6 +77,11 @@ export async function closedWith(c: Client, ms = 1500): Promise<{ code: number; 
   throw new Error('socket stayed open');
 }
 
+/** Run `fn` inside a table's object, its private parts in reach (the typed stub is too deep for tsc here). */
+export function inTable<R>(tableId: string, fn: (t: any, state: DurableObjectState) => R | Promise<R>): Promise<R> {
+  return runInDurableObject(table(tableId) as unknown as DurableObjectStub, fn as never) as Promise<R>;
+}
+
 export async function deadlines(tableId: string): Promise<Record<string, number>> {
   return runInDurableObject(table(tableId), (_t, state) =>
     Object.fromEntries(state.storage.sql.exec<{ name: string; at: number }>(`SELECT name, at FROM deadlines`).toArray().map((r) => [r.name, r.at])),

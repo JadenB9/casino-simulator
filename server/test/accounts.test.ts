@@ -302,6 +302,9 @@ describe('bank', () => {
     let stack = 1_000;
     for (let round = 0; stack > 0; round++) {
       expect(round).toBeLessThan(200);
+      // A lucky streak can run past the table's action limit (12 a second after a burst of 24);
+      // an action it refuses would never produce the event waited for below.
+      if (round >= 8) await new Promise((r) => setTimeout(r, 180));
       const bet = Math.min(stack, 100_000);
       c.send({ t: 'act', aid: `b${round}`, a: { type: 'bet', amount: bet } });
       await c.next<any>((m) => m.t === 'ev' && m.events.some((e: any) => e.type === 'bet' && e.total === bet));
@@ -326,5 +329,5 @@ describe('bank', () => {
     const adjusted = STARTING_BALANCE - 1_000; // what the direct UPDATE above removed
     expect(ledger - adjusted).toBe(after.balance + after.inPlay);
     c.ws.close();
-  }, 30_000);
+  }, 60_000);
 });

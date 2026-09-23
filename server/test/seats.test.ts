@@ -4,9 +4,9 @@
 // Three Card Poker and Hold'em are the games with cards only one seat may see.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { evictDurableObject, runDurableObjectAlarm, runInDurableObject } from 'cloudflare:test';
+import { evictDurableObject, runDurableObjectAlarm } from 'cloudflare:test';
 import type { Client } from './helpers.ts';
-import { aid, buyIn, cardsIn, clockAt, enter, find, makeLobby, player, sleep, table, type Player } from './party.ts';
+import { aid, buyIn, cardsIn, clockAt, enter, find, inTable, makeLobby, player, sleep, table, type Player } from './party.ts';
 
 afterEach(() => {
   vi.useRealTimers();
@@ -42,6 +42,8 @@ describe('a seat given up mid-round', () => {
     // Seat 1 folds and leaves while seat 0 is still deciding.
     c1.send({ t: 'act', aid: aid(), a: { type: 'fold' } });
     await c1.next((m) => m.t === 'ev' && m.view.seats[1]?.decision === 'fold');
+    // (c0 was here before c1 arrived: drop its old member lists so only the leave's can match.)
+    c0.msgs.length = 0;
     c1.send({ t: 'leave' });
     await c0.next((m) => m.t === 'members' && !find(m.members, ps[1]!.id));
 
@@ -52,13 +54,13 @@ describe('a seat given up mid-round', () => {
     cn.send({ t: 'buyin', aid: aid(), amount: 20_000 });
     const refused = await cn.next<any>((m) => m.t === 'err');
     expect(refused).toMatchObject({ code: 'BUSY', msg: 'This seat opens when the round in play ends.' });
-    expect((await runInDurableObject(table(made.tableId), (t: any) => t.meta.held)) as number[]).toEqual([1]);
+    expect((await inTable(made.tableId, (t: any) => t.meta.held)) as number[]).toEqual([1]);
 
     // Seat 0's decision times out, the round settles, and the seat opens.
     clockAt(dealt.view.deadline + 1);
     await runDurableObjectAlarm(table(made.tableId));
     await cn.next((m) => m.t === 'ev' && m.view.phase === 'results');
-    expect((await runInDurableObject(table(made.tableId), (t: any) => t.meta.held)) as number[]).toEqual([]);
+    expect((await inTable(made.tableId, (t: any) => t.meta.held)) as number[]).toEqual([]);
     cn.send({ t: 'buyin', aid: aid(), amount: 20_000 });
     await cn.next((m) => m.t === 'seat' && m.status === 'seated');
     cn.send({ t: 'sync' });
@@ -79,29 +81,39 @@ describe('a seat given up mid-round', () => {
     for (const p of ps) cs.push((await enter(p, made.tableId))[0]);
     for (const c of cs) await buyIn(c, 20_000);
     cs[0]!.send({ t: 'start' });
-    // The table deals a couple of seconds after it can start.
+    // The table deals a couple of seconds after it can start. Newcomers wait for the big blind, so
+    // an early hand can be heads-up (a fold would end it); fold through those to one with three
+    // or more players dealt in, where it goes on after someone folds.
     let view: any = null;
-    for (let i = 0; i < 10 && view?.phase !== 'playing'; i++) {
+    for (let i = 0; i < 60; i++) {
       clockAt(Date.now() + 2_500);
       await runDurableObjectAlarm(table(made.tableId));
       await sleep(20);
       cs[0]!.send({ t: 'sync' });
       view = (await cs[0]!.next<any>((m) => m.t === 'table')).view;
+      if (view.phase !== 'playing' || !view.turn) continue;
+      if (view.seats.filter((s: any) => s?.inHand && !s.folded).length >= 3) break;
+      cs[view.turn.seat]!.send({ t: 'act', aid: aid(), a: { type: 'fold' } });
+      await sleep(20);
     }
     expect(view.phase).toBe('playing');
+    expect(view.seats.filter((s: any) => s?.inHand && !s.folded).length).toBeGreaterThanOrEqual(3);
 
     // Whoever is to act folds and leaves; the hand goes on without them.
     const seat = view.turn.seat as number;
     const leaver = cs[seat]!;
+    leaver.msgs.length = 0;
     leaver.send({ t: 'sync' });
     const hole = (await leaver.next<any>((m) => m.t === 'table')).view.you.cards as string[];
     expect(hole).toHaveLength(2);
     leaver.send({ t: 'act', aid: aid(), a: { type: 'fold' } });
     await leaver.next((m) => m.t === 'ev' && m.view.seats[seat]?.folded);
-    leaver.send({ t: 'leave' });
+    // (Someone who was here before the leaver arrived still has member lists without them queued.)
     const other = cs[(seat + 1) % 4]!;
+    other.msgs.length = 0;
+    leaver.send({ t: 'leave' });
     await other.next((m) => m.t === 'members' && !find(m.members, ps[seat]!.id));
-    expect((await runInDurableObject(table(made.tableId), (t: any) => t.meta.held)) as number[]).toEqual([seat]);
+    expect((await inTable(made.tableId, (t: any) => t.meta.held)) as number[]).toEqual([seat]);
 
     const n = await player('henew');
     const [cn, snap] = await enter(n, made.tableId);
@@ -131,7 +143,7 @@ describe('a seat given up mid-round', () => {
 
     // Seat 1's cards are in the engine under seat 1. As if someone new held that number and were
     // still buying in, the snapshot must not show them; once seated, it's their own view again.
-    const views = await runInDurableObject(table(made.tableId), (t: any) => {
+    const views = await inTable(made.tableId, (t: any) => {
       const mem = t.members.get(b.id);
       mem.status = 'buying_in';
       const buying = t.snapshotFor(b.id, Date.now()).view;
@@ -154,19 +166,21 @@ describe('a seat given up mid-round', () => {
     await buyIn(cs[1]!, 20_000);
 
     // Between rounds (the table hasn't started): leaving holds nothing.
+    cs[0]!.msgs.length = 0;
     cs[2]!.send({ t: 'leave' });
     await cs[0]!.next((m) => m.t === 'members' && !find(m.members, ps[2]!.id));
-    expect((await runInDurableObject(table(made.tableId), (t: any) => t.meta.held ?? [])) as number[]).toEqual([]);
+    expect((await inTable(made.tableId, (t: any) => t.meta.held ?? [])) as number[]).toEqual([]);
 
     // Mid-round: held, and still held after the object restarts.
     cs[0]!.send({ t: 'start' });
     await cs[1]!.next((m) => m.t === 'ev' && m.view.phase === 'betting');
     cs[0]!.send({ t: 'act', aid: aid(), a: { type: 'bet', ante: 1_000, pairPlus: 0 } });
     await cs[0]!.next((m) => m.t === 'seat' && m.stack === 19_000);
+    cs[0]!.msgs.length = 0;
     cs[1]!.send({ t: 'leave' });
     await cs[0]!.next((m) => m.t === 'members' && !find(m.members, ps[1]!.id));
-    expect((await runInDurableObject(table(made.tableId), (t: any) => t.meta.held)) as number[]).toEqual([1]);
+    expect((await inTable(made.tableId, (t: any) => t.meta.held)) as number[]).toEqual([1]);
     await evictDurableObject(table(made.tableId));
-    expect((await runInDurableObject(table(made.tableId), (t: any) => t.meta.held)) as number[]).toEqual([1]);
+    expect((await inTable(made.tableId, (t: any) => t.meta.held)) as number[]).toEqual([1]);
   }, 20_000);
 });
