@@ -44,7 +44,7 @@ Everything the client and server say to each other. The TypeScript source of tru
 | 4001 | replaced by a newer connection for this account | show "opened in another tab"; don't reconnect |
 | 4003 | missing or expired token | back to login |
 | 4004 | table not found or closed | back to the floor |
-| 4005 | not allowed at this table (full, or another player's solo table) | back to the floor |
+| 4005 | not allowed at this table (full, another player's solo table, a private lobby without its PIN, or too many wrong PINs) | back to the floor |
 | 4008 | rate limited repeatedly | back off |
 | 4009 | protocol version mismatch | reload the page |
 | anything else (1001, 1006, 1011, 1012, deploys) | transient | reconnect with full jitter |
@@ -79,7 +79,9 @@ type Profile = {
     games: Partial<Record<GameId, { rounds: number; wagered: number; net: number; biggestWin: number }>>;
   };
 };
-type Look = { v: 1; body: string; skin: number; hair: number; hairColor: string; top: string; bottom: string };
+type Look = { v: 1; body: "m" | "f"; outfit: string;      // outfit ids per body in shared/src/look.ts
+              skin: number;                                  // 0-7, lightest to darkest
+              hair: string; top: string; bottom: string; shoes: string };   // "#rrggbb"; either case in, lower case stored
 ```
 
 ## Floor socket
@@ -93,6 +95,14 @@ Client to server:
 | `mv` | `x, z` (integer cm), `r` (yaw 0-255) | at most every 100 ms, only while moving |
 | `st` | `x, z, r` | once when you stop |
 | `watch` | `game: GameId \| null` | subscribe to one game's lobby list |
+
+Movement rules. The first `mv` or `st` on a connection places you anywhere inside the floor
+(`FLOOR_BOUNDS`, the room's walls): a first visit echoes the spawn in `hello`, and after a dropped
+connection the client knows where it walked meanwhile. After that each position is checked
+against a speed allowance and stops short on its line if it jumps further than anyone can walk.
+A `st` is sent to everyone at once; walking positions go out in snapshots at most every 66 ms.
+A second tab for the same account takes the first one's place quietly: the old socket closes
+with 4001, and nobody else sees a leave and a join.
 
 Server to client:
 
@@ -117,7 +127,7 @@ type LobbySummary = { tableId: string; game: GameId; variant?: string; leader: s
 
 ## Table socket
 
-Lobby: `wss://api.j4den.com/casino/ws/table/<tableId>?v=1&t=<token>`
+Lobby: `wss://api.j4den.com/casino/ws/table/<tableId>?v=1&t=<token>[&pin=<pin>]`
 Solo: `wss://api.j4den.com/casino/ws/solo/<game>?v=1&t=<token>&variant=<variant>`
 
 Client to server:
@@ -125,10 +135,10 @@ Client to server:
 | t | fields | who |
 |---|---|---|
 | `buyin` | `aid, amount` | anyone without a seat (a machine calls it "insert") |
-| `topup` | `aid, amount` | seated, between rounds |
+| `topup` | `aid, amount` | seated, any time; the seat keeps playing and the chips join the stack when they land (one at a time; cash-out waits for it) |
 | `cashout` | `aid` | seated; completes when nothing of yours is live on the layout |
 | `act` | `aid, a: <game action>` | seated; parsed by that game's `parseAction` |
-| `ready` | `on` | seated, during a betting window |
+| `ready` | `on` | seated; the table clears everyone's flag after each finished round |
 | `visibility` | `visibility` | leader |
 | `start` | | leader |
 | `leave` | | anyone; implies cash-out |
@@ -143,7 +153,6 @@ Server to client:
 | `ev` | `seq, events: GameEvent[], view, now` (per recipient) |
 | `seat` | `stack, status: "buying_in" \| "seated" \| "cashing_out", escrow` (yours) |
 | `balance` | `balance, inPlay, rev` (after a buy-in, top-up or cash-out lands) |
-| `timer` | `kind: "betting" \| "turn" \| "decision" \| "roll", seat?, deadline, now` |
 | `closed` | `reason` |
 
 ```ts
@@ -155,6 +164,14 @@ type Member = { accountId: number; name: string; look: Look; seat: number | null
 ```
 
 `seq` is persisted and increases by one per `ev`. A client that sees a gap sends `sync`.
+Countdowns (betting windows, turns, the shooter's clock) are deadlines inside each game's view,
+counted down against `now`; there is no separate timer message.
+
+Lobbies. A private lobby lets in only newcomers who bring its PIN (`&pin=`); whoever was already
+a member when it went private stays one. Five wrong PINs from one account lock it out of that
+table for ten minutes. The leader is whoever has been there longest; a leader who drops keeps the
+lead for 20 seconds (their seat is held for two minutes), then it passes to the longest-present
+player still connected. An empty lobby closes after two minutes and gives up its PIN.
 
 ## Game actions, events and views
 
@@ -165,12 +182,12 @@ folder documents the final shapes):
 
 | game | actions |
 |---|---|
-| blackjack | `bet {amount}`, `deal` (solo), `insurance {take}`, `hit`, `stand`, `double`, `split`, `surrender` |
-| roulette | `bet {bets: {kind, numbers?, amount}[]}`, `clear`, `spin` (solo) |
-| craps | `bet {bets: {kind, number?, amount}[]}`, `odds {on, amount}`, `down {betId}`, `roll` (shooter) |
-| baccarat | `bet {player?, banker?, tie?, playerPair?, bankerPair?}`, `deal` (solo) |
-| slots | `spin {coins}` (credits are the seat's stack) |
-| videopoker | `deal {coins}`, `draw {hold: boolean[5]}` |
+| blackjack | `bet {amount}`, `undo`, `clear`, `deal` (solo), `insurance {take}`, `hit`, `stand`, `double`, `split`, `surrender` |
+| roulette | `bet {bets: {kind, numbers?, amount}[]}` (at most 40), `undo`, `clear`, `rebet {double}`, `ready {on}`, `spin` (solo) |
+| craps | `bet {bets: {kind, number?, amount}[]}`, `odds {on, amount}`, `down {id, part?, amount?}`, `working {id, on}`, `roll` (shooter) |
+| baccarat | `bet {bets: {player?, banker?, tie?, playerPair?, bankerPair?}}`, `undo`, `clear`, `deal` (solo) |
+| slots | `spin {coins, denom}` (free games play out inside the paid spin) |
+| videopoker | `deal {coins, denom?}`, `draw {hold: boolean[5]}` |
 | threecard | `bet {ante, pairPlus}`, `deal` (solo), `play`, `fold` |
 | holdem | `fold`, `check`, `call`, `bet {amount}`, `raise {to}`, `allin`, `sitout {on}` |
 

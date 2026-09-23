@@ -28,28 +28,30 @@ is the summary. The full rules, every paytable, the strategy charts and the sour
 ## Summary
 
 House edge is the expected loss divided by the initial wager (the Ante for Three Card Poker);
-return to player (RTP) is 1 minus that. "Measured" is filled in by the Monte Carlo suite.
+return to player (RTP) is 1 minus that. "Measured" is the Monte Carlo suite's result with its
+sample size and how many standard errors it landed from the published figure (z); every one is
+inside 3. Seeds are fixed, so `npm run test:mc` reproduces these exactly.
 
 | Game | Rules | Bet | Published | Measured |
 |---|---|---|---|---|
-| Blackjack | 6 decks, dealer stands on soft 17, blackjack pays 3:2, double any two, double after split, split to 4 hands, no resplitting aces, late surrender, dealer peeks, insurance 2:1, cut card at 75% | Basic strategy, cut card | 0.354% | |
-| Roulette (American) | 0 and 00, all inside and outside bets | Every bet but the top line | 5.263% | |
-| | | Top line (0-00-1-2-3), 6:1 | 7.895% | |
-| Roulette (European) | single 0, no la partage | Every bet | 2.703% | |
-| Craps | 3-4-5x odds, field pays 3:1 on 12, buy 4/10 with commission on a win, place bets off on the come-out | Pass line | 1.414% | |
-| | | Don't pass (bar 12) | 1.364% | |
-| | | Place 6 or 8 (7:6) | 1.515% | |
-| | | Field | 2.778% | |
-| | | Free odds | 0% | |
-| Baccarat | punto banco, 8 decks, standard tableau, 5% commission, tie 8:1 | Banker | 1.058% | |
-| | | Player | 1.235% | |
-| | | Tie | 14.360% | |
-| Three Card Poker | dealer qualifies with queen high; Ante Bonus 5-4-1; Pair Plus 40-30-6-3-1 | Ante and Play, Q-6-4 strategy | 3.373% | |
-| | | Pair Plus | 7.276% | |
-| Video poker | Jacks or Better 9/6, 5 coins, optimal hold list | | 99.544% RTP | |
-| Slots | three machines, published reel strips | A "Classic Sevens" (3 reels) | 94.428% RTP | |
-| | | B "Neon Nights" (5x3, 20 lines, free spins) | 95.374% RTP | |
-| | | C "5x Wild" (3 reels, high volatility) | 89.820% RTP | |
+| Blackjack | 6 decks, dealer stands on soft 17, blackjack pays 3:2, double any two, double after split, split to 4 hands, no resplitting aces, late surrender, dealer peeks, insurance 2:1, cut card at 75% | Basic strategy, cut card | 0.354% | 0.328% (12M rounds, z −0.80) |
+| Roulette (American) | 0 and 00, all inside and outside bets | Every bet but the top line | 5.263% | red 5.229%, odd 5.222%, straight 17 5.748% (3M spins, z −0.59, −0.72, +1.46) |
+| | | Top line (0-00-1-2-3), 6:1 | 7.895% | 7.924% (3M spins, z +0.21) |
+| Roulette (European) | single 0, no la partage | Every bet | 2.703% | red 2.717%, odd 2.601%, straight 17 2.813% (3M spins, z +0.24, −1.77, +0.33) |
+| Craps | 3-4-5x odds, field pays 3:1 on 12, buy 4/10 with commission on a win, place bets off on the come-out | Pass line | 1.414% | 1.426% (4M bets, z +0.24) |
+| | | Don't pass (bar 12) | 1.364% | 1.389% (2M bets, z +0.37) |
+| | | Place 6 or 8 (7:6) | 1.515% | 1.658% (2M bets, z +1.87) |
+| | | Field | 2.778% | 2.712% (4M bets, z −1.16) |
+| | | Free odds | 0% | 0 exactly (enumerated) |
+| Baccarat | punto banco, 8 decks, standard tableau, 5% commission, tie 8:1 | Banker | 1.058% | 1.011% (10M coups, z −1.60) |
+| | | Player | 1.235% | 1.283% (10M coups, z +1.59) |
+| | | Tie | 14.360% | 14.300% (10M coups, z −0.72) |
+| Three Card Poker | dealer qualifies with queen high; Ante Bonus 5-4-1; Pair Plus 40-30-6-3-1 | Ante and Play, Q-6-4 strategy | 3.373% | 3.384% (10M hands, z +0.20) |
+| | | Pair Plus | 7.276% | 7.264% (10M hands, z −0.14) |
+| Video poker | Jacks or Better 9/6, 5 coins, optimal hold list | | 99.544% RTP | 99.447% (20M hands, z −1.00) |
+| Slots | three machines, published reel strips | A "Classic Sevens" (3 reels) | 94.428% RTP | 94.563% (10M spins, z +0.65) |
+| | | B "Neon Nights" (5x3, 20 lines, free spins) | 95.374% RTP | 95.325% (10M spins, z −0.41) |
+| | | C "5x Wild" (3 reels, high volatility) | 89.820% RTP | 89.968% (50M spins, z +0.39) |
 | Texas Hold'em | no-limit, blinds, Poker TDA rules, no rake | | no house edge | |
 
 The blackjack figure is for exactly these rules. The often-quoted 0.26-0.28% assumes aces can be
