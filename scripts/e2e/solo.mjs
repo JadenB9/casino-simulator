@@ -22,7 +22,7 @@ const log = (s) => console.log(new Date().toISOString().slice(11, 19), s);
 
 const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
-await ctx.addInitScript((q) => localStorage.setItem('casino.quality', q), process.env.QUALITY ?? 'low');
+await ctx.addInitScript(([q, api]) => { localStorage.setItem('casino.quality', q); if (api) window.__api = api; }, [process.env.QUALITY ?? 'low', process.env.API ?? '']);
 const page = await ctx.newPage();
 page.on('console', (m) => m.type() === 'error' && !/404|Failed to load resource/.test(m.text()) && errors.push(m.text()));
 page.on('pageerror', (e) => errors.push(String(e)));
@@ -30,7 +30,7 @@ const shot = (name) => page.screenshot({ path: `${out}/${name}.png` });
 const name = process.env.NAME ?? 'solo_e2e';
 
 async function enterFloor() {
-  await page.goto(`http://localhost:${port}/casino/`);
+  await page.goto(`${process.env.BASE ?? `http://localhost:${port}`}/casino/`);
   await page.waitForSelector('.name-input, .menu-item', { timeout: 180_000 });
   if (await page.$('.name-input')) {
     await page.fill('.name-input', name);
@@ -43,7 +43,7 @@ async function enterFloor() {
 
 const me = () =>
   page.evaluate(async () => {
-    const r = await fetch(`${location.origin}/casino/api/me`, { headers: { Authorization: `Bearer ${sessionStorage.getItem('casino.token')}` } });
+    const r = await fetch(`${window.__api ?? location.origin}/casino/api/me`, { headers: { Authorization: `Bearer ${sessionStorage.getItem('casino.token')}` } });
     return (await r.json()).profile;
   });
 

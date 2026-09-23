@@ -30,7 +30,7 @@ async function player(name) {
   // Two players share one software-rendered browser, so they play at low graphics unless
   // QUALITY=high asks otherwise; this check is about the tables, not the lights.
   const quality = process.env.QUALITY ?? 'low';
-  await ctx.addInitScript((q) => localStorage.setItem('casino.quality', q), quality);
+  await ctx.addInitScript(([q, api]) => { localStorage.setItem('casino.quality', q); if (api) window.__api = api; }, [quality, process.env.API ?? '']);
   const page = await ctx.newPage();
   page.on('console', (m) => {
     // Refused moves while a bot guesses at turns show up as the table's toasts, not errors;
@@ -38,7 +38,7 @@ async function player(name) {
     if (m.type() === 'error' && !/404|Failed to load resource/.test(m.text())) errors.push(`${name}: ${m.text()}`);
   });
   page.on('pageerror', (e) => errors.push(`${name}: ${e}`));
-  await page.goto(`http://localhost:${port}/casino/`);
+  await page.goto(`${process.env.BASE ?? `http://localhost:${port}`}/casino/`);
   await page.waitForSelector('.name-input', { timeout: 180_000 });
   await page.fill('.name-input', name);
   await page.click('.enter-btn');
@@ -137,7 +137,7 @@ async function sitDown(p) {
 
 async function statsOf(p) {
   return p.page.evaluate(async () => {
-    const r = await fetch(`${window.location.origin}/casino/api/me`, { headers: { Authorization: `Bearer ${sessionStorage.getItem('casino.token')}` } });
+    const r = await fetch(`${window.__api ?? window.location.origin}/casino/api/me`, { headers: { Authorization: `Bearer ${sessionStorage.getItem('casino.token')}` } });
     return (await r.json()).profile;
   });
 }
