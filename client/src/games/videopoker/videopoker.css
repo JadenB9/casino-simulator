@@ -56,6 +56,8 @@
    whole slot would be a hairline once the screen is scaled onto the cabinet). */
 .vp-screen .vp-slot.tip-pick { box-shadow: none !important; }
 .vp-slot.tip-pick .vp-card { box-shadow: 0 3px 0 #050c40, 0 0 0 6px #fff49a, 0 0 26px 8px rgba(255, 244, 154, 0.55); }
+/* The kit's tips line would sit on the HOLD buttons; the cabinet front below the deck is bare. */
+.vp-layer ~ .tip-line { bottom: 24px; }
 
 /* Meters */
 .vp-bar { display: grid; grid-template-columns: 96px 1fr 150px 250px; align-items: center; gap: 10px; padding: 0 16px 0 12px; background: #081159; border-top: 2px solid #1d3fd8; }

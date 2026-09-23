@@ -7,13 +7,30 @@ import * as THREE from 'three';
 import type { TableStage } from '../../table/stage.ts';
 
 const geometry = new THREE.PlaneGeometry(1, 1);
+let soft: THREE.Texture | null = null;
+
+/** A white spot that fades to nothing at its edges, so the glow has no hard outline. */
+function softSpot(): THREE.Texture {
+  if (soft) return soft;
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d')!;
+  const grad = g.createRadialGradient(32, 32, 6, 32, 32, 32);
+  grad.addColorStop(0, 'rgba(255,255,255,1)');
+  grad.addColorStop(0.55, 'rgba(255,255,255,0.75)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 64, 64);
+  soft = new THREE.CanvasTexture(c);
+  return soft;
+}
 const box = new THREE.Box3();
 const size = new THREE.Vector3();
 const centre = new THREE.Vector3();
 
 /** Glow under `objects` for `ms` (Infinity: until stopped). Returns the stop. */
 export function feltGlow(stage: TableStage, objects: THREE.Object3D[], feltY: number, ms: number): () => void {
-  const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.5, 1.15, 0.55), transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
+  const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.5, 1.15, 0.55), map: softSpot(), transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
   const spots: THREE.Mesh[] = [];
   for (const o of objects) {
     // Measured in the table's own space (the cards are its children), so a station turned on
@@ -26,7 +43,7 @@ export function feltGlow(stage: TableStage, objects: THREE.Object3D[], feltY: nu
     box.getCenter(centre);
     const spot = new THREE.Mesh(geometry, mat);
     spot.rotation.x = -Math.PI / 2;
-    spot.scale.set(size.x * 1.34 + 0.012, size.z * 1.26 + 0.012, 1);
+    spot.scale.set(size.x * 1.8 + 0.02, size.z * 1.55 + 0.02, 1);
     spot.position.set(centre.x, feltY + 0.0005, centre.z);
     spot.renderOrder = 1;
     stage.root.add(spot);

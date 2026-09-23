@@ -73,7 +73,7 @@ export const POT_POINT = new THREE.Vector3(0, TOP_Y, 0.2);
  * The board is dealt larger than life: everyone reads it from across the table, and it's the
  * part of the felt every decision turns on. The printed card spots use the same size.
  */
-export const BOARD_SCALE = 1.5;
+export const BOARD_SCALE = 1.6;
 const BOARD_Z = -0.035;
 const BOARD_GAP = 0.014;
 export function boardPoint(i: number): THREE.Vector3 {
@@ -181,10 +181,10 @@ export function holdemFelt(blinds: { sb: Cents; bb: Cents }, seats: number): Fel
       g.textBaseline = 'middle';
       g.fillStyle = 'rgba(234, 206, 146, 0.8)';
       g.font = `600 ${px(0.052)}px Cinzel, Georgia, serif`;
-      g.fillText("TEXAS HOLD'EM", 0, px(-0.2));
+      g.fillText("TEXAS HOLD'EM", 0, px(-0.222));
       g.font = `500 ${px(0.024)}px Cinzel, Georgia, serif`;
       g.fillStyle = 'rgba(234, 206, 146, 0.62)';
-      g.fillText(`NO LIMIT  ·  BLINDS ${formatMoney(blinds.sb)} / ${formatMoney(blinds.bb)}  ·  ${seats} SEATS`, 0, px(-0.145));
+      g.fillText(`NO LIMIT  ·  BLINDS ${formatMoney(blinds.sb)} / ${formatMoney(blinds.bb)}  ·  ${seats} SEATS`, 0, px(-0.162));
     },
     regions: [],
   });
