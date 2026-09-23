@@ -31,12 +31,17 @@ const DP = { z: [0.29, 0.39], x: [1.42, 1.5] } as const;
 const PASS = { z: [0.39, 0.53], x: [1.5, 1.62] } as const;
 const ODDS_Z: [number, number] = [0.53, 0.58];
 
-/** Left edge of a number's box on the right end. */
-function boxX(n: number): number {
-  return X_IN + POINTS.indexOf(n as (typeof POINTS)[number]) * BOX_W;
+/**
+ * Inner edge of a number's box, in right-end coordinates. Both ends read 4 5 SIX 8 NINE 10 from
+ * left to right (Scarne), so on the mirrored left end the order runs the other way from the
+ * centre: 4 sits next to the Don't Come Bar at the outer end.
+ */
+function boxX(n: number, end: 1 | -1 = 1): number {
+  const i = POINTS.indexOf(n as (typeof POINTS)[number]);
+  return X_IN + (end === 1 ? i : 5 - i) * BOX_W;
 }
-export function boxCenter(n: number): number {
-  return boxX(n) + BOX_W / 2;
+export function boxCenter(n: number, end: 1 | -1 = 1): number {
+  return boxX(n, end) + BOX_W / 2;
 }
 
 // The proposition box in the middle (shared by both ends).
@@ -103,7 +108,7 @@ function endRegions(end: 'R' | 'L'): Region[] {
   out.push(poly(`${end}|big8`, [[bx1, bz0], [bx1, bz1], [bx0, bz1]], m));
   r('dontcome', DC_X, [ROW.top, ROW.bottom]);
   for (const n of POINTS) {
-    const x: [number, number] = [boxX(n), boxX(n) + BOX_W];
+    const x: [number, number] = [boxX(n, m ? -1 : 1), boxX(n, m ? -1 : 1) + BOX_W];
     r(`dc${n}`, x, [ROW.top, ROW.strip]);
     if (n === 4 || n === 10) {
       r(`box${n}`, x, [ROW.strip, ROW.main]);
@@ -134,7 +139,7 @@ const CENTER_OF: Record<string, [number, number]> = Object.fromEntries(
   CENTER_CELLS.filter((c) => !c.id.includes('#')).map((c) => [c.id, [(c.x[0] + c.x[1]) / 2, (c.z[0] + c.z[1]) / 2 + 0.018]]),
 );
 CENTER_OF.ce = [(C.ce[0] + C.ce[1]) / 2, 0.02];
-CENTER_OF.any7 = [0.1, -0.47];
+CENTER_OF.any7 = [0.118, -0.468];
 CENTER_OF.anycraps = [0.1, 0.305];
 
 /** Where a bet (or its odds) sits. `end` is 1 for the right end, -1 for the left. */
@@ -144,7 +149,7 @@ export function chipSpot(id: string, part: 'flat' | 'odds', end: 1 | -1): [numbe
   if (id in CENTER_OF) return CENTER_OF[id]!;
   if (m && m[1] !== 'big' && m[1] !== 'hard') {
     const n = Number(m[2]);
-    const bx = boxCenter(n);
+    const bx = boxCenter(n, end);
     const kind = m[1];
     if (kind === 'come') at = part === 'odds' ? [bx + 0.032, -0.4] : [bx - 0.028, -0.392];
     else if (kind === 'dontcome') at = part === 'odds' ? [bx + 0.035, -0.5] : [bx - 0.03, -0.5];
@@ -154,7 +159,8 @@ export function chipSpot(id: string, part: 'flat' | 'odds', end: 1 | -1): [numbe
   } else {
     switch (id) {
       case 'pass':
-        at = part === 'odds' ? [0.8, 0.556] : [0.8, 0.46];
+        // odds sit behind the flat bet, toward the player, still inside the band (the armrest hides the felt beyond it)
+        at = part === 'odds' ? [0.8, 0.496] : [0.8, 0.432];
         break;
       case 'dontpass':
         at = part === 'odds' ? [0.855, 0.33] : [0.8, 0.33];
@@ -184,7 +190,7 @@ export function chipSpot(id: string, part: 'flat' | 'odds', end: 1 | -1): [numbe
 /** Where the puck sits: OFF in the Don't Come Bar, ON at the top of the point's box. */
 export function puckSpot(point: number | null, end: 1 | -1): [number, number] {
   if (point === null) return [((DC_X[0] + DC_X[1]) / 2) * end, -0.32];
-  return [boxCenter(point) * end, -0.442];
+  return [boxCenter(point, end) * end, -0.442];
 }
 
 /** Where the dice come to rest on an end: in the come area, after coming off the end wall. */
@@ -331,7 +337,7 @@ function paintEnd(g: G, px: Px, m: 1 | -1): void {
   g.lineTo(px(DC_X[0]), px(ROW.strip));
   g.stroke();
   for (const n of POINTS) {
-    const x0 = boxX(n);
+    const x0 = boxX(n, m);
     g.beginPath();
     g.moveTo(px(x0 + BOX_W), px(ROW.top));
     g.lineTo(px(x0 + BOX_W), px(ROW.bottom));

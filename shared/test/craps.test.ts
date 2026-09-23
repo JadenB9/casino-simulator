@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { engine, type CrapsState, PAUSE_MS, MIN_PAUSE_MS, SHOOT_MS, LEAVING_ROLL_MS } from '../src/games/craps/engine.ts';
 import type { CrapsView } from '../src/games/craps/protocol.ts';
 import { BET_KINDS, NUMBERED, limitKey } from '../src/games/craps/rules.ts';
+import { stickCall } from '../src/games/craps/calls.ts';
 import type { Rng } from '../src/rng.ts';
 import { randInt } from '../src/rng.ts';
 import { TableSim } from './helpers/table-sim.ts';
@@ -478,6 +479,21 @@ describe('craps engine: multiplayer shooter', () => {
     const { sim } = multi();
     const s = engine.shiftDeadlines(sim.state, 5000);
     expect([s.pauseUntil, s.minPauseEnd, s.rollBy]).toEqual([sim.state.pauseUntil! + 5000, sim.state.minPauseEnd! + 5000, sim.state.rollBy! + 5000]);
+  });
+});
+
+describe('craps stick calls', () => {
+  it('calls the come-out, the point, and the rolls in between', () => {
+    expect(stickCall(null, 3, 4)).toBe("Seven, winner. Pay the line, take the don'ts");
+    expect(stickCall(null, 5, 6)).toBe('Yo-leven, front line winner');
+    expect(stickCall(null, 1, 1)).toBe('Two craps, aces. Line away');
+    expect(stickCall(null, 6, 6)).toBe('Twelve craps. Bar the twelve');
+    expect(stickCall(null, 2, 4)).toBe('The point is SIX');
+    expect(stickCall(6, 3, 3)).toBe('Six the hard way, winner. Pay the line');
+    expect(stickCall(6, 2, 5)).toBe("Seven out, line away. Pay the don'ts");
+    expect(stickCall(6, 4, 4)).toBe('Hard eight');
+    expect(stickCall(6, 3, 5)).toBe('Eight, easy eight');
+    expect(stickCall(6, 1, 4)).toBe('Five, no field five');
   });
 });
 
