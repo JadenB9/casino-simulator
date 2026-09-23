@@ -83,7 +83,8 @@ button { font: inherit; color: inherit; }
 @keyframes pill-in { from { opacity: 0; transform: translate(-50%, -30%) scale(0.9); } }
 
 /* dealer call line */
-.dealer-line { position: fixed; top: 18px; left: 50%; transform: translateX(-50%); padding: 7px 16px; font-family: var(--serif); font-size: 17px; letter-spacing: 0.04em; }
+/* Under the HUD, between the game's left and right panels. */
+.dealer-line { position: fixed; top: var(--below-hud); left: 50%; transform: translateX(-50%); max-width: min(520px, calc(100vw - 32px)); padding: 7px 16px; font-family: var(--serif); font-size: 17px; letter-spacing: 0.04em; text-align: center; text-wrap: balance; }
 
 /* chip tray */
 .tray { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; padding: 10px 14px; }
