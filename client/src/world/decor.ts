@@ -38,9 +38,10 @@ export const BANK_COLORS: Record<string, [string, string]> = {
   sevens: ['#ff3b30', '#ffcf5a'],
   neon: ['#ff2bd6', '#35a8ff'],
   wild: ['#2dff7a', '#b46bff'],
-  diamonds: ['#7fdcff', '#f2f6ff'],
-  cherries: ['#ff2d6a', '#7dff6b'],
-  goldrush: ['#ffc23d', '#ff7a1a'],
+  // the new cabinets' own themes: ice blue, cherry red on gold, gold on orange
+  diamonds: ['#63c6ff', '#eef7ff'],
+  cherries: ['#ff3d6e', '#f2c14a'],
+  goldrush: ['#f2c14a', '#ff9f2e'],
 };
 /** For a variant added later without its own colours: one of these, by its place in the catalogue. */
 const SPARE_COLORS: [string, string][] = [
@@ -53,9 +54,18 @@ function bankColors(variant: string, i: number): [string, string] {
   return BANK_COLORS[variant] ?? SPARE_COLORS[i % SPARE_COLORS.length]!;
 }
 
-/** The island's topper reads the variant's catalogue name ("CLASSIC SEVENS"). */
+const BANK_TITLES: Record<string, string> = {
+  sevens: 'CLASSIC SEVENS',
+  neon: 'NEON NIGHTS',
+  wild: '5X WILD',
+  diamonds: 'DIAMOND LINE',
+  cherries: 'LUCKY CHERRIES',
+  goldrush: 'GOLD RUSH',
+};
+
+/** The island's topper; a variant added later reads its catalogue name. */
 function bankTitle(variant: string): string {
-  return (CATALOG.slots.variants.find((v) => v.id === variant)?.name ?? variant).toUpperCase();
+  return BANK_TITLES[variant] ?? (CATALOG.slots.variants.find((v) => v.id === variant)?.name ?? variant).toUpperCase();
 }
 
 export function buildDecor(plan: FloorPlan, stations: WorldStation[], vpMode: VpMode, b: Batch, m: Mats, col: Collider): Decor {
