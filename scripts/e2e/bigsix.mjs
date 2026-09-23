@@ -55,7 +55,8 @@ if (flag('--multi')) {
 
 await page.goto(`http://localhost:${port}/casino/?dev=table&game=bigsix&name=${NAMES.solo}`);
 await sitDown(page, '2000');
-await page.waitForTimeout(800);
+await until(() => document.getElementById('boot')?.classList.contains('done'), 90000);
+await page.waitForTimeout(1500);
 const frame = await page.evaluate(() => ({ ms: window.casino.engine.frameMs(), calls: window.casino.engine.renderer.info.render.calls, tris: window.casino.engine.renderer.info.render.triangles }));
 console.log('frame', JSON.stringify(frame));
 await shot('0-empty');
