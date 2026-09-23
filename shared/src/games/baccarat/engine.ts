@@ -29,7 +29,7 @@ export const BETTING_MS = 15_000;
  * the coup out in that time (deal, reveal, draw, settle), so it grows with the third cards, a new
  * shoe's shuffle and burn, and the number of seats paid, and leaves a few seconds to read it.
  */
-export const RESULTS_MS = 7_500;
+export const RESULTS_MS = 9_000;
 export const THIRD_CARD_MS = 1_200;
 export const NEW_SHOE_MS = 4_000;
 export const PAY_MS = 450;
