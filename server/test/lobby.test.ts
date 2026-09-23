@@ -12,7 +12,7 @@ import { env, exports } from 'cloudflare:workers';
 import { evictDurableObject, runDurableObjectAlarm, runInDurableObject } from 'cloudflare:test';
 import { ORIGIN, api, connect, type Client } from './helpers.ts';
 import type { CasinoFloor } from '../src/floor/index.ts';
-import { GRACE_MS, RESTART_SHIFT_MS, type CasinoTable } from '../src/table/host.ts';
+import { GRACE_MS, HOST_CONSTANTS, LEADER_HANDOFF_MS, RESTART_SHIFT_MS, type CasinoTable } from '../src/table/host.ts';
 import { PIN_COOLDOWN_MS, PIN_STALE_MS, STALE_MS, ipKey } from '../src/floor/directory.ts';
 import { BETTING_MS } from '../../shared/src/games/highcard/engine.ts';
 import type { LobbySummary, Member } from '../../shared/src/protocol.ts';
@@ -63,9 +63,9 @@ async function makeLobby(creator: Player, visibility: 'public' | 'private'): Pro
   return made;
 }
 
-/** Open a table socket and wait for the snapshot. */
-async function enter(p: Player, tableId: string): Promise<[Client, any]> {
-  const { client } = await connect(`table/${tableId}`, p.token);
+/** Open a table socket and wait for the snapshot. A private lobby needs its PIN from newcomers. */
+async function enter(p: Player, tableId: string, pin?: string | null): Promise<[Client, any]> {
+  const { client } = await connect(`table/${tableId}`, p.token, pin ? `&pin=${pin}` : '');
   const snap = await client!.next<any>((m) => m.t === 'table');
   return [client!, snap];
 }
@@ -191,7 +191,7 @@ describe('the lobby list', () => {
     const a = await player('priv');
     const made = await makeLobby(a, 'private');
     expect(made.pin).toMatch(/^\d{4}$/);
-    const [, snap] = await enter(a, made.tableId);
+    const [, snap] = await enter(a, made.tableId, made.pin);
     expect(snap.meta).toMatchObject({ visibility: 'private', pin: made.pin });
     await sleep(100);
     expect(w.msgs.some((m) => m.t === 'lobby' && m.lobby.tableId === made.tableId)).toBe(false);
@@ -278,12 +278,12 @@ describe('PINs', () => {
     const a = await player('host');
     const b = await player('guest');
     const made = await makeLobby(a, 'private');
-    const [ca] = await enter(a, made.tableId);
+    const [ca] = await enter(a, made.tableId, made.pin);
 
     const res = await joinByPin(b, made.pin!);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ tableId: made.tableId, game: 'highcard' });
-    const [, snap] = await enter(b, made.tableId);
+    const [, snap] = await enter(b, made.tableId, made.pin);
     expect(snap.leader).toBe(a.id);
     expect(snap.members.map((m: Member) => m.accountId)).toEqual([a.id, b.id]);
     // Members see the PIN, so anyone at the table can invite a friend.
@@ -459,8 +459,8 @@ describe('the party', () => {
     const a = await player('vis');
     const b = await player('vis');
     const made = await makeLobby(a, 'private');
-    const [ca] = await enter(a, made.tableId);
-    const [cb] = await enter(b, made.tableId);
+    const [ca] = await enter(a, made.tableId, made.pin);
+    const [cb] = await enter(b, made.tableId, made.pin);
     const { w } = await watcher();
 
     cb.send({ t: 'visibility', visibility: 'public' });
@@ -674,17 +674,34 @@ describe('drops and the grace period', () => {
     expect(stats).toEqual({ rounds: 1, wagered: 2_000 });
   });
 
-  it('a dropped leader keeps the lead until the grace period ends, then hands it over', async () => {
+  it('a dropped leader keeps the lead for 20 s, then hands it on while their seat is still held', async () => {
     const { a, b, ca, cb, tableId } = await startedTable();
     ca.ws.close(1001, 'network');
     const held = await cb.next<any>((m) => m.t === 'members' && find(m.members, a.id)?.connected === false);
     expect(held.leader).toBe(a.id);
+    const due = await deadlines(tableId);
+    expect(due.leader! - Date.now()).toBeGreaterThan(LEADER_HANDOFF_MS - 5_000);
 
-    clockAt((await deadlines(tableId))[`grace:${a.id}`]! + 1);
+    clockAt(due.leader! + 1);
     await runDurableObjectAlarm(table(tableId));
-    const handed = await cb.next<any>((m) => m.t === 'members' && !find(m.members, a.id));
-    expect(handed.leader).toBe(b.id);
+    const handed = await cb.next<any>((m) => m.t === 'members' && m.leader === b.id);
+    expect(find(handed.members, a.id)).toMatchObject({ status: 'seated', connected: false });
+
+    clockAt(due[`grace:${a.id}`]! + 1);
+    await runDurableObjectAlarm(table(tableId));
+    await cb.next((m) => m.t === 'members' && !find(m.members, a.id));
     expect(await escrow(a.id, tableId)).toBeNull();
+  });
+
+  it('a leader who comes back inside 20 s keeps the lead', async () => {
+    const { a, cb, ca, tableId } = await startedTable();
+    ca.ws.close(1001, 'network');
+    await cb.next((m) => m.t === 'members' && find(m.members, a.id)?.connected === false);
+    const [again] = await enter(a, tableId);
+    expect(Object.keys(await deadlines(tableId))).not.toContain('leader');
+    const back = await cb.next<any>((m) => m.t === 'members' && find(m.members, a.id)?.connected === true);
+    expect(back.leader).toBe(a.id);
+    again.ws.close();
   });
 
   it('an undealt bet comes back when a player leaves', async () => {
@@ -719,13 +736,10 @@ describe('drops and the grace period', () => {
 });
 
 // ---------------------------------------------------------------------------------------------
-// Gaps in server/src/table/host.ts found while writing these tests. Each is written as the
-// behaviour the rules call for and marked `it.fails` until host.ts is fixed (the lobby report
-// has the fix for each); once it is, the test starts passing, it.fails reports that, and the
-// marker comes off.
+// Gaps in server/src/table/host.ts found while writing these tests, now fixed there.
 
-describe('host.ts gaps (it.fails until fixed)', () => {
-  it.fails('a lobby stays listed while it is played, even when its first heartbeat found it empty', async () => {
+describe('host.ts gaps', () => {
+  it('a lobby stays listed while it is played, even when its first heartbeat found it empty', async () => {
     const a = await player('beat');
     const made = await makeLobby(a, 'public');
     // The creator takes a minute to sit down, so the first heartbeat finds nobody and stops.
@@ -739,7 +753,7 @@ describe('host.ts gaps (it.fails until fixed)', () => {
     expect((await watcher()).list.some((l) => l.tableId === made.tableId)).toBe(true);
   });
 
-  it.fails('a stranger who saw a lobby listed cannot walk in after it goes private', async () => {
+  it('a stranger who saw a lobby listed cannot walk in after it goes private', async () => {
     const a = await player('shut');
     const s = await player('strange');
     const made = await makeLobby(a, 'public');
@@ -750,7 +764,7 @@ describe('host.ts gaps (it.fails until fixed)', () => {
     expect((await closedWith(client!, 400)).code).toBe(4005);
   });
 
-  it.fails('ready is cleared when a round ends, so the next window waits for everyone again', async () => {
+  it('ready is cleared when a round ends, so the next window waits for everyone again', async () => {
     const { ca, cb, tableId } = await startedTable();
     bet(ca, 1_000);
     bet(cb, 1_000);
@@ -768,7 +782,53 @@ describe('host.ts gaps (it.fails until fixed)', () => {
     expect(ca.msgs.some(isResult)).toBe(false);
   });
 
-  it.fails('two joins in the same millisecond keep their order across a restart', async () => {
+  it('a private lobby lets in the right PIN, refuses a wrong one, and locks out a guesser', async () => {
+    const a = await player('lock');
+    const b = await player('friend');
+    const g = await player('guess');
+    const made = await makeLobby(a, 'private');
+    await enter(a, made.tableId, made.pin);
+    const wrong = made.pin === '0000' ? '0001' : '0000';
+    for (let i = 0; i < 5; i++) {
+      const { client } = await connect(`table/${made.tableId}`, g.token, `&pin=${wrong}`);
+      expect(await closedWith(client!, 400)).toEqual({ code: 4005, reason: 'wrong pin' });
+    }
+    // The sixth try is refused even with the right PIN, for a while.
+    const { client: locked } = await connect(`table/${made.tableId}`, g.token, `&pin=${made.pin}`);
+    expect(await closedWith(locked!, 400)).toEqual({ code: 4008, reason: 'too many tries' });
+    const [, snap] = await enter(b, made.tableId, made.pin);
+    expect(snap.members.map((m: Member) => m.accountId)).toContain(b.id);
+  });
+
+  it('a lobby nobody ever enters closes and gives up its PIN', async () => {
+    const a = await player('empty');
+    const made = await makeLobby(a, 'private');
+    const due = await deadlines(made.tableId);
+    expect(due.close! - Date.now()).toBeGreaterThan(HOST_CONSTANTS.EMPTY_CLOSE_MS - 5_000);
+    clockAt(due.close! + 1);
+    await runDurableObjectAlarm(table(made.tableId));
+    const { client } = await connect(`table/${made.tableId}`, a.token, `&pin=${made.pin}`);
+    expect((await closedWith(client!, 400)).code).toBe(4004);
+    expect(await floor().joinByPin({ pin: made.pin!, accountId: a.id, ip: nextIp() })).toEqual({ error: 'BAD_PIN' });
+  });
+
+  it('a top-up lands while a bet is working, and the seat keeps playing', async () => {
+    const { a, ca, tableId } = await startedTable();
+    bet(ca, 1_000);
+    await ca.next((m) => m.t === 'seat' && m.stack === 9_000);
+    ca.send({ t: 'topup', aid: `top${++seq}`, amount: 5_000 });
+    const topped = await ca.next<any>((m) => m.t === 'seat' && m.stack === 14_000);
+    expect(topped).toMatchObject({ status: 'seated', escrow: 15_000 });
+    expect(await escrow(a.id, tableId)).toBe(15_000);
+    // The bet is still on the layout and still plays.
+    const snap = await (async () => {
+      ca.send({ t: 'sync' });
+      return ca.next<any>((m) => m.t === 'table');
+    })();
+    expect(snap.view.bets).toMatchObject({ 0: 1_000 });
+  });
+
+  it('two joins in the same millisecond keep their order across a restart', async () => {
     const a = await player('tie');
     const c = await player('tie'); // the older account...
     const b = await player('tie'); // ...joins after this one

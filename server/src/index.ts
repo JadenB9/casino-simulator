@@ -181,6 +181,9 @@ async function handleSocket(request: Request, env: Env, url: URL, route: string,
     const id = lobby[1]!;
     if (!TABLE_ID_RE.test(id)) return closeWith(CLOSE.NOT_FOUND, 'no such table');
     headers.set('x-casino-table', id);
+    // A private lobby checks this against its own PIN before letting a newcomer in.
+    const pin = url.searchParams.get('pin');
+    if (pin && /^\d{4}$/.test(pin)) headers.set('x-casino-pin', pin);
     return tableStub(env, id).fetch(forward(request, headers));
   }
 

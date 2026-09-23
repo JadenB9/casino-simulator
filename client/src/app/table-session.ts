@@ -18,6 +18,8 @@ export interface TableTarget {
   game: GameClientModule['game'];
   variant: string;
   tableId?: string;
+  /** A private lobby's PIN; the table asks for it from anyone who isn't a member yet. */
+  pin?: string;
   station?: string;
 }
 
@@ -45,6 +47,7 @@ export class TableSession {
     const params: Record<string, string> = {};
     if (target.kind === 'solo' && target.variant) params.variant = target.variant;
     if (target.station) params.station = target.station;
+    if (target.pin) params.pin = target.pin;
     this.socket = new Socket({
       url: () => socketUrl(path, params),
       onMessage: (m) => this.onMessage(m),
