@@ -1,0 +1,66 @@
+/* Roulette table: last numbers, meters, the result plaque over the wheel, bet tooltips, the
+   betting clock and the players at the wheel. Built on the theme's glass panels and brass lines.
+   The bottom-left corner stays free for the site's back chip. */
+
+.rl-history { position: fixed; top: 16px; left: 16px; padding: 8px 12px 10px; max-width: min(640px, calc(100vw - 420px)); }
+.rl-history .label { margin-bottom: 6px; }
+.rl-history-row { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.rl-history-empty { font-size: 14px; color: var(--ink-3); }
+.rl-num { display: inline-grid; place-items: center; min-width: 28px; height: 28px; padding: 0 3px; border-radius: 3px; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; color: #f3e8cc; border: 1px solid rgba(0, 0, 0, 0.35); }
+.rl-num.red { background: #a51d24; }
+.rl-num.black { background: #141414; border-color: rgba(255, 255, 255, 0.12); }
+.rl-num.green { background: #0d6a39; }
+.rl-num.latest { min-width: 38px; height: 38px; font-size: 21px; box-shadow: 0 0 0 1px var(--brass-hi); margin-right: 4px; }
+
+.rl-meters { position: fixed; top: 64px; right: 16px; display: flex; gap: 18px; padding: 9px 16px; }
+.rl-meter { display: grid; gap: 2px; min-width: 78px; }
+.rl-meter-value { font-size: 21px; font-weight: 600; color: var(--ink); }
+
+.rl-result { position: absolute; display: flex; align-items: center; gap: 12px; padding: 10px 16px 10px 10px; pointer-events: none; animation: rl-rise 0.4s var(--ease); white-space: nowrap; }
+.rl-result-badge { display: grid; place-items: center; width: 54px; height: 54px; border-radius: 50%; font-size: 27px; font-weight: 600; color: #f3e8cc; border: 2px solid var(--brass-hi); }
+.rl-result-badge.red { background: #a51d24; }
+.rl-result-badge.black { background: #141414; }
+.rl-result-badge.green { background: #0d6a39; }
+.rl-result-words { display: grid; gap: 1px; }
+.rl-result-call { font-family: var(--serif); font-size: 26px; font-weight: 700; letter-spacing: 0.06em; color: var(--brass-hi); }
+.rl-result-detail { font-size: 15px; letter-spacing: 0.08em; color: var(--ink-2); }
+.rl-result-net { font-size: 16px; font-weight: 600; letter-spacing: 0.04em; min-height: 0; }
+.rl-result-net.win { color: var(--win); }
+.rl-result-net.quiet { color: var(--ink-3); }
+@keyframes rl-rise { from { opacity: 0; transform: translateY(8px); } }
+
+#ui .rl-tip { pointer-events: none; }
+.rl-result[hidden], .rl-clock[hidden], .rl-players[hidden], .rl-tip[hidden], .rl-color-note[hidden] { display: none; }
+.rl-tip { position: fixed; z-index: 20; padding: 7px 11px; font-size: 15px; line-height: 1.35; pointer-events: none; max-width: 280px; }
+.rl-tip .rl-tip-name { font-weight: 600; color: var(--ink); letter-spacing: 0.03em; }
+.rl-tip .rl-tip-pays { color: var(--brass-hi); }
+.rl-tip .rl-tip-edge { color: var(--ink-3); font-size: 13px; }
+.rl-tip .rl-tip-mine { color: var(--ink); }
+.rl-tip .rl-tip-other { color: var(--ink-2); }
+
+.rl-clock { position: absolute; display: grid; justify-items: center; gap: 3px; pointer-events: none; }
+.rl-clock-ring { position: relative; width: 58px; height: 58px; }
+.rl-clock-ring svg { width: 100%; height: 100%; display: block; }
+.rl-clock circle { fill: rgba(14, 12, 10, 0.72); stroke-width: 3.5; }
+.rl-clock .track { stroke: rgba(255, 255, 255, 0.14); }
+.rl-clock .left { fill: none; stroke: var(--brass-hi); stroke-linecap: round; transform: rotate(-90deg); transform-origin: 50% 50%; transition: stroke-dashoffset 0.25s linear; }
+.rl-clock.late .left { stroke: #e8a33a; }
+.rl-clock-secs { position: absolute; inset: 0; display: grid; place-items: center; font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.rl-clock-caption { font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-2); text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8); }
+
+.rl-players { position: fixed; top: 136px; right: 16px; display: grid; gap: 5px; padding: 9px 12px; min-width: 230px; }
+.rl-player { display: grid; grid-template-columns: 16px 1fr auto auto; align-items: center; gap: 8px; font-size: 16px; }
+.rl-player.you .rl-player-name { color: var(--brass-hi); }
+.rl-player-chip { width: 14px; height: 14px; border-radius: 50%; box-shadow: 0 0 0 2px rgba(247, 242, 234, 0.85) inset, 0 0 0 1px rgba(0, 0, 0, 0.4); }
+.rl-player-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rl-player-status { font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); }
+.rl-player-status.ready { color: var(--brass-hi); }
+.rl-player-status.win { color: var(--win); }
+.rl-player-stack { color: var(--ink-2); }
+
+.rl-color-note { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: var(--ink-2); }
+
+@media (max-width: 900px) {
+  .rl-history { max-width: calc(100vw - 32px); }
+  .rl-meters { gap: 10px; padding: 7px 10px; }
+}
