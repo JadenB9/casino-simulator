@@ -40,7 +40,7 @@ const TRAY_MAX: Cents = 50_000;
 const LOOKAHEAD_S = 0.12;
 
 /** Betting: the layout and the whole wheel from behind the players. The spin: the wheel, then close on the clapper. */
-const BET_POSE: Pose = { position: [0, 2.3, 2.62], target: [0, 1.42, -0.25] };
+const BET_POSE: Pose = { position: [0, 2.4, 2.75], target: [0, 1.56, -0.25] };
 const WHEEL_POSE: Pose = { position: [0, WHEEL_Y + 0.12, 1.5], target: [0, WHEEL_Y + 0.1, WHEEL_Z] };
 const CLAPPER_POSE: Pose = { position: [0, WHEEL_Y + 0.62, WHEEL_Z + 1.0], target: [0, WHEEL_Y + 0.7, WHEEL_Z] };
 

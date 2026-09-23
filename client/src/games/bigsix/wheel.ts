@@ -101,8 +101,8 @@ export function paintFace(g: CanvasRenderingContext2D, size: number): void {
     wedge.addColorStop(1, `#${base.getHexString()}`);
     g.fillStyle = wedge;
     g.beginPath();
-    g.moveTo(0, 0);
     g.arc(0, 0, R(FACE_R), -Math.PI / 2 - SECTOR / 2, -Math.PI / 2 + SECTOR / 2);
+    g.arc(0, 0, R(BAND_IN), -Math.PI / 2 + SECTOR / 2, -Math.PI / 2 - SECTOR / 2, true);
     g.closePath();
     g.fill();
     // the label ring: the value in cream, or a small picture
