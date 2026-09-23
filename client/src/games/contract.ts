@@ -12,7 +12,6 @@ import type { Sfx } from '../audio/sfx.ts';
 
 export type TableSnapshot = Extract<TableServerMsg, { t: 'table' }>;
 export type SeatMsg = Extract<TableServerMsg, { t: 'seat' }>;
-export type TimerMsg = Extract<TableServerMsg, { t: 'timer' }>;
 export type MembersMsg = Extract<TableServerMsg, { t: 'members' }>;
 
 /** Sends to this table. Actions get a fresh aid automatically. */
@@ -42,7 +41,6 @@ export interface TableView {
   onEvents(events: GameEvent[], view: unknown): Promise<void> | void;
   onSeat(msg: SeatMsg): void;
   onMembers?(msg: MembersMsg): void;
-  onTimer?(msg: TimerMsg, receivedAt: number): void;
   onError?(code: string, msg: string): void;
   /** Keyboard shortcuts at the table; return true when handled. */
   keydown?(e: KeyboardEvent): boolean;

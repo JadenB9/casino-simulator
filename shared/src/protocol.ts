@@ -232,7 +232,6 @@ export type TableServerMsg =
   | { t: 'ev'; seq: number; events: unknown[]; view: unknown; now: number }
   | { t: 'seat'; status: SeatStatus; stack: Cents; escrow: Cents; seat: number | null }
   | { t: 'balance'; balance: Cents; inPlay: Cents; rev: number }
-  | { t: 'timer'; kind: 'betting' | 'turn' | 'decision' | 'roll'; seat?: number; deadline: number; now: number }
   | { t: 'closed'; reason: string }
   | { t: 'err'; ref?: string; code: ErrorCode; msg: string };
 

@@ -143,9 +143,6 @@ export class TableSession {
       case 'members':
         this.view?.onMembers?.(m);
         break;
-      case 'timer':
-        this.view?.onTimer?.(m, Date.now());
-        break;
       case 'err':
         this.kit.toast(m.msg, 'err');
         this.view?.onError?.(m.code, m.msg);

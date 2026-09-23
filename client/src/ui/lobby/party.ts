@@ -277,7 +277,6 @@ export function withParty(module: GameClientModule, party: PartyPanel): GameClie
           view.dispose();
         },
       };
-      if (view.onTimer) wrapped.onTimer = (msg, at) => view.onTimer!(msg, at);
       wrapped.onError = (code, msg) => {
         party.onError();
         view.onError?.(code, msg);
