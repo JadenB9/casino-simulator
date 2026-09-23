@@ -17,7 +17,7 @@ import { advise, insuranceAdvice } from '../../../../shared/src/games/blackjack/
 import { CardMesh, dealCard, flipCard } from '../../table/cards.ts';
 import { ChipStack, slideStack } from '../../table/chips.ts';
 import { celebrate } from '../../table/celebrate.ts';
-import { dropGlow, handGlow } from './glow.ts';
+import { dropGlow, handGlow, raiseBanner } from './celebration.ts';
 import { roundMoment } from './moments.ts';
 import { tween, wait, ease } from '../../table/tween.ts';
 import { ChipTray, button, el } from '../../ui/kit.ts';
@@ -141,6 +141,7 @@ export class BlackjackTable implements TableView {
   private timerObj: CSS2DObject | null = null;
   private readonly onPointer: (e: PointerEvent) => void;
   private readonly offTips: () => void;
+  private readonly lowerBanner: () => void;
   /** A decision is on its way to the server: its tip stays down until the next view arrives. */
   private acted = false;
 
@@ -205,6 +206,7 @@ export class BlackjackTable implements TableView {
     };
     addEventListener('pointerdown', this.onPointer);
     this.offTips = ctx.tips.subscribe(() => this.renderTip());
+    this.lowerBanner = raiseBanner(ctx.ui);
   }
 
   // ------------------------------------------------------------------------------------------
@@ -1006,6 +1008,7 @@ export class BlackjackTable implements TableView {
   dispose(): void {
     removeEventListener('pointerdown', this.onPointer);
     this.offTips();
+    this.lowerBanner();
     this.ctx.kit.tip(null);
     this.tray.root.remove();
     this.actions.remove();

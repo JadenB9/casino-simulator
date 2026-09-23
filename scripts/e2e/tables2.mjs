@@ -31,7 +31,8 @@ async function open(game, name) {
         await page.fill('.modal input[type=number]', '2000');
         await page.click('.modal .btn.primary');
       }
-      await page.waitForFunction(() => window.casino?.table?.snapshot?.you?.status === 'seated', null, { timeout: 15000 });
+      // the session's snapshot isn't refreshed by the seat message: seated once the dialog closes
+      await page.waitForFunction(() => !document.querySelector('.modal') && window.casino?.table?.view, null, { timeout: 15000 });
       break;
     } catch (err) {
       const seen = await page.evaluate(() => ({ you: window.casino?.table?.snapshot?.you, modal: document.querySelector('.modal')?.textContent, toasts: [...document.querySelectorAll('.toast')].map((t) => t.textContent) })).catch(() => null);
@@ -40,7 +41,7 @@ async function open(game, name) {
       await page.waitForTimeout(3000);
     }
   }
-  await page.waitForTimeout(800);
+  await page.waitForTimeout(1500);
   return page;
 }
 
@@ -145,8 +146,10 @@ async function blackjack() {
 
 async function threecard() {
   const page = await open('threecard', 't2_tc');
-  const out = { tips: [] };
-  for (let hand = 0; hand < 3; hand++) {
+  const out = { tips: [], hands: 0 };
+  const watcher = watchCelebration(page, 'threecard', out);
+  for (let hand = 0; hand < 16 && !(out.celebration && hand >= 2); hand++) {
+    out.hands++;
     // straight to the server: the view's own tray keeps its bets locally
     await page.evaluate(() => window.casino.table.link.act({ type: 'bet', ante: 2500, pairPlus: 500 }));
     await page.waitForTimeout(500);
@@ -154,31 +157,42 @@ async function threecard() {
     await page.waitForSelector('.tc-decide:not([hidden])', { timeout: 30000 });
     await page.waitForTimeout(600);
     out.tips.push({ tip: await tipText(page), pick: await picked(page) });
-    if (hand === 0) await page.screenshot({ path: `${outDir}/threecard-decision.png` });
+    if (hand === 0) {
+      await page.screenshot({ path: `${outDir}/threecard-decision.png` });
+      await seatShots(page, 'threecard', [4, 5]);
+    }
     const key = await page.evaluate(() => document.querySelector('.tc-decide .tip-pick .key')?.textContent ?? 'P');
     await page.keyboard.press(key.toLowerCase());
     await page.waitForFunction(() => /qualif|Dealer has|Folded/.test(document.querySelector('.dealer-line')?.textContent ?? ''), null, { timeout: 30000 });
     await page.waitForTimeout(900);
     if (hand === 0) await page.screenshot({ path: `${outDir}/threecard-reveal.png` });
     await settle(page, 600);
+    out.tipAfter = await tipText(page);
   }
+  await Promise.race([watcher, page.waitForTimeout(20000)]);
   report.threecard = out;
   await page.close();
 }
 
 async function baccarat() {
   const page = await open('baccarat', 't2_bc');
-  const out = { tips: [] };
-  out.tips.push({ tip: await tipText(page), pick: await picked(page) });
+  const out = { tips: [], coups: 0 };
+  const watcher = watchCelebration(page, 'baccarat', out);
+  out.tips.push({ tip: await tipText(page), mark: await page.evaluate(() => window.casino.table.view.tipMark?.mesh.visible ?? false) });
   await page.screenshot({ path: `${outDir}/baccarat-betting.png` });
-  await page.keyboard.press('3');
-  await page.keyboard.press('b');
-  await page.waitForTimeout(400);
-  await page.keyboard.press('Space');
-  await page.waitForTimeout(1200);
-  out.tips.push({ tip: await tipText(page), pick: await picked(page) });
-  await settle(page, 300);
-  await page.screenshot({ path: `${outDir}/baccarat-settled.png` });
+  await seatShots(page, 'baccarat', [5, 6]);
+  for (let coup = 0; coup < 14 && !(out.celebration && coup >= 2); coup++) {
+    out.coups++;
+    await page.evaluate(() => window.casino.table.link.act({ type: 'bet', banker: 2500, playerPair: 500, bankerPair: 500 }));
+    await page.waitForTimeout(400);
+    await page.evaluate(() => window.casino.table.link.act({ type: 'deal' }));
+    await page.waitForTimeout(1500);
+    out.tips.push({ tip: await tipText(page) });
+    if (coup === 0) await page.screenshot({ path: `${outDir}/baccarat-deal.png` });
+    await settle(page, 300);
+    if (coup === 0) await page.screenshot({ path: `${outDir}/baccarat-settled.png` });
+  }
+  await Promise.race([watcher, page.waitForTimeout(20000)]);
   report.baccarat = out;
   await page.close();
 }

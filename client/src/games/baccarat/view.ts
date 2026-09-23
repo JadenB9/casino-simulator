@@ -20,7 +20,7 @@ import {
 import { engine, limitsFor } from '../../../../shared/src/games/baccarat/engine.ts';
 import { bestBet, bettingTip } from '../../../../shared/src/games/baccarat/advice.ts';
 import { celebrate } from '../../table/celebrate.ts';
-import { dropGlow, handGlow } from '../blackjack/glow.ts';
+import { dropGlow, handGlow, raiseBanner } from '../blackjack/celebration.ts';
 import { coupMoment } from './moments.ts';
 import { Felt } from '../../table/felt.ts';
 import { CardMesh, CARD_H, dealCard, flipCard } from '../../table/cards.ts';
@@ -129,6 +129,7 @@ export class BaccaratTable implements TableView {
   /** The Tips mark on your seat's best bet, and which spot it lights. */
   private tipMark: { mesh: THREE.Mesh; region: string } | null = null;
   private readonly offTips: () => void;
+  private readonly lowerBanner: () => void;
 
   constructor(private readonly ctx: TableViewCtx) {
     this.root = ctx.stage.root;
@@ -178,6 +179,7 @@ export class BaccaratTable implements TableView {
     addEventListener('pointerdown', this.onPointerDown);
     addEventListener('pointermove', this.onPointerMove);
     this.offTips = ctx.tips.subscribe(() => this.renderTip());
+    this.lowerBanner = raiseBanner(ctx.ui);
   }
 
   // -------------------------------------------------------------------------------------------
@@ -364,6 +366,7 @@ export class BaccaratTable implements TableView {
   dispose(): void {
     this.disposed = true;
     this.offTips();
+    this.lowerBanner();
     this.ctx.kit.tip(null);
     this.tipMark?.mesh.removeFromParent();
     removeEventListener('pointerdown', this.onPointerDown);

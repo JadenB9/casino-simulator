@@ -136,15 +136,15 @@ export function seatPosition(seat: number): { position: [number, number, number]
 
 /**
  * The camera for a seat: behind the circle at eye height, looking across to the dealer's hand. It
- * sits further back toward the ends of the arc, so every seat frames alike: the dealer's cards a
- * little above the middle of the screen, just below where a win's banner goes up (so the banner
- * never hides them), and your cards and bet low but clear of the controls.
+ * sits further back toward the ends of the arc, so every seat frames alike: the dealer's cards
+ * about a third of the way down the screen, just below the celebration banner (raised at this
+ * table, see celebration.ts), and your cards and bet low but clear of the controls.
  */
 export function seatPose(seat: number): { position: [number, number, number]; target: [number, number, number] } {
   const s = spotAt(seat);
   const { out } = spotFrame(seat);
-  const eye = s.clone().addScaledVector(out, 0.43 + 0.19 * out.x * out.x);
+  const eye = s.clone().addScaledVector(out, 0.37 + 0.15 * out.x * out.x);
   eye.y = TOP_Y + 0.6;
-  const target = s.clone().lerp(DEALER_HAND, 0.63);
+  const target = s.clone().lerp(DEALER_HAND, 0.5);
   return { position: [eye.x, eye.y, eye.z], target: [target.x, target.y, target.z] };
 }

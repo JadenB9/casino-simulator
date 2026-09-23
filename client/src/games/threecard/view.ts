@@ -31,7 +31,7 @@ import { ChipStack, slideStack } from '../../table/chips.ts';
 import { celebrate } from '../../table/celebrate.ts';
 import type { Felt } from '../../table/felt.ts';
 import { ease, tween, wait } from '../../table/tween.ts';
-import { dropGlow, handGlow } from '../blackjack/glow.ts';
+import { dropGlow, handGlow, raiseBanner } from '../blackjack/celebration.ts';
 import { handMoment } from './moments.ts';
 import { ChipTray, button, el } from '../../ui/kit.ts';
 import { serverNow } from '../../net/clock.ts';
@@ -340,6 +340,7 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
     ctx.kit.tip(a ? a.text : null);
   };
   const offTips = ctx.tips.subscribe(() => renderTip());
+  const lowerBanner = raiseBanner(ctx.ui);
 
   /** My hand's moment, if it was one, with the light under my cards. */
   const celebrateHand = (r: Settlement, cards: Card[]): void => {
@@ -979,6 +980,7 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
 
     dispose() {
       offTips();
+      lowerBanner();
       ctx.kit.tip(null);
       removeEventListener('pointerdown', onDown);
       removeEventListener('pointermove', onMove);

@@ -105,11 +105,19 @@ export function seatPose(seat: number): { position: [number, number, number]; ya
   return { position: [x, 0, z], yaw: a + Math.PI };
 }
 
+/**
+ * The camera over a seat, looking down across its cards to the dealer's: the dealer's cards about
+ * a third of the way down the screen (just below the raised celebration banner) and the Play spot
+ * clear of the controls. It sits further back and aims further toward the dealer at the ends of
+ * the arc, so every seat frames alike.
+ */
 export function cameraPose(seat: number): { position: [number, number, number]; target: [number, number, number] } {
   const a = seatAngle(seat);
-  const [cx, cz] = along(a, 1.45);
-  const [tx, tz] = along(a, 0.55);
-  return { position: [cx, 1.34, cz], target: [tx, TOP_Y, tz] };
+  const t = Math.abs(a) / THREE.MathUtils.degToRad(50);
+  const [cx, cz] = along(a, 1.165 + 0.225 * t);
+  const [hx, hz] = along(a, HAND_R);
+  const k = -0.045 + 0.225 * t;
+  return { position: [cx, 1.78, cz], target: [hx + (0 - hx) * k, TOP_Y, hz + (DEALER_CARDS_Z - hz) * k] };
 }
 
 // ---------------------------------------------------------------------------------------------
