@@ -173,7 +173,7 @@ export function mountSicBo(ctx: TableViewCtx): TableView {
   ctx.ui.append(history.root, meters.root, tip.root, players.root);
   // the result board stands over the game's name, left of the dome, clear of the dealer's line and the banners
   const boardObj = stage.label(board.root, new THREE.Vector3(-0.66, TOP_Y + 0.1, SHAKER_Z + 0.03));
-  const clockObj = stage.label(clock.root, new THREE.Vector3(-0.34, TOP_Y + 0.12, SHAKER_Z + 0.03));
+  const clockObj = stage.label(clock.root, new THREE.Vector3(0.34, TOP_Y + 0.12, SHAKER_Z + 0.03));
 
   const tray = new ChipTray({
     undo: () => act({ type: 'undo' }),

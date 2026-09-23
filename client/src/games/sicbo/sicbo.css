@@ -73,7 +73,7 @@
 .sb-player-status.win { color: var(--win); }
 .sb-player-stack { color: var(--ink-2); }
 
-.sb-color-note { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: var(--ink-2); }
+.sb-color-note { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: var(--ink-2); white-space: nowrap; }
 
 @media (max-width: 900px) {
   .sb-history { max-width: calc(100vw - 32px); }
