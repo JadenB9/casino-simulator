@@ -132,7 +132,7 @@ function mountRoulette(ctx: TableViewCtx): TableView {
 
   // highlights: the numbers a hovered bet covers, and the winning number
   const plane = new THREE.PlaneGeometry(1, 1);
-  const hoverMat = new THREE.MeshBasicMaterial({ color: '#ffe0a0', transparent: true, opacity: 0.2, depthWrite: false, blending: THREE.AdditiveBlending });
+  const hoverMat = new THREE.MeshBasicMaterial({ color: '#ffe0a0', transparent: true, opacity: 0.3, depthWrite: false, blending: THREE.AdditiveBlending });
   const winMat = new THREE.MeshBasicMaterial({ color: '#fff0c0', transparent: true, opacity: 0.3, depthWrite: false, blending: THREE.AdditiveBlending });
   const hoverGroup = new THREE.Group();
   const winGroup = new THREE.Group();
@@ -166,6 +166,7 @@ function mountRoulette(ctx: TableViewCtx): TableView {
     dolly.add(body, band, crown, knob);
   }
   dolly.visible = false;
+  dolly.scale.setScalar(CHIP_SCALE);
   scene.add(dolly);
 
   // The camera: betting happens over the layout; when bets close it glides in on the wheel for the

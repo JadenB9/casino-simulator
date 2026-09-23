@@ -238,7 +238,7 @@ export function buildWheel(v: Variant, quality: Quality): THREE.Group {
   const n = WHEEL[v].length;
   const fretLen = DIMS.pocketOutR - DIMS.pocketInR;
   const fretH = DIMS.fretTop - DIMS.pocketY;
-  const frets = new THREE.InstancedMesh(new THREE.BoxGeometry(0.0022, fretH, fretLen), m.brass, n);
+  const frets = new THREE.InstancedMesh(new THREE.BoxGeometry(0.003, fretH, fretLen), m.brass, n);
   const mid = (DIMS.pocketOutR + DIMS.pocketInR) / 2;
   const mtx = new THREE.Matrix4();
   const q = new THREE.Quaternion();
