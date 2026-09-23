@@ -1,0 +1,164 @@
+// High-quality post: bloom on everything brighter than 1.0 (neon, LED strips, bulbs), plus the
+// adaptive pixel ratio.
+//
+// three r186's own route is `renderer.setEffects([bloom])`, but that needs the renderer to have
+// been created with `outputBufferType: HalfFloatType`, and Engine3D creates it without one. So the
+// floor scene does it itself through its render hooks: onBeforeRender points the frame at a
+// multisampled HalfFloat target, onAfterRender copies it to a plain HalfFloat buffer, blooms that
+// and tone-maps it to the canvas. If the renderer ever does have a HalfFloat output buffer (the
+// scene then renders into the renderer's own target), the same bloom pass is handed to
+// setEffects() instead and the hooks stand down.
+
+import * as THREE from 'three';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { CopyShader } from 'three/addons/shaders/CopyShader.js';
+import type { Engine3D } from '../render/engine3d.ts';
+
+type Mode = 'probe' | 'hooks' | 'effects' | 'off';
+
+export class Bloom {
+  readonly pass: UnrealBloomPass;
+  private copy = new ShaderPass(CopyShader);
+  private output = new OutputPass();
+  private sceneRT: THREE.WebGLRenderTarget;
+  private postRT: THREE.WebGLRenderTarget;
+  private mode: Mode = 'off';
+  private enabled = false;
+  private redirected = false;
+  private size = new THREE.Vector2();
+  private dt = 0;
+  private prevBefore: THREE.Scene['onBeforeRender'];
+  private prevAfter: THREE.Scene['onAfterRender'];
+
+  constructor(private readonly engine: Engine3D) {
+    const r = engine.renderer;
+    r.getDrawingBufferSize(this.size);
+    this.pass = new UnrealBloomPass(this.size.clone(), 0.42, 0.32, 1.05);
+    this.sceneRT = new THREE.WebGLRenderTarget(this.size.x, this.size.y, { type: THREE.HalfFloatType, samples: 4 });
+    this.postRT = new THREE.WebGLRenderTarget(this.size.x, this.size.y, { type: THREE.HalfFloatType, depthBuffer: false });
+    this.output.renderToScreen = true;
+    const scene = engine.scene;
+    this.prevBefore = scene.onBeforeRender;
+    this.prevAfter = scene.onAfterRender;
+    // for a Scene, the renderer passes the bound render target where Object3D's hook has geometry
+    const before = (...args: Parameters<THREE.Scene['onBeforeRender']>) => {
+      this.prevBefore.apply(scene, args);
+      this.before(args[0], args[2], args[3] as unknown as THREE.WebGLRenderTarget | null);
+    };
+    const after = (...args: Parameters<THREE.Scene['onAfterRender']>) => {
+      this.prevAfter.apply(scene, args);
+      this.after(args[0], args[2]);
+    };
+    scene.onBeforeRender = before;
+    scene.onAfterRender = after;
+  }
+
+  setEnabled(on: boolean): void {
+    this.enabled = on;
+    if (this.mode === 'effects') this.engine.renderer.setEffects(on ? [this.pass] : []);
+    if (on && this.mode === 'off') this.mode = 'probe';
+  }
+
+  get active(): boolean {
+    return this.enabled && (this.mode === 'hooks' || this.mode === 'effects');
+  }
+
+  /** Per frame, before the engine renders. */
+  update(dt: number): void {
+    this.dt = dt;
+  }
+
+  private before(renderer: THREE.WebGLRenderer, camera: THREE.Camera, target: THREE.WebGLRenderTarget | null): void {
+    this.redirected = false;
+    if (!this.enabled || camera !== this.engine.camera) return;
+    if (this.mode === 'probe') {
+      // a target already bound for the main pass means the renderer has its own HDR output
+      if (target !== null) {
+        this.mode = 'effects';
+        renderer.setEffects([this.pass]);
+        return;
+      }
+      this.mode = 'hooks';
+    }
+    if (this.mode !== 'hooks' || target !== null) return;
+    renderer.getDrawingBufferSize(this.size);
+    if (this.sceneRT.width !== this.size.x || this.sceneRT.height !== this.size.y) {
+      this.sceneRT.setSize(this.size.x, this.size.y);
+      this.postRT.setSize(this.size.x, this.size.y);
+      this.pass.setSize(this.size.x, this.size.y);
+    }
+    renderer.setRenderTarget(this.sceneRT);
+    this.redirected = true;
+  }
+
+  private after(renderer: THREE.WebGLRenderer, camera: THREE.Camera): void {
+    if (!this.redirected || camera !== this.engine.camera) return;
+    this.redirected = false;
+    // multisampled scene -> plain buffer (the bloom blends into its input) -> bloom -> tone map to the canvas
+    this.copy.render(renderer, this.postRT, this.sceneRT, this.dt, false);
+    this.pass.render(renderer, null as unknown as THREE.WebGLRenderTarget, this.postRT, this.dt, false);
+    renderer.setRenderTarget(null);
+    this.output.render(renderer, null as unknown as THREE.WebGLRenderTarget, this.postRT, this.dt, false);
+  }
+
+  dispose(): void {
+    this.engine.scene.onBeforeRender = this.prevBefore;
+    this.engine.scene.onAfterRender = this.prevAfter;
+    if (this.mode === 'effects') this.engine.renderer.setEffects([]);
+    this.sceneRT.dispose();
+    this.postRT.dispose();
+    this.pass.dispose();
+    this.copy.dispose();
+    this.output.dispose();
+  }
+}
+
+/**
+ * Pixel ratio on High: start at min(devicePixelRatio, 2); step down 0.25 (not below 1.25) when the
+ * 90th-percentile frame is over 17 ms for two seconds, back up when under 12 ms for five. Resizing
+ * is expensive, hence the long windows.
+ */
+export class PixelRatio {
+  private samples: number[] = [];
+  private slow = 0;
+  private fast = 0;
+  private enabled = false;
+  private max = 1;
+  current = 1;
+
+  constructor(private readonly renderer: THREE.WebGLRenderer) {}
+
+  set(high: boolean): void {
+    this.enabled = high;
+    this.max = high ? Math.min(window.devicePixelRatio || 1, 2) : 1;
+    this.apply(this.max);
+  }
+
+  update(dt: number): void {
+    if (!this.enabled || dt <= 0) return;
+    this.samples.push(dt * 1000);
+    if (this.samples.length > 60) this.samples.shift();
+    if (this.samples.length < 30) return;
+    const p90 = [...this.samples].sort((a, b) => a - b)[Math.floor(this.samples.length * 0.9)]!;
+    if (p90 > 17) {
+      this.slow += dt;
+      this.fast = 0;
+    } else if (p90 < 12) {
+      this.fast += dt;
+      this.slow = 0;
+    } else {
+      this.slow = this.fast = 0;
+    }
+    if (this.slow > 2 && this.current > 1.25) this.apply(Math.max(1.25, this.current - 0.25));
+    else if (this.fast > 5 && this.current < this.max) this.apply(Math.min(this.max, this.current + 0.25));
+  }
+
+  private apply(pr: number): void {
+    this.current = pr;
+    this.slow = this.fast = 0;
+    this.samples.length = 0;
+    if (this.renderer.getPixelRatio() !== pr) this.renderer.setPixelRatio(pr);
+  }
+}

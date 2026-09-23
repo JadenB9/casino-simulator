@@ -240,10 +240,10 @@ export function planFloor(footprint: (game: GameId) => Footprint): FloorPlan {
     addBank('wild', cx, Math.min(z2, bottom), 0);
   }
   {
-    // between the cashier and the cross aisle, long axis north-south
-    const x = (ROOM.x0 + WALL + Math.min(pit.x0, -9.5)) / 2 + 0.3;
-    const z = (counter.z1 + 1.9 + crossZ0) / 2;
-    addBank('neon', x, z, Math.PI / 2);
+    // between the cashier and the cross aisle, back from the cashier's queue
+    const x = (ROOM.x0 + WALL + Math.min(pit.x0, -9.5)) / 2 - 0.4;
+    const z = Math.max(counter.z1 + 3.2 + PLAYER_ZONE + bankDepth / 2, crossZ0 - PLAYER_ZONE - 0.4 - bankDepth / 2);
+    addBank('neon', x, z, 0);
   }
 
   // --- the bar: counter along the east wall, video poker set into the north end ----------------
@@ -319,7 +319,7 @@ export function planFloor(footprint: (game: GameId) => Footprint): FloorPlan {
     staff,
     aisles,
     entrance,
-    door: { x0: -1.8, x1: 1.8, height: 2.9 },
+    door: { x0: -1.3, x1: 1.3, height: 2.9 },
     pokerRoom,
     slotsZone,
     barZone,

@@ -128,6 +128,7 @@ export class Mats {
     const wallTex = this.canvasTex(drawCarpet(512, WALL_PALETTE, 5));
     const cofferTex = this.canvasTex(drawCoffer(256));
     const washTex = this.canvasTex(drawWash(64, 256));
+    const ceilTex = this.canvasTex(drawCeiling(256));
     const poolTex = this.canvasTex(drawRadial(128, [[0, 'rgba(255,255,255,1)'], [0.35, 'rgba(255,255,255,0.55)'], [1, 'rgba(255,255,255,0)']]));
     poolTex.wrapS = poolTex.wrapT = THREE.ClampToEdgeWrapping;
     const blobTex = this.canvasTex(drawRadial(64, [[0, 'rgba(0,0,0,0.62)'], [0.55, 'rgba(0,0,0,0.3)'], [1, 'rgba(0,0,0,0)']]));
@@ -139,13 +140,13 @@ export class Mats {
     this.makers.set('carpet-poker', carpet(pokerTex));
     this.makers.set('carpet-aisle', carpet(aisleTex));
     this.makers.set('marble-floor', (q) =>
-      hi(q) ? std({ map: t.marbleTiles ?? null, color: t.marbleTiles ? '#ffffff' : '#d9ccb4', roughness: 0.22, metalness: 0 }) : lambert({ map: t.marbleTiles ?? null, color: t.marbleTiles ? '#ffffff' : '#d9ccb4' }),
+      hi(q) ? std({ map: t.marbleTiles ?? null, color: t.marbleTiles ? '#a89c8c' : '#a89c8c', roughness: 0.28, metalness: 0 }) : lambert({ map: t.marbleTiles ?? null, color: t.marbleTiles ? '#a89c8c' : '#a89c8c' }),
     );
     this.makers.set('wall', () => lambert({ map: wallTex }));
     this.makers.set('wainscot', (q) =>
       hi(q) ? std({ map: t.woodPanel ?? null, color: t.woodPanel ? '#b89a8a' : '#3a2016', roughness: 0.55 }) : lambert({ map: t.woodPanel ?? null, color: t.woodPanel ? '#b89a8a' : '#3a2016' }),
     );
-    this.makers.set('ceiling', () => lambert({ color: '#1b1411' }));
+    this.makers.set('ceiling', () => lambert({ map: ceilTex }));
     this.makers.set('ceiling-pit', () => new THREE.MeshBasicMaterial({ map: cofferTex }));
     this.makers.set('fascia', () => new THREE.MeshBasicMaterial({ map: washTex }));
     this.makers.set('wood', (q) =>
@@ -166,10 +167,10 @@ export class Mats {
     this.makers.set('shade', () => lambert({ color: '#e8d2a8', emissive: '#6a4a22', side: THREE.DoubleSide }));
     this.makers.set('glow-warm', () => new THREE.MeshBasicMaterial({ color: hdr('#ffd39a', 2.6) }));
     this.makers.set('glow-soft', () => new THREE.MeshBasicMaterial({ color: hdr('#ffc98a', 1.25) }));
-    this.makers.set('glow-bulb', () => new THREE.MeshBasicMaterial({ color: hdr('#fff0d0', 4) }));
+    this.makers.set('glow-bulb', () => new THREE.MeshBasicMaterial({ color: hdr('#fff0d0', 1.12) }));
     this.makers.set('glow-shelf', () => new THREE.MeshBasicMaterial({ color: hdr('#ffb266', 2.2) }));
     this.makers.set('pool', () =>
-      new THREE.MeshBasicMaterial({ map: poolTex, color: new THREE.Color('#ffb46a').multiplyScalar(0.34), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }),
+      new THREE.MeshBasicMaterial({ map: poolTex, color: new THREE.Color('#ffb46a').multiplyScalar(0.15), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }),
     );
     this.makers.set('blob', () => new THREE.MeshBasicMaterial({ map: blobTex, transparent: true, depthWrite: false }));
   }
@@ -219,6 +220,24 @@ function drawCoffer(size: number): HTMLCanvasElement {
   return c;
 }
 
+/** Low ceiling panels: dark, with a faint bronze reveal between them (one 1.2 m panel per tile). */
+function drawCeiling(size: number): HTMLCanvasElement {
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const ctx = c.getContext('2d')!;
+  ctx.fillStyle = '#1c1512';
+  ctx.fillRect(0, 0, size, size);
+  const g = ctx.createRadialGradient(size / 2, size / 2, size * 0.05, size / 2, size / 2, size * 0.7);
+  g.addColorStop(0, '#231a16');
+  g.addColorStop(1, '#17110f');
+  ctx.fillStyle = g;
+  ctx.fillRect(size * 0.04, size * 0.04, size * 0.92, size * 0.92);
+  ctx.strokeStyle = '#4a3522';
+  ctx.lineWidth = size * 0.012;
+  ctx.strokeRect(size * 0.04, size * 0.04, size * 0.92, size * 0.92);
+  return c;
+}
+
 /** The fascia under a cove: bright where the hidden LED strip washes it, fading upward. */
 function drawWash(w: number, h: number): HTMLCanvasElement {
   const c = document.createElement('canvas');
@@ -226,10 +245,10 @@ function drawWash(w: number, h: number): HTMLCanvasElement {
   c.height = h;
   const ctx = c.getContext('2d')!;
   const g = ctx.createLinearGradient(0, h, 0, 0);
-  g.addColorStop(0, '#f6c683');
-  g.addColorStop(0.12, '#c07a40');
-  g.addColorStop(0.45, '#4a2419');
-  g.addColorStop(1, '#231210');
+  g.addColorStop(0, '#d9a060');
+  g.addColorStop(0.1, '#8a5530');
+  g.addColorStop(0.35, '#3a1c14');
+  g.addColorStop(1, '#1a0e0c');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, w, h);
   return c;

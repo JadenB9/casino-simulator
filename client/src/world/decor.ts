@@ -80,8 +80,14 @@ export function buildDecor(plan: FloorPlan, stations: WorldStation[], vpMode: Vp
     box(0, 1.44, 0, L + 0.02, 0.03, 0.2, brass);
     // end caps with vertical light bars
     for (const e of [-1, 1]) {
-      box(e * (L / 2 + 0.12), 0.98, 0, 0.2, 1.84, Dp + 0.02, m.get('lacquer-red'));
-      box(e * (L / 2 + 0.23), 0.98, 0, 0.012, 1.5, 0.05, led2);
+      // black lacquer frame, a red inset panel edged in brass, light bars down both corners
+      box(e * (L / 2 + 0.12), 0.98, 0, 0.2, 1.84, Dp + 0.02, lacquer);
+      box(e * (L / 2 + 0.225), 0.98, 0, 0.01, 1.4, Dp - 0.5, m.get('lacquer-red'));
+      box(e * (L / 2 + 0.228), 0.98, (Dp - 0.5) / 2, 0.012, 1.42, 0.02, brass);
+      box(e * (L / 2 + 0.228), 0.98, -(Dp - 0.5) / 2, 0.012, 1.42, 0.02, brass);
+      box(e * (L / 2 + 0.228), 0.98 + 0.71, 0, 0.012, 0.02, Dp - 0.48, brass);
+      box(e * (L / 2 + 0.228), 0.98 - 0.71, 0, 0.012, 0.02, Dp - 0.48, brass);
+      for (const side of [-1, 1]) box(e * (L / 2 + 0.12), 0.98, side * (Dp / 2 + 0.018), 0.05, 1.6, 0.014, led2);
       box(e * (L / 2 + 0.12), 1.91, 0, 0.24, 0.03, Dp + 0.06, brass);
     }
     // topper: a sign box on a chrome mast above the spine
@@ -161,7 +167,7 @@ export function buildDecor(plan: FloorPlan, stations: WorldStation[], vpMode: Vp
     b.box(wood, (x0 + x1) / 2, (2.95 + CEILING) / 2, zc, x1 - x0 + 0.1, CEILING - 2.95, len + 0.1, 1.2);
     b.box(brass, x0 - 0.02, 2.93, zc, 0.04, 0.04, len + 0.1);
     col.box((x0 + x1) / 2, zc, x1 - x0, len, 0, CEILING);
-    out.signs.push({ kind: 'neon', text: 'BAR', sub: 'COCKTAILS · WINE · SPIRITS', color: '#3fe0d0', font: 'Limelight', at: [x0 - 0.06, 3.14, zc], ry: -Math.PI / 2, w: 3.4, h: 0.52 });
+    out.signs.push({ kind: 'neon', text: 'BAR', sub: 'COCKTAILS · WINE · SPIRITS', color: '#3fe0d0', font: 'Limelight', at: [x0 - 0.06, 3.17, zc], ry: -Math.PI / 2, w: 3.0, h: 0.46 });
   }
   // cocktail glasses along the counter, stools in front of the plain run
   for (const z of bar.stools) {
@@ -250,7 +256,7 @@ export function buildDecor(plan: FloorPlan, stations: WorldStation[], vpMode: Vp
         if (xc - xa > 0.3) plan.ropes.push({ points: [[xa, z], [xc, z]] });
       }
     }
-    for (const s of stations) if (s.zone === 'pit' || s.zone === 'poker') out.pools.push({ x: s.anchor.position.x, z: s.anchor.position.z, r: Math.max(s.footprint.width, s.footprint.depth) * 0.75 + 0.6 });
+    for (const s of stations) if (s.zone === 'pit' || s.zone === 'poker') out.pools.push({ x: s.anchor.position.x, z: s.anchor.position.z, r: Math.max(s.footprint.width, s.footprint.depth) * 0.6 + 0.4 });
   }
 
   // --- velvet ropes --------------------------------------------------------------------------
@@ -313,8 +319,8 @@ export function buildDecor(plan: FloorPlan, stations: WorldStation[], vpMode: Vp
       b.box(marble, cx, 0.42, cz, 1.3, 0.04, 0.7, 1.4);
       for (const [dx, dz] of [[-0.55, -0.27], [0.55, -0.27], [-0.55, 0.27], [0.55, 0.27]] as const) b.box(brass, cx + dx, 0.2, cz + dz, 0.03, 0.4, 0.03);
       col.box(cx, cz, 1.3, 0.7, 0, 0.45, { cam: false });
-      out.props.push({ kind: 'lamp-floor', x: cx + 1.45, y: 0, z: cz - 1.25, ry: 0, size: 1.6 });
-      out.props.push({ kind: 'lamp-floor', x: cx - 1.45, y: 0, z: cz + 1.25, ry: 0, size: 1.6 });
+      out.props.push({ kind: 'lamp-floor', x: cx + 1.5, y: 0, z: cz - 1.25, ry: 0, size: 1.45 });
+      out.props.push({ kind: 'lamp-floor', x: cx - 1.5, y: 0, z: cz + 1.25, ry: 0, size: 1.45 });
       col.post(cx + 1.45, cz - 1.25, 0.2, 1.6, { cam: false });
       col.post(cx - 1.45, cz + 1.25, 0.2, 1.6, { cam: false });
       out.pools.push({ x: cx, z: cz, r: 2.4 });
@@ -322,6 +328,6 @@ export function buildDecor(plan: FloorPlan, stations: WorldStation[], vpMode: Vp
   }
 
   // --- the entrance doors ----------------------------------------------------------------------
-  out.props.push({ kind: 'door', x: 0, y: 0, z: plan.room.z1 - 0.02, ry: Math.PI, size: plan.door.x1 - plan.door.x0 });
+  out.props.push({ kind: 'door', x: 0, y: 0, z: plan.room.z1 + 0.05, ry: Math.PI, size: plan.door.height });
   return out;
 }

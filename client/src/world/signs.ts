@@ -189,10 +189,13 @@ export function buildSigns(specs: SignSpec[], parent: THREE.Object3D, quality: '
       uv.setXY(i, u, v);
     }
     g.applyMatrix4(new THREE.Matrix4().compose(new THREE.Vector3(...s.at), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), s.ry), new THREE.Vector3(1, 1, 1)));
+    // neon blooms hard; printed and lit-box faces only just glow
+    const k = s.kind === 'neon' ? 1 : s.kind === 'lit' ? 0.62 : 0.5;
+    g.setAttribute('color', new THREE.Float32BufferAttribute(new Array(uv.count * 3).fill(k), 3));
     geos.push(g);
   }
   const merged = mergeAll(geos);
-  const mat = new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, color: new THREE.Color(1, 1, 1).multiplyScalar(quality === 'high' ? 2.4 : 1.6) });
+  const mat = new THREE.MeshBasicMaterial({ map: texture, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, color: new THREE.Color(1, 1, 1).multiplyScalar(quality === 'high' ? 2.4 : 1.6) });
   mat.name = 'signs';
   const mesh = new THREE.Mesh(merged, mat);
   mesh.name = 'signs';
@@ -204,14 +207,17 @@ export function buildSigns(specs: SignSpec[], parent: THREE.Object3D, quality: '
 function mergeAll(geos: THREE.BufferGeometry[]): THREE.BufferGeometry {
   const pos: number[] = [];
   const uv: number[] = [];
+  const col: number[] = [];
   const idx: number[] = [];
   let base = 0;
   for (const g of geos) {
     const p = g.getAttribute('position');
     const t = g.getAttribute('uv');
+    const c = g.getAttribute('color');
     for (let i = 0; i < p.count; i++) {
       pos.push(p.getX(i), p.getY(i), p.getZ(i));
       uv.push(t.getX(i), t.getY(i));
+      col.push(c.getX(i), c.getY(i), c.getZ(i));
     }
     for (const i of g.index!.array) idx.push(i + base);
     base += p.count;
@@ -220,6 +226,7 @@ function mergeAll(geos: THREE.BufferGeometry[]): THREE.BufferGeometry {
   const out = new THREE.BufferGeometry();
   out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   out.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  out.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
   out.setIndex(idx);
   out.computeBoundingSphere();
   return out;

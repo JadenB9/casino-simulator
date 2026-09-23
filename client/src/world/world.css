@@ -1,0 +1,71 @@
+/* The floor's own overlays: the "Press E" prompt, name tags over characters, and the dev
+   floor's stats readout. Colours and faces come from theme.css. */
+
+.world-prompt {
+  position: fixed;
+  left: 50%;
+  bottom: 88px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 9px 18px 9px 14px;
+  background: var(--glass);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
+  font-size: 18px;
+  letter-spacing: 0.04em;
+  color: var(--ink);
+  white-space: nowrap;
+  pointer-events: none;
+  animation: world-prompt-in 0.18s var(--ease);
+}
+.world-prompt[hidden] { display: none; }
+.world-key {
+  display: inline-grid;
+  place-items: center;
+  min-width: 26px;
+  height: 26px;
+  margin: 0 6px 0 4px;
+  border: 1px solid var(--brass);
+  border-radius: 4px;
+  background: rgba(216, 176, 106, 0.12);
+  color: var(--brass-hi);
+  font-weight: 600;
+}
+@keyframes world-prompt-in { from { opacity: 0; transform: translate(-50%, 6px); } }
+
+.world-tag {
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: rgba(14, 12, 10, 0.62);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  font-family: var(--ui);
+  font-size: 14px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.world-stats {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
+  pointer-events: none;
+}
+.world-help {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 6px 14px;
+  font-size: 14px;
+  color: var(--ink-2);
+  pointer-events: none;
+}

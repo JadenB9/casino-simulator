@@ -10,7 +10,8 @@ import { CEILING, PIT_CEILING, WALL, type FloorPlan, type Rect, inRect } from '.
 
 const FLOOR_Y = 0.004;
 
-export function buildRoom(plan: FloorPlan, b: Batch, m: Mats, col: Collider): void {
+/** Builds the shell; returns where chandeliers hang (coffer centres over the pit's middle). */
+export function buildRoom(plan: FloorPlan, b: Batch, m: Mats, col: Collider): { chandeliers: THREE.Vector3[] } {
   const R = plan.room;
   const W = R.x1 - R.x0;
   const D = R.z1 - R.z0;
@@ -86,7 +87,7 @@ export function buildRoom(plan: FloorPlan, b: Batch, m: Mats, col: Collider): vo
   const under = (r: Rect) => {
     if (r.x1 - r.x0 < 0.01 || r.z1 - r.z0 < 0.01) return;
     const g = new THREE.PlaneGeometry(r.x1 - r.x0, r.z1 - r.z0);
-    b.add(g, ceil, new THREE.Matrix4().makeRotationX(Math.PI / 2).premultiply(new THREE.Matrix4().makeTranslation((r.x0 + r.x1) / 2, H, (r.z0 + r.z1) / 2)));
+    b.add(g, ceil, new THREE.Matrix4().makeRotationX(Math.PI / 2).premultiply(new THREE.Matrix4().makeTranslation((r.x0 + r.x1) / 2, H, (r.z0 + r.z1) / 2)), 2.4);
   };
   under({ x0: R.x0, x1: R.x1, z0: R.z0, z1: P.z0 });
   under({ x0: R.x0, x1: R.x1, z0: P.z1, z1: R.z1 });
@@ -94,8 +95,8 @@ export function buildRoom(plan: FloorPlan, b: Batch, m: Mats, col: Collider): vo
   under({ x0: P.x1, x1: R.x1, z0: P.z0, z1: P.z1 });
 
   // recessed downlights on a 2.4 m grid, trimmed in brass
-  const disc = new THREE.CircleGeometry(0.075, 16);
-  const ring = new THREE.RingGeometry(0.075, 0.12, 20);
+  const disc = new THREE.CircleGeometry(0.06, 16);
+  const ring = new THREE.RingGeometry(0.06, 0.1, 20);
   const bulb = m.get('glow-bulb');
   for (let x = R.x0 + 1.4; x < R.x1 - 1; x += 2.4) {
     for (let z = R.z0 + 1.3; z < R.z1 - 1; z += 2.4) {
@@ -162,10 +163,18 @@ export function buildRoom(plan: FloorPlan, b: Batch, m: Mats, col: Collider): vo
     b.add(new THREE.CylinderGeometry(c.r, c.r, h - 0.55, 24, 1, true), marble, { x: c.x, y: 0.25 + (h - 0.55) / 2, z: c.z });
     for (const y of [1.15, h - 0.62]) b.add(new THREE.TorusGeometry(c.r + 0.012, 0.028, 8, 32), brass, new THREE.Matrix4().makeRotationX(Math.PI / 2).premultiply(new THREE.Matrix4().makeTranslation(c.x, y, c.z)));
     // flared brass capital meeting the ceiling
-    b.add(new THREE.CylinderGeometry(c.r + 0.16, c.r, 0.3, 24, 1, true), brass, { x: c.x, y: h - 0.15, z: c.z });
+    b.add(new THREE.CylinderGeometry(c.r + 0.03, c.r + 0.03, 0.12, 24, 1, true), brass, { x: c.x, y: h - 0.06, z: c.z });
     col.post(c.x, c.z, c.r + 0.1, CEILING);
   }
 
+  // chandeliers in every other coffer of the row over the staff area
+  const chandeliers: THREE.Vector3[] = [];
+  const cw = pw / nx;
+  const cd = pd / nz;
+  const midZ = (plan.staff.z0 + plan.staff.z1) / 2;
+  const j = Math.max(0, Math.min(nz - 1, Math.floor((midZ - P.z0) / cd)));
+  for (let i = nx % 2 ? 0 : 1; i < nx; i += 2) chandeliers.push(new THREE.Vector3(P.x0 + (i + 0.5) * cw, PH - 0.02, P.z0 + (j + 0.5) * cd));
   void W;
   void D;
+  return { chandeliers };
 }
