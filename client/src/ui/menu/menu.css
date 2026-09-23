@@ -56,6 +56,7 @@
 .sheet-titles { flex: 1; min-width: 0; }
 .sheet-title { margin: 0; font-family: var(--serif); font-size: 22px; font-weight: 600; line-height: 1.2; letter-spacing: 0.1em; text-transform: uppercase; color: var(--brass-hi); overflow-wrap: anywhere; }
 .sheet-sub { margin: 4px 0 0; font-size: 15px; letter-spacing: 0.04em; color: var(--ink-3); }
+.sheet-sub.err { color: var(--lose); }
 .sheet-body { padding: 18px 24px 22px; overflow: auto; overscroll-behavior: contain; }
 .sheet-foot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
 .x-btn { display: inline-flex; align-items: center; gap: 8px; height: 32px; margin: -4px -8px 0 0; padding: 0 8px 0 6px; border: 1px solid transparent; border-radius: 4px; background: none; color: var(--ink-3); cursor: pointer; }

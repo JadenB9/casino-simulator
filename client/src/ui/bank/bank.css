@@ -1,0 +1,15 @@
+/* Cashier: the three numbers that decide a loan, the bank's rule set like the sign over a cage
+   window, then one calm line saying where you stand. */
+
+.bank-sheet { width: min(540px, 100%); }
+.bank-stats { margin-bottom: 20px; }
+.bank-rule { margin: 0; font-family: var(--serif); font-size: 17px; font-weight: 500; line-height: 1.5; letter-spacing: 0.03em; color: var(--ink); }
+.bank-terms { margin: 6px 0 16px; }
+.bank-where { display: grid; margin: 0 0 14px; }
+.bank-where:empty { display: none; }
+.bank-table { display: flex; justify-content: space-between; gap: 16px; padding: 7px 0; border-bottom: 1px solid rgba(214, 178, 110, 0.09); font-size: 15px; color: var(--ink-2); }
+.bank-table:first-child { border-top: 1px solid rgba(214, 178, 110, 0.09); }
+.bank-status { margin: 0; padding: 10px 14px; border-left: 2px solid var(--line-strong); background: rgba(255, 255, 255, 0.025); font-size: 16px; line-height: 1.4; color: var(--ink-2); }
+.bank-status.ok { border-left-color: var(--brass-hi); color: var(--ink); }
+.bank-status.err { border-left-color: var(--lose); color: var(--lose); }
+.bank-take { min-width: 220px; }
