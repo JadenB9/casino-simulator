@@ -17,8 +17,8 @@ export const slots: GameClientModule = {
   seats: () => [{ position: [0, 0, 0.72], yaw: Math.PI }],
   playPose: (variant) =>
     variant === 'neon'
-      ? { position: [0, 1.46, 1.32], target: [0, 1.31, 0.27] }
-      : { position: [0, 1.43, 1.26], target: [0, 1.3, 0.25] },
+      ? { position: [0, 1.5, 1.5], target: [0, 1.38, 0.27] }
+      : { position: [0, 1.48, 1.44], target: [0, 1.37, 0.25] },
   mount: (ctx) => mountSlots(ctx),
   async preload() {
     // canvases for the glass, reels and meters need these faces before they paint

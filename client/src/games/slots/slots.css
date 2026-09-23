@@ -15,6 +15,7 @@
 .slots-banner { position: fixed; top: 34%; left: 50%; transform: translate(-50%, -50%); display: grid; justify-items: center; gap: 4px; padding: 18px 42px; border-radius: 10px; background: rgba(6, 5, 18, 0.82); border: 2px solid rgba(64, 214, 255, 0.7); pointer-events: none; animation: slots-in 0.35s var(--ease); }
 .slots-banner .tier { font-family: 'Tilt Neon', var(--ui); font-size: 64px; line-height: 1; text-transform: uppercase; letter-spacing: 0.06em; color: #fff; text-shadow: 0 0 10px #ff4fd8, 0 0 28px #ff4fd8; }
 .slots-banner .amount { font-family: var(--meter); font-size: 34px; color: #ffb347; text-shadow: 0 0 10px rgba(255, 150, 40, 0.6); }
+.slots-banner[hidden] { display: none; }
 .slots-banner.feature { border-color: rgba(255, 211, 107, 0.75); }
 .slots-banner.feature .tier { font-size: 44px; text-shadow: 0 0 10px #ffd36b, 0 0 24px #ffd36b; }
 .slots-banner.feature .amount { font-family: 'Tilt Neon', var(--ui); font-size: 30px; text-transform: uppercase; color: #ffe7a8; }

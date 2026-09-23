@@ -355,7 +355,7 @@ function printedParts(l: Layout): THREE.BufferGeometry[] {
   parts.push(panel(l.belly.w, l.belly.h, P.belly, at(0, l.belly.cy, l.belly.z + l.bevel + 0.002)));
   l.deck.xs.forEach((x, i) => parts.push(panel(l.deck.bw, l.deck.bh, P.buttons[i]!, deckMatrix(l, x, l.bevel + 0.003))));
   // the dark inside of the reel box, behind the reels
-  parts.push(solid(new THREE.PlaneGeometry(l.window.w + 0.02, l.window.h + 0.06).toNonIndexed().applyMatrix4(at(0, l.window.cy, l.plate.zBack + 0.004)), P.black));
+  parts.push(solid(new THREE.PlaneGeometry(l.window.w + 0.02, l.window.h + 0.06).toNonIndexed().applyMatrix4(at(0, l.window.cy, l.plate.zBack + 0.016)), P.black));
   // topper face
   if (l.topper === 'arch') {
     const s = new THREE.Shape();
@@ -458,7 +458,7 @@ function parts(machine: MachineId, quality: Quality): Parts {
     leds: ledParts(l),
     bodyMat: new THREE.MeshStandardMaterial(l.body),
     trimMat: new THREE.MeshStandardMaterial(l.trim),
-    printedMat: new THREE.MeshStandardMaterial({ map: atlas, emissiveMap: atlas, emissive: '#ffffff', emissiveIntensity: 0.62, roughness: 0.34, metalness: 0 }),
+    printedMat: new THREE.MeshStandardMaterial({ map: atlas, emissiveMap: atlas, emissive: '#ffffff', emissiveIntensity: 0.4, roughness: 0.34, metalness: 0 }),
     ledMat: new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false }),
     reelGeo: reelGeometry(l.reels.look),
     reelMats,
