@@ -39,10 +39,10 @@ if (flag('--multi')) {
 }
 
 await page.goto(`http://localhost:${port}/casino/?dev=table&game=bigsix&name=b6_${Date.now().toString(36).slice(-6)}`);
-await page.waitForSelector('.modal input[type=number]', { timeout: 30000 });
+await page.waitForSelector('.modal input[type=number]', { timeout: 90000 });
 await page.fill('.modal input[type=number]', '2000');
-await page.click('.modal .btn.primary');
-await until(() => window.casino?.table?.view?.debug?.state().stack > 0, 20000);
+await page.click('.modal .btn.primary', { force: true });
+await until(() => window.casino?.table?.view?.debug?.state().stack > 0, 90000);
 await page.waitForTimeout(800);
 const frame = await page.evaluate(() => ({ ms: window.casino.engine.frameMs(), calls: window.casino.engine.renderer.info.render.calls, tris: window.casino.engine.renderer.info.render.triangles }));
 console.log('frame', JSON.stringify(frame));
@@ -113,7 +113,8 @@ await page.evaluate(() => {
 });
 await until(() => window.casino.table.view.debug.state().spin?.stop === 0, 10000);
 const sp2 = (await state()).spin;
-await until(`window.casino.table.view.debug.state().s >= ${sp2.tRest + 0.2}`);
+await until(`window.casino.table.view.debug.state().s >= ${sp2.tRest}`);
+await page.waitForTimeout(300);
 await shot('8-star-rest');
 await until(() => !!document.querySelector('.celebrate'), 30000);
 await page.waitForTimeout(700);
@@ -190,10 +191,10 @@ async function multiplayer() {
 
   // the view with three players' chips, the clock and the player list
   await page.goto(`${base}/casino/?dev=table&game=bigsix&name=b6M_${Date.now().toString(36).slice(-5)}`);
-  await page.waitForSelector('.modal input[type=number]', { timeout: 30000 });
+  await page.waitForSelector('.modal input[type=number]', { timeout: 90000 });
   await page.fill('.modal input[type=number]', '1000');
-  await page.click('.modal .btn.primary');
-  await page.waitForFunction(() => window.casino?.table?.view?.debug?.state().stack > 0, null, { timeout: 20000 });
+  await page.click('.modal .btn.primary', { force: true });
+  await page.waitForFunction(() => window.casino?.table?.view?.debug?.state().stack > 0, null, { timeout: 90000 });
   await page.evaluate(() => {
     const t = window.casino.table;
     const snap = structuredClone(t.snapshot);

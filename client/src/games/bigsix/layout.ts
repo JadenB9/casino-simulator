@@ -13,17 +13,20 @@ export const FELT_D = 0.76;
 export const SPOT_W = 0.258;
 export const SPOT_GAP = 0.022;
 /** The spots run from the dealer's side (z0) toward the players (z1). */
-export const SPOT_Z0 = -0.25;
-export const SPOT_Z1 = 0.2;
-/** The picture panel, the payout line under it, and the chip area nearest the players. */
-export const PANEL_Z = -0.162;
-export const PANEL_W = 0.234;
-export const PANEL_D = 0.13;
-export const PAYS_Z = -0.062;
-export const CHIPS_Z0 = -0.015;
-export const CHIPS_Z1 = 0.185;
-export const TITLE_Z = -0.318;
-export const NOTE_Z = 0.29;
+export const SPOT_Z0 = -0.27;
+export const SPOT_Z1 = 0.24;
+/**
+ * The picture panel, the payout line under it, and the chip area nearest the players. The felt is
+ * seen at a low angle from the rail, so the printing runs large in depth.
+ */
+export const PANEL_Z = -0.19;
+export const PANEL_W = 0.238;
+export const PANEL_D = 0.136;
+export const PAYS_Z = -0.083;
+export const PAYS_SIZE = 0.05;
+export const CHIPS_Z0 = -0.042;
+export const CHIPS_Z1 = 0.226;
+export const TITLE_Z = -0.325;
 
 export interface Rect {
   x: number;

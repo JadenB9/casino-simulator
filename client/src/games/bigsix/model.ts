@@ -11,7 +11,7 @@ import type { Quality } from '../../render/engine3d.ts';
 import { Felt } from '../../table/felt.ts';
 import { SYMBOL_COLOR, billValue, drawNote, drawStar, drawCrown } from './art.ts';
 import {
-  FELT_W, FELT_D, SPOT_W, SPOT_Z0, SPOT_Z1, PANEL_Z, PANEL_W, PANEL_D, PAYS_Z, CHIPS_Z0, CHIPS_Z1, TITLE_Z, NOTE_Z, spotX,
+  FELT_W, FELT_D, SPOT_W, SPOT_Z0, SPOT_Z1, PANEL_Z, PANEL_W, PANEL_D, PAYS_Z, PAYS_SIZE, CHIPS_Z0, CHIPS_Z1, TITLE_Z, spotX,
 } from './layout.ts';
 import { buildWheel } from './wheel.ts';
 
@@ -20,7 +20,7 @@ export const TABLE_W = 2.32;
 export const TABLE_D = 0.96;
 /** The table sits toward the players; the wheel stands behind it on the dealer's side. */
 export const TABLE_Z = 0.37;
-export const WHEEL_Y = 1.93;
+export const WHEEL_Y = 1.84;
 export const WHEEL_Z = -0.52;
 export const FOOTPRINT = { width: 2.4, depth: 1.7 };
 export const FELT_COLOR = '#0c3b29';
@@ -45,19 +45,24 @@ export function paintLayout(g: CanvasRenderingContext2D, px: (m: number) => numb
 
   // the name across the dealer's side, between two stars and two rules
   g.fillStyle = PRINT;
-  g.font = `600 ${X(0.056)}px ${SERIF}`;
+  g.font = `600 ${X(0.06)}px ${SERIF}`;
   g.fillText('BIG SIX', 0, X(TITLE_Z + 0.004));
+  // the one rule a player might not expect, either side of the name, between fine rules
   g.strokeStyle = PRINT;
   g.lineWidth = X(0.0022);
+  g.font = `600 ${X(0.03)}px ${CONDENSED}`;
   for (const side of [-1, 1]) {
     g.save();
-    g.translate(X(side * 0.2), X(TITLE_Z));
-    drawStar(g, X(0.018));
+    g.translate(X(side * 0.21), X(TITLE_Z));
+    drawStar(g, X(0.02));
     g.restore();
-    g.beginPath();
-    g.moveTo(X(side * 0.24), X(TITLE_Z));
-    g.lineTo(X(side * 0.86), X(TITLE_Z));
-    g.stroke();
+    g.fillText(side < 0 ? 'STAR PAYS ONLY ON THE STAR' : 'CROWN PAYS ONLY ON THE CROWN', X(side * 0.555), X(TITLE_Z + 0.002));
+    for (const [a, b] of [[0.25, 0.36], [0.75, 0.9]] as const) {
+      g.beginPath();
+      g.moveTo(X(side * a), X(TITLE_Z));
+      g.lineTo(X(side * b), X(TITLE_Z));
+      g.stroke();
+    }
   }
 
   SPOTS.forEach((spot, k) => {
@@ -78,22 +83,22 @@ export function paintLayout(g: CanvasRenderingContext2D, px: (m: number) => numb
     g.translate(X(x), X(PANEL_Z));
     const v = billValue(spot.key);
     if (v !== null) {
-      drawNote(g, v, X(0.204), X(0.087), false);
+      drawNote(g, v, X(0.222), X(0.108), false);
     } else {
-      g.translate(X(-0.042), 0);
-      if (spot.key === 'star') drawStar(g, X(0.047));
-      else drawCrown(g, X(0.092));
+      // the picture over its name
+      g.translate(0, X(-0.018));
+      if (spot.key === 'star') drawStar(g, X(0.042));
+      else drawCrown(g, X(0.094));
       g.fillStyle = '#f6efe0';
-      g.font = `600 ${X(0.03)}px ${SERIF}`;
-      g.textAlign = 'left';
-      g.fillText(spot.key === 'star' ? 'STAR' : 'CROWN', X(0.055), X(0.003));
+      g.font = `700 ${X(0.034)}px ${SERIF}`;
+      g.fillText(spot.key === 'star' ? 'STAR' : 'CROWN', 0, X(0.062));
     }
     g.restore();
     // what it pays
     g.fillStyle = PRINT;
     g.textAlign = 'center';
-    g.font = `600 ${X(0.034)}px ${SERIF}`;
-    g.fillText(`${spot.pays} TO 1`, X(x), X(PAYS_Z));
+    g.font = `700 ${X(PAYS_SIZE)}px ${SERIF}`;
+    g.fillText(`${spot.pays} TO 1`, X(x), X(PAYS_Z + PAYS_SIZE * 0.06));
     // where the chips go
     g.strokeStyle = 'rgba(234, 215, 162, 0.42)';
     g.lineWidth = X(0.0022);
@@ -101,9 +106,6 @@ export function paintLayout(g: CanvasRenderingContext2D, px: (m: number) => numb
     g.stroke();
   });
 
-  g.fillStyle = 'rgba(234, 215, 162, 0.82)';
-  g.font = `600 ${X(0.026)}px ${CONDENSED}`;
-  g.fillText('STAR AND CROWN PAY ONLY ON THEIR OWN SYMBOL', 0, X(NOTE_Z));
 
   // a fine border around the whole layout
   g.strokeStyle = PRINT;

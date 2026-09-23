@@ -15,16 +15,22 @@ import { GEO, SECTOR } from './spin.ts';
 export const ROTOR_NAME = 'bigsix-rotor';
 export const FLAP_NAME = 'bigsix-flap';
 export const BULBS_NAME = 'bigsix-bulbs';
+export const GLOW_NAME = 'bigsix-glow';
 
-/** The painted face, the band of stops on it, and the cabinet round the wheel. */
-export const FACE_R = 0.725;
+/**
+ * The painted face and the band of stops on it (the stops run out past the pegs, so the clapper's
+ * tip always points into a stop's colour), then the wheel's rim and the cabinet round it.
+ */
+export const FACE_R = 0.772;
 export const BAND_IN = 0.47;
-export const RIM_R = 0.78;
-export const FRAME_IN = 0.795;
-export const FRAME_OUT = 0.885;
-export const BULB_R = 0.84;
-/** Pegs stand out of the rim from here to PEG_Z1; the clapper swings between them at FLAP_Z. */
-const PEG_Z0 = 0.018;
+export const RIM_R = 0.795;
+export const FRAME_IN = 0.808;
+export const FRAME_OUT = 0.9;
+export const BULB_R = 0.854;
+/** Where each note stands on its stop, and how long it is. */
+const NOTE_R = 0.64;
+const NOTE_L = 0.172;
+/** Pegs stand out of the face up to PEG_Z1; the clapper swings between them at FLAP_Z. */
 const PEG_Z1 = 0.068;
 export const FLAP_Z = 0.046;
 /** Where the crest's sign sits above the hub. */
@@ -121,10 +127,10 @@ export function paintFace(g: CanvasRenderingContext2D, size: number): void {
     g.restore();
     // the note, standing with its top toward the rim, or the big picture
     g.save();
-    g.translate(0, -R(0.625));
-    if (v !== null) drawNote(g, v, R(0.172), R(0.058), true);
-    else if (key === 'star') drawStar(g, R(0.052));
-    else drawCrown(g, R(0.068));
+    g.translate(0, -R(NOTE_R));
+    if (v !== null) drawNote(g, v, R(NOTE_L), R(0.058), true);
+    else if (key === 'star') drawStar(g, R(0.054));
+    else drawCrown(g, R(0.07));
     g.restore();
     g.restore();
   }
@@ -237,8 +243,18 @@ function buildRotor(quality: Quality, mats: Mats): THREE.Group {
   face.position.z = 0.0012;
   rotor.add(face);
 
-  const rim = new THREE.Mesh(new THREE.TorusGeometry((FACE_R + RIM_R) / 2, (RIM_R - FACE_R) / 2, quality === 'high' ? 16 : 8, seg), mats.lacquer);
+  const rim = new THREE.Mesh(new THREE.TorusGeometry((FACE_R + RIM_R) / 2, (RIM_R - FACE_R) / 2 + 0.002, quality === 'high' ? 16 : 8, seg), mats.lacquer);
   rotor.add(rim);
+
+  // the light over the stop that came up, moved onto it by the view (stop 0 spans φ from π/2 − S to π/2)
+  const glow = new THREE.Mesh(
+    new THREE.RingGeometry(BAND_IN + 0.004, FACE_R - 0.004, 6, 1, Math.PI / 2 - SECTOR, SECTOR),
+    new THREE.MeshBasicMaterial({ color: new THREE.Color(1.25, 1.05, 0.7), transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }),
+  );
+  glow.name = GLOW_NAME;
+  glow.position.z = 0.0022;
+  glow.visible = false;
+  rotor.add(glow);
 
   const ringIn = new THREE.Mesh(new THREE.TorusGeometry(BAND_IN, 0.0065, 8, seg), mats.brass);
   ringIn.position.z = 0.003;
@@ -251,20 +267,22 @@ function buildRotor(quality: Quality, mats: Mats): THREE.Group {
   const one = new THREE.Vector3(1, 1, 1);
   const zAxis = new THREE.Vector3(0, 0, 1);
 
-  // a brass divider on every boundary, and a peg standing out of the rim at its end
+  // a brass divider on every boundary, and a peg standing out of the face near its end
   const divLen = FACE_R - BAND_IN;
   const dividers = new THREE.InstancedMesh(new THREE.BoxGeometry(0.0038, divLen, 0.004), mats.brass, STOPS);
-  const pegGeo = new THREE.CylinderGeometry(GEO.pegRadius, GEO.pegRadius, PEG_Z1 - PEG_Z0, 12).rotateX(Math.PI / 2);
+  const pegGeo = new THREE.CylinderGeometry(GEO.pegRadius, GEO.pegRadius, PEG_Z1, 12).rotateX(Math.PI / 2);
   const pegs = new THREE.InstancedMesh(pegGeo, mats.pegBrass, STOPS);
+  const heads = new THREE.InstancedMesh(new THREE.SphereGeometry(GEO.pegRadius * 1.35, 12, 8), mats.pegBrass, STOPS);
   for (let k = 0; k < STOPS; k++) {
     const a = k * SECTOR;
     q.setFromAxisAngle(zAxis, -a);
     const [dx, dy] = polar(BAND_IN + divLen / 2, a);
     dividers.setMatrixAt(k, m.compose(new THREE.Vector3(dx, dy, 0.003), q, one));
     const [px, py] = polar(GEO.pegR, a);
-    pegs.setMatrixAt(k, m.compose(new THREE.Vector3(px, py, (PEG_Z0 + PEG_Z1) / 2), q, one));
+    pegs.setMatrixAt(k, m.compose(new THREE.Vector3(px, py, PEG_Z1 / 2), q, one));
+    heads.setMatrixAt(k, m.compose(new THREE.Vector3(px, py, PEG_Z1), q, one));
   }
-  rotor.add(dividers, pegs);
+  rotor.add(dividers, pegs, heads);
 
   // turned spokes from the hub to the band, over the lacquer
   const spokes = quality === 'high' ? 12 : 8;
@@ -308,21 +326,32 @@ function buildClapper(mats: Mats): { bracket: THREE.Group; flap: THREE.Group } {
   bracket.add(block, arm, pin);
 
   // the tongue: wide at the hinge, narrowing to a rounded point that reaches between the pegs
-  const L = GEO.flapL + 0.008;
+  const L = GEO.flapL;
   const s = new THREE.Shape();
-  s.moveTo(-0.017, 0.012);
-  s.lineTo(0.017, 0.012);
-  s.lineTo(0.011, -L + 0.012);
-  s.quadraticCurveTo(0, -L - 0.002, -0.011, -L + 0.012);
+  s.moveTo(-0.024, 0.014);
+  s.lineTo(0.024, 0.014);
+  s.lineTo(0.013, -L + 0.016);
+  s.quadraticCurveTo(0, -L - 0.006, -0.013, -L + 0.016);
   s.closePath();
-  const tongue = new THREE.Mesh(new THREE.ExtrudeGeometry(s, { depth: 0.008, bevelEnabled: true, bevelThickness: 0.0015, bevelSize: 0.0015, bevelSegments: 2 }), mats.leather);
-  tongue.position.z = -0.004;
-  const clamp = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.026, 0.014), mats.brass);
-  clamp.position.set(0, 0.001, 0);
+  const tongue = new THREE.Mesh(new THREE.ExtrudeGeometry(s, { depth: 0.006, bevelEnabled: true, bevelThickness: 0.0015, bevelSize: 0.0015, bevelSegments: 2 }), mats.leather);
+  tongue.position.z = -0.003;
+  // a line of stitching round the edge, a shade lighter
+  const seam = new THREE.Mesh(
+    new THREE.ShapeGeometry(s).scale(0.8, 0.9, 1).translate(0, -0.004, 0),
+    new THREE.MeshStandardMaterial({ color: '#c08a55', roughness: 0.75, transparent: true, opacity: 0.35 }),
+  );
+  seam.position.z = 0.0046;
+  const clamp = new THREE.Mesh(new THREE.BoxGeometry(0.056, 0.03, 0.016), mats.brass);
+  clamp.position.set(0, 0.002, 0);
+  const rivets = [-0.016, 0.016].map((x) => {
+    const r = new THREE.Mesh(new THREE.SphereGeometry(0.004, 10, 8), mats.pegBrass);
+    r.position.set(x, 0.002, 0.008);
+    return r;
+  });
   const flap = new THREE.Group();
   flap.name = FLAP_NAME;
   flap.position.set(0, GEO.pivotR, FLAP_Z);
-  flap.add(tongue, clamp);
+  flap.add(tongue, seam, clamp, ...rivets);
   return { bracket, flap };
 }
 
@@ -334,7 +363,7 @@ export function buildWheel(quality: Quality, floorY: number): THREE.Group {
     lacquer: new THREE.MeshStandardMaterial({ color: '#5a2412', roughness: 0.28, metalness: 0.05 }),
     brass: new THREE.MeshStandardMaterial({ color: '#c9a24b', roughness: 0.3, metalness: 1 }),
     pegBrass: new THREE.MeshStandardMaterial({ color: '#e0c07a', roughness: 0.22, metalness: 1 }),
-    leather: new THREE.MeshStandardMaterial({ color: '#4a2a18', roughness: 0.78 }),
+    leather: new THREE.MeshStandardMaterial({ color: '#9a5a30', roughness: 0.72 }),
   };
   const seg = quality === 'high' ? 128 : 72;
 
@@ -352,18 +381,20 @@ export function buildWheel(quality: Quality, floorY: number): THREE.Group {
   trimIn.position.z = 0.006;
   g.add(board, ring, trimOut, trimIn);
 
-  // marquee bulbs round the ring (their colour is their light: the view dims and chases them)
+  // marquee bulbs in brass cups round the ring (their colour is their light: the view dims and chases them)
   const nBulbs = quality === 'high' ? 36 : 24;
-  const bulbs = new THREE.InstancedMesh(new THREE.SphereGeometry(0.0105, 12, 8), new THREE.MeshBasicMaterial({ color: '#ffffff' }), nBulbs);
+  const bulbs = new THREE.InstancedMesh(new THREE.SphereGeometry(0.0135, 14, 10), new THREE.MeshBasicMaterial({ color: '#ffffff' }), nBulbs);
   bulbs.name = BULBS_NAME;
+  const cups = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.019, 0.016, 0.012, 20).rotateX(Math.PI / 2), mats.brass, nBulbs);
   const m = new THREE.Matrix4();
   const lit = new THREE.Color(1.9, 1.45, 0.78);
   for (let k = 0; k < nBulbs; k++) {
     const [x, y] = polar(BULB_R, ((k + 0.5) / nBulbs) * Math.PI * 2);
-    bulbs.setMatrixAt(k, m.makeTranslation(x, y, 0.014));
+    bulbs.setMatrixAt(k, m.makeTranslation(x, y, 0.02));
     bulbs.setColorAt(k, lit);
+    cups.setMatrixAt(k, m.makeTranslation(x, y, 0.009));
   }
-  g.add(bulbs);
+  g.add(cups, bulbs);
 
   g.add(buildRotor(quality, mats));
   const { bracket, flap } = buildClapper(mats);

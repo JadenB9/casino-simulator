@@ -24,8 +24,8 @@ import { celebrate } from '../../table/celebrate.ts';
 import { serverNow } from '../../net/clock.ts';
 import { TOP_Y, TABLE_W, TABLE_D, TABLE_Z, WHEEL_Y, WHEEL_Z, FOOTPRINT, MODEL_FELT, WHEEL_GROUP, tableModel, layoutFelt } from './model.ts';
 import { spotAt, spotRect, chipSpot, SPOT_Z0 } from './layout.ts';
-import { ROTOR_NAME, FLAP_NAME, BULBS_NAME, FRAME_OUT, buildWheel } from './wheel.ts';
-import { WheelSpin, chooseEnding, angleFor, flapAngle, stopAt, TAU, G_TOUCH } from './spin.ts';
+import { ROTOR_NAME, FLAP_NAME, BULBS_NAME, GLOW_NAME, FRAME_OUT, buildWheel } from './wheel.ts';
+import { WheelSpin, chooseEnding, angleFor, flapAngle, stopAt, TAU, SECTOR, G_TOUCH } from './spin.ts';
 import { LayoutChips, Pile, seatColor, CHIP_SCALE, type PileStyle } from './chips.ts';
 import { ClapperSound } from './sound.ts';
 import { History, Meters, Plaque, Tooltip, Clock, Players, type PlayerRow } from './hud.ts';
@@ -40,9 +40,9 @@ const TRAY_MAX: Cents = 50_000;
 const LOOKAHEAD_S = 0.12;
 
 /** Betting: the layout and the whole wheel from behind the players. The spin: the wheel, then close on the clapper. */
-const BET_POSE: Pose = { position: [0, 2.4, 2.75], target: [0, 1.56, -0.25] };
+const BET_POSE: Pose = { position: [0, 2.32, 2.25], target: [0, 1.47, -0.25] };
 const WHEEL_POSE: Pose = { position: [0, WHEEL_Y + 0.12, 1.5], target: [0, WHEEL_Y + 0.1, WHEEL_Z] };
-const CLAPPER_POSE: Pose = { position: [0, WHEEL_Y + 0.62, WHEEL_Z + 1.0], target: [0, WHEEL_Y + 0.7, WHEEL_Z] };
+const CLAPPER_POSE: Pose = { position: [0, WHEEL_Y + 0.5, WHEEL_Z + 0.92], target: [0, WHEEL_Y + 0.58, WHEEL_Z] };
 
 const SEATS: { position: [number, number, number]; yaw: number }[] = [
   ...[-0.9, -0.54, -0.18, 0.18, 0.54, 0.9].map((x) => ({ position: [x, 0, TABLE_Z + TABLE_D / 2 + 0.3] as [number, number, number], yaw: Math.PI })),
@@ -102,6 +102,7 @@ function mountBigSix(ctx: TableViewCtx): TableView {
   const rotor = wheel.getObjectByName(ROTOR_NAME)!;
   const flap = wheel.getObjectByName(FLAP_NAME)!;
   const bulbs = wheel.getObjectByName(BULBS_NAME) as THREE.InstancedMesh;
+  const glow = wheel.getObjectByName(GLOW_NAME) as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
   const modelFelt = stage.anchor.getObjectByName(MODEL_FELT);
   if (modelFelt) modelFelt.visible = false;
   const felt = layoutFelt(1400);
@@ -140,6 +141,12 @@ function mountBigSix(ctx: TableViewCtx): TableView {
   let relIdx = 0;
   let stopHeard = true;
   const sound = new ClapperSound(ctx.sfx);
+
+  /** Light the stop that came up (null: none), from the moment the wheel stops until the next spin opens. */
+  function lightStop(stop: number | null): void {
+    glow.visible = stop !== null;
+    if (stop !== null) glow.rotation.z = -stop * SECTOR;
+  }
 
   // the marquee: 'idle' blinks in pairs, 'spin' chases round with the wheel, 'win' flashes
   let bulbMode: 'idle' | 'spin' | 'win' = 'idle';
@@ -442,6 +449,7 @@ function mountBigSix(ctx: TableViewCtx): TableView {
     if (!stopHeard && s >= spin.tStop) {
       stopHeard = true;
       sound.settle();
+      lightStop(spin.plan.stop);
     }
   }
 
@@ -459,7 +467,7 @@ function mountBigSix(ctx: TableViewCtx): TableView {
         const t = (now - bulbSince) / 1000;
         on = t > 2.2 ? 1 : Math.floor(t / 0.22) % 2 === 0 ? 1 : 0.05;
       } else {
-        on = (k + Math.floor(now / 700)) % 2 === 0 ? 1 : 0.3;
+        on = (k + Math.floor(now / 700)) % 2 === 0 ? 1 : 0.12;
       }
       bulbs.setColorAt(k, bulbColor.copy(dim).lerp(lit, on));
     }
@@ -488,6 +496,7 @@ function mountBigSix(ctx: TableViewCtx): TableView {
     refreshControls();
     plaque.hide();
     showWinning(null);
+    lightStop(null);
     const duration = Math.max(4, (e.restAt - Math.max(serverNow(), e.startAt)) / 1000);
     spin = new WheelSpin({ theta0: theta, duration, stop: e.stop, ...chooseEnding(Math.random) });
     s = 0;
@@ -642,6 +651,7 @@ function mountBigSix(ctx: TableViewCtx): TableView {
   function clearResult(): void {
     plaque.hide();
     showWinning(null);
+    lightStop(null);
   }
 
   // ------------------------------------------------------------------------------------------
@@ -664,6 +674,7 @@ function mountBigSix(ctx: TableViewCtx): TableView {
       if (v.phase === 'results' && v.spin) {
         showWinning(v.spin.symbol);
         plaque.show(v.spin.symbol);
+        lightStop(v.spin.stop);
       }
       draw(v);
     },
@@ -756,7 +767,9 @@ function mountBigSix(ctx: TableViewCtx): TableView {
       clapperSounds();
       lightBulbs();
       updateClock();
-      if (winGroup.children.length) winMat.opacity = 0.2 + 0.12 * (0.5 + 0.5 * Math.sin(performance.now() / 260));
+      const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 260);
+      if (winGroup.children.length) winMat.opacity = 0.2 + 0.12 * pulse;
+      if (glow.visible) glow.material.opacity = 0.2 + 0.16 * pulse;
     },
 
     dispose() {
@@ -783,6 +796,7 @@ function mountBigSix(ctx: TableViewCtx): TableView {
         // leave the floor's wheel where it stopped, its bulbs steady
         rotor.rotation.z = -theta;
         flap.rotation.z = flapAngle(theta, null);
+        glow.visible = false;
         if (bulbs?.instanceColor) {
           for (let k = 0; k < bulbs.count; k++) bulbs.setColorAt(k, lit);
           bulbs.instanceColor.needsUpdate = true;
