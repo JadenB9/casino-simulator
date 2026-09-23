@@ -3,6 +3,7 @@
 // reach the floor or the table behind it, so W doesn't walk you away while you read your stats.
 // M and ? stay global so mute and the shortcut list work from anywhere.
 
+import './menu.css';
 import { el } from '../kit.ts';
 import { icon } from './icons.ts';
 
@@ -26,7 +27,13 @@ export interface Sheet {
 /** Keys that keep working while a sheet has the keyboard. */
 export const GLOBAL_KEYS: ReadonlySet<string> = new Set(['m', 'M', '?']);
 
-const stack: Sheet[] = [];
+/** Anything that owns the keyboard while it's up: a sheet, or a full-screen layer like the editor. */
+interface Layer {
+  readonly panel: HTMLElement;
+  close(): void;
+}
+
+const stack: Layer[] = [];
 const watchers = new Set<(open: number) => void>();
 let seq = 0;
 
@@ -106,6 +113,24 @@ function install(): void {
     },
     true,
   );
+}
+
+/**
+ * Give the keyboard to a custom layer the way a sheet has it: Esc calls `onEscape` (which may
+ * decide not to close), Tab stays inside `panel`, other keys don't reach the page behind.
+ * Returns the release.
+ */
+export function holdKeyboard(panel: HTMLElement, onEscape: () => void): () => void {
+  install();
+  const layer: Layer = { panel, close: onEscape };
+  stack.push(layer);
+  changed();
+  return () => {
+    const i = stack.indexOf(layer);
+    if (i < 0) return;
+    stack.splice(i, 1);
+    changed();
+  };
 }
 
 let closeLabelId = 0;
