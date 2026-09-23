@@ -62,10 +62,11 @@ export class Client {
   }
 }
 
-export async function connect(path: string, token: string, extra = ''): Promise<{ res: Response; client: Client | null }> {
+/** Open a socket; `ip` is the client address the edge would report (none by default). */
+export async function connect(path: string, token: string, extra = '', ip?: string): Promise<{ res: Response; client: Client | null }> {
   const res = await exports.default.fetch(
     new Request(`http://casino.test/casino/ws/${path}?v=1&t=${encodeURIComponent(token)}${extra}`, {
-      headers: { Upgrade: 'websocket', Origin: ORIGIN },
+      headers: { Upgrade: 'websocket', Origin: ORIGIN, ...(ip ? { 'CF-Connecting-IP': ip } : {}) },
     }),
   );
   return { res, client: res.webSocket ? new Client(res.webSocket) : null };
