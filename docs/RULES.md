@@ -3,13 +3,8 @@
 Every game in the casino follows standard Las Vegas Strip rules and pays real odds. This page
 is the summary. The full rules, every paytable, the strategy charts and the sources are in:
 
-- [rules/table-games.md](rules/table-games.md): blackjack, roulette, craps, baccarat, Sic Bo
-||||||| 9239b79
-- [rules/table-games.md](rules/table-games.md): blackjack, roulette, craps, baccarat
-- [rules/table-games.md](rules/table-games.md): blackjack, roulette, craps, baccarat, Casino War
-||||||| 9239b79
-- [rules/table-games.md](rules/table-games.md): blackjack, roulette, craps, baccarat
-- [rules/table-games.md](rules/table-games.md): blackjack, roulette, craps, baccarat, Big Six
+- [rules/table-games.md](rules/table-games.md): blackjack, roulette, craps, baccarat, Casino War,
+  the Big Six wheel and Sic Bo
 - [rules/cards-and-machines.md](rules/cards-and-machines.md): Three Card Poker, video poker,
   slots, Texas Hold'em
 - [math/](math/): the dependency-free Node scripts that enumerate each game exactly
@@ -69,7 +64,6 @@ inside 3. Seeds are fixed, so `npm run test:mc` reproduces these exactly.
 | | | Totals: 7 or 14 at 12:1 (best) to 9 or 12 at 6:1 (worst) | 9.722% to 18.981% | 9.507% on 7, 19.080% on 9 (4M rolls, z −1.30, +0.88) |
 | | | Specific triple (180:1) / any triple (30:1) | 16.204% / 13.889% | 15.799% on 6-6-6, 14.197% (4M rolls, z −0.66, +1.21) |
 | | | Double (10:1) / two-dice combination (5:1) | 18.519% / 16.667% | 18.524% on 5-5, 16.857% on 2-5 (4M rolls, z +0.04, +1.84) |
-||||||| 98527a4
 | | | D "Diamond Line" (3 reels, doubling diamond wild) | 94.983% RTP | 94.929% (10M spins, z −0.28) |
 | | | E "Lucky Cherries" (5x3, 10 lines, Cherry Wheel) | 94.028% RTP | 94.126% (10M spins, z +0.90) |
 | | | F "Gold Rush" (5x4, 40 lines, sticky-wild free games) | 92.994% RTP | 93.138% (10M spins, z +1.22) |
