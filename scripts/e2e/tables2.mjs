@@ -18,23 +18,28 @@ async function open(game, name) {
   page.on('console', (m) => m.type() === 'error' && errors.push(`${game}: ${m.text()}`));
   page.on('pageerror', (e) => errors.push(`${game}: ${e}`));
   await page.addInitScript(() => localStorage.setItem('casino.tips', '1'));
-  // A fixed name may still hold its seat (and chips) from the last run: no buy-in asked then. A
-  // table the last run's page left a moment ago can still be letting that seat go: load again.
-  const ready = () => page.waitForFunction(() => document.querySelector('.modal input[type=number]') || window.casino?.table?.snapshot?.you?.status === 'seated', null, { timeout: 20000 });
-  await page.goto(`http://localhost:${port}/casino/?dev=table&game=${game}&name=${name}`);
-  try {
-    await ready();
-  } catch {
-    const seen = await page.evaluate(() => ({ you: window.casino?.table?.snapshot?.you, modal: document.querySelector('.modal')?.textContent, toasts: [...document.querySelectorAll('.toast')].map((t) => t.textContent) }));
-    console.error(`${game}: not seated yet, loading again`, JSON.stringify(seen));
-    await page.reload();
-    await ready();
+  // A fixed name may still hold its seat (and chips) from the last run: no buy-in is asked then.
+  // A table the last run's page left a moment ago can still be letting that seat go, so a load
+  // that doesn't end up seated is tried again.
+  const seated = () => page.evaluate(() => window.casino?.table?.snapshot?.you?.status === 'seated');
+  for (let attempt = 1; ; attempt++) {
+    if (attempt === 1) await page.goto(`http://localhost:${port}/casino/?dev=table&game=${game}&name=${name}`);
+    else await page.reload();
+    try {
+      await page.waitForFunction(() => document.querySelector('.modal input[type=number]') || window.casino?.table?.snapshot?.you?.status === 'seated', null, { timeout: 20000 });
+      if (!(await seated())) {
+        await page.fill('.modal input[type=number]', '2000');
+        await page.click('.modal .btn.primary');
+      }
+      await page.waitForFunction(() => window.casino?.table?.snapshot?.you?.status === 'seated', null, { timeout: 15000 });
+      break;
+    } catch (err) {
+      const seen = await page.evaluate(() => ({ you: window.casino?.table?.snapshot?.you, modal: document.querySelector('.modal')?.textContent, toasts: [...document.querySelectorAll('.toast')].map((t) => t.textContent) })).catch(() => null);
+      console.error(`${game}: not seated (attempt ${attempt})`, JSON.stringify(seen));
+      if (attempt === 3) throw err;
+      await page.waitForTimeout(3000);
+    }
   }
-  if (await page.$('.modal input[type=number]')) {
-    await page.fill('.modal input[type=number]', '2000');
-    await page.click('.modal .btn.primary');
-  }
-  await page.waitForFunction(() => window.casino?.table?.snapshot?.you?.status === 'seated', null, { timeout: 30000 });
   await page.waitForTimeout(800);
   return page;
 }
@@ -73,9 +78,10 @@ function watchCelebration(page, name, out) {
   return page
     .waitForSelector('.celebrate', { timeout: 15 * 60_000 })
     .then(async () => {
-      out.celebration = await page.textContent('.celebrate');
+      const text = await page.textContent('.celebrate');
       await page.waitForTimeout(450);
       await page.screenshot({ path: `${outDir}/${name}-celebrate.png` });
+      out.celebration = text;
     })
     .catch(() => {});
 }
@@ -132,7 +138,7 @@ async function blackjack() {
     }
     await page.waitForTimeout(out.celebration ? 0 : 900);
   }
-  await Promise.race([watcher, page.waitForTimeout(3000)]);
+  await Promise.race([watcher, page.waitForTimeout(20000)]);
   report.blackjack = out;
   await page.close();
 }

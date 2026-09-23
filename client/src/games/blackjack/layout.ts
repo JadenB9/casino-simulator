@@ -119,11 +119,8 @@ export function dealerCard(index: number): { pos: THREE.Vector3; yaw: number } {
 /** Middle of a three-card dealer hand: what the seat cameras look across to. */
 const DEALER_HAND = new THREE.Vector3(0.03, TOP_Y, DEALER_CARDS_Z);
 
-/**
- * The dealer's total: its bottom right corner sits just left of the up card, a little toward the
- * dealer, so the label reads beside the cards and above the printed arc.
- */
-export const DEALER_TOTAL = new THREE.Vector3(dealerCard(0).pos.x - (CARD_W / 2) * DEALER_CARD_SCALE - 0.01, TOP_Y + 0.01, DEALER_CARDS_Z - 0.012);
+/** The dealer's total reads level with the cards, just left of the up card: its right edge is here. */
+export const DEALER_TOTAL = new THREE.Vector3(dealerCard(0).pos.x - (CARD_W / 2) * DEALER_CARD_SCALE - 0.012, TOP_Y + 0.01, DEALER_CARDS_Z);
 
 export const RACK = new THREE.Vector3(0, TOP_Y + 0.02, -0.395);
 export const SHOE = { pos: new THREE.Vector3(0.66, TOP_Y, -0.33), yaw: THREE.MathUtils.degToRad(-18) };
@@ -138,16 +135,16 @@ export function seatPosition(seat: number): { position: [number, number, number]
 }
 
 /**
- * The camera for a seat: behind the circle at eye height, looking across to the dealer. It sits in
- * closer at the middle circles and further back toward the ends, so every seat frames the same way:
- * the dealer's cards in the upper middle of the screen, your cards and bet low but clear of the
- * controls.
+ * The camera for a seat: behind the circle at eye height, looking across to the dealer's hand. It
+ * sits further back toward the ends of the arc, so every seat frames alike: the dealer's cards a
+ * little above the middle of the screen, just below where a win's banner goes up (so the banner
+ * never hides them), and your cards and bet low but clear of the controls.
  */
 export function seatPose(seat: number): { position: [number, number, number]; target: [number, number, number] } {
   const s = spotAt(seat);
   const { out } = spotFrame(seat);
-  const eye = s.clone().addScaledVector(out, 0.35 + 0.13 * Math.abs(out.x));
-  eye.y = TOP_Y + 0.58;
-  const target = s.clone().lerp(DEALER_HAND, 0.46);
+  const eye = s.clone().addScaledVector(out, 0.43 + 0.19 * out.x * out.x);
+  eye.y = TOP_Y + 0.6;
+  const target = s.clone().lerp(DEALER_HAND, 0.63);
   return { position: [eye.x, eye.y, eye.z], target: [target.x, target.y, target.z] };
 }

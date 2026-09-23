@@ -53,13 +53,14 @@
 .bj-total.settled { opacity: 0.7; }
 .bj-total.active { border-color: var(--brass-hi); box-shadow: 0 0 0 1px rgba(241, 213, 154, 0.35), 0 0 12px rgba(241, 213, 154, 0.25); }
 
-/* The dealer's total, beside the up card. The anchor is a point: the label hangs up and to the
-   left of it, so it never spreads over the cards or down onto the printed arc. */
+/* The dealer's total, level with the cards on the up card's left. The anchor is a point at the
+   label's right edge, so however long the label gets it grows away from the cards. */
 .bj-dealer-at { width: 0; height: 0; }
 .bj-dealer {
   position: absolute;
   right: 0;
-  bottom: 0;
+  top: 0;
+  transform: translateY(-50%);
   display: inline-flex;
   align-items: baseline;
   gap: 8px;
