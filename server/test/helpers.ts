@@ -49,7 +49,7 @@ export class Client {
   send(m: unknown): void {
     this.ws.send(JSON.stringify(m));
   }
-  next<T = TableServerMsg>(pred: (m: any) => boolean, ms = 3000): Promise<T> {
+  next<T = any>(pred: (m: any) => boolean, ms = 3000): Promise<T> {
     const found = this.msgs.find(pred);
     if (found) {
       this.msgs.splice(this.msgs.indexOf(found), 1);
