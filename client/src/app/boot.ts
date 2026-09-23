@@ -334,6 +334,7 @@ class App {
       (fn) => this.engine.onFrame(fn),
       (code) => this.tableClosed(code),
       {
+        onLeave: () => void this.leaveTable(),
         onTable: (snap) => this.poseForSeat(snap.you.seat),
         onSeat: (m) => {
           const open = this.table;

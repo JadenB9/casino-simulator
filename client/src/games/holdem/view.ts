@@ -138,8 +138,7 @@ export function mountHoldem(ctx: TableViewCtx): TableView {
   });
   leave.addEventListener('click', () => {
     seatPanel.hidden = true;
-    // The app shell owns leaving a table (the back chip); tell it the player asked to.
-    dispatchEvent(new CustomEvent('casino:leave-table'));
+    link.leave();
   });
 
   // ------------------------------------------------------------------------------------------

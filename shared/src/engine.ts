@@ -78,7 +78,9 @@ export interface RoundResult {
 
 /**
  * Something for the client to animate. `to` is a seat number when only that player may see it
- * (a hole card, a private hand); omitted or 'all' for everyone at the table.
+ * (a hole card, a private hand); omitted or 'all' for everyone at the table. The name is
+ * reserved: the host routes on it, so a field called `to` that means anything else (a raise
+ * "to" some amount, say) hides the event from everyone.
  */
 export interface GameEvent {
   type: string;

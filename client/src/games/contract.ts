@@ -21,6 +21,8 @@ export interface TableLink {
   topUp(amount: number): void;
   cashOut(): void;
   ready(on: boolean): void;
+  /** Stand up and go back to the floor, as Esc does (a view's own Leave button). */
+  leave(): void;
 }
 
 export interface TableViewCtx {

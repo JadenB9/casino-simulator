@@ -27,6 +27,8 @@ export interface TableTarget {
 export interface TableHooks {
   onTable?(snap: TableSnapshot): void;
   onSeat?(msg: SeatMsg): void;
+  /** A view asked to stand up; the app leaves the table the way Esc does. */
+  onLeave?(): void;
 }
 
 export class TableSession {
@@ -72,6 +74,7 @@ export class TableSession {
     topUp: (amount) => this.send({ t: 'topup', aid: this.nextAid(), amount }),
     cashOut: () => this.send({ t: 'cashout', aid: this.nextAid() }),
     ready: (on) => this.send({ t: 'ready', on }),
+    leave: () => (this.hooks.onLeave ? this.hooks.onLeave() : this.leave()),
   };
 
   send(msg: unknown): void {
