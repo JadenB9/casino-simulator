@@ -33,7 +33,8 @@ function views(w: FloorWorld): Record<string, View | 'walk'> {
     pit: { pos: [5.6, 2.0, cross.z1 - 0.3], at: [-1.2, 0.9, pitZ] },
     cashier: { pos: [p.cashier.x + 4.6, 1.8, p.cashier.z + 1.1], at: [p.cashier.x - 0.4, 1.35, p.cashier.counter.z1] },
     bar: { pos: [p.bar.front - 4.6, 1.75, (p.bar.z0 + p.bar.z1) / 2 + 4.6], at: [p.bar.back, 1.3, (p.bar.z0 + p.bar.z1) / 2 - 1.6] },
-    poker: { pos: [p.pokerRoom.x0 - 2.2, 2.0, p.pokerRoom.z1 + 1.3], at: [p.pokerRoom.x1 - 2.4, 0.9, (p.pokerRoom.z0 + p.pokerRoom.z1) / 2] },
+    // from inside the room's south-west corner (the pit's corner column stands just outside it)
+    poker: { pos: [p.pokerRoom.x0 + 0.5, 2.3, p.pokerRoom.z1 - 0.4], at: [p.pokerRoom.x1 - 1.5, 0.8, p.pokerRoom.z0 + 2.5] },
     lounge: { pos: [p.lounge.x0 - 1.2, 1.75, p.lounge.z0 - 1.0], at: [(p.lounge.x0 + p.lounge.x1) / 2, 0.7, (p.lounge.z0 + p.lounge.z1) / 2] },
     // in front of the wheel, where its players stand
     bigsix: { pos: [wheel.x + 5.2, 1.9, wheel.z + 1.4], at: [wheel.x, 1.5, wheel.z] },
