@@ -64,7 +64,7 @@ function handOffset(hand: number, hands: number): number {
 export function handAnchor(seat: number, hand: number, hands: number): THREE.Vector3 {
   const { out, right } = spotFrame(seat);
   return spotAt(seat, TOP_Y + 0.0012)
-    .addScaledVector(out, -0.145)
+    .addScaledVector(out, -0.122)
     .addScaledVector(right, handOffset(hand, hands));
 }
 
@@ -75,8 +75,8 @@ export function handAnchor(seat: number, hand: number, hands: number): THREE.Vec
 export function handCard(seat: number, hand: number, hands: number, index: number, sideways: boolean): { pos: THREE.Vector3; yaw: number } {
   const { out, right, yaw } = spotFrame(seat);
   const pos = handAnchor(seat, hand, hands)
-    .addScaledVector(out, -0.024 * index)
-    .addScaledVector(right, 0.011 * index);
+    .addScaledVector(out, -0.015 * index)
+    .addScaledVector(right, 0.013 * index);
   pos.y += 0.0006 * index;
   if (sideways) pos.addScaledVector(out, -0.012).addScaledVector(right, 0.012);
   return { pos, yaw: sideways ? yaw + Math.PI / 2 : yaw };
@@ -113,6 +113,9 @@ export function dealerCard(index: number): { pos: THREE.Vector3; yaw: number } {
   const x = index === 0 ? -0.035 : 0.012 + (index - 1) * 0.05;
   return { pos: new THREE.Vector3(x, TOP_Y + 0.0012 + index * 0.0006, DEALER_CARDS_Z), yaw: 0 };
 }
+
+/** The dealer's total sits to the left of the up card, clear of the printed arcs. */
+export const DEALER_TOTAL = new THREE.Vector3(-0.1, TOP_Y + 0.01, DEALER_CARDS_Z);
 
 export const RACK = new THREE.Vector3(0, TOP_Y + 0.02, -0.395);
 export const SHOE = { pos: new THREE.Vector3(0.66, TOP_Y, -0.33), yaw: THREE.MathUtils.degToRad(-18) };

@@ -78,8 +78,14 @@ for (; rounds < 90 && !(did.hit && did.stand && did.double && did.split); rounds
   } else {
     await page.keyboard.press('r'); // rebet
   }
+  // The bet has to reach the server and come back before it shows in the circle.
+  await page.waitForFunction(() => {
+    const t = window.casino.table.view;
+    return t.v?.phase === 'betting' && (t.v.bets[t.seat] ?? 0) > 0;
+  }, null, { timeout: 8000 }).catch(async () => {
+    throw new Error(`round ${rounds}: bet did not land in the circle: ${JSON.stringify(await state())}`);
+  });
   await settle(100);
-  if ((await state()).bet === 0) throw new Error('bet did not land in the circle');
   await page.keyboard.press('Space');
   await settle(rounds === 0 ? 900 : 300);
   if (rounds === 0) await shot('01-deal');

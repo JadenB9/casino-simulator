@@ -428,7 +428,7 @@ export class BlackjackTable implements TableView {
       this.label(key, cls, text, at);
     };
     const dealerText = totalText(v.dealer, dealerBlackjack(v));
-    if (dealerText) put('dealer', `bj-total dealer${dealerText === 'BJ' ? ' bj' : ''}`, dealerText, new THREE.Vector3(-0.012, L.TOP_Y + 0.01, L.DEALER_CARDS_Z + 0.072));
+    if (dealerText) put('dealer', `bj-total dealer${dealerText === 'BJ' ? ' bj' : ''}`, dealerText, L.DEALER_TOTAL.clone());
     for (const sp of v.spots) {
       const { out } = L.spotFrame(sp.seat);
       sp.hands.forEach((h, hi) => {
@@ -441,11 +441,11 @@ export class BlackjackTable implements TableView {
         if (text) put(`t:${sp.seat}:${hi}`, cls, text, anchor.clone().addScaledVector(out, 0.07));
         if (h.outcome) {
           const p = pillFor(h.outcome, h.bet, h.payout);
-          put(`p:${sp.seat}:${hi}`, `pill ${p.kind}`, p.text, anchor.clone().addScaledVector(out, -0.03).setY(L.TOP_Y + 0.04));
+          put(`p:${sp.seat}:${hi}`, `pill ${p.kind}`, p.text, anchor.clone().setY(L.TOP_Y + 0.03));
         }
       });
       if (sp.hands.length > 1 && v.turn?.seat === sp.seat) {
-        const at = L.handAnchor(sp.seat, v.turn.hand, sp.hands.length).addScaledVector(out, -0.1);
+        const at = L.handAnchor(sp.seat, v.turn.hand, sp.hands.length).addScaledVector(out, -0.072);
         put(`n:${sp.seat}`, 'bj-hand-no', `HAND ${v.turn.hand + 1} OF ${sp.hands.length}`, at);
       }
       if (sp.insured > 0 && v.phase !== 'insurance') {
@@ -477,7 +477,7 @@ export class BlackjackTable implements TableView {
     if (betting) {
       const bet = this.myBet();
       if (this.mode === 'multi') this.tray.setPrimary(this.ready ? 'Ready ✓' : 'Ready', bet > 0);
-      else if (bet === 0 && this.lastBet > 0) this.tray.setPrimary(`Rebet ${formatMoney(this.lastBet)} & Deal`, this.lastBet <= this.stack);
+      else if (bet === 0 && this.lastBet > 0) this.tray.setPrimary(`Deal ${formatMoney(this.lastBet)}`, this.lastBet <= this.stack);
       else this.tray.setPrimary('Deal', bet >= this.limits.min);
     }
 
@@ -873,7 +873,7 @@ export class BlackjackTable implements TableView {
     }
     const p = pillFor(e.outcome, e.bet, e.payout);
     const anchor = L.handAnchor(e.seat, e.hand, n);
-    this.label(`p:${e.seat}:${e.hand}`, `pill ${p.kind}`, p.text, anchor.addScaledVector(L.spotFrame(e.seat).out, -0.03).setY(L.TOP_Y + 0.04));
+    this.label(`p:${e.seat}:${e.hand}`, `pill ${p.kind}`, p.text, anchor.setY(L.TOP_Y + 0.03));
     this.renderLiveTotals();
     await wait(e.outcome === 'bust' ? 350 : 260);
   }
@@ -881,7 +881,7 @@ export class BlackjackTable implements TableView {
   /** Totals and the turn marker while the animation is mid-round (from the local copy of the round). */
   private renderLiveTotals(): void {
     const dealerText = totalText(this.dealer);
-    if (dealerText) this.label('dealer', 'bj-total dealer', dealerText, new THREE.Vector3(-0.012, L.TOP_Y + 0.01, L.DEALER_CARDS_Z + 0.072));
+    if (dealerText) this.label('dealer', 'bj-total dealer', dealerText, L.DEALER_TOTAL.clone());
     for (const sp of this.spots) {
       const { out } = L.spotFrame(sp.seat);
       sp.hands.forEach((h, hi) => {

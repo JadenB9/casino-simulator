@@ -86,3 +86,5 @@
   letter-spacing: 0.16em;
   white-space: nowrap;
 }
+
+.bj-tray .btn.primary { white-space: nowrap; }
