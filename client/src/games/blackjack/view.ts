@@ -986,16 +986,17 @@ export class BlackjackTable implements TableView {
     }
   }
 
-  /** Your round's moment, if it had one, with the light under each hand that made it. */
+  /**
+   * Your round's moment, if it had one, with light under the hands that made it: one light under
+   * them all, since split hands lie side by side and two would overlap into a bright seam.
+   */
   private celebrateRound(sp: SpotView): void {
     const found = roundMoment(sp);
     if (!found) return;
-    const stands = found.hands.map((hi) => {
-      const cards = sp.hands[hi]!.cards.map((_, ci) => this.cards.get(`c:${sp.seat}:${hi}:${ci}`)).filter((m): m is CardMesh => !!m);
-      return handGlow(cards, L.TOP_Y + 0.0013);
-    });
-    celebrate(this.ctx, { ...found.m, glow: stands.filter((s): s is THREE.Mesh => !!s) });
-    stands.forEach(dropGlow);
+    const cards = found.hands.flatMap((hi) => sp.hands[hi]!.cards.map((_, ci) => this.cards.get(`c:${sp.seat}:${hi}:${ci}`)).filter((m): m is CardMesh => !!m));
+    const stand = handGlow(cards, L.TOP_Y + 0.0013);
+    celebrate(this.ctx, { ...found.m, glow: stand ? [stand] : [] });
+    dropGlow(stand);
   }
 
   private liveTurn(seat: number, hand: number): void {
