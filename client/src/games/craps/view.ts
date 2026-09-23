@@ -20,7 +20,7 @@ import { Die, throwDie } from '../../table/dice.ts';
 import { tween, wait, ease } from '../../table/tween.ts';
 import { ChipTray } from '../../ui/kit.ts';
 import { serverNow } from '../../net/clock.ts';
-import { feltSpec, parseRegion, chipSpot, puckSpot, DICE_REST, FELT_W } from './layout.ts';
+import { feltSpec, parseRegion, chipSpot, puckSpot, spotRect, DICE_REST, FELT_W } from './layout.ts';
 import { BED_Y } from './model.ts';
 import { seatEnd, slotOffset, railSpot, handSpot } from './seats.ts';
 import { CrapsHud } from './hud.ts';
@@ -587,8 +587,22 @@ export class CrapsTable implements TableView {
     }
     const m = crapsMoment(decided, total, net);
     if (!m) return false;
-    const glow = [this.stacks.get(`${seat}|${m.id}|flat`), this.stacks.get(`${seat}|${m.id}|odds`), paid.get(m.id)].filter((o): o is ChipStack => !!o);
+    // light the printed spot the bet won on (the kit rings an object's bounds 35% wider, so a
+    // stand-in that much smaller makes the light fill the box); fall back to the chips
+    const r = spotRect(m.id, this.solo ? 1 : seatEnd(seat));
+    const stand = r ? new THREE.Mesh(new THREE.PlaneGeometry((r[2] - r[0]) / 1.35, (r[3] - r[1]) / 1.35)) : null;
+    if (stand && r) {
+      stand.visible = false;
+      stand.rotation.x = -Math.PI / 2;
+      stand.position.set((r[0] + r[2]) / 2, SURFACE, (r[1] + r[3]) / 2);
+      this.ctx.stage.root.add(stand);
+    }
+    const glow = stand ? [stand] : [this.stacks.get(`${seat}|${m.id}|flat`), paid.get(m.id)].filter((o): o is ChipStack => !!o);
     celebrate({ stage: this.ctx.stage, ui: this.ctx.ui, sfx: this.ctx.sfx }, { title: m.title, sub: m.sub, tier: m.tier, glow });
+    if (stand) {
+      stand.removeFromParent();
+      stand.geometry.dispose();
+    }
     return true;
   }
 

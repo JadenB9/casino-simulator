@@ -88,7 +88,7 @@ export const BEST_POINT = "Best bets: come or don't come with full odds; place 6
 
 export interface Advice {
   text: string;
-  /** The felt spot to ring: 'passodds', 'box6'... (null: nothing in particular). */
+  /** The felt spot to ring: 'pass', 'box6'... (null: nothing in particular). */
   pick: string | null;
 }
 
@@ -106,7 +106,8 @@ export function crapsAdvice(point: PointNumber | null, mine: Record<string, Bet>
     return Math.floor(left / s) * s > 0;
   };
   if (point !== null) {
-    if (room('pass', 'pass', point)) return { text: TAKE_ODDS, pick: 'passodds' };
+    // a click on the line itself takes the odds (the strip behind it hides under the rail)
+    if (room('pass', 'pass', point)) return { text: TAKE_ODDS, pick: 'pass' };
     if (room('dontpass', 'dontpass', point)) return { text: LAY_ODDS, pick: 'dontpass' };
   }
   for (const n of POINTS) {

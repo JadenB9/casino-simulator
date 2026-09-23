@@ -602,13 +602,21 @@ function mountRoulette(ctx: TableViewCtx): TableView {
     await Promise.all(pays);
     // a straight-up (or split or street) hit that beat the whole stake: light the number and the bet
     const moment = mine && mySeat !== null ? rouletteMoment(variant, mine) : null;
-    if (moment && mySeat !== null) {
-      const glow: THREE.Object3D[] = [...winGroup.children];
-      const pile = chips.pile(mySeat, moment.key);
-      if (pile) glow.push(pile);
-      const paid = payouts.find((p) => p.seat === mySeat && p.key === moment.key);
-      if (paid) glow.push(paid.pile);
-      celebrate({ stage, ui: ctx.ui, sfx: ctx.sfx }, { title: moment.title, sub: moment.sub, tier: moment.tier, glow });
+    const spot = moment && spotByKey(variant, moment.key);
+    if (moment && spot) {
+      // light the numbers the bet covered, the winning one among them: the kit rings an object's
+      // bounds 35% wider, so stand-ins that much smaller than each cell make the light fill it
+      const stands = rectsFor(variant, spot).map((r) => {
+        const m = new THREE.Mesh(plane);
+        m.visible = false;
+        m.rotation.x = -Math.PI / 2;
+        m.scale.set(r.w / 1.35, r.d / 1.35, 1);
+        m.position.set(r.x, TOP_Y + 0.0013, r.z);
+        scene.add(m);
+        return m;
+      });
+      celebrate({ stage, ui: ctx.ui, sfx: ctx.sfx }, { title: moment.title, sub: moment.sub, tier: moment.tier, glow: stands });
+      for (const m of stands) m.removeFromParent();
     }
     if (mine && mine.returned > 0) lastWin = mine.returned;
     if (disposed) return;

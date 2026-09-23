@@ -104,8 +104,8 @@ describe('craps Tips: the advice line', () => {
     expect(crapsAdvice(null, { pass: { amount: 1000 } }, step)).toEqual({ text: BEST_COME_OUT, pick: null });
   });
   it('a line bet with a point: take odds, until they are full', () => {
-    expect(crapsAdvice(6, { pass: { amount: 1000 } }, step)).toEqual({ text: TAKE_ODDS, pick: 'passodds' });
-    expect(crapsAdvice(6, { pass: { amount: 1000, odds: 2000 } }, step).pick).toBe('passodds');
+    expect(crapsAdvice(6, { pass: { amount: 1000 } }, step)).toEqual({ text: TAKE_ODDS, pick: 'pass' });
+    expect(crapsAdvice(6, { pass: { amount: 1000, odds: 2000 } }, step).pick).toBe('pass');
     expect(crapsAdvice(6, { pass: { amount: 1000, odds: 5000 } }, step)).toEqual({ text: BEST_POINT, pick: null });
     expect(crapsAdvice(4, { dontpass: { amount: 1000 } }, step)).toEqual({ text: LAY_ODDS, pick: 'dontpass' });
     expect(crapsAdvice(4, { dontpass: { amount: 1000, odds: 6000 } }, step).text).toBe(BEST_POINT);
