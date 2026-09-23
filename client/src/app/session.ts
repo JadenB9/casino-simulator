@@ -20,6 +20,11 @@ class Session {
     this.emit();
   }
 
+  /** Log out: forget the profile. Listeners stay; they hear from the next login. */
+  clear(): void {
+    this.profile = null;
+  }
+
   on(fn: Listener): () => void {
     this.listeners.add(fn);
     return () => this.listeners.delete(fn);

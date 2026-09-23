@@ -12,7 +12,6 @@ import { icon } from '../menu/icons.ts';
 import { formatDuration } from '../menu/parts.ts';
 import { openSettings } from './settings.ts';
 import { openShortcuts } from './shortcuts.ts';
-import { initVolume, setMuted } from './volume.ts';
 
 export interface HudDeps {
   root: HTMLElement;
@@ -83,7 +82,6 @@ function roller(target: HTMLElement): (to: Cents) => void {
 }
 
 export function mountHud(deps: HudDeps): Hud {
-  initVolume(deps.sfx);
   const root = el('div', 'hud pass');
   root.setAttribute('aria-label', 'Status');
 
@@ -156,7 +154,7 @@ export function mountHud(deps: HudDeps): Hud {
     mute.title = deps.sfx.muted ? 'Unmute (M)' : 'Mute (M)';
   };
   const toggleMute = () => {
-    setMuted(deps.sfx, !deps.sfx.muted);
+    deps.sfx.setMuted(!deps.sfx.muted);
     if (!deps.sfx.muted) deps.sfx.play('ui-click', { volume: 0.5 });
     paintMute();
   };

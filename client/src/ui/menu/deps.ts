@@ -32,7 +32,9 @@ export interface EngineLike {
 /** Enough of Sfx for menu clicks, the mute toggle and the volume setting. */
 export interface SfxLike {
   muted: boolean;
+  volume: number;
   setMuted(m: boolean): void;
+  setVolume(v: number): void;
   play(name: string, opts?: { volume?: number; rate?: number; delay?: number }): void;
   readonly out: GainNode;
 }

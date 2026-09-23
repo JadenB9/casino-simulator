@@ -35,7 +35,7 @@ export const DEFAULT_LOOK: Look = {
   shoes: '#111111',
 };
 
-const HEX = /^#[0-9a-f]{6}$/;
+const HEX = /^#[0-9a-f]{6}$/i;
 
 /** A clean Look from untrusted input, or null. Unknown keys are dropped. */
 export function parseLook(raw: unknown): Look | null {
@@ -54,10 +54,11 @@ export function parseLook(raw: unknown): Look | null {
     body,
     outfit: o.outfit,
     skin: o.skin as number,
-    hair: o.hair as string,
-    top: o.top as string,
-    bottom: o.bottom as string,
-    shoes: o.shoes as string,
+    // Colour pickers hand back either case; one spelling per colour keeps stored looks comparable.
+    hair: (o.hair as string).toLowerCase(),
+    top: (o.top as string).toLowerCase(),
+    bottom: (o.bottom as string).toLowerCase(),
+    shoes: (o.shoes as string).toLowerCase(),
   };
 }
 

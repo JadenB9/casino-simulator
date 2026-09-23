@@ -207,7 +207,6 @@ describe('look', () => {
       { ...look, skin: -1 },
       { ...look, skin: 1.5 },
       { ...look, skin: '2' },
-      { ...look, hair: '#FFFFFF' },
       { ...look, hair: '#fff' },
       { ...look, top: 'red' },
       { ...look, shoes: '#12345g' },
@@ -226,6 +225,13 @@ describe('look', () => {
     // bigger than the 1 KB the endpoint reads
     expect((await putLook(token, { look: { ...look, pad: 'x'.repeat(1100) } })).status).toBe(400);
     expect((await me(token)).look).toEqual(look);
+  });
+
+  it('stores colours in lower case whatever case the picker sent', async () => {
+    const { token } = await account('Dresser_4');
+    const res = await putLook(token, { look: { ...look, hair: '#FFAA00' } });
+    expect(res.status).toBe(200);
+    expect((await me(token)).look).toEqual({ ...look, hair: '#ffaa00' });
   });
 
   it('needs a token', async () => {

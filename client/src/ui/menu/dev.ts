@@ -14,7 +14,7 @@ import * as realApi from '../../net/api.ts';
 import { session } from '../../app/session.ts';
 import { el } from '../kit.ts';
 import { broke, fixtureApi, regular } from './fixtures.ts';
-import { initVolume, mountHud, mountLogin, mountMenu, openBank, openEditor, openProfile, openSettings, openShortcuts, type AccountApi, type Hud } from './index.ts';
+import { mountHud, mountLogin, mountMenu, openBank, openEditor, openProfile, openSettings, openShortcuts, type AccountApi, type Hud } from './index.ts';
 
 const q = new URLSearchParams(location.search);
 const screen = q.get('screen') ?? 'flow';
@@ -23,7 +23,6 @@ const ui = document.getElementById('ui')!;
 const engine = new Engine3D(document.getElementById('scene') as HTMLCanvasElement, document.getElementById('labels')!, savedQuality());
 const sfx = new Sfx();
 void sfx.load().catch(() => {});
-initVolume(sfx);
 devRoom(engine, GAMES.highcard, '');
 const cam = engine.camera;
 const rest = () => {

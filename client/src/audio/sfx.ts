@@ -1,23 +1,24 @@
 // Sound effects: decoded once into WebAudio buffers, a random variant per play, a master gain
-// for mute. Browsers only start audio after a gesture, so the context unlocks on the first click
-// or key press.
+// for volume and mute. Browsers only start audio after a gesture, so the context unlocks on the
+// first click or key press.
 
 const MUTE_KEY = 'casino.muted';
+const VOLUME_KEY = 'casino.volume';
+/** The master level at full volume; the volume setting scales it. */
+const BASE = 0.8;
 
 export class Sfx {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
   private buffers = new Map<string, AudioBuffer[]>();
   muted: boolean;
+  /** 0 to 1, kept across reloads. Unmuting comes back to this level. */
+  volume: number;
 
   constructor() {
-    let m = false;
-    try {
-      m = localStorage.getItem(MUTE_KEY) === '1';
-    } catch {
-      /* blocked */
-    }
-    this.muted = m;
+    this.muted = stored(MUTE_KEY) === '1';
+    const v = Number(stored(VOLUME_KEY) ?? 1);
+    this.volume = Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 1;
     const unlock = () => {
       this.ensure();
       void this.ctx?.resume();
@@ -30,7 +31,7 @@ export class Sfx {
     if (!this.ctx) {
       this.ctx = new AudioContext();
       this.master = this.ctx.createGain();
-      this.master.gain.value = this.muted ? 0 : 0.8;
+      this.master.gain.value = this.level();
       this.master.connect(this.ctx.destination);
     }
     return this.ctx;
@@ -71,11 +72,37 @@ export class Sfx {
 
   setMuted(m: boolean): void {
     this.muted = m;
-    if (this.master && this.ctx) this.master.gain.setTargetAtTime(m ? 0 : 0.8, this.ctx.currentTime, 0.05);
-    try {
-      localStorage.setItem(MUTE_KEY, m ? '1' : '0');
-    } catch {
-      /* blocked */
-    }
+    this.ramp();
+    store(MUTE_KEY, m ? '1' : '0');
+  }
+
+  setVolume(v: number): void {
+    this.volume = Math.min(1, Math.max(0, v));
+    this.ramp();
+    store(VOLUME_KEY, String(this.volume));
+  }
+
+  private level(): number {
+    return this.muted ? 0 : BASE * this.volume;
+  }
+
+  private ramp(): void {
+    if (this.master && this.ctx) this.master.gain.setTargetAtTime(this.level(), this.ctx.currentTime, 0.05);
+  }
+}
+
+function stored(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function store(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    /* blocked */
   }
 }

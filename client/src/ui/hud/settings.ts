@@ -7,7 +7,6 @@ import { el } from '../kit.ts';
 import type { Closable, SfxLike } from '../menu/deps.ts';
 import { openSheet } from '../menu/sheet.ts';
 import { segmented } from '../menu/parts.ts';
-import { applyVolume, initVolume, savedVolume, saveVolume, setMuted } from './volume.ts';
 
 export interface SettingsDeps {
   root: HTMLElement;
@@ -38,7 +37,6 @@ function row(label: string, control: HTMLElement, note?: HTMLElement): HTMLEleme
 }
 
 export function openSettings(deps: SettingsDeps): Closable {
-  initVolume(deps.sfx);
   const running = deps.quality ?? LOADED_QUALITY;
   const sheet = openSheet(deps.root, { title: 'Settings', cls: 'settings-sheet', onClose: deps.onClose });
 
@@ -63,7 +61,7 @@ export function openSettings(deps: SettingsDeps): Closable {
 
   // sound
   const sound = segmented<'on' | 'off'>('Sound', [{ id: 'on', label: 'On' }, { id: 'off', label: 'Off' }], deps.sfx.muted ? 'off' : 'on', (v) => {
-    setMuted(deps.sfx, v === 'off');
+    deps.sfx.setMuted(v === 'off');
     if (v === 'on') deps.sfx.play('ui-click', { volume: 0.5 });
     volume.disabled = v === 'off';
   });
@@ -73,7 +71,7 @@ export function openSettings(deps: SettingsDeps): Closable {
   volume.min = '0';
   volume.max = '100';
   volume.step = '5';
-  volume.value = String(Math.round(savedVolume() * 100));
+  volume.value = String(Math.round(deps.sfx.volume * 100));
   volume.disabled = deps.sfx.muted;
   volume.setAttribute('aria-label', 'Volume');
   const volValue = el('span', 'set-value money', `${volume.value}%`);
@@ -81,8 +79,7 @@ export function openSettings(deps: SettingsDeps): Closable {
   volume.addEventListener('input', () => {
     const v = Number(volume.value) / 100;
     volValue.textContent = `${volume.value}%`;
-    saveVolume(v);
-    applyVolume(deps.sfx, v);
+    deps.sfx.setVolume(v);
     // a chip landing at the new level, once the slider settles
     clearTimeout(sample);
     sample = window.setTimeout(() => deps.sfx.play('chip-lay', { volume: 0.9 }), 140);

@@ -13,7 +13,6 @@ dependencies explicitly, so `app/boot.ts` decides the flow and nothing here reac
 | `mountHud({ root, session, sfx, onSettings?, onProfile?, onMenu? })` | name, balance, chips at table, session net/time, online, mute, settings, "?" | `{ root, close, setTableChips(stack, escrow?), setOnline(n), toggleShortcuts() }` |
 | `openBank({ root, api, session, onClose?, sfx? })` | cashier: balance, chips on tables, the loan rule, Take loan | `{ root, close }` |
 | `openSettings({ root, sfx, quality?, reload? })`, `openShortcuts({ root })` | the two sheets the HUD opens; the menu's Settings uses the first | `{ root, close }` |
-| `initVolume(sfx)` | applies the saved volume once audio unlocks | |
 | `overlayCount()`, `onOverlayChange(fn)` | how many sheets/editor are up: pause the floor controller while > 0 | |
 
 `api` is `import * as api from '../net/api.ts'`, `session` is `app/session.ts`'s singleton,
@@ -24,9 +23,8 @@ dependencies explicitly, so `app/boot.ts` decides the flow and nothing here reac
 ```ts
 import * as api from '../net/api.ts';
 import { session } from './session.ts';
-import { initVolume, mountHud, mountLogin, mountMenu, openBank, openEditor, openProfile, openSettings } from '../ui/menu/index.ts';
+import { mountHud, mountLogin, mountMenu, openBank, openEditor, openProfile, openSettings } from '../ui/menu/index.ts';
 
-initVolume(sfx);
 const ui = document.getElementById('ui')!;
 // The floor's slow camera pass behind login and menu. Called on mount, its return on close.
 // Count users so login -> menu keeps one pass running (mount the menu before closing the login).
@@ -75,8 +73,8 @@ Notes for integration:
   other keydowns never reach window listeners behind them (keyups do, so held WASD clears). M and
   ? stay global; the HUD handles both. Floor code should also ignore keys while
   `overlayCount() > 0`.
-- **Volume.** Sfx only has mute; `hud/volume.ts` scales Sfx's master gain and persists it as
-  `casino.volume`. If Sfx gains a `setVolume`, move that logic there.
+- **Volume.** Sfx owns it: `sfx.setVolume(v)` persists `casino.volume`, and unmuting comes back
+  to that level.
 - **Balance timing.** The HUD rolls to whatever the session says; hold `session.balance()` until a
   table's reveal lands if the view wants the number to change after the animation.
 - **Bottom-left corner** is left empty on every screen for the site's back chip.
