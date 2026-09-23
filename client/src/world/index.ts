@@ -20,6 +20,7 @@ import { Props } from './props.ts';
 import { Characters } from './characters.ts';
 import { Player } from './player.ts';
 import { Interact } from './interact.ts';
+import { StationLod } from './lod.ts';
 import { Bloom, PixelRatio } from './bloom.ts';
 import './world.css';
 
@@ -85,6 +86,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
   stationRoot.name = 'stations';
   root.add(stationRoot);
   const { stations, vpMode } = buildStations(plan, stationRoot, quality, col);
+  const lod = new StationLod(stations, quality);
   const decor = buildDecor(plan, stations, vpMode, batch, mats, col);
   buildPools(decor.pools, batch, mats);
   const signSpecs = [...floorSigns(plan, batch, mats), ...decor.signs];
@@ -179,6 +181,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
       renderer.info.reset();
       player.update(dt);
       interact.update(dt);
+      lod.update(engine.camera, interact.seated);
       character.update(dt);
       const f = world.focus;
       lighting.setFocus(f && f.zone !== 'slots' && f.game !== 'videopoker' ? focusAt.copy(f.anchor.position) : null);
@@ -190,6 +193,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
     stats: () => ({ calls: lastCalls, triangles: lastTris, programs: renderer.info.programs?.length ?? 0, pixelRatio: renderer.getPixelRatio() }),
     teleport: (x, z, heading) => player.spawn(x, z, heading),
     dispose() {
+      lod.dispose();
       interact.dispose();
       player.dispose();
       character.dispose();

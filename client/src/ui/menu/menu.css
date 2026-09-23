@@ -126,7 +126,7 @@
 .menu-item:focus-visible { outline: none; }
 .menu-item::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 1px; background: linear-gradient(90deg, var(--brass-hi), rgba(241, 213, 154, 0.25) 70%, rgba(241, 213, 154, 0)); transform: scaleX(0); transform-origin: left; transition: transform 0.35s var(--ease); }
 .menu-label { font-family: var(--serif); font-size: 25px; font-weight: 600; line-height: 1.1; letter-spacing: 0.09em; text-transform: uppercase; transition: color 0.15s, transform 0.25s var(--ease); }
-.menu-fact { margin-left: auto; font-size: 15px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); opacity: 0.55; transition: opacity 0.2s, color 0.2s; white-space: nowrap; }
+.menu-fact { margin-left: auto; font-size: 15px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); opacity: 0.7; text-shadow: 0 1px 10px rgba(0, 0, 0, 0.9); transition: opacity 0.2s, color 0.2s; white-space: nowrap; }
 .menu-mark { position: absolute; left: 3px; top: 50%; width: 8px; height: 8px; margin-top: -4px; background: var(--brass-hi); transform: rotate(45deg) scale(0); transition: transform 0.25s var(--ease); }
 .menu-item.sel { color: var(--ink); }
 .menu-item.sel::after { transform: scaleX(1); }

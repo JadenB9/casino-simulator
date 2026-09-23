@@ -44,6 +44,8 @@ export async function boot(): Promise<void> {
     sfx.load().catch((err) => console.warn('sounds failed to load', err)),
   ]);
   app = new App(engine, world, sfx, ui);
+  // Handles for the console and the headless checks; nothing here can move money.
+  (window as unknown as { casino: unknown }).casino = { engine, world, app, session };
   await app.start();
 }
 
