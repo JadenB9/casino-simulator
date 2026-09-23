@@ -4,8 +4,10 @@
 //   - parts smaller than a few centimetres are dropped (nobody can see them from there),
 //   - untextured parts are merged into one mesh coloured per vertex, and the glowing ones into
 //     one more, so they cost two draw calls however many parts they came from,
-//   - textured and see-through parts are merged per material, so felts, signs and glass keep
-//     their own look.
+//   - small textured parts (chip stacks, table signs, a reel strip) become their texture's
+//     average colour and join those two merges; at that distance a chip is a few pixels,
+//   - larger textured and see-through parts are merged per material, so felts, signs and glass
+//     keep their own look.
 // Everything is shared with the live model (materials, canvas textures), so a sign repainted up
 // close is repainted far away too. The swap has a little hysteresis so it doesn't flicker at the
 // boundary, and the station you're sitting at always shows the real thing.
@@ -18,6 +20,8 @@ const FAR_M = 11;
 const NEAR_M = 10;
 /** Parts whose bounding sphere is smaller than this (metres) are left out of the far copy. */
 const TINY_M = 0.035;
+/** Textured parts smaller than this (bounding sphere, metres) are drawn in their average colour. */
+const SMALL_M = 0.3;
 
 type Piece = { geo: THREE.BufferGeometry; matrix: THREE.Matrix4; start: number; count: number };
 
@@ -97,9 +101,23 @@ export class StationLod {
       // An instanced mesh is measured across all its instances (a ring of bulbs, not one bulb).
       const holder = o instanceof THREE.InstancedMesh ? o : geo;
       if (!holder.boundingSphere) holder.computeBoundingSphere();
-      if (holder.boundingSphere!.radius * o.matrixWorld.getMaxScaleOnAxis() < TINY_M) return;
+      const radius = holder.boundingSphere!.radius * o.matrixWorld.getMaxScaleOnAxis();
+      if (radius < TINY_M) return;
       const matrix = new THREE.Matrix4().multiplyMatrices(toModel, o.matrixWorld);
       const mats = Array.isArray(o.material) ? o.material : [o.material];
+      const total0 = geo.index ? geo.index.count : geo.attributes.position.count;
+      // A small custom-shaded part drawing a texture (a reel strip behind its glass): lit, in the
+      // strip's average colour.
+      const sm = mats[0];
+      if (!(o instanceof THREE.InstancedMesh) && mats.length === 1 && sm instanceof THREE.ShaderMaterial && radius < SMALL_M && !Object.keys(geo.morphAttributes).length) {
+        const avg = averageColor(sm.uniforms.map?.value);
+        if (avg) {
+          const tint = sm.uniforms.uTint?.value;
+          if (tint instanceof THREE.Color) avg.multiply(tint);
+          glow.push({ geo, matrix, start: 0, count: total0, color: avg });
+          return;
+        }
+      }
       if (o instanceof THREE.InstancedMesh) {
         // Already one draw call; share it as it is, clock and all (bulbs that chase).
         const inst = new THREE.InstancedMesh(o.geometry, o.material, o.count);
@@ -128,6 +146,16 @@ export class StationLod {
         const m = mat as THREE.MeshStandardMaterial;
         const textured = !!(m.map || m.emissiveMap || m.alphaMap);
         const clear = m.transparent || m.opacity < 1 || m.alphaTest > 0;
+        if (textured && !clear && radius < SMALL_M && m.map && !m.emissiveMap && !m.alphaMap && m.color) {
+          const avg = averageColor(m.map);
+          if (avg) {
+            avg.multiply(m.color);
+            // unlit parts (a screen, a lit panel) stay lit
+            if ((m as THREE.Material as THREE.MeshBasicMaterial).isMeshBasicMaterial) glow.push({ ...piece, color: avg });
+            else solid.push({ ...piece, color: avg });
+            continue;
+          }
+        }
         if (textured || clear || !m.color) {
           const list = byMaterial.get(mat) ?? [];
           list.push(piece);
@@ -224,6 +252,56 @@ function merge(pieces: (Piece & { color?: THREE.Color })[], extra: 'color' | 'uv
   g.setIndex(new THREE.BufferAttribute(index, 1));
   g.computeBoundingSphere();
   return g;
+}
+
+const averages = new WeakMap<THREE.Texture, THREE.Color | null>();
+let sampler: CanvasRenderingContext2D | null | undefined;
+
+/**
+ * A texture's average colour (linear), from an 8x8 downscale of its image; null for images a
+ * canvas can't draw (compressed or data textures). Worked out once per texture.
+ */
+function averageColor(tex: unknown): THREE.Color | null {
+  if (!(tex instanceof THREE.Texture)) return null;
+  if (averages.has(tex)) return averages.get(tex)?.clone() ?? null;
+  let out: THREE.Color | null = null;
+  const img = tex.image as CanvasImageSource | undefined;
+  // not loaded yet: no answer this time, but don't remember that
+  if (typeof HTMLImageElement !== 'undefined' && img instanceof HTMLImageElement && !(img.complete && img.naturalWidth > 0)) return null;
+  const drawable = typeof HTMLCanvasElement !== 'undefined' && (img instanceof HTMLCanvasElement || img instanceof HTMLImageElement || img instanceof ImageBitmap || (typeof OffscreenCanvas !== 'undefined' && img instanceof OffscreenCanvas));
+  if (drawable) {
+    if (sampler === undefined) {
+      const c = document.createElement('canvas');
+      c.width = c.height = 8;
+      sampler = c.getContext('2d', { willReadFrequently: true });
+    }
+    try {
+      if (sampler) {
+        sampler.clearRect(0, 0, 8, 8);
+        sampler.drawImage(img!, 0, 0, 8, 8);
+        const px = sampler.getImageData(0, 0, 8, 8).data;
+        const c = new THREE.Color();
+        let r = 0;
+        let g = 0;
+        let b = 0;
+        let n = 0;
+        for (let i = 0; i < px.length; i += 4) {
+          const a = px[i + 3]! / 255;
+          if (a < 0.05) continue;
+          c.setRGB(px[i]! / 255, px[i + 1]! / 255, px[i + 2]! / 255, tex.colorSpace === THREE.SRGBColorSpace ? THREE.SRGBColorSpace : THREE.LinearSRGBColorSpace);
+          r += c.r * a;
+          g += c.g * a;
+          b += c.b * a;
+          n += a;
+        }
+        if (n > 0) out = new THREE.Color(r / n, g / n, b / n);
+      }
+    } catch {
+      out = null; // an image from elsewhere, or not decoded yet
+    }
+  }
+  averages.set(tex, out);
+  return out?.clone() ?? null;
 }
 
 function withNormals(geo: THREE.BufferGeometry): THREE.BufferGeometry {
