@@ -12,6 +12,7 @@ import { Engine3D, savedQuality, type Quality } from '../render/engine3d.ts';
 import { el, toast } from '../ui/kit.ts';
 import { DEFAULT_LOOK, OUTFITS, type Body, type Look } from '../../../shared/src/look.ts';
 import { createWorld, type FloorWorld } from './index.ts';
+import { checkLayout } from './layout.ts';
 
 interface View {
   pos: [number, number, number];
@@ -46,6 +47,7 @@ export async function runDevFloor(params: URLSearchParams): Promise<FloorWorld> 
   });
   engine.onFrame((dt) => world.update(dt));
   document.getElementById('boot')?.classList.add('done');
+  for (const problem of checkLayout(world.plan)) console.warn(`floor plan: ${problem}`);
 
   const ui = document.getElementById('ui')!;
   world.onEnter((s) => toast(`${s.name}: sitting down (no server on the dev floor). Esc to stand up.`));

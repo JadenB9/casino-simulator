@@ -337,3 +337,78 @@ export function planFloor(footprint: (game: GameId) => Footprint): FloorPlan {
 export function inRect(r: Rect, x: number, z: number, pad = 0): boolean {
   return x >= r.x0 - pad && x <= r.x1 + pad && z >= r.z0 - pad && z <= r.z1 + pad;
 }
+
+// --- checks ----------------------------------------------------------------------------------
+
+type Poly = [number, number][];
+
+function corners(x: number, z: number, w: number, d: number, yaw: number): Poly {
+  const c = Math.cos(yaw);
+  const s = Math.sin(yaw);
+  return [
+    [-w / 2, -d / 2],
+    [w / 2, -d / 2],
+    [w / 2, d / 2],
+    [-w / 2, d / 2],
+  ].map(([lx, lz]) => [x + lx! * c + lz! * s, z - lx! * s + lz! * c] as [number, number]);
+}
+
+/** Separating-axis test for two convex quads. */
+function overlaps(a: Poly, b: Poly): boolean {
+  for (const poly of [a, b]) {
+    for (let i = 0; i < poly.length; i++) {
+      const p = poly[i]!;
+      const q = poly[(i + 1) % poly.length]!;
+      const ax = -(q[1] - p[1]);
+      const az = q[0] - p[0];
+      const proj = (pts: Poly) => pts.map(([x, z]) => x * ax + z * az);
+      const pa = proj(a);
+      const pb = proj(b);
+      if (Math.max(...pa) <= Math.min(...pb) || Math.max(...pb) <= Math.min(...pa)) return false;
+    }
+  }
+  return true;
+}
+
+function rectPoly(r: Rect): Poly {
+  return [
+    [r.x0, r.z0],
+    [r.x1, r.z0],
+    [r.x1, r.z1],
+    [r.x0, r.z1],
+  ];
+}
+
+/**
+ * Problems with a plan, as readable strings (empty when it's sound): stations overlapping each
+ * other, the walls or an aisle, and players' standing room in front of a station blocked.
+ */
+export function checkLayout(plan: FloorPlan): string[] {
+  const out: string[] = [];
+  const PAD = 0.05;
+  const boxes = plan.stations.map((s) => ({ s, poly: corners(s.x, s.z, s.fp.width + PAD, s.fp.depth + PAD, s.yaw) }));
+  const inner: Rect = { x0: plan.room.x0 + WALL, z0: plan.room.z0 + WALL, x1: plan.room.x1 - WALL, z1: plan.room.z1 - WALL };
+  for (let i = 0; i < boxes.length; i++) {
+    const a = boxes[i]!;
+    for (const [x, z] of a.poly) if (!inRect(inner, x, z, 0.01)) out.push(`${a.s.id} pokes through a wall`);
+    for (let j = i + 1; j < boxes.length; j++) {
+      const b = boxes[j]!;
+      if (overlaps(a.poly, b.poly)) out.push(`${a.s.id} overlaps ${b.s.id}`);
+    }
+    for (const [k, aisle] of plan.aisles.entries()) if (overlaps(a.poly, rectPoly(aisle))) out.push(`${a.s.id} stands in aisle ${k}`);
+    // a strip of standing room along the player side (tables, and machines on the floor)
+    if (a.s.zone !== 'bar') {
+      const off = a.s.fp.depth / 2 + 0.45;
+      const fx = a.s.x + Math.sin(a.s.yaw) * off;
+      const fz = a.s.z + Math.cos(a.s.yaw) * off;
+      const front = corners(fx, fz, a.s.fp.width * 0.8, 0.7, a.s.yaw);
+      for (const b of boxes) if (b !== a && overlaps(front, b.poly)) out.push(`${b.s.id} blocks the players of ${a.s.id}`);
+      for (const bank of plan.banks) {
+        if (bank.ids.includes(a.s.id)) continue;
+        if (overlaps(front, corners(bank.x, bank.z, bank.length + 0.6, bank.depth + 0.2, bank.yaw))) out.push(`bank ${bank.variant} blocks the players of ${a.s.id}`);
+      }
+      for (const [x, z] of front) if (!inRect(inner, x, z, 0.01)) out.push(`${a.s.id} has its players against a wall`);
+    }
+  }
+  return [...new Set(out)];
+}
