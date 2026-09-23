@@ -12,7 +12,7 @@ import { DurableObject } from 'cloudflare:workers';
 import type { GameEngine, GameEvent, EngineCtx, SeatCtx, Step, TableConfig, TableMode, GameId } from '../../../shared/src/engine.ts';
 import { isRefusal } from '../../../shared/src/engine.ts';
 import { engineFor } from '../../../shared/src/games/index.ts';
-import { isGameId, variantOf } from '../../../shared/src/games/catalog.ts';
+import { gameInfo, isGameId, variantOf } from '../../../shared/src/games/catalog.ts';
 import { cryptoRng, type Rng } from '../../../shared/src/rng.ts';
 import { lookFromJson } from '../../../shared/src/look.ts';
 import type { Cents } from '../../../shared/src/money.ts';
@@ -231,7 +231,7 @@ export class CasinoTable extends DurableObject<Env> {
       mode: p.mode,
       visibility: p.visibility,
       pin: p.pin,
-      started: p.mode === 'solo',
+      started: p.mode === 'solo' || gameInfo(p.game).autoStart === true,
       leader: null,
       incarnation: crypto.randomUUID(),
       seq: 0,
