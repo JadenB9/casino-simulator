@@ -23,7 +23,7 @@ import { CHIP_R, CHIP_H } from '../../table/chips.ts';
 import { celebrate } from '../../table/celebrate.ts';
 import { serverNow } from '../../net/clock.ts';
 import { TOP_Y, TABLE_W, TABLE_D, TABLE_Z, WHEEL_Y, WHEEL_Z, FOOTPRINT, MODEL_FELT, WHEEL_GROUP, tableModel, layoutFelt } from './model.ts';
-import { spotAt, spotRect, chipSpot, SPOT_Z0 } from './layout.ts';
+import { spotAt, spotRect, chipSpot, SPOT_Z0, FELT_D } from './layout.ts';
 import { ROTOR_NAME, FLAP_NAME, BULBS_NAME, GLOW_NAME, FRAME_OUT, buildWheel } from './wheel.ts';
 import { WheelSpin, chooseEnding, angleFor, flapAngle, stopAt, TAU, SECTOR, G_TOUCH } from './spin.ts';
 import { LayoutChips, Pile, seatColor, CHIP_SCALE, type PileStyle } from './chips.ts';
@@ -33,7 +33,7 @@ import { History, Meters, Plaque, Tooltip, Clock, Players, type PlayerRow } from
 const FELT_Y = TOP_Y + 0.0007;
 const CHIP_Y = TOP_Y + 0.0009;
 /** Where the dealer works (losers go here, payouts come from here): the head of the layout, under the wheel. */
-const DEALER = new THREE.Vector3(0, CHIP_Y, TABLE_Z - TABLE_D / 2 + 0.07);
+const DEALER = new THREE.Vector3(0, CHIP_Y, TABLE_Z - FELT_D / 2 + 0.04);
 /** Tray chips above the most a spot takes are hidden. */
 const TRAY_MAX: Cents = 50_000;
 /** Ticks are handed to the audio clock this far ahead. */
@@ -287,8 +287,8 @@ function mountBigSix(ctx: TableViewCtx): TableView {
   let tipShown = false;
   function refreshTips(): void {
     const show = ctx.tips.on && canBet();
-    if (show) ctx.kit.tip(TIP_TEXT);
-    else if (tipShown) ctx.kit.tip(null);
+    if (show && !tipShown) ctx.kit.tip(TIP_TEXT);
+    else if (!show && tipShown) ctx.kit.tip(null);
     best.hidden = !show;
     tipShown = show;
   }
@@ -421,10 +421,10 @@ function mountBigSix(ctx: TableViewCtx): TableView {
   // ------------------------------------------------------------------------------------------
   // The wheel, every frame
 
-  /** Put the wheel at rest on a stop, the flap leaning lightly on its next peg. */
+  /** Put the wheel at rest on a stop, the flap hanging free just inside it (as every spin ends). */
   function restOn(stop: number): void {
     spin = null;
-    theta = angleFor(stop, G_TOUCH - 0.05);
+    theta = angleFor(stop, G_TOUCH + 0.08);
   }
 
   function turnWheel(): void {
@@ -509,7 +509,7 @@ function mountBigSix(ctx: TableViewCtx): TableView {
     ctx.kit.say('No more bets', 2800);
     void glideTo(WHEEL_POSE, 1100);
     const token = spin;
-    void wait(Math.max(0, duration - 3.4) * 1000).then(() => {
+    void wait(Math.max(1.2, duration - 3.4) * 1000).then(() => {
       if (!disposed && animating && spin === token) void glideTo(CLAPPER_POSE, 2800);
     });
     driving = true;
