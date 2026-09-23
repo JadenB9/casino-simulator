@@ -12,6 +12,7 @@ import { bearer, signToken, verifyToken, type Claims } from './auth.ts';
 import { bumpRate, escrowsOf, getAccount, loadProfile, loginAccount, setLook } from './db.ts';
 import { takeLoan } from './transfer.ts';
 import { leaderboard } from './leaderboard.ts';
+import { ipKey } from './floor/directory.ts';
 import type { CasinoFloor } from './floor/index.ts';
 import type { CasinoTable } from './table/host.ts';
 
@@ -34,7 +35,15 @@ export default {
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
     if (path === '/api/health') return json({ ok: true, v: PROTOCOL_VERSION }, 200, cors);
 
-    if (path.startsWith('/ws/')) return handleSocket(request, env, url, path.slice(4), origin);
+    if (path.startsWith('/ws/')) {
+      try {
+        return await handleSocket(request, env, url, path.slice(4), origin);
+      } catch (err) {
+        // A transient code, so the client reconnects with backoff; the reason says nothing inside.
+        console.error('socket routing failed', path, err);
+        return closeWith(1011, 'try again');
+      }
+    }
     if (path.startsWith('/api/')) {
       // Browsers always send Origin on these (they're cross-origin POST/PUT or credentialed GET);
       // refusing unknown origins keeps other sites from driving the API from a visitor's browser.
@@ -56,14 +65,17 @@ export default {
 async function handleApi(request: Request, env: Env, route: string, cors: Record<string, string>): Promise<Response> {
   const now = Date.now();
   const ip = request.headers.get('CF-Connecting-IP') ?? 'local';
+  // Limits count per address, and per /64 for IPv6: one user can take a fresh address from their
+  // /64 for every request, which would make a per-address limit on sign-ups no limit at all.
+  const addr = ipKey(ip);
 
   if (route === 'login' && request.method === 'POST') {
-    if (!(await bumpRate(env.DB, 'casino-login', ip, 30, 60_000, now))) return fail(429, 'RATE_LIMITED', 'Too many logins. Try again in a minute.', cors);
+    if (!(await bumpRate(env.DB, 'casino-login', addr, 30, 60_000, now))) return fail(429, 'RATE_LIMITED', 'Too many logins. Try again in a minute.', cors);
     const body = await readJson(request);
     const name = (body as { name?: unknown } | null)?.name;
     if (!isValidName(name)) return fail(400, 'BAD_NAME', 'Names are 3-16 letters, numbers or _.', cors);
     const existing = await env.DB.prepare(`SELECT 1 AS hit FROM casino_accounts WHERE name = ?1`).bind(name).first();
-    if (!existing && !(await bumpRate(env.DB, 'casino-new', ip, 10, 3_600_000, now))) {
+    if (!existing && !(await bumpRate(env.DB, 'casino-new', addr, 10, 3_600_000, now))) {
       return fail(429, 'RATE_LIMITED', 'Too many new accounts from here. Try again later.', cors);
     }
     const { account } = await loginAccount(env.DB, name, now);
@@ -88,6 +100,8 @@ async function handleApi(request: Request, env: Env, route: string, cors: Record
   }
 
   if (route === 'me/look' && request.method === 'PUT') {
+    // Each change is a D1 write and a message to everyone on the floor.
+    if (!(await bumpRate(env.DB, 'casino-look', `a${claims.a}`, 20, 60_000, now))) return fail(429, 'RATE_LIMITED', 'Give it a minute.', cors);
     const look = parseLook((await readJson(request, 1024) as { look?: unknown } | null)?.look);
     if (!look) return fail(400, 'BAD_REQUEST', "That look isn't valid.", cors);
     await setLook(env.DB, claims.a, look);
@@ -100,6 +114,8 @@ async function handleApi(request: Request, env: Env, route: string, cors: Record
   }
 
   if (route === 'bank/loan' && request.method === 'POST') {
+    // Each ask calls every table holding an escrow of yours, so it has a limit of its own.
+    if (!(await bumpRate(env.DB, 'casino-loan', `a${claims.a}`, 10, 60_000, now))) return fail(429, 'RATE_LIMITED', 'Give it a minute.', cors);
     await reconcileStale(env, claims.a, now, true);
     const { granted } = await takeLoan(env.DB, claims.a, now, `loan:${claims.a}:${crypto.randomUUID()}`);
     const profile = await loadProfile(env.DB, claims.a);
