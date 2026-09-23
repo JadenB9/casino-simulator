@@ -37,6 +37,7 @@ export interface RemotePlayer {
   info: PlayerInfo;
   /** Where the player is, in cm and yaw bytes: sample with `track.at(serverNow())`. */
   track: Track;
+  /** The newest sample, to tell a jump from a step. */
   last: Pose | null;
 }
 
