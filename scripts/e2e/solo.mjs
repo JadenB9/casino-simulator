@@ -157,10 +157,7 @@ try {
       const orig = s.onMessage.bind(s);
       s.onMessage = (m) => {
         orig(m);
-        if (m.t === 'seat') {
-          s.__stack = m.stack;
-          s.__status = m.status;
-        }
+        if (m.t === 'seat') s.__stack = m.stack;
         if (m.t === 'ev' && m.events.some((e) => e.type === 'settle')) setTimeout(spin, 800);
       };
       // The seat message with the stack came before this hook; the escrow is the same number.

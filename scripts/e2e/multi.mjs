@@ -58,11 +58,13 @@ async function arm(p, game) {
     const act = (a) => s.link.act(a);
     const mine = () => s.snapshot?.you?.seat;
     let betRound = -1;
+    s.__rounds = 0;
     const orig = s.onMessage.bind(s);
     s.onMessage = (m) => {
       orig(m);
       if (m.t === 'err') (window.__evlog ??= []).push(`ERR ${m.code}: ${m.msg}`);
       if (m.t !== 'ev') return;
+      if (m.events.some((e) => ['result', 'settle', 'showdown', 'win', 'payout'].includes(e.type))) s.__rounds++;
       s.__lastView = m.view;
       (window.__evlog ??= []).push(m.events.map((e) => e.type).join(','));
       const me = mine();
@@ -186,17 +188,6 @@ try {
         const s = window.casino.app.table?.session;
         return !!s && (s.__rounds ?? 0) > 0;
       });
-    for (const p of [a, b]) {
-      await p.page.evaluate(() => {
-        const s = window.casino.app.table.session;
-        const orig = s.onMessage.bind(s);
-        s.__rounds = 0;
-        s.onMessage = (m) => {
-          orig(m);
-          if (m.t === 'ev' && m.events.some((e) => e.type === 'result' || e.type === 'settle' || e.type === 'showdown' || e.type === 'win' || e.type === 'payout')) s.__rounds++;
-        };
-      });
-    }
     while (Date.now() - t0 < 120_000 && !((await settled(a)) && (await settled(b)))) await a.page.waitForTimeout(1000);
     if (process.env.DEBUG) for (const p of [a, b]) console.log(game, p.name, (await p.page.evaluate(() => (window.__evlog ?? []).slice(-40).join(' | '))).slice(0, 3000));
     await shot(a, `multi-${game}-a`);

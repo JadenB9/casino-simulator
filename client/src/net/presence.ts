@@ -59,6 +59,8 @@ export interface FloorEvents {
   at: (id: number, at: { station: string } | null) => void;
   online: (n: number) => void;
   state: (state: SocketState, code?: number) => void;
+  /** Every message, after the roster has taken what it needs (the lobby list rides this socket). */
+  message: (msg: FloorServerMsg) => void;
 }
 
 type Listeners = { [K in keyof FloorEvents]: Set<FloorEvents[K]> };
@@ -81,7 +83,7 @@ export class FloorLink {
   you: PlayerInfo | null = null;
   onlineCount = 0;
   private readonly socket: FloorTransport;
-  private readonly listeners: Listeners = { hello: new Set(), join: new Set(), leave: new Set(), look: new Set(), at: new Set(), online: new Set(), state: new Set() };
+  private readonly listeners: Listeners = { hello: new Set(), join: new Set(), leave: new Set(), look: new Set(), at: new Set(), online: new Set(), state: new Set(), message: new Set() };
   private connected = false;
   private placed = false;
   private sent: { x: number; z: number; r: number } | null = null;
@@ -89,7 +91,6 @@ export class FloorLink {
   /** The server last heard `mv` from us, so it shows us walking until a `st`. */
   private walking = false;
   private frame: { x: number; z: number; r: number } | null = null;
-  private readonly raw = new Set<(msg: FloorServerMsg) => void>();
 
   constructor(opts: FloorLinkOptions = {}) {
     const onMessage = (m: unknown) => this.receive(m as FloorServerMsg);
@@ -109,8 +110,7 @@ export class FloorLink {
 
   /** Hear every floor message (the lobby list rides the same socket). */
   subscribe(fn: (msg: FloorServerMsg) => void): () => void {
-    this.raw.add(fn);
-    return () => this.raw.delete(fn);
+    return this.on('message', fn);
   }
 
   /** Send something other than movement (a lobby watch). False while reconnecting. */
@@ -152,11 +152,6 @@ export class FloorLink {
   }
 
   private receive(m: FloorServerMsg): void {
-    this.handle(m);
-    for (const fn of this.raw) fn(m);
-  }
-
-  private handle(m: FloorServerMsg): void {
     switch (m.t) {
       case 'hello': {
         observeServerTime(m.now);
@@ -207,6 +202,7 @@ export class FloorLink {
         this.emit('online', m.n);
         break;
     }
+    this.emit('message', m);
   }
 
   /** Add a player, or refresh one we already have (a reconnect's hello) without losing its track. */

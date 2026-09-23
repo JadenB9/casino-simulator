@@ -30,6 +30,7 @@ import {
 } from '../../../shared/src/protocol.ts';
 import { applyTransfer, buyInStatements, cashOutStatements, refundStatements, moneyOf, type SeatStats } from '../transfer.ts';
 import { Bucket } from '../ratelimit.ts';
+import { closeWith } from '../http.ts';
 import type { CasinoFloor } from '../floor/index.ts';
 
 /** How long a dropped player keeps their seat before being cashed out. */
@@ -315,37 +316,18 @@ export class CasinoTable extends DurableObject<Env> {
       if (!isGameId(game)) return new Response('bad game', { status: 400 });
       this.create({ name: tableName, game, variant: variantOf(game, variant), mode: 'solo', visibility: 'private', pin: null }, now);
     }
-    const pair = new WebSocketPair();
-    const client = pair[0];
-    const server = pair[1];
     const m = this.meta;
-    if (!m || m.closed) {
-      server.accept();
-      server.close(CLOSE.NOT_FOUND, 'no such table');
-      return new Response(null, { status: 101, webSocket: client });
-    }
-    if (m.mode === 'solo' && !tableName.endsWith(`:${accountId}`)) {
-      server.accept();
-      server.close(CLOSE.FORBIDDEN, 'not your table');
-      return new Response(null, { status: 101, webSocket: client });
-    }
+    if (!m || m.closed) return closeWith(CLOSE.NOT_FOUND, 'no such table');
+    if (m.mode === 'solo' && !tableName.endsWith(`:${accountId}`)) return closeWith(CLOSE.FORBIDDEN, 'not your table');
     let mem = this.members.get(accountId);
     if (!mem) {
-      if (this.members.size >= m.config.maxSeats) {
-        server.accept();
-        server.close(CLOSE.FORBIDDEN, 'table full');
-        return new Response(null, { status: 101, webSocket: client });
-      }
+      if (this.members.size >= m.config.maxSeats) return closeWith(CLOSE.FORBIDDEN, 'table full');
       // A private lobby lets in only people who bring its PIN. Members already inside when it
       // went private stay members; everyone else, even someone who saw it listed, needs the PIN.
       if (m.mode === 'multi' && m.visibility === 'private') {
         const refused = this.checkPin(accountId, request.headers.get('x-casino-pin'), now);
-        if (refused) {
-          server.accept();
-          // FORBIDDEN either way: the client must not keep retrying a lobby it can't enter.
-          server.close(CLOSE.FORBIDDEN, refused === 'locked' ? 'too many tries' : 'wrong pin');
-          return new Response(null, { status: 101, webSocket: client });
-        }
+        // FORBIDDEN either way: the client must not keep retrying a lobby it can't enter.
+        if (refused) return closeWith(CLOSE.FORBIDDEN, refused === 'locked' ? 'too many tries' : 'wrong pin');
       }
       mem = this.addMember(accountId, name, look, station, now);
     } else {
@@ -368,6 +350,9 @@ export class CasinoTable extends DurableObject<Env> {
         /* already gone */
       }
     }
+    const pair = new WebSocketPair();
+    const client = pair[0];
+    const server = pair[1];
     this.ctx.acceptWebSocket(server, [`a:${accountId}`]);
     server.serializeAttachment({ accountId } satisfies Att);
     this.send(server, this.snapshotFor(accountId, now));
@@ -559,14 +544,18 @@ export class CasinoTable extends DurableObject<Env> {
     return row;
   }
 
+  /** Who leads after `except`: whoever has been here longest, someone connected if possible. */
+  private nextLeader(except: number): MemberRow | undefined {
+    const rank = (x: MemberRow) => (this.isConnected(x.account_id) ? 0 : 1);
+    return [...this.members.values()].filter((x) => x.account_id !== except).sort((a, b) => rank(a) - rank(b) || a.joined_at - b.joined_at)[0];
+  }
+
   /** Pass the lead from a leader who dropped to whoever has been here longest and still is. */
   private handOffLead(): void {
     const m = this.meta!;
     if (m.mode !== 'multi' || m.leader === null || this.isConnected(m.leader)) return;
-    const next = [...this.members.values()]
-      .filter((x) => x.account_id !== m.leader && this.isConnected(x.account_id))
-      .sort((a, b) => a.joined_at - b.joined_at)[0];
-    if (!next) return;
+    const next = this.nextLeader(m.leader);
+    if (!next || !this.isConnected(next.account_id)) return;
     m.leader = next.account_id;
     this.putMeta('leader', m.leader);
     this.broadcastMembers();
@@ -580,9 +569,7 @@ export class CasinoTable extends DurableObject<Env> {
       this.members.delete(mem.account_id);
       this.clearDeadline(`grace:${mem.account_id}`);
       if (m.leader === mem.account_id) {
-        // Leadership passes to whoever has been here longest, someone connected if possible.
-        const rank = (x: MemberRow) => (this.isConnected(x.account_id) ? 0 : 1);
-        const next = [...this.members.values()].sort((a, b) => rank(a) - rank(b) || a.joined_at - b.joined_at)[0];
+        const next = this.nextLeader(mem.account_id);
         m.leader = next ? next.account_id : null;
         this.putMeta('leader', m.leader);
         this.clearDeadline('leader');
@@ -1181,4 +1168,4 @@ export class CasinoTable extends DurableObject<Env> {
   }
 }
 
-export const HOST_CONSTANTS = { GRACE_MS, RESTART_SHIFT_MS, HEARTBEAT_MS, EMPTY_CLOSE_MS, LEADER_HANDOFF_MS };
+export const HOST_CONSTANTS = { GRACE_MS, RESTART_SHIFT_MS, HEARTBEAT_MS, EMPTY_CLOSE_MS };

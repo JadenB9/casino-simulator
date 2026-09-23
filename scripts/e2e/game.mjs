@@ -1,15 +1,13 @@
 #!/usr/bin/env node
 // Headless walk through the game proper: log in, the menu, the floor, walk, sit at a table solo,
 // buy in, stand up, the cashier. Usage: node scripts/e2e/game.mjs [port] [outdir]
-// Set GPU=1 to use the real GPU (headed Chrome) for frame times.
 
 import { chromium } from 'playwright';
 import { mkdirSync } from 'node:fs';
 
 const [port = '5173', out = '/tmp/casino-game'] = process.argv.slice(2);
 mkdirSync(out, { recursive: true });
-const gpu = process.env.GPU === '1';
-const browser = await chromium.launch(gpu ? { headless: false, args: ['--ignore-gpu-blocklist'] } : { args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
 const errors = [];
 page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));

@@ -12,18 +12,16 @@ import { loadCards } from '../table/cards.ts';
 import { TableStage, type Pose } from '../table/stage.ts';
 import { Sfx } from '../audio/sfx.ts';
 import { createWorld, type FloorWorld, type WorldStation } from '../world/index.ts';
+import { seatWorld } from '../world/stations.ts';
 import { RemotePlayers, type SeatPose } from '../world/remote-players.ts';
 import { FloorLink, byteToYaw } from '../net/presence.ts';
 import { GAMES } from '../games/index.ts';
 import { openTableFlow, PartyPanel, withParty, type TableChoice } from '../ui/lobby/index.ts';
 import { mountHud, mountLogin, mountMenu, openBank, openEditor, openProfile, openSettings, overlayCount, type Hud, type MenuHandle } from '../ui/menu/index.ts';
+import { isTyping } from '../ui/keyboard.ts';
 import { button, modal, toast } from '../ui/kit.ts';
 import { ENGINES } from '../../../shared/src/games/index.ts';
-import { CLOSE } from '../../../shared/src/protocol.ts';
-import type { Look } from '../../../shared/src/look.ts';
-
-/** How long the world's fly-in to a table takes (world/interact.ts), plus a frame of slack. */
-const FLY_IN_MS = 950;
+import { CLOSE, type Profile } from '../../../shared/src/protocol.ts';
 
 export async function boot(): Promise<void> {
   const ui = document.getElementById('ui')!;
@@ -31,6 +29,8 @@ export async function boot(): Promise<void> {
   const engine = new Engine3D(document.getElementById('scene') as HTMLCanvasElement, document.getElementById('labels')!, savedQuality());
   engine.onFrame((dt) => updateTweens(dt));
   const sfx = new Sfx();
+  // A saved login is checked while the floor loads, not after it.
+  const saved = api.savedToken() ? api.me().catch(() => null) : Promise.resolve(null);
   let app: App | null = null;
   const [world] = await Promise.all([
     createWorld(engine, {
@@ -46,15 +46,18 @@ export async function boot(): Promise<void> {
   app = new App(engine, world, sfx, ui);
   // Handles for the console and the headless checks; nothing here can move money.
   (window as unknown as { casino: unknown }).casino = { engine, world, app, session };
-  await app.start();
+  await app.start(saved);
 }
 
 interface OpenTable {
   station: WorldStation;
   session: TableSession;
-  stage: TableStage;
-  enteredAt: number;
+  /** The lobby's party panel; it goes with the view, or with the table if no view ever came. */
+  party: PartyPanel | null;
+  /** Bought in (not just watching). */
   seated: boolean;
+  /** The seat the camera was last moved to. */
+  posed: number | null;
 }
 
 class App {
@@ -67,6 +70,8 @@ class App {
   private passOff: (() => void) | null = null;
   private lookKey = '';
   private stopped = false;
+  /** Where each station's n-th seated player is drawn; stations never move. */
+  private readonly seatCache = new Map<string, SeatPose | null>();
 
   constructor(
     private readonly engine: Engine3D,
@@ -81,16 +86,21 @@ class App {
     });
     world.onEnter((station) => void this.sitDown(station));
     world.onCashier(() => this.openCashier());
-    session.on((p) => this.applyLook(p.look));
+    // Every way a profile arrives (login, the saved session, the editor's save) goes through
+    // session.set, so this one listener keeps your character dressed.
+    session.on((p) => {
+      const key = JSON.stringify(p.look);
+      if (key === this.lookKey) return;
+      this.lookKey = key;
+      world.player.character.setLook(p.look);
+    });
     // The table's own shortcuts. Capture phase, so a key the view uses (Esc closing its rules
     // panel, say) never also reaches the floor behind it.
     addEventListener(
       'keydown',
       (e) => {
         const view = this.table?.session.view;
-        if (!view?.keydown || overlayCount() > 0) return;
-        const t = e.target as HTMLElement | null;
-        if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+        if (!view?.keydown || overlayCount() > 0 || isTyping(e)) return;
         if (view.keydown(e)) {
           e.preventDefault();
           e.stopPropagation();
@@ -100,18 +110,16 @@ class App {
     );
   }
 
-  async start(): Promise<void> {
+  async start(saved: Promise<Profile | null>): Promise<void> {
     this.world.player.setEnabled(false);
-    if (api.savedToken()) {
-      try {
-        session.set(await api.me());
-        this.loggedIn();
-        this.showMenu();
-        return;
-      } catch {
-        api.forgetToken();
-      }
+    const profile = await saved;
+    if (profile) {
+      session.set(profile);
+      this.connectFloor();
+      this.showMenu();
+      return;
     }
+    api.forgetToken();
     this.showLogin();
   }
 
@@ -125,19 +133,12 @@ class App {
       sfx: this.sfx,
       backdrop: () => this.pass(),
       onDone: () => {
-        this.loggedIn();
+        this.connectFloor();
         // Menu first, then close the login, so the backdrop pass keeps running between them.
         this.showMenu();
         login.close();
       },
     });
-  }
-
-  /** Once per login: your look on your character, and your place on the floor. */
-  private loggedIn(): void {
-    const p = session.profile!;
-    this.applyLook(p.look);
-    this.connectFloor();
   }
 
   private showMenu(): void {
@@ -155,18 +156,7 @@ class App {
       onCharacter: () => {
         this.menu = null;
         menu.close();
-        openEditor({
-          root: this.ui,
-          api,
-          session,
-          engine: this.engine,
-          characters: this.world.characterFactory,
-          sfx: this.sfx,
-          onClose: (saved) => {
-            if (saved) this.applyLook(saved);
-            this.showMenu();
-          },
-        });
+        openEditor({ root: this.ui, api, session, engine: this.engine, characters: this.world.characterFactory, sfx: this.sfx, onClose: () => this.showMenu() });
       },
       onProfile: () => openProfile({ root: this.ui, api, session, onClose: () => menu.focus() }),
       onSettings: () => openSettings({ root: this.ui, sfx: this.sfx, quality: this.engine.quality, onClose: () => menu.focus() }),
@@ -179,7 +169,7 @@ class App {
         menu.close();
       },
     });
-    menu.setOnline(this.link ? this.link.onlineCount : null);
+    menu.setOnline(this.link?.onlineCount ?? null);
     this.menu = menu;
   }
 
@@ -214,13 +204,6 @@ class App {
     };
   }
 
-  private applyLook(look: Look): void {
-    const key = JSON.stringify(look);
-    if (key === this.lookKey) return;
-    this.lookKey = key;
-    this.world.player.character.setLook(look);
-  }
-
   // --- the floor ------------------------------------------------------------------------------
 
   private connectFloor(): void {
@@ -239,11 +222,7 @@ class App {
       this.hud?.setOnline(n);
       this.menu?.setOnline(n);
     });
-    link.on('state', (_s, code) => {
-      if (code === CLOSE.REPLACED) this.openedElsewhere();
-      else if (code === CLOSE.UNAUTHORIZED) this.sessionEnded();
-      else if (code === CLOSE.VERSION) this.needsReload();
-    });
+    link.on('state', (_s, code) => void this.endsSession(code));
   }
 
   private disconnectFloor(): void {
@@ -254,21 +233,20 @@ class App {
   }
 
   /**
-   * Where someone sitting at a station is drawn: that game's seats, in the station's frame. At
-   * your own table nobody is drawn: presence knows the table but not the chair, so a guessed chair
-   * could be yours and stand in front of the camera, and the table view already shows everyone
-   * at their real seats.
+   * Where someone sitting at a station is drawn. At the table you're at (from pressing E) nobody
+   * is: presence knows the table but not the chair, so a guessed chair could be yours and stand
+   * in front of the camera, and the table view already shows everyone at their real seats.
    */
   private seatOf(stationId: string, slot: number): SeatPose | null {
-    if (this.table?.station.id === stationId) return null;
-    const st = this.world.stations.find((s) => s.id === stationId);
-    if (!st) return null;
-    const seats = GAMES[st.game].seats(st.variant);
-    const seat = seats[slot % Math.max(1, seats.length)];
-    if (!seat) return null;
-    st.anchor.updateWorldMatrix(true, false);
-    const p = st.anchor.localToWorld(new THREE.Vector3(...seat.position));
-    return { x: p.x, y: p.y, z: p.z, yaw: st.yaw + seat.yaw };
+    if (this.world.seated?.id === stationId) return null;
+    const key = `${stationId}:${slot}`;
+    let pose = this.seatCache.get(key);
+    if (pose === undefined) {
+      const st = this.world.stations.find((s) => s.id === stationId);
+      pose = st ? seatWorld(st, slot) : null;
+      this.seatCache.set(key, pose);
+    }
+    return pose;
   }
 
   private enterFloor(): void {
@@ -280,7 +258,7 @@ class App {
       onProfile: () => openProfile({ root: this.ui, api, session }),
       onMenu: () => void this.backToMenu(),
     });
-    this.hud.setOnline(this.link ? this.link.onlineCount : null);
+    this.hud.setOnline(this.link?.onlineCount ?? null);
   }
 
   private async backToMenu(): Promise<void> {
@@ -298,27 +276,26 @@ class App {
   // --- tables ---------------------------------------------------------------------------------
 
   private async sitDown(station: WorldStation): Promise<void> {
-    const enteredAt = performance.now();
-    const limits = ENGINES[station.game].config(station.variant, 'solo').limits.default;
     const choice = await openTableFlow({
       game: station.game,
       variant: station.variant,
       floor: this.link,
-      limits: { min: limits.min, max: limits.max },
+      limits: ENGINES[station.game].config(station.variant, 'solo').limits.default,
       root: this.ui,
     });
     if (!choice) {
       await this.world.exitTable();
       return;
     }
-    this.openTable(station, choice, enteredAt);
+    this.openTable(station, choice);
   }
 
-  private openTable(station: WorldStation, choice: TableChoice, enteredAt: number): void {
-    const stage = new TableStage(this.engine, station.anchor);
+  private openTable(station: WorldStation, choice: TableChoice): void {
     const me = session.profile!;
     // Declared before the panel so the panel's callbacks can reach the session once it exists.
     let table: TableSession | null = null;
+    // Messages from a table already left (its socket lingers a moment) change nothing here.
+    const current = () => table !== null && this.table?.session === table;
     const party =
       choice.kind === 'lobby'
         ? new PartyPanel({
@@ -334,63 +311,36 @@ class App {
     table = new TableSession(
       { ...choice, game: station.game, variant: station.variant, station: station.id },
       module,
-      stage,
+      new TableStage(this.engine, station.anchor),
       this.ui,
       this.sfx,
       (fn) => this.engine.onFrame(fn),
       (code) => this.tableClosed(table!, code),
       {
-        onLeave: () => void this.leaveTable(),
-        onTable: (snap) => this.poseForSeat(snap.you.seat),
+        onLeave: () => current() && void this.leaveTable(),
+        onTable: (snap) => current() && this.poseForSeat(snap.you.seat),
         onSeat: (m) => {
-          const open = this.table;
-          if (open) open.seated = m.status !== 'watching';
-          this.hud?.setTableChips(m.status === 'watching' ? null : m.stack, m.escrow);
-          if (m.seat !== null && m.status !== 'watching') this.poseForSeat(m.seat);
+          if (!current()) return;
+          const seated = m.status !== 'watching';
+          this.table!.seated = seated;
+          this.hud?.setTableChips(seated ? m.stack : null, m.escrow);
+          if (seated) this.poseForSeat(m.seat);
         },
       },
     );
-    this.table = { station, session: table, stage, enteredAt, seated: false };
+    this.table = { station, session: table, party, seated: false, posed: null };
   }
 
   /**
    * Games whose seats look at different parts of the table (craps' two ends, baccarat's and Three
-   * Card Poker's arcs) get the camera moved to your seat once the table says which it is.
+   * Card Poker's arcs) move the camera to your seat once the table says which it is.
    */
-  private posed: string | null = null;
   private poseForSeat(seat: number | null): void {
     const open = this.table;
-    if (!open || seat === null) return;
-    const key = `${open.station.id}:${seat}`;
-    if (this.posed === key) return;
-    this.posed = key;
-    const module = GAMES[open.station.game];
-    const want = module.playPose(open.station.variant, seat);
-    const first = module.playPose(open.station.variant, null);
-    if (samePose(want, first)) return;
-    const wait = Math.max(0, open.enteredAt + FLY_IN_MS - performance.now());
-    setTimeout(() => {
-      if (this.table !== open) return;
-      this.flyCamera(open.stage.worldPose(want), 0.6);
-    }, wait);
-  }
-
-  private flyCamera(to: { position: THREE.Vector3; target: THREE.Vector3 }, dur: number): void {
-    const cam = this.engine.camera;
-    const from = cam.position.clone();
-    const dir = new THREE.Vector3();
-    cam.getWorldDirection(dir);
-    const fromT = from.clone().addScaledVector(dir, from.distanceTo(to.target));
-    const look = new THREE.Vector3();
-    let t = 0;
-    const off = this.engine.onFrame((dt) => {
-      t = Math.min(1, t + dt / dur);
-      const k = t < 0.5 ? 4 * t ** 3 : 1 - (-2 * t + 2) ** 3 / 2;
-      cam.position.lerpVectors(from, to.position, k);
-      look.lerpVectors(fromT, to.target, k);
-      cam.lookAt(look);
-      if (t >= 1) off();
-    });
+    if (!open || seat === null || open.posed === seat) return;
+    open.posed = seat;
+    const { game, variant } = open.station;
+    if (!samePose(GAMES[game].playPose(variant, seat), GAMES[game].playPose(variant, null))) this.world.aim(seat);
   }
 
   /** Esc at a table: leave, after a word if you have chips down. */
@@ -414,6 +364,7 @@ class App {
         }, { cls: 'primary' }),
         button('Stay', () => m.close(), { cls: 'ghost' }),
       ],
+      () => m.close(),
     );
   }
 
@@ -421,43 +372,42 @@ class App {
     const open = this.table;
     if (!open) return;
     this.table = null;
-    this.posed = null;
+    // The session closes itself (and its stage) once the leave has gone out.
     open.session.leave();
+    open.party?.dispose();
     this.hud?.setTableChips(null);
-    // The view disposes itself when the socket closes (150 ms after the leave goes out).
-    setTimeout(() => open.stage.dispose(), 250);
     await this.world.exitTable();
   }
 
   private tableClosed(closed: TableSession, code?: number): void {
     const open = this.table;
-    // A table already left can still report its socket closing; only the current one matters.
     if (!open || open.session !== closed) return;
-    if (code === CLOSE.REPLACED) return this.openedElsewhere();
-    if (code === CLOSE.UNAUTHORIZED) return this.sessionEnded();
-    if (code === CLOSE.VERSION) return this.needsReload();
+    if (this.endsSession(code)) return;
     this.table = null;
-    this.posed = null;
     open.session.close();
-    open.stage.dispose();
+    open.party?.dispose();
     this.hud?.setTableChips(null);
     toast(code === CLOSE.FORBIDDEN ? "You can't join that table." : code === CLOSE.NOT_FOUND ? 'That table has closed.' : 'Lost the table.', 'err');
     void this.world.exitTable();
   }
 
-  // --- the few ways a session ends ------------------------------------------------------------
+  // --- the ways a whole session ends ------------------------------------------------------------
 
-  private openedElsewhere(): void {
-    this.halt('Opened in another tab', 'The casino is open in another tab or window with this name. Only one can play at a time.');
-  }
-
-  private sessionEnded(): void {
-    api.forgetToken();
-    this.halt('Log in again', 'Your session ended.');
-  }
-
-  private needsReload(): void {
-    this.halt('The casino was updated', 'Reload to play the new version.');
+  /**
+   * A close that ends the session rather than one table: this name opened in another tab, or the
+   * login ran out. (A new version of the game reloads the page from the socket itself.) True if
+   * it was one.
+   */
+  private endsSession(code?: number): boolean {
+    if (code === CLOSE.REPLACED) {
+      this.halt('Opened in another tab', 'The casino is open in another tab or window with this name. Only one can play at a time.');
+    } else if (code === CLOSE.UNAUTHORIZED) {
+      api.forgetToken();
+      this.halt('Log in again', 'Your session ended.');
+    } else {
+      return false;
+    }
+    return true;
   }
 
   private halt(title: string, text: string): void {

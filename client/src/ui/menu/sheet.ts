@@ -6,6 +6,11 @@
 import './menu.css';
 import { el } from '../kit.ts';
 import { icon } from './icons.ts';
+import { GLOBAL_KEYS, focusFirst, holdKeyboard, topPanel } from '../keyboard.ts';
+
+// The keyboard stack itself lives in ui/keyboard.ts (kit dialogs hold it too); these stay
+// exported from here for the screens that already import them.
+export { GLOBAL_KEYS, focusFirst, focusables, holdKeyboard, onOverlayChange, overlayCount } from '../keyboard.ts';
 
 export interface SheetOpts {
   title: string;
@@ -24,114 +29,7 @@ export interface Sheet {
   readonly closed: boolean;
 }
 
-/** Keys that keep working while a sheet has the keyboard. */
-export const GLOBAL_KEYS: ReadonlySet<string> = new Set(['m', 'M', '?']);
-
-/** Anything that owns the keyboard while it's up: a sheet, or a full-screen layer like the editor. */
-interface Layer {
-  readonly panel: HTMLElement;
-  close(): void;
-}
-
-const stack: Layer[] = [];
-const watchers = new Set<(open: number) => void>();
 let seq = 0;
-
-/** How many sheets are open. The floor controller should stand still while this is above 0. */
-export function overlayCount(): number {
-  return stack.length;
-}
-
-export function onOverlayChange(fn: (open: number) => void): () => void {
-  watchers.add(fn);
-  return () => watchers.delete(fn);
-}
-
-function changed(): void {
-  for (const fn of watchers) fn(stack.length);
-}
-
-const FOCUSABLE = 'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
-export function focusables(within: HTMLElement): HTMLElement[] {
-  return [...within.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((e) => e.getClientRects().length > 0 && !e.closest('[hidden]'));
-}
-
-export function focusFirst(within: HTMLElement): void {
-  const list = focusables(within);
-  const pick = list.find((e) => e.dataset.autofocus !== undefined) ?? list[0];
-  (pick ?? within).focus({ preventScroll: true });
-}
-
-function trapTab(panel: HTMLElement, e: KeyboardEvent): void {
-  const list = focusables(panel);
-  if (list.length === 0) {
-    e.preventDefault();
-    return;
-  }
-  const first = list[0]!;
-  const last = list[list.length - 1]!;
-  const active = document.activeElement;
-  if (!panel.contains(active) || active === panel) {
-    e.preventDefault();
-    (e.shiftKey ? last : first).focus();
-  } else if (e.shiftKey && active === first) {
-    e.preventDefault();
-    last.focus();
-  } else if (!e.shiftKey && active === last) {
-    e.preventDefault();
-    first.focus();
-  }
-}
-
-// One capture listener for every sheet: it runs before anything else on the page sees the key.
-let installed = false;
-function install(): void {
-  if (installed) return;
-  installed = true;
-  addEventListener(
-    'keydown',
-    (e) => {
-      const top = stack[stack.length - 1];
-      if (!top) return;
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        e.stopPropagation();
-        top.close();
-        return;
-      }
-      if (e.key === 'Tab') {
-        trapTab(top.panel, e);
-        return;
-      }
-      if (GLOBAL_KEYS.has(e.key)) return;
-      if (!top.panel.contains(e.target as Node)) {
-        // A key aimed at the page behind the sheet: swallow it and bring focus back.
-        e.stopPropagation();
-        focusFirst(top.panel);
-      }
-    },
-    true,
-  );
-}
-
-/**
- * Give the keyboard to a custom layer the way a sheet has it: Esc calls `onEscape` (which may
- * decide not to close), Tab stays inside `panel`, other keys don't reach the page behind.
- * Returns the release.
- */
-export function holdKeyboard(panel: HTMLElement, onEscape: () => void): () => void {
-  install();
-  const layer: Layer = { panel, close: onEscape };
-  stack.push(layer);
-  changed();
-  return () => {
-    const i = stack.indexOf(layer);
-    if (i < 0) return;
-    stack.splice(i, 1);
-    changed();
-  };
-}
 
 let closeLabelId = 0;
 
@@ -147,7 +45,6 @@ export function closeButton(onClick: () => void, label = 'Close'): HTMLButtonEle
 }
 
 export function openSheet(root: HTMLElement, opts: SheetOpts): Sheet {
-  install();
   const scrim = el('div', 'sheet-scrim');
   const panel = el('section', `sheet ${opts.cls ?? ''}`.trim());
   panel.setAttribute('role', 'dialog');
@@ -176,15 +73,14 @@ export function openSheet(root: HTMLElement, opts: SheetOpts): Sheet {
     close() {
       if (closed) return;
       closed = true;
-      const i = stack.indexOf(sheet);
-      if (i >= 0) stack.splice(i, 1);
+      release();
       scrim.classList.add('closing');
       // Removed on a timer rather than animationend: with reduced motion (or a background tab)
       // the animation event may never come, and a scrim left behind would eat every click.
       setTimeout(() => scrim.remove(), 170);
+      const top = topPanel();
       if (before?.isConnected) before.focus({ preventScroll: true });
-      else if (stack.length) focusFirst(stack[stack.length - 1]!.panel);
-      changed();
+      else if (top) focusFirst(top);
       opts.onClose?.();
     },
   };
@@ -201,8 +97,7 @@ export function openSheet(root: HTMLElement, opts: SheetOpts): Sheet {
     if (!GLOBAL_KEYS.has(e.key)) e.stopPropagation();
   });
   root.append(scrim);
-  stack.push(sheet);
-  changed();
+  const release = holdKeyboard(panel, () => sheet.close());
   // The panel itself takes focus (no ring on the close button); Tab goes to its first control.
   queueMicrotask(() => {
     const auto = panel.querySelector<HTMLElement>('[data-autofocus]');

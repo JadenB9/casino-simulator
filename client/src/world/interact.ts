@@ -5,6 +5,7 @@
 
 import * as THREE from 'three';
 import { el } from '../ui/kit.ts';
+import { isTyping } from '../ui/keyboard.ts';
 import type { Player } from './player.ts';
 import type { WorldStation } from './stations.ts';
 import { playPoseWorld } from './stations.ts';
@@ -13,6 +14,7 @@ import type { CashierPoint } from './contract.ts';
 const REACH = 1.6;
 const FLY_IN = 0.9;
 const FLY_OUT = 0.75;
+const AIM = 0.6;
 
 type Target = { kind: 'station'; station: WorldStation; d: number } | { kind: 'cashier'; d: number };
 
@@ -85,6 +87,17 @@ export class Interact {
     const pose = playPoseWorld(s, seat);
     this.flyTo(pose.position, pose.target, FLY_IN, () => {});
     for (const cb of this.enterCbs) cb(s);
+  }
+
+  /**
+   * Point the camera at a seat's own view of the table you're at (craps looks at its end, the
+   * arc tables at their spot). Starts from wherever the camera is, so it can take over the
+   * fly-in halfway.
+   */
+  aim(seat: number): void {
+    if (!this.seated) return;
+    const pose = playPoseWorld(this.seated, seat);
+    this.flyTo(pose.position, pose.target, AIM, () => {});
   }
 
   /** Leave the table: fly back behind the player and hand the controls back. */
@@ -167,8 +180,7 @@ export class Interact {
   }
 
   private onKey = (e: KeyboardEvent): void => {
-    const tgt = e.target as HTMLElement | null;
-    if (tgt && (tgt.tagName === 'INPUT' || tgt.tagName === 'TEXTAREA' || tgt.isContentEditable)) return;
+    if (isTyping(e)) return;
     if (e.code === 'KeyE' && !e.repeat && !this.seated && !this.fly && this.player.isEnabled && this.current) {
       e.preventDefault();
       if (this.current.kind === 'station') this.enter(this.current.station);

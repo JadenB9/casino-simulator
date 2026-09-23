@@ -21,12 +21,18 @@ const TINY_M = 0.035;
 
 type Piece = { geo: THREE.BufferGeometry; matrix: THREE.Matrix4; start: number; count: number };
 
+/** A station, its baked stand-in, and where it stands (stations never move). */
+interface Entry {
+  station: WorldStation;
+  copy: THREE.Object3D;
+  x: number;
+  z: number;
+}
+
 export class StationLod {
-  private readonly far = new Map<WorldStation, THREE.Object3D>();
-  private readonly isFar = new Map<WorldStation, boolean>();
+  private readonly entries: Entry[] = [];
   private readonly solid: THREE.Material;
   private readonly glow: THREE.MeshBasicMaterial;
-  private readonly at = new THREE.Vector3();
   private readonly cam = new THREE.Vector3();
 
   constructor(stations: WorldStation[], quality: Quality) {
@@ -35,33 +41,32 @@ export class StationLod {
         ? new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.62, metalness: 0.18, side: THREE.DoubleSide })
         : new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
     this.glow = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide });
+    const at = new THREE.Vector3();
     for (const s of stations) {
       const copy = this.bake(s.model);
       copy.name = `far:${s.id}`;
       copy.visible = false;
       s.model.parent!.add(copy);
-      this.far.set(s, copy);
-      this.isFar.set(s, false);
+      s.anchor.getWorldPosition(at);
+      this.entries.push({ station: s, copy, x: at.x, z: at.z });
     }
   }
 
   /** Show the real model near the camera and the stand-in further away. */
   update(camera: THREE.Camera, seated: WorldStation | null): void {
     camera.getWorldPosition(this.cam);
-    for (const [s, copy] of this.far) {
-      s.anchor.getWorldPosition(this.at);
-      const d = this.at.distanceTo(this.cam);
-      const was = this.isFar.get(s)!;
-      const far = s !== seated && (was ? d > NEAR_M : d > FAR_M);
+    for (const { station, copy, x, z } of this.entries) {
+      const d2 = (x - this.cam.x) ** 2 + (z - this.cam.z) ** 2;
+      const was = copy.visible;
+      const far = station !== seated && (was ? d2 > NEAR_M * NEAR_M : d2 > FAR_M * FAR_M);
       if (far === was) continue;
-      this.isFar.set(s, far);
-      s.model.visible = !far;
+      station.model.visible = !far;
       copy.visible = far;
     }
   }
 
   dispose(): void {
-    for (const copy of this.far.values()) {
+    for (const { copy } of this.entries) {
       copy.traverse((o) => {
         if (o instanceof THREE.Mesh && !(o instanceof THREE.InstancedMesh)) o.geometry.dispose();
       });
@@ -84,24 +89,23 @@ export class StationLod {
     const solid: (Piece & { color: THREE.Color })[] = [];
     const glow: (Piece & { color: THREE.Color })[] = [];
     const byMaterial = new Map<THREE.Material, Piece[]>();
-    const sphere = new THREE.Sphere();
-    const scale = new THREE.Vector3();
 
     model.traverseVisible((o) => {
       if (!(o instanceof THREE.Mesh) || o instanceof THREE.SkinnedMesh) return;
       const geo = o.geometry as THREE.BufferGeometry;
       if (!geo.attributes.position) return;
-      if (!geo.boundingSphere) geo.computeBoundingSphere();
-      o.matrixWorld.decompose(new THREE.Vector3(), new THREE.Quaternion(), scale);
-      sphere.copy(geo.boundingSphere!);
-      if (sphere.radius * Math.max(scale.x, scale.y, scale.z) < TINY_M) return;
+      // An instanced mesh is measured across all its instances (a ring of bulbs, not one bulb).
+      const holder = o instanceof THREE.InstancedMesh ? o : geo;
+      if (!holder.boundingSphere) holder.computeBoundingSphere();
+      if (holder.boundingSphere!.radius * o.matrixWorld.getMaxScaleOnAxis() < TINY_M) return;
       const matrix = new THREE.Matrix4().multiplyMatrices(toModel, o.matrixWorld);
       const mats = Array.isArray(o.material) ? o.material : [o.material];
       if (o instanceof THREE.InstancedMesh) {
-        // Already one draw call; share it as it is.
+        // Already one draw call; share it as it is, clock and all (bulbs that chase).
         const inst = new THREE.InstancedMesh(o.geometry, o.material, o.count);
         inst.instanceMatrix = o.instanceMatrix;
         if (o.instanceColor) inst.instanceColor = o.instanceColor;
+        inst.onBeforeRender = o.onBeforeRender;
         matrix.decompose(inst.position, inst.quaternion, inst.scale);
         out.add(inst);
         return;
@@ -142,7 +146,7 @@ export class StationLod {
     for (const [mat, pieces] of byMaterial) {
       const mesh = new THREE.Mesh(merge(pieces, 'uv'), mat);
       // A see-through part drawn after the solid ones, as it would be in the live model.
-      mesh.renderOrder = (mat as THREE.Material).transparent ? 1 : 0;
+      mesh.renderOrder = mat.transparent ? 1 : 0;
       out.add(mesh);
     }
     return out;
@@ -178,11 +182,9 @@ function merge(pieces: (Piece & { color?: THREE.Color })[], extra: 'color' | 'uv
   pieces.forEach((p, i) => {
     const { v0, vn } = ranges[i]!;
     const pos = p.geo.attributes.position!;
-    let nrm = p.geo.attributes.normal;
-    if (!nrm) {
-      p.geo.computeVertexNormals();
-      nrm = p.geo.attributes.normal!;
-    }
+    // Normals for a part that has none are worked out on a copy: the live model's geometry is
+    // shared and stays as it is.
+    const nrm = p.geo.attributes.normal ?? withNormals(p.geo).attributes.normal!;
     const uv = p.geo.attributes.uv;
     nm.getNormalMatrix(p.matrix);
     for (let k = 0; k < vn; k++) {
@@ -222,4 +224,10 @@ function merge(pieces: (Piece & { color?: THREE.Color })[], extra: 'color' | 'uv
   g.setIndex(new THREE.BufferAttribute(index, 1));
   g.computeBoundingSphere();
   return g;
+}
+
+function withNormals(geo: THREE.BufferGeometry): THREE.BufferGeometry {
+  const copy = geo.clone();
+  copy.computeVertexNormals();
+  return copy;
 }

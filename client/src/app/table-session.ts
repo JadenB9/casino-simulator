@@ -62,7 +62,8 @@ export class TableSession {
       onMessage: (m) => this.onMessage(m),
       onState: (s, code) => {
         if (s === 'reconnecting') this.kit.say('Reconnecting…', 4000);
-        if (s === 'closed') this.onClosed(code);
+        // A close this session asked for (leaving, closing) isn't news to the app.
+        if (s === 'closed' && !this.ended) this.onClosed(code);
       },
     });
     this.offFrame = onFrame((dt) => this.view?.update(dt));
@@ -82,21 +83,23 @@ export class TableSession {
   }
 
   leave(): void {
-    // Nothing more is asked of a player on the way out (the last seat message says "watching,
-    // $0", which would otherwise offer a buy-in at the table just left).
-    this.leaving = true;
+    // Nothing more is asked of a player on the way out: the kit's prompts close with it (the last
+    // seat message says "watching, $0", which would otherwise offer a buy-in at the table just left).
+    this.ended = true;
     this.kit.dispose();
     this.socket.send({ t: 'leave' });
     setTimeout(() => this.close(), 150);
   }
 
+  /** Close the socket and take the table's view and stage out of the scene. */
   close(): void {
-    this.leaving = true;
+    this.ended = true;
     this.kit.dispose();
     this.socket.close();
     this.offFrame();
     this.view?.dispose();
     this.view = null;
+    this.stage.dispose();
   }
 
   private nextAid(): string {
@@ -157,18 +160,19 @@ export class TableSession {
         this.view?.onError?.(m.code, m.msg);
         break;
       case 'closed':
-        this.onClosed();
+        if (!this.ended) this.onClosed();
         break;
     }
   }
 
   private prompting = false;
-  private leaving = false;
+  /** Left or closed: nothing more is reported to the app. */
+  private ended = false;
 
   async promptBuyIn(): Promise<void> {
     const snap = this.snapshot;
     const p = session.profile;
-    if (this.prompting || this.leaving || !snap || !p) return;
+    if (this.prompting || !snap || !p) return;
     this.prompting = true;
     const amount = await this.kit.askBuyIn({ min: snap.meta.config.buyIn.min, max: snap.meta.config.buyIn.max, balance: p.balance });
     this.prompting = false;

@@ -4,6 +4,7 @@
 
 import * as THREE from 'three';
 import { BETTING_CHIPS, LOAN_AMOUNT, formatMoney, type Cents, type ChipSpec } from '../../../shared/src/money.ts';
+import { holdKeyboard } from './keyboard.ts';
 import { chipTrayCanvases } from '../table/chips.ts';
 import type { TableStage } from '../table/stage.ts';
 
@@ -37,7 +38,11 @@ export function toast(msg: string, kind: 'info' | 'err' = 'info', ms = 3200): vo
   setTimeout(() => t.remove(), ms);
 }
 
-export function modal(title: string, body: (HTMLElement | string)[], actions: HTMLButtonElement[]): { close: () => void; root: HTMLElement } {
+/**
+ * A dialog over the game. It holds the keyboard while it's up (ui/keyboard.ts): Esc calls
+ * `onEscape`, and no key reaches the floor or the table behind it.
+ */
+export function modal(title: string, body: (HTMLElement | string)[], actions: HTMLButtonElement[], onEscape: () => void = () => {}): { close: () => void; root: HTMLElement } {
   const scrim = el('div', 'scrim');
   const box = el('div', 'modal panel');
   box.setAttribute('role', 'dialog');
@@ -48,7 +53,12 @@ export function modal(title: string, body: (HTMLElement | string)[], actions: HT
   box.append(row);
   scrim.append(box);
   document.getElementById('ui')!.append(scrim);
-  const close = () => scrim.remove();
+  const release = holdKeyboard(box, onEscape);
+  (box.querySelector<HTMLElement>('input, .btn.primary') ?? actions[0] ?? box).focus({ preventScroll: true });
+  const close = () => {
+    release();
+    scrim.remove();
+  };
   return { close, root: box };
 }
 
@@ -57,17 +67,7 @@ export function askBuyIn(opts: { min: Cents; max: Cents; balance: Cents; suggest
   return new Promise((resolve) => {
     if (signal?.aborted) return resolve(null);
     const max = Math.min(opts.max, Math.floor(opts.balance / 100) * 100);
-    const picks = [opts.min, opts.min * 5, opts.min * 20, max].filter((v, i, a) => v >= opts.min && v <= max && a.indexOf(v) === i);
-    const input = el('input');
-    input.type = 'number';
-    input.min = String(opts.min / 100);
-    input.max = String(max / 100);
-    input.step = '1';
-    input.value = String(Math.min(max, opts.suggested ?? picks[1] ?? opts.min) / 100);
     const note = el('p', '', `Balance ${formatMoney(opts.balance)}. This table takes ${formatMoney(opts.min)} to ${formatMoney(opts.max)}.`);
-    const broke = max < opts.min ? el('p', '', `The cashier lends ${formatMoney(LOAN_AMOUNT)} once your balance and the chips on every table are all gone.`) : null;
-    const quick = el('div', 'row');
-    for (const v of picks) quick.append(button(formatMoney(v), () => (input.value = String(v / 100)), { cls: 'ghost' }));
     let m: { close: () => void };
     const done = (v: Cents | null) => {
       signal?.removeEventListener('abort', cancel);
@@ -76,7 +76,22 @@ export function askBuyIn(opts: { min: Cents; max: Cents; balance: Cents; suggest
     };
     // The table this was asked for has gone (left, closed): take the question away with it.
     const cancel = () => done(null);
-    signal?.addEventListener('abort', cancel, { once: true });
+    signal?.addEventListener('abort', cancel);
+    const dismiss = () => done(null);
+    if (max < opts.min) {
+      const loan = el('p', '', `The cashier lends ${formatMoney(LOAN_AMOUNT)} once your balance and the chips on every table are all gone.`);
+      m = modal('Not enough to sit down', [note, loan], [button('Close', dismiss)], dismiss);
+      return;
+    }
+    const picks = [opts.min, opts.min * 5, opts.min * 20, max].filter((v, i, a) => v >= opts.min && v <= max && a.indexOf(v) === i);
+    const input = el('input');
+    input.type = 'number';
+    input.min = String(opts.min / 100);
+    input.max = String(max / 100);
+    input.step = '1';
+    input.value = String(Math.min(max, opts.suggested ?? picks[1] ?? opts.min) / 100);
+    const quick = el('div', 'row');
+    for (const v of picks) quick.append(button(formatMoney(v), () => (input.value = String(v / 100)), { cls: 'ghost' }));
     const ok = button(opts.verb ?? 'Buy in', () => {
       const v = Math.round(Number(input.value)) * 100;
       if (!Number.isFinite(v) || v < opts.min || v > max) {
@@ -85,15 +100,9 @@ export function askBuyIn(opts: { min: Cents; max: Cents; balance: Cents; suggest
       }
       done(v);
     }, { cls: 'primary' });
-    m = modal(max < opts.min ? 'Not enough to sit down' : 'Buy in', broke ? [note, broke] : [note, quick, input], max < opts.min ? [button('Close', () => done(null))] : [ok, button('Cancel', () => done(null), { cls: 'ghost' })]);
-    input.focus();
+    m = modal('Buy in', [note, quick, input], [ok, button('Cancel', dismiss, { cls: 'ghost' })], dismiss);
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') ok.click();
-      if (e.key === 'Escape') {
-        // Esc closes the prompt only; it mustn't also reach the floor and stand you up.
-        e.stopPropagation();
-        done(null);
-      }
     });
   });
 }

@@ -96,6 +96,19 @@ export function buildStations(plan: FloorPlan, parent: THREE.Object3D, quality: 
 }
 
 /** The camera pose for playing at a station, in world space (same maths as TableStage.worldPose). */
+/**
+ * Where the `slot`-th person sitting at a station is drawn, in world space: that game's seats in
+ * the station's frame (stations never move, so callers may keep the answer).
+ */
+export function seatWorld(s: WorldStation, slot: number): { x: number; y: number; z: number; yaw: number } | null {
+  const seats = GAMES[s.game].seats(s.variant);
+  const seat = seats[slot % seats.length];
+  if (!seat) return null;
+  s.anchor.updateWorldMatrix(true, false);
+  const p = s.anchor.localToWorld(new THREE.Vector3(...seat.position));
+  return { x: p.x, y: p.y, z: p.z, yaw: s.yaw + seat.yaw };
+}
+
 export function playPoseWorld(s: Station, seat: number | null): { position: THREE.Vector3; target: THREE.Vector3 } {
   const p = GAMES[s.game].playPose(s.variant, seat);
   s.anchor.updateWorldMatrix(true, false);

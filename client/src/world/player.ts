@@ -5,6 +5,7 @@
 // player's head along a ray and pulls in wherever that ray would enter a wall, column or bank.
 
 import * as THREE from 'three';
+import { isTyping } from '../ui/keyboard.ts';
 import type { Character } from './contract.ts';
 import type { Collider } from './collision.ts';
 import { CEILING, PIT_CEILING, inRect, type Rect } from './layout.ts';
@@ -167,8 +168,7 @@ export class Player {
   }
 
   private onKey = (e: KeyboardEvent): void => {
-    const t = e.target as HTMLElement | null;
-    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+    if (isTyping(e)) return;
     if (e.type === 'keydown') {
       if (!this.enabled) return;
       if (MOVE_KEYS.has(e.code)) {

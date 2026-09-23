@@ -13,7 +13,7 @@
   /* The HUD owns the top of the screen; game panels start below it (the party panel, in a
      lobby, sits under the HUD's right-hand buttons). */
   --below-hud: 82px;
-  --below-party: 116px;
+  --below-party: var(--below-hud);
   --ink: #f4efe4;
   --ink-2: #c9c0ad;
   --ink-3: #8f8676;
@@ -39,6 +39,8 @@
 * { box-sizing: border-box; }
 /* Classes like .btn set display, which would otherwise beat the hidden attribute. */
 [hidden] { display: none !important; }
+/* A lobby's party panel sits under the HUD's right-hand buttons; the game's right panels go below it. */
+:root:has(.party:not([hidden])) { --below-party: 116px; }
 html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0908; color: var(--ink); font-family: var(--ui); letter-spacing: 0.01em; }
 button { font: inherit; color: inherit; }
 #scene { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }

@@ -4,6 +4,7 @@
 // top centre belongs to the dealer's line and the bottom-left corner to the site's back chip.
 
 import './hud.css';
+import { isTyping } from '../keyboard.ts';
 import { LOAN_AMOUNT, formatMoney, type Cents } from '../../../../shared/src/money.ts';
 import type { Profile } from '../../../../shared/src/protocol.ts';
 import { el } from '../kit.ts';
@@ -170,8 +171,7 @@ export function mountHud(deps: HudDeps): Hud {
 
   const onKey = (e: KeyboardEvent) => {
     if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
-    const t = e.target as HTMLElement | null;
-    if (t && (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement || t.isContentEditable)) return;
+    if (isTyping(e)) return;
     if (e.key === '?') {
       e.preventDefault();
       toggleShortcuts();

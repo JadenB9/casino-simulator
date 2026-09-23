@@ -54,6 +54,10 @@ export interface FloorWorld extends World {
   onEnter(cb: (station: WorldStation) => void): () => void;
   /** Sit down at a station as if E were pressed there (the app's lobby list can use this). */
   enter(station: Station, seat?: number | null): void;
+  /** At the table you're at, move the camera to this seat's view of it. */
+  aim(seat: number): void;
+  /** The station you're sitting at (from pressing E until you stand up), if any. */
+  readonly seated: WorldStation | null;
   /** The station the player is standing at, if any. */
   readonly focus: WorldStation | null;
   /** Draw calls and triangles of the last frame (renderer.info, counted across the bloom passes). */
@@ -160,6 +164,10 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
     enter: (s, seat = null) => {
       const ws = stations.find((x) => x.id === s.id);
       if (ws) interact.enter(ws, seat);
+    },
+    aim: (seat) => interact.aim(seat),
+    get seated() {
+      return interact.seated;
     },
     get focus() {
       return interact.seated ?? interact.focus;
