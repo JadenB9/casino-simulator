@@ -98,12 +98,14 @@ export class CrapsHud {
     this.net.textContent = net === null ? '' : `Last roll ${net === 0 ? 'even' : formatMoney(net, { sign: true })}`;
   }
 
-  showTip(lines: string[] | null, x: number, y: number): void {
+  /** The hover card: the spot's name, what it pays, your bet on it; `edge` is the Tips line. */
+  showTip(lines: string[] | null, x: number, y: number, edge: string | null = null): void {
     if (!lines) {
       this.tip.hidden = true;
       return;
     }
     this.tip.replaceChildren(...lines.map((l, i) => el('div', i === 0 ? 'craps-tip-head' : 'craps-tip-line', l)));
+    if (edge) this.tip.insertBefore(el('div', 'craps-tip-edge', edge), this.tip.children[2] ?? null);
     this.tip.hidden = false;
     this.tip.style.left = `${Math.min(innerWidth - 260, x + 16)}px`;
     this.tip.style.top = `${Math.max(8, y - 12)}px`;

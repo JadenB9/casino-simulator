@@ -25,3 +25,4 @@
 #ui .craps-tip { pointer-events: none; }
 .craps-tip-head { font-family: var(--serif); font-size: 15px; color: var(--brass-hi); letter-spacing: 0.03em; }
 .craps-tip-line { font-size: 14px; color: var(--ink-2); }
+.craps-tip-edge { font-size: 14px; color: var(--brass-hi); font-variant-numeric: tabular-nums; }
