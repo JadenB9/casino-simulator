@@ -20,7 +20,7 @@ export interface LoginDeps {
   sfx?: Pick<SfxLike, 'play'>;
 }
 
-const RULE = '3 to 16 letters, numbers or _';
+const RULE = '3 to 16 letters, numbers or underscores';
 
 export function mountLogin(deps: LoginDeps): Closable {
   const shell = frontShell(deps.root, 'front-login', deps.backdrop);

@@ -72,9 +72,9 @@ function trapTab(panel: HTMLElement, e: KeyboardEvent): void {
   const first = list[0]!;
   const last = list[list.length - 1]!;
   const active = document.activeElement;
-  if (!panel.contains(active)) {
+  if (!panel.contains(active) || active === panel) {
     e.preventDefault();
-    first.focus();
+    (e.shiftKey ? last : first).focus();
   } else if (e.shiftKey && active === first) {
     e.preventDefault();
     last.focus();
@@ -203,6 +203,10 @@ export function openSheet(root: HTMLElement, opts: SheetOpts): Sheet {
   root.append(scrim);
   stack.push(sheet);
   changed();
-  queueMicrotask(() => focusFirst(panel));
+  // The panel itself takes focus (no ring on the close button); Tab goes to its first control.
+  queueMicrotask(() => {
+    const auto = panel.querySelector<HTMLElement>('[data-autofocus]');
+    (auto ?? panel).focus({ preventScroll: true });
+  });
   return sheet;
 }

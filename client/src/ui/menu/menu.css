@@ -4,6 +4,9 @@
 
 /* ---------------------------------------------------------------- shared parts */
 
+/* A class that sets display (flex, grid) would otherwise beat the hidden attribute. */
+.front [hidden], .sheet [hidden], .hud [hidden], .editor [hidden] { display: none !important; }
+
 .ico { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 .ico .fill { fill: currentColor; stroke: none; }
 
@@ -55,6 +58,8 @@
 .sheet-head { display: flex; align-items: flex-start; gap: 16px; padding: 20px 24px 15px; border-bottom: 1px solid var(--line); }
 .sheet-titles { flex: 1; min-width: 0; }
 .sheet-title { margin: 0; font-family: var(--serif); font-size: 22px; font-weight: 600; line-height: 1.2; letter-spacing: 0.1em; text-transform: uppercase; color: var(--brass-hi); overflow-wrap: anywhere; }
+/* A player's name keeps its own capitals (Cinzel draws lowercase as small capitals). */
+.sheet-title.name, .hud-who { text-transform: none; }
 .sheet-sub { margin: 4px 0 0; font-size: 15px; letter-spacing: 0.04em; color: var(--ink-3); }
 .sheet-sub.err { color: var(--lose); }
 .sheet-body { padding: 18px 24px 22px; overflow: auto; overscroll-behavior: contain; }
