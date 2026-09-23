@@ -234,8 +234,11 @@ export class ChatPanel {
     if (id === 'table' && !this.table) return [];
     const reading = this.visible && this.open && this.active === id;
     const stick = this.atBottom();
+    const epoch = room.log.epoch;
     const fresh = room.log.take(msg.lines, msg.backlog === true, this.deps.me(), reading);
     if (!fresh.length) return fresh;
+    // The room began again (its backlog is older than what we had): draw it from scratch.
+    if (room.log.epoch !== epoch) room.list.replaceChildren(el('p', 'chat-note', NOTES[id]));
     for (const line of fresh) room.list.append(this.lineEl(line));
     trim(room.list);
     if (id === this.active && (stick || fresh.some((l) => l.id === this.deps.me()))) this.toBottom();

@@ -11,6 +11,8 @@ export const KEEP = 150;
 export class RoomLog {
   readonly lines: ChatLine[] = [];
   unread = 0;
+  /** Counts clears: a log drawn at an older epoch has to be drawn again from `lines`. */
+  epoch = 0;
   /** The newest line's number: a backlog after a reconnect skips everything up to it. */
   private last = 0;
 
@@ -21,9 +23,9 @@ export class RoomLog {
    * nothing does while you're `reading` this room.
    */
   take(lines: readonly ChatLine[], backlog: boolean, me: number | null, reading: boolean): ChatLine[] {
-    const first = this.last === 0;
     // A backlog that ends before our newest line is a different room (the storage was reset).
     if (backlog && lines.length && lines[lines.length - 1]!.n < this.last) this.clear();
+    const first = this.last === 0;
     const fresh = lines.filter((l) => l.n > this.last);
     if (!fresh.length) return fresh;
     this.last = fresh[fresh.length - 1]!.n;
@@ -37,6 +39,7 @@ export class RoomLog {
     this.lines.length = 0;
     this.unread = 0;
     this.last = 0;
+    this.epoch++;
   }
 }
 
