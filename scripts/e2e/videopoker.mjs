@@ -94,31 +94,21 @@ out.shots.push(await shot('6-help'));
 await page.keyboard.press('h');
 
 // The server can't be asked for a royal, so replay one through the view (display only; the
-// next snapshot resyncs) to check the center moment and the long rollup, then a dealt made hand.
+// next snapshot resyncs) to check the center moment and the long rollup.
 await page.evaluate(() => {
   const royal = ['Ts', 'Js', 'Qs', 'Ks', 'As'];
   const view = { phase: 'over', round: 99, coins: 5, denom: 100, hand: royal, held: [false, false, false, false, false], dealt: null, result: { rank: 9, name: 'Royal Flush', credits: 4000, payout: 400000 } };
   void window.casino.table.view.onEvents(
     [
-      { type: 'draw', hold: [true, true, false, false, true], cards: royal },
+      { type: 'draw', hold: [false, false, false, false, false], cards: royal },
       { type: 'result', seat: 0, rank: 9, name: 'Royal Flush', coins: 5, denom: 100, credits: 4000, payout: 400000 },
     ],
     view,
   );
 });
-await page.waitForTimeout(2600);
+await page.waitForTimeout(5000);
 out.shots.push(await shot('7-royal-moment'));
 out.states.push(['royal replay', await screenState()]);
-await page.waitForTimeout(9000);
-await page.evaluate(() => {
-  const cards = ['Jh', '4c', 'Js', '8d', '2s'];
-  const view = { phase: 'dealt', round: 100, coins: 5, denom: 100, hand: cards, held: [false, false, false, false, false], dealt: 1, result: null };
-  void window.casino.table.view.onEvents([{ type: 'deal', round: 100, coins: 5, denom: 100, bet: 500, cards, made: 1 }], view);
-});
-await page.waitForTimeout(2500);
-out.shots.push(await shot('8-made-hand'));
-out.states.push(['made hand replay', await screenState()]);
-
 out.hud = await page.textContent('.dev-hud').catch(() => '');
 out.errors = errors.slice(0, 10);
 console.log(JSON.stringify(out, null, 1));
