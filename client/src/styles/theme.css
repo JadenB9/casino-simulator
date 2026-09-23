@@ -70,7 +70,8 @@ button { font: inherit; color: inherit; }
 .money { font-variant-numeric: tabular-nums; }
 
 /* toasts */
-.toasts { position: fixed; top: 64px; left: 50%; transform: translateX(-50%); display: grid; gap: 8px; z-index: 40; }
+/* Below the dealer's line, which takes the first row under the HUD. */
+.toasts { position: fixed; top: calc(var(--below-hud) + 52px); left: 50%; transform: translateX(-50%); display: grid; gap: 8px; z-index: 40; }
 .toast { padding: 9px 14px; font-size: 16px; animation: toast-in 0.25s var(--ease); }
 .toast.err { border-color: rgba(224, 118, 107, 0.6); }
 @keyframes toast-in { from { opacity: 0; transform: translateY(-6px); } }
