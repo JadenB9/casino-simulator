@@ -31,9 +31,13 @@ await page.waitForTimeout(500);
 shots.push(await shot('2-pass-bet'));
 
 const log = [];
+// Software rendering is slow, so wait for the table itself: the roll counted and its animation done.
+const settled = (n) => page.waitForFunction((k) => { const t = window.casino.table.view; return t.v.rolls > k && !t.rolling; }, n, { timeout: 60000 });
 async function roll() {
+  const n = (await view()).rolls;
   await page.keyboard.press('Space');
-  await page.waitForTimeout(5200);
+  await settled(n);
+  await page.waitForTimeout(300);
   const v = await view();
   const last = v.history.at(-1);
   log.push({ dice: last, point: v.point });
@@ -55,10 +59,12 @@ if (v.point !== null) {
   await page.waitForTimeout(600);
   shots.push(await shot('5-bets-down'));
   // throw and catch the dice mid-flight once
+  const n = (await view()).rolls;
   await page.keyboard.press('Space');
   await page.waitForTimeout(900);
   shots.push(await shot('6-dice-flying'));
-  await page.waitForTimeout(4300);
+  await settled(n);
+  await page.waitForTimeout(300);
   shots.push(await shot('7-after-roll'));
   for (let i = 0; i < 3; i++) {
     v = await roll();
