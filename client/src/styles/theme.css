@@ -83,7 +83,8 @@ button { font: inherit; color: inherit; }
 .pill.win { color: var(--win); border-color: rgba(127, 209, 139, 0.6); }
 .pill.lose { color: var(--lose); }
 .pill.push { color: var(--push); }
-@keyframes pill-in { from { opacity: 0; transform: translate(-50%, -30%) scale(0.9); } }
+/* translate/scale, not transform: the label renderer positions pills with transform. */
+@keyframes pill-in { from { opacity: 0; translate: 0 8px; scale: 0.9; } }
 
 /* dealer call line */
 /* Under the HUD, between the game's left and right panels. */
@@ -117,7 +118,7 @@ button { font: inherit; color: inherit; }
 }
 
 /* Tips: one line above the table's controls, and a ring on the control it recommends. */
-.tip-line { position: fixed; left: 50%; bottom: 104px; transform: translateX(-50%); max-width: min(560px, calc(100vw - 32px)); display: flex; gap: 10px; align-items: baseline; padding: 7px 14px; font-size: 15px; color: var(--ink); text-wrap: balance; pointer-events: none; }
+.tip-line { position: fixed; left: 50%; bottom: var(--tip-bottom, 104px); transform: translateX(-50%); max-width: min(560px, calc(100vw - 32px)); display: flex; gap: 10px; align-items: baseline; padding: 7px 14px; font-size: 15px; color: var(--ink); text-wrap: balance; pointer-events: none; }
 .tip-label { font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--brass-hi); }
 .tip-pick { box-shadow: 0 0 0 2px var(--brass-hi), 0 0 16px rgba(241, 213, 154, 0.45) !important; }
 
