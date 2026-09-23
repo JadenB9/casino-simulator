@@ -112,15 +112,16 @@ it('blackjack: from a fresh shoe every round, the edge, the rates and the net di
   report('blackjack 6D S17 DAS LS, basic strategy, fresh shoe every round', PUBLISHED, n, run);
   expect(Math.abs(run.tally.edge - PUBLISHED)).toBeLessThanOrEqual(3 * run.tally.se);
 
-  // §1.6: per round, natural 4.749%, push 8.50% (8.499145%), surrender 4.475%; 2.78 splits and
-  // 10.38 doubles per 100 rounds.
-  const z = (count: number, p: number) => Math.abs(count / n - p) / Math.sqrt((p * (1 - p)) / n);
+  // §1.6: per round, natural 4.749%, push 8.499145%, surrender 4.47514%; 2.78 splits and 10.38
+  // doubles per 100 rounds. `half` is half a unit in the last digit the reference was published
+  // to: at a few hundred million rounds, rounding "2.78" is worth several standard errors.
+  const z = (count: number, p: number, half: number) => Math.max(0, Math.abs(count / n - p) - half) / Math.sqrt((p * (1 - p)) / n);
   const c = run.counts;
-  expect(z(c.naturals, 0.04749)).toBeLessThan(4);
-  expect(z(c.pushes, 0.08499145)).toBeLessThan(4);
-  expect(z(c.surrenders, 0.0447514)).toBeLessThan(4);
-  expect(z(c.splits, 0.0278)).toBeLessThan(4);
-  expect(z(c.doubles, 0.1038)).toBeLessThan(4);
+  expect(z(c.naturals, 0.04749, 0.000005)).toBeLessThan(4);
+  expect(z(c.pushes, 0.08499145, 0)).toBeLessThan(4);
+  expect(z(c.surrenders, 0.0447514, 0)).toBeLessThan(4);
+  expect(z(c.splits, 0.0278, 0.00005)).toBeLessThan(4);
+  expect(z(c.doubles, 0.1038, 0.00005)).toBeLessThan(4);
 
   // §1.6 distribution of the net result (keys are twice the net). Tails beyond ±4 units are
   // merged so every bin expects plenty of rounds.

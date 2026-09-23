@@ -19,6 +19,17 @@ export const DECKS = 6;
 export const PENETRATION = 0.75;
 export const MAX_HANDS = 4;
 
+/**
+ * Which betting circle each seat sits at, counting circles from first base (the dealer's left)
+ * to third base. The first player to sit down (and every solo player) gets the middle circle;
+ * later players fill outward. Cards are dealt and hands played by circle, first base first.
+ */
+export const SPOT_OF_SEAT: readonly number[] = [3, 2, 4, 1, 5, 0, 6];
+
+export function spotOf(seat: number): number {
+  return SPOT_OF_SEAT[seat] ?? seat;
+}
+
 // ---------------------------------------------------------------------------------------------
 // Cards and totals
 
@@ -101,7 +112,7 @@ export interface Spot {
 export type Stage = 'insurance' | 'play' | 'done';
 
 export interface Round {
-  /** First base (the dealer's left) first: the order cards are dealt and hands are played. */
+  /** By circle, first base (the dealer's left) first: the order cards are dealt and hands are played. */
   spots: Spot[];
   /** Up card, hole card, then the dealer's draws. */
   dealer: Card[];
@@ -214,7 +225,7 @@ function settleInsurance(s: Spot, payout: Cents, d: Dealing): void {
  */
 export function startRound(bets: readonly { seat: number; bet: Cents }[], d: Dealing): Round {
   const spots: Spot[] = [...bets]
-    .sort((a, b) => a.seat - b.seat)
+    .sort((a, b) => spotOf(a.seat) - spotOf(b.seat))
     .map(({ seat, bet }) => ({ seat, base: bet, hands: [newHand(bet)], insurance: 'none', insured: 0, wagered: bet, returned: 0, live: bet }));
   const r: Round = { spots, dealer: [], holeUp: false, stage: 'play', turn: null, peeked: false, dealerBlackjack: false };
   for (let i = 0; i < spots.length; i++) dealTo(r, i, 0, d);

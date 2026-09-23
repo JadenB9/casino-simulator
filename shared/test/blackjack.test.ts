@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import type { Card } from '../src/cards.ts';
 import type { GameEvent } from '../src/engine.ts';
 import { engine, BETTING_MS, INSURANCE_MS, TURN_MS, RESULTS_MS, type BlackjackState, type BlackjackView } from '../src/games/blackjack/engine.ts';
-import { handTotal, dealerStands, openShoe, startRound, decideInsurance, play, legalMoves, current, type Dealing, type Move } from '../src/games/blackjack/rules.ts';
+import { handTotal, dealerStands, openShoe, startRound, decideInsurance, play, legalMoves, current, spotOf, SPOT_OF_SEAT, type Dealing, type Move } from '../src/games/blackjack/rules.ts';
 import { basicStrategy } from '../src/games/blackjack/strategy.ts';
 import { TableSim, type SimSeat } from './helpers/table-sim.ts';
 import { seededRng } from './helpers/seeded.ts';
@@ -480,6 +480,11 @@ describe('blackjack table flow', () => {
 });
 
 describe('blackjack multiplayer', () => {
+  it('the seven seats sit at the seven circles, the first one in the middle', () => {
+    expect([...SPOT_OF_SEAT].sort()).toEqual([0, 1, 2, 3, 4, 5, 6]);
+    expect(spotOf(0)).toBe(3);
+  });
+
   it('betting window: closes at the deadline, bets under the minimum come back, betting after it is refused', () => {
     const sim = multi([{ seat: 0, stack: 10_000 }, { seat: 3, stack: 10_000 }]);
     expect(view(sim, null).phase).toBe('betting');
@@ -512,21 +517,23 @@ describe('blackjack multiplayer', () => {
     expect(view(sim, null).phase).toBe('play');
   });
 
-  it('plays from first base and settles right to left', () => {
+  it('plays from first base and settles right to left, by circle', () => {
+    // Seat 0 is the middle circle, seat 2 the one on its third-base side, seat 5 first base.
+    expect([0, 2, 5].map(spotOf)).toEqual([3, 4, 0]);
     const sim = multi([{ seat: 0, stack: 10_000 }, { seat: 2, stack: 10_000 }, { seat: 5, stack: 10_000 }]);
     for (const seat of [0, 2, 5]) sim.act(seat, { type: 'bet', amount: 2500 });
-    rig(sim, 'Ts Th Tc 6d 8s 9h 7c Td 6s');
+    rig(sim, 'Tc Ts Th 6d 7c 8s 9h Td 6s');
     sim.advance(BETTING_MS);
     const deal = events(sim).filter((e) => e.type === 'card' || e.type === 'dealer-card');
-    expect(deal.map((e) => (e.type === 'card' ? e.seat : 'D'))).toEqual([0, 2, 5, 'D', 0, 2, 5, 'D']);
-    expect(view(sim, null).turn).toEqual({ seat: 0, hand: 0 });
-    expect(refused(sim, 2, { type: 'stand' })).toBe('NOT_YOUR_TURN');
-    sim.act(0, { type: 'stand' });
-    expect(events(sim)).toContainEqual({ type: 'turn', seat: 2, hand: 0 });
-    sim.act(2, { type: 'stand' });
+    expect(deal.map((e) => (e.type === 'card' ? e.seat : 'D'))).toEqual([5, 0, 2, 'D', 5, 0, 2, 'D']);
+    expect(view(sim, null).turn).toEqual({ seat: 5, hand: 0 });
+    expect(refused(sim, 0, { type: 'stand' })).toBe('NOT_YOUR_TURN');
     sim.act(5, { type: 'stand' });
+    expect(events(sim)).toContainEqual({ type: 'turn', seat: 0, hand: 0 });
+    sim.act(0, { type: 'stand' });
+    sim.act(2, { type: 'stand' });
     const results = events(sim).filter((e) => e.type === 'result');
-    expect(results.map((e) => e.seat)).toEqual([5, 2, 0]);
+    expect(results.map((e) => e.seat)).toEqual([2, 0, 5]);
     // Dealer 6-T-6 busts: everyone standing wins.
     expect(sim.stack(0)).toBe(12_500);
     expect(sim.rounds.map((r) => r.seat).sort()).toEqual([0, 2, 5]);

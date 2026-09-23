@@ -1,7 +1,7 @@
 // Blackjack at a table: betting windows, turns and timers around the rule core in rules.ts.
 //
 // Solo: bet, then Deal; decisions wait for the player; a bet after the results opens the next
-// round. Multiplayer (seats 0-6, seat 0 is first base on the dealer's left): once the leader
+// round. Multiplayer (seats 0-6 at the seven circles, see SPOT_OF_SEAT): once the leader
 // starts the table a 15 second betting window opens and closes early when everyone with a bet is
 // ready; with an ace up every circle gets 10 seconds to answer insurance; each hand gets 20
 // seconds per decision and stands when the time runs out; results show for 5 seconds, then the
