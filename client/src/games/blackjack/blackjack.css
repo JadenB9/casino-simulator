@@ -1,0 +1,88 @@
+/* Blackjack table controls and the labels pinned to hands. Colors come from the theme tokens. */
+
+/* These panels are flex boxes, which would otherwise override the hidden attribute. */
+.bj-tray[hidden],
+.bj-actions[hidden],
+.bj-insure[hidden],
+.bj-actions .btn[hidden] { display: none; }
+
+.bj-actions,
+.bj-insure {
+  position: fixed;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+}
+.bj-actions .btn { min-width: 104px; height: 44px; font-size: 17px; }
+.bj-insure .btn { height: 42px; }
+.bj-insure-q { font-family: var(--serif); font-size: 18px; letter-spacing: 0.05em; color: var(--brass-hi); padding: 0 8px 0 4px; }
+
+.bj-meters {
+  position: fixed;
+  right: 18px;
+  bottom: 96px;
+  display: flex;
+  gap: 18px;
+  padding: 8px 16px;
+}
+.bj-meter { display: grid; gap: 1px; }
+.bj-meter .label { font-size: 11px; }
+.bj-meter .money { font-size: 21px; font-weight: 600; letter-spacing: 0.02em; }
+.bj-meter .money.up { color: var(--win); }
+.bj-meter .money.down { color: var(--lose); }
+
+/* Hand totals sit on the felt between the cards and the bet. */
+.bj-total {
+  padding: 1px 7px 0;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  background: rgba(12, 10, 8, 0.74);
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.bj-total.bj { color: #1d140a; background: var(--brass); border-color: var(--brass-hi); letter-spacing: 0.1em; }
+.bj-total.bust { color: var(--lose); }
+.bj-total.settled { opacity: 0.7; }
+.bj-total.active { border-color: var(--brass-hi); box-shadow: 0 0 0 1px rgba(241, 213, 154, 0.35), 0 0 12px rgba(241, 213, 154, 0.25); }
+.bj-total.dealer { font-size: 16px; }
+
+.bj-hand-no {
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--glass);
+  color: var(--brass-hi);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  white-space: nowrap;
+}
+
+.bj-name {
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+}
+.bj-name.me { color: var(--brass-hi); }
+
+.bj-note {
+  padding: 2px 7px 1px;
+  border-radius: 3px;
+  background: var(--brass);
+  color: #1d140a;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  white-space: nowrap;
+}
