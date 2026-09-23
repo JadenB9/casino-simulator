@@ -534,3 +534,44 @@ export function leather(quality: Quality): MetalMaps {
   made.set(`${key}:r`, r);
   return { normal: n, roughness: r };
 }
+
+/**
+ * Rolls of chips lying in a rack, one band per roll from the top of the texture down: each chip's
+ * edge with its six inserts turned at random, a fine dark line between chips, and a plain strip
+ * at the left for the rolls' ends.
+ */
+export function chipRolls(rolls: { body: string; spots: string }[], chips: number, quality: Quality): THREE.Texture {
+  return once(`rolls:${rolls.length}:${chips}:${quality}`, () => {
+    const W = quality === 'high' ? 128 : 64;
+    const row = quality === 'high' ? 6 : 4;
+    const band = chips * row;
+    const [c, g] = canvasOf(W, band * rolls.length);
+    let seed = 1234567;
+    const rand = () => {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      return seed / 4294967296;
+    };
+    const spotW = W / 6 / 3;
+    rolls.forEach((r, k) => {
+      for (let i = 0; i < chips; i++) {
+        const y = k * band + i * row;
+        g.fillStyle = r.body;
+        g.fillRect(0, y, W, row);
+        g.fillStyle = r.spots;
+        const phase = rand() * W;
+        for (let s = 0; s < 6; s++) {
+          const x = (phase + (s * W) / 6) % W;
+          if (x < W * 0.08) continue;
+          g.fillRect(x, y, Math.min(spotW, W - x), row);
+        }
+        g.fillStyle = `rgba(0, 0, 0, ${0.25 + 0.15 * rand()})`;
+        g.fillRect(0, y + row - 1, W, 1);
+        g.fillStyle = `rgba(255, 255, 255, ${0.05 * rand()})`;
+        g.fillRect(0, y, W, row - 1);
+      }
+      g.fillStyle = r.body;
+      g.fillRect(0, k * band, Math.ceil(W * 0.04), band);
+    });
+    return texture(c, true);
+  });
+}

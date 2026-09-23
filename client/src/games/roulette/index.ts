@@ -96,7 +96,7 @@ function mountRoulette(ctx: TableViewCtx): TableView {
   const ball = wheel.getObjectByName(BALL_NAME) as THREE.Mesh;
   const modelFelt = stage.anchor.getObjectByName(MODEL_FELT);
   if (modelFelt) modelFelt.visible = false;
-  const felt = layoutFelt(variant, 1400);
+  const felt = layoutFelt(variant, 1400, stage.engine.quality);
   stage.addFelt(felt, FELT_Y);
 
   // state
