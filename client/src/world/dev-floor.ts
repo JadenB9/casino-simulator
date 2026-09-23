@@ -69,7 +69,7 @@ export async function runDevFloor(params: URLSearchParams): Promise<FloorWorld> 
       engine.camera.lookAt(...v.at);
     });
   } else {
-    ui.append(el('div', 'panel world-help', 'WASD or arrows to walk · Shift to run · drag to look · E to sit · Esc to stand'));
+    ui.append(el('div', 'panel world-help', 'WASD or arrows to walk · Shift to run · click to look with the mouse, Esc to let go · or drag to look · E to sit'));
   }
 
   if (params.get('lineup')) lineup(world, engine);

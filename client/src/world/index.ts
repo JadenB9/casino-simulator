@@ -22,6 +22,7 @@ import { Player } from './player.ts';
 import { Interact } from './interact.ts';
 import { StationLod } from './lod.ts';
 import { Bloom, PixelRatio } from './bloom.ts';
+import type { MouseSettings } from './mouse.ts';
 import './world.css';
 
 export type { WorldStation } from './stations.ts';
@@ -45,6 +46,12 @@ export interface WorldOptions {
   onEscape?: () => void;
   /** Loading progress, 0 to 1. */
   onProgress?: (k: number) => void;
+  /**
+   * A further say on whether a click on the floor may capture the mouse. The world already
+   * refuses while seated, while the player is disabled and while a sheet or dialog holds the
+   * keyboard (overlayCount), and lets go when any of those starts.
+   */
+  canCapture?: () => boolean;
 }
 
 export interface FloorWorld extends World {
@@ -65,6 +72,13 @@ export interface FloorWorld extends World {
   /** Place the player (dev views, respawn). */
   teleport(x: number, z: number, heading: number): void;
   quality: Quality;
+  /** Mouse look: sensitivity (1 = default) and whether a click captures the mouse. Kept in localStorage. */
+  readonly mouse: MouseSettings;
+  setMouse(o: Partial<MouseSettings>): void;
+  /** True while a click has captured the mouse for looking around. */
+  readonly mouseCaptured: boolean;
+  /** Let a captured mouse go (something is opening over the floor). */
+  releaseMouse(): void;
 }
 
 export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Promise<FloorWorld> {
@@ -112,7 +126,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
   character.setName('');
   root.add(character.root);
   const canvas = renderer.domElement;
-  const player = new Player(character, engine.camera, col, plan.pit, canvas);
+  const player = new Player(character, engine.camera, col, plan.pit, canvas, () => opts.canCapture?.() ?? true);
   player.spawn(SPAWN.x, SPAWN.z, SPAWN.yaw);
 
   const cashierAnchor = new THREE.Object3D();
@@ -205,6 +219,14 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
     },
     stats: () => ({ calls: lastCalls, triangles: lastTris, programs: renderer.info.programs?.length ?? 0, pixelRatio: renderer.getPixelRatio() }),
     teleport: (x, z, heading) => player.spawn(x, z, heading),
+    get mouse() {
+      return player.mouseSettings;
+    },
+    setMouse: (o) => player.setMouse(o),
+    get mouseCaptured() {
+      return player.captured;
+    },
+    releaseMouse: () => player.release(),
     dispose() {
       lod.dispose();
       interact.dispose();
