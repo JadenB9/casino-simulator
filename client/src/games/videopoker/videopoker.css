@@ -37,6 +37,9 @@
 .vp-status.over { color: #ff4a3d; }
 .vp-status.dim { color: #b9c4ff; }
 .vp-status.info { color: #ffffff; font-size: 26px; letter-spacing: 0.1em; }
+/* A full house and better: the hand's name flashes with its pay row. */
+.vp-status.win { animation: vp-status-win 0.44s steps(1) infinite; }
+@keyframes vp-status-win { 0% { color: #fff49a; text-shadow: 0 0 18px rgba(255, 244, 154, 0.85); } 50% { color: #ffffff; text-shadow: none; } }
 
 /* Cards */
 .vp-cards { display: flex; justify-content: center; gap: 14px; align-items: flex-end; padding-bottom: 6px; }
@@ -49,6 +52,10 @@
 .vp-held { height: 28px; font-size: 26px; line-height: 28px; letter-spacing: 0.14em; color: #ffffff; visibility: hidden; }
 .vp-held.on { visibility: visible; }
 .vp-card { width: 136px; height: 190px; border-radius: 9px; background: #fff; box-shadow: 0 3px 0 #050c40; transform-origin: 50% 50%; }
+/* Tips ring the cards to hold: on the card itself, at the screen's own scale (the kit's ring on the
+   whole slot would be a hairline once the screen is scaled onto the cabinet). */
+.vp-screen .vp-slot.tip-pick { box-shadow: none !important; }
+.vp-slot.tip-pick .vp-card { box-shadow: 0 3px 0 #050c40, 0 0 0 6px #fff49a, 0 0 26px 8px rgba(255, 244, 154, 0.55); }
 
 /* Meters */
 .vp-bar { display: grid; grid-template-columns: 96px 1fr 150px 250px; align-items: center; gap: 10px; padding: 0 16px 0 12px; background: #081159; border-top: 2px solid #1d3fd8; }
@@ -74,27 +81,7 @@
 .vp-help p { margin: 0 0 8px; }
 .vp-help .vp-keys { color: #ffe600; font-size: 18px; letter-spacing: 0.04em; }
 
-/* The center moment, for four of a kind and better only */
-.vp-moment {
-  position: fixed; left: 50%; top: 34%; transform: translate(-50%, -50%);
-  text-align: center; pointer-events: none; white-space: nowrap;
-  padding: 16px 48px 18px; border-radius: var(--radius);
-  background: rgba(12, 9, 6, 0.9); border: 1px solid var(--line-strong); box-shadow: 0 16px 60px rgba(0, 0, 0, 0.6);
-  animation: vp-moment-in 0.5s var(--ease) both;
-}
-.vp-moment.out { animation: vp-moment-out 0.6s ease forwards; }
-.vp-moment .vp-moment-hand {
-  font-family: var(--serif); font-weight: 700; font-size: 60px; letter-spacing: 0.14em; color: var(--brass-hi);
-  text-shadow: 0 2px 0 #3b2a12, 0 0 28px rgba(241, 213, 154, 0.35);
-}
-.vp-moment .vp-moment-amount { margin-top: 8px; font-size: 26px; letter-spacing: 0.22em; color: var(--ink); }
-.vp-moment .vp-moment-amount::before { content: ''; display: block; height: 1px; margin: 0 auto 10px; width: 60%; background: var(--line-strong); }
-/* #ui turns pointer events back on for its children; the moment must never eat a click. */
-#ui .vp-moment { pointer-events: none; }
-@keyframes vp-moment-in { from { opacity: 0; transform: translate(-50%, -46%) scale(0.96); } to { opacity: 1; transform: translate(-50%, -50%); } }
-@keyframes vp-moment-out { to { opacity: 0; transform: translate(-50%, -54%); } }
-
 @media (prefers-reduced-motion: reduce) {
   .vp-row.win > * { animation: none; background: #fff49a; color: #0b1a6e; }
-  .vp-moment, .vp-moment.out { animation: none; }
+  .vp-status.win { animation: none; color: #fff49a; }
 }

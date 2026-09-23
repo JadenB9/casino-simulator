@@ -103,7 +103,8 @@ export class MachineScreen {
     }
   }
 
-  setStatus(text: string, kind: 'hand' | 'over' | 'dim' | 'info' = 'hand'): void {
+  /** 'win' flashes the hand's name, for the pays worth a celebration. */
+  setStatus(text: string, kind: 'hand' | 'win' | 'over' | 'dim' | 'info' = 'hand'): void {
     this.status.textContent = text;
     this.status.className = `vp-status ${kind}`;
   }
@@ -126,6 +127,11 @@ export class MachineScreen {
 
   setHoldable(on: boolean): void {
     for (const s of this.slots) s.root.disabled = !on;
+  }
+
+  /** Ring the cards Tips says to hold (bit i is card i); 0 clears the rings. */
+  pick(mask: number): void {
+    this.slots.forEach((s, i) => s.root.classList.toggle('tip-pick', (mask & (1 << i)) !== 0));
   }
 
   /** Show a card (or the back) with no animation. */
