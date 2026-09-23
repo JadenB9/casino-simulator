@@ -1,0 +1,131 @@
+/* The online games' website, as it shows on the lounge's monitors: a dense dark page in the
+   manner of the big crypto-casino sites (bet panel down the left, the board filling the rest, a
+   bright green action button), not the casino floor's brass-and-felt look. Built at 1280 x 800
+   and mapped onto the monitor by screen.ts; everything here is sized in design pixels. */
+
+.os-screen {
+  --os-bg: #0f1e29;
+  --os-panel: #1a2c38;
+  --os-card: #213743;
+  --os-field: #0f1e29;
+  --os-line: #2f4553;
+  --os-ink: #eef3f8;
+  --os-ink-2: #a7b4c6;
+  --os-ink-3: #6f8196;
+  --os-go: #1fd65f;
+  --os-go-ink: #06210f;
+  --os-cash: #f5b93b;
+  --os-cash-ink: #2a1a00;
+  --os-win: #1fd65f;
+  --os-lose: #ff5a5f;
+  --os-font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --os-num: 'Barlow Condensed', 'Arial Narrow', system-ui, sans-serif;
+  position: absolute; left: 0; top: 0; width: 1280px; height: 800px;
+  transform-origin: 0 0;
+  display: grid; grid-template-rows: 64px 1fr 34px;
+  background: var(--os-bg); color: var(--os-ink);
+  font-family: var(--os-font); font-size: 16px; letter-spacing: 0;
+  overflow: hidden; user-select: none; -webkit-user-select: none;
+}
+.os-screen[hidden] { display: none; }
+.os-screen button { font-family: var(--os-font); }
+
+/* Top bar */
+.os-top {
+  display: grid; grid-template-columns: 220px 1fr auto; align-items: center; gap: 16px;
+  padding: 0 22px; background: var(--os-panel); border-bottom: 1px solid var(--os-line);
+}
+.os-brand { display: flex; align-items: baseline; gap: 6px; }
+.os-brand-mark { font-weight: 800; font-size: 20px; letter-spacing: 0.06em; }
+.os-brand-sub { font-weight: 600; font-size: 12px; letter-spacing: 0.16em; color: var(--os-ink-3); }
+.os-title { font-weight: 700; font-size: 18px; }
+.os-stack {
+  display: flex; align-items: center; gap: 10px; padding: 8px 14px;
+  background: var(--os-field); border: 1px solid var(--os-line); border-radius: 6px;
+}
+.os-stack-label { font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--os-ink-3); }
+.os-stack-value { font-family: var(--os-num); font-size: 22px; font-variant-numeric: tabular-nums; }
+
+/* Body: the bet panel and the board */
+.os-body { display: grid; grid-template-columns: 330px 1fr; min-height: 0; }
+.os-side {
+  display: flex; flex-direction: column; gap: 14px; padding: 18px;
+  background: var(--os-panel); border-right: 1px solid var(--os-line); overflow: hidden;
+}
+.os-main { position: relative; min-width: 0; min-height: 0; overflow: hidden; }
+.os-foot {
+  display: flex; align-items: center; padding: 0 22px; gap: 18px;
+  font-size: 13px; color: var(--os-ink-3); border-top: 1px solid var(--os-line); background: var(--os-panel);
+}
+
+/* Labels and fields shared by every panel control */
+.os-label { font-size: 13px; font-weight: 600; color: var(--os-ink-2); }
+.os-field {
+  display: flex; align-items: center; height: 44px; padding: 0 12px; gap: 8px;
+  background: var(--os-field); border: 2px solid var(--os-line); border-radius: 6px;
+}
+.os-field:focus-within { border-color: #557086; }
+
+/* The bet field */
+.os-bet { display: grid; gap: 6px; }
+.os-bet-head { display: flex; justify-content: space-between; align-items: baseline; }
+.os-bet-range { font-size: 12px; color: var(--os-ink-3); }
+.os-bet-row { display: grid; grid-template-columns: 1fr 48px 48px 58px; gap: 6px; }
+.os-bet-field {
+  display: flex; align-items: center; height: 44px; padding: 0 10px; gap: 4px;
+  background: var(--os-field); border: 2px solid var(--os-line); border-radius: 6px 0 0 6px;
+}
+.os-bet-field:focus-within { border-color: #557086; }
+.os-bet-sign { color: var(--os-ink-3); font-weight: 600; }
+.os-bet-input {
+  width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--os-ink);
+  font-family: var(--os-num); font-size: 22px; font-variant-numeric: tabular-nums;
+}
+.os-chip-btn {
+  height: 44px; border: 0; border-radius: 0; background: var(--os-card); color: var(--os-ink);
+  font-weight: 700; font-size: 15px; cursor: pointer;
+}
+.os-chip-btn:last-child { border-radius: 0 6px 6px 0; }
+.os-chip-btn:hover:not(:disabled) { background: var(--os-line); }
+.os-chip-btn:disabled { color: var(--os-ink-3); cursor: default; }
+
+/* Segmented choices: risk, difficulty, rows, over/under */
+.os-seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; padding: 4px; background: var(--os-field); border-radius: 8px; }
+.os-seg button {
+  height: 38px; border: 0; border-radius: 5px; background: transparent; color: var(--os-ink-2);
+  font-weight: 600; font-size: 14px; cursor: pointer;
+}
+.os-seg button.on { background: var(--os-card); color: var(--os-ink); }
+.os-seg button:disabled { cursor: default; opacity: 0.5; }
+
+/* The main action */
+.os-action {
+  height: 54px; border: 0; border-radius: 6px; font-weight: 800; font-size: 17px; letter-spacing: 0.02em;
+  cursor: pointer; transition: filter 0.12s, transform 0.08s;
+}
+.os-action.go { background: var(--os-go); color: var(--os-go-ink); }
+.os-action.cash { background: var(--os-cash); color: var(--os-cash-ink); }
+.os-action.plain { background: var(--os-card); color: var(--os-ink); }
+.os-action:hover:not(:disabled) { filter: brightness(1.08); }
+.os-action:active:not(:disabled) { transform: translateY(1px); }
+.os-action:disabled { filter: grayscale(0.6) brightness(0.7); cursor: default; }
+.os-action.tip-pick { outline: 3px solid var(--focus, #f1d59a); outline-offset: 2px; }
+
+/* Stat tiles under the board (profit on win, chance, multiplier) */
+.os-stats { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 10px; }
+.os-stat { display: grid; gap: 4px; padding: 10px 12px; background: var(--os-card); border-radius: 6px; }
+.os-stat-label { font-size: 12px; color: var(--os-ink-3); font-weight: 600; }
+.os-stat-value { font-family: var(--os-num); font-size: 22px; font-variant-numeric: tabular-nums; }
+
+/* A result that pops over the board: the multiplier and what it paid */
+.os-result {
+  position: absolute; left: 50%; top: 50%; translate: -50% -50%;
+  display: grid; justify-items: center; gap: 4px; padding: 18px 28px;
+  background: rgba(15, 30, 41, 0.92); border: 3px solid var(--os-win); border-radius: 10px;
+  animation: os-pop 0.22s var(--ease, ease-out);
+}
+.os-result.lose { border-color: var(--os-line); }
+.os-result-mult { font-family: var(--os-num); font-size: 44px; color: var(--os-win); }
+.os-result.lose .os-result-mult { color: var(--os-ink-2); }
+.os-result-paid { font-size: 16px; color: var(--os-ink-2); }
+@keyframes os-pop { from { opacity: 0; scale: 0.85; } }
