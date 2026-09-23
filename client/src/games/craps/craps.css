@@ -1,0 +1,27 @@
+/* Craps table controls. Colours and type come from theme.css tokens. */
+
+.craps-hud { position: fixed; top: 18px; left: 18px; width: 236px; padding: 12px 14px; display: grid; gap: 8px; }
+.craps-puck-line { display: flex; align-items: center; gap: 10px; }
+.craps-puck { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; font-family: var(--ui); font-weight: 600; font-size: 13px; letter-spacing: 0.08em; flex: none; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5); }
+.craps-puck.off { background: #111; color: #f4efe4; border: 2px solid #3a3a3a; }
+.craps-puck.on { background: #f4efe4; color: #111; border: 2px solid #cfc6b2; }
+.craps-phase { font-family: var(--serif); font-size: 16px; letter-spacing: 0.04em; color: var(--brass-hi); }
+.craps-who { font-size: 15px; color: var(--ink-2); }
+.craps-clock { font-family: var(--ui); font-size: 16px; letter-spacing: 0.06em; color: var(--ink); font-variant-numeric: tabular-nums; }
+.craps-history { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px 10px; border-top: 1px solid var(--line); padding-top: 8px; }
+.craps-history:empty { display: none; }
+.craps-roll { display: flex; align-items: center; gap: 3px; opacity: 0.9; }
+.craps-roll:first-child { opacity: 1; }
+.craps-die { width: 20px; height: 20px; display: block; }
+.craps-total { font-family: var(--ui); font-size: 15px; color: var(--ink-2); margin-left: 4px; font-variant-numeric: tabular-nums; }
+.craps-roll.seven .craps-total { color: var(--lose); }
+.craps-net { font-family: var(--ui); font-size: 15px; letter-spacing: 0.04em; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.craps-net:empty { display: none; }
+.craps-net.win { color: var(--win); }
+.craps-net.lose { color: var(--lose); }
+.craps-note { font-size: 14px; color: var(--brass-hi); }
+
+.craps-tip { position: fixed; pointer-events: none; padding: 7px 10px; max-width: 250px; z-index: 20; }
+#ui .craps-tip { pointer-events: none; }
+.craps-tip-head { font-family: var(--serif); font-size: 15px; color: var(--brass-hi); letter-spacing: 0.03em; }
+.craps-tip-line { font-size: 14px; color: var(--ink-2); }
