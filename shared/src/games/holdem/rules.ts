@@ -383,7 +383,11 @@ export function endStreet(h: Hand): { seat: number; amount: Cents } | null {
   return uncalled;
 }
 
-/** Burn one and turn the next street's cards (three for the flop, then one, then one). */
+/**
+ * Burn one and turn the next street's cards (three for the flop, then one, then one). A street
+ * that will be bet starts with no aggressor; an all-in run-out (`closed`) keeps the last one,
+ * because the showdown order goes by the final betting round.
+ */
 export function dealStreet(h: Hand): number[] {
   h.pos++; // burn
   const n = h.street === 0 ? 3 : 1;
@@ -391,6 +395,7 @@ export function dealStreet(h: Hand): number[] {
   h.pos += n;
   h.board.push(...cards);
   h.street = (h.street + 1) as Street;
+  if (!h.closed) h.aggressor = null;
   return cards;
 }
 
