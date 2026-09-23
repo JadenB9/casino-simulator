@@ -1,8 +1,8 @@
 # Table Game Rules and Odds
 
-Blackjack, roulette, craps, baccarat and the Big Six wheel as this casino deals them. For each game this page lists the
-house rules, every bet's payout, its house edge with a source, and the standard deviation (SD) per
-bet. The Monte Carlo tests use the SD to work out how many rounds they need.
+Blackjack, roulette, craps, baccarat and the Big Six wheel as this casino deals them. For each game
+this page lists the house rules, every bet's payout, its house edge with a source, and the standard
+deviation (SD) per bet. The Monte Carlo tests use the SD to work out how many rounds they need.
 
 Researched 2026-09-22. Defaults follow standard Las Vegas Strip practice. Where sources disagree,
 both are shown and one is picked, with the reason.
