@@ -11,13 +11,17 @@
 // floats over the head as a CSS2D label. Emotes are acted out on top of that (gesture): the arms
 // are turned by hand after the mixer has posed them, in the character's own frame, so a wave or
 // a cheer works whatever the bones' local axes are, and a cheer hops.
+//
+// The same hand posing gives the floor's staff their life (world/npcs.ts: a head that turns to
+// look at someone, slow weight shifts, a dealer's arm motions) and seats a player on a chair
+// (sit). Staff wear uniforms: outfits made from the players' models, see the end of this file.
 
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
-import { DEFAULT_LOOK, OUTFITS, SKIN_TONES, type Look } from '../../../shared/src/look.ts';
+import { DEFAULT_LOOK, OUTFITS, SKIN_TONES, type Body, type Look } from '../../../shared/src/look.ts';
 import type { Quality } from '../render/engine3d.ts';
 import type { Character, CharacterFactory } from './contract.ts';
 import type { EmoteId } from '../../../shared/src/protocol.ts';
@@ -90,10 +94,15 @@ export class Characters implements CharacterFactory {
     await this.template(look.body, look.outfit);
   }
 
-  create(look: Look, name: string): Character {
-    const p = new Person(this, look, name);
+  create(look: Look, name: string, opts: PersonOptions = {}): Person {
+    const p = new Person(this, look, name, opts);
     this.live.add(p);
     return p;
+  }
+
+  /** Everyone drawn on the floor who isn't staff (you, other players), shown or not. */
+  *people(): Iterable<Person> {
+    for (const p of this.live) if (!p.staff) yield p;
   }
 
   setQuality(q: Quality): void {
@@ -139,7 +148,8 @@ export class Characters implements CharacterFactory {
 
   private async build(body: string, outfit: string): Promise<Template> {
     const man = await this.manifest;
-    const entry = (body === 'f' ? man.f : man.m)[outfit] ?? man.m.suit!;
+    const uniform = uniformFor(outfit);
+    const entry = (body === 'f' ? man.f : man.m)[uniform ? uniform.base[body === 'f' ? 'f' : 'm'] : outfit] ?? man.m.suit!;
     const gltf = await this.loader.loadAsync(MODEL_BASE + entry.file);
     const parts: THREE.SkinnedMesh[] = [];
     gltf.scene.traverse((o) => {
@@ -150,6 +160,8 @@ export class Characters implements CharacterFactory {
     const geos: THREE.BufferGeometry[] = [];
     const slots: number[] = [];
     const base: number[] = [];
+    /** Per vertex, which part and original material it came from (for uniforms). */
+    const from: { part: string; material: string }[] = [];
     parts.forEach((mesh, i) => {
       const g = mesh.geometry.clone();
       for (const name of Object.keys(g.attributes)) if (!['position', 'normal', 'skinIndex', 'skinWeight'].includes(name)) g.deleteAttribute(name);
@@ -159,9 +171,11 @@ export class Characters implements CharacterFactory {
       const slot = prim && prim.material === mat.name ? prim.slot : (entry.parts[`*/${mat.name}`] ?? null);
       const s = slot ? SLOTS.indexOf(slot) : FIXED;
       const c = mat.color ?? new THREE.Color(1, 1, 1);
+      const src = { part: prim?.part ?? '', material: mat.name };
       for (let k = 0; k < n; k++) {
         slots.push(s);
         base.push(c.r, c.g, c.b);
+        if (uniform) from.push(src);
       }
       geos.push(g);
     });
@@ -178,7 +192,7 @@ export class Characters implements CharacterFactory {
     for (const p of parts) p.removeFromParent();
     merged.computeBoundingSphere();
     const box = new THREE.Box3().setFromObject(gltf.scene);
-    return {
+    const tpl: Template = {
       root: gltf.scene,
       geometry: merged,
       slot: Uint8Array.from(slots),
@@ -186,16 +200,25 @@ export class Characters implements CharacterFactory {
       clips: gltf.animations,
       height: box.max.y - box.min.y,
     };
+    return uniform ? tailor(tpl, joined, uniform, from) : tpl;
   }
+}
+
+export interface PersonOptions {
+  /** Draw the soft shadow under the feet (staff share one instanced set instead). */
+  blob?: boolean;
+  /** Floor staff: left out of people(). */
+  staff?: boolean;
 }
 
 const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
 const _c = new THREE.Color();
 
-class Person implements Character {
+export class Person implements Character {
   readonly root = new THREE.Group();
   readonly tag: CSS2DObject;
+  readonly staff: boolean;
   private model: THREE.Object3D | null = null;
   private mesh: THREE.SkinnedMesh | null = null;
   private colors: THREE.BufferAttribute | null = null;
@@ -211,25 +234,43 @@ class Person implements Character {
   private bones: Partial<Record<BoneKey, THREE.Object3D>> = {};
   /** Bones this frame's gesture turned, and the mixer's pose for them (put back next frame). */
   private readonly posed = new Map<THREE.Object3D, THREE.Quaternion>();
-  private act: { e: EmoteId; t: number } | null = null;
+  private readonly spare = new Map<THREE.Object3D, THREE.Quaternion>();
+  private act: { e: EmoteId | StaffGesture; t: number } | null = null;
   private modelY = 0;
+  // --- posing layers (see the functions after the class) ---
+  /** Where the head looks (world space), and the eased yaw/pitch it has got to. */
+  private gaze: THREE.Vector3 | null = null;
+  private readonly aim = { yaw: 0, pitch: 0 };
+  /** Weight shifts: on with a seed so neighbours don't move in step; the clock that drives them. */
+  private swaySeed: number | null = null;
+  private swayT = 0;
+  /** Seat top above the feet while sitting, and how far the model is lowered for it. */
+  private seatTop: number | null = null;
+  private seated = 0;
+  private legs: { hip: number; thigh: number; shin: number } | null = null;
+  /** Idle clip speed and phase (staff breathe out of step with each other). */
+  private pace: { rate: number; phase: number } | null = null;
 
   constructor(
     private readonly factory: Characters,
     look: Look,
     name: string,
+    opts: PersonOptions = {},
   ) {
     this.look = look;
+    this.staff = opts.staff ?? false;
     this.root.name = 'character';
     const el = document.createElement('div');
     el.className = 'world-tag';
     this.tag = new CSS2DObject(el);
     this.tag.position.set(0, NAME_Y, 0);
     this.root.add(this.tag);
-    const blob = new THREE.Mesh(factory.blobGeometry, factory.blob);
-    blob.position.y = 0.012;
-    blob.renderOrder = 1;
-    this.root.add(blob);
+    if (opts.blob ?? true) {
+      const blob = new THREE.Mesh(factory.blobGeometry, factory.blob);
+      blob.position.y = 0.012;
+      blob.renderOrder = 1;
+      this.root.add(blob);
+    }
     this.setName(name);
     this.setLook(look);
   }
@@ -276,14 +317,41 @@ class Person implements Character {
     if (this.mesh) this.mesh.material = m;
   }
 
-  gesture(e: EmoteId): void {
+  /** Act out an emote, or one of a dealer's motions (StaffGesture). */
+  gesture(e: EmoteId | StaffGesture): void {
     this.act = { e, t: 0 };
+  }
+
+  /** Turn the head (and a little of the neck) toward a point in world space; null looks ahead. */
+  lookAt(p: THREE.Vector3 | null): void {
+    if (p) (this.gaze ??= new THREE.Vector3()).copy(p);
+    else this.gaze = null;
+  }
+
+  /** Slow weight shifts from foot to foot, out of step with anyone given another seed; null stops. */
+  sway(seed: number | null): void {
+    this.swaySeed = seed;
+  }
+
+  /**
+   * Sit on a seat whose top is `seatTop` above the feet (the root's own units: metres unless the
+   * root is scaled): hips and knees bend until the shins hang onto the floor, the model drops
+   * onto the seat and the forearms come forward onto the table's rail. Null stands up again.
+   */
+  sit(seatTop: number | null): void {
+    this.seatTop = seatTop;
+  }
+
+  /** The idle clip's speed (1 = as made) and where in it to start (0-1), so a crowd breathes out of step. */
+  setPace(rate: number, phase: number): void {
+    this.pace = { rate, phase };
+    this.applyPace();
   }
 
   update(dt: number): void {
     if (!this.mixer) {
       // still loading: a gesture made meanwhile runs out rather than playing late
-      if (this.act && (this.act.t += dt) > (GESTURES[this.act.e]?.dur ?? 0)) this.act = null;
+      if (this.act && (this.act.t += dt) > (gestureOf(this.act.e)?.dur ?? 0)) this.act = null;
       return;
     }
     // the mixer only rewrites bones its clips move: undo last frame's gesture first
@@ -300,39 +368,142 @@ class Person implements Character {
     const walk = this.actions[1];
     if (walk) walk.timeScale = 0.85 + 0.3 * Math.min(1, s);
     this.mixer.update(dt);
-    if (this.act) this.perform(dt);
+    // then the hand posing, each layer on top of the last: legs, body, head, arms
+    this.root.updateWorldMatrix(true, false);
+    this.root.getWorldQuaternion(_rootQ).invert();
+    let y = 0;
+    if (this.seatTop !== null) y -= this.sitPose();
+    else if (this.swaySeed !== null) this.swayPose(dt);
+    this.lookPose(dt);
+    if (this.act) y += this.perform(dt);
+    if (this.model) this.model.position.y = this.modelY + y;
   }
 
-  /** Turn the arms (and hop) for the emote being acted out, on top of the mixer's pose. */
-  private perform(dt: number): void {
+  /** Turn the arms for the emote being acted out; returns how high it hops. */
+  private perform(dt: number): number {
     const act = this.act!;
-    const g = GESTURES[act.e];
+    const g = gestureOf(act.e);
     act.t += dt;
     if (!g || act.t >= g.dur || !this.model) {
       this.act = null;
-      if (this.model) this.model.position.y = this.modelY;
-      return;
+      return 0;
     }
     // ease into the pose and back out of it
     const k = smooth(Math.min(1, act.t / 0.22)) * smooth(Math.min(1, (g.dur - act.t) / 0.3));
     const pose = g.pose(act.t);
-    this.root.updateWorldMatrix(true, false);
-    this.root.getWorldQuaternion(_rootQ).invert();
     for (const key of BONE_ORDER) {
       const turn = pose[key];
-      const bone = this.bones[key];
-      if (!turn || !bone?.parent) continue;
-      // the turn is about the character's own axes (x left, y up, z forward): carry it into the
-      // bone's parent frame and put it in front of the bone's local rotation
-      bone.parent.updateWorldMatrix(true, false);
-      bone.parent.getWorldQuaternion(_parentQ).premultiply(_rootQ);
-      _turnQ.setFromEuler(_euler.set(turn[0] * k, turn[1] * k, turn[2] * k, 'YXZ'));
-      _turnQ.premultiply(_invQ.copy(_parentQ).invert()).multiply(_parentQ);
-      this.posed.set(bone, bone.quaternion.clone());
-      bone.quaternion.premultiply(_turnQ);
-      bone.updateMatrixWorld(true);
+      if (turn) this.turn(key, turn, k);
     }
-    this.model.position.y = this.modelY + (pose.hop ?? 0) * k;
+    return (pose.hop ?? 0) * k;
+  }
+
+  /**
+   * Turn one bone about the character's own axes (x left, y up, z forward) on top of its pose
+   * now: the turn is carried into the bone's parent frame and put in front of its local rotation.
+   * The pose before the frame's first turn is kept; update() puts it back.
+   */
+  private turn(key: BoneKey, t: Turn, k = 1): void {
+    const bone = this.bones[key];
+    if (!bone?.parent) return;
+    bone.parent.updateWorldMatrix(true, false);
+    bone.parent.getWorldQuaternion(_parentQ).premultiply(_rootQ);
+    _turnQ.setFromEuler(_euler.set(t[0] * k, t[1] * k, t[2] * k, 'YXZ'));
+    _turnQ.premultiply(_invQ.copy(_parentQ).invert()).multiply(_parentQ);
+    if (!this.posed.has(bone)) {
+      let q = this.spare.get(bone);
+      if (!q) this.spare.set(bone, (q = new THREE.Quaternion()));
+      this.posed.set(bone, q.copy(bone.quaternion));
+    }
+    bone.quaternion.premultiply(_turnQ);
+    bone.updateMatrixWorld(true);
+  }
+
+  /** Head and neck toward the gaze point, within a comfortable reach, eased. */
+  private lookPose(dt: number): void {
+    let yaw = 0;
+    let pitch = 0;
+    if (this.gaze) {
+      const p = this.root.worldToLocal(_v.copy(this.gaze));
+      const flat = Math.hypot(p.x, p.z);
+      yaw = Math.atan2(p.x, p.z);
+      pitch = Math.atan2(EYE_Y - p.y, flat);
+      // nobody turns their head right round: past this, look ahead again
+      if (Math.abs(yaw) > LOOK_GIVE_UP || flat < 0.2) yaw = pitch = 0;
+      yaw = THREE.MathUtils.clamp(yaw, -LOOK_YAW, LOOK_YAW);
+      pitch = THREE.MathUtils.clamp(pitch, -0.3, 0.6);
+    }
+    const k = 1 - Math.exp(-dt * 3.2);
+    this.aim.yaw += (yaw - this.aim.yaw) * k;
+    this.aim.pitch += (pitch - this.aim.pitch) * k;
+    if (Math.abs(this.aim.yaw) + Math.abs(this.aim.pitch) < 1e-4) return;
+    this.turn('neck', [this.aim.pitch * 0.35, this.aim.yaw * 0.4, 0]);
+    this.turn('head', [this.aim.pitch * 0.65, this.aim.yaw * 0.6, 0]);
+  }
+
+  /**
+   * Weight from one foot to the other every few seconds, resting on each: the hips tip (the
+   * standing leg's side up) while the thighs keep the legs upright, the free knee eases forward
+   * and the spine leans back over the feet.
+   */
+  private swayPose(dt: number): void {
+    this.swayT += dt;
+    const t = this.swayT + this.swaySeed! * 7.3;
+    const w = Math.sin((t * Math.PI * 2) / (8.5 + (this.swaySeed! % 1) * 3));
+    const s = Math.sign(w) * Math.sqrt(Math.abs(w));
+    const tip = 0.05 * s;
+    this.turn('hips', [0, 0.035 * s, tip]);
+    this.turn('thighR', [0, 0, -tip]);
+    this.turn('thighL', [0, 0, -tip]);
+    const free = Math.abs(s);
+    const [thigh, shin] = s > 0 ? (['thighR', 'shinR'] as const) : (['thighL', 'shinL'] as const);
+    this.turn(thigh, [-0.07 * free, 0, 0]);
+    this.turn(shin, [0.14 * free, 0, 0]);
+    this.turn('torso', [0, -0.02 * s, -0.8 * tip]);
+    this.turn('chest', [0.012 * Math.sin(t * 0.61), 0.03 * Math.sin(t * 0.37), 0]);
+  }
+
+  /** The sitting pose (see sit()); returns how far the model drops. */
+  private sitPose(): number {
+    const legs = (this.legs ??= this.measureLegs());
+    if (!legs) return 0;
+    // The hip joint rides a hand's width above the seat; the thighs tip forward until the shins,
+    // hanging from the knees, reach the floor (a high stool leaves them bent at the limit).
+    const hipY = this.seatTop! + HIP_OVER_SEAT;
+    const c = THREE.MathUtils.clamp((hipY - legs.shin) / legs.thigh, Math.cos(SIT_BEND_MAX), Math.cos(SIT_BEND_MIN));
+    const bend = Math.acos(c);
+    this.turn('thighR', [-bend, 0, 0]);
+    this.turn('shinR', [bend + 0.1, 0, 0]);
+    this.turn('thighL', [-bend, 0, 0]);
+    this.turn('shinL', [bend + 0.1, 0, 0]);
+    this.turn('torso', [0.1, 0, 0]);
+    // forearms forward and a little in, resting on the rail in front
+    this.turn('upperR', [-0.5, 0, -0.1]);
+    this.turn('upperL', [-0.5, 0, 0.1]);
+    this.turn('lowerR', [-1.05, 0.35, 0]);
+    this.turn('lowerL', [-1.05, -0.35, 0]);
+    return legs.hip - hipY;
+  }
+
+  /** Standing hip height, thigh length and knee height, in the root's frame (for sitting). */
+  private measureLegs(): { hip: number; thigh: number; shin: number } | null {
+    const hip = this.bones.thighR;
+    const knee = this.bones.shinR;
+    if (!this.model || !hip || !knee) return null;
+    this.model.updateWorldMatrix(true, true);
+    const lift = this.model.position.y - this.modelY;
+    const h = this.root.worldToLocal(hip.getWorldPosition(_v)).y - lift;
+    const kp = this.root.worldToLocal(knee.getWorldPosition(_w));
+    const kn = kp.y - lift;
+    const hp = this.root.worldToLocal(hip.getWorldPosition(new THREE.Vector3()));
+    return { hip: h, thigh: hp.distanceTo(kp), shin: kn };
+  }
+
+  private applyPace(): void {
+    const idle = this.actions[0];
+    if (!this.pace || !idle) return;
+    idle.timeScale = this.pace.rate;
+    idle.time = this.pace.phase * idle.getClip().duration;
   }
 
   dispose(): void {
@@ -393,6 +564,9 @@ class Person implements Character {
       return a;
     });
     this.weights = [1, 0, 0];
+    this.spare.clear();
+    this.legs = null;
+    this.applyPace();
     this.update(0);
     this.paint();
   }
@@ -429,7 +603,22 @@ class Person implements Character {
 
 // --- gestures ---------------------------------------------------------------------------------
 
-type BoneKey = 'shoulderR' | 'upperR' | 'lowerR' | 'shoulderL' | 'upperL' | 'lowerL' | 'head';
+type BoneKey =
+  | 'shoulderR'
+  | 'upperR'
+  | 'lowerR'
+  | 'shoulderL'
+  | 'upperL'
+  | 'lowerL'
+  | 'head'
+  | 'neck'
+  | 'hips'
+  | 'torso'
+  | 'chest'
+  | 'thighR'
+  | 'shinR'
+  | 'thighL'
+  | 'shinL';
 const BONE_NAMES: Record<BoneKey, string> = {
   shoulderR: 'Shoulder.R',
   upperR: 'UpperArm.R',
@@ -438,9 +627,27 @@ const BONE_NAMES: Record<BoneKey, string> = {
   upperL: 'UpperArm.L',
   lowerL: 'LowerArm.L',
   head: 'Head',
+  neck: 'Neck',
+  hips: 'Hips',
+  torso: 'Torso',
+  chest: 'Chest',
+  thighR: 'UpperLeg.R',
+  shinR: 'LowerLeg.R',
+  thighL: 'UpperLeg.L',
+  shinL: 'LowerLeg.L',
 };
 /** Parents before children, so each turn starts from its parent's new pose. */
-const BONE_ORDER: BoneKey[] = ['shoulderR', 'upperR', 'lowerR', 'shoulderL', 'upperL', 'lowerL', 'head'];
+const BONE_ORDER: BoneKey[] = ['hips', 'thighR', 'shinR', 'thighL', 'shinL', 'torso', 'chest', 'shoulderR', 'upperR', 'lowerR', 'shoulderL', 'upperL', 'lowerL', 'neck', 'head'];
+
+/** Where the eyes are above the feet, for aiming the head. */
+const EYE_Y = 1.64;
+/** How far the head turns toward what it looks at, and past which it gives up and looks ahead. */
+const LOOK_YAW = 1.15;
+const LOOK_GIVE_UP = 1.9;
+/** Sitting: the hip joint's height over the seat top, and the range the hips bend through. */
+const HIP_OVER_SEAT = 0.1;
+const SIT_BEND_MIN = 1.2;
+const SIT_BEND_MAX = 1.62;
 
 /** Radians about the character's x (left), y (up) and z (forward) axes, applied z, then x, then y. */
 type Turn = [number, number, number];
@@ -489,6 +696,55 @@ const GESTURES: Record<EmoteId, { dur: number; pose: (t: number) => Pose }> = {
   },
 };
 
+/** A dealer's motions at the table, for the table views to call through the world. */
+export type StaffGesture = 'deal' | 'sweep' | 'pay';
+
+/** Up, then down again, between two moments of a gesture (0 outside them). */
+const beat = (t: number, t0: number, t1: number) => (t <= t0 || t >= t1 ? 0 : Math.sin((Math.PI * (t - t0)) / (t1 - t0)));
+
+const STAFF_GESTURES: Record<StaffGesture, { dur: number; pose: (t: number) => Pose }> = {
+  // the deck in the left hand at the waist; the right hand takes a card and sends it out
+  deal: {
+    dur: 1.0,
+    pose: (t) => {
+      const flick = beat(t, 0.32, 0.72);
+      return {
+        torso: [0.07, 0, 0],
+        upperL: [-0.45, 0, 0.05],
+        lowerL: [-1.15, -0.45, 0],
+        upperR: [-0.7 - 0.35 * flick, 0.12, -0.05],
+        lowerR: [-0.95 + 0.6 * flick, 0.3, 0],
+      };
+    },
+  },
+  // the right arm reaches across the layout and draws the chips in toward the rack
+  sweep: {
+    dur: 1.35,
+    pose: (t) => {
+      const u = smooth(Math.min(1, Math.max(0, (t - 0.2) / 0.85)));
+      return {
+        torso: [0.12, 0.12 - 0.22 * u, 0],
+        upperR: [-1.05 + 0.35 * u, 0.55 - 0.85 * u, 0],
+        lowerR: [-0.35 - 0.55 * u, 0.25, 0],
+      };
+    },
+  },
+  // both hands forward, setting a payout down beside a bet
+  pay: {
+    dur: 1.1,
+    pose: (t) => {
+      const push = beat(t, 0.3, 0.8);
+      const upper: Turn = [-0.8 - 0.15 * push, 0.12, -0.04];
+      const lower: Turn = [-0.55 + 0.3 * push, 0.28, 0];
+      return { torso: [0.1 + 0.04 * push, 0, 0], upperR: upper, lowerR: lower, upperL: mirror(upper), lowerL: mirror(lower) };
+    },
+  },
+};
+
+function gestureOf(e: EmoteId | StaffGesture): { dur: number; pose: (t: number) => Pose } | undefined {
+  return (GESTURES as Partial<Record<string, { dur: number; pose: (t: number) => Pose }>>)[e] ?? (STAFF_GESTURES as Partial<Record<string, { dur: number; pose: (t: number) => Pose }>>)[e];
+}
+
 function smooth(x: number): number {
   return x * x * (3 - 2 * x);
 }
@@ -501,3 +757,246 @@ const _euler = new THREE.Euler();
 
 /** Every outfit id per body, for pickers and checks. */
 export const ALL_OUTFITS = OUTFITS;
+
+// --- staff uniforms ------------------------------------------------------------------------------
+//
+// The floor's staff wear outfits made from the players' own models (nothing more to download): a
+// uniform names a base outfit per body and restyles it vertex by vertex, going by the bone each
+// vertex follows. Arm vertices become a white shirt's sleeves under a vest, or stay the jacket's
+// colour; a vest stops at the waist; skin at the neckline goes under a shirt collar; the suit's
+// long tie goes. A bow tie and a brass name badge are added as a few more vertices, skinned like
+// the cloth under them, so a uniformed character is still one mesh and one draw call. The Look
+// colours it as usual: top is the vest or jacket, bottom the trousers, plus skin and hair.
+
+export type UniformId = 'vest' | 'blazer';
+
+/** The Look.outfit that dresses a character in a uniform. */
+export function uniformOutfit(u: UniformId): string {
+  return `staff:${u}`;
+}
+
+interface Uniform {
+  base: Record<Body, string>;
+  /** What the arms are: a white shirt's sleeves (under a vest) or the jacket's own. */
+  sleeves: 'shirt' | 'top';
+  /** A vest ends at the waist: the jacket's skirt over the hips turns trouser-coloured. */
+  waist: boolean;
+  bow: boolean;
+  badge: boolean;
+}
+
+const UNIFORMS: Record<UniformId, Uniform> = {
+  vest: { base: { m: 'suit', f: 'smart' }, sleeves: 'shirt', waist: true, bow: true, badge: true },
+  blazer: { base: { m: 'suit', f: 'smart' }, sleeves: 'top', waist: false, bow: false, badge: true },
+};
+
+function uniformFor(outfit: string): Uniform | null {
+  return outfit.startsWith('staff:') ? (UNIFORMS[outfit.slice(6) as UniformId] ?? null) : null;
+}
+
+// A shirt a shade off white (pure white glows under the pit's spots), a black silk bow tie and a
+// brushed brass badge.
+const SHIRT = new THREE.Color('#dedad0');
+const BOW = new THREE.Color('#141418');
+const BADGE = new THREE.Color('#b8923f');
+
+const HAND = /^(Wrist|Index|Middle|Ring|Pinky|Thumb)/;
+const ARM = /^(UpperArm|LowerArm)/;
+const HIPS = /^(Body|Hips|UpperLeg)$/;
+const TRUNK = /^(Chest|Torso|Abdomen|Shoulder)/;
+
+/** Restyle a loaded outfit into a uniform (see above). The template's arrays are rebuilt. */
+function tailor(tpl: Template, mesh: THREE.SkinnedMesh, u: Uniform, from: { part: string; material: string }[]): Template {
+  const geo = mesh.geometry;
+  const n = tpl.slot.length;
+  tpl.root.updateMatrixWorld(true);
+  // Each vertex at rest in the character's frame (y up, z forward, x to its left), the bone it
+  // mostly follows and how much of it hangs on the arm bones.
+  const at = new Float32Array(n * 3);
+  const v = new THREE.Vector3();
+  for (let i = 0; i < n; i++) mesh.getVertexPosition(i, v).applyMatrix4(mesh.matrixWorld).toArray(at, i * 3);
+  const names = mesh.skeleton.bones.map((b) => b.name.replace(/\./g, ''));
+  const si = geo.getAttribute('skinIndex');
+  const sw = geo.getAttribute('skinWeight');
+  const main: string[] = [];
+  const arm = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    let best = 0;
+    let bw = -1;
+    for (let c = 0; c < 4; c++) {
+      const w = sw.getComponent(i, c);
+      if (ARM.test(names[si.getComponent(i, c)] ?? '')) arm[i]! += w;
+      if (w > bw) {
+        bw = w;
+        best = c;
+      }
+    }
+    main.push(names[si.getComponent(i, best)] ?? '');
+  }
+  const slot = tpl.slot;
+  const base = tpl.base;
+  const TOP = SLOTS.indexOf('top');
+  const SKIN = SLOTS.indexOf('skin');
+  const BOTTOM = SLOTS.indexOf('bottom');
+  const fix = (i: number, c: THREE.Color) => {
+    slot[i] = FIXED;
+    base[i * 3] = c.r;
+    base[i * 3 + 1] = c.g;
+    base[i * 3 + 2] = c.b;
+  };
+  const shirt = (i: number) => (u.sleeves === 'shirt' ? fix(i, SHIRT) : (slot[i] = TOP));
+  const isShirt = new Uint8Array(n);
+  for (let i = 0; i < n; i++) {
+    const body = from[i]!.part.endsWith('_Body');
+    const bone = main[i]!;
+    if (body && from[i]!.material === 'White' && slot[i] === FIXED) {
+      // the suit's shirt front and cuffs
+      fix(i, SHIRT);
+      isShirt[i] = 1;
+    } else if (body && from[i]!.material === 'Tie') {
+      if (u.bow) {
+        fix(i, SHIRT);
+        isShirt[i] = 1;
+      }
+    } else if (body && slot[i] === TOP) {
+      if (arm[i]! >= 0.5) {
+        shirt(i);
+        isShirt[i] = u.sleeves === 'shirt' ? 1 : 0;
+      } else if (u.waist && HIPS.test(bone)) slot[i] = BOTTOM;
+    } else if (body && slot[i] === SKIN && !HAND.test(bone)) {
+      if (arm[i]! >= 0.5) {
+        shirt(i);
+        isShirt[i] = u.sleeves === 'shirt' ? 1 : 0;
+      } else if (TRUNK.test(bone)) {
+        fix(i, SHIRT);
+        isShirt[i] = 1;
+      }
+    }
+  }
+
+  // Where the collar meets the neck, front and centre: the highest shirt at the middle of the chest.
+  let collarY = -Infinity;
+  for (let i = 0; i < n; i++) {
+    if (!isShirt[i] || Math.abs(at[i * 3]!) > 0.03 || at[i * 3 + 2]! <= 0) continue;
+    collarY = Math.max(collarY, at[i * 3 + 1]!);
+  }
+  if (!Number.isFinite(collarY)) return tpl;
+  /** The front of the body near (x, y), and the nearest vertex there (to skin an addition like it). */
+  const front = (x: number, y: number): { z: number; i: number } => {
+    let z = -Infinity;
+    let best = -1;
+    for (let i = 0; i < n; i++) {
+      if (!from[i]!.part.endsWith('_Body')) continue;
+      const dx = at[i * 3]! - x;
+      const dy = at[i * 3 + 1]! - y;
+      if (dx * dx + dy * dy > 0.025 * 0.025) continue;
+      if (at[i * 3 + 2]! > z) {
+        z = at[i * 3 + 2]!;
+        best = i;
+      }
+    }
+    return { z, i: best };
+  };
+
+  const extras: { geo: THREE.BufferGeometry; color: THREE.Color; skin: number }[] = [];
+  if (u.bow) {
+    const y = collarY - 0.022;
+    const f = front(0, y);
+    if (f.i >= 0) extras.push({ geo: bowTie(new THREE.Vector3(0, y, f.z + 0.008)), color: BOW, skin: f.i });
+  }
+  if (u.badge) {
+    // the wearer's left breast, where the vest or jacket is
+    const x = 0.085;
+    const y = collarY - 0.155;
+    const f = front(x, y);
+    if (f.i >= 0) {
+      const g = new THREE.BoxGeometry(0.066, 0.019, 0.005);
+      g.translate(x, y, f.z + 0.004);
+      extras.push({ geo: g, color: BADGE, skin: f.i });
+    }
+  }
+  if (extras.length === 0) return tpl;
+
+  // Carry each addition from the character's frame into the mesh's own (quantized) space, skinned
+  // exactly like the vertex it sits on, so it rides the same bones.
+  const pieces: THREE.BufferGeometry[] = [geo];
+  const slots = Array.from(slot);
+  const bases = Array.from(base);
+  for (const x of extras) {
+    const toMesh = restMatrix(mesh, x.skin).invert();
+    const turn = new THREE.Matrix3().setFromMatrix4(toMesh);
+    const src = x.geo;
+    const count = src.getAttribute('position').count;
+    const out = new THREE.BufferGeometry();
+    for (const name of ['position', 'normal', 'skinIndex', 'skinWeight'] as const) {
+      const a = geo.getAttribute(name) as THREE.BufferAttribute;
+      const Arr = a.array.constructor as new (len: number) => THREE.TypedArray;
+      out.setAttribute(name, new THREE.BufferAttribute(new Arr(count * a.itemSize), a.itemSize, a.normalized));
+    }
+    const pos = out.getAttribute('position');
+    const nor = out.getAttribute('normal');
+    const sk = out.getAttribute('skinIndex');
+    const wt = out.getAttribute('skinWeight');
+    const p = new THREE.Vector3();
+    for (let k = 0; k < count; k++) {
+      p.fromBufferAttribute(src.getAttribute('position'), k).applyMatrix4(toMesh);
+      pos.setXYZ(k, p.x, p.y, p.z);
+      p.fromBufferAttribute(src.getAttribute('normal'), k).applyMatrix3(turn).normalize();
+      nor.setXYZ(k, p.x, p.y, p.z);
+      sk.setXYZW(k, si.getX(x.skin), si.getY(x.skin), si.getZ(x.skin), si.getW(x.skin));
+      wt.setXYZW(k, sw.getX(x.skin), sw.getY(x.skin), sw.getZ(x.skin), sw.getW(x.skin));
+      slots.push(FIXED);
+      bases.push(x.color.r, x.color.g, x.color.b);
+    }
+    out.setIndex(src.getIndex());
+    pieces.push(out);
+    src.dispose();
+  }
+  const joined = mergeGeometries(pieces, false);
+  if (!joined) return tpl;
+  joined.computeBoundingSphere();
+  mesh.geometry = joined;
+  geo.dispose();
+  return { ...tpl, geometry: joined, slot: Uint8Array.from(slots), base: Float32Array.from(bases) };
+}
+
+/** Mesh space to the character's frame, at rest, for a vertex skinned like vertex `j`. */
+function restMatrix(mesh: THREE.SkinnedMesh, j: number): THREE.Matrix4 {
+  const geo = mesh.geometry;
+  const si = geo.getAttribute('skinIndex');
+  const sw = geo.getAttribute('skinWeight');
+  const sum = new THREE.Matrix4().makeScale(0, 0, 0);
+  sum.elements[15] = 0;
+  const m = new THREE.Matrix4();
+  for (let c = 0; c < 4; c++) {
+    const w = sw.getComponent(j, c);
+    if (!w) continue;
+    const b = si.getComponent(j, c);
+    m.multiplyMatrices(mesh.skeleton.bones[b]!.matrixWorld, mesh.skeleton.boneInverses[b]!);
+    for (let e = 0; e < 16; e++) sum.elements[e]! += m.elements[e]! * w;
+  }
+  return new THREE.Matrix4().multiplyMatrices(mesh.matrixWorld, mesh.bindMatrixInverse).multiply(sum).multiply(mesh.bindMatrix);
+}
+
+/** A bow tie centred on `c`, facing +z: a knot and two wings pinched where they meet it. */
+function bowTie(c: THREE.Vector3): THREE.BufferGeometry {
+  const parts: THREE.BufferGeometry[] = [];
+  for (const side of [-1, 1]) {
+    const wing = new THREE.BoxGeometry(0.042, 0.036, 0.01);
+    const pos = wing.getAttribute('position');
+    for (let k = 0; k < pos.count; k++) {
+      // the end at the knot is half as tall as the outer end
+      if (pos.getX(k) * side < 0) pos.setY(k, pos.getY(k) * 0.45);
+    }
+    wing.computeVertexNormals();
+    wing.translate(side * 0.028, 0, 0);
+    parts.push(wing);
+  }
+  const knot = new THREE.BoxGeometry(0.018, 0.02, 0.014);
+  parts.push(knot);
+  for (const p of parts) p.deleteAttribute('uv');
+  const bow = mergeGeometries(parts, false)!;
+  for (const p of parts) p.dispose();
+  bow.translate(c.x, c.y, c.z);
+  return bow;
+}
