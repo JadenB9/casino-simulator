@@ -6,13 +6,18 @@
 // has their own place read once per snapshot. Isolates each keep their own copy; nothing needs
 // them to agree.
 //
-// Every query is indexed (migration 0002; leaderboard.test.ts checks the plans):
-//   richest     balance + in_play, where in_play is what went to tables (the live stack settles
-//               at cash-out)                                  idx_casino_accounts_worth
-//   biggestWin  the largest single-round profit in any game    idx_casino_stats_biggest_win
-//   rounds      rounds summed over every game. No index can order a sum, so this reads
-//               casino_stats once, in primary-key order (account_id, game), which groups each
-//               player without sorting.
+// Reads, and the index each one names (INDEXED BY, so a missing migration fails this route
+// loudly instead of quietly scanning; leaderboard.test.ts checks the plans):
+//   richest     balance + in_play, where in_play is what went to tables (the live stack
+//               settles at cash-out). Top ten: ten index steps. Your place: a count over the
+//               index above you.                              idx_casino_accounts_worth
+//   biggestWin  the largest single-round profit in any one game. Top ten: a bounded prefix of
+//               the index (WIN_ROWS). Your place: a count over the index above you.
+//                                                             idx_casino_stats_biggest_win
+//   rounds      rounds summed over every game. No index can order a sum, so the snapshot reads
+//               casino_stats in primary-key order (account_id, game), which groups each player
+//               without sorting, and keeps every player's total; your place is then your own
+//               sum (a primary-key lookup) counted against those totals in memory.
 //
 // Only names leave here. Account ids stay inside, to tell which row is the asker's.
 
@@ -29,22 +34,24 @@ const MAX_PLACES = 2_000;
  * casino_stats has one row per player per game, so a player fills at most GAMES rows of the
  * biggest_win index. Before the tenth-best player's best row there can only be rows of the nine
  * ahead of them, at most 9 x GAMES, so the first 10 x GAMES rows name every one of the top ten
- * at their best. (Rows are taken in index order, biggest_win then account_id, which is the same
- * tie-break the board uses.)
+ * at their best. (Rows are taken in index order, biggest_win then account_id, which is the
+ * board's own tie-break, so the prefix agrees with a full read even on ties.)
  */
 const GAMES = Object.keys(CATALOG).length;
 export const WIN_ROWS = LEADERBOARD_TOP * GAMES;
 
 export const SQL = {
   richestTop: `
-    SELECT id, name, balance + in_play AS v FROM casino_accounts
+    SELECT id, name, balance + in_play AS v
+      FROM casino_accounts INDEXED BY idx_casino_accounts_worth
      WHERE balance + in_play > 0
      ORDER BY balance + in_play DESC, id
      LIMIT ?1`,
   biggestWinTop: `
     SELECT best.id AS id, a.name AS name, best.v AS v
       FROM (SELECT account_id AS id, MAX(biggest_win) AS v
-              FROM (SELECT account_id, biggest_win FROM casino_stats
+              FROM (SELECT account_id, biggest_win
+                      FROM casino_stats INDEXED BY idx_casino_stats_biggest_win
                      WHERE biggest_win > 0
                      ORDER BY biggest_win DESC, account_id
                      LIMIT ?2)
@@ -62,25 +69,27 @@ export const SQL = {
              LIMIT ?1) AS most
       JOIN casino_accounts AS a ON a.id = most.id
      ORDER BY most.v DESC, most.id`,
-  // One player's value and how many players are strictly ahead of it.
+  /** Every player's rounds total, for counting who is ahead of an asker. */
+  roundsTotals: `
+    SELECT SUM(rounds) AS v FROM casino_stats
+     GROUP BY account_id
+    HAVING SUM(rounds) > 0`,
+  // One player's value, and (richest, biggestWin) how many players are strictly ahead of it.
   richestPlace: `
     SELECT me.balance + me.in_play AS v,
-           (SELECT COUNT(*) FROM casino_accounts AS o
+           (SELECT COUNT(*) FROM casino_accounts AS o INDEXED BY idx_casino_accounts_worth
              WHERE o.balance + o.in_play > me.balance + me.in_play) AS ahead
       FROM casino_accounts AS me
      WHERE me.id = ?1`,
   biggestWinPlace: `
     SELECT me.v AS v,
-           (SELECT COUNT(DISTINCT account_id) FROM casino_stats WHERE biggest_win > me.v) AS ahead
+           (SELECT COUNT(DISTINCT account_id) FROM casino_stats INDEXED BY idx_casino_stats_biggest_win
+             WHERE biggest_win > me.v) AS ahead
       FROM (SELECT COALESCE(MAX(biggest_win), 0) AS v FROM casino_stats WHERE account_id = ?1) AS me`,
   roundsPlace: `
-    SELECT me.v AS v,
-           (SELECT COUNT(*) FROM (SELECT SUM(rounds) AS n FROM casino_stats GROUP BY account_id)
-             WHERE n > me.v) AS ahead
-      FROM (SELECT COALESCE(SUM(rounds), 0) AS v FROM casino_stats WHERE account_id = ?1) AS me`,
+    SELECT COALESCE(SUM(rounds), 0) AS v, NULL AS ahead FROM casino_stats WHERE account_id = ?1`,
 } as const;
 
-const TOP_SQL: Record<LeaderboardId, string> = { richest: SQL.richestTop, biggestWin: SQL.biggestWinTop, rounds: SQL.roundsTop };
 const PLACE_SQL: Record<LeaderboardId, string> = { richest: SQL.richestPlace, biggestWin: SQL.biggestWinPlace, rounds: SQL.roundsPlace };
 
 interface Ranked {
@@ -98,6 +107,8 @@ interface Place {
 interface Snapshot {
   at: number;
   top: Record<LeaderboardId, Ranked[]>;
+  /** Every player's rounds total, ascending. */
+  rounds: number[];
   places: Map<number, Partial<Record<LeaderboardId, Place>>>;
 }
 
@@ -118,22 +129,47 @@ function ranked(rows: { id: number; name: string; v: number }[]): Ranked[] {
   return out;
 }
 
-async function readTop(db: D1Database, now: number): Promise<Snapshot> {
-  const results = await db.batch<{ id: number; name: string; v: number }>(
-    LEADERBOARDS.map((b) => (b === 'biggestWin' ? db.prepare(TOP_SQL[b]).bind(LEADERBOARD_TOP, WIN_ROWS) : db.prepare(TOP_SQL[b]).bind(LEADERBOARD_TOP))),
-  );
-  const top = {} as Record<LeaderboardId, Ranked[]>;
-  LEADERBOARDS.forEach((b, i) => (top[b] = ranked(results[i]!.results)));
-  return { at: now, top, places: new Map() };
+/** How many of the ascending `sorted` are greater than `v`. */
+function countAbove(sorted: number[], v: number): number {
+  let lo = 0;
+  let hi = sorted.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (sorted[mid]! > v) hi = mid;
+    else lo = mid + 1;
+  }
+  return sorted.length - lo;
 }
 
-async function readPlaces(db: D1Database, accountId: number, boards: LeaderboardId[]): Promise<Partial<Record<LeaderboardId, Place>>> {
-  const results = await db.batch<{ v: number; ahead: number }>(boards.map((b) => db.prepare(PLACE_SQL[b]).bind(accountId)));
+async function readTop(db: D1Database, now: number): Promise<Snapshot> {
+  const [richest, biggestWin, rounds, totals] = await db.batch([
+    db.prepare(SQL.richestTop).bind(LEADERBOARD_TOP),
+    db.prepare(SQL.biggestWinTop).bind(LEADERBOARD_TOP, WIN_ROWS),
+    db.prepare(SQL.roundsTop).bind(LEADERBOARD_TOP),
+    db.prepare(SQL.roundsTotals),
+  ]);
+  type Row = { id: number; name: string; v: number };
+  return {
+    at: now,
+    top: {
+      richest: ranked(richest!.results as Row[]),
+      biggestWin: ranked(biggestWin!.results as Row[]),
+      rounds: ranked(rounds!.results as Row[]),
+    },
+    rounds: (totals!.results as { v: number }[]).map((r) => r.v).sort((a, b) => a - b),
+    places: new Map(),
+  };
+}
+
+async function readPlaces(db: D1Database, snap: Snapshot, accountId: number, boards: LeaderboardId[]): Promise<Partial<Record<LeaderboardId, Place>>> {
+  const results = await db.batch<{ v: number; ahead: number | null }>(boards.map((b) => db.prepare(PLACE_SQL[b]).bind(accountId)));
   const out: Partial<Record<LeaderboardId, Place>> = {};
   boards.forEach((b, i) => {
     const row = results[i]!.results[0];
+    const value = row?.v ?? 0;
     // Nothing to rank (no money, no win, no rounds, or the account is gone): no place.
-    out[b] = row && row.v > 0 ? { rank: row.ahead + 1, value: row.v } : { rank: null, value: row?.v ?? 0 };
+    if (value <= 0) out[b] = { rank: null, value: 0 };
+    else out[b] = { rank: 1 + (b === 'rounds' ? countAbove(snap.rounds, value) : row!.ahead!), value };
   });
   return out;
 }
@@ -147,7 +183,7 @@ export async function leaderboard(db: D1Database, asker: { id: number; name: str
   let places = snap.places.get(asker.id) ?? {};
   const missing = LEADERBOARDS.filter((b) => !inTop(b) && !places[b]);
   if (missing.length > 0) {
-    places = { ...places, ...(await readPlaces(db, asker.id, missing)) };
+    places = { ...places, ...(await readPlaces(db, snap, asker.id, missing)) };
     if (snap.places.size < MAX_PLACES || snap.places.has(asker.id)) snap.places.set(asker.id, places);
   }
 
