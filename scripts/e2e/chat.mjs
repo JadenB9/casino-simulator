@@ -5,6 +5,7 @@
 // unread counts and previews on a closed dock, a bubble next to an emote, hiding chat, a private
 // lobby's own room, a phone-width box, and the server's mute. Screenshots go to <outDir>.
 // Usage: node scripts/e2e/chat.mjs [port] [outDir]   (PORT_BASE=<port> npm run dev first)
+// On a busy machine: BOOT_MS (loading the floor, default 5 min) and STEP_MS (the least any wait allows).
 
 import { chromium } from 'playwright';
 import { mkdirSync } from 'node:fs';
@@ -21,6 +22,8 @@ const check = (ok, what) => {
   log(`${ok ? 'ok  ' : 'FAIL'} ${what}`);
 };
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+/** A wait's timeout, stretched on a busy machine (STEP_MS). */
+const T = (ms) => ({ timeout: Math.max(ms, Number(process.env.STEP_MS ?? 0)) });
 
 const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 
@@ -28,18 +31,19 @@ async function player(name) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
   await ctx.addInitScript((q) => localStorage.setItem('casino.quality', q), process.env.QUALITY ?? 'low');
   const page = await ctx.newPage();
+  page.setDefaultTimeout(Math.max(30_000, Number(process.env.STEP_MS ?? 0)));
   page.on('console', (m) => {
     if (m.type() === 'error' && !/404|Failed to load resource/.test(m.text())) errors.push(`${name}: ${m.text()}`);
   });
   page.on('pageerror', (e) => errors.push(`${name}: ${e}`));
   await page.goto(`http://localhost:${port}/casino/`);
-  await page.waitForSelector('.name-input', { timeout: 180_000 });
+  await page.waitForSelector('.name-input', { timeout: Number(process.env.BOOT_MS ?? 300_000) });
   await page.fill('.name-input', name);
   await page.click('.enter-btn');
-  await page.waitForSelector('.menu-item', { timeout: 20_000 });
+  await page.waitForSelector('.menu-item', T(20_000));
   await page.click('.menu-item >> nth=0');
-  await page.waitForSelector('.hud', { timeout: 20_000 });
-  await page.waitForSelector('.chat-dock', { timeout: 10_000 });
+  await page.waitForSelector('.hud', T(20_000));
+  await page.waitForSelector('.chat-dock', T(10_000));
   const id = await page.evaluate(() => window.casino.session.profile.id);
   return { page, name, id };
 }
@@ -53,7 +57,7 @@ const bubbles = (p) => texts(p, '#labels .say-text');
 /** Type a line the way a player does: T, the words, Enter. */
 async function say(p, text, key = 't') {
   await p.page.keyboard.press(key);
-  await p.page.waitForSelector('.chat.typing', { timeout: 3000 });
+  await p.page.waitForSelector('.chat.typing', T(3000));
   await p.page.keyboard.type(text);
   await p.page.keyboard.press('Enter');
   // The client's own limit is a little under the server's one a second.
@@ -65,34 +69,36 @@ async function openLobby(p, station) {
     const w = window.casino.world;
     w.enter(w.stations.find((s) => s.id === id));
   }, station);
-  await p.page.waitForSelector('.lobby-choice', { timeout: 10_000 });
+  await p.page.waitForSelector('.lobby-choice', T(10_000));
   await p.page.keyboard.press('m');
-  await p.page.waitForSelector('.lobby-pin-input', { timeout: 10_000 });
+  await p.page.waitForSelector('.lobby-pin-input', T(10_000));
 }
 
 try {
   const a = await player(`chat_al_${tag}`);
   const b = await player(`chat_bo_${tag}`);
   log(`logged in ${a.name} (${a.id}) and ${b.name} (${b.id})`);
-  await a.page.waitForFunction((id) => window.casino.app.remotes?.drawn?.has(id), b.id, { timeout: 15_000 });
-  await b.page.waitForFunction((id) => window.casino.app.remotes?.drawn?.has(id), a.id, { timeout: 15_000 });
+  await a.page.waitForFunction((id) => window.casino.app.remotes?.drawn?.has(id), b.id, T(15_000));
+  await b.page.waitForFunction((id) => window.casino.app.remotes?.drawn?.has(id), a.id, T(15_000));
   // A stands a few steps in front of B, facing B's camera.
   await a.page.evaluate(() => window.casino.world.teleport(0.5, 9.4, 0));
   await wait(1500);
 
   // --- the floor: a line, the bubble over the speaker, the log --------------------------------
-  await say(a, 'Anyone up for blackjack?');
-  await b.page.waitForFunction(() => [...document.querySelectorAll('#labels .say-text')].some((e) => e.textContent === 'Anyone up for blackjack?'), null, { timeout: 5000 });
-  await wait(500);
-  await shot(b, 'chat-1-bubble-b');
-  await shot(a, 'chat-1-bubble-a');
+  // Long enough to stay up a while (bubbles last longer for longer lines): screenshots are slow.
+  const first = 'Anyone up for blackjack? Two seats open at the table in the middle';
+  await say(a, first);
+  await b.page.waitForFunction((t) => [...document.querySelectorAll('#labels .say-text')].some((e) => e.textContent === t), first, T(5_000));
+  // Read everything first; the previews and bubbles are on timers.
   results.bubbleOnB = await bubbles(b);
   results.bubbleOnA = await bubbles(a);
-  check(results.bubbleOnA.includes('Anyone up for blackjack?'), 'the speaker sees their own bubble');
-  const bLog = await texts(b, '#chat-list-floor .chat-line');
-  check(bLog.some((t) => t === `${a.name}Anyone up for blackjack?`), 'the other player has the line in the floor log');
   results.badgeB = await b.page.textContent('.chat-dock .chat-badge');
   results.peeksB = await texts(b, '.chat-peek');
+  const bLog = await texts(b, '#chat-list-floor .chat-line');
+  await shot(b, 'chat-1-bubble-b');
+  await shot(a, 'chat-1-bubble-a');
+  check(results.bubbleOnA.includes(first), 'the speaker sees their own bubble');
+  check(bLog.some((t) => t === `${a.name}${first}`), 'the other player has the line in the floor log');
   check(results.badgeB === '1' && results.peeksB.length === 1, 'a closed dock counts the line and previews it');
 
   // --- typing holds the keyboard ------------------------------------------------------------------
@@ -136,18 +142,19 @@ try {
   check(await b.page.isHidden('.chat-dock .chat-badge'), 'opening the box reads the room');
   await say(b, 'Sure, send me the PIN', 'Enter');
   check(await b.page.isVisible('.chat-box'), 'a box opened with a click stays open after sending');
-  await a.page.waitForFunction(() => [...document.querySelectorAll('#labels .say-text')].some((e) => e.textContent === 'Sure, send me the PIN'), null, { timeout: 5000 });
+  await a.page.waitForFunction(() => [...document.querySelectorAll('#labels .say-text')].some((e) => e.textContent === 'Sure, send me the PIN'), null, T(5_000));
   await wait(400);
   await shot(b, 'chat-3-open-b');
   await shot(a, 'chat-3-reply-a');
 
   // --- a line and an emote together ----------------------------------------------------------------
+  await say(a, 'On my way, see you at the table');
   await a.page.evaluate(() => window.casino.app.link.emote('wave'));
-  await say(a, 'On my way');
-  await wait(300);
-  results.lifted = await b.page.$$eval('#labels .say', (els) => els.map((e) => e.classList.contains('lifted')));
-  check(results.lifted.includes(true), 'a bubble rises clear of an emote on the same player');
+  results.lifted = await b.page
+    .waitForFunction(() => document.querySelector('#labels .say.lifted') !== null && document.querySelector('#labels .emote') !== null, null, T(5_000))
+    .then(() => true, () => false);
   await shot(b, 'chat-4-emote-b');
+  check(results.lifted, 'a bubble rises clear of an emote on the same player');
 
   // --- hiding chat ------------------------------------------------------------------------------------
   await b.page.click('.chat-mute');
@@ -165,19 +172,19 @@ try {
   // --- a private lobby's own room ---------------------------------------------------------------------
   await openLobby(a, 'bj-1');
   await a.page.click('.lobby-actions .btn:has-text("Private")');
-  await a.page.waitForSelector('.party-pin-digits', { timeout: 10_000 });
+  await a.page.waitForSelector('.party-pin-digits', T(10_000));
   const pin = (await a.page.textContent('.party-pin-digits .lb-seg-lit')).trim();
   await openLobby(b, 'bj-1');
   await b.page.fill('.lobby-pin-input', pin);
   await b.page.keyboard.press('Enter');
-  await a.page.waitForFunction(() => document.querySelectorAll('.party-member').length === 2, null, { timeout: 15_000 });
+  await a.page.waitForFunction(() => document.querySelectorAll('.party-member').length === 2, null, T(15_000));
   log(`lobby PIN ${pin}, both in`);
   check(await a.page.isVisible('#chat-tab-table') || (await a.page.$('#chat-tab-table:not([hidden])')) !== null, 'the Table tab appears at a lobby table');
   await a.page.click('.chat-dock');
   await a.page.click('.chat-input');
   await a.page.keyboard.type('Good luck, table');
   await a.page.keyboard.press('Enter');
-  await b.page.waitForFunction(() => [...document.querySelectorAll('#chat-list-table .chat-line')].some((e) => e.textContent.endsWith('Good luck, table')), null, { timeout: 5000 });
+  await b.page.waitForFunction(() => [...document.querySelectorAll('#chat-list-table .chat-line')].some((e) => e.textContent.endsWith('Good luck, table')), null, T(5_000));
   const bFloor = await texts(b, '#chat-list-floor .chat-line');
   check(!bFloor.some((t) => t.endsWith('Good luck, table')), "the table's line stays out of the floor log");
   check((await bubbles(b)).every((t) => t !== 'Good luck, table'), "the table's line makes no bubble on the floor");
@@ -185,7 +192,7 @@ try {
   await b.page.click('.chat-input');
   await b.page.keyboard.type('Thanks! Dealer looks cold tonight');
   await b.page.keyboard.press('Enter');
-  await a.page.waitForFunction(() => [...document.querySelectorAll('#chat-list-table .chat-line')].some((e) => e.textContent.endsWith('cold tonight')), null, { timeout: 5000 });
+  await a.page.waitForFunction(() => [...document.querySelectorAll('#chat-list-table .chat-line')].some((e) => e.textContent.endsWith('cold tonight')), null, T(5_000));
   await wait(600);
   await shot(a, 'chat-6-table-a');
   await shot(b, 'chat-6-table-b');
@@ -204,7 +211,7 @@ try {
   await a.page.evaluate(() => {
     for (let i = 0; i < 9; i++) window.casino.app.table.session.socket.send({ t: 'say', text: `spam ${i}` });
   });
-  await a.page.waitForFunction(() => /^Muted for \d:\d\d$/.test(document.querySelector('.chat-input').placeholder), null, { timeout: 5000 });
+  await a.page.waitForFunction(() => /^Muted for \d:\d\d$/.test(document.querySelector('.chat-input').placeholder), null, T(5_000));
   results.mutedPlaceholder = await a.page.getAttribute('.chat-input', 'placeholder');
   check(await a.page.isDisabled('.chat-input'), 'a muted player cannot type');
   results.mutedNotices = await texts(a, '#chat-list-table .chat-sys');
