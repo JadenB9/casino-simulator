@@ -183,9 +183,10 @@ export class StationLod {
       if (e.pin) e.real = e.pin === 'real';
       else if (e.real && e.station !== seated && this.frustum.intersectsSphere(e.sphere)) order.push(e);
     }
-    // nearest first (the ones already real a little nearer still), each while it fits
+    // nearest first (the ones already real a little nearer still), each while it fits; the table
+    // you're sitting at is paid for first
     order.sort((a, b) => rank(a) - rank(b));
-    let spent = 0;
+    let spent = seated ? (this.entries.find((e) => e.station === seated)?.extra ?? 0) : 0;
     for (const e of order) {
       spent += e.extra;
       if (spent > this.budget) e.real = false;
@@ -342,14 +343,19 @@ function rank(e: Entry): number {
   return e.copy.visible ? e.d2 : e.d2 * KEEP * KEEP;
 }
 
-/** How many draw calls an object makes at most: one per mesh, or one per group for a mesh of several materials. */
+/**
+ * How many draw calls an object makes at most when shown: one per visible mesh, or one per group
+ * for a mesh of several materials. The object's own visibility doesn't matter (a hidden stand-in).
+ */
 function meshes(o: THREE.Object3D): number {
   let n = 0;
-  o.traverseVisible((m) => {
+  const count = (m: THREE.Object3D) => {
     const mesh = m as THREE.Mesh;
     if (!mesh.isMesh) return;
     n += Array.isArray(mesh.material) ? Math.max(1, mesh.geometry.groups.filter((g) => (mesh.material as THREE.Material[])[g.materialIndex ?? 0]?.visible).length) : 1;
-  });
+  };
+  count(o);
+  for (const child of o.children) child.traverseVisible(count);
   return n;
 }
 
