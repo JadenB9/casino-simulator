@@ -35,6 +35,7 @@ import { Bucket } from '../ratelimit.ts';
 import { closeWith } from '../http.ts';
 import type { CasinoFloor } from '../floor/index.ts';
 import { ChatRoom } from '../floor/chat.ts';
+import { bigWinsIn, type BigWinReport } from '../floor/wins.ts'; // features: big wins
 
 /** How long a dropped player keeps their seat before being cashed out. */
 export const GRACE_MS = 120_000;
@@ -981,6 +982,7 @@ export class CasinoTable extends DurableObject<Env> {
     this.broadcastEvents(step.events, now);
     for (const seat of stacks.keys()) this.sendSeat(bySeat.get(seat)!);
     if (readyCleared) this.broadcastMembers();
+    if (step.rounds?.length) this.announceBigWins(step, bySeat, now); // features: big wins
     return true;
   }
 
@@ -1171,6 +1173,24 @@ export class CasinoTable extends DurableObject<Env> {
       await this.floor().playerAt(accountId, station);
     } catch (err) {
       console.error('floor playerAt failed', err);
+    }
+  }
+
+  // features: rounds that paid big go to the floor's sign (floor/wins.ts decides what counts)
+  private announceBigWins(step: Step<unknown>, bySeat: Map<number, MemberRow>, now: number): void {
+    const m = this.meta!;
+    const who = (seat: number) => {
+      const mem = bySeat.get(seat);
+      return mem ? { accountId: mem.account_id, name: mem.name, station: mem.station } : undefined;
+    };
+    for (const w of bigWinsIn(m.game, m.variant, step, who, now)) this.ctx.waitUntil(this.tellBigWin(w));
+  }
+
+  private async tellBigWin(w: BigWinReport): Promise<void> {
+    try {
+      await this.floor().bigWin(w);
+    } catch (err) {
+      console.error('floor bigWin failed', err);
     }
   }
 

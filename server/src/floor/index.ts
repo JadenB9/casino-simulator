@@ -14,6 +14,7 @@ import { lookFromJson, type Look } from '../../../shared/src/look.ts';
 import { Presence, type FloorAtt } from './presence.ts';
 import { Directory } from './directory.ts';
 import { FloorChat } from './chat.ts';
+import { Wins, type BigWinReport } from './wins.ts';
 import { Bucket } from '../ratelimit.ts';
 
 /** A hard cap on floor connections; a busy night past this gets a polite "casino is full". */
@@ -23,6 +24,8 @@ export class CasinoFloor extends DurableObject<Env> {
   readonly presence: Presence;
   readonly directory: Directory;
   readonly chat: FloorChat;
+  /** features: big-win announcements (wins.ts) */
+  readonly wins: Wins;
   private buckets = new Map<WebSocket, { move: Bucket; misc: Bucket; emote: Bucket; strikes: number }>();
 
   constructor(ctx: DurableObjectState, env: Env) {
@@ -31,6 +34,7 @@ export class CasinoFloor extends DurableObject<Env> {
     this.presence = new Presence(ctx, (msg, except) => this.broadcast(msg, except));
     this.directory = new Directory(ctx, (msg, game) => this.toWatchers(msg, game));
     this.chat = new FloorChat(ctx, (msg) => this.broadcast(msg));
+    this.wins = new Wins(ctx, (msg) => this.broadcast(msg));
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -58,6 +62,7 @@ export class CasinoFloor extends DurableObject<Env> {
     this.ctx.acceptWebSocket(server, [`a:${accountId}`]);
     this.presence.onConnect(server, { accountId, name, look });
     this.chat.join(server);
+    this.wins.greet(server); // features: the recent big wins, after hello
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -144,6 +149,11 @@ export class CasinoFloor extends DurableObject<Env> {
 
   joinByPin(p: { pin: string; accountId: number; ip: string }): { tableId: string; game: GameId } | { error: 'BAD_PIN' | 'RATE_LIMITED' } {
     return this.directory.joinByPin(p, Date.now());
+  }
+
+  /** features: a table's round paid big; the floor announces it within its limits (wins.ts). */
+  bigWin(r: BigWinReport): 'sent' | 'limited' | 'refused' {
+    return this.wins.report(r);
   }
 
   /** Everyone on the floor sees the gesture over this player's head. */

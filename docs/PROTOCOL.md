@@ -156,13 +156,29 @@ Server to client:
 | `lobby` | `game, lobby: LobbySummary` (upsert, to watchers) |
 | `lobby.gone` | `game, tableId` |
 | `emote` | `id, e` (to everyone on the floor, the sender included) |
+| `bigwins` | `list: BigWin[]` (newest first, at most 20), `today: WinsToday` (right after `hello`) |
+| `bigwin` | `...BigWin, today: WinsToday` (to everyone on the floor) |
 
 ```ts
 type PlayerInfo = { id: number; name: string; look: Look; x: number; z: number; r: number;
                     at: { station: string } | null };   // never a private table's id
 type LobbySummary = { tableId: string; game: GameId; variant?: string; leader: string;
                       players: number; max: number; started: boolean };  // public lobbies only
+type BigWin = { name: string; game: GameId; amount: number;   // cents won: returned - wagered
+                what: string;                                  // "Straight 17", "Royal Flush", "Neon Nights, 250x"
+                at: number;                                    // server time the winner sees it
+                station?: string };                            // where on the floor, if anywhere
+type WinsToday = { day: string; total: number; count: number };  // YYYY-MM-DD, Las Vegas time
 ```
+
+Big wins. A round that returns at least 25 times its stake and wins $100 or more, or wins $5,000 or
+more, is reported by its table to the floor (`server/src/floor/wins.ts`). The floor announces at
+most one a minute per player and six a minute in all, keeps the last 20 for newcomers, and adds
+every one (announced or not) to the day's total. `at` is when the result shows at the table (the
+ball lands, the reels and any free games stop): clients hold the news until then, so nobody on
+the floor hears about a win before the winner sees it. The words in `what` come only from what
+the table showed everyone once the round was over: the bet that paid, a hand turned over to be
+paid, a machine's own display. A Hold'em pot won without a showdown is just "Took the pot".
 
 ## Table socket
 
