@@ -221,6 +221,24 @@ describe('HTTP routes', () => {
     expect(sneaky.status).toBe(403);
   });
 
+  it('socket upgrades from another site, or with no Origin at all, are refused before anything opens', async () => {
+    const p = await player('wsorigin');
+    for (const origin of ['https://evil.example', 'http://localhost.evil.example:5173', 'null', undefined]) {
+      for (const path of ['floor', 'solo/highcard']) {
+        const res = await exports.default.fetch(
+          new Request(`http://casino.test/casino/ws/${path}?v=1&t=${encodeURIComponent(p.token)}`, {
+            headers: { Upgrade: 'websocket', 'CF-Connecting-IP': p.ip, ...(origin ? { Origin: origin } : {}) },
+          }),
+        );
+        expect(res.status, `${path} ${origin}`).toBe(403);
+        expect(res.webSocket, `${path} ${origin}`).toBeFalsy();
+      }
+    }
+    // The same token from the page's own origin gets in.
+    const ok = await floorSocket(p);
+    ok.ws.close();
+  });
+
   it('look changes and loan requests have per-account limits', async () => {
     const p = await player('lims');
     const look = { v: 1, body: 'f', outfit: 'dress', skin: 5, hair: '#b8894e', top: '#6b1f2a', bottom: '#1f2430', shoes: '#8a5a34' };
