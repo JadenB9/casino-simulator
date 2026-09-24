@@ -226,6 +226,11 @@ name and asks only for its password.
   object's roughly 1,000 a second (`scripts/load/floor.mjs` measures it). Positions are clamped to
   the floor and speed-checked; presence carries no money, so that is all the checking it needs.
 - **One connection per account.** A newer tab replaces the older one (close 4001).
+- **Idle sockets.** A socket nothing real has come from for 15 minutes (`IDLE_MS`) is closed with
+  4010. A real thing is a move or turn that changes the pose, chat, an emote, a lobby watch, or the
+  page's `here`. The time is kept in the socket's attachment, and the object's one alarm sweeps
+  for them, at most every 30 s, only while someone is connected. The page normally goes first
+  (see Client).
 - **Online count** is the number of connected accounts.
 - **Lobby directory.** Public lobbies per game and private lobbies by PIN, persisted in the
   floor's SQLite so they survive hibernation. It is a hint: tables upsert their summary on
@@ -248,9 +253,9 @@ name and asks only for its password.
   The only awaited work is the outbox and floor updates, and they never touch anything a
   transition reads except through seat status. The runtime holds outgoing messages until the
   storage write is durable, so no client ever sees a result that isn't saved.
-- **Alarms are the only timers.** Named deadlines (`betting_close`, `turn:<seat>`,
-  `grace:<account>`, `idle_cashout:<account>`, `heartbeat`, `outbox_retry`) live in a table,
-  and the one alarm is always set to the earliest. After a deploy restarts the object, turn
+- **Alarms are the only timers.** Named deadlines (`grace:<account>`, `idle:<account>`,
+  `leader`, `heartbeat`, `close`) live in a table. The one alarm is always set to the earliest of
+  them, the engine's own deadline (a betting window, a turn) and the outbox's next retry. After a deploy restarts the object, turn
   deadlines are pushed out by the grace period so a restart doesn't auto-stand the table.
 - **Party.** Members are ordered by join time. The creator is the leader. The leader switches
   public/private (private gets a PIN) and presses Start. If the leader leaves, the
@@ -262,6 +267,11 @@ name and asks only for its password.
   held for 2 minutes after a drop and a reconnect gets the full table back. A player whose
   turn times out is stood (or folded in poker games). When the grace period ends with nothing
   live on the layout, the seat is cashed out.
+- **Idle players.** Each member has an `idle:<account>` deadline 15 minutes after the last thing
+  they asked for (`sync` aside). The page's `here` counts too. The deadline is written with a
+  minute to spare, so at most once a minute. When it falls due with the player connected, their
+  sockets close with 4010 and the seat is stood up exactly as Leave does it: live bets settle,
+  then the cash-out goes through the outbox. A watcher just leaves, handing on the lead.
 - **Hidden information stays on the server.** Each socket gets its own view: no hole cards,
   no shoe order, no bot cards, no future results in any message.
 - **Seats changing hands.** Engines key a round by seat number, so a newcomer must never see a
@@ -347,12 +357,19 @@ statistical test checks the crypto source itself.
   tags. Stations (tables, machines, the cashier) show "Press E" within range.
 - **Table view** happens in the same scene: the camera flies to the table's play pose and the
   DOM controls fade in. Other players keep walking past behind the table.
-- **Remote players** are drawn 200 ms in the past, interpolated between snapshots.
+- **Remote players** are drawn 300 ms in the past, interpolated between snapshots, each position
+  placed at the moment it reached the server (the snapshot's time less the row's age).
 - **Quality**: High (bloom on emissive surfaces, MSAA, pixel ratio up to 2 with an adaptive
   step-down) and Low (no bloom, pixel ratio 1, cheaper materials), suggested from a frame-time
   probe and changeable in Settings.
 - **Reconnect** with full-jitter backoff (0.5 s doubling to 30 s). A reconnect to a table
   gets the whole table state, so nothing is replayed.
+- **Idle** (`app/idle.ts`, `ui/away/`): with no key, mouse, touch or wheel input for 15 minutes,
+  the page shows "Still there?" for the last minute (any input clears it), then leaves any table
+  the normal way, closes its sockets and shows "You were away for 15 minutes." with Come back,
+  which reconnects where the player stood. While there is input it tells each socket `here` at
+  most once a minute and once more after the last input, so the servers' own idle close (the
+  backstop for a page that slept or was frozen) never comes first. 4010 never reconnects by itself.
 
 ## Deploys
 

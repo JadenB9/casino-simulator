@@ -51,6 +51,7 @@ Everything the client and server say to each other. The TypeScript source of tru
 | 4006 | the socket ticket was expired, already used, or for another path | get a new ticket and reconnect (with backoff) |
 | 4008 | rate limited repeatedly, or connecting again too fast | back off |
 | 4009 | protocol version mismatch, or a page from before socket tickets (it sends `t=<token>`) | reload the page |
+| 4010 | away too long: nothing from this player for 15 minutes ([Idle](#idle)); a seat is stood up first | show the away screen; reconnect only on Come back |
 | anything else (1001, 1006, 1011, 1012, deploys) | transient | reconnect with full jitter |
 
 Reconnect: `delay = random(0, min(30 s, 0.5 s × 2^attempt))`, reset after 10 s of a stable
@@ -69,11 +70,11 @@ junk (not JSON, an unknown `t`, a wrong shape).
 | table frames, any kind | 60 in a burst, then 30 a second | dropped, a strike |
 | table `act` | 24, then 12 a second | `err RATE_LIMITED`, a strike |
 | table `buyin`, `topup`, `cashout` | 3, then 1 a second | `err RATE_LIMITED`, a strike |
-| other table messages | 8, then 4 a second | `err RATE_LIMITED`, a strike |
+| other table messages (`here` included) | 8, then 4 a second | `err RATE_LIMITED`, a strike |
 | table strikes | 40, one forgiven every 5 s | closed, 4008 |
 | floor frames, any kind | 60, then 30 a second | dropped, a strike |
 | floor `mv`, `st` | 30, then 16 a second | dropped, a strike |
-| floor `watch` | 10, then 4 a second | dropped, a strike |
+| floor `watch`, `here` | 10, then 4 a second | dropped, a strike |
 | floor `emote` | 3, then one every 2 s | dropped quietly, no strike |
 | floor strikes | 200, one forgiven a second | closed, 4008 |
 | chat `say` (both sockets) | per account per room: 3 lines, then 1 a second | `chat.no`; repeated, a mute ([Chat](#chat)) |
@@ -201,6 +202,36 @@ close 4006, and the client simply asks for another. No ticket at all gets 4003; 
 before tickets that still sends `&t=<token>` gets 4009 and reloads. The account a socket
 belongs to (and so a solo table's name) comes from the ticket.
 
+## Idle
+
+Nobody at the keyboard for `IDLE_MS` (15 minutes; `IDLE_WARN_MS` and `HERE_MS` sit beside it in
+`shared/src/protocol.ts`) and the casino lets them go.
+
+- **The page goes first.** It watches its own input (keys, mouse, touch, the wheel;
+  `client/src/app/idle.ts`) on the wall clock, so a laptop that slept through the quarter hour
+  finds out as soon as it wakes. A minute before the end it shows "Still there?" with a
+  countdown, and any input clears it. At the end it leaves any table the normal way (`leave`),
+  closes its sockets and shows "You were away for 15 minutes." with Come back, which reconnects
+  (fresh tickets) and puts the player back where they stood: the first position on a new floor
+  connection places the player.
+- **`here`.** While there is input, the page sends `{ "t": "here" }` on each open socket, at most
+  once every `HERE_MS` (a minute), and once more after the last input (retried every 5 s while a
+  socket reconnects). So what a server last heard is never older than the last input, and the
+  server never closes a socket before the page's own warning has run.
+- **The floor** closes a socket nothing real has come from for `IDLE_MS` with 4010: a real thing is
+  a move or turn that changes the pose (the same pose again isn't), a chat line, an emote, a
+  `watch`, or `here`. Connecting counts; pings never reach the object. The time lives in the
+  socket's attachment, so it survives hibernation, and one alarm sweeps at most every 30 s while
+  anyone is connected.
+- **A table** keeps an `idle:<account>` deadline per member, pushed back by anything the player
+  asks for (`sync` excepted, which the client sends on its own). It's written with a minute to
+  spare, so at most once a minute. When it falls due with the player connected, their sockets
+  close with 4010 and the seat is stood up the way `leave` does it: live bets settle first, then
+  the cash-out. A watcher just leaves, and the lead passes on. A player who had dropped is the
+  grace period's business instead, and gets a whole new deadline if they come back after it
+  passed.
+- **The client** treats 4010 as final: no reconnect, the away screen instead.
+
 ## Floor socket
 
 `wss://api.j4den.com/casino/ws/floor?v=1&ticket=<ticket>`
@@ -213,6 +244,7 @@ Client to server:
 | `st` | `x, z, r` | once when you stop |
 | `watch` | `game: GameId \| null` | subscribe to one game's lobby list |
 | `emote` | `e: "wave" \| "cheer" \| "clap" \| "thumbs" \| "shrug"` (`EMOTES`) | 3 in a burst, then one every 2 s; extras are dropped without a reply |
+| `here` | | the player is at the keyboard ([Idle](#idle)); at most once a minute, no reply |
 
 Movement rules. The first `mv` or `st` on a connection places you anywhere inside the floor
 (`FLOOR_BOUNDS`, the room's walls): a first visit echoes the spawn in `hello`, and after a dropped
@@ -282,6 +314,7 @@ Client to server:
 | `start` | | leader |
 | `leave` | | anyone; implies cash-out |
 | `sync` | | anyone; answered with a full `table` |
+| `here` | | anyone; the player is at the keyboard ([Idle](#idle)), no reply |
 
 Server to client:
 
