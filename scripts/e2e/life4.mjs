@@ -43,10 +43,18 @@ async function hold(p) {
   await p.evaluate(() => {
     const c = window.casino;
     c.shot = null;
+    // the walker would put the camera back every frame (and the staff are culled by it)
+    c.world.player.setEnabled(false);
     c.engine.onFrame(() => {
       const s = c.shot;
       if (!s) return;
-      if (s.follow) {
+      if (s.follow && s.world) {
+        // from a fixed side in the room, whichever way they face
+        const m = s.follow();
+        const [dx, up, dz, lookUp] = s.world;
+        c.engine.camera.position.set(m.x + dx, up, m.z + dz);
+        c.engine.camera.lookAt(m.x, lookUp, m.z);
+      } else if (s.follow) {
         const m = s.follow();
         const f = [Math.sin(m.yaw), Math.cos(m.yaw)];
         const [ahead, side, up, lookUp] = s.offset;
@@ -101,6 +109,47 @@ if (checks.includes('dev')) {
   await p.waitForTimeout(800);
   await shot(p, 'bankers', { x: 200, y: 120, width: 880, height: 560 });
 
+  // the shopkeeper, at a stand-in counter in the lounge until the boutique is built
+  await p.evaluate(() => {
+    const w = window.casino.world;
+    const L = w.plan.lounge;
+    // the lounge's south-west corner, off every waiter's round, facing the main aisle
+    const x = L.x0 + 0.5;
+    const z = L.z1 - 1.0;
+    w.life.useBoutique({ keeper: { x, z, yaw: -Math.PI / 2 }, customer: { x: x - 1.4, z, yaw: Math.PI / 2 }, cases: [{ x, z: z - 1.4, yaw: -Math.PI / 2, top: 0.95 }], mannequins: [{ x: x - 0.2, z: z - 2.6, yaw: -Math.PI / 2 }] });
+  });
+  const follow = () =>
+    p.evaluate(() => {
+      const m = window.casino.world.life.shopkeeper.m;
+      window.casino.shot = { follow: () => m, world: [-1.9, 1.6, -1.5, 1.15] };
+    });
+  await p.evaluate(() => {
+    const m = window.casino.world.life.shopkeeper.m;
+    window.casino.world.life.crew.play(m, 'welcome');
+  });
+  await follow();
+  await p.waitForTimeout(700);
+  await shot(p, 'shopkeeper', { x: 320, y: 100, width: 640, height: 600 });
+  console.log('shopkeeper', await p.evaluate(() => {
+    const m = window.casino.world.life.shopkeeper.m;
+    const cam = window.casino.engine.camera.position;
+    return JSON.stringify({ x: +m.x.toFixed(2), z: +m.z.toFixed(2), shown: m.shown, vis: m.ch.root.visible, root: m.ch.root.position.toArray().map((v) => +v.toFixed(2)), cam: cam.toArray().map((v) => +v.toFixed(2)), kids: m.ch.root.children.length });
+  }));
+  for (const [motion, name] of [['polish', 'shopkeeper-polish'], ['adjust', 'shopkeeper-adjust'], ['count', 'banker-count'], ['handOver', 'handover']]) {
+    await p.evaluate((mo) => {
+      const l = window.casino.world.life;
+      const m = mo === 'count' ? l.bankers.tellers[0].m : l.shopkeeper.m;
+      l.crew.play(m, mo);
+    }, motion);
+    await p.waitForTimeout(motion === 'count' ? 900 : 1100);
+    if (motion === 'count') {
+      const t = pts.tellers[0];
+      await aim(p, [t.x + 0.4, 1.55, t.z + 2.0], [t.x, 1.2, t.z]);
+      await p.waitForTimeout(200);
+    }
+    await shot(p, name, { x: 320, y: 100, width: 640, height: 600 });
+    if (motion === 'count') await follow();
+  }
   // sitting: the player on a sofa place and on a bar stool, from behind (the game's own camera)
   await p.evaluate(() => (window.casino.shot = null));
   for (const [id, name] of [['lounge.sofa.1a.2', 'sit-sofa'], ['bar.stool.3', 'sit-stool']]) {
@@ -141,41 +190,6 @@ if (checks.includes('dev')) {
     await p.waitForTimeout(700);
   }
 
-  // the shopkeeper, at a stand-in counter in the lounge until the boutique is built
-  await p.evaluate(() => {
-    const w = window.casino.world;
-    const L = w.plan.lounge;
-    const x = L.x0 + 0.9;
-    const z = (L.z0 + L.z1) / 2;
-    w.life.useBoutique({ keeper: { x, z, yaw: Math.PI / 2 }, customer: { x: x + 1.4, z, yaw: -Math.PI / 2 }, cases: [{ x: x + 0.2, z: z - 1.5, yaw: Math.PI / 2, top: 0.95 }], mannequins: [{ x: x + 0.3, z: z + 1.6, yaw: Math.PI / 2 }] });
-  });
-  const follow = () =>
-    p.evaluate(() => {
-      const m = window.casino.world.life.shopkeeper.m;
-      window.casino.shot = { follow: () => m, offset: [2.3, 0.7, 1.6, 1.15] };
-    });
-  await p.evaluate(() => {
-    const m = window.casino.world.life.shopkeeper.m;
-    window.casino.world.life.crew.play(m, 'welcome');
-  });
-  await follow();
-  await p.waitForTimeout(700);
-  await shot(p, 'shopkeeper', { x: 320, y: 100, width: 640, height: 600 });
-  for (const [motion, name] of [['polish', 'shopkeeper-polish'], ['adjust', 'shopkeeper-adjust'], ['count', 'banker-count'], ['handOver', 'handover']]) {
-    await p.evaluate((mo) => {
-      const l = window.casino.world.life;
-      const m = mo === 'count' ? l.bankers.tellers[0].m : l.shopkeeper.m;
-      l.crew.play(m, mo);
-    }, motion);
-    await p.waitForTimeout(motion === 'count' ? 900 : 1100);
-    if (motion === 'count') {
-      const t = pts.tellers[0];
-      await aim(p, [t.x + 0.4, 1.55, t.z + 2.0], [t.x, 1.2, t.z]);
-      await p.waitForTimeout(200);
-    }
-    await shot(p, name, { x: 320, y: 100, width: 640, height: 600 });
-    if (motion === 'count') await follow();
-  }
   const calls = await p.evaluate(async () => {
     const w = window.casino.world;
     w.player.setEnabled(false);
