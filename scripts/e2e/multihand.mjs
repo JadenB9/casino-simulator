@@ -99,9 +99,11 @@ async function blackjack() {
   await t.pick(3);
   await t.shot('1-three-spots');
 
-  const did = { split: false, turnShot: false, insurance: false };
+  const did = { split: false, turnShot: false, insurance: false, celebration: false };
   let rounds = 0;
-  for (; rounds < 40 && !(did.split && did.turnShot); rounds++) {
+  // Deal on until a split, the insurance question (an ace up) and a celebration (a blackjack or a
+  // winning double or split on one of the spots) have all come up.
+  for (; rounds < 60 && !(did.split && did.turnShot && did.insurance && did.celebration); rounds++) {
     if (rounds === 0) {
       await page.keyboard.press('3'); // the $25 chip
       for (const spot of [0, 1, 2]) {
@@ -149,6 +151,13 @@ async function blackjack() {
         await page.keyboard.press(total(hand.cards) < 13 ? 'h' : 's');
       }
       await t.settle(200);
+    }
+    // the 'done' event puts a celebration banner up for a spot that had its moment
+    const banner = await page.waitForSelector('.celebrate', { timeout: 1500 }).catch(() => null);
+    if (banner && !did.celebration) {
+      did.celebration = true;
+      await page.waitForTimeout(350);
+      await t.shot('8-celebration');
     }
     await t.settle(700);
     if (rounds === 0 || (did.split && !report.blackjackSplitResult)) {
