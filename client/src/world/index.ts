@@ -14,7 +14,7 @@ import { Collider } from './collision.ts';
 import { buildRoom } from './room.ts';
 import { buildStations, type WorldStation } from './stations.ts';
 import { buildDecor } from './decor.ts';
-import { buildSigns, floorSigns, loadSignFonts } from './signs.ts';
+import { buildSigns, floorSigns, loadSignFonts, signGain } from './signs.ts';
 import { GlowMerge, Lighting, buildPools } from './lighting.ts';
 import { Props } from './props.ts';
 import { Characters } from './characters.ts';
@@ -298,7 +298,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
       quality = q;
       world.quality = q;
       mats.swap(root, q);
-      if (signs) (signs.mesh.material as THREE.MeshBasicMaterial).color.setScalar(q === 'high' ? 2.4 : 1.6);
+      if (signs) (signs.mesh.material as THREE.MeshBasicMaterial).color.setScalar(signGain(q));
       lighting.setQuality(q);
       characters.setQuality(q);
       void props.setQuality(q).then(() => reflect());

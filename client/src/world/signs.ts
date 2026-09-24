@@ -110,6 +110,11 @@ interface Placed {
   padY: number;
 }
 
+/** How bright the sign faces are: on High neon's core sits well past the floor's bloom threshold. */
+export function signGain(quality: 'high' | 'low'): number {
+  return quality === 'high' ? 3.6 : 1.6;
+}
+
 /** Draw every sign into one atlas and add their faces to the scene as one mesh. */
 export function buildSigns(specs: SignSpec[], parent: THREE.Object3D, quality: 'high' | 'low', anisotropy: number): { mesh: THREE.Mesh; texture: THREE.Texture } | null {
   if (specs.length === 0) return null;
@@ -164,7 +169,7 @@ export function buildSigns(specs: SignSpec[], parent: THREE.Object3D, quality: '
     geos.push(g);
   }
   const merged = mergeAll(geos);
-  const mat = new THREE.MeshBasicMaterial({ map: texture, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, color: new THREE.Color(1, 1, 1).multiplyScalar(quality === 'high' ? 2.4 : 1.6) });
+  const mat = new THREE.MeshBasicMaterial({ map: texture, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, color: new THREE.Color(1, 1, 1).multiplyScalar(signGain(quality)) });
   mat.name = 'signs';
   const mesh = new THREE.Mesh(merged, mat);
   mesh.name = 'signs';
