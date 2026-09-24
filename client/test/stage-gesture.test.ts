@@ -8,7 +8,7 @@ import type { Engine3D } from '../src/render/engine3d.ts';
 // motion after another, and the pay follows the sweep) instead of snapping the arm back to the start.
 
 function stage(): { st: TableStage; seen: [DealerGesture, number][] } {
-  const st = new TableStage({ camera: new THREE.PerspectiveCamera() } as unknown as Engine3D, new THREE.Group());
+  const st = new TableStage({ camera: new THREE.PerspectiveCamera(), scene: new THREE.Scene() } as unknown as Engine3D, new THREE.Group());
   const seen: [DealerGesture, number][] = [];
   st.dealer = (g) => seen.push([g, performance.now()]);
   return { st, seen };
@@ -65,7 +65,7 @@ describe("the dealer's gestures", () => {
     st.dispose();
     vi.advanceTimersByTime(5000);
     expect(seen.map(([g]) => g)).toEqual(['deal']);
-    const bare = new TableStage({ camera: new THREE.PerspectiveCamera() } as unknown as Engine3D, new THREE.Group());
+    const bare = new TableStage({ camera: new THREE.PerspectiveCamera(), scene: new THREE.Scene() } as unknown as Engine3D, new THREE.Group());
     expect(() => bare.gesture('deal')).not.toThrow();
   });
 });
