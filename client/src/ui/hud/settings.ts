@@ -9,6 +9,7 @@ import type { Closable, SfxLike } from '../menu/deps.ts';
 import { openSheet } from '../menu/sheet.ts';
 import { segmented } from '../menu/parts.ts';
 import { bigWinSettings } from '../feed/settings.ts'; // features: big-win toasts
+import { controlSettings } from '../menu/controls.ts'; // world: mouse look
 
 export interface SettingsDeps {
   root: HTMLElement;
@@ -98,6 +99,7 @@ export function openSettings(deps: SettingsDeps): Closable {
     el('h3', 'section-label', 'Audio'),
     row('Sound', sound.root, el('p', 'set-note', 'M mutes and unmutes anywhere.')),
     row('Volume', volWrap),
+    ...controlSettings(row), // world: mouse look
   );
   return { root: sheet.root, close: () => sheet.close() };
 }

@@ -1,5 +1,11 @@
-// High-quality post: bloom on everything brighter than 1.0 (neon, LED strips, bulbs), plus the
-// adaptive pixel ratio.
+// High-quality post: bloom on light brighter than the threshold (neon, LED strips, bulbs), plus
+// the adaptive pixel ratio.
+//
+// Bloom you can see through: only the light past the threshold goes into the glow, and only by how
+// far past it it is (a soft knee rather than three's all-or-nothing cut). A neon tube at three
+// times the threshold gives most of its light to its halo; a card, a paytable or a brass rail
+// that's lit a little past it gives almost none, so it stays crisp and readable instead of
+// vanishing into a white smear. The glow itself stays close to its source (a small radius).
 //
 // three r186's own route is `renderer.setEffects([bloom])`, but that needs the renderer to have
 // been created with `outputBufferType: HalfFloatType`, and Engine3D creates it without one. So the
@@ -18,6 +24,40 @@ import type { Engine3D } from '../render/engine3d.ts';
 
 type Mode = 'probe' | 'hooks' | 'effects' | 'off';
 
+export interface BloomLook {
+  /** Past this brightness light glows; the knee softens the start; strength and radius size the halo. */
+  threshold: number;
+  knee: number;
+  strength: number;
+  radius: number;
+}
+
+/** Walking the floor: neon, LED strips, bulbs and the machines' glass glow. */
+export const FLOOR_BLOOM: BloomLook = { threshold: 1.0, knee: 0.35, strength: 0.62, radius: 0.18 };
+/**
+ * Seated at a table, a metre from felt, cards and chips under the pit's spots: lit white printing
+ * reaches three or so, so nothing on the table glows at all; only the strongest light sources do.
+ */
+export const TABLE_BLOOM: BloomLook = { threshold: 4.2, knee: 0.5, strength: 0.35, radius: 0.12 };
+/** Seated at a machine: its bulbs, candle and glass are the point, and glow a little. */
+export const MACHINE_BLOOM: BloomLook = { threshold: 2.2, knee: 0.4, strength: 0.45, radius: 0.14 };
+
+/** The high pass: each pixel keeps only the part of its light past the threshold (soft-kneed). */
+const EXCESS_FRAGMENT = /* glsl */ `
+uniform sampler2D tDiffuse;
+uniform float luminosityThreshold;
+uniform float smoothWidth;
+varying vec2 vUv;
+void main() {
+  vec4 texel = texture2D( tDiffuse, vUv );
+  float bright = max( texel.r, max( texel.g, texel.b ) );
+  float knee = max( smoothWidth, 1e-4 );
+  float soft = clamp( bright - luminosityThreshold + knee, 0.0, 2.0 * knee );
+  soft = soft * soft / ( 4.0 * knee );
+  float excess = max( soft, bright - luminosityThreshold ) / max( bright, 1e-4 );
+  gl_FragColor = vec4( texel.rgb * excess, 1.0 );
+}`;
+
 export class Bloom {
   readonly pass: UnrealBloomPass;
   private copy = new ShaderPass(CopyShader);
@@ -35,7 +75,10 @@ export class Bloom {
   constructor(private readonly engine: Engine3D) {
     const r = engine.renderer;
     r.getDrawingBufferSize(this.size);
-    this.pass = new UnrealBloomPass(this.size.clone(), 0.42, 0.32, 1.05);
+    this.pass = new UnrealBloomPass(this.size.clone(), FLOOR_BLOOM.strength, FLOOR_BLOOM.radius, FLOOR_BLOOM.threshold);
+    this.pass.materialHighPassFilter.fragmentShader = EXCESS_FRAGMENT;
+    this.pass.materialHighPassFilter.needsUpdate = true;
+    this.setLook(FLOOR_BLOOM);
     this.sceneRT = new THREE.WebGLRenderTarget(this.size.x, this.size.y, { type: THREE.HalfFloatType, samples: 4 });
     this.postRT = new THREE.WebGLRenderTarget(this.size.x, this.size.y, { type: THREE.HalfFloatType, depthBuffer: false });
     this.output.renderToScreen = true;
@@ -59,6 +102,14 @@ export class Bloom {
     this.enabled = on;
     if (this.mode === 'effects') this.engine.renderer.setEffects(on ? [this.pass] : []);
     if (on && this.mode === 'off') this.mode = 'probe';
+  }
+
+  /** How the glow looks: FLOOR_BLOOM on the floor, TABLE_BLOOM or MACHINE_BLOOM seated. */
+  setLook(l: BloomLook): void {
+    this.pass.threshold = l.threshold;
+    this.pass.strength = l.strength;
+    this.pass.radius = l.radius;
+    (this.pass.highPassUniforms as { smoothWidth: { value: number } }).smoothWidth.value = l.knee;
   }
 
   get active(): boolean {
