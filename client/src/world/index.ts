@@ -20,6 +20,7 @@ import { Props } from './props.ts';
 import { Characters } from './characters.ts';
 import { Player } from './player.ts';
 import { Interact } from './interact.ts';
+import { TouchControls } from './touch.ts';
 import { StationLod } from './lod.ts';
 import { Bloom, PixelRatio } from './bloom.ts';
 import type { MouseSettings } from './mouse.ts';
@@ -147,6 +148,8 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
   const cashier: CashierPoint = { id: 'cashier', anchor: cashierAnchor, position: new THREE.Vector3(plan.cashier.x, 0, plan.cashier.z) };
   const ui = opts.ui ?? document.getElementById('ui') ?? document.body;
   const interact = new Interact(stations, cashier, player, engine.camera, ui, opts.onEscape);
+  // Phones and tablets: the thumb stick, drag-to-look, the action button and Leave at a table.
+  const touch = new TouchControls({ player, ui, seated: () => interact.seated, focus: () => interact.focus, sensitivity: () => player.mouseSettings.sensitivity });
 
   const bloom = new Bloom(engine);
   const pr = new PixelRatio(renderer);
@@ -217,6 +220,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
       renderer.info.reset();
       player.update(dt);
       interact.update(dt);
+      touch.update();
       lod.update(engine.camera, interact.seated);
       character.update(dt);
       emotes.update(dt);
@@ -252,6 +256,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
       remotes = source;
     },
     dispose() {
+      touch.dispose();
       emotes.dispose();
       lod.dispose();
       interact.dispose();
