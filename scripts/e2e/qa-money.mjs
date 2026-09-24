@@ -182,11 +182,17 @@ async function sitSolo(p, id, { tier = 'Standard', buyin = '1000', shotAs = null
   await page.click(`.lim-opt:has-text("${tier}")`);
   if (shotAs) await shoot(page, `${shotAs}-picker`);
   await page.keyboard.press('s');
-  await page.waitForSelector('.modal input[type=number]', { timeout: 30_000 });
+  await page.waitForFunction(() => !!document.querySelector('.modal input[type=number]') || window.casino.app.table?.seated === true, null, { timeout: 30_000 });
+  // a seat still held from an earlier run (inside its two minutes) comes back with its chips
+  if (await page.evaluate(() => window.casino.app.table?.seated === true)) {
+    log(`${p.name}: sat back down at ${id} with chips still on it`);
+    return false;
+  }
   if (shotAs) await shoot(page, `${shotAs}-buyin`);
   await page.fill('.modal input[type=number]', buyin);
   await page.click('.modal .btn.primary');
   await page.waitForFunction(() => window.casino.app.table?.seated === true, null, { timeout: 30_000 });
+  return true;
 }
 
 async function shoot(page, name) {
@@ -198,9 +204,16 @@ async function shoot(page, name) {
 /** Stand up the way Esc does (confirming the Leave), and wait for the chips to come home. */
 async function leave(p) {
   const { page } = p;
-  await page.keyboard.press('Escape');
-  const btn = await page.waitForSelector('.modal .btn.primary:has-text("Leave")', { timeout: 5000 }).catch(() => null);
-  if (btn) await btn.click();
+  // Esc does nothing while the camera is still flying in: try again until the question comes up
+  for (let i = 0; i < 6; i++) {
+    await page.keyboard.press('Escape');
+    const btn = await page.waitForSelector('.modal .btn.primary:has-text("Leave")', { timeout: 1500 }).catch(() => null);
+    if (btn) {
+      await btn.click();
+      break;
+    }
+    if (await page.evaluate(() => !window.casino.app.table)) break;
+  }
   await page.waitForFunction(() => !window.casino.app.table, null, { timeout: 20_000 });
 }
 
@@ -460,6 +473,142 @@ if (wanted('crash2')) {
     failed('crash2', err);
     if (a) await shoot(a.page, 'crash2-failure-a').catch(() => null);
     if (b) await shoot(b.page, 'crash2-failure-b').catch(() => null);
+  }
+}
+
+// ------------------------------------------------------------------------------------------------------
+// Part: the Bandit Wheel in Bandit Camp, alone and with a second player
+
+const wheelState = (p) => p.page.evaluate(() => window.casino.app.table?.session.view?.debug?.state());
+
+/** Wait for the wheel's betting window with at least `ms` left in it (the spin before it finished). */
+async function wheelWindow(p, ms = 6000, timeout = 90_000) {
+  await p.page.waitForFunction(
+    (m) => {
+      const s = window.casino.app.table?.session.view?.debug?.state();
+      return s && s.phase === 'betting' && !s.animating && (s.left === null || s.left > m);
+    },
+    ms,
+    { timeout, polling: 100 },
+  );
+}
+
+/** Wait for the round's settle event, the wheel to come to rest on it, and return both. */
+async function wheelResult(p, since, round) {
+  const until = Date.now() + 90_000;
+  let settle = null;
+  while (Date.now() < until && !settle) {
+    settle = eventsOf(p, 'settle', since).find((e) => e.round === round) ?? null;
+    if (!settle) await sleep(200);
+  }
+  if (!settle) throw new Error(`round ${round} never settled`);
+  await p.page.waitForFunction(() => {
+    const s = window.casino.app.table?.session.view?.debug?.state();
+    return s && !s.animating;
+  }, null, { timeout: 60_000, polling: 100 });
+  await p.page.waitForTimeout(400);
+  return { settle, state: await wheelState(p) };
+}
+
+if (wanted('wheel')) {
+  let a = null;
+  let b = null;
+  try {
+    await clearRate();
+    a = await player('qm_wheel_a');
+    pages.push(a);
+    await settled(a, 180_000);
+    // alone, at the Penthouse tier: the $100K chip is offered, the $1M one isn't
+    let before = await me(a);
+    if (before.inPlay > 0) {
+      // chips still on the wheel from an earlier run: stand up first
+      await sitSolo(a, 'bw-1', { tier: 'Penthouse' }).catch(() => null);
+      if (await a.page.evaluate(() => !!window.casino.app.table)) await leave(a);
+      before = await settled(a);
+    }
+    let since = Date.now();
+    if (!(await sitSolo(a, 'bw-1', { tier: 'Penthouse', buyin: '20000', shotAs: 'wheel-1' }))) {
+      await leave(a);
+      await settled(a);
+      await sitSolo(a, 'bw-1', { tier: 'Penthouse', buyin: '20000', shotAs: 'wheel-1' });
+    }
+    await wheelWindow(a, 0);
+    await a.page.waitForTimeout(800);
+    await shoot(a.page, 'wheel-2-solo-seated');
+    const chipsShown = await a.page.$$eval('.bw-chip:not(.bw-max)', (bs) => bs.filter((b) => !b.hidden).length);
+    check(chipsShown === 9, `Penthouse ($1K to $100K a number): the terminal offers the chips up to $100K, not the $1M (${chipsShown} of 10)`);
+    // Max on the 20: the table's $100,000 or the $20,000 here, whichever is less
+    await a.page.keyboard.press('a');
+    await a.page.click('.bw-slot[data-n="1"]');
+    await a.page.waitForTimeout(700);
+    let st = await wheelState(a);
+    check(st.bets[1] === 2_000_000, `Max on the 1 puts all $20,000 here down (under the $100,000 max): ${money(st.bets[1] ?? 0)}`);
+    await a.page.keyboard.press('x');
+    await a.page.waitForTimeout(500);
+    // a $1 chip on the 20 and one on the 1 put the $1,000 minimum down on each, then Spin now
+    await a.page.click('.bw-chip >> nth=0');
+    await a.page.click('.bw-slot[data-n="20"]');
+    await a.page.click('.bw-slot[data-n="1"]');
+    await a.page.waitForTimeout(600);
+    st = await wheelState(a);
+    const round = st.round;
+    check(st.bets[20] === 100_000 && st.bets[1] === 100_000, `a $1 chip on a $1,000-minimum number puts the minimum down: ${JSON.stringify(st.bets)}`);
+    await a.page.keyboard.press('Space');
+    await a.page.waitForTimeout(2500);
+    await shoot(a.page, 'wheel-3-solo-spinning');
+    const r1 = await wheelResult(a, since, round);
+    await shoot(a.page, 'wheel-4-solo-rest');
+    const mine = r1.settle.seats[String(r1.state.mySeat)];
+    const n = r1.settle.number;
+    const want = (n === 20 ? 100_000 * 21 : 0) + (n === 1 ? 100_000 * 2 : 0);
+    check(r1.state.shows === r1.settle.slot, `the flapper rests on the server's slot ${r1.settle.slot} (shows ${r1.state.shows}), a ${n}`);
+    check(mine.wagered === 200_000 && mine.returned === want, `solo: $2,000 down, the ${n} came up, paid ${money(mine.returned)} (rules say ${money(want)})`);
+    check(r1.state.stack === 2_000_000 - 200_000 + want, `solo: the stack is ${money(r1.state.stack)}`);
+    await leave(a);
+    const after = await settled(a);
+    check(after.balance - before.balance === want - 200_000, `solo: the balance moved by ${money(after.balance - before.balance)}`);
+
+    // two players: A opens a public wheel, B joins; the wheel spins on its own clock
+    b = await player('qm_wheel_b');
+    pages.push(b);
+    await settled(b, 180_000);
+    since = Date.now();
+    const tableId = await openLobby(a, 'bw-1', { buyin: '1000' });
+    await joinLobby(b, 'bw-1', tableId, '600');
+    await wheelWindow(a, 4000);
+    await wheelWindow(b, 4000);
+    await a.page.click('.bw-chip >> nth=2'); // $25
+    await a.page.click('.bw-slot[data-n="3"]');
+    await a.page.click('.bw-slot[data-n="5"]');
+    await b.page.keyboard.press('a');
+    await b.page.click('.bw-slot[data-n="10"]');
+    await a.page.waitForTimeout(800);
+    const ra = await wheelState(a);
+    const rb = await wheelState(b);
+    check(ra.round === rb.round, `both at round ${ra.round}`);
+    check(rb.bets[10] === 60_000, `B's Max on the 10 is the $600 B has (under the $1,000 max): ${money(rb.bets[10] ?? 0)}`);
+    await shoot(b.page, 'wheel-5-multi-bets');
+    const ma = await wheelResult(a, since, ra.round);
+    const mb = await wheelResult(b, since, ra.round);
+    await shoot(a.page, 'wheel-6-multi-rest-a');
+    const num = ma.settle.number;
+    check(ma.state.shows === ma.settle.slot && mb.state.shows === ma.settle.slot, `both wheels rest on the server's slot ${ma.settle.slot} (a ${num}): ${ma.state.shows}, ${mb.state.shows}`);
+    const wantA = (num === 3 ? 2_500 * 4 : 0) + (num === 5 ? 2_500 * 6 : 0);
+    const wantB = num === 10 ? 60_000 * 11 : 0;
+    const sa = ma.settle.seats[String(ma.state.mySeat)];
+    const sb = mb.settle.seats[String(mb.state.mySeat)];
+    check(sa.returned === wantA && sa.wagered === 5_000, `A: $50 on the 3 and 5, paid ${money(sa.returned)} (rules ${money(wantA)})`);
+    check(sb.returned === wantB && sb.wagered === 60_000, `B: $600 on the 10, paid ${money(sb.returned)} (rules ${money(wantB)})`);
+    check(ma.state.stack === 100_000 - 5_000 + wantA && mb.state.stack === 60_000 - 60_000 + wantB, `stacks ${money(ma.state.stack)} and ${money(mb.state.stack)}`);
+    await leave(a);
+    if (await b.page.evaluate(() => !!window.casino.app.table)) await leave(b);
+    await settled(a);
+    await settled(b);
+    await audit(['qm_wheel_a', 'qm_wheel_b'], 'wheel');
+  } catch (err) {
+    failed('wheel', err);
+    if (a) await shoot(a.page, 'wheel-failure-a').catch(() => null);
+    if (b) await shoot(b.page, 'wheel-failure-b').catch(() => null);
   }
 }
 
