@@ -57,9 +57,14 @@ async function player(name) {
   await page.fill('.name-input', name);
   await page.fill('.pass-input', 'casino-dev'); // DEV_PASSWORD in client/src/net/api.ts
   await page.click('.enter-btn');
-  await page.waitForSelector('.menu-item', { timeout: 20_000 });
-  await page.click('.menu-item >> nth=0');
-  await page.waitForSelector('.hud', { timeout: 20_000 });
+  // a name's first visit walks through its look first; either way end on the floor
+  await page.waitForSelector('.menu-item, .editor-panel.guided', { timeout: 30_000 });
+  if (await page.$('.editor-panel.guided')) {
+    for (let i = 0; i < 3; i++) await page.click('.editor-panel .ed-buttons .btn.primary');
+  } else {
+    await page.click('.menu-item >> nth=0');
+  }
+  await page.waitForSelector('.hud', { timeout: 30_000 });
   return { page, name };
 }
 
