@@ -57,7 +57,8 @@ async function newPage(name) {
 async function player(name) {
   const page = await newPage(name);
   await page.goto(`${base}/casino/`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-  await page.waitForSelector('.name-input', { timeout: 180_000 });
+  // the whole floor loads first: minutes on a software renderer sharing the machine
+  await page.waitForSelector('.name-input', { timeout: 600_000 });
   await page.fill('.name-input', name);
   await page.fill('.pass-input', 'casino-dev'); // DEV_PASSWORD in client/src/net/api.ts
   await page.click('.enter-btn');
@@ -214,7 +215,7 @@ if (wanted('lobby')) try {
 async function harness(game, limits, buyIn, extra = '') {
   const page = await newPage(game);
   await page.goto(`${base}/casino/?dev=table&game=${game}&name=lim_${game.slice(0, 8)}_${tag}&limits=${limits}${extra}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-  await page.waitForSelector('.modal input[type=number]', { timeout: 60_000 });
+  await page.waitForSelector('.modal input[type=number]', { timeout: 300_000 });
   await page.fill('.modal input[type=number]', String(buyIn));
   await page.click('.modal .btn.primary');
   await page.waitForFunction(() => window.casino?.table?.snapshot?.you?.status === 'seated' || window.casino?.table?.view?.seated === true, null, { timeout: 20_000 });
