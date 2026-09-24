@@ -224,7 +224,7 @@
 .os-players-count { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--os-ink-3); }
 .os-players-total { font-family: var(--os-num); font-size: 17px; color: var(--os-ink); font-variant-numeric: tabular-nums; }
 .os-players-list { display: grid; align-content: start; overflow: hidden; }
-.os-players-row { display: grid; grid-template-columns: 1fr 64px 64px 66px; align-items: center; gap: 6px; padding: 0 12px; height: 30px; font-size: 14px; }
+.os-players-row { display: grid; grid-template-columns: minmax(0, 1fr) 56px 58px 62px; align-items: center; gap: 6px; padding: 0 12px; height: 30px; font-size: 14px; }
 .os-players-cols { height: 24px; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--os-ink-3); border-bottom: 1px solid var(--os-panel); }
 .os-players-cols span:not(:first-child), .os-players-row span:not(.os-players-name) { text-align: right; }
 .os-players-row:nth-child(even):not(.os-players-cols) { background: rgba(33, 55, 67, 0.45); }
