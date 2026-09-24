@@ -335,6 +335,7 @@ function wheelMaterials(q: Quality): WheelMaterials {
   });
 
   const chrome = new THREE.MeshStandardMaterial({ color: '#dde0e4', metalness: 1, roughness: 0.1, side: THREE.DoubleSide });
+  buildOnFirstDraw(chrome);
   const ball = Physical({ color: '#efe8d8', roughness: 0.16, sheen: 0.5, sheenColor: new THREE.Color('#fff4e2'), sheenRoughness: 0.45 });
   const m = { rim, track, veneer: veneerMat, chrome, ball };
   reflectCasino([
@@ -413,9 +414,7 @@ export function buildWheel(v: Variant, quality: Quality): THREE.Group {
       .translate(0, ARM_Y, 0),
   );
   const chromeParts = [lathe(ROTOR_RIM, seg), lathe(POCKET_OUTER, seg), lathe(POCKET_INNER, seg), lathe(TURRET, high ? 64 : 32), ...arms];
-  const chromeMesh = new THREE.Mesh(mergeGeometries(chromeParts), m.chrome);
-  buildOnFirstDraw(chromeMesh);
-  rotor.add(chromeMesh);
+  rotor.add(new THREE.Mesh(mergeGeometries(chromeParts), m.chrome));
 
   rotor.add(
     new THREE.Mesh(

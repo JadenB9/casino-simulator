@@ -24,9 +24,12 @@ export function reflectCasino(entries: [THREE.MeshStandardMaterial, number][]): 
   }
 }
 
-/** Build the casino the first time `mesh` is drawn, once that frame is done. */
-export function buildOnFirstDraw(mesh: THREE.Object3D): void {
-  mesh.onBeforeRender = (renderer) => {
+/**
+ * Build the casino the first time anything drawn in `material` is drawn (the live wheel or the
+ * floor's far stand-in, which shares its materials), once that frame is done.
+ */
+export function buildOnFirstDraw(material: THREE.Material): void {
+  material.onBeforeRender = (renderer) => {
     if (started) return;
     started = true;
     queueMicrotask(() => {
