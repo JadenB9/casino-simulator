@@ -159,8 +159,27 @@ for (const key of list) {
     await page.waitForSelector('.hud', { timeout: 30_000 });
     await page.waitForFunction(() => document.documentElement.classList.contains('touch-ui') && !document.querySelector('.touch-layer')?.hidden, null, { timeout: 10_000 }).catch(() => fail('touch controls did not come up on the floor'));
     await sleep(1200);
-    const gfx = await page.evaluate(() => ({ q: window.casino.engine.quality, pr: window.casino.engine.renderer.getPixelRatio(), dpr: devicePixelRatio, fov: window.casino.engine.camera.fov }));
-    log(`${key}: quality ${gfx.q}, pixel ratio ${gfx.pr} (device ${gfx.dpr}), fov ${gfx.fov.toFixed(1)}`);
+    // What a frame costs here (a phone's fps can't be measured in emulation): the most draw calls
+    // and triangles over a second of frames, and the size of the drawing buffer.
+    const gfx = await page.evaluate(async () => {
+      const { engine, world } = window.casino;
+      let calls = 0;
+      let tris = 0;
+      const t0 = performance.now();
+      await new Promise((done) => {
+        const tick = () => {
+          const s = world.stats();
+          calls = Math.max(calls, s.calls);
+          tris = Math.max(tris, s.triangles);
+          if (performance.now() - t0 < 1000) requestAnimationFrame(tick);
+          else done();
+        };
+        requestAnimationFrame(tick);
+      });
+      const b = engine.renderer.domElement;
+      return { q: engine.quality, pr: engine.renderer.getPixelRatio(), dpr: devicePixelRatio, fov: engine.camera.fov, calls, tris, buf: `${b.width}x${b.height}` };
+    });
+    log(`${key}: quality ${gfx.q}, pixel ratio ${gfx.pr} (device ${gfx.dpr}), buffer ${gfx.buf}, fov ${gfx.fov.toFixed(1)}, ${gfx.calls} draw calls, ${Math.round(gfx.tris / 1000)}k triangles`);
     if (gfx.q !== 'low') fail(`quality ${gfx.q} on a phone`);
     if (gfx.pr > 1.5) fail(`pixel ratio ${gfx.pr}`);
     await shot('floor');
