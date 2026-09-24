@@ -1,0 +1,52 @@
+/* Keno on the online site: the 8 x 5 board of numbers, and under it the paytable for the picks
+   made (what each count of hits pays at this risk). Picked numbers are violet; a drawn pick turns
+   green with a gem, a drawn number that wasn't picked goes dark with a red numeral. Design pixels
+   of the 1280 x 800 page. */
+
+.kn-main { position: absolute; inset: 0; }
+
+.kn-grid {
+  position: absolute; left: 50%; top: 34px; translate: -50% 0;
+  display: grid; grid-template-columns: repeat(8, 94px); grid-auto-rows: 80px; gap: 12px;
+}
+.kn-tile {
+  position: relative; border: 0; border-radius: 8px; background: #2f4553; color: var(--os-ink);
+  box-shadow: 0 5px 0 #213743; font-family: var(--os-num); font-size: 32px; font-variant-numeric: tabular-nums;
+  cursor: pointer; transition: background 0.1s, translate 0.08s;
+}
+.kn-tile:hover:not(:disabled):not(.picked) { background: #3b5669; }
+.kn-tile:active:not(:disabled) { translate: 0 2px; box-shadow: 0 3px 0 #213743; }
+.kn-tile:disabled { cursor: default; }
+.kn-tile.picked { background: #8b3ffb; box-shadow: 0 5px 0 #5a1fb4; }
+.kn-tile.picked:hover:not(:disabled) { background: #9a55ff; }
+/* Drawn: a miss goes dark with a red numeral; a hit turns green with a gem over its number */
+.kn-tile.drawn { background: #0f1e29; box-shadow: 0 5px 0 #0a151d, inset 0 0 0 2px #1d3140; color: var(--os-lose); }
+.kn-tile.hit { background: var(--os-win); box-shadow: 0 5px 0 #0f8f3c; color: var(--os-go-ink); }
+.kn-tile.hit::before {
+  content: ''; position: absolute; left: 50%; top: 9px; width: 12px; height: 12px; translate: -50% 0; rotate: 45deg;
+  background: #eafff1; box-shadow: 0 0 10px rgba(234, 255, 241, 0.8); border-radius: 2px;
+}
+.kn-tile.hit { padding-top: 12px; }
+.kn-tile.pop { animation: kn-pop 0.28s ease-out; }
+@keyframes kn-pop { 0% { scale: 0.86; } 55% { scale: 1.08; } }
+.kn-tile.full { animation: kn-shake 0.24s ease-in-out; }
+@keyframes kn-shake { 25% { translate: -3px 0; } 75% { translate: 3px 0; } }
+
+/* The paytable for the picks made: a pay and a hit count per column */
+.kn-pays { position: absolute; left: 24px; right: 24px; bottom: 24px; padding: 14px 16px 16px; border-radius: 8px; background: var(--os-panel); }
+.kn-pays-grid { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 8px; }
+.kn-pay { display: grid; gap: 6px; }
+.kn-pay-mult {
+  display: grid; place-items: center; height: 40px; border-radius: 6px; background: var(--os-card);
+  font-family: var(--os-num); font-size: 19px; font-variant-numeric: tabular-nums; color: var(--os-ink);
+}
+.kn-pay-mult.zero { color: var(--os-ink-3); }
+.kn-pay-hits { display: flex; justify-content: center; align-items: center; gap: 6px; height: 26px; font-size: 13px; font-weight: 600; color: var(--os-ink-3); }
+.kn-pay-hits::after { content: ''; width: 8px; height: 8px; rotate: 45deg; background: currentColor; border-radius: 1px; }
+.kn-pay.now .kn-pay-mult { background: #3b5669; color: var(--os-ink); }
+.kn-pay.now .kn-pay-hits { color: var(--os-ink); }
+.kn-pay.won .kn-pay-mult { background: var(--os-win); color: var(--os-go-ink); }
+.kn-pay.won .kn-pay-hits { color: var(--os-win); }
+.kn-pays-empty { display: grid; place-items: center; height: 72px; font-size: 17px; color: var(--os-ink-3); }
+
+.kn-main .os-result { top: 258px; z-index: 2; pointer-events: none; }

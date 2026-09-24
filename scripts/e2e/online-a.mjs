@@ -193,6 +193,30 @@ for (const game of games) {
     await shot('4-auto');
   }
 
+  // Tips on: reload with the setting saved (the seat is kept, so no buy-in) and read the tip.
+  await page.evaluate(() => localStorage.setItem('casino.tips', '1'));
+  await page.reload();
+  await page.waitForSelector('.os-screen:not([hidden])', { timeout: 30000 });
+  await page.waitForTimeout(1500);
+  if (game === 'keno' && !(await page.$('.kn-tile.picked'))) await page.click('.kn-tile >> nth=4');
+  await shot('5-tips');
+  out.tip = await text('.tip-line');
+  out.tipPick = await page.$$eval('.tip-pick', (els) => els.map((e) => e.textContent || e.className).slice(0, 4));
+  await page.evaluate(() => localStorage.setItem('casino.tips', '0'));
+
+  // A showpiece the server can't be asked for, replayed through the view (display only; nothing
+  // is paid, and the next snapshot puts the page back): a top pay, for its celebration.
+  const stack = await page.evaluate(() => window.casino.table.snapshot.you.stack);
+  const showpiece = {
+    plinko: [{ type: 'drop', seat: 0, round: 9999, rows: 16, risk: 'high', bet: 100, bin: 0, mult: 100000, payout: 100000, path: new Array(16).fill(0), stack: stack + 99900 }],
+    dice: [{ type: 'roll', seat: 0, round: 9999, bet: 100, target: 100, over: false, chance: 100, roll: 42, win: true, payout: 9900, stack: stack + 9800 }],
+    limbo: [{ type: 'result', seat: 0, round: 9999, bet: 100, target: 20000, result: 31337, win: true, payout: 20000, stack: stack + 19900 }],
+    keno: [{ type: 'draw', seat: 0, round: 9999, bet: 100, risk: 'high', picks: [4, 9, 13, 22, 27, 31, 38, 2, 17, 40], drawn: [2, 9, 13, 17, 4, 27, 31, 38, 22, 36], hits: 9, mult: 80000, payout: 80000, stack: stack + 79900 }],
+  }[game];
+  await page.evaluate((events) => void window.casino.table.view.onEvents(events, window.casino.table.snapshot.view), showpiece);
+  await page.waitForTimeout(game === 'plinko' ? 3100 : game === 'keno' ? 1700 : 900);
+  await shot('6-showpiece');
+
   out.hud = await text('.dev-hud');
   out.foot = await text('.os-foot');
   // Stand up, so the next run starts with a buy-in.
