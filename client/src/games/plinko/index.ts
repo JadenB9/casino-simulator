@@ -11,7 +11,7 @@ import { ROWS, RISKS, RISK_NAMES, MULTS, binChance, boardRtp, bestBoard, returnR
 import type { DropEvent, PlinkoView } from '../../../../shared/src/games/plinko/engine.ts';
 import { celebrate } from '../../table/celebrate.ts';
 import { attractTexture, pcModel, pcPose, pcScreenCorners, PC_FOOTPRINT, PC_SEAT } from '../online/pc.ts';
-import { OnlineScreen, BetBox, actionButton, SegChoice, InfoList, SessionTally, commitTyping, labelled, winTier, siteTone, drawSiteBar, drawAttractPanel } from '../online/screen.ts';
+import { OnlineScreen, AddChips, BetBox, actionButton, SegChoice, InfoList, SessionTally, commitTyping, labelled, winTier, siteTone, drawSiteBar, drawAttractPanel } from '../online/screen.ts';
 import { PlinkoBoard, binColor, multText } from './board.ts';
 
 /** The chair's trim on the floor: Plinko's pink. */
@@ -74,6 +74,7 @@ export const plinko: GameClientModule = {
   mount(ctx): TableView {
     const screen = new OnlineScreen('Plinko');
     ctx.ui.append(screen.root);
+    const cashier = new AddChips(screen, ctx);
     const corners = pcScreenCorners();
 
     let rows: Rows = 16;
@@ -208,8 +209,15 @@ export const plinko: GameClientModule = {
       sync();
     };
 
+    /** The HUD's chips wait for every ball in the air to land (TableView.settled). */
+    let calm: (() => void)[] = [];
+    const calmed = () => {
+      if (board.inFlight === 0) for (const r of calm.splice(0)) r();
+    };
+
     const landed = (d: DropEvent) => {
       falling = Math.max(0, falling - d.payout);
+      queueMicrotask(calmed);
       tally.add(d.bet, d.payout);
       board.pushResult(d);
       if (d.mult < 100) siteTone(ctx.sfx, 330, 110, { gain: 0.045, to: 240 });
@@ -230,10 +238,12 @@ export const plinko: GameClientModule = {
 
     return {
       onTable(snap) {
+        cashier.table(snap);
         stack = snap.you.stack;
         waiting = 0;
         falling = 0;
         board.clear();
+        calmed();
         const lim = snap.meta.config.limits.default;
         if (!bet || !limits || lim.min !== limits.min || lim.max !== limits.max || lim.step !== limits.step) {
           bet?.root.remove();
@@ -287,11 +297,13 @@ export const plinko: GameClientModule = {
       },
 
       onSeat(msg) {
+        cashier.seat(msg);
         stack = msg.stack;
         sync();
       },
 
       onError() {
+        cashier.refused();
         waiting = Math.max(0, waiting - 1);
         sync();
       },
@@ -318,9 +330,14 @@ export const plinko: GameClientModule = {
         screen.follow(ctx.stage.root, camera, corners);
       },
 
+      settled() {
+        return board.inFlight === 0 ? Promise.resolve() : new Promise<void>((r) => calm.push(r));
+      },
+
       dispose() {
         offTips();
         if (tipShown) ctx.kit.tip(null);
+        for (const r of calm.splice(0)) r();
         screen.dispose();
       },
     };

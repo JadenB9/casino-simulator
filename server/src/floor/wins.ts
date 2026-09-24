@@ -21,6 +21,7 @@ import { isValidName } from '../../../shared/src/names.ts';
 import { spotByKey as rouletteSpot, spotName as rouletteName, type Variant as RouletteVariant } from '../../../shared/src/games/roulette/rules.ts';
 import { spotByKey as sicboSpot, spotName as sicboName } from '../../../shared/src/games/sicbo/rules.ts';
 import { spotOf as bigSixSpot } from '../../../shared/src/games/bigsix/rules.ts';
+import { spotOf as bandit } from '../../../shared/src/games/banditwheel/rules.ts';
 import { SPOT_NAMES as BACCARAT_SPOTS, type Spot as BaccaratSpot } from '../../../shared/src/games/baccarat/rules.ts';
 import { handName as threeCardHand, score as threeCardScore } from '../../../shared/src/games/threecard/rules.ts';
 import type { Card } from '../../../shared/src/cards.ts';
@@ -112,6 +113,16 @@ const SHOW_MS: Partial<Record<GameId, number>> = {
   bigsix: 2_000,
   sicbo: 2_000,
   highcard: 1_500,
+  // the online games: a Plinko ball falls 16 rows in about 2.5 s, Keno turns its ten numbers
+  // over in 1.3 s, Limbo counts up for at most a second; the others show a result at once
+  plinko: 3_000,
+  keno: 2_000,
+  limbo: 1_500,
+  dice: 1_000,
+  tower: 1_000,
+  mines: 1_000,
+  hilo: 1_000,
+  crash: 500,
 };
 /** Each free game plays out after the paid spin. */
 const FREE_GAME_MS = 2_400;
@@ -197,6 +208,44 @@ export function describeWin(game: GameId, variant: string, events: readonly Game
         if ((r?.tie ?? 0) > 0) return 'Tie bet, 10 to 1';
         return r?.outcome === 'war-win' ? 'Won the war' : 'High card';
       }
+      case 'banditwheel': {
+        const key = bestBet(settledBets(events, seat));
+        const n = key === null ? null : Number(key);
+        return n !== null && bandit(n) ? `${n} to 1` : times;
+      }
+      case 'plinko': {
+        const e = mine('drop')[0];
+        return e ? `${e.rows} rows ${RISK_WORD[e.risk as string] ?? ''}, ${mult(e.mult)}`.replace(/ ,/, ',') : times;
+      }
+      case 'dice': {
+        const e = mine('roll')[0];
+        return e ? `Rolled ${hundredths(e.roll)} ${e.over ? 'over' : 'under'} ${hundredths(e.target)}` : times;
+      }
+      case 'limbo': {
+        const e = mine('result')[0];
+        return e ? `Target ${mult(e.target)}` : times;
+      }
+      case 'keno': {
+        const e = mine('draw')[0];
+        return e && Array.isArray(e.picks) ? `${e.hits} of ${e.picks.length} picks hit, ${mult(e.mult)}` : times;
+      }
+      case 'tower': {
+        const e = events.find((x) => x.type === 'over');
+        return e ? `Row ${e.level}, ${mult(e.mult)}` : times;
+      }
+      case 'mines': {
+        const e = events.find((x) => x.type === 'over');
+        const mines = Array.isArray(e?.field) ? e.field.length : 0;
+        return e ? `${mines} ${mines === 1 ? 'mine' : 'mines'}, ${e.gems} ${e.gems === 1 ? 'gem' : 'gems'}, ${mult(e.mult)}` : times;
+      }
+      case 'hilo': {
+        const e = events.find((x) => x.type === 'over');
+        return e ? `${e.guesses} right guesses, ${mult(e.mult)}` : times;
+      }
+      case 'crash': {
+        const e = mine('cashout')[0];
+        return e ? `Cashed out at ${mult(e.at)}` : times;
+      }
       case 'holdem': {
         // Only a hand shown down is named; an uncontested pot stays a pot.
         for (const e of events) {
@@ -212,6 +261,20 @@ export function describeWin(game: GameId, variant: string, events: readonly Game
     return times;
   }
 }
+
+/** A multiplier in hundredths as the sign prints it: "45.12x", "1,000x". */
+function mult(k: unknown): string {
+  if (typeof k !== 'number' || !Number.isFinite(k)) return '';
+  const whole = k % 100 === 0;
+  return `${(k / 100).toLocaleString('en-US', { minimumFractionDigits: whole ? 0 : 2, maximumFractionDigits: 2 })}x`;
+}
+
+/** A dice roll or target in hundredths: "49.50". */
+function hundredths(k: unknown): string {
+  return typeof k === 'number' && Number.isFinite(k) ? (k / 100).toFixed(2) : '';
+}
+
+const RISK_WORD: Record<string, string> = { low: 'Low', medium: 'Medium', high: 'High' };
 
 type Settled = [key: string, amount: number, returned: number][];
 

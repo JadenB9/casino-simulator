@@ -20,6 +20,7 @@ import {
   type TableLimits,
 } from '../../../../shared/src/limits.ts';
 import { el } from '../kit.ts';
+import { session } from '../../app/session.ts';
 
 const KEY = (game: GameId) => `casino.limits.${game}`;
 
@@ -214,6 +215,12 @@ export class LimitsPicker {
     const cfg = applyLimits(ENGINES[this.game].config(this.variant, 'multi'), v);
     const lines = limitsDetail(cfg);
     this.buyIn.textContent = lines.pop()!;
+    // Said before sitting down, not after: a table whose smallest buy-in is more than the balance.
+    const balance = session.profile?.balance;
+    const short = balance !== undefined && balance < cfg.buyIn.min;
+    this.buyIn.classList.toggle('short', short);
+    this.buyIn.title = short ? `More than your balance of ${formatMoney(balance)}` : '';
+    if (short) this.buyIn.textContent += ` · you have ${formatMoney(balance)}`;
     this.detail.textContent = lines.join(' · ');
     this.detail.hidden = lines.length === 0;
   }

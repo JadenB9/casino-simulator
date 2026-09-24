@@ -43,6 +43,9 @@ through the engines themselves.
   ([limits.md](limits.md)): $1 to $1,000 in $1 steps at Standard, up to $100,000 a bet, and a buy-in
   of up to a hundred times the maximum ($10 to $100,000 at Standard). Engines check the config's
   limits; pages print them in the footer next to the return ("Return 99.00% · Bet $1 to $1,000").
+  **Add chips**, beside the chips at the top of every page, tops the stack up from the balance to
+  as much as that buy-in allows, and turns into **Buy in** when there are no chips here (after a
+  bust, or a buy-in turned down).
 - **Monte Carlo.** Fixed seeds (`mcRng`), SE = SD/√N, and every tally must land within 3 SE of the
   published return. z is (measured return − published return)/SE. `npm run test:mc` reproduces
   every figure below exactly; `MC_RNG=crypto` reruns on the production generator.

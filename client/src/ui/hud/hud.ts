@@ -14,6 +14,7 @@ import { icon } from '../menu/icons.ts';
 import { formatDuration } from '../menu/parts.ts';
 import { openSettings } from './settings.ts';
 import { openShortcuts } from './shortcuts.ts';
+import { netStart, sessionNet } from './net.ts';
 
 export interface HudDeps {
   root: HTMLElement;
@@ -127,23 +128,17 @@ export function mountHud(deps: HudDeps): Hud {
   const rollBalance = roller(balance.value);
   const rollTable = roller(table.value);
 
-  // Session net = what you're worth now - what you had when the HUD came up - loans since.
-  // Chips at the current table count at their live stack, other tables at what went in. The bank
-  // tops up by whatever reaches $50,000, so each loan since counts at its own amount (the
-  // profile lists them newest first).
+  // Session net: won or lost at play since the HUD came up (ui/hud/net.ts): the bank's top-ups
+  // aren't winnings and the boutique's and the bar's prices aren't losses.
   const startedAt = Date.now();
-  const p0 = deps.session.profile;
-  const startWorth = p0 ? p0.balance + p0.inPlay : 0;
-  const startLoans = p0?.loansTaken ?? 0;
+  const start = netStart(deps.session.profile, deps.session.spent ?? 0);
   let seat: { stack: Cents; escrow: Cents } | null = null;
   let netTimer = 0;
 
   const paintSession = () => {
     const p = deps.session.profile;
     if (!p) return;
-    const worth = p.balance + p.inPlay + (seat ? seat.stack - seat.escrow : 0);
-    const lent = p.loans.slice(0, Math.max(0, p.loansTaken - startLoans)).reduce((sum, l) => sum + l.amount, 0);
-    const net = worth - startWorth - lent;
+    const net = sessionNet(p, start, seat, deps.session.spent ?? 0);
     sessionTile.value.replaceChildren(
       el('span', net > 0 ? 'win' : net < 0 ? 'lose' : '', formatMoney(net, { sign: true })),
       el('span', 'hud-time', ` · ${formatDuration(Date.now() - startedAt)}`),

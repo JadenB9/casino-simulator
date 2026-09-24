@@ -472,6 +472,8 @@ class App {
     let table: TableSession | null = null;
     // Messages from a table already left (its socket lingers a moment) change nothing here.
     const current = () => table !== null && this.table?.session === table;
+    /** The newest seat message's chips, waiting for the table to show the round behind them. */
+    let chips: { stack: number | null; escrow: number } | null = null;
     const party =
       choice.kind === 'lobby'
         ? new PartyPanel({
@@ -501,6 +503,7 @@ class App {
           // A reconnect sends only the snapshot: it says whether you're seated and with what.
           const seated = snap.you.status !== 'watching';
           this.table!.seated = seated;
+          chips = null;
           this.hud?.setTableChips(seated ? snap.you.stack : null);
           this.poseForSeat(snap.you.seat);
         },
@@ -508,7 +511,14 @@ class App {
           if (!current()) return;
           const seated = m.status !== 'watching';
           this.table!.seated = seated;
-          this.hud?.setTableChips(seated ? m.stack : null, m.escrow);
+          // The stack a round leaves arrives as the round starts to play out (a wheel still
+          // turning, cards still to come): the HUD shows it once the table has.
+          chips = { stack: seated ? m.stack : null, escrow: m.escrow };
+          table!.afterShown(() => {
+            if (!current() || !chips) return;
+            this.hud?.setTableChips(chips.stack, chips.escrow);
+            chips = null;
+          });
           if (seated) this.poseForSeat(m.seat);
         },
         onChat: (m) => current() && this.chat?.tableMessage(m),
