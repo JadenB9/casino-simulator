@@ -306,10 +306,35 @@ if (checks.includes('layout')) {
       const h = L.STATION_H[st.zone];
       if (ex > 0.05 || ez > 0.05 || top > h) stations.push(`${st.id}: model past its footprint by ${ex.toFixed(2)} (width) ${ez.toFixed(2)} (depth), top ${top.toFixed(2)} m (allowed ${h})`);
     }
-    return { plan: L.checkLayout(plan), props, stations, plants: plan.plants.length, palms: plan.palms.map((p) => p.size) };
+    // the staff (npcs.ts): each a body on the floor, clear of every solid, every other station and each other
+    const staff = [];
+    const posts = world.staff?.posts ?? [];
+    const BODY = 0.25;
+    const inStation = (st, x, z, r) => {
+      const c = Math.cos(st.yaw);
+      const sn = Math.sin(st.yaw);
+      const lx = (x - st.anchor.position.x) * c - (z - st.anchor.position.z) * sn;
+      const lz = (x - st.anchor.position.x) * sn + (z - st.anchor.position.z) * c;
+      return Math.abs(lx) < st.footprint.width / 2 + r && Math.abs(lz) < st.footprint.depth / 2 + r;
+    };
+    posts.forEach((p, i) => {
+      const who = `${p.role}${p.station ? ` of ${p.station}` : ''}`;
+      for (const sol of plan.solids) {
+        if (p.role === 'cashier' && sol.group === 'cashier') continue; // inside the cage, by design
+        if (sol.y0 >= 1.9) continue; // hangs over a standing body
+        // how far the body's centre is from the solid's footprint (0 inside it)
+        const flat = inside({ ...sol, y0: 0, y1: 2 }, p.x, 1, p.z);
+        if (flat < BODY - 0.01) staff.push(`${who} stands in ${sol.id}`);
+      }
+      for (const st of world.stations) if (st.id !== p.station && inStation(st, p.x, p.z, BODY - 0.02)) staff.push(`${who} stands in ${st.id}`);
+      posts.forEach((q, j) => {
+        if (j > i && Math.hypot(p.x - q.x, p.z - q.z) < 2 * BODY) staff.push(`${who} and ${q.role} of ${q.station} stand in each other`);
+      });
+    });
+    return { plan: L.checkLayout(plan), props, stations, staff, staffCount: posts.length, plants: plan.plants.length, palms: plan.palms.map((p) => p.size) };
   });
   console.log(JSON.stringify({ check: 'layout', ...result, errors: errors.slice(0, 3) }));
-  for (const k of ['plan', 'props', 'stations']) if (result[k].length) fail(`layout ${k}: ${result[k].join('; ')}`);
+  for (const k of ['plan', 'props', 'stations', 'staff']) if (result[k].length) fail(`layout ${k}: ${result[k].join('; ')}`);
   await page.close();
 }
 

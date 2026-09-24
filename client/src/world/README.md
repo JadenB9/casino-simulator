@@ -37,6 +37,8 @@ engine.onFrame((dt) => world.update(dt));
 | `stats()` | `{ calls, triangles, programs, pixelRatio }` of the last frame. |
 | `collider` | What the walker and the camera bump into; add a post or box for anything that stands on the floor (dealers). |
 | `lod` | The far stand-ins: `lod.budget` (draw calls the real models in view may cost over their stand-ins) and `lod.pin(id, 'real' \| 'far' \| null)` for the checks. |
+| `dealerGesture(stationId, g)` | A dealer's arm motion at a table, for its view to call as it animates: `'deal'` (a card off the deck in the left hand, sent out with the right), `'sweep'` (the right arm draws the chips in toward the rack), `'pay'` (both hands forward, setting a payout down). About a second each; a new one replaces one still playing. False when the station has no dealer (machines). Nothing calls it yet. |
+| `staff` | The floor's staff (npcs.ts): `posts` (`{ role, station, x, z, yaw }` for every dealer, the stickman, the bartender and the cashier), `at(stationId)` (that station's dealer character), `gesture(stationId, g)` (what `dealerGesture` calls). |
 | `plan`, `focus`, `teleport`, `dispose` | The floor plan (layout.ts), the station the player is at, respawn, teardown. |
 
 `SPAWN` (exported) is where a new player appears: `(0, 12.8)`, yaw `Math.PI`, on the marble inside
@@ -60,6 +62,16 @@ The world stops moving the player and does not touch the camera once the fly-in 
 table view owns it (roulette's wheel shot, craps' per-seat pose). Esc calls `opts.onEscape` if
 given (confirm live bets there, then call `exitTable()`), otherwise it stands up at once. The
 player's own avatar is hidden while seated.
+
+### Other players sitting
+Seats with a chair or stool are measured once the floor has loaded (`measureSeats` in npcs.ts: a
+ray straight down at every `seats()` position against the station's model and the floor props; a
+top 0.3-0.95 m up counts). `seatWorld(station, slot)` returns it as `sit`, and `RemotePlayers`
+calls `character.sit(sit)`: hips and knees bend until the shins reach the floor (a high stool
+leaves them bent at the limit), the character drops onto the seat and the forearms come forward
+onto the rail. The drop moves the whole root, so the name tag and speech or emote bubbles hung on
+it come down with the head (the shadow stays on the floor). Where there is no seat (most tables are
+played standing) `sit` is null and they stand.
 
 ### Screen space
 The "Press E" prompt sits bottom-centre, clear of the bottom-left corner (the site's back chip).
@@ -93,8 +105,44 @@ inside its footprint). The dev floor logs any problem. `node scripts/e2e/world2.
 checks the layout with three and six slot islands, the views and their draw calls, mouse look,
 the recentring rules and emotes.
 
-Hooks for others: dealers standing in the staff area want collision, since the staff area is open
-now: `world.collider.post(x, z, 0.28, 1.9, { cam: false })` (the Collider built in `createWorld`).
+Anything else that stands on the floor adds its own collision through `world.collider` (the
+Collider built in `createWorld`), as the staff do with a post each.
+## Staff
+`npcs.ts` puts a dealer behind every table (a stickman across the craps table from its players,
+the Big Six dealer beside the wheel, the roulette dealer between the wheel and the zero), a
+bartender behind the bar and a cashier at the cage's east window. Where a dealer stands comes from
+the table's own model: rays from the dealer's side at a couple of dozen heights find the table's
+edge, and the dealer stands as close as a standing body allows at each height (toes at the floor,
+thighs at table height, belly and chest above it) plus 4 cm, so a rebuilt table moves its dealer.
+The players' seated cameras look over the table at the dealer, who frames it from behind.
+
+- **Uniforms** (characters.ts, `uniformOutfit('vest' | 'blazer')` as `Look.outfit`): made in code
+  from the suit (men) and smart (women) outfits, no extra files. Bone weights say what each vertex
+  is: arms become white shirt sleeves under a vest (or stay the jacket's colour for the blazer), a
+  vest stops at the waist, bare neckline goes under a collar; a bow tie, a brass name badge and,
+  on the round-neck top, a shirt-front V are added as a few vertices skinned like the cloth under
+  them. Still one mesh and one draw call; the Look colours it (top = vest or jacket). Dealers wear
+  black vests, the bartender wine red, the cashier a navy blazer.
+- **Faces**: `staffLooks()` gives every post a body, skin tone, hair colour and height; skin and
+  height walk their lists at different strides, so no two of up to 56 staff match, and the same
+  table keeps the same dealer every visit.
+- **Life** (the posing layers on `Person`, applied after the mixer each frame): `setPace(rate,
+  phase)` so the idle breathing is out of step, `sway(seed)` for weight shifts from foot to foot,
+  `lookAt(point)` turning the head and neck (within 66 degrees; further round and they look ahead),
+  and `gesture('deal' | 'sweep' | 'pay')`. Heads turn to the nearest person within 3.6 m in front of
+  them for a couple of seconds at a time; with nobody near, a dealer glances over the layout. When
+  you sit at a table its dealer turns (up to 46 degrees) and looks at you, now and then down at the
+  layout. The bartender strolls a few steps along the bar every 8-22 s.
+- **Cost**: staff outside the camera's view are hidden and not animated. Past `CULL_M` (15 m, back
+  inside 14 m) each gives way to a still copy of itself (`Person.bake()`, posed at rest), drawn with
+  everyone in the same uniform and colour as one instanced mesh: a view pays one call per live
+  dealer it can see plus at most four for the whole far floor. All their shadows are one instanced
+  mesh. Each stands on a collision post (0.28 m, `cam: false`) so nobody walks through them; the
+  bartender's post follows the stroll.
+- `node scripts/e2e/npcs.mjs <port> <dir> [tables seated staff gestures sitting calls]` screenshots
+  every table with its dealer from its players' side, the seated views, the bar, the cage and the
+  pit, a dealer's three motions and two players sitting at Hold'em (on stand-in chairs), and checks
+  the dev views stay under 250 draw calls.
 
 ## Rendering
 - Static architecture is merged per material (batch.ts); the floor's glowing strips and discs (LED

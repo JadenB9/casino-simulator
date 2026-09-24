@@ -20,6 +20,8 @@ export interface SeatPose {
   y?: number;
   z: number;
   yaw: number;
+  /** The top of the chair or stool there, metres above the seat's floor; none: they stand. */
+  sit?: number | null;
 }
 
 export interface RemotePlayersOptions {
@@ -102,10 +104,12 @@ export class RemotePlayers {
           root.position.set(seat.x, seat.y ?? 0, seat.z);
           root.rotation.y = seat.yaw;
           d.ch.setMotion(0);
+          d.ch.sit?.(seat.sit ?? null);
           d.ch.update(dt);
         }
         continue;
       }
+      d.ch.sit?.(null);
       if (!pose) {
         root.visible = false;
         d.onFloor = false;

@@ -43,3 +43,6 @@ code in this repo.
 | wood panel | `assets/textures/wood-panel.webp` | Poly Haven | CC0 1.0 | https://polyhaven.com/a/dark_paneled_wood |
 | velvet | `assets/textures/velvet.webp` | Poly Haven | CC0 1.0 | https://polyhaven.com/a/velour_velvet |
 | carpet normal | `assets/textures/carpet-normal.webp` | ambientCG | CC0 1.0 | https://ambientcg.com/view?id=Carpet013 |
+
+The floor's staff (dealers, the bartender, the cashier) are the Quaternius suit and smart characters
+above, restyled in code into uniforms (client/src/world/characters.ts); they add no files.

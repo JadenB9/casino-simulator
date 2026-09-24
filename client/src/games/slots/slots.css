@@ -57,3 +57,53 @@
 /* Tips at a machine: beside the cabinet over the deck's right end, so the credit, bet and win
    meters just above the deck stay in view. */
 .slots-deck ~ .tip-line { left: auto; right: 20px; transform: none; max-width: min(330px, calc(100vw - 40px)); }
+
+/* Phones and tablets upright: the deck above the back chip. */
+@media (max-aspect-ratio: 1/1) {
+  .slots-deck { bottom: 54px; }
+}
+@media (pointer: coarse) {
+  .slots-pays { max-height: calc(100dvh - 140px); }
+}
+/* A phone upright: the bet controls on the first row, Insert, Pays, Max bet and Spin on the
+   second (deck children: insert, pays, sep, coin, down, bet, up, max, sep, spin). */
+@media (max-width: 560px) {
+  .slots-deck { flex-wrap: wrap; justify-content: center; gap: 8px 6px; width: calc(100vw - 20px); max-width: 440px; padding: 8px 10px 10px; }
+  .slots-deck .sep { display: none; }
+  .slots-deck > :nth-child(4) { order: 1; }
+  .slots-deck > :nth-child(5) { order: 2; }
+  .slots-deck > :nth-child(6) { order: 3; }
+  .slots-deck > :nth-child(7) { order: 4; }
+  .slots-deck::after { content: ''; order: 4; flex-basis: 100%; }
+  .slots-deck > :nth-child(1) { order: 5; }
+  .slots-deck > :nth-child(2) { order: 6; }
+  .slots-deck > :nth-child(8) { order: 7; }
+  .slots-deck > :nth-child(10) { order: 8; }
+  .slots-deck .btn { padding: 0 11px; white-space: nowrap; }
+  .slots-deck .slots-coin { min-width: 0; }
+  .slots-bet { flex: 1 1 0; min-width: 0; font-size: 16px; }
+  .slots-deck .btn.primary { flex: 1 1 auto; min-width: 0; }
+  .slots-deck ~ .tip-line { left: 10px; right: 112px; max-width: none; }
+  .slots-banner { padding: 14px 24px; max-width: calc(100vw - 24px); }
+  .slots-banner .tier { font-size: 46px; }
+  .slots-banner .amount { font-size: 28px; }
+  .slots-banner.feature .tier { font-size: 34px; }
+  .slots-countup { padding: 8px 18px 10px; }
+  .slots-countup .amount { font-size: 36px; }
+  .slots-pays { padding: 14px 14px 16px; }
+}
+/* On its side: one row, right of the back chip, a little slimmer. */
+@media (max-height: 480px) {
+  .slots-deck { left: auto; right: 10px; bottom: max(8px, env(safe-area-inset-bottom, 0px)); transform: none; gap: 6px; padding: 6px 8px; }
+  .slots-deck .btn { padding: 0 10px; white-space: nowrap; }
+  .slots-deck .slots-coin { min-width: 0; }
+  .slots-bet { min-width: 0; padding: 0 4px; font-size: 16px; }
+  .slots-deck .btn.primary { min-width: 96px; }
+  .slots-banner { top: 40%; padding: 10px 28px; }
+  .slots-banner .tier { font-size: 44px; }
+  .slots-banner .amount { font-size: 26px; }
+  .slots-countup { top: calc(40% + 50px); padding: 6px 18px 8px; }
+  .slots-countup .amount { font-size: 32px; }
+  .slots-pays { max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px); }
+  .slots-deck ~ .tip-line { left: 10px; right: auto; }
+}

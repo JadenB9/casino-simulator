@@ -23,6 +23,8 @@ export interface WorldStation extends Station {
   /** The game module's model (a child of the anchor). */
   model: THREE.Object3D;
   yaw: number;
+  /** Per seat, the top of the chair or stool there (metres above the floor), or null to stand (npcs.ts measures them). */
+  seatTops?: (number | null)[];
 }
 
 export { BAR_TOP, type VpMode };
@@ -97,13 +99,13 @@ export function buildStations(plan: FloorPlan, parent: THREE.Object3D, quality: 
  * Where the `slot`-th person sitting at a station is drawn, in world space: that game's seats in
  * the station's frame (stations never move, so callers may keep the answer).
  */
-export function seatWorld(s: WorldStation, slot: number): { x: number; y: number; z: number; yaw: number } | null {
+export function seatWorld(s: WorldStation, slot: number): { x: number; y: number; z: number; yaw: number; sit: number | null } | null {
   const seats = GAMES[s.game].seats(s.variant);
   const seat = seats[slot % seats.length];
   if (!seat) return null;
   s.anchor.updateWorldMatrix(true, false);
   const p = s.anchor.localToWorld(new THREE.Vector3(...seat.position));
-  return { x: p.x, y: p.y, z: p.z, yaw: s.yaw + seat.yaw };
+  return { x: p.x, y: p.y, z: p.z, yaw: s.yaw + seat.yaw, sit: s.seatTops?.[slot % seats.length] ?? null };
 }
 
 export function playPoseWorld(s: Station, seat: number | null): { position: THREE.Vector3; target: THREE.Vector3 } {

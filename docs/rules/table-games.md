@@ -1,7 +1,7 @@
 # Table Game Rules and Odds
 
-Blackjack, roulette, craps, baccarat, Casino War, the Big Six wheel and Sic Bo as this casino
-deals them. For each game this page lists the house rules, every bet's payout, its house edge with
+Blackjack, roulette, craps, baccarat, Casino War, the Big Six wheel, Sic Bo and the Bandit Wheel
+as this casino deals them. For each game this page lists the house rules, every bet's payout, its house edge with
 a source, and the standard deviation (SD) per bet. The Monte Carlo tests use the SD to work out how
 many rounds they need.
 
@@ -1102,3 +1102,127 @@ rounds through the whole engine (bet, shake, settle, chip moves).
 - [S2] 58 Pa. Code Chapter 625a, Sic Bo (shaker §625a.1, dice §625a.2, wagers §625a.3, procedure
   §625a.5, payout odds §625a.6, irregularities §625a.7).
   https://www.pacodeandbulletin.gov/Display/pacode?file=%2Fsecure%2Fpacode%2Fdata%2F058%2Fchapter625a%2Fchap625atoc.html
+
+---
+
+## Bandit Wheel
+
+Rust's big wheel, from the casino in the Bandit Camp: a wheel of 25 painted slots, five numbers to
+bet on at a terminal, and the wheel spinning on its own clock. You win the number times your bet,
+and your bet back. Researched 2026-09-24; the sources for this section are listed at its end
+([R1]–[R8]).
+
+### House rules
+
+| Rule | This table |
+|---|---|
+| Wheel | 25 equal slots with a peg on every boundary and a flapper at the top: 1 ×12 (yellow), 3 ×6 (green), 5 ×4 (blue), 10 ×2 (purple), 20 ×1 (red) ([R2], [R3], [R4], [R7]) |
+| Payouts | A win returns the bet plus the number times the bet: 1 pays 1 to 1, 3 pays 3 to 1, 5 pays 5 to 1, 10 pays 10 to 1, 20 pays 20 to 1 ([R1], [R6]) |
+| Spin | The server draws the slot uniformly (rejection sampling over 0..24) when betting closes, and the wheel is animated onto it. Every spin turns the wheel at least twice |
+| Rounds | The wheel runs on its own clock while anyone is seated: a 20 second betting window, "No more bets", 7 seconds from the pull to rest, 5 seconds of results, the next window. It spins whether anyone has bet or not. Nobody presses Spin and no leader starts it: the table starts with its first seat |
+| Single player | The same loop with a 12 second window, and "Spin now" once you have a bet down |
+| Limits | $1 to $1,000 on each number per spin, whole dollars (the table's config). Max puts down the rest of that limit or your whole stack, whichever is less. Buy-in $10 to $10,000 |
+| Seats | Ten terminals in an arc in front of the wheel (one alone) |
+
+### The wheel (slots clockwise from the 20)
+
+```text
+20, 1, 3, 1, 5, 1, 3, 1, 10, 1, 3, 1, 5, 1, 5, 3, 1, 10, 1, 3, 1, 5, 1, 3, 1
+```
+
+This is the order on the wheel in Facepunch's own screenshot of it [R2], read clockwise from the 20,
+and two trackers copied it off the game independently: [R3] by colour and [R4] by number ("corrected
+from in-game screenshot, clockwise from indicator arrow"). The twelve 1s never touch each other, and
+the 20 sits between two 1s. A unit test checks the order against both trackers slot by slot, the
+counts and the neighbours.
+
+### Payout table
+
+House edge = (25 − slots × (pays + 1)) ÷ 25, exactly, for every number. The proof is the
+enumeration of the 25 equally likely slots: a $1 bet on a number with k slots gets back
+k × (pays + 1) dollars summed over the wheel, so its expected return is that over 25. A unit test
+does the same sum in whole cents for each number.
+
+| Number | Slots | Pays | P(win) | Return | House edge | SD |
+|---|---|---|---|---|---|---|
+| 1 | 12 | 1:1 | 48% | 96% (12 × 2 = 24 of 25) | **4%** (1/25) | 0.9992 |
+| 3 | 6 | 3:1 | 24% | 96% (6 × 4 = 24 of 25) | **4%** (1/25) | 1.7083 |
+| 5 | 4 | 5:1 | 16% | 96% (4 × 6 = 24 of 25) | **4%** (1/25) | 2.1996 |
+| 10 | 2 | 10:1 | 8% | 88% (2 × 11 = 22 of 25) | 12% (3/25) | 2.9842 |
+| 20 | 1 | 20:1 | 4% | 84% (1 × 21 = 21 of 25) | 16% (4/25) | 4.1151 |
+
+The 1, the 3 and the 5 are the best bets and cost the same; the 10 costs three times as much and
+the 20 four times. The table's Tips say so. Bets on several numbers are separate bets (at most one
+can win), so a spread costs the stake-weighted average of their edges. The SDs are
+`(k+1)·sqrt(p·(1−p))` for a number that pays `k:1` and wins with probability `p`.
+
+### Edge cases (each one has a unit test)
+
+1. A number wins on any of its slots: the 10 on either 10.
+2. The slot is drawn only when betting closes (a test counts the draws), and nothing a client
+   receives carries a result before the spin event.
+3. Max puts down the rest of the per-number limit or the whole stack, whichever is less, in whole
+   dollars; it is refused when that number is already at the limit.
+4. Chips down before "No more bets" come back to a player who leaves. After it they are settled
+   with the spin: a player who drops while the wheel turns has already been paid, and the seat is
+   held for the grace period.
+5. After a restart the betting deadline is pushed back; a spin already decided keeps its times.
+6. Every payout is a whole number of dollars on a whole-dollar bet, so nothing is rounded.
+7. The wheel spins when nobody has bet (its history is the wheel's), and rests once the last player
+   has gone.
+
+### Monte Carlo
+
+One trial = one spin, per number. `shared/test/banditwheel.mc.test.ts` spins drawSlot and returnFor
+(the functions the engine settles with) ten million times on seed 20260923, then plays 200,000
+spins through the whole engine (seed 20260924). Every number lands within 3 SE of its exact edge:
+
+| Number | Published | Measured (10M spins) | SE | z |
+|---|---|---|---|---|
+| 1 | 4.0000% | 3.9647% | 0.0316% | −1.12 |
+| 3 | 4.0000% | 3.9790% | 0.0540% | −0.39 |
+| 5 | 4.0000% | 4.1064% | 0.0695% | +1.53 |
+| 10 | 12.0000% | 12.0847% | 0.0943% | +0.90 |
+| 20 | 16.0000% | 15.9464% | 0.1302% | −0.41 |
+
+Through the engine (bet, spin, settle, chip moves; 200,000 spins): 4.010%, 4.670%, 3.502%, 10.735%
+and 16.536% (z +0.04, +1.76, −1.01, −1.88, +0.58). The 25 slots came up evenly (chi-square 36.53
+over 24 degrees of freedom; the critical value at p = 0.001 is 51.18). The guides' 12× and 25× for
+the 10 and the 20 (see below) would move those edges by 8 and 16 points, far past 3 SE here.
+
+### Where sources disagree
+
+| Topic | Disagreement | Choice and reason |
+|---|---|---|
+| What the 10 and the 20 pay | Some guides give 12× and 25× [R8]. Facepunch: "you get your original bet back plus whatever the number was as a multiplier" [R1], which is 11× and 21×, as the players' own tables have it [R6] | Facepunch's rule: 10 to 1 and 20 to 1 |
+| The colours of 3 and 5 | [R4]'s colour table has the 3 blue and the 5 green; the game's own wheel and terminal [R2], [R3] and [R7] have the 3 green and the 5 blue | The game's: 3 green, 5 blue |
+| How the result is decided | Rust spins a simulated wheel with a random pull between 7 and 10 [R5], so where the wheel starts shifts the odds of a spin a little, and players have tracked that [R5] | The server draws each slot with probability exactly 1/25 and the wheel is turned onto it: the published odds hold on every spin, whatever the wheel showed before |
+| How often it spins | Every 45 seconds in Rust, a server setting [R1] | 20 second windows at a shared wheel (about 32 seconds a round), 12 alone |
+
+### Sources for the Bandit Wheel
+
+- [R1] Facepunch, "The Bandit Town Update" (2018-08-02), Casino: "You can bet on 1, 3, 5, 10 or 20.
+  Every 45 seconds the wheel spins, and if it lands on your number you get your original bet back
+  plus whatever the number was as a multiplier. This means putting 10 scrap on 3 yields you your
+  original bet plus 30 scrap!" https://rust.facepunch.com/blog/bandit-town-update/
+- [R2] The screenshots in the same post: the wheel (https://files.facepunch.com/s/64622b83cdfb.jpg,
+  the slots readable clockwise from the 20 as above, and the room with it:
+  https://files.facepunch.com/s/6d09db260c0d.jpg) and the betting terminal
+  (https://files.facepunch.com/s/07159e345881.jpg: "Place scrap into the betting areas. If the
+  wheel lands on your selected number(s) You win!", Time Remaining, the five painted squares).
+- [R3] Adam Nizol, rustwheel, a logger for the Rust wheel: its 25 segments by colour, clockwise from
+  the red. https://github.com/AdamNizol/rustwheel (src/App.vue)
+- [R4] Tyler Kanz, rust-wheel-oracle: "Corrected from in-game screenshot, clockwise from indicator
+  arrow: 20, 1, 3, 1, 5, 1, 3, 1, 10, 1, 3, 1, 5, 1, 5, 3, 1, 10, 1, 3, 1, 5, 1, 3, 1"; "25
+  segments: 12×1 … 1×20". https://github.com/tylerkanz/rust-wheel-oracle
+- [R5] r/playrust, "How a Rust server generates roulette spins" (2020-05-10): DoSpin adds a random
+  force between 7 and 10 to the wheel; replies measure how the start position leans the result.
+  https://www.reddit.com/r/playrust/comments/gh0b1p/how_a_rust_server_generates_roulette_spins/
+- [R6] r/playrust, "BANDIT CAMP ROULETTE: SOLVED" (2022-08-10): odds 48/24/16/8/4%, payout from 1
+  scrap 2/4/6/11/21, E(x) 0.96/0.96/0.96/0.88/0.84.
+  https://www.reddit.com/r/playrust/comments/wl1e00/bandit_camp_roulette_solved/
+- [R7] "Rust Bandit Camp Guide 2026" (whenisforcewiperust.com): "the 25 segment gambling wheel";
+  1× yellow 12 of 25, 3× green 6, 5× blue 4, 10× purple 2, 20× red 1.
+  https://whenisforcewiperust.com/bandit-camp-rust
+- [R8] EIP Gaming, "Bandit Camp - Rust Monument Guide" (2022-08-25): lists the 10 and 20 as paying
+  12× and 25×. https://eip.gg/rust/guides/bandit-camp-monument/

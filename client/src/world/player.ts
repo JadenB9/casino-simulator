@@ -197,13 +197,21 @@ export class Player {
     if (k.has('KeyS') || k.has('ArrowDown')) iz -= 1;
     if (k.has('KeyD') || k.has('ArrowRight')) ix += 1;
     if (k.has('KeyA') || k.has('ArrowLeft')) ix -= 1;
-    const run = k.has('ShiftLeft') || k.has('ShiftRight');
+    let run = k.has('ShiftLeft') || k.has('ShiftRight');
+    // the on-screen stick (see the input API below), when no movement key is down
+    let pace = 1;
+    if (ix === 0 && iz === 0 && this.stickPace > 0) {
+      ix = this.stick.x;
+      iz = this.stick.y;
+      pace = this.stickPace;
+      run = this.stickRun;
+    }
     const s = Math.sin(this.camYaw);
     const c = Math.cos(this.camYaw);
     let mx = -s * iz + c * ix;
     let mz = -c * iz - s * ix;
     const len = Math.hypot(mx, mz);
-    const speed = len > 0 ? (run ? RUN : WALK) : 0;
+    const speed = len > 0 ? (run ? RUN : WALK * pace) : 0;
     if (len > 0) {
       mx /= len;
       mz /= len;
@@ -230,6 +238,40 @@ export class Player {
     this.syncCharacter();
     this.placeCamera(dt);
   }
+
+  // --- input API for the touch controls (world/touch.ts) ----------------------------------------
+  // The on-screen stick and drag-to-look feed the same walk and camera as the keys and the mouse.
+
+  private readonly stick = new THREE.Vector2();
+  /** How far the stick is pushed, 0..1 of a walk; 0 when it's let go. */
+  private stickPace = 0;
+  private stickRun = false;
+
+  /**
+   * The stick: x to the right, y forward, relative to the camera like WASD. The length (clamped to
+   * 1) is the pace, from a creep up to a walk; `run` is a full run. (0, 0) lets go. A movement key
+   * held at the same time wins.
+   */
+  setMoveInput(x: number, y: number, run = false): void {
+    const len = Math.hypot(x, y);
+    if (!(len > 0)) {
+      this.stick.set(0, 0);
+      this.stickPace = 0;
+      this.stickRun = false;
+      return;
+    }
+    this.stick.set(x / len, y / len);
+    this.stickPace = Math.min(1, len);
+    this.stickRun = run;
+  }
+
+  /** A touch drag turning the camera, in radians: +dx turns right, +dy looks down. */
+  addLook(dx: number, dy: number): void {
+    if (!this.enabled || !Number.isFinite(dx) || !Number.isFinite(dy)) return;
+    this.look(dx, dy);
+  }
+
+  // ------------------------------------------------------------------------------------------------
 
   dispose(): void {
     this.release();
@@ -338,7 +380,7 @@ export class Player {
   }
 
   private canCapture(): boolean {
-    return this.mouse.capture && this.enabled && overlayCount() === 0 && !textFocused() && this.mayCapture() && typeof this.canvas.requestPointerLock === 'function';
+    return this.mouse.capture && this.enabled && hasMouse() && overlayCount() === 0 && !textFocused() && this.mayCapture() && typeof this.canvas.requestPointerLock === 'function';
   }
 
   /** Something needs the cursor for a while: let go, and take it back after if it was held. */
@@ -396,6 +438,12 @@ export class Player {
 }
 
 const MOVE_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ShiftRight']);
+
+/** A mouse or trackpad to hold: touch-only phones and tablets look with a drag (touch.ts) instead. */
+const finePointer = typeof matchMedia === 'function' ? matchMedia('(any-pointer: fine)') : null;
+function hasMouse(): boolean {
+  return finePointer?.matches ?? true;
+}
 
 /** Text going into a field (the chat line, a name): the cursor and the keyboard belong to it. */
 const TEXT_INPUTS = new Set(['text', 'search', 'password', 'email', 'number', 'tel', 'url']);
