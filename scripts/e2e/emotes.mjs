@@ -4,17 +4,21 @@
 // hands measured (the clap's palms must meet, 67's must be up); the wheel with its six, on a
 // laptop and a phone. Vite only (the dev floor and the social dev page run without a server).
 // Usage: node scripts/e2e/emotes.mjs [port] [out dir] [checks...]
-//   checks: poses seated wheel (default: all)
+//   checks: poses seated live (default: all; live needs the worker: PORT_BASE=<port> npm run dev)
+// live: two players through the game proper. B watches A clap and do 67 (frozen at moments, from a
+// camera placed in front of A), each hears the claps it should (A's own, B's only while A is near),
+// and A sits at a blackjack table and waves: A's own bubble at the foot of the view, and B sees A
+// do it in the chair.
 
 import { chromium } from 'playwright';
 import { mkdirSync } from 'node:fs';
 
 const [port = '6080', out = '/tmp/emotes', ...wanted] = process.argv.slice(2);
 mkdirSync(out, { recursive: true });
-const checks = wanted.length ? wanted : ['poses', 'seated', 'wheel'];
+const checks = wanted.length ? wanted : ['poses', 'seated', 'live'];
 const quality = process.env.QUALITY ?? 'high';
 const floorUrl = `http://localhost:${port}/casino/src/world/dev-floor.html`;
-const browser = await chromium.launch({ channel: 'chromium', args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+const browser = await chromium.launch({ channel: 'chromium', args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--autoplay-policy=no-user-gesture-required'] });
 let failed = 0;
 const fail = (what) => {
   failed++;
@@ -242,6 +246,170 @@ if (checks.includes('seated')) {
   }
   if (errors.length) fail(`seated: ${errors.join(' | ')}`);
   await page.close();
+}
+
+if (checks.includes('live')) {
+  const name = process.env.TAG ?? 'e2e';
+  async function player(who) {
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    await ctx.addInitScript(() => localStorage.setItem('casino.quality', 'low'));
+    const page = await ctx.newPage();
+    page.setDefaultTimeout(300000);
+    const errors = [];
+    page.on('console', (m) => m.type() === 'error' && !/404|Failed to load resource/.test(m.text()) && errors.push(m.text()));
+    page.on('pageerror', (e) => errors.push(String(e)));
+    await page.goto(`http://localhost:${port}/casino/`);
+    await page.waitForSelector('.name-input', { timeout: 300000 });
+    await page.fill('.name-input', who);
+    if (await page.$('.pass-input')) await page.fill('.pass-input', 'casino-dev');
+    await page.click('.enter-btn');
+    await page.waitForSelector('.menu-item');
+    await page.click('.menu-item >> nth=0');
+    await page.waitForSelector('.hud');
+    await page.evaluate(async () => {
+      const c = window.casino;
+      // every clap the floor plays, and whether it came from somewhere (someone else's)
+      const m = await import('/casino/src/audio/claps.ts');
+      window.clapCalls = [];
+      const play = m.Claps.prototype.play;
+      m.Claps.prototype.play = function (times, at) {
+        window.clapCalls.push({ n: times.length, from: at ? [at.x, at.z].map((v) => +v.toFixed(1)) : null });
+        return play.call(this, times, at);
+      };
+      // hold a character at a moment of its emote (frames go by with no time passing for it)
+      window.hold = (ch, e, t) => {
+        if (!ch.heldUpdate) {
+          const update = ch.update.bind(ch);
+          ch.heldUpdate = true;
+          ch.update = (dt) => update(ch.held ? 0 : dt);
+        }
+        ch.held = true;
+        ch.gesture(e);
+        ch.act.t = t;
+      };
+      window.release = (ch) => (ch.held = false);
+      window.shot = null;
+      c.engine.onFrame(() => {
+        if (!window.shot) return;
+        c.engine.camera.position.set(...window.shot.pos);
+        c.engine.camera.lookAt(...window.shot.at);
+      });
+    });
+    const id = await page.evaluate(() => window.casino.session.profile.id);
+    return { page, id, errors };
+  }
+  const settle = (p, n = 4) => frames(p.page, n);
+  const a = await player(`emo_al_${name}`);
+  const b = await player(`emo_bo_${name}`);
+  await a.page.waitForFunction((id) => window.casino.app.remotes?.drawn?.has(id), b.id);
+  await b.page.waitForFunction((id) => window.casino.app.remotes?.drawn?.has(id), a.id);
+  const facing = async (yaw) => {
+    await a.page.evaluate((y) => window.casino.world.teleport(0.5, 9.4, y), yaw);
+    await b.page.waitForFunction((id) => Math.abs((window.casino.app.remotes.character(id)?.root.position.z ?? 0) - 9.4) < 0.05, a.id, { timeout: 20000 }).catch(() => {});
+    await b.page.waitForTimeout(900);
+  };
+  const remoteHold = (e, t) => b.page.evaluate(([id, e, t]) => window.hold(window.casino.app.remotes.character(id), e, t), [a.id, e, t]);
+  const ownHold = (e, t) => a.page.evaluate(([e, t]) => window.hold(window.casino.world.player.character, e, t), [e, t]);
+  const emote = async (e) => {
+    const before = await b.page.evaluate(() => document.querySelectorAll('#labels .emote-bubble').length);
+    await a.page.evaluate((x) => window.casino.app.link.emote(x), e);
+    await b.page.waitForFunction((n) => document.querySelectorAll('#labels .emote-bubble').length > n || document.querySelectorAll('#labels .emote-bubble').length > 0, before, { timeout: 10000 });
+  };
+  // B's camera close in front of A (A faces +z at yaw 0)
+  await b.page.evaluate(() => (window.shot = { pos: [0.5, 1.45, 11.6], at: [0.5, 1.15, 9.4] }));
+  await facing(0);
+
+  await emote('clap');
+  for (const [t, label] of [[1 / 3, 'meet'], [0.5, 'open']]) {
+    await remoteHold('clap', t);
+    await ownHold('clap', t);
+    await settle(b);
+    await b.page.screenshot({ path: `${out}/live-remote-clap-${label}.png` });
+    await settle(a);
+    await a.page.screenshot({ path: `${out}/live-own-clap-${label}.png` });
+  }
+  await facing(Math.PI / 2);
+  await remoteHold('clap', 1 / 3);
+  await settle(b);
+  await b.page.screenshot({ path: `${out}/live-remote-clap-meet-side.png` });
+  await remoteHold('clap', 0.5);
+  await settle(b);
+  await b.page.screenshot({ path: `${out}/live-remote-clap-open-side.png` });
+  const heard = { a: await a.page.evaluate(() => window.clapCalls.slice()), b: await b.page.evaluate(() => window.clapCalls.slice()) };
+  console.log(`claps heard near: A ${JSON.stringify(heard.a)} B ${JSON.stringify(heard.b)}`);
+  if (!(heard.a.length === 1 && heard.a[0].from === null && heard.a[0].n === 5)) fail('A does not hear its own five claps (from right here)');
+  if (!(heard.b.length === 1 && heard.b[0].from !== null && heard.b[0].n === 5)) fail("B does not hear A's claps from where A stands");
+
+  await b.page.waitForTimeout(2200);
+  await facing(0);
+  await emote('sixseven');
+  for (const [t, label] of [[0.47, 'a'], [0.78, 'b']]) {
+    await remoteHold('sixseven', t);
+    await ownHold('sixseven', t);
+    await settle(b);
+    await b.page.screenshot({ path: `${out}/live-remote-67-${label}.png` });
+    await settle(a);
+    await a.page.screenshot({ path: `${out}/live-own-67-${label}.png` });
+  }
+  await facing(Math.PI / 2);
+  await remoteHold('sixseven', 0.47);
+  await settle(b);
+  await b.page.screenshot({ path: `${out}/live-remote-67-side.png` });
+  await b.page.evaluate((id) => window.release(window.casino.app.remotes.character(id)), a.id);
+  await a.page.evaluate(() => window.release(window.casino.world.player.character));
+
+  // Far off: B hears nothing of it, A still hears its own.
+  await b.page.waitForTimeout(2200);
+  await a.page.evaluate(() => window.casino.world.teleport(0.5, -8, 0));
+  await b.page.waitForFunction((id) => window.casino.app.remotes.character(id)?.root.position.z < -7, a.id, { timeout: 20000 }).catch(() => {});
+  await a.page.evaluate(() => window.casino.app.link.emote('clap'));
+  await b.page.waitForTimeout(1500);
+  const far = { a: await a.page.evaluate(() => window.clapCalls.length), b: await b.page.evaluate(() => window.clapCalls.length) };
+  console.log(`claps heard far: A ${far.a} B ${far.b}`);
+  if (far.a !== 2) fail("A's own clap from far off was not heard by A");
+  if (far.b !== 1) fail(`B heard A's claps from ${(16 + 8).toFixed(0)} m away`);
+
+  // At a table: A sits at blackjack and waves.
+  await b.page.waitForTimeout(2200);
+  await a.page.evaluate(() => window.casino.world.teleport(0, 12.8, Math.PI));
+  await a.page.evaluate(() => {
+    const w = window.casino.world;
+    w.enter(w.stations.find((s) => s.id === 'bj-1'));
+  });
+  await a.page.waitForSelector('.lobby-choice', { timeout: 20000 });
+  await a.page.keyboard.press('s');
+  await a.page.waitForSelector('.modal input[type=number]', { timeout: 30000 });
+  await a.page.fill('.modal input[type=number]', '500');
+  await a.page.click('.modal .btn.primary');
+  await a.page.waitForFunction(() => window.casino.app.table?.seated === true, null, { timeout: 30000 });
+  await a.page.waitForTimeout(1500);
+  // G opens the wheel at the table too; 1 waves
+  await a.page.keyboard.press('g');
+  await a.page.waitForSelector('.emo-wheel');
+  await a.page.screenshot({ path: `${out}/live-own-table-wheel.png` });
+  await a.page.keyboard.press('1');
+  await a.page.waitForSelector('.emote-own .emote-bubble', { timeout: 10000 });
+  // (software rendering: the pop can start a second late)
+  await a.page.waitForFunction(() => getComputedStyle(document.querySelector('.emote-own .emote-bubble')).opacity === '1', null, { timeout: 10000 });
+  await a.page.screenshot({ path: `${out}/live-own-table-wave.png` });
+  const seat = await b.page.waitForFunction((id) => {
+    const ch = window.casino.app.remotes.character(id);
+    return ch?.root.visible && window.casino.app.link.players.get(id)?.info.at?.station === 'bj-1' ? [ch.root.position.x, ch.root.position.y, ch.root.position.z, ch.root.rotation.y] : null;
+  }, a.id, { timeout: 20000 }).then((h) => h.jsonValue()).catch(() => null);
+  if (!seat) fail('B does not see A seated at the blackjack table');
+  else {
+    const [x, y, z, yaw] = seat;
+    await b.page.evaluate(([x, z, yaw]) => (window.shot = { pos: [x + Math.sin(yaw) * 1.9 + Math.cos(yaw) * 0.9, 1.5, z + Math.cos(yaw) * 1.9 - Math.sin(yaw) * 0.9], at: [x, 1.0, z] }), [x, z, yaw]);
+    await remoteHold('wave', 0.9);
+    await settle(b);
+    await b.page.screenshot({ path: `${out}/live-remote-seated-wave.png` });
+    await remoteHold('clap', 1 / 3);
+    await settle(b);
+    await b.page.screenshot({ path: `${out}/live-remote-seated-clap.png` });
+  }
+  for (const p of [a, b]) if (p.errors.length) fail(`live: ${p.errors.slice(0, 5).join(' | ')}`);
+  await a.page.context().close();
+  await b.page.context().close();
 }
 
 await browser.close();

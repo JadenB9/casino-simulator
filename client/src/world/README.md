@@ -30,7 +30,7 @@ engine.onFrame((dt) => world.update(dt));
 | `exitTable()` | Fly back behind the player and hand the keys back (resolves when landed). |
 | `enter(station, seat)` | Sit down without pressing E (lobby list, reconnect). With a seat, the camera flies to that seat's `playPose` (craps looks at its own end of the table). |
 | `setQuality(q)` | Live switch: bloom, pixel ratio, lights, materials, chandeliers. Station models keep the quality they were built with. |
-| `showEmote(who, e)` | An emote over a player: `'me'` or a floor id. A bubble with the gesture's icon for 2.8 s, and the character acts it out (wave, cheer with a hop, clap, thumbs up, shrug). False when that player has no character drawn. |
+| `showEmote(who, e)` | An emote over a player: `'me'` or a floor id. A bubble with the wheel's icon for 2.8 s, and the character acts it out, standing or seated (wave, cheer with a hop, clap with its sound, thumbs up, shrug, 67). Your own at a table shows at the foot of the view, where you sit. False when that player has no character drawn. |
 | `useRemotes(source)` | Where `showEmote` finds other players' characters: pass the app's `RemotePlayers` (anything with `character(id)`), `null` to forget it. |
 | `holdItem(id)`, `dropHeld()` | A waiter hands over a paid bar order (its `id` from the bar's `onOrder`, or an item id for your newest paid order of it): it goes in your right hand, in your look, so everyone sees it. `dropHeld()` puts it down. Both go to the bar given to `useBar(bar)` (the app's, `ui/shop/bar.ts`; `null` to forget it). |
 | `mouse`, `setMouse({ sensitivity, capture })` | Mouse look settings (sensitivity 0.25-3, 1 = default; capture on/off), kept in localStorage (`casino.mouse.*`). |

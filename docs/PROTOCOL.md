@@ -160,7 +160,7 @@ Client to server:
 | `mv` | `x, z` (integer cm), `r` (yaw 0-255) | at most every 100 ms, only while moving |
 | `st` | `x, z, r` | once when you stop |
 | `watch` | `game: GameId \| null` | subscribe to one game's lobby list |
-| `emote` | `e: "wave" \| "cheer" \| "clap" \| "thumbs" \| "shrug"` (`EMOTES`) | 3 in a burst, then one every 2 s; extras are dropped without a reply |
+| `emote` | `e: "wave" \| "cheer" \| "clap" \| "thumbs" \| "shrug" \| "sixseven"` (`EMOTES`, in the wheel's order: new ones go on the end) | 3 in a burst, then one every 2 s; extras are dropped without a reply |
 
 Movement rules. The first `mv` or `st` on a connection places you anywhere inside the floor
 (`FLOOR_BOUNDS`, the room's walls): a first visit echoes the spawn in `hello`, and after a dropped
