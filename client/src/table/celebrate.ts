@@ -62,7 +62,7 @@ const WARM = new THREE.Color(1, 0.8, 0.47);
  */
 export function celebrate(ctx: { stage: TableStage; ui: HTMLElement; sfx: Sfx }, m: Moment): () => void {
   banner(ctx.ui, m);
-  const prints = [...(m.glow ?? []).map((g) => footprintOf(ctx.stage, Array.isArray(g) ? g : [g])), ...(m.spots ?? []).map(spotPrint)].filter((f): f is Footprint => f !== null);
+  const prints = [...(m.glow ?? []).map((g) => footprintOf(ctx.stage.root, ctx.stage.engine.camera, Array.isArray(g) ? g : [g])), ...(m.spots ?? []).map(spotPrint)].filter((f): f is Footprint => f !== null);
   const stop = rings(ctx.stage, prints, m.tier, HOLD_MS[m.tier] + 400);
   if (m.tier === 'huge' && m.at) shower(ctx.stage, m.at, prints);
   chime(ctx.sfx, m.tier);
@@ -81,7 +81,7 @@ function banner(ui: HTMLElement, m: Moment): void {
 // ---- where the light goes ------------------------------------------------------------------
 
 /** An outline to ring, table-local: a (rounded) rectangle in the plane through `centre`. */
-interface Footprint {
+export interface Footprint {
   /** Things lying on the felt (lit under as well as round them), or a printed spot (outline only). */
   solid: boolean;
   centre: THREE.Vector3;
@@ -100,7 +100,7 @@ const _inv = new THREE.Matrix4();
 const _m = new THREE.Matrix4();
 const _cam = new THREE.Vector3();
 
-function spotPrint(s: Spot): Footprint {
+export function spotPrint(s: Spot): Footprint {
   const a = s.w / 2;
   return {
     solid: false,
@@ -115,14 +115,13 @@ function spotPrint(s: Spot): Footprint {
 }
 
 /**
- * The outline of `objects` together, measured from their meshes in the table's own space (so a
- * station turned on the floor doesn't widen it) and squared to the first one's turn, so a hand
- * dealt at an angle gets a ring at that angle. Things lying flat (cards, chips, a printed box) are
- * ringed in the felt's plane; a flat thing standing up (a lit sector on an upright wheel) in its
- * own plane.
+ * The outline of `objects` together, measured from their meshes in the table's own space (`root`,
+ * so a station turned on the floor doesn't widen it) and squared to the first one's turn, so a
+ * hand dealt at an angle gets a ring at that angle. Things lying flat (cards, chips, a printed
+ * box) are ringed in the felt's plane; a flat thing standing up (a lit sector on an upright wheel)
+ * in its own plane. The ring goes on the side away from `camera`.
  */
-function footprintOf(stage: TableStage, objects: THREE.Object3D[]): Footprint | null {
-  const root = stage.root;
+export function footprintOf(root: THREE.Object3D, camera: THREE.Camera, objects: THREE.Object3D[]): Footprint | null {
   root.updateWorldMatrix(true, false);
   _inv.copy(root.matrixWorld).invert();
   const pts: THREE.Vector3[] = [];
@@ -187,10 +186,12 @@ function footprintOf(stage: TableStage, objects: THREE.Object3D[]): Footprint | 
     n1 = Math.max(n1, pn);
   }
   // Just inside the object's far side from the camera: under a card lying flat (between its two
-  // faces), a hair above the felt under a chip, behind a sector on a wheel.
-  stage.engine.camera.getWorldPosition(_cam);
+  // faces), a hair above the felt under a chip. Something with no thickness (a lit sector on a
+  // wheel) gets it a hair behind instead.
+  camera.getWorldPosition(_cam);
   root.worldToLocal(_cam);
-  const off = Math.min(0.0003, Math.max(0.0002, (n1 - n0) / 2));
+  const thick = n1 - n0;
+  const off = thick < 0.0002 ? -0.0002 : Math.min(0.0003, thick / 2);
   const depth = _cam.dot(n) >= (n0 + n1) / 2 ? n0 + off : n1 - off;
   const centre = new THREE.Vector3()
     .addScaledVector(u, (u0 + u1) / 2)
@@ -392,6 +393,30 @@ function covers(f: Footprint, x: number, z: number, pad: number): boolean {
 }
 
 /**
+ * Where a showered chip comes down: somewhere round `at`, and never on the lit things (a chip's
+ * width clear of them), so the cards that made the moment stay readable. Table-local x, z.
+ */
+export function landing(at: THREE.Vector3, keepClear: Footprint[], random: () => number = Math.random): [number, number] {
+  const clear = (x: number, z: number) => !keepClear.some((f) => covers(f, x, z, CHIP_R + 0.004));
+  let a = 0;
+  let x = at.x;
+  let z = at.z;
+  for (let tries = 0; tries < 16; tries++) {
+    a = random() * Math.PI * 2;
+    const r = 0.06 + random() * (0.12 + tries * 0.012);
+    x = at.x + Math.cos(a) * r;
+    z = at.z + Math.sin(a) * r;
+    if (clear(x, z)) return [x, z];
+  }
+  // hemmed in (`at` in the middle of a big hand): keep going outward until it's clear
+  for (let step = 0; step < 100 && !clear(x, z); step++) {
+    x += Math.cos(a) * 0.01;
+    z += Math.sin(a) * 0.01;
+  }
+  return [x, z];
+}
+
+/**
  * A handful of chips tossed up over `at` that land and settle on the felt, then fade. They come
  * down round the lit things, never on them, so the cards that made the moment stay readable.
  */
@@ -404,16 +429,7 @@ function shower(stage: TableStage, at: THREE.Vector3, keepClear: Footprint[]): v
   const floor = at.y + 0.002;
   const parts = Array.from({ length: n }, (_, i) => {
     mesh.setColorAt(i, color.set(CHIP_COLORS[i % CHIP_COLORS.length]!));
-    // where it lands: somewhere round `at`, off the lit cards
-    let tx = at.x;
-    let tz = at.z;
-    for (let tries = 0; tries < 16; tries++) {
-      const a = Math.random() * Math.PI * 2;
-      const r = 0.06 + Math.random() * (0.12 + tries * 0.012);
-      tx = at.x + Math.cos(a) * r;
-      tz = at.z + Math.sin(a) * r;
-      if (!keepClear.some((f) => covers(f, tx, tz, CHIP_R + 0.004))) break;
-    }
+    const [tx, tz] = landing(at, keepClear);
     const p = new THREE.Vector3(at.x, at.y + 0.35 + Math.random() * 0.25, at.z);
     const vy = 0.6 + Math.random() * 0.6;
     // time to fall back to the felt, so the throw lands where it was aimed

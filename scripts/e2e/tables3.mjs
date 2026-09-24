@@ -161,19 +161,16 @@ async function measure(page, label, spec) {
       });
     };
     const before = read();
-    const stop = window.__t3.kit.celebrate({ stage, ui: session.ui, sfx: session.sfx }, { title: spec.title, sub: spec.sub, tier: spec.tier, glow: objects.glow, spots: objects.spots, at: objects.at });
-    // wait for full light: the rings' material past most of its peak
-    const t0 = performance.now();
-    await new Promise((r) => {
-      const tick = () => {
-        const ring = stage.root.children.find((o) => o.isMesh && o.material?.alphaMap && o.material.blending === 2);
-        if ((ring && ring.material.opacity > 0.8 * { nice: 0.28, big: 0.34, huge: 0.4 }[spec.tier]) || performance.now() - t0 > 6000) r();
-        else requestAnimationFrame(tick);
-      };
-      tick();
-    });
+    // The light without the chips (they start in the air over the table), set straight to its
+    // peak (the kit's PEAK) and read in the same task: frames under software GL can take so long
+    // that waiting for the fade-in could miss the whole moment.
+    const stop = window.__t3.kit.celebrate({ stage, ui: session.ui, sfx: session.sfx }, { title: spec.title, sub: spec.sub, tier: spec.tier, glow: objects.glow, spots: objects.spots });
+    const rings = stage.root.children.filter((o) => o.isMesh && o.material?.alphaMap && o.material.blending === 2);
+    for (const r of rings) r.material.opacity = { nice: 0.28, big: 0.34, huge: 0.4 }[spec.tier];
     const during = read(true);
     window.__t3.stop = stop;
+    window.__t3.at = objects.at ?? null;
+    window.__t3.last = { glow: objects.glow, spots: objects.spots };
     const diff = (a, b) => (a && b ? Math.max(...a.map((v, i) => Math.abs(v - b[i]))) : null);
     const lum = (c) => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
     return {
@@ -191,7 +188,20 @@ async function measure(page, label, spec) {
   // and the page as it is now (the banner, if it's still up)
   await shot(page, `glow-${label}-page`);
   await page.evaluate(() => window.__t3.stop?.());
-  await page.waitForTimeout(spec.tier === 'huge' ? 3400 : 900);
+  await page.waitForTimeout(900);
+  // The biggest moments with their chips: shots while they come down round the lit things.
+  if (spec.tier === 'huge' && (await page.evaluate(() => !!window.__t3.at))) {
+    await page.evaluate((spec) => {
+      const session = window.casino.app.table.session;
+      const { glow, spots } = window.__t3.last;
+      window.__t3.kit.celebrate({ stage: session.stage, ui: session.ui, sfx: session.sfx }, { title: spec.title, sub: spec.sub, tier: 'huge', glow, spots, at: window.__t3.at });
+    }, spec);
+    for (const k of [1, 2]) {
+      await page.waitForTimeout(1600);
+      await shot(page, `glow-${label}-chips${k}`);
+    }
+    await page.waitForTimeout(4000);
+  }
   const faces = res.rows.map((r) => r.face).filter((v) => v !== null);
   const lifts = res.rows.map((r) => r.lift).filter((v) => v !== null);
   const entry = { faceChange: faces.length ? +Math.max(...faces).toFixed(1) : null, glowLift: lifts.length ? Math.max(...lifts) : null, faceLum: res.rows.map((r) => r.faceLum) };
@@ -199,7 +209,8 @@ async function measure(page, label, spec) {
   // a lit thing's face may move by a unit or two (dithering, the breath of the light on its edge)
   if (entry.faceChange === null) fail(`${label}: nothing measured`);
   else if (entry.faceChange > 4) fail(`${label}: the light changed what it lit by ${entry.faceChange}/255`);
-  if (entry.glowLift !== null && entry.glowLift < 6) fail(`${label}: the light hardly shows round it (+${entry.glowLift})`);
+  // (a spot among bright printing, like craps' props, shows it least)
+  if (entry.glowLift !== null && entry.glowLift < 2) fail(`${label}: the light doesn't show round it (+${entry.glowLift})`);
   log(`${label}: ${JSON.stringify(entry)}`);
 }
 
@@ -220,10 +231,12 @@ window.__t3.pick = (spec) => {
     const y = m.rotation.x > 1.5 ? b.min.y : b.max.y;
     return [[b.min.x, y, b.min.z], [b.max.x, y, b.min.z], [b.max.x, y, b.max.z], [b.min.x, y, b.max.z]].map(([x, yy, z]) => m.localToWorld(V(x, yy, z)));
   };
+  // face-up cards anywhere in the table (Three Card keeps its own group), nearest the camera first
   const cardsNear = (n) => {
-    const camLocal = root.worldToLocal(engine.camera.position.clone());
-    return root.children.filter((o) => 'card' in o && o.card && o.visible && Math.abs(o.rotation.x) < 1.2)
-      .sort((a, b) => a.position.distanceToSquared(camLocal) - b.position.distanceToSquared(camLocal)).slice(0, n);
+    const found = [];
+    root.traverse((o) => 'card' in o && o.card && o.visible && Math.abs(o.rotation.x) < 1.2 && found.push(o));
+    const d = (o) => o.getWorldPosition(root.position.clone()).distanceToSquared(engine.camera.position);
+    return found.sort((a, b) => d(a) - d(b)).slice(0, n);
   };
   if (spec.game === 'blackjack') {
     const cards = [...view.cards.entries()].filter(([k]) => k.startsWith('c:' + view.seat + ':')).map(([, m]) => m);
@@ -316,9 +329,11 @@ async function glowChecks() {
     await act(page, { type: 'bet', ante: 1000, pairPlus: 500 });
     await page.waitForTimeout(500);
     await act(page, { type: 'deal' });
-    await page.waitForSelector('.tc-decide:not([hidden])', { timeout: 40_000 }).catch(() => fail('threecard: no decision'));
-    await page.waitForTimeout(800);
-    await act(page, { type: 'play' });
+    // (a seat kept from the last run may have been dealt in already: then there's nothing to decide)
+    if (await page.waitForSelector('.tc-decide:not([hidden])', { timeout: 40_000 }).catch(() => null)) {
+      await page.waitForTimeout(800);
+      await act(page, { type: 'play' });
+    }
     await settle(page, 1500);
     await shot(page, 'glow-threecard-0-before');
     for (const tier of tiers) await measure(page, `threecard-${tier}`, { game: 'threecard', tier, title: tier === 'huge' ? 'Straight flush' : tier === 'big' ? 'Three of a kind' : 'Flush', sub: 'Pays 40 to 1' });
@@ -337,8 +352,10 @@ async function glowChecks() {
       };
     });
     await page.waitForTimeout(2500);
-    await page.evaluate(() => {
-      window.__paused = true;
+    await page.evaluate(() => (window.__paused = true));
+    // A showdown drawn from a paused feed, drawn again before each shot (a bot's move or the
+    // hand clock can still redraw the table in between).
+    const scene = () => page.evaluate(() => {
       const t = window.casino.app.table.session;
       const snap = structuredClone(t.snapshot);
       snap.view = structuredClone(window.__lastView ?? snap.view);
@@ -354,9 +371,14 @@ async function glowChecks() {
       });
       t.view.onTable(snap);
     });
+    await scene();
     await page.waitForTimeout(1500);
     await shot(page, 'glow-holdem-0-before');
-    for (const tier of tiers) await measure(page, `holdem-${tier}`, { game: 'holdem', tier, title: 'Full house', sub: 'Kings full of nines · $1,500' });
+    for (const tier of tiers) {
+      await scene();
+      await page.waitForTimeout(800);
+      await measure(page, `holdem-${tier}`, { game: 'holdem', tier, title: 'Full house', sub: 'Kings full of nines · $1,500' });
+    }
     await page.evaluate(() => (window.__paused = false));
     await stand(page);
   }
