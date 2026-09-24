@@ -185,7 +185,7 @@ function mountRoulette(ctx: TableViewCtx): TableView {
     }, ease.inOut);
   }
   function glideToWheel(ms: number): Promise<void> {
-    camHome ??= { pos: camera.position.clone(), quat: camera.quaternion.clone() };
+    camHome ??= stage.restPose(camera);
     const to = stage.worldPose(WHEEL_POSE);
     const q = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(to.position, to.target, camera.up));
     return glide(to.position, q, ms);

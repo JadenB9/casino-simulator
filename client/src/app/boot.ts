@@ -323,10 +323,12 @@ class App {
           })
         : null;
     const module = party ? withParty(GAMES[station.game], party) : GAMES[station.game];
+    const stage = new TableStage(this.engine, station.anchor);
+    stage.setRest(GAMES[station.game].playPose(station.variant, null));
     table = new TableSession(
       { ...choice, game: station.game, variant: station.variant, station: station.id },
       module,
-      new TableStage(this.engine, station.anchor),
+      stage,
       this.ui,
       this.sfx,
       (fn) => this.engine.onFrame(fn),
@@ -362,7 +364,9 @@ class App {
     if (!open || seat === null || open.posed === seat) return;
     open.posed = seat;
     const { game, variant } = open.station;
-    if (!samePose(GAMES[game].playPose(variant, seat), GAMES[game].playPose(variant, null))) this.world.aim(seat);
+    const pose = GAMES[game].playPose(variant, seat);
+    open.session.stage.setRest(pose);
+    if (!samePose(pose, GAMES[game].playPose(variant, null))) this.world.aim(seat);
   }
 
   /** Esc at a table: leave, after a word if you have chips down. */
