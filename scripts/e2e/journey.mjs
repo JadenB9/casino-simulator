@@ -168,6 +168,18 @@ const screenOf = (page, spot) =>
     return null;
   }, spot);
 
+/** Tips on or off with the HUD's bulb, as a player does, until the bulb says so (a toast can be in the way). */
+async function setTips(page, on) {
+  const bulb = '.hud [aria-label="Tips at the tables"]';
+  for (let i = 0; i < 5; i++) {
+    const now = await page.evaluate((b) => document.querySelector(b)?.getAttribute('aria-pressed') === 'true', bulb);
+    if (now === on) return true;
+    await page.click(bulb, { timeout: 5000 }).catch(() => {});
+    await page.waitForTimeout(300);
+  }
+  return false;
+}
+
 const stackOf = (page) => page.evaluate(() => window.casino.app.table?.session.snapshot?.you?.stack ?? 0);
 const shot = (page, file) => page.screenshot({ path: `${out}/${file}.png` });
 /** Wait for the table's queued animations to finish, then a beat. */
@@ -278,9 +290,7 @@ async function playStation(page, id) {
   await shot(page, `${tag}-2-seated`);
 
   // --- Tips on (the HUD's bulb)
-  await page.click('.hud [aria-label="Tips at the tables"], .hud [title="Tips at the tables"]').catch(async () => page.evaluate(() => localStorage.setItem('casino.tips', '1')));
-  const tipsOn = await page.evaluate(() => localStorage.getItem('casino.tips') === '1');
-  check(tipsOn, `${id}: the bulb turns Tips on`);
+  check(await setTips(page, true), `${id}: the bulb turns Tips on`);
 
   for (let r = 0; r < ROUNDS; r++) {
     const s0 = await stackOf(page);
@@ -319,7 +329,7 @@ async function playStation(page, id) {
     }
     // --- the round: Space, then the decisions (the highlighted control while Tips are on)
     const tipsNow = r < ROUNDS - 1;
-    if (!tipsNow) await page.evaluate(() => localStorage.getItem('casino.tips') === '1' && document.querySelector('.hud [aria-label="Tips at the tables"], .hud [title="Tips at the tables"]')?.click());
+    if (!tipsNow) check(await setTips(page, false), `${id} round ${r}: the bulb turns Tips off`);
     await page.keyboard.press('Space');
     if (placed === -1) {
       await page.waitForTimeout(1200);
@@ -559,7 +569,7 @@ async function playHoldem(page, id) {
   check(dealer, `${id}: a dealer stands at the table`);
   await page.waitForTimeout(1500);
   await shot(page, `${id}-${QUALITY}-2-seated`);
-  await page.click('.hud [aria-label="Tips at the tables"], .hud [title="Tips at the tables"]').catch(() => {});
+  await setTips(page, true);
   let hands = 0;
   let allin = false;
   let tipSeen = 0;
@@ -618,7 +628,7 @@ async function playMachine(page, id, game) {
   const buyIn = await sitAlone(page, id, null);
   await page.waitForTimeout(1200);
   await shot(page, `${id}-${QUALITY}-2-seated`);
-  if (game === 'videopoker') await page.click('.hud [aria-label="Tips at the tables"], .hud [title="Tips at the tables"]').catch(() => {});
+  if (game === 'videopoker') await setTips(page, true);
   const s0 = await stackOf(page);
   const reset = () =>
     page.evaluate(() => {
@@ -660,7 +670,7 @@ async function playMachine(page, id, game) {
     check(res.errs.length === 0, `${id} round ${r}: nothing refused (${res.errs.join(' | ')})`);
     await shot(page, `${id}-${QUALITY}-5-after${r}`);
   }
-  if (game === 'videopoker') await page.click('.hud [aria-label="Tips at the tables"], .hud [title="Tips at the tables"]').catch(() => {});
+  if (game === 'videopoker') await setTips(page, false);
   await leaveAndReconcile(page, id, prof0.balance, prof0.inPlay ?? 0, buyIn);
 }
 
