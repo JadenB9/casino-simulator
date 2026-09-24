@@ -928,6 +928,8 @@ function readVerdicts() {
     if (r.name === 'cards') {
       if (r.lift > 2 || r.p95 > 6) fail(`read: glow over the cards (${label}: +${r.lift} mean, +${r.p95} p95)`);
       if (r.n >= 400 && r.contrast < 35) fail(`read: cards washed out (${label}: contrast ${r.contrast})`);
+      // white paper blown out to pure white (High's spots did that, fading the ink with it)
+      if (r.n >= 400 && r.clip > 0.1) fail(`read: cards blown out (${label}: ${Math.round(r.clip * 100)}% of the face clipped)`);
     } else if (!light) {
       if (r.lift > 2.5 || r.p95 > 10) fail(`read: glow over the layout (${label}: +${r.lift} mean, +${r.p95} p95)`);
     }

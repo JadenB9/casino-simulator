@@ -314,8 +314,11 @@ for (const part of only.length ? only : Object.keys(PARTS)) {
       want = [...e.dice].sort().join('');
       got = seen.map((d) => d.face).sort().join('');
       const flat = seen.every((d) => d.up > 0.995);
-      good = got === want && flat && seen.length === e.dice.length;
+      // no two dice in each other: centres at least a die's diagonal apart on the felt (19 mm dice)
+      const apart = seen.every((a, i) => seen.every((b, j) => j <= i || Math.hypot(a.at[0] - b.at[0], a.at[2] - b.at[2]) >= 0.0265));
+      good = got === want && flat && apart && seen.length === e.dice.length;
       if (!flat) got += ` (not flat: ${seen.map((d) => d.up).join(',')})`;
+      if (!apart) got += ' (two dice overlap)';
       got += ` at ${JSON.stringify(seen.map((d) => d.at))}`;
     } else if (spec.game === 'bigsix' || spec.game === 'banditwheel') {
       const e = res.events.find((x) => x.type === 'spin');
@@ -328,7 +331,8 @@ for (const part of only.length ? only : Object.keys(PARTS)) {
       want = last.stops.join(',');
       const strips = Array.isArray(seen.strip) ? seen.strip : seen.offsets.map(() => seen.strip);
       const rowOff = { sevens: 0, wild: 0, diamonds: 0, neon: 1, cherries: 1, goldrush: 1.5 }[spec.variant];
-      got = seen.offsets.map((o, i) => ((o - rowOff) % strips[i] + strips[i]) % strips[i]).map((x) => +x.toFixed(3)).join(',');
+      // (a bank's shader has room for five reels; a three-reel machine leaves the last two at 0)
+      got = seen.offsets.slice(0, last.stops.length).map((o, i) => ((o - rowOff) % strips[i] + strips[i]) % strips[i]).map((x) => +x.toFixed(3)).join(',');
       good = got === want;
       got += ` (strips ${strips.join('/')}, free games ${reels.length - 1})`;
     }
