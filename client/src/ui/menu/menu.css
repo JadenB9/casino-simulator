@@ -147,3 +147,44 @@
   .menu-hints { display: none; }
   .backdrop-canvas { animation: none; }
 }
+
+/* ---------------------------------------------------------------- phones and tablets */
+
+/* Touch screens: sheet controls a thumb's width. */
+@media (pointer: coarse) {
+  .seg-btn { height: 44px; }
+  .x-btn { height: 44px; min-width: 44px; justify-content: center; }
+}
+/* A phone on its side: 390 px of height for the title, you and five menu rows (each still 44 px
+   to the thumb), and sheets that use the whole height. */
+@media (max-height: 480px) {
+  .front-col { top: 14px; gap: 10px; }
+  .front-title { font-size: 30px; }
+  .front-rule { margin-top: 8px; }
+  .menu-who .stat { margin-right: 14px; padding: 5px 14px 6px 0; }
+  .menu-who .stat-value { font-size: 17px; }
+  .menu-item { padding-block: 11px; }
+  .menu-label { font-size: 20px; }
+  .menu-fact { font-size: 14px; }
+  .name-input { height: 44px; font-size: 26px; }
+  .name-rule { margin-bottom: 4px; }
+  .continue-btn { min-height: 48px; margin-bottom: 8px; }
+  .login-note { margin-top: 6px; }
+  .sheet-scrim { padding: 8px 12px; }
+  .sheet { max-height: calc(100vh - 16px); }
+  .sheet-head { padding: 12px 18px 10px; }
+  .sheet-title { font-size: 19px; }
+  .sheet-body { padding: 12px 18px 14px; }
+  .sheet-foot { margin-top: 12px; }
+}
+/* A phone upright: sheets edge to edge, stat tiles two across. */
+@media (max-width: 560px) {
+  .sheet-scrim { padding: 12px 10px; }
+  .sheet { max-height: calc(100vh - 24px); }
+  .sheet-head { padding: 16px 16px 12px; }
+  .sheet-body { padding: 14px 16px 18px; }
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .stats .stat:nth-child(odd) { border-left: 0; }
+  .stats .stat:nth-child(n + 3) { border-top: 1px solid var(--line); }
+  .data td, .data th { padding-left: 6px; padding-right: 6px; }
+}

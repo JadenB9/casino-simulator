@@ -60,3 +60,22 @@
   .bs-history { max-width: calc(100vw - 32px); }
   .bs-meters { gap: 10px; padding: 7px 10px; }
 }
+
+/* A phone upright: the meters across the top under the HUD, the history under them, the players
+   under both. */
+@media (max-width: 560px) {
+  .bs-meters { left: 10px; right: 10px; justify-content: space-between; gap: 8px; padding: 7px 12px; }
+  .bs-meter { min-width: 0; }
+  .bs-meter-value { font-size: 18px; }
+  .bs-history { top: calc(var(--below-party) + 62px); left: 10px; right: 10px; max-width: none; padding: 7px 10px 8px; }
+  .bs-players { top: calc(var(--below-party) + 140px); left: 10px; right: 10px; min-width: 0; }
+  .bs-tip { max-width: calc(100vw - 24px); }
+}
+/* On its side: slimmer corner panels. */
+@media (max-height: 480px) {
+  .bs-history { left: 10px; padding: 6px 10px 7px; }
+  .bs-history .label { margin-bottom: 4px; }
+  .bs-meters { right: 10px; gap: 12px; padding: 6px 12px; }
+  .bs-meter-value { font-size: 18px; }
+  .bs-players { top: calc(var(--below-party) + 58px); right: 10px; padding: 6px 10px; }
+}

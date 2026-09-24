@@ -23,7 +23,7 @@
   .btn .key, .kc, .lb-key, .emo-key, .menu-hints, .lobby-foot { display: none !important; }
   .hud-btn[aria-label^='Keyboard'] { display: none; }
 
-  /* Finger-sized targets: 44 px at the least. */
+  /* Finger-sized targets: 44 px at the least (panels size their own controls). */
   .btn { min-height: 44px; }
   .chip-btn { min-width: 44px; min-height: 44px; }
   .modal input[type='number'], .modal input[type='text'] { height: 44px; }

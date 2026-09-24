@@ -125,3 +125,33 @@
   .lobby { top: auto; right: 16px; bottom: 72px; left: 16px; width: auto; transform: none; max-height: calc(100vh - 100px); animation: none; }
   .party { top: 12px; right: 12px; left: 12px; width: auto; }
 }
+
+/* ---- phones and tablets ---- */
+
+/* Touch screens: rows and buttons a thumb's width. */
+@media (pointer: coarse) {
+  .lobby-back { height: 44px; }
+  .lobby-row { height: 48px; }
+  .party-head { height: 44px; }
+  .party-seg button { height: 44px; }
+  .lobby-pin-input { height: 44px; }
+}
+/* A phone upright: the party panel under the HUD's two rows (the game's right-hand panels below
+   its head). */
+@media (max-width: 640px) {
+  .party { top: var(--below-hud); left: 10px; right: 10px; }
+  :root:has(.party:not([hidden])) { --below-party: calc(var(--below-hud) + 54px); }
+}
+/* A phone on its side: the panel uses the height, its list gets shorter, and the party panel
+   sits under the one-row HUD. */
+@media (max-height: 480px) {
+  .lobby { right: 12px; max-height: calc(100vh - 16px); }
+  .lobby-head { padding: 10px 14px 8px; }
+  .lobby-choice { padding: 8px 10px; }
+  .lobby-list { max-height: 140px; }
+  .lobby-section { padding-top: 10px; }
+  .lobby-section:last-child { padding-bottom: 12px; }
+  .party { top: var(--below-hud); right: 10px; width: 280px; }
+  :root:has(.party:not([hidden])) { --below-party: calc(var(--below-hud) + 52px); }
+  .party-body { max-height: calc(100vh - var(--below-hud) - 70px); overflow-y: auto; }
+}

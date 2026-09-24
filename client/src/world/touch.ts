@@ -33,8 +33,12 @@ const STICK_Y = 0.3;
 /** A drag across the screen's shorter side turns the camera half way round. */
 const LOOK_TURN = Math.PI;
 const LOOK_PITCH = 0.7;
-/** Machines are tall: an upright phone plays them fine. Every other game is a wide felt. */
-const UPRIGHT_OK = new Set(['slots', 'videopoker']);
+/**
+ * Games an upright phone can't really play: the layout runs off both sides (or, at video poker,
+ * the button deck does), so they get the note. At the card tables your own spot and every button
+ * fit upright, and a slot machine is tall anyway.
+ */
+const WIDE = new Set(['roulette', 'craps', 'sicbo', 'bigsix', 'holdem', 'videopoker']);
 /** A portrait screen narrower than this (width / height) gets the note at a table. */
 const NARROW = 0.7;
 const NOTE_MS = 6000;
@@ -96,6 +100,7 @@ export class TouchControls {
   private readonly caption = el('div', 'touch-caption');
   private readonly leave = el('button', 'touch-leave');
   private readonly note = el('div', 'touch-note');
+  private readonly noteText = el('span');
   /** The finger on the stick: where it came down, and the ring's centre (kept on screen). */
   private stick: { id: number; x0: number; y0: number; cx: number; cy: number } | null = null;
   private look: { id: number; x: number; y: number } | null = null;
@@ -128,7 +133,7 @@ export class TouchControls {
 
     this.note.hidden = true;
     this.note.setAttribute('role', 'status');
-    this.note.append(rotateIcon(), el('span', '', 'Turn your phone sideways to see the whole table.'));
+    this.note.append(rotateIcon(), this.noteText);
     this.note.addEventListener('click', () => this.hideNote());
 
     deps.ui.prepend(this.layer);
@@ -221,13 +226,14 @@ export class TouchControls {
       this.leave.hidden = false;
     }
     const upright = innerWidth / innerHeight < NARROW;
-    if (!upright || UPRIGHT_OK.has(station.game)) {
+    if (!upright || !WIDE.has(station.game)) {
       this.hideNote();
       return;
     }
     // After the station's panel (single player or a lobby) has gone: that choice fits upright.
     if (this.notedFor !== station && !document.querySelector('.lobby')) {
       this.notedFor = station;
+      this.noteText.textContent = `Turn your phone sideways to see the whole ${station.game === 'videopoker' ? 'machine' : 'table'}.`;
       this.note.hidden = false;
       clearTimeout(this.noteTimer);
       this.noteTimer = window.setTimeout(() => this.hideNote(), NOTE_MS);

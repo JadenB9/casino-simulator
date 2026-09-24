@@ -98,3 +98,14 @@ button.hud-who:focus-visible { outline: 2px solid var(--focus); outline-offset: 
 .sc-list dd { margin: 0; font-size: 15px; color: var(--ink-2); }
 .sc-keys { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; }
 .sc-or { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); padding: 0 2px; }
+
+/* Settings on a touch screen: the sliders' thumbs and tracks sized for a finger. */
+@media (pointer: coarse) {
+  .range { height: 44px; }
+  .range::-webkit-slider-thumb { width: 24px; height: 24px; margin-top: -11px; }
+  .range::-moz-range-thumb { width: 24px; height: 24px; }
+}
+@media (max-width: 560px) {
+  .set-row { grid-template-columns: 1fr; gap: 6px; }
+  .set-label { padding-top: 0; }
+}
