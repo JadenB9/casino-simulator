@@ -153,10 +153,9 @@ async function blackjack() {
       await t.settle(200);
     }
     // the 'done' event puts a celebration banner up for a spot that had its moment
-    const banner = await page.waitForSelector('.celebrate', { timeout: 1500 }).catch(() => null);
+    const banner = await page.waitForSelector('.celebrate:not(.out)', { timeout: 1500 }).catch(() => null);
     if (banner && !did.celebration) {
       did.celebration = true;
-      await page.waitForTimeout(350);
       await t.shot('8-celebration');
     }
     await t.settle(700);

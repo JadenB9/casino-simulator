@@ -6,7 +6,7 @@
 //
 // Spots are numbered like seats (the rule core's SPOT_OF_SEAT), so every key and position below
 // is a spot's. At a shared table you play your seat's spot; alone you can play up to five: the
-// hands picker in the tray says how many, your circles are ringed while you bet, and the hand
+// Hands picker by the tray says how many, your circles are ringed while you bet, and the hand
 // being played (or asked about insurance) has its circle lit.
 
 import * as THREE from 'three';
@@ -31,11 +31,10 @@ import { discardStack } from './model.ts';
 import * as L from './layout.ts';
 import { SpotPicker } from '../multihand/picker.ts';
 import { glideTo, setSpotsInPlay } from '../multihand/frame.ts';
+import { oneAtATime } from '../multihand/turns.ts';
 import './blackjack.css';
 
 const SVG = 'http://www.w3.org/2000/svg';
-/** Between one spot's celebration and the next, so each banner has its moment. */
-const CELEBRATION_GAP_MS = 2100;
 
 const MOVE_KEYS: Record<Move, string> = { hit: 'H', stand: 'S', double: 'D', split: 'P', surrender: 'U' };
 const MOVE_LABEL: Record<Move, string> = { hit: 'Hit', stand: 'Stand', double: 'Double', split: 'Split', surrender: 'Surrender' };
@@ -146,6 +145,8 @@ export class BlackjackTable implements TableView {
   /** How many spots the camera was last framed for (null until the first view). */
   private framed: number | null = null;
   private disposed = false;
+  /** Several spots' celebrations take turns. */
+  private readonly inTurn = oneAtATime();
 
   private readonly tray: ChipTray;
   private readonly picker: SpotPicker;
@@ -1105,16 +1106,15 @@ export class BlackjackTable implements TableView {
    * Several spots take turns, in the order they played, so each banner is read on its own.
    */
   private celebrateRound(spots: SpotView[]): void {
-    const moments = spots.map((sp) => ({ sp, found: roundMoment(sp) })).filter((x) => x.found !== null);
-    moments.forEach(({ sp, found }, i) => {
-      const show = () => {
-        if (this.disposed || !found) return;
+    for (const sp of spots) {
+      const found = roundMoment(sp);
+      if (!found) continue;
+      this.inTurn(() => {
+        if (this.disposed) return;
         const cards = found.hands.flatMap((hi) => (sp.hands[hi]?.cards ?? []).map((_, ci) => this.cards.get(`c:${sp.seat}:${hi}:${ci}`)).filter((m): m is CardMesh => !!m));
         celebrate(this.ctx, { ...found.m, glow: [cards] });
-      };
-      if (i === 0) show();
-      else setTimeout(show, i * CELEBRATION_GAP_MS);
-    });
+      });
+    }
   }
 
   private liveTurn(seat: number, hand: number): void {

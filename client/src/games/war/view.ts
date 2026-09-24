@@ -48,11 +48,10 @@ import {
 import { FLOOR_FELT, discardStack } from './model.ts';
 import { SpotPicker } from '../multihand/picker.ts';
 import { glideTo, setSpotsInPlay } from '../multihand/frame.ts';
+import { oneAtATime } from '../multihand/turns.ts';
 import './war.css';
 
 const KINDS: SpotKind[] = ['tie', 'bet', 'war'];
-/** Between one spot's celebration and the next, so each banner has its moment. */
-const CELEBRATION_GAP_MS = 2100;
 const RACK_POINT = new THREE.Vector3(RACK.x, TOP_Y + 0.012, RACK.z);
 
 type Bets = { bet: Cents; tie: Cents };
@@ -118,11 +117,13 @@ export function mountWar(ctx: TableViewCtx): TableView {
   let roundNet: Cents = 0;
   let readyOn = false;
   let lastAction: 'bet' | 'other' = 'other';
+  // a bet the table refused: until I bet again, my spots are drawn from what the table holds (a
+  // Rebet across several spots sends one message each, and the refusal can come before the others land)
+  let resync = false;
   // ties whose War or Surrender is on its way, so a stale view can't bring their buttons back
   const sent = new Set<number>();
   // how many spots the camera was last framed for (null until the first view)
   let framed: number | null = null;
-  let celebrateAt = 0;
   let disposed = false;
 
   /** A spot is mine: my seat's at a shared table, every one at my own. */
@@ -132,13 +133,8 @@ export function mountWar(ctx: TableViewCtx): TableView {
   const byPosition = (a: number, b: number): number => positionOf(a) - positionOf(b);
 
   /** A banner for one of my spots, a couple of seconds after the one before it. */
-  const celebrateSoon = (show: () => void): void => {
-    const now = performance.now();
-    const at = Math.max(now, celebrateAt);
-    celebrateAt = at + CELEBRATION_GAP_MS;
-    if (at <= now) show();
-    else setTimeout(() => !disposed && show(), at - now);
-  };
+  const inTurn = oneAtATime();
+  const celebrateSoon = (show: () => void): void => inTurn(() => !disposed && show());
 
   // ---- table objects -----------------------------------------------------------------------
 
@@ -427,6 +423,7 @@ export function mountWar(ctx: TableViewCtx): TableView {
   const draw = (v: WarView): void => {
     view = v;
     spots = v.mine ?? (me !== null ? [me] : []);
+    if (resync) wanted = serverBets();
     // a tie the table has answered for is no longer on its way
     for (const spot of [...sent]) if (v.seats[spot]?.decision !== 'pending') sent.delete(spot);
     clearPayouts();
@@ -512,6 +509,7 @@ export function mountWar(ctx: TableViewCtx): TableView {
    */
   const sendBets = (next: Record<number, Bets>, push = true): void => {
     if (!canBet()) return;
+    resync = false;
     const changed = spots.filter((s) => {
       const a = betsOf(s);
       const b = next[s] ?? NO_BETS;
@@ -1123,6 +1121,7 @@ export function mountWar(ctx: TableViewCtx): TableView {
       // a refused move: go back to what the table really holds
       if (lastAction === 'bet') {
         history.pop();
+        resync = true;
         wanted = serverBets();
       } else {
         sent.clear();
