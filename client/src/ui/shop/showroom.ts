@@ -169,7 +169,6 @@ export class Showroom {
   private framing: Framing = 'full';
   private yaw = FRAMES.full.yaw;
   private base = FRAMES.full.yaw;
-  private spin = 0;
   private clock = 0;
   private held = 0;
   private fixed: number | null = null;
