@@ -615,7 +615,7 @@ export class BlackjackTable implements TableView {
         if (text) put(`t:${sp.seat}:${hi}`, cls, text, anchor.clone().addScaledVector(out, 0.07));
         if (h.outcome) {
           const p = pillFor(h.outcome, h.bet, h.payout);
-          put(`p:${sp.seat}:${hi}`, `pill ${p.kind}`, p.text, anchor.clone().setY(L.TOP_Y + 0.03));
+          put(`p:${sp.seat}:${hi}`, `pill ${p.kind}`, p.text, L.handChips(sp.seat, hi, sp.hands.length).setY(L.TOP_Y + 0.03));
         }
       });
       if (sp.hands.length > 1 && v.turn?.seat === sp.seat) {
@@ -1099,8 +1099,8 @@ export class BlackjackTable implements TableView {
       await this.slideIn(`w:${e.seat}:${e.hand}`, e.payout - e.bet, L.RACK, L.winChips(e.seat, e.hand, n));
     }
     const p = pillFor(e.outcome, e.bet, e.payout);
-    const anchor = L.handAnchor(e.seat, e.hand, n);
-    this.label(`p:${e.seat}:${e.hand}`, `pill ${p.kind}`, p.text, anchor.setY(L.TOP_Y + 0.03));
+    // on the bet, clear of the cards (on the first card it hid the indices fanned over it)
+    this.label(`p:${e.seat}:${e.hand}`, `pill ${p.kind}`, p.text, L.handChips(e.seat, e.hand, n).setY(L.TOP_Y + 0.03));
     this.renderLiveTotals();
     await wait(e.outcome === 'bust' ? 350 : 260);
   }
