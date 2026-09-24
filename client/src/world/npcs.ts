@@ -1,0 +1,509 @@
+// The floor's staff: a dealer behind every table (a stickman at craps), a bartender behind the bar
+// and a cashier in the cage. They are characters like the players (the same rigs, one draw call
+// each, the shared vertex-coloured material) dressed in uniforms (characters.ts): dealers in a
+// white shirt, black vest, bow tie and brass name badge, the bartender in a wine-red vest, the
+// cashier in a navy blazer. Skin, hair, body and height differ from one to the next, never twice
+// the same, and each table keeps its dealer from one visit to the next.
+//
+// Where a dealer stands comes from the table's own model: behind its edge on the dealer's side
+// (local -z), as close as the model allows at every height (a high craps rail keeps the stickman
+// further back than a blackjack table does), by the wheel at roulette and beside it at the Big
+// Six. So when a table is rebuilt, its dealer moves with it.
+//
+// Life: the idle clip plays at a slightly different pace for each, weight shifts from foot to
+// foot, and heads turn to whoever comes near (within reach and in front); with nobody there they
+// glance over their layout. When you sit at a table its dealer turns to face you. Table views can
+// ask for a deal, sweep or pay motion (FloorWorld.dealerGesture).
+//
+// Cost: staff are hidden (and not animated) beyond CULL_M or outside the camera's view; their
+// shadows are one instanced mesh. Each stands on a collision post so nobody walks through them.
+
+import * as THREE from 'three';
+import type { GameId } from '../../../shared/src/engine.ts';
+import { SKIN_TONES, type Body, type Look } from '../../../shared/src/look.ts';
+import { uniformOutfit, type Characters, type Person, type StaffGesture, type UniformId } from './characters.ts';
+import type { Collider, Post as CollisionPost } from './collision.ts';
+import type { FloorPlan } from './layout.ts';
+import type { WorldStation } from './stations.ts';
+
+export type { StaffGesture } from './characters.ts';
+export type StaffRole = 'dealer' | 'stickman' | 'bartender' | 'cashier';
+
+/** Where one of the staff works: a floor position and the way they face (Object3D.rotation.y). */
+export interface StaffPost {
+  role: StaffRole;
+  /** The station they deal at; null behind the bar and in the cage. */
+  station: string | null;
+  x: number;
+  z: number;
+  yaw: number;
+}
+
+/** Hidden past this (metres from the camera), shown again inside CULL_M - 1. */
+export const CULL_M = 15;
+/** How near someone must be for a head to turn their way. */
+const NOTICE_M = 3.6;
+/** Collision: the coordinator's post for anyone standing on the floor. */
+const POST_R = 0.28;
+const POST_TOP = 1.9;
+
+// --- where dealers stand ------------------------------------------------------------------------
+
+/**
+ * How far the front of a standing body reaches (z, metres) at a height: toes near the floor,
+ * thighs at table height, belly and chest above it.
+ */
+export function bodyFront(y: number): number {
+  if (y < 0.12) return 0.2;
+  if (y < 0.95) return 0.12;
+  return 0.19;
+}
+const CLEAR = 0.04;
+/** Half the body's width with the arms at its sides. */
+const HALF_WIDTH = 0.3;
+
+/**
+ * The dealer's z (in the station's frame, dealer side -z) for a body centred on x: as close to the
+ * model as bodyFront allows at every height, a few centimetres clear. `points` is the model's
+ * geometry sampled in the station's frame (x, y, z triples).
+ */
+export function standBehind(points: ArrayLike<number>, x: number): number {
+  let z = Infinity;
+  for (let i = 0; i + 2 < points.length; i += 3) {
+    const px = points[i]!;
+    const py = points[i + 1]!;
+    if (Math.abs(px - x) > HALF_WIDTH || py < 0.02 || py > 1.9) continue;
+    z = Math.min(z, points[i + 2]! - bodyFront(py) - CLEAR);
+  }
+  return Number.isFinite(z) ? z : -0.9;
+}
+
+/** True when no part of the model is inside a body standing at (x, z) facing +z. */
+export function standsClear(points: ArrayLike<number>, x: number, z: number): boolean {
+  for (let i = 0; i + 2 < points.length; i += 3) {
+    const py = points[i + 1]!;
+    if (Math.abs(points[i]! - x) > HALF_WIDTH - 0.03 || py < 0.02 || py > 1.9) continue;
+    const pz = points[i + 2]!;
+    if (pz > z - 0.17 && pz < z + bodyFront(py)) return false;
+  }
+  return true;
+}
+
+/** The model's geometry in its station's frame, sampled (a few thousand points per table). */
+function modelPoints(s: WorldStation, only?: THREE.Object3D): Float32Array {
+  const out: number[] = [];
+  s.anchor.updateWorldMatrix(true, true);
+  const inv = new THREE.Matrix4().copy(s.anchor.matrixWorld).invert();
+  const m = new THREE.Matrix4();
+  const im = new THREE.Matrix4();
+  const v = new THREE.Vector3();
+  (only ?? s.model).traverseVisible((o) => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh || (mesh as THREE.SkinnedMesh).isSkinnedMesh) return;
+    const pos = mesh.geometry.getAttribute('position');
+    if (!pos) return;
+    const inst = (mesh as THREE.InstancedMesh).isInstancedMesh ? (mesh as THREE.InstancedMesh) : null;
+    const copies = inst ? inst.count : 1;
+    const step = Math.max(1, Math.floor((pos.count * copies) / 6000));
+    m.multiplyMatrices(inv, mesh.matrixWorld);
+    for (let c = 0; c < copies; c++) {
+      if (inst) inst.getMatrixAt(c, im).premultiply(m);
+      const to = inst ? im : m;
+      for (let i = c % step; i < pos.count; i += step) {
+        v.fromBufferAttribute(pos, i).applyMatrix4(to);
+        out.push(v.x, v.y, v.z);
+      }
+    }
+  });
+  return Float32Array.from(out);
+}
+
+/** An object's box in the station's frame. */
+function localBox(s: WorldStation, name: string): THREE.Box3 | null {
+  const o = s.model.getObjectByName(name);
+  if (!o) return null;
+  const p = modelPoints(s, o);
+  if (p.length === 0) return null;
+  const box = new THREE.Box3();
+  for (let i = 0; i < p.length; i += 3) box.expandByPoint(new THREE.Vector3(p[i], p[i + 1], p[i + 2]));
+  return box;
+}
+
+const TABLES: GameId[] = ['blackjack', 'roulette', 'craps', 'baccarat', 'threecard', 'war', 'sicbo', 'bigsix', 'holdem'];
+
+/** A dealer's spot in the station's frame: x, z and a turn from facing the players (+z). */
+function dealerSpot(s: WorldStation, points: Float32Array): { x: number; z: number; turn: number } {
+  if (s.game === 'bigsix') {
+    // beside the wheel on its left (as the players see it), turned a little toward the layout
+    const wheel = localBox(s, 'bigsix-wheel');
+    if (wheel) {
+      const z = (wheel.min.z + wheel.max.z) / 2 + 0.12;
+      let x = wheel.max.x + HALF_WIDTH + 0.06;
+      for (let k = 0; k < 8 && !standsClear(points, x, z); k++) x += 0.05;
+      return { x, z, turn: -0.35 };
+    }
+  }
+  let x = 0;
+  if (s.game === 'roulette') {
+    // between the wheel and the layout's zero end, the wheel at the dealer's right hand
+    const wheel = localBox(s, 'roulette-wheel');
+    if (wheel) {
+      const cx = (wheel.min.x + wheel.max.x) / 2;
+      x = cx + Math.sign(-cx || 1) * 0.36;
+    }
+  }
+  let z = standBehind(points, x);
+  for (let k = 0; k < 8 && !standsClear(points, x, z); k++) z -= 0.05;
+  return { x, z, turn: 0 };
+}
+
+/** Every post on the floor: the tables' dealers, then the bartender and the cashier. */
+export function staffPosts(stations: WorldStation[], plan: FloorPlan): StaffPost[] {
+  const posts: StaffPost[] = [];
+  const at = new THREE.Vector3();
+  for (const s of stations) {
+    if (!TABLES.includes(s.game)) continue;
+    const spot = dealerSpot(s, modelPoints(s));
+    s.anchor.updateWorldMatrix(true, false);
+    s.anchor.localToWorld(at.set(spot.x, 0, spot.z));
+    posts.push({ role: s.game === 'craps' ? 'stickman' : 'dealer', station: s.id, x: at.x, z: at.z, yaw: s.yaw + spot.turn });
+  }
+  // behind the bar, a little way back from the counter, facing the stools (-x)
+  const bar = plan.bar;
+  const stools = bar.stools.length ? bar.stools : [(bar.z0 + bar.z1) / 2];
+  const mid = stools[Math.floor(stools.length / 2)]!;
+  posts.push({ role: 'bartender', station: null, x: bar.front + bar.depth + 0.42, z: mid, yaw: -Math.PI / 2 });
+  // in the cage behind the counter, at the teller window nearer the floor (decor.ts cuts the
+  // windows a metre either side of where players stand)
+  const c = plan.cashier;
+  posts.push({ role: 'cashier', station: null, x: c.x + 1.0, z: c.counter.z1 - 0.64 - 0.3, yaw: 0 });
+  return posts;
+}
+
+// --- who they are -------------------------------------------------------------------------------
+
+const HAIR_LIGHT = ['#2b1d14', '#4a3020', '#1b1512', '#6b4226', '#8f6a3e', '#7a3b22', '#b89660', '#8c8a86', '#0e0c0b'];
+const HAIR_DARK = ['#0e0c0b', '#1b1512', '#2b1d14', '#3a2618', '#6f6c68'];
+const HEIGHTS = [1.0, 0.97, 1.03, 0.985, 1.045, 0.96, 1.015];
+
+const UNIFORM: Record<StaffRole, { uniform: UniformId; top: string }> = {
+  dealer: { uniform: 'vest', top: '#16171b' },
+  stickman: { uniform: 'vest', top: '#16171b' },
+  bartender: { uniform: 'vest', top: '#5a1a26' },
+  cashier: { uniform: 'blazer', top: '#1d2a44' },
+};
+
+/** A small deterministic generator, so a table keeps its dealer from one visit to the next. */
+function rng(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/**
+ * The staff's looks and heights, one per post, never two alike: skin tones and heights walk
+ * through their lists at different strides, so the pair differs for every one of up to 56 staff
+ * (hair and body vary on top of that).
+ */
+export function staffLooks(posts: StaffPost[], seed = 7): { look: Look; scale: number }[] {
+  const r = rng(seed);
+  const skinStart = Math.floor(r() * SKIN_TONES.length);
+  const heightStart = Math.floor(r() * HEIGHTS.length);
+  return posts.map((p, i) => {
+    const body: Body = r() < 0.45 ? 'f' : 'm';
+    const skin = (skinStart + i * 3) % SKIN_TONES.length;
+    const hairs = skin >= 5 ? HAIR_DARK : HAIR_LIGHT;
+    const hair = hairs[(i * 5 + Math.floor(r() * hairs.length)) % hairs.length]!;
+    const u = UNIFORM[p.role];
+    const look: Look = { v: 1, body, outfit: uniformOutfit(u.uniform), skin, hair, top: u.top, bottom: '#1a1b20', shoes: '#0c0c0e' };
+    const scale = HEIGHTS[(heightStart + i) % HEIGHTS.length]! * (body === 'f' ? 0.975 : 1);
+    return { look, scale };
+  });
+}
+
+// --- the staff on the floor ---------------------------------------------------------------------
+
+/** The angle from facing `yaw` to looking from (x, z) toward (tx, tz), in -PI..PI. */
+export function turnToward(yaw: number, x: number, z: number, tx: number, tz: number): number {
+  const want = Math.atan2(tx - x, tz - z);
+  return Math.atan2(Math.sin(want - yaw), Math.cos(want - yaw));
+}
+
+interface Member {
+  post: StaffPost;
+  ch: Person;
+  scale: number;
+  station: WorldStation | null;
+  col: CollisionPost | null;
+  shown: boolean;
+  /** Current turn of the body away from the post's facing. */
+  turn: number;
+  /** Who or what they look at, and until when (seconds on the staff clock). */
+  gaze: THREE.Vector3 | null;
+  gazeWho: THREE.Object3D | 'you' | 'table' | null;
+  gazeUntil: number;
+  /** The bartender's stroll: where to, and the pause before the next one. */
+  walkTo: number | null;
+  rest: number;
+}
+
+export class Staff {
+  readonly group = new THREE.Group();
+  readonly posts: StaffPost[];
+  private readonly members: Member[] = [];
+  private readonly blobs: THREE.InstancedMesh;
+  private readonly frustum = new THREE.Frustum();
+  private readonly viewProj = new THREE.Matrix4();
+  private readonly sphere = new THREE.Sphere(new THREE.Vector3(), 1.1);
+  private readonly cam = new THREE.Vector3();
+  private readonly people: THREE.Vector3[] = [];
+  private readonly pool: THREE.Vector3[] = [];
+  private readonly peopleWho: THREE.Object3D[] = [];
+  private clock = 0;
+  private blobsDirty = true;
+  private readonly rand = rng(911);
+  private readonly bar: { z0: number; z1: number };
+
+  constructor(
+    private readonly characters: Characters,
+    stations: WorldStation[],
+    plan: FloorPlan,
+    col: Collider | null,
+  ) {
+    this.group.name = 'staff';
+    this.posts = staffPosts(stations, plan);
+    const looks = staffLooks(this.posts);
+    const stools = plan.bar.stools;
+    this.bar = stools.length ? { z0: stools[0]!, z1: stools[stools.length - 1]! } : { z0: plan.bar.z0 + 1, z1: plan.bar.z1 - 1 };
+    this.posts.forEach((post, i) => {
+      const { look, scale } = looks[i]!;
+      const ch = characters.create(look, '', { blob: false, staff: true });
+      ch.root.position.set(post.x, 0, post.z);
+      ch.root.rotation.y = post.yaw;
+      ch.root.scale.setScalar(scale);
+      ch.root.visible = false;
+      const r = rng(i * 7919 + 17);
+      ch.setPace(0.88 + r() * 0.24, r());
+      ch.sway(r() * 10);
+      this.group.add(ch.root);
+      this.members.push({
+        post,
+        ch,
+        scale,
+        station: stations.find((s) => s.id === post.station) ?? null,
+        col: col ? col.post(post.x, post.z, POST_R, POST_TOP, { cam: false }) : null,
+        shown: false,
+        turn: 0,
+        gaze: null,
+        gazeWho: null,
+        gazeUntil: 0,
+        walkTo: null,
+        rest: 6 + r() * 10,
+      });
+    });
+    this.blobs = new THREE.InstancedMesh(characters.blobGeometry, characters.blob, this.members.length);
+    this.blobs.name = 'staff-shadows';
+    this.blobs.renderOrder = 1;
+    this.blobs.frustumCulled = false;
+    this.group.add(this.blobs);
+  }
+
+  /** Resolves when every uniform's model is ready (behind the loading screen). */
+  async load(): Promise<void> {
+    const seen = new Set<string>();
+    const waits: Promise<void>[] = [];
+    for (const m of this.members) {
+      const look = m.ch.currentLook;
+      const key = `${look.body}/${look.outfit}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      waits.push(this.characters.load(look));
+    }
+    await Promise.all(waits);
+  }
+
+  /** The staff member posted at a station (its dealer or stickman). */
+  at(stationId: string): Person | null {
+    return this.members.find((m) => m.post.station === stationId)?.ch ?? null;
+  }
+
+  /** A dealer's motion at a table; false when the station has no dealer. */
+  gesture(stationId: string, g: StaffGesture): boolean {
+    const m = this.members.find((x) => x.post.station === stationId);
+    if (!m) return false;
+    m.ch.gesture(g);
+    return true;
+  }
+
+  /**
+   * Every frame: show who's near and in view, and give them their life. `you` is your own
+   * character's root (null while it isn't on the floor); `seated` the table you sit at.
+   */
+  update(dt: number, camera: THREE.Camera, seated: WorldStation | null): void {
+    this.clock += dt;
+    camera.updateMatrixWorld();
+    camera.getWorldPosition(this.cam);
+    const cam = camera as THREE.PerspectiveCamera;
+    this.viewProj.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
+    this.frustum.setFromProjectionMatrix(this.viewProj);
+    this.gatherPeople();
+    for (const m of this.members) {
+      const root = m.ch.root;
+      const mine = seated !== null && m.station === seated;
+      const d = Math.hypot(root.position.x - this.cam.x, root.position.z - this.cam.z);
+      const near = m.shown ? d < CULL_M : d < CULL_M - 1;
+      this.sphere.center.set(root.position.x, 0.95, root.position.z);
+      const show = mine || (near && this.frustum.intersectsSphere(this.sphere));
+      if (show !== m.shown) {
+        m.shown = show;
+        root.visible = show;
+        this.blobsDirty = true;
+      }
+      if (!show) continue;
+      if (m.post.role === 'bartender') this.stroll(m, dt);
+      this.live(m, dt, mine);
+      m.ch.update(dt);
+    }
+    if (this.blobsDirty) this.placeBlobs();
+  }
+
+  dispose(): void {
+    for (const m of this.members) m.ch.dispose();
+    this.blobs.dispose();
+    this.group.removeFromParent();
+  }
+
+  /** Where everyone who isn't staff is, heads up (your own character too, while it's shown). */
+  private gatherPeople(): void {
+    this.people.length = 0;
+    this.peopleWho.length = 0;
+    let n = 0;
+    for (const p of this.characters.people()) {
+      const r = p.root;
+      let shown = r.parent !== null;
+      for (let o: THREE.Object3D | null = r; o && shown; o = o.parent) shown = o.visible;
+      if (!shown) continue;
+      const head = this.pool[n] ?? (this.pool[n] = new THREE.Vector3());
+      n++;
+      this.people.push(head.set(r.position.x, r.position.y + 1.55 * r.scale.y, r.position.z));
+      this.peopleWho.push(r);
+    }
+  }
+
+  /** Where to look and how far to turn: you when you sit here, else whoever is near, else the table. */
+  private live(m: Member, dt: number, mine: boolean): void {
+    const root = m.ch.root;
+    const x = root.position.x;
+    const z = root.position.z;
+    const home = m.post.yaw;
+    let want = 0;
+    if (mine) {
+      // face the player: the body turns most of the way, the head the rest
+      want = THREE.MathUtils.clamp(turnToward(home, x, z, this.cam.x, this.cam.z), -0.8, 0.8);
+      if (m.gazeWho !== 'you' || this.clock > m.gazeUntil) {
+        // mostly you, now and then a glance down at the layout
+        const glance = m.gazeWho === 'you' && this.rand() < 0.3;
+        m.gazeWho = glance ? 'table' : 'you';
+        m.gazeUntil = this.clock + (glance ? 1.2 + this.rand() : 3 + this.rand() * 3);
+        m.gaze = glance ? this.tablePoint(m) : null;
+      }
+      if (m.gazeWho === 'you') m.gaze = (m.gaze ?? new THREE.Vector3()).set(this.cam.x, this.cam.y - 0.08, this.cam.z);
+    } else {
+      // the nearest person within reach and in front keeps their gaze a while
+      let best = -1;
+      let bestD = NOTICE_M;
+      for (let i = 0; i < this.people.length; i++) {
+        const p = this.people[i]!;
+        const dd = Math.hypot(p.x - x, p.z - z);
+        if (dd > NOTICE_M || dd < 0.3) continue;
+        if (Math.abs(turnToward(home, x, z, p.x, p.z)) > 1.9) continue;
+        if (dd < bestD) {
+          bestD = dd;
+          best = i;
+        }
+      }
+      const who = best >= 0 ? this.peopleWho[best]! : null;
+      const keep = m.gazeWho instanceof THREE.Object3D && this.clock < m.gazeUntil && this.peopleWho.includes(m.gazeWho);
+      if (who && !keep && who !== m.gazeWho) {
+        m.gazeWho = who;
+        m.gazeUntil = this.clock + 1.5 + this.rand() * 2;
+      } else if (!who && m.gazeWho instanceof THREE.Object3D && !keep) {
+        m.gazeWho = null;
+      }
+      if (m.gazeWho instanceof THREE.Object3D) {
+        const i = this.peopleWho.indexOf(m.gazeWho);
+        const p = this.people[i]!;
+        m.gaze = (m.gaze ?? new THREE.Vector3()).copy(p);
+        want = THREE.MathUtils.clamp(turnToward(home, x, z, p.x, p.z), -0.45, 0.45) * 0.6;
+      } else if (this.clock > m.gazeUntil) {
+        // nobody near: look over the layout now and then, or straight ahead
+        const table = m.station !== null && this.rand() < 0.6;
+        m.gazeWho = table ? 'table' : null;
+        m.gaze = table ? this.tablePoint(m) : null;
+        m.gazeUntil = this.clock + 2.5 + this.rand() * 4;
+      }
+    }
+    m.turn += (want - m.turn) * (1 - Math.exp(-dt * 2.2));
+    if (m.walkTo === null) root.rotation.y = home + m.turn;
+    m.ch.lookAt(m.gaze);
+  }
+
+  /** A spot on the layout in front of a dealer, where their eyes rest between players. */
+  private tablePoint(m: Member): THREE.Vector3 | null {
+    const s = m.station;
+    if (!s) return null;
+    const p = new THREE.Vector3((this.rand() - 0.5) * 1.2, 0.8, -0.2 + this.rand() * 0.5);
+    return s.anchor.localToWorld(p);
+  }
+
+  /** The bartender now and then walks a few steps along the bar, then turns back to the stools. */
+  private stroll(m: Member, dt: number): void {
+    const root = m.ch.root;
+    if (m.walkTo === null) {
+      m.rest -= dt;
+      if (m.rest > 0) return;
+      const span = this.bar.z1 - this.bar.z0;
+      let to = this.bar.z0 + this.rand() * span;
+      if (Math.abs(to - root.position.z) < 1.2) to = root.position.z + (to < root.position.z ? -1.6 : 1.6);
+      m.walkTo = THREE.MathUtils.clamp(to, this.bar.z0, this.bar.z1);
+      m.gazeWho = null;
+      m.gaze = null;
+      return;
+    }
+    const dz = m.walkTo - root.position.z;
+    const step = Math.min(Math.abs(dz), 1.05 * dt);
+    root.position.z += Math.sign(dz) * step;
+    const face = dz > 0 ? 0 : Math.PI;
+    root.rotation.y += Math.atan2(Math.sin(face - root.rotation.y), Math.cos(face - root.rotation.y)) * (1 - Math.exp(-dt * 6));
+    m.ch.setMotion(Math.abs(dz) > 0.05 ? 0.62 : 0);
+    if (m.col) m.col.cz = root.position.z;
+    this.blobsDirty = true;
+    if (Math.abs(dz) <= 0.02) {
+      m.walkTo = null;
+      m.ch.setMotion(0);
+      m.rest = 8 + this.rand() * 14;
+      m.turn = Math.atan2(Math.sin(root.rotation.y - m.post.yaw), Math.cos(root.rotation.y - m.post.yaw));
+    }
+  }
+
+  private placeBlobs(): void {
+    this.blobsDirty = false;
+    const mat = new THREE.Matrix4();
+    const zero = new THREE.Matrix4().makeScale(0, 0, 0);
+    this.members.forEach((m, i) => {
+      if (!m.shown) {
+        this.blobs.setMatrixAt(i, zero);
+        return;
+      }
+      const p = m.ch.root.position;
+      mat.makeScale(m.scale, 1, m.scale).setPosition(p.x, 0.012, p.z);
+      this.blobs.setMatrixAt(i, mat);
+    });
+    this.blobs.instanceMatrix.needsUpdate = true;
+  }
+}

@@ -317,6 +317,11 @@ export class Person implements Character {
     if (this.mesh) this.mesh.material = m;
   }
 
+  /** The Look this character is drawn from. */
+  get currentLook(): Look {
+    return this.look;
+  }
+
   /** Act out an emote, or one of a dealer's motions (StaffGesture). */
   gesture(e: EmoteId | StaffGesture): void {
     this.act = { e, t: 0 };
