@@ -1047,18 +1047,30 @@ if (checks.includes('read')) {
   };
   for (const quality of readParts.includes('seated') ? ['high', 'low'] : []) {
     const { ctx, page, errors } = await openGame('world3_read', (q) => localStorage.setItem('casino.quality', q), quality);
-    if (await page.$('.editor-panel.guided')) {
-      for (let i = 0; i < 3; i++) await page.click('.editor-panel .ed-buttons .btn.primary');
-    } else {
-      await page.click('.menu-item >> nth=0');
-    }
-    await page.waitForSelector('.hud', { timeout: 60000 });
-    await page.evaluate(`window.__read = (${READ_HELPERS.toString()})()`);
-    await page.evaluate(async () => {
-      window.__kit = await import('/casino/src/table/celebrate.ts');
-    });
+    // onto the floor, and again if the page ever reloads under us (a new build, a lost socket)
+    const onFloor = async () => {
+      if (await page.evaluate(() => !!window.casino?.app && !!document.querySelector('.hud') && !!window.__read).catch(() => false)) return;
+      await page.waitForSelector('.name-input, .menu-item, .editor-panel.guided, .hud', { timeout: 600000 });
+      if (await page.$('.name-input')) {
+        await page.fill('.name-input', 'world3_read');
+        await page.fill('.pass-input', PASSWORD);
+        await page.click('.enter-btn');
+        await page.waitForSelector('.menu-item, .editor-panel.guided', { timeout: 60000 });
+      }
+      if (await page.$('.editor-panel.guided')) {
+        for (let i = 0; i < 3; i++) await page.click('.editor-panel .ed-buttons .btn.primary');
+      } else if (!(await page.$('.hud'))) {
+        await page.click('.menu-item >> nth=0');
+      }
+      await page.waitForSelector('.hud', { timeout: 60000 });
+      await page.evaluate(`window.__read = (${READ_HELPERS.toString()})()`);
+      await page.evaluate(async () => {
+        window.__kit = await import('/casino/src/table/celebrate.ts');
+      });
+    };
     for (const [id, game] of SEATED) {
       try {
+        await onFloor();
         await page.evaluate((id) => {
           const w = window.casino.world;
           w.enter(w.stations.find((s) => s.id === id));
@@ -1136,11 +1148,17 @@ if (checks.includes('read')) {
       } catch (err) {
         fail(`read seated ${quality} ${id}: ${String(err).split('\n')[0]}`);
       }
-      // stand up (after a word if chips are down)
-      await page.evaluate(() => window.casino.app.escape());
-      const leave = await page.waitForSelector('.modal .btn.primary', { timeout: 4000 }).catch(() => null);
-      if (leave) await leave.click();
-      await page.waitForFunction(() => window.casino.world.seated === null, null, { timeout: 30000 }).catch(() => {});
+      // stand up (after a word if chips are down); a reloaded page is already standing
+      try {
+        if (await page.evaluate(() => !!window.casino?.world?.seated)) {
+          await page.evaluate(() => window.casino.app.escape());
+          const leave = await page.waitForSelector('.modal .btn.primary', { timeout: 4000 }).catch(() => null);
+          if (leave) await leave.click();
+          await page.waitForFunction(() => window.casino.world.seated === null, null, { timeout: 30000 }).catch(() => {});
+        }
+      } catch (err) {
+        console.log(JSON.stringify({ check: 'read', note: `standing up at ${id}: ${String(err).split('\n')[0]}` }));
+      }
       await page.waitForTimeout(800);
     }
     console.log(JSON.stringify({ check: 'read-seated', quality, rows: readRows.filter((r) => r.where === 'seated' && r.quality === quality).length, errors: errors.slice(0, 3) }));
