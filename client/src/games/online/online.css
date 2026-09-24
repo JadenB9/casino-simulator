@@ -162,7 +162,11 @@
 .os-num-btn:hover:not(:disabled) { background: var(--os-line); }
 .os-num-btn:disabled { color: var(--os-ink-3); cursor: default; }
 
+/* A small caption over a panel block: THIS BOARD, THIS SESSION */
+.os-caption { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--os-ink-3); }
+
 /* Key-value rows under the bet panel */
+.os-infobox { display: grid; gap: 8px; }
 .os-info { display: grid; margin: 0; padding: 2px 12px; background: var(--os-field); border-radius: 6px; }
 .os-info-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--os-panel); }
 .os-info-row:last-child { border-bottom: 0; }
@@ -183,7 +187,6 @@
 
 /* The session tally at the foot of the bet panel */
 .os-tally { display: grid; gap: 8px; margin-top: auto; }
-.os-tally-head { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--os-ink-3); }
 .os-tally .os-stat { padding: 8px 10px; }
 .os-tally .os-stat-value { font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .os-stat-value.win { color: var(--os-win); }

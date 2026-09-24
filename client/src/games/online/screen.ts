@@ -340,10 +340,16 @@ export class NumberField {
   }
 }
 
-/** Label and value rows under the bet panel: a board's return, the chance of its top pay. */
+/** Label and value rows under the bet panel, under a small caption: a board's return, the chance of its top pay. */
 export class InfoList {
-  readonly root = el('dl', 'os-info');
+  readonly root = el('div', 'os-infobox');
+  private readonly list = el('dl', 'os-info');
   private readonly rows = new Map<string, { label: HTMLElement; value: HTMLElement }>();
+
+  constructor(caption?: string) {
+    if (caption) this.root.append(el('div', 'os-caption', caption));
+    this.root.append(this.list);
+  }
 
   set(key: string, label: string, value: string, tone: 'win' | 'lose' | null = null): void {
     let row = this.rows.get(key);
@@ -351,7 +357,7 @@ export class InfoList {
       const r = el('div', 'os-info-row');
       row = { label: el('dt', ''), value: el('dd', '') };
       r.append(row.label, row.value);
-      this.root.append(r);
+      this.list.append(r);
       this.rows.set(key, row);
     }
     row.label.textContent = label;
@@ -394,7 +400,7 @@ export class SessionTally {
       return s;
     };
     stats.append(stat('Bets', this.betsEl), stat('Wagered', this.wageredEl), stat('Profit', this.netEl));
-    this.root.append(el('div', 'os-tally-head', 'This session'), stats);
+    this.root.append(el('div', 'os-caption', 'This session'), stats);
   }
 
   add(wagered: Cents, returned: Cents): void {
@@ -476,4 +482,14 @@ export function drawSiteBar(g: CanvasRenderingContext2D, w: number, title: strin
   g.fillText(title, w - 16, 22);
   g.textAlign = 'left';
   return 44;
+}
+
+/** A block of the bet panel: a label (and an optional note on its right) over a control. */
+export function labelled(label: string, control: HTMLElement, note?: HTMLElement): HTMLElement {
+  const g = el('div', 'os-group');
+  const head = el('div', 'os-group-head');
+  head.append(el('span', 'os-label', label));
+  if (note) head.append(note);
+  g.append(head, control);
+  return g;
 }
