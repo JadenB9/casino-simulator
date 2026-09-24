@@ -906,19 +906,6 @@ function restyle(tpl: Template, mesh: THREE.SkinnedMesh, u: Uniform, from: { par
     collarY = Math.max(collarY, at[i * 3 + 1]!);
   }
   if (!Number.isFinite(collarY)) return tpl;
-  // A top with a plain round neck (no shirt front of its own, unlike the suit) gets one: a V
-  // cut into its front under the collar, so the bow tie sits on white as it does on the men.
-  if (!ownFront) {
-    const bottom = collarY - 0.19;
-    for (let i = 0; i < n; i++) {
-      if (slot[i] !== TOP || !from[i]!.part.endsWith('_Body') || at[i * 3 + 2]! < 0.04) continue;
-      const y = at[i * 3 + 1]!;
-      if (y > bottom && Math.abs(at[i * 3]!) < 0.5 * (y - bottom)) {
-        fix(i, SHIRT);
-        isShirt[i] = 1;
-      }
-    }
-  }
   /**
    * The body's front surface at (x, y): a ray from in front straight back (-z) against the
    * triangles, and the hit triangle's nearest corner, to skin an addition like the cloth it sits
@@ -956,11 +943,22 @@ function restyle(tpl: Template, mesh: THREE.SkinnedMesh, u: Uniform, from: { par
     return { z, i: best };
   };
 
-  const extras: { geo: THREE.BufferGeometry; color: THREE.Color; skin: number }[] = [];
+  /** Additions in the character's frame, each vertex skinned like the body vertex `skin` names. */
+  const extras: { geo: THREE.BufferGeometry; color: THREE.Color; skin: number[] }[] = [];
+  const each = (g: THREE.BufferGeometry, i: number) => new Array<number>(g.getAttribute('position').count).fill(i);
+  if (!ownFront) {
+    // A top with a plain round neck (unlike the suit) gets a shirt front: a V laid over its chest,
+    // a few millimetres proud of it, so the bow tie sits on white as it does on the men.
+    const patch = shirtFront(collarY, front);
+    if (patch) extras.push({ geo: patch.geo, color: SHIRT, skin: patch.skin });
+  }
   if (u.bow) {
     const y = collarY - 0.022;
     const f = front(0, y);
-    if (f.i >= 0) extras.push({ geo: bowTie(new THREE.Vector3(0, y, f.z + 0.008)), color: BOW, skin: f.i });
+    if (f.i >= 0) {
+      const g = bowTie(new THREE.Vector3(0, y, f.z + (ownFront ? 0.008 : 0.011)));
+      extras.push({ geo: g, color: BOW, skin: each(g, f.i) });
+    }
   }
   if (u.badge) {
     // the wearer's left breast: on the upper chest, a little under halfway out to the side
@@ -974,19 +972,26 @@ function restyle(tpl: Template, mesh: THREE.SkinnedMesh, u: Uniform, from: { par
     if (f.i >= 0) {
       const g = new THREE.BoxGeometry(0.066, 0.019, 0.005);
       g.translate(x, y, f.z + 0.004);
-      extras.push({ geo: g, color: BADGE, skin: f.i });
+      extras.push({ geo: g, color: BADGE, skin: each(g, f.i) });
     }
   }
 
   // Carry each addition from the character's frame into the mesh's own (quantized) space, skinned
   // exactly like the vertex it sits on, so it rides the same bones.
+  if (extras.length === 0) return tpl;
   const slots = Array.from(slot);
   const bases = Array.from(base);
-  const hard = harden(geo, slots, bases);
-  const pieces: THREE.BufferGeometry[] = [hard];
+  const pieces: THREE.BufferGeometry[] = [geo];
+  const toMesh = new Map<number, { m: THREE.Matrix4; turn: THREE.Matrix3 }>();
+  const inverse = (j: number) => {
+    let t = toMesh.get(j);
+    if (!t) {
+      const m = restMatrix(mesh, j).invert();
+      toMesh.set(j, (t = { m, turn: new THREE.Matrix3().setFromMatrix4(m) }));
+    }
+    return t;
+  };
   for (const x of extras) {
-    const toMesh = restMatrix(mesh, x.skin).invert();
-    const turn = new THREE.Matrix3().setFromMatrix4(toMesh);
     const src = x.geo;
     const count = src.getAttribute('position').count;
     const out = new THREE.BufferGeometry();
@@ -1001,12 +1006,14 @@ function restyle(tpl: Template, mesh: THREE.SkinnedMesh, u: Uniform, from: { par
     const wt = out.getAttribute('skinWeight');
     const p = new THREE.Vector3();
     for (let k = 0; k < count; k++) {
-      p.fromBufferAttribute(src.getAttribute('position'), k).applyMatrix4(toMesh);
+      const j = x.skin[k]!;
+      const t = inverse(j);
+      p.fromBufferAttribute(src.getAttribute('position'), k).applyMatrix4(t.m);
       pos.setXYZ(k, p.x, p.y, p.z);
-      p.fromBufferAttribute(src.getAttribute('normal'), k).applyMatrix3(turn).normalize();
+      p.fromBufferAttribute(src.getAttribute('normal'), k).applyMatrix3(t.turn).normalize();
       nor.setXYZ(k, p.x, p.y, p.z);
-      sk.setXYZW(k, si.getX(x.skin), si.getY(x.skin), si.getZ(x.skin), si.getW(x.skin));
-      wt.setXYZW(k, sw.getX(x.skin), sw.getY(x.skin), sw.getZ(x.skin), sw.getW(x.skin));
+      sk.setXYZW(k, si.getX(j), si.getY(j), si.getZ(j), si.getW(j));
+      wt.setXYZW(k, sw.getX(j), sw.getY(j), sw.getZ(j), sw.getW(j));
       slots.push(FIXED);
       bases.push(x.color.r, x.color.g, x.color.b);
     }
@@ -1014,75 +1021,12 @@ function restyle(tpl: Template, mesh: THREE.SkinnedMesh, u: Uniform, from: { par
     pieces.push(out);
     src.dispose();
   }
-  const joined = pieces.length > 1 ? mergeGeometries(pieces, false) : hard;
+  const joined = mergeGeometries(pieces, false);
   if (!joined) return tpl;
   joined.computeBoundingSphere();
   mesh.geometry = joined;
-  if (hard !== joined) hard.dispose();
   geo.dispose();
   return { ...tpl, geometry: joined, slot: Uint8Array.from(slots), base: Float32Array.from(bases) };
-}
-
-/**
- * Give every face one colour. Where a restyle split a face between two (a sleeve's edge, the V of
- * a shirt front) the face takes its majority's, and a corner it shares with faces of another
- * colour is doubled, so edges run crisp along the mesh instead of smearing across a triangle.
- * `slot` and `base` grow with the doubled corners.
- */
-function harden(geo: THREE.BufferGeometry, slot: number[], base: number[]): THREE.BufferGeometry {
-  const index = geo.getIndex();
-  if (!index) return geo;
-  const n = geo.getAttribute('position').count;
-  const key = (i: number) => (slot[i] === FIXED ? `${base[i * 3]!.toFixed(3)},${base[i * 3 + 1]!.toFixed(3)},${base[i * 3 + 2]!.toFixed(3)}` : `${slot[i]}`);
-  const keys = Array.from({ length: n }, (_, i) => key(i));
-  const faces = new Uint32Array(index.count);
-  const copies = new Map<string, number>();
-  const from: number[] = [];
-  for (let t = 0; t < index.count; t += 3) {
-    const a = index.getX(t);
-    const b = index.getX(t + 1);
-    const c = index.getX(t + 2);
-    const [ka, kb, kc] = [keys[a]!, keys[b]!, keys[c]!];
-    const k = ka === kb || ka === kc ? ka : kb === kc ? kb : ka;
-    const owner = k === ka ? a : k === kb ? b : c;
-    for (let j = 0; j < 3; j++) {
-      const v = index.getX(t + j);
-      if (keys[v] === k) {
-        faces[t + j] = v;
-        continue;
-      }
-      const id = `${v}|${k}`;
-      let w = copies.get(id);
-      if (w === undefined) {
-        w = n + from.length;
-        copies.set(id, w);
-        from.push(v);
-        slot.push(slot[owner]!);
-        base.push(base[owner * 3]!, base[owner * 3 + 1]!, base[owner * 3 + 2]!);
-      }
-      faces[t + j] = w;
-    }
-  }
-  if (from.length === 0) return geo;
-  const out = new THREE.BufferGeometry();
-  for (const name of ['position', 'normal', 'skinIndex', 'skinWeight'] as const) {
-    const a = geo.getAttribute(name);
-    const Arr = (a.array as THREE.TypedArray).constructor as new (len: number) => THREE.TypedArray;
-    const size = a.itemSize;
-    const b = new THREE.BufferAttribute(new Arr((n + from.length) * size), size, a.normalized);
-    // stored values as they are (no normalising round trip); the loader's may be interleaved
-    const il = (a as THREE.InterleavedBufferAttribute).isInterleavedBufferAttribute ? (a as THREE.InterleavedBufferAttribute) : null;
-    const arr = il ? il.data.array : (a as THREE.BufferAttribute).array;
-    const stride = il ? il.data.stride : size;
-    const offset = il ? il.offset : 0;
-    for (let i = 0; i < n + from.length; i++) {
-      const src = i < n ? i : from[i - n]!;
-      for (let c = 0; c < size; c++) b.array[i * size + c] = arr[src * stride + offset + c]!;
-    }
-    out.setAttribute(name, b);
-  }
-  out.setIndex(new THREE.BufferAttribute(faces, 1));
-  return out;
 }
 
 /** Mesh space to the character's frame, at rest, for a vertex skinned like vertex `j`. */
@@ -1101,6 +1045,44 @@ function restMatrix(mesh: THREE.SkinnedMesh, j: number): THREE.Matrix4 {
     for (let e = 0; e < 16; e++) sum.elements[e]! += m.elements[e]! * w;
   }
   return new THREE.Matrix4().multiplyMatrices(mesh.matrixWorld, mesh.bindMatrixInverse).multiply(sum).multiply(mesh.bindMatrix);
+}
+
+/**
+ * A V of shirt front from the collar down the chest: a small grid whose points are cast onto the
+ * body (`front`) and lifted a few millimetres off it, each skinned like the body vertex it lands
+ * nearest. Null if any point misses the body.
+ */
+function shirtFront(collarY: number, front: (x: number, y: number) => { z: number; i: number }): { geo: THREE.BufferGeometry; skin: number[] } | null {
+  const ROWS = 7;
+  const COLS = 6;
+  const HALF = 0.062;
+  const DEPTH = 0.17;
+  const pos: number[] = [];
+  const skin: number[] = [];
+  for (let r = 0; r <= ROWS; r++) {
+    const v = r / ROWS;
+    const y = collarY + 0.004 - v * DEPTH;
+    for (let c = 0; c <= COLS; c++) {
+      const x = ((2 * c) / COLS - 1) * HALF * (1 - v);
+      const f = front(x, y);
+      if (f.i < 0) return null;
+      pos.push(x, y, f.z + 0.004);
+      skin.push(f.i);
+    }
+  }
+  const index: number[] = [];
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const a = r * (COLS + 1) + c;
+      const b = a + COLS + 1;
+      index.push(a, b, a + 1, a + 1, b, b + 1);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setIndex(index);
+  geo.computeVertexNormals();
+  return { geo, skin };
 }
 
 /** A bow tie centred on `c`, facing +z: a knot and two wings pinched where they meet it. */
