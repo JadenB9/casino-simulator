@@ -19,7 +19,10 @@ const WINNER = 'feat_bigwinner';
 const WATCHER = 'feat_floorwatch';
 const errors = [];
 const log = (s) => console.log(new Date().toISOString().slice(11, 19), s);
-const browser = await chromium.launch({ channel: 'chromium', args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--autoplay-policy=no-user-gesture-required'] });
+// GPU=1: visible windows on the real GPU (faster, and the screenshots are what a player sees)
+const browser = process.env.GPU === '1'
+  ? await chromium.launch({ headless: false, args: ['--ignore-gpu-blocklist', '--disable-renderer-backgrounding', '--disable-background-timer-throttling', '--autoplay-policy=no-user-gesture-required'] })
+  : await chromium.launch({ channel: 'chromium', args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--autoplay-policy=no-user-gesture-required'] });
 
 async function player(name, quality) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
@@ -138,7 +141,7 @@ if (won) {
     if (!text.toLowerCase().includes(WINNER)) errors.push(`toast without the winner's name: ${text}`);
     if (!/\$5,000|\$7,500/.test(text)) errors.push(`toast without the amount: ${text}`);
     if (!/Blackjack/.test(text)) errors.push(`toast without the game: ${text}`);
-    await watcher.waitForTimeout(300);
+    await watcher.waitForFunction(() => getComputedStyle(document.querySelector('.bigwin-toast')).opacity === '1', null, { timeout: 30_000 }).catch(() => {});
     await watcher.screenshot({ path: `${out}/bigwin-watcher-toast.png` });
     await watcher.waitForTimeout(2200);
     await watcher.screenshot({ path: `${out}/bigwin-watcher-amount.png` });
