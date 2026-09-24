@@ -382,7 +382,11 @@ export function mountHoldem(ctx: TableViewCtx): TableView {
     });
     potLabelEl.hidden = view.total <= 0;
     potLabelEl.textContent = `Pot ${money(view.total)}`;
-    potLabel.position.set(0, TOP_Y + 0.012, 0.215);
+    // Beside the pot on its right, from its left edge: in front of the pot it sat on your own bet
+    // (the bet in front of your seat is on the same line), and the side pots' tags are below them.
+    const right = potAt(Math.max(0, view.pots.length - 1), Math.max(1, view.pots.length));
+    potLabel.position.set(right.x + 0.06, TOP_Y + 0.012, right.z);
+    potLabel.center.set(0, 0.5);
 
     if (view.button !== null && view.seats[view.button]) {
       button.visible = true;
