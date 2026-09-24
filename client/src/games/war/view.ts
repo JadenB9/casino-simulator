@@ -24,6 +24,7 @@ import { celebrate } from '../../table/celebrate.ts';
 import type { Felt } from '../../table/felt.ts';
 import { wait } from '../../table/tween.ts';
 import { ChipTray, button, el } from '../../ui/kit.ts';
+import { chipOn, maxRefusal, warMax } from '../../table/max.ts';
 import { serverNow } from '../../net/clock.ts';
 import {
   TOP_Y,
@@ -201,6 +202,7 @@ export function mountWar(ctx: TableViewCtx): TableView {
     clear: () => clear(),
     rebet: () => rebet(1),
     double: () => rebet(2),
+    max: { mode: 'pick' },
     primary: { label: 'Deal', key: 'Space', run: () => primary() },
   });
   tray.select(BETTING_CHIPS[2]!);
@@ -277,7 +279,7 @@ export function mountWar(ctx: TableViewCtx): TableView {
       p(
         `House edge: always going to war ${pct(-o.goToWar)} of the bet (${pct(-noBonus.goToWar)} at tables without the bonus on a tie in the war), always surrendering ${pct(-o.surrender)}, the Tie bet ${pct(-o.tieBet)}.`,
       ),
-      el('p', 'wr-keys', '1-7 chips · B bet · T tie · Space deal · W war · S surrender · R rebet · Shift R double · X clear · Backspace undo'),
+      el('p', 'wr-keys', '1-8 chips · B bet · T tie · A max, then a bet · Space deal · W war · S surrender · R rebet · Shift R double · X clear · Backspace undo'),
     );
   };
 
@@ -528,18 +530,46 @@ export function mountWar(ctx: TableViewCtx): TableView {
     renderControls();
   };
 
+  /**
+   * What goes on one hand's spot: the picked chip (the minimum if the chip is short of it), or with
+   * Max picked on the bet, the most it takes with every hand's raise kept back. `next` holds the
+   * other hands' bets as they will stand, `left` the chips not yet down. Null (and a word why) when
+   * Max can't put anything there.
+   */
+  const chipFor = (spot: number, kind: 'bet' | 'tie', next: Record<number, Bets>, left: Cents): Cents | null => {
+    const b = next[spot] ?? NO_BETS;
+    const lim = cfg ? (cfg.limits[kind] ?? cfg.limits.default) : null;
+    if (!lim) return tray.selected.value;
+    if (!(tray.maxPicked && kind === 'bet')) return chipOn(tray.selected.value, b[kind], lim);
+    const others = Object.entries(next).reduce((a, [s, x]) => (Number(s) === spot ? a : a + x.bet), 0);
+    const m = warMax(cfg!, b, left, others);
+    if ('none' in m) {
+      ctx.kit.toast(maxRefusal(m, lim));
+      return null;
+    }
+    return m.amount;
+  };
+
   const addChip = (spot: number, kind: 'bet' | 'tie'): void => {
     if (!canBet()) return;
+    const add = chipFor(spot, kind, wanted, stack);
+    if (add === null) return;
     ctx.sfx.play('chip-lay');
     const b = betsOf(spot);
-    sendBets({ ...wanted, [spot]: { ...b, [kind]: b[kind] + tray.selected.value } });
+    sendBets({ ...wanted, [spot]: { ...b, [kind]: b[kind] + add } });
   };
-  /** The keyboard's B and T: the chosen chip on each spot I play. */
+  /** The keyboard's B and T: the chosen chip (or Max) on each spot I play. */
   const addChipEverywhere = (kind: 'bet' | 'tie'): void => {
     if (!canBet()) return;
-    ctx.sfx.play('chip-lay');
     const next = structuredClone(wanted);
-    for (const spot of spots) next[spot] = { ...betsOf(spot), [kind]: betsOf(spot)[kind] + tray.selected.value };
+    let left = stack;
+    for (const spot of spots) {
+      const add = chipFor(spot, kind, next, left);
+      if (add === null) break;
+      next[spot] = { ...(next[spot] ?? NO_BETS), [kind]: (next[spot] ?? NO_BETS)[kind] + add };
+      left -= add;
+    }
+    ctx.sfx.play('chip-lay');
     sendBets(next);
   };
 
@@ -1091,9 +1121,8 @@ export function mountWar(ctx: TableViewCtx): TableView {
         ctx.stage.addFelt(felt, TOP_Y + 0.0006);
         if (floorFelt) floorFelt.visible = false;
       }
-      // hide chips the table can't take
-      const max = limitMax();
-      tray.root.querySelectorAll<HTMLButtonElement>('.chip-btn').forEach((b, i) => (b.hidden = (BETTING_CHIPS[i]?.value ?? 0) > max));
+      // the rack: chips the table can take, from what its smallest bet (the Tie bet) needs
+      tray.setChipMax(limitMax(), (cfg.limits.tie ?? cfg.limits.default).min);
       fillRules();
       renderNames();
       draw(v);
@@ -1134,7 +1163,7 @@ export function mountWar(ctx: TableViewCtx): TableView {
       if (e.repeat && !/^[1-8]$/.test(e.key)) return true;
       const n = Number(e.key);
       if (Number.isInteger(n) && n >= 1 && n <= BETTING_CHIPS.length) {
-        if ((BETTING_CHIPS[n - 1]?.value ?? 0) <= limitMax()) tray.key(e);
+        tray.key(e);
         return true;
       }
       switch (e.code) {
@@ -1152,6 +1181,11 @@ export function mountWar(ctx: TableViewCtx): TableView {
           return true;
         case 'KeyT':
           addChipEverywhere('tie');
+          return true;
+        case 'KeyA':
+          // Max, while a bet can go down: then a hand's bet (or B for every hand)
+          if (e.shiftKey || !canBet()) return false;
+          tray.pickMax();
           return true;
         case 'KeyX':
           clear();

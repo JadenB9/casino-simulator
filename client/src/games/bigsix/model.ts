@@ -7,6 +7,8 @@ import * as THREE from 'three';
 import { SPOTS } from '../../../../shared/src/games/bigsix/rules.ts';
 import { engine } from '../../../../shared/src/games/bigsix/engine.ts';
 import { formatMoney } from '../../../../shared/src/money.ts';
+import type { TableConfig } from '../../../../shared/src/engine.ts';
+import { repaintable } from '../../table/limit-sign.ts';
 import type { Quality } from '../../render/engine3d.ts';
 import { Felt } from '../../table/felt.ts';
 import { SYMBOL_COLOR, billValue, drawNote, drawStar, drawCrown } from './art.ts';
@@ -137,12 +139,10 @@ function roundedShape(w: number, d: number, r: number): THREE.Shape {
   return s;
 }
 
-function limitSign(): THREE.Mesh {
-  const lim = engine.config('', 'multi').limits;
-  const c = document.createElement('canvas');
-  c.width = 640;
-  c.height = 440;
-  const g = c.getContext('2d')!;
+/** The sign's face for a table at these limits (the floor's shows the Standard table's). */
+function paintSign(g: CanvasRenderingContext2D, cfg: TableConfig): void {
+  const c = g.canvas;
+  const lim = cfg.limits;
   g.fillStyle = '#0d0b09';
   g.fillRect(0, 0, c.width, c.height);
   g.strokeStyle = '#d8b06a';
@@ -171,12 +171,22 @@ function limitSign(): THREE.Mesh {
   g.fillStyle = '#c9c0ad';
   g.font = `600 28px ${CONDENSED}`;
   g.fillText('54 STOPS · STAR AND CROWN PAY 40 TO 1', c.width / 2, 384);
+}
+
+function limitSign(): THREE.Mesh {
+  const c = document.createElement('canvas');
+  c.width = 640;
+  c.height = 440;
+  const g = c.getContext('2d')!;
+  paintSign(g, engine.config('', 'multi'));
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
   const face = new THREE.MeshStandardMaterial({ map: tex, emissive: '#ffffff', emissiveMap: tex, emissiveIntensity: 0.55, roughness: 0.5 });
   const edge = new THREE.MeshStandardMaterial({ color: '#1a1512', roughness: 0.4, metalness: 0.4 });
-  return new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.1375, 0.008), [edge, edge, edge, edge, face, edge]);
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.1375, 0.008), [edge, edge, edge, edge, face, edge]);
+  repaintable(mesh, face, { width: 640, height: 440, paint: paintSign });
+  return mesh;
 }
 
 /** The station, centred at the origin: players on the +z side, the wheel toward −z. */

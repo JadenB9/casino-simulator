@@ -8,6 +8,8 @@ is the summary. The full rules, every paytable, the strategy charts and the sour
 - [rules/cards-and-machines.md](rules/cards-and-machines.md): Three Card Poker, video poker,
   slots, Texas Hold'em
 - [rules/online-games.md](rules/online-games.md): the online games on the lounge computers
+- [rules/limits.md](rules/limits.md): table limits chosen at every table (tiers up to $500,000 a
+  bet, custom to $1,000,000), buy-ins, Max, and the machines' coin values
 - [math/](math/): the dependency-free Node scripts that enumerate each game exactly
   (`node docs/math/three-card-poker.mjs` and so on)
 

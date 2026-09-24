@@ -76,7 +76,8 @@ function config(_variant: string, mode: TableMode): TableConfig {
     variant: '',
     mode,
     maxSeats: mode === 'solo' ? 1 : 6,
-    buyIn: { min: 100 * DOLLAR, max: 10_000 * DOLLAR },
+    // up to a hundred times the table maximum (shared/src/limits.ts scales it with the table)
+    buyIn: { min: 100 * DOLLAR, max: 100_000 * DOLLAR },
     limits: {
       default: { min: 10 * DOLLAR, max: 1_000 * DOLLAR, step: DOLLAR },
       ante: { min: 10 * DOLLAR, max: 1_000 * DOLLAR, step: DOLLAR },

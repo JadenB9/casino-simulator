@@ -24,6 +24,10 @@ both are shown and one is picked, with the reason.
 - **Money.** Integer cents, whole-dollar wagers, exact payouts with no rounding. A payout `a:b` on a
   wager of `W` dollars is exact in cents when `100·W·a` is divisible by `b`. Every payout on this
   page is exact at $1 steps except the few craps bets in §3.5.
+- **Limits.** Every table's minimum and maximum bet is chosen when it is started, from $1 up to
+  $500,000 a bet as a tier and $1,000,000 as custom limits, with every other bet and the buy-in
+  scaling with them; [limits.md](limits.md) has the tiers and the rules. The amounts quoted on this
+  page are the Standard table's. Limits never change a payout, so every edge here holds at every table.
 - **Monte Carlo acceptance.** For N independent decisions of one bet, SE = SD/√N. A correct engine
   passes `|measured edge − published edge| ≤ 3·SE` 99.73% of the time, whatever N is. N sets the
   test's power instead. To also catch a bug that moves the edge by δ at least 97.7% of the time,
@@ -802,7 +806,7 @@ listed at its end.
 | Card ranks | Ace high, down to 2. Suits never matter | [W1], [W2] §651a.6 |
 | Cover card | A quarter of the way up from the bottom (78 cards). Pennsylvania requires at least a quarter | [W2] §651a.5(d) |
 | Burn | The first card after each shuffle, face down and unseen | [W2] §651a.8(b) |
-| Bets | The bet (the Initial Wager), $10 to $1,000 in whole dollars, and an optional Tie bet placed with it, $1 to $100 | [W2] §651a.7 |
+| Bets | The bet (the Initial Wager) and an optional Tie bet placed with it, whole dollars within the table's limits ([limits.md](limits.md); Standard: the bet $10 to $1,000, the Tie bet $1 to $100) | [W2] §651a.7 |
 | Deal | One card face up to each player with a bet, first base first, then one face up to the dealer | [W1], [W2] §651a.8(c) |
 | Higher card | The bet wins 1:1 and the Tie bet loses | [W1], [W2] §651a.9(a)(2) |
 | Lower card | The bet and the Tie bet lose | [W1], [W2] §651a.9(a)(1) |
@@ -944,7 +948,7 @@ is paid. Researched 2026-09-23; the sources for this section are listed at its e
 | Payouts | The bills pay the number on the bill to 1. The Star and the Crown pay 40 to 1, each on its own symbol only [B1] |
 | Spin | The server picks the stop first, uniformly over the 54, and the wheel is animated onto it. Every spin turns the wheel at least three times ([B3] §619a.2 asks for three) |
 | Settlement | The stop the clapper comes to rest in wins ([B3] §619a.2). All spots settle at once |
-| Limits | $1 to $500 on each spot, whole dollars, and at most $2,500 on the layout per player per spin |
+| Limits | The table's ([limits.md](limits.md)): at Standard $1 to $500 on each spot, whole dollars, and at most $2,500 on the layout per player per spin; at every table five times the spot maximum a spin |
 | Single player | Place chips, press Spin. The wheel turns from "No more bets" to rest in about 10.5 seconds |
 | Multiplayer | A 20 second betting window once the leader starts the table. It closes early once every connected seated player has pressed Ready (and someone has a bet down). The stop is drawn only when betting closes |
 
@@ -1077,7 +1081,7 @@ Three dice shaken under a glass dome, and 52 places to bet on how they land. Res
 | No roll | Never. A live shaker calls "no roll" when a die doesn't land flat ([S2] §625a.7(a)); here the server's roll is final and the dice are animated onto it | |
 | Pay table | The usual US table: the Wizard of Odds "Atlantic City" column (below) | [S1] |
 | Odd and Even | Offered at 1:1, losing to any triple. It is a Macau bet; [S1] has "only seen [it] in Macau, never in the United States" | [S1] |
-| Limits | Small, Big, Odd, Even $5–$5,000. Single numbers $1–$1,000. Totals, two-dice combinations, doubles and Any triple $1–$500. Specific triples $1–$100. At most $10,000 on the layout per player per roll | this casino |
+| Limits | The table's ([limits.md](limits.md)). At Standard: Small, Big, Odd, Even $5–$5,000. Single numbers $1–$1,000. Totals, two-dice combinations, doubles and Any triple $1–$500. Specific triples $1–$100. At most $10,000 on the layout per player per roll. Other tables keep these proportions | this casino |
 
 Multiplayer tables open a 20 second betting window after the leader starts them. It closes early
 once everyone connected has pressed Ready with chips down; the dice are drawn only when it closes.
@@ -1184,7 +1188,7 @@ and your bet back. Researched 2026-09-24; the sources for this section are liste
 | Spin | The server draws the slot uniformly (rejection sampling over 0..24) when betting closes, and the wheel is animated onto it. Every spin turns the wheel at least twice |
 | Rounds | The wheel runs on its own clock while anyone is seated: a 20 second betting window, "No more bets", 7 seconds from the pull to rest, 5 seconds of results, the next window. It spins whether anyone has bet or not. Nobody presses Spin and no leader starts it: the table starts with its first seat |
 | Single player | The same loop with a 12 second window, and "Spin now" once you have a bet down |
-| Limits | $1 to $1,000 on each number per spin, whole dollars (the table's config). Max puts down the rest of that limit or your whole stack, whichever is less. Buy-in $10 to $10,000 |
+| Limits | The table's ([limits.md](limits.md)): at Standard $1 to $1,000 on each number per spin, whole dollars, and a buy-in of $10 to $100,000. Max puts down the rest of that limit or your whole stack, whichever is less |
 | Seats | Ten terminals in an arc in front of the wheel (one alone) |
 
 ### The wheel (slots clockwise from the 20)

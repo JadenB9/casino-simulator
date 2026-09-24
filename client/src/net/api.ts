@@ -7,6 +7,7 @@ import type {
 } from '../../../shared/src/protocol.ts';
 import type { GameId } from '../../../shared/src/engine.ts';
 import type { Look } from '../../../shared/src/look.ts';
+import type { TableLimits } from '../../../shared/src/limits.ts';
 
 declare const __API_ORIGIN__: string;
 export const API_ORIGIN: string = __API_ORIGIN__;
@@ -67,8 +68,8 @@ export async function login(name: string, password: string): Promise<Profile> {
 export const me = async (): Promise<Profile> => (await call<MeResponse>('me')).profile;
 export const saveLook = async (look: Look): Promise<Look> => (await call<{ look: Look }>('me/look', { method: 'PUT', body: JSON.stringify({ look }) })).look;
 export const takeLoan = (): Promise<LoanResponse> => call<LoanResponse>('bank/loan', { method: 'POST' });
-export const createTable = (game: GameId, visibility: 'public' | 'private', variant?: string): Promise<CreateTableResponse> =>
-  call<CreateTableResponse>('tables', { method: 'POST', body: JSON.stringify({ game, visibility, variant }) });
+export const createTable = (game: GameId, visibility: 'public' | 'private', variant?: string, limits?: TableLimits): Promise<CreateTableResponse> =>
+  call<CreateTableResponse>('tables', { method: 'POST', body: JSON.stringify({ game, visibility, variant, ...(limits ? { limits } : {}) }) });
 export const joinByPin = (pin: string): Promise<JoinByPinResponse> => call<JoinByPinResponse>('tables/join', { method: 'POST', body: JSON.stringify({ pin }) });
 
 /**

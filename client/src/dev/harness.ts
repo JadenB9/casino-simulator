@@ -1,5 +1,6 @@
-// Dev harness: /casino/?dev=table&game=<id>[&variant=<v>][&name=<n>] opens a solo table of one game
-// in a bare room, logged in as a throwaway name. Every game agent develops against this.
+// Dev harness: /casino/?dev=table&game=<id>[&variant=<v>][&name=<n>][&limits=<min>-<max>] opens a
+// solo table of one game in a bare room, logged in as a throwaway name, at those limits (in cents;
+// the table's Standard ones without). Every game agent develops against this.
 
 import { Engine3D, savedQuality } from '../render/engine3d.ts';
 import { GAMES } from '../games/index.ts';
@@ -14,6 +15,7 @@ import { loadCards } from '../table/cards.ts';
 import { Sfx } from '../audio/sfx.ts';
 import { el, toast } from '../ui/kit.ts';
 import { formatMoney } from '../../../shared/src/money.ts';
+import { parseLimitsParam } from '../../../shared/src/limits.ts';
 
 export async function runHarness(params: URLSearchParams): Promise<void> {
   const game = params.get('game');
@@ -53,7 +55,8 @@ export async function runHarness(params: URLSearchParams): Promise<void> {
     engine.camera.lookAt(at.target);
     stage.setRest(next);
   };
-  const table = new TableSession({ kind: 'solo', game, variant, station: station.id }, module, stage, ui, sfx, (fn) => engine.onFrame(fn), (code) => toast(`Table closed (${code ?? ''})`, 'err'), {
+  const limits = parseLimitsParam(params.get('limits')) ?? undefined;
+  const table = new TableSession({ kind: 'solo', game, variant, station: station.id, limits }, module, stage, ui, sfx, (fn) => engine.onFrame(fn), (code) => toast(`Table closed (${code ?? ''})`, 'err'), {
     onTable: (snap) => repose(snap.you.seat),
   });
   addEventListener('keydown', (e) => {

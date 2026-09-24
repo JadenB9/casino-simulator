@@ -49,7 +49,8 @@ function config(_variant: string, mode: TableMode): TableConfig {
     variant: '',
     mode,
     maxSeats: mode === 'solo' ? 1 : 8,
-    buyIn: { min: 10 * DOLLAR, max: 10_000 * DOLLAR },
+    // up to a hundred times the table maximum (shared/src/limits.ts scales it with the table)
+    buyIn: { min: 10 * DOLLAR, max: 50_000 * DOLLAR },
     limits: {
       // the table: smallest chip, and the most one player may have on the layout for a spin
       default: { min: DOLLAR, max: 2_500 * DOLLAR, step: DOLLAR },

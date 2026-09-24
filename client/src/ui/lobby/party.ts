@@ -7,6 +7,7 @@ import type { GameId } from '../../../../shared/src/engine.ts';
 import type { Member, TableClientMsg } from '../../../../shared/src/protocol.ts';
 import { CATALOG } from '../../../../shared/src/games/catalog.ts';
 import { formatMoney } from '../../../../shared/src/money.ts';
+import { hasLimitChoice, limitsLabel, limitsOf } from '../../../../shared/src/limits.ts';
 import type { GameClientModule, MembersMsg, TableSnapshot, TableView } from '../../games/contract.ts';
 import { el, toast } from '../kit.ts';
 import { chevron, crown, lock, unlock } from './icons.ts';
@@ -33,6 +34,8 @@ interface Party {
   pin?: string;
   started: boolean;
   maxSeats: number;
+  /** "$25–$5,000": what the table was opened at. */
+  limits: string;
 }
 
 export class PartyPanel {
@@ -68,6 +71,7 @@ export class PartyPanel {
       ...(m.pin ? { pin: m.pin } : {}),
       started: m.started,
       maxSeats: m.config.maxSeats,
+      limits: hasLimitChoice(m.game) ? limitsLabel(m.game, limitsOf(m.config)) : '',
     });
   }
 
@@ -79,6 +83,7 @@ export class PartyPanel {
       ...(msg.pin ? { pin: msg.pin } : {}),
       started: msg.started,
       maxSeats: this.party?.maxSeats ?? CATALOG[this.opts.game].seats.max,
+      limits: this.party?.limits ?? '',
     });
   }
 
@@ -137,6 +142,11 @@ export class PartyPanel {
     const title = el('span', 'label', p.started ? 'In play' : 'Party');
     const count = el('span', 'party-count', `${p.members.length}/${p.maxSeats}`);
     const headParts: (HTMLElement | SVGSVGElement)[] = [title, vis];
+    if (p.limits) {
+      const lim = el('span', 'party-limits', p.limits);
+      lim.title = `Table limits ${p.limits}`;
+      headParts.push(lim);
+    }
     if (p.pin && this.collapsed) headParts.push(el('span', 'party-pin-mini', p.pin));
     headParts.push(count, chevron());
     this.head.replaceChildren(...headParts);

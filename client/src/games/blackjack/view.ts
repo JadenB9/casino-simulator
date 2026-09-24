@@ -25,6 +25,7 @@ import { celebrate } from '../../table/celebrate.ts';
 import { roundMoment } from './moments.ts';
 import { tween, wait, ease } from '../../table/tween.ts';
 import { ChipTray, button, el } from '../../ui/kit.ts';
+import { blackjackMax, maxRefusal } from '../../table/max.ts';
 import { serverNow } from '../../net/clock.ts';
 import { playFelt } from './felt.ts';
 import { discardStack } from './model.ts';
@@ -183,13 +184,11 @@ export class BlackjackTable implements TableView {
       clear: () => this.act({ type: 'clear' }),
       rebet: () => this.rebet(1),
       double: () => this.rebet(2),
+      max: { mode: 'pick' },
       primary: { label: 'Deal', run: () => this.primary() },
     });
-    // The table maximum is $5,000, so the $25,000 chip stays in the rack.
-    const chipButtons = [...this.tray.root.querySelectorAll<HTMLButtonElement>('.chip-btn')];
-    BETTING_CHIPS.forEach((c, i) => {
-      if (c.value > this.limits.max) chipButtons[i]!.hidden = true;
-    });
+    // Chips over the table maximum stay in the rack (the limits arrive with the table).
+    this.tray.setChipMax(this.limits.max);
     this.tray.select(BETTING_CHIPS[2]!);
     this.tray.root.classList.add('bj-tray');
     this.picker = new SpotPicker(MAX_SPOTS, (n) => this.act({ type: 'spots', n }));
@@ -224,7 +223,9 @@ export class BlackjackTable implements TableView {
       if (e.target !== ctx.stage.engine.renderer.domElement) return;
       const region = ctx.stage.pick(e)?.region ?? '';
       const spot = this.mine.find((s) => region === `spot:${s}`);
-      if (spot !== undefined && this.canBet()) this.act({ type: 'bet', amount: this.tray.selected.value, spot });
+      if (spot === undefined || !this.canBet()) return;
+      const amount = this.chipFor(spot);
+      if (amount !== null) this.act({ type: 'bet', amount, spot });
     };
     addEventListener('pointerdown', this.onPointer);
     this.offTips = ctx.tips.subscribe(() => this.renderTip());
@@ -236,6 +237,7 @@ export class BlackjackTable implements TableView {
   onTable(snap: TableSnapshot): void {
     this.mode = snap.meta.mode;
     this.limits = snap.meta.config.limits.default ?? this.limits;
+    this.tray.setChipMax(this.limits.max, this.limits.min);
     this.seat = snap.you.seat;
     this.seated = snap.you.status === 'seated';
     this.stack = snap.you.stack;
@@ -336,6 +338,20 @@ export class BlackjackTable implements TableView {
     return this.mine.reduce((a, s) => a + (this.lastBets[s] ?? 0), 0);
   }
 
+  /**
+   * What a click on one of your circles puts down: the picked chip, or with Max picked the most
+   * that circle takes (the limits are per circle) or every chip you have left, whichever is less.
+   */
+  private chipFor(spot: number): Cents | null {
+    if (!this.tray.maxPicked) return this.tray.selected.value;
+    const m = blackjackMax(this.limits, this.betOn(spot), this.stack);
+    if ('none' in m) {
+      this.ctx.kit.toast(maxRefusal(m, this.limits));
+      return null;
+    }
+    return m.amount;
+  }
+
   /** Rebet: last round's bets again, circle by circle; ×2 doubles what's down (or last round's). */
   private rebet(times: 1 | 2): void {
     if (!this.canBet()) return;
@@ -377,10 +393,11 @@ export class BlackjackTable implements TableView {
     if (this.canBet()) {
       const n = Number(e.key);
       if (Number.isInteger(n) && n >= 1 && n <= BETTING_CHIPS.length) {
-        if (BETTING_CHIPS[n - 1]!.value <= this.limits.max) this.tray.key(e);
+        this.tray.key(e);
         return true;
       }
       if (e.key === 'Backspace') return this.act({ type: 'undo' }), true;
+      if (k === 'a' && !e.shiftKey) return this.tray.pickMax(), true;
       if (k === 'x') return this.act({ type: 'clear' }), true;
       if (k === 'r') return this.rebet(e.shiftKey ? 2 : 1), true;
       if (e.code === 'Space') return this.primary(), true;

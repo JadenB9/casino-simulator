@@ -146,7 +146,7 @@ console.log(JSON.stringify({ slot: sp.slot, flapperShows: rest.shows, history: a
 // Max: the table's $1,000 or the stack, whichever is less
 await freshWindow(6000);
 const before = (await state()).stack;
-await page.keyboard.press('m');
+await page.keyboard.press('a'); // Max (M is the casino's mute)
 await slot(5);
 await until(() => (window.casino.table.view.debug.state().bets[5] ?? 0) > 0, 15000);
 const maxBet = (await state()).bets[5];

@@ -282,7 +282,7 @@ describe('PINs', () => {
 
     const res = await joinByPin(b, made.pin!);
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ tableId: made.tableId, game: 'highcard' });
+    expect(await res.json()).toMatchObject({ tableId: made.tableId, game: 'highcard', lobby: { tableId: made.tableId } });
     const [, snap] = await enter(b, made.tableId, made.pin);
     expect(snap.leader).toBe(a.id);
     expect(snap.members.map((m: Member) => m.accountId)).toEqual([a.id, b.id]);
@@ -482,7 +482,7 @@ describe('the party', () => {
     // The old PIN is cooling down, so the lobby gets a different one.
     expect(priv.pin).not.toBe(made.pin);
     await w.next((m) => m.t === 'lobby.gone' && m.tableId === made.tableId);
-    expect(await (await joinByPin(b, priv.pin)).json()).toEqual({ tableId: made.tableId, game: 'highcard' });
+    expect(await (await joinByPin(b, priv.pin)).json()).toMatchObject({ tableId: made.tableId, game: 'highcard' });
     // A fresh snapshot carries the new PIN for members.
     cb.send({ t: 'sync' });
     expect((await cb.next<any>((m) => m.t === 'table')).meta.pin).toBe(priv.pin);

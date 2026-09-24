@@ -38,6 +38,7 @@ import type { Felt } from '../../table/felt.ts';
 import { ease, tween, wait } from '../../table/tween.ts';
 import { handMoment } from './moments.ts';
 import { ChipTray, button, el } from '../../ui/kit.ts';
+import { chipOn, maxRefusal, threeCardMax } from '../../table/max.ts';
 import { serverNow } from '../../net/clock.ts';
 import {
   TOP_Y,
@@ -184,6 +185,8 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
   /** A hand is mine: my seat's at a shared table, every one at my own. */
   const owns = (spot: number): boolean => me !== null && (mode === 'solo' || spot === me);
   const betsOf = (spot: number): Bets => wanted[spot] ?? NO_BETS;
+  /** The Antes on my other hands: each keeps its Play back too. */
+  const antesBesides = (spot: number): Cents => Object.entries(wanted).reduce((a, [s, b]) => (Number(s) === spot ? a : a + b.ante), 0);
   const total = (b: Record<number, Bets>): Cents => Object.values(b).reduce((a, x) => a + x.ante + x.pairPlus, 0);
 
   // ---- table objects -----------------------------------------------------------------------
@@ -245,6 +248,7 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
     clear: () => clear(),
     rebet: () => rebet(1),
     double: () => rebet(2),
+    max: { mode: 'pick' },
     primary: { label: 'Deal', key: 'Space', run: () => primary() },
   });
   tray.select(BETTING_CHIPS[2]!);
@@ -317,7 +321,7 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
       table('Pair Plus, paid on your own hand', pay.pairPlus.map((x, i) => [cat(i), x])),
       p('Hands, best first: straight flush, three of a kind, straight, flush, pair, high card. A-K-Q is the top straight and A-2-3 the lowest.'),
       p(`Best play: Play with Q-6-4 or better, fold the rest.${bonus145 ? ' That gives the house 3.37% of the Ante.' : ''} Pair Plus: ${(edge * 100).toFixed(2)}%.`),
-      el('p', 'tc-keys', '1-7 chips · Space deal · P play · F fold · R rebet · Shift R double · X clear · Backspace undo'),
+      el('p', 'tc-keys', '1-8 chips · A max, then click the Ante or Pair Plus · Space deal · P play · F fold · R rebet · Shift R double · X clear · Backspace undo'),
     );
   };
 
@@ -564,9 +568,18 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
 
   const addChip = (spot: number, kind: 'ante' | 'pairPlus'): void => {
     if (!canBet()) return;
-    ctx.sfx.play('chip-lay');
     const b = betsOf(spot);
-    sendBets({ ...wanted, [spot]: { ...b, [kind]: b[kind] + tray.selected.value } });
+    const lim = cfg ? (cfg.limits[kind] ?? cfg.limits.default) : null;
+    // a chip short of the minimum puts the minimum down; Max picked, the most this hand takes
+    // (every hand's Ante keeping its Play back)
+    let add = lim ? chipOn(tray.selected.value, b[kind], lim) : tray.selected.value;
+    if (tray.maxPicked && cfg && lim) {
+      const m = threeCardMax(cfg, kind, b, stack, antesBesides(spot));
+      if ('none' in m) return ctx.kit.toast(maxRefusal(m, lim));
+      add = m.amount;
+    }
+    ctx.sfx.play('chip-lay');
+    sendBets({ ...wanted, [spot]: { ...b, [kind]: b[kind] + add } });
   };
 
   const undo = (): void => {
@@ -665,7 +678,9 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
     tipObj.position.copy(besideSpot(spot, kind, 0.16));
     const amount = betsOf(spot)[kind];
     const pays = kind === 'ante' ? 'pays 1 to 1' : `pays up to ${pay.pairPlus[0]} to 1`;
-    tip.textContent = `${SPOT_NAMES[kind]} · ${pays}${amount ? ` · ${money(amount)}` : ''}`;
+    const most = tray.maxPicked && cfg ? threeCardMax(cfg, kind, betsOf(spot), stack, antesBesides(spot)) : null;
+    const max = most && 'amount' in most ? ` · Max adds ${money(most.amount)}` : '';
+    tip.textContent = `${SPOT_NAMES[kind]} · ${pays}${amount ? ` · ${money(amount)}` : ''}${max}`;
   };
   addEventListener('pointerdown', onDown);
   addEventListener('pointermove', onMove);
@@ -1036,9 +1051,8 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
         sign = placard(cfg);
         root.add(sign);
       }
-      // hide chips the table can't take
-      const max = limitMax();
-      tray.root.querySelectorAll<HTMLButtonElement>('.chip-btn').forEach((b, i) => (b.hidden = (BETTING_CHIPS[i]?.value ?? 0) > max));
+      // the rack: chips the table can take, from what its smallest bet (Pair Plus) needs
+      tray.setChipMax(limitMax(), (cfg.limits.pairPlus ?? cfg.limits.default).min);
       fillRules();
       renderNames();
       draw(v);
@@ -1079,7 +1093,7 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
       if (e.repeat && !/^[1-8]$/.test(e.key)) return true;
       const n = Number(e.key);
       if (Number.isInteger(n) && n >= 1 && n <= BETTING_CHIPS.length) {
-        if ((BETTING_CHIPS[n - 1]?.value ?? 0) <= limitMax()) tray.key(e);
+        tray.key(e);
         return true;
       }
       if (e.code === 'Space') {
@@ -1100,6 +1114,11 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
       }
       if (e.code === 'KeyR') {
         rebet(e.shiftKey ? 2 : 1);
+        return true;
+      }
+      // Max, while a bet can go down
+      if (e.code === 'KeyA' && !e.shiftKey && canBet()) {
+        tray.pickMax();
         return true;
       }
       if (e.key === 'Backspace' || ((e.metaKey || e.ctrlKey) && e.key === 'z')) {
