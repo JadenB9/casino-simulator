@@ -324,41 +324,42 @@ function dealerStation(mats: PokerMaterials): THREE.Group {
   chips.name = 'holdem-tray-chips';
   g.add(chips);
 
-  // the deck, face down in a low holder, on the dealer's left; the muck on their right
-  g.add(cardHolder(mats, 0.285, zMid, shelfTop, 34, false), cardHolder(mats, -0.285, zMid, shelfTop, 12, true));
+  // the deck, face down in a low walnut holder, on the dealer's left; the muck in a clear one on
+  // their right. Merged by material: a handful of draw calls, not a dozen boxes.
+  const parts: Record<'walnut' | 'tray' | 'acrylic' | 'back' | 'edge', THREE.BufferGeometry[]> = { walnut: [], tray: [], acrylic: [], back: [], edge: [] };
+  cardHolder(parts, 0.285, zMid, shelfTop, 34, false);
+  cardHolder(parts, -0.285, zMid, shelfTop, 12, true);
+  const merged = (list: THREE.BufferGeometry[], mat: THREE.Material) => new THREE.Mesh(mergeGeometries(list.map((x) => plain(x, true)), false)!, mat);
+  g.add(merged(parts.walnut, mats.walnut), merged(parts.tray, mats.tray), merged(parts.acrylic, mats.acrylic), merged(parts.back, mats.cardBack), merged(parts.edge, mats.cardEdge));
   return g;
 }
 
-/** A low walnut holder (or a clear one, for the muck) with `cards` face-down cards in it. */
-function cardHolder(mats: PokerMaterials, x: number, z: number, base: number, cards: number, clear: boolean): THREE.Group {
-  const g = new THREE.Group();
+/** A low holder (walnut, or clear for the muck) with `cards` face-down cards in it, as geometry by material. */
+function cardHolder(parts: Record<'walnut' | 'tray' | 'acrylic' | 'back' | 'edge', THREE.BufferGeometry[]>, x: number, z: number, base: number, cards: number, clear: boolean): void {
   const w = CARD_W + 0.012;
   const d = CARD_H + 0.012;
-  const floor = new THREE.Mesh(new THREE.BoxGeometry(w, 0.004, d), clear ? mats.tray : mats.walnut);
-  floor.position.y = base + 0.002;
-  g.add(floor);
+  const at = (geo: THREE.BufferGeometry, px: number, py: number, pz: number) => geo.translate(x + px, py, z + pz);
+  (clear ? parts.tray : parts.walnut).push(at(new THREE.BoxGeometry(w, 0.004, d), 0, base + 0.002, 0));
   const wall = 0.004;
   const h = 0.02;
-  const wallMat = clear ? mats.acrylic : mats.walnut;
   for (const [ww, dd, px, pz] of [
     [w, wall, 0, -d / 2 + wall / 2],
     [w, wall, 0, d / 2 - wall / 2],
     [wall, d - 2 * wall, -w / 2 + wall / 2, 0],
     [wall, d - 2 * wall, w / 2 - wall / 2, 0],
   ] as const) {
-    const side = new THREE.Mesh(new THREE.BoxGeometry(ww, h, dd), wallMat);
-    side.position.set(px, base + 0.004 + h / 2, pz);
-    g.add(side);
+    (clear ? parts.acrylic : parts.walnut).push(at(new THREE.BoxGeometry(ww, h, dd), px, base + 0.004 + h / 2, pz));
   }
+  // a face-down stack: paper edges, the red back on top; the muck is a loose pile, turned a little
   const thick = cards * 0.0003;
-  // a face-down stack: backs on top, paper edges round the sides
-  const stack = new THREE.Mesh(new THREE.BoxGeometry(CARD_W, thick, CARD_H), [mats.cardEdge, mats.cardEdge, mats.cardBack, mats.cardEdge, mats.cardEdge, mats.cardEdge]);
-  stack.position.y = base + 0.004 + thick / 2;
-  // the muck is a loose pile, not a squared deck
-  if (clear) stack.rotation.y = 0.12;
-  g.add(stack);
-  g.position.set(x, 0, z);
-  return g;
+  const turn = clear ? 0.12 : 0;
+  const body = new THREE.BoxGeometry(CARD_W, thick, CARD_H);
+  body.rotateY(turn);
+  parts.edge.push(at(body, 0, base + 0.004 + thick / 2, 0));
+  const back = new THREE.PlaneGeometry(CARD_W, CARD_H);
+  back.rotateX(-Math.PI / 2);
+  back.rotateY(turn);
+  parts.back.push(at(back, 0, base + 0.004 + thick + 0.0001, 0));
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -450,7 +451,7 @@ function cupHolders(mats: PokerMaterials, high: boolean): THREE.Group {
 // (chairSpots, the same points as the module's seats()). Built facing +z (the sitter's front),
 // turned to face the table. Seat top 0.48 m; the back leans 8 degrees.
 
-export const SEAT_TOP = 0.48;
+const SEAT_TOP = 0.48;
 const SEAT_W = 0.46;
 const SEAT_D = 0.42;
 const LEAN = (8 * Math.PI) / 180;
