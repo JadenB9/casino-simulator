@@ -19,6 +19,7 @@ import { ChipStack, slideStack, CHIP_H } from '../../table/chips.ts';
 import { Die, throwDie } from '../../table/dice.ts';
 import { tween, wait, ease } from '../../table/tween.ts';
 import { ChipTray } from '../../ui/kit.ts';
+import { crapsMax, crapsOddsMax, maxRefusal, type MaxBet } from '../../table/max.ts';
 import { serverNow } from '../../net/clock.ts';
 import { feltSpec, parseRegion, chipSpot, puckSpot, spotRect, DICE_REST, FELT_W } from './layout.ts';
 import { BED_Y } from './model.ts';
@@ -122,6 +123,8 @@ export class CrapsTable implements TableView {
   private readonly tray: ChipTray;
   private v: View | null = null;
   private cfg: TableConfig | null = null;
+  /** My chips at the table, for Max. */
+  private stack: Cents = 0;
   private solo = true;
   private mySeat: number | null = null;
   private names = new Map<number, string>();
@@ -154,6 +157,7 @@ export class CrapsTable implements TableView {
       undo: () => this.undo(),
       clear: () => this.clear(),
       rebet: () => this.rebet(),
+      max: { mode: 'pick' },
       primary: { label: 'Roll', run: () => this.primary() },
     });
     ctx.ui.append(this.tray.root);
@@ -322,6 +326,9 @@ export class CrapsTable implements TableView {
     const cur = this.mine()[id]?.amount ?? 0;
     let amount = Math.max(l.step, Math.round(chip / l.step) * l.step);
     if (cur + amount < l.min) amount = Math.ceil((l.min - cur) / l.step) * l.step;
+    const most = this.tray.maxPicked ? this.maxFlat(kind, n) : null;
+    if (most && 'none' in most) return this.ctx.kit.toast(maxRefusal(most, l));
+    if (most) amount = most.amount;
     this.ctx.link.act({ type: 'bet', bets: [n === undefined ? { kind, amount } : { kind, number: n, amount }] });
     this.ctx.sfx.play('chip-lay');
   }
@@ -336,8 +343,11 @@ export class CrapsTable implements TableView {
     const lay = p.kind === 'dontpass' || p.kind === 'dontcome';
     const step = this.limits(oddsLimitKey(lay, n)).step;
     const room = maxOdds(p.kind as 'pass', flat.amount, n) - (flat.odds ?? 0);
-    const amount = Math.min(Math.max(step, Math.round(this.tray.selected.value / step) * step), Math.floor(room / step) * step);
-    if (amount <= 0) {
+    let amount = Math.min(Math.max(step, Math.round(this.tray.selected.value / step) * step), Math.floor(room / step) * step);
+    const most = this.tray.maxPicked ? this.maxOdds(on) : null;
+    if (most && 'none' in most && most.none === 'SHORT') return this.ctx.kit.toast(maxRefusal(most, this.limits(oddsLimitKey(lay, n))));
+    if (most && 'amount' in most) amount = most.amount;
+    if (amount <= 0 || (most && 'none' in most)) {
       this.ctx.kit.toast('Full odds are already behind that bet.');
       return;
     }
@@ -345,25 +355,48 @@ export class CrapsTable implements TableView {
     this.ctx.sfx.play('chip-lay');
   }
 
-  private place(spot: string): void {
+  /** What a click on this spot does for this player: a flat bet, odds behind one of theirs, or nothing (and why). */
+  private route(spot: string): { flat: BetKind; n?: number } | { odds: string } | { none: string } | null {
     const v = this.v;
-    if (!v || this.mySeat === null) return;
+    if (!v || this.mySeat === null) return null;
     const mine = this.mine();
     const m = /^(box|dc|buy|big|hard)(\d+)$/.exec(spot);
     if (m) {
       const n = Number(m[2]);
-      if (m[1] === 'box') return mine[`come${n}`] ? this.odds(`come${n}`) : this.bet('place', n);
+      if (m[1] === 'box') return mine[`come${n}`] ? { odds: `come${n}` } : { flat: 'place', n };
       if (m[1] === 'dc') {
-        if (mine[`dontcome${n}`]) return this.odds(`dontcome${n}`);
-        if (v.lay) return this.bet('lay', n);
-        this.ctx.kit.toast("Don't come bets travel here from the Don't Come Bar.");
-        return;
+        if (mine[`dontcome${n}`]) return { odds: `dontcome${n}` };
+        if (v.lay) return { flat: 'lay', n };
+        return { none: "Don't come bets travel here from the Don't Come Bar." };
       }
-      return this.bet(m[1] as BetKind, n);
+      return { flat: m[1] as BetKind, n };
     }
-    if (spot === 'passodds') return this.odds('pass');
-    if ((spot === 'pass' || spot === 'dontpass') && v.point !== null && mine[spot]) return this.odds(spot);
-    this.bet(spot as BetKind);
+    if (spot === 'passodds') return { odds: 'pass' };
+    if ((spot === 'pass' || spot === 'dontpass') && v.point !== null && mine[spot]) return { odds: spot };
+    return { flat: spot as BetKind };
+  }
+
+  private place(spot: string): void {
+    const r = this.route(spot);
+    if (!r) return;
+    if ('none' in r) return this.ctx.kit.toast(r.none);
+    if ('odds' in r) return this.odds(r.odds);
+    this.bet(r.flat, r.n);
+  }
+
+  /** What Max puts on a flat bet: its maximum or your chips (a lay's commission included). */
+  private maxFlat(kind: BetKind, n?: number): MaxBet | null {
+    return this.cfg ? crapsMax(this.cfg, kind, n, this.mine()[betId(kind, n)], this.stack) : null;
+  }
+
+  /** What Max puts behind a bet: full odds (3-4-5x, 6x laid) or your chips. */
+  private maxOdds(on: string): MaxBet | null {
+    const v = this.v;
+    const flat = this.mine()[on];
+    const p = parseId(on);
+    const n = (on === 'pass' || on === 'dontpass' ? v?.point : p.n) as PointNumber | null | undefined;
+    if (!this.cfg || !flat || n == null) return null;
+    return crapsOddsMax(this.cfg, p.kind as 'pass' | 'dontpass' | 'come' | 'dontcome', flat, n, this.stack);
   }
 
   private takeDown(spot: string): void {
@@ -633,6 +666,11 @@ export class CrapsTable implements TableView {
       return;
     }
     const lines = [d[0], d[1]];
+    if (this.tray.maxPicked) {
+      const r = this.route(spot);
+      const most = r && 'flat' in r ? this.maxFlat(r.flat, r.n) : r && 'odds' in r ? this.maxOdds(r.odds) : null;
+      if (most) lines.push('amount' in most ? `Max ${r && 'odds' in r ? 'odds ' : ''}adds ${formatMoney(most.amount)}` : most.none === 'AT_MAX' ? 'At the maximum' : 'Not enough chips for its minimum');
+    }
     const edge = this.ctx.tips.on ? spotEdge(spot, this.mine(), this.v.point, !!this.v.lay) : null;
     const b = spotBet(spot, this.mine(), this.v.point);
     const bet = b && this.mine()[b.id];
@@ -650,6 +688,11 @@ export class CrapsTable implements TableView {
 
   onTable(snap: Parameters<TableView['onTable']>[0]): void {
     this.cfg = snap.meta.config;
+    this.stack = snap.you.stack;
+    // the rack: chips up to anything this table takes (its laid odds are the most), from what its
+    // smallest bet needs
+    const lims = Object.values(this.cfg.limits);
+    this.tray.setChipMax(Math.max(...lims.map((l) => l.max)), Math.min(...lims.map((l) => l.min)));
     this.solo = snap.meta.mode === 'solo';
     this.mySeat = snap.you.status === 'watching' ? null : snap.you.seat;
     this.names = new Map(snap.members.filter((m) => m.seat !== null).map((m) => [m.seat!, m.name]));
@@ -685,6 +728,7 @@ export class CrapsTable implements TableView {
 
   onSeat(msg: Parameters<TableView['onSeat']>[0]): void {
     this.mySeat = msg.status === 'watching' ? null : msg.seat;
+    this.stack = msg.stack;
     this.refreshControls();
   }
 

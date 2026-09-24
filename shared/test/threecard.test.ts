@@ -28,6 +28,7 @@ import { type Card, newDeck, isCard } from '../src/cards.ts';
 import type { Rng } from '../src/rng.ts';
 import { TableSim } from './helpers/table-sim.ts';
 import { seededRng } from './helpers/seeded.ts';
+import { stackedDeck } from './helpers/stacked.ts';
 
 // shared/ compiles without DOM or Node types; the test runner provides console.
 declare const console: { log(...args: unknown[]): void };
@@ -39,28 +40,7 @@ const cards = (s: string): Card[] => {
 };
 const sc = (s: string) => score(cards(s));
 
-/**
- * An Rng that makes dealHands() deal `top` in that order (each seat's three cards in seat order,
- * then the dealer's), so a test can play exact hands through the real engine. It answers each
- * Fisher-Yates draw with the position of the card wanted next.
- */
-function stackedRng(top: Card[]): Rng {
-  const cur = newDeck();
-  const draws: number[] = [];
-  top.forEach((card, t) => {
-    const i = cur.length - 1 - t;
-    const j = cur.indexOf(card);
-    draws.push(j);
-    [cur[i], cur[j]] = [cur[j]!, cur[i]!];
-  });
-  let k = 0;
-  return {
-    next32() {
-      if (k >= draws.length) throw new Error('stacked deck used up');
-      return draws[k++]!;
-    },
-  };
-}
+const stackedRng = stackedDeck;
 
 type Sim = TableSim<ThreeCardState, unknown, ThreeCardView>;
 const solo = (rng: Rng, stack = 100_000): Sim => new TableSim(engine, rng, 'solo', [{ seat: 0, stack }]) as Sim;

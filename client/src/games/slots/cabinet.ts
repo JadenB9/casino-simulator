@@ -106,7 +106,7 @@ const LAYOUTS: Record<MachineId, Layout> = {
 };
 
 /** Candle colours by coin value (this casino's scheme; white above is the service light). */
-const CANDLE: Record<number, string> = { 5: '#e8412c', 25: '#f2c14a', 100: '#3d7be0', 500: '#b05ad6', 2500: '#f08a2c' };
+const CANDLE: Record<number, string> = { 5: '#e8412c', 25: '#f2c14a', 100: '#3d7be0', 500: '#b05ad6', 2500: '#f08a2c', 10_000: '#c9a24b' };
 export function candleColor(denom: number): string {
   return CANDLE[denom] ?? '#3d7be0';
 }

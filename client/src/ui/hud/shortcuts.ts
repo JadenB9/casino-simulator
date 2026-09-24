@@ -15,7 +15,8 @@ export const SHORTCUTS: readonly { title: string; rows: readonly Row[] }[] = [
   {
     title: 'Any table',
     rows: [
-      ['1-7', 'Pick a chip, left to right'],
+      ['1-9 / 0', 'Pick a chip, left to right'],
+      ['A', 'Max: the most the bet takes, or all your chips (at a layout, then click a spot)'],
       ['⌫ / ⌘ Z', 'Take back the last chip'],
       ['X', 'Clear your bets'],
       ['R', 'Rebet'],

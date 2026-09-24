@@ -76,8 +76,8 @@ played standing) `sit` is null and they stand.
 
 ### Screen space
 The "Press E" prompt sits bottom-centre, clear of the bottom-left corner (the site's back chip).
-Prompts read `Press E · Blackjack · $5–$5,000` with the limits from
-`ENGINES[game].config(variant, 'solo').limits.default`.
+Prompts read `Press E · Blackjack · $5–$500,000`: the limits a table there can be opened at
+(`limitsSpan` in shared/src/limits.ts), or a machine's bets from its engine's config.
 
 ### Wearables
 `wearables.ts` puts the boutique's pieces on any character the factory makes, from the look:

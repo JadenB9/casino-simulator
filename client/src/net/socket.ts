@@ -5,21 +5,29 @@
 // Only the current socket's events count. A socket that has been replaced or closed on purpose can
 // still deliver an open, a message or a close afterwards; those are ignored, so a stale close never
 // stops the current socket's timers and a stale pong never vouches for it.
+//
+// Every attempt asks for its URL afresh: the casino's sockets open with a single-use ticket that is
+// good for a minute (net/api.ts socketUrl), so a reconnect after sleep or in a storm gets a new one.
+// One attempt at a time, while its ticket is on the way too.
 
 import { CLOSE } from '../../../shared/src/protocol.ts';
 
 export type SocketState = 'connecting' | 'open' | 'reconnecting' | 'closed';
 
 export interface SocketOptions {
-  url: () => string;
+  /** The URL for the next attempt, asked for on every one; an error with status 401 means log in again. */
+  url: () => string | Promise<string>;
   onMessage: (msg: any) => void;
   onState?: (state: SocketState, code?: number) => void;
 }
 
 const PING_MS = 25_000;
 const PONG_TIMEOUT_MS = 10_000;
-/** Close codes that mean "don't come back" (another tab took over, the table is gone, reload). */
-const FINAL = new Set<number>([CLOSE.REPLACED, CLOSE.NOT_FOUND, CLOSE.FORBIDDEN, CLOSE.UNAUTHORIZED, CLOSE.VERSION]);
+/**
+ * Close codes that mean "don't come back" (another tab took over, the table is gone, reload, or
+ * away too long: the app offers Come back instead).
+ */
+const FINAL = new Set<number>([CLOSE.REPLACED, CLOSE.NOT_FOUND, CLOSE.FORBIDDEN, CLOSE.UNAUTHORIZED, CLOSE.VERSION, CLOSE.IDLE]);
 
 export class Socket {
   private ws: WebSocket | null = null;
@@ -29,6 +37,8 @@ export class Socket {
   private pongTimer = 0;
   private retryTimer = 0;
   private stopped = false;
+  /** An attempt is waiting for its URL (a ticket): nothing else starts one meanwhile. */
+  private opening = false;
   state: SocketState = 'connecting';
 
   constructor(private readonly opts: SocketOptions) {
@@ -57,7 +67,7 @@ export class Socket {
 
   private poke = (): void => {
     if (this.stopped || document.visibilityState === 'hidden') return;
-    if (this.state === 'reconnecting' && !this.ws) {
+    if (this.state === 'reconnecting' && !this.ws && !this.opening) {
       // Waiting out a backoff: the network (or the tab) is back, so try now. A socket already on
       // its way is left to finish; opening another would race it for the seat.
       clearTimeout(this.retryTimer);
@@ -84,8 +94,41 @@ export class Socket {
   }
 
   private open(): void {
+    if (this.opening || this.stopped) return;
     this.setState(this.attempt === 0 ? 'connecting' : 'reconnecting');
-    const ws = new WebSocket(this.opts.url());
+    let url: string | Promise<string>;
+    try {
+      url = this.opts.url();
+    } catch (err) {
+      url = Promise.reject(err);
+    }
+    if (typeof url === 'string') {
+      this.connect(url);
+      return;
+    }
+    this.opening = true;
+    url.then(
+      (u) => {
+        this.opening = false;
+        if (!this.stopped) this.connect(u);
+      },
+      (err: unknown) => {
+        this.opening = false;
+        if (this.stopped) return;
+        // The token itself was refused: back to logging in, as a 4003 close would say.
+        if ((err as { status?: number } | null)?.status === 401) {
+          this.stopped = true;
+          this.setState('closed', CLOSE.UNAUTHORIZED);
+          return;
+        }
+        // Offline, or the casino didn't answer: try again after the same backoff as a drop.
+        this.retry();
+      },
+    );
+  }
+
+  private connect(url: string): void {
+    const ws = new WebSocket(url);
     this.ws = ws;
     ws.onopen = () => {
       if (this.ws !== ws) return;
@@ -117,11 +160,16 @@ export class Socket {
         if (e.code === CLOSE.VERSION) location.reload();
         return;
       }
-      this.attempt++;
-      const cap = Math.min(30_000, 500 * 2 ** this.attempt);
-      this.setState('reconnecting', e.code);
-      this.retryTimer = window.setTimeout(() => this.open(), Math.random() * cap);
+      this.retry(e.code);
     };
+  }
+
+  /** Wait a random time under a doubling cap, then open again. */
+  private retry(code?: number): void {
+    this.attempt++;
+    const cap = Math.min(30_000, 500 * 2 ** this.attempt);
+    this.setState('reconnecting', code);
+    this.retryTimer = window.setTimeout(() => this.open(), Math.random() * cap);
   }
 
   private clearTimers(): void {

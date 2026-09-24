@@ -24,6 +24,10 @@ both are shown and one is picked, with the reason.
 - **Money.** Integer cents, whole-dollar wagers, exact payouts with no rounding. A payout `a:b` on a
   wager of `W` dollars is exact in cents when `100·W·a` is divisible by `b`. Every payout on this
   page is exact at $1 steps except the few craps bets in §3.5.
+- **Limits.** Every table's minimum and maximum bet is chosen when it is started, from $1 up to
+  $500,000 a bet as a tier and $1,000,000 as custom limits, with every other bet and the buy-in
+  scaling with them; [limits.md](limits.md) has the tiers and the rules. The amounts quoted on this
+  page are the Standard table's. Limits never change a payout, so every edge here holds at every table.
 - **Monte Carlo acceptance.** For N independent decisions of one bet, SE = SD/√N. A correct engine
   passes `|measured edge − published edge| ≤ 3·SE` 99.73% of the time, whatever N is. N sets the
   test's power instead. To also catch a bug that moves the edge by δ at least 97.7% of the time,
@@ -277,6 +281,42 @@ natural 4.749%, dealer natural 4.749%, both 0.217%, surrender 4.48% of rounds. S
 are counted per action, so one round can have several: 2.78 splits and 10.38 doubles per 100
 rounds. The average total amount wagered is 1.1316 initial units, which makes the loss per unit
 of total action ("element of risk") 0.295%. That figure must **not** be used as the house edge.
+
+### 1.7 Several spots (solo tables)
+
+At a solo table a player can play one to five betting circles at once, from the one stack, as a
+player may play two or more spots at a real table. The circles are the ones the first players to
+sit down would take: the middle circle, then the two beside it, then the next two. Each circle
+has its own bet, inside the table's limits for a circle; the stack has to cover every bet as it
+goes down, and a double or a split on any circle as it's made. The choice holds from round to
+round. At a shared table every player keeps one circle.
+
+The round is the round a full table gets. The dealer deals one card to each circle from first
+base (the dealer's left; on screen, the right-hand circle first), the up card, a second card to
+each circle, then the hole card, and the hands are played circle by circle in the same order,
+each split hand finished before the next circle. With an ace up, each circle is asked about
+insurance (or even money, holding a blackjack) on its own. Each circle settles on its own and
+is a round of its own in the player's stats.
+
+**Odds.** Every hand plays by exactly the rules above, so its edge is the published one; the only
+difference sharing a shoe can make is the real card-removal effect of the other hands (their
+cards are unseen by basic strategy, but how long they hit changes what the dealer draws from,
+and more cards a round changes the cut-card effect). The hands of a round share the dealer's
+cards, so they are correlated (a dealer bust wins them all): one hand's result has SD 1.141, but
+the average of a round's three hands has SD 0.868, not 1.141/√3 = 0.659 (a correlation of about
+0.37 between two hands of the same round). The Monte Carlo therefore takes its standard error
+from each round's average over its hands, and plays every hand with the §1.4 chart through the
+same rule functions the table deals with (shared/test/blackjack-spots.mc.test.ts):
+
+| Spots | Dealing | Published (one spot) | Measured per hand | SE | z | N |
+|---|---|---|---|---|---|---|
+| 3 | cut card at 75% | 0.354% | 0.3499% | 0.0250% | −0.16 | 12M rounds, 36M hands |
+| 3 | fresh shoe every round | 0.3336% | 0.3135% | 0.0250% | −0.80 | 12M rounds, 36M hands |
+| 5 | cut card at 75% | 0.354% | 0.3511% | 0.0327% | −0.09 | 6M rounds, 30M hands |
+
+The card-removal effect is far below what these runs can see. A unit test also plays 3,000
+three-spot rounds through the table engine and the bare rule functions from the same seed and
+checks that they deal the same cards to the same circles and reach the same results.
 
 ---
 
@@ -766,7 +806,7 @@ listed at its end.
 | Card ranks | Ace high, down to 2. Suits never matter | [W1], [W2] §651a.6 |
 | Cover card | A quarter of the way up from the bottom (78 cards). Pennsylvania requires at least a quarter | [W2] §651a.5(d) |
 | Burn | The first card after each shuffle, face down and unseen | [W2] §651a.8(b) |
-| Bets | The bet (the Initial Wager), $10 to $1,000 in whole dollars, and an optional Tie bet placed with it, $1 to $100 | [W2] §651a.7 |
+| Bets | The bet (the Initial Wager) and an optional Tie bet placed with it, whole dollars within the table's limits ([limits.md](limits.md); Standard: the bet $10 to $1,000, the Tie bet $1 to $100) | [W2] §651a.7 |
 | Deal | One card face up to each player with a bet, first base first, then one face up to the dealer | [W1], [W2] §651a.8(c) |
 | Higher card | The bet wins 1:1 and the Tie bet loses | [W1], [W2] §651a.9(a)(2) |
 | Lower card | The bet and the Tie bet lose | [W1], [W2] §651a.9(a)(1) |
@@ -852,7 +892,34 @@ which `(5·SD/δ)²` says 9.4×10⁵ rounds catch; the enumeration catches it ex
 war, against 2.3301% from a full shoe (z +0.57). Like baccarat, Casino War shows no measurable
 cut-card effect, so the full-shoe figures are the test targets.
 
-### 7.6 Where sources differ
+### 7.6 Several spots (solo tables)
+
+At a solo table a player can play one to three spots at once, from the one stack: the player's
+own and the spots the next players would take. Each spot has its own bet and Tie bet inside the
+table's limits, and every bet is taken only with its war raise still in the stack, so every spot
+could go to war on the same deal. The round is a full table's: one card face up to each spot,
+first base first, and one to the dealer. Ties are decided one at a time, first base first; once
+every tie is decided, one war deal serves them all (three burned, one card to each spot at war,
+one to the dealer), and each spot settles on its own, a round of its own in the stats. At a
+shared table every player keeps one spot.
+
+**Odds.** Each spot's deal is two cards of the shoe, whatever the other spots hold, so the chance
+of a tie (23/311) and the Tie bet are exactly the one-spot figures. The only card-removal effect
+is two spots tying at once: their war comes from a shoe short of one more card of the tied rank.
+The spots share the dealer's card, so the standard error comes from each round's average over its
+spots (shared/test/war-spots.mc.test.ts, three spots a round, the table's own shoe):
+
+| Bet | Published | Measured per spot | SE | z | N |
+|---|---|---|---|---|---|
+| Bet, going to war on every tie | 2.3301% | 2.3315% | 0.0244% | +0.06 | 10M rounds, 30M spots |
+| Bet, going to war, no bonus | 2.8771% | 2.8778% | 0.0243% | +0.03 | the same deals |
+| Bet, surrendering every tie | 3.6977% | 3.6960% | 0.0231% | −0.08 | the same deals |
+| Tie | 18.6495% | 18.6648% | 0.0524% | +0.29 | the same deals |
+| Bet and Tie through the table engine, one stack | 20.9796% | 20.4934% | 0.4371% | −1.11 | 166,667 rounds |
+
+150,207 of the 10M rounds had two or three spots at war at once.
+
+### 7.7 Where sources differ
 
 | Topic | Disagreement | Choice and reason |
 |---|---|---|
@@ -881,7 +948,7 @@ is paid. Researched 2026-09-23; the sources for this section are listed at its e
 | Payouts | The bills pay the number on the bill to 1. The Star and the Crown pay 40 to 1, each on its own symbol only [B1] |
 | Spin | The server picks the stop first, uniformly over the 54, and the wheel is animated onto it. Every spin turns the wheel at least three times ([B3] §619a.2 asks for three) |
 | Settlement | The stop the clapper comes to rest in wins ([B3] §619a.2). All spots settle at once |
-| Limits | $1 to $500 on each spot, whole dollars, and at most $2,500 on the layout per player per spin |
+| Limits | The table's ([limits.md](limits.md)): at Standard $1 to $500 on each spot, whole dollars, and at most $2,500 on the layout per player per spin; at every table five times the spot maximum a spin |
 | Single player | Place chips, press Spin. The wheel turns from "No more bets" to rest in about 10.5 seconds |
 | Multiplayer | A 20 second betting window once the leader starts the table. It closes early once every connected seated player has pressed Ready (and someone has a bet down). The stop is drawn only when betting closes |
 
@@ -1014,7 +1081,7 @@ Three dice shaken under a glass dome, and 52 places to bet on how they land. Res
 | No roll | Never. A live shaker calls "no roll" when a die doesn't land flat ([S2] §625a.7(a)); here the server's roll is final and the dice are animated onto it | |
 | Pay table | The usual US table: the Wizard of Odds "Atlantic City" column (below) | [S1] |
 | Odd and Even | Offered at 1:1, losing to any triple. It is a Macau bet; [S1] has "only seen [it] in Macau, never in the United States" | [S1] |
-| Limits | Small, Big, Odd, Even $5–$5,000. Single numbers $1–$1,000. Totals, two-dice combinations, doubles and Any triple $1–$500. Specific triples $1–$100. At most $10,000 on the layout per player per roll | this casino |
+| Limits | The table's ([limits.md](limits.md)). At Standard: Small, Big, Odd, Even $5–$5,000. Single numbers $1–$1,000. Totals, two-dice combinations, doubles and Any triple $1–$500. Specific triples $1–$100. At most $10,000 on the layout per player per roll. Other tables keep these proportions | this casino |
 
 Multiplayer tables open a 20 second betting window after the leader starts them. It closes early
 once everyone connected has pressed Ready with chips down; the dice are drawn only when it closes.
@@ -1121,7 +1188,7 @@ and your bet back. Researched 2026-09-24; the sources for this section are liste
 | Spin | The server draws the slot uniformly (rejection sampling over 0..24) when betting closes, and the wheel is animated onto it. Every spin turns the wheel at least twice |
 | Rounds | The wheel runs on its own clock while anyone is seated: a 20 second betting window, "No more bets", 7 seconds from the pull to rest, 5 seconds of results, the next window. It spins whether anyone has bet or not. Nobody presses Spin and no leader starts it: the table starts with its first seat |
 | Single player | The same loop with a 12 second window, and "Spin now" once you have a bet down |
-| Limits | $1 to $1,000 on each number per spin, whole dollars (the table's config). Max puts down the rest of that limit or your whole stack, whichever is less. Buy-in $10 to $10,000 |
+| Limits | The table's ([limits.md](limits.md)): at Standard $1 to $1,000 on each number per spin, whole dollars, and a buy-in of $10 to $100,000. Max puts down the rest of that limit or your whole stack, whichever is less |
 | Seats | Ten terminals in an arc in front of the wheel (one alone) |
 
 ### The wheel (slots clockwise from the 20)

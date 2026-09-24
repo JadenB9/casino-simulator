@@ -239,10 +239,10 @@ describe('Diamond Line draws', () => {
 describe('Diamond Line on the engine', () => {
   const sim = (stack: number, rng: Rng) => new TableSim(engine, rng, 'solo', [{ seat: 0, stack }], engine.config('diamonds', 'solo'));
 
-  it('config: one seat, $1/$2/$5 coins, 1-3 coins', () => {
+  it('config: one seat, $1/$2/$5 coins or the high-limit $25 and $100, 1-3 coins', () => {
     const cfg = engine.config('diamonds', 'solo');
-    expect(cfg).toMatchObject({ game: 'slots', variant: 'diamonds', maxSeats: 1, limits: { default: { min: 100, max: 1500, step: 100 } } });
-    expect(cfg.options).toEqual({ machine: 'diamonds', denoms: [100, 200, 500], maxCoins: 3, lines: 1 });
+    expect(cfg).toMatchObject({ game: 'slots', variant: 'diamonds', maxSeats: 1, limits: { default: { min: 100, max: 30_000, step: 100 } } });
+    expect(cfg.options).toEqual({ machine: 'diamonds', denoms: [100, 200, 500, 2500, 10_000], maxCoins: 3, lines: 1 });
   });
 
   it('three diamonds: the bet goes out, 1,000 x coins x coin value comes back, one round', () => {

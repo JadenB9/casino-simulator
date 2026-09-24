@@ -125,13 +125,16 @@ async function multiplayer() {
   const tB = await login(pageB, `rlB_${Date.now().toString(36).slice(-5)}`);
   const { tableId } = await page.evaluate(async ([t, v]) => (await (await fetch('/casino/api/tables', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${t}` }, body: JSON.stringify({ game: 'roulette', variant: v, visibility: 'public' }) })).json()), [tA, variant]);
   const open = (p, t) =>
-    p.evaluate(([id, tok]) => new Promise((res, rej) => {
-      const ws = new WebSocket(`${location.origin.replace('http', 'ws')}/casino/ws/table/${id}?v=1&t=${tok}`);
+    p.evaluate(async ([id, tok]) => {
+      // Sockets open with a single-use ticket for their path, never with the token itself.
+      const { ticket } = await (await fetch('/casino/api/ticket', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${tok}` }, body: JSON.stringify({ target: `table/${id}` }) })).json();
+      return new Promise((res, rej) => {
+      const ws = new WebSocket(`${location.origin.replace('http', 'ws')}/casino/ws/table/${id}?v=1&ticket=${encodeURIComponent(ticket)}`);
       window.rl = { ws, msgs: [], aid: 0, send: (m) => ws.send(JSON.stringify(m)), act: (a) => ws.send(JSON.stringify({ t: 'act', aid: `x${window.rl.aid++}`, a })) };
       ws.onmessage = (e) => window.rl.msgs.push(JSON.parse(e.data));
       ws.onopen = () => res(true);
       ws.onerror = () => rej(new Error('socket failed'));
-    }), [tableId, t]);
+    }); }, [tableId, t]);
   await open(page, tA);
   await open(pageB, tB);
   const wait = (p, pred, ms = 30000) => p.waitForFunction(pred, null, { timeout: ms, polling: 100 });

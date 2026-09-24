@@ -39,9 +39,10 @@ through the engines themselves.
   the slider and the count-up only show what the server sent.
 - **Return (RTP)** is the expected payout per unit bet, stake included. **SD** is the standard
   deviation of one round's net result in units of the bet.
-- **Limits** come from the table's config (`limits.default`): $1 to $1,000 in $1 steps unless a
-  table is created with others, and a buy-in of $10 to $10,000. Engines check the config's limits;
-  pages print them in the footer next to the return ("Return 99.00% · Bet $1 to $1,000").
+- **Limits** come from the table's config (`limits.default`), chosen when you sit down
+  ([limits.md](limits.md)): $1 to $1,000 in $1 steps at Standard, up to $100,000 a bet, and a buy-in
+  of up to a hundred times the maximum ($10 to $100,000 at Standard). Engines check the config's
+  limits; pages print them in the footer next to the return ("Return 99.00% · Bet $1 to $1,000").
 - **Monte Carlo.** Fixed seeds (`mcRng`), SE = SD/√N, and every tally must land within 3 SE of the
   published return. z is (measured return − published return)/SE. `npm run test:mc` reproduces
   every figure below exactly; `MC_RNG=crypto` reruns on the production generator.

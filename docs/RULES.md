@@ -8,6 +8,8 @@ is the summary. The full rules, every paytable, the strategy charts and the sour
 - [rules/cards-and-machines.md](rules/cards-and-machines.md): Three Card Poker, video poker,
   slots, Texas Hold'em
 - [rules/online-games.md](rules/online-games.md): the online games on the lounge computers
+- [rules/limits.md](rules/limits.md): table limits chosen at every table (tiers up to $500,000 a
+  bet, custom to $1,000,000), buy-ins, Max, and the machines' coin values
 - [math/](math/): the dependency-free Node scripts that enumerate each game exactly
   (`node docs/math/three-card-poker.mjs` and so on)
 
@@ -29,6 +31,18 @@ is the summary. The full rules, every paytable, the strategy charts and the sour
 - **Exact enumeration** checks the engines wherever the outcome space is small enough.
 - **Monte Carlo tests** play millions of rounds per game and require the measured edge to land
   within 3 standard errors of the published one. Seeds are fixed so the suite is deterministic.
+
+## Several hands at once
+
+Alone at blackjack (up to five circles), Three Card Poker (up to three hands) or Casino War (up to
+three spots), a player can play several hands from one stack, each with its own bets and its own
+decisions, dealt exactly as a full table deals them. Every hand plays by the same rules, so the
+figures below are per hand either way; sharing the shoe or deck changes nothing measurable (Three
+Card Poker exactly nothing). The Monte Carlo runs with several hands, their standard errors taken
+from each round's average since the hands share the dealer's cards, are in rules/table-games.md
+§1.7 and §7.6 and rules/cards-and-machines.md §1.9: blackjack on three spots to the cut card
+0.3499% per hand (36M hands, z −0.16), Three Card Poker on three hands 3.3801% (30M hands,
+z +0.20), Casino War on three spots 2.3315% (30M spots, z +0.06).
 
 ## Summary
 
