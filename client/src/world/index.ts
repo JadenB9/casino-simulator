@@ -76,6 +76,11 @@ export interface FloorWorld extends World {
   stats(): { calls: number; triangles: number; programs: number; pixelRatio: number };
   /** The far stand-ins and their draw-call budget (for the dev floor and the headless checks). */
   readonly lod: StationLod;
+  /**
+   * What the walker and the camera bump into. Something standing on the floor adds itself here, as
+   * dealers in the open staff area do: `collider.post(x, z, 0.28, 1.9, { cam: false })`.
+   */
+  readonly collider: Collider;
   /** Place the player (dev views, respawn). */
   teleport(x: number, z: number, heading: number): void;
   quality: Quality;
@@ -234,6 +239,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
     plan,
     quality,
     lod,
+    collider: col,
     player: {
       character,
       position: player.position,
