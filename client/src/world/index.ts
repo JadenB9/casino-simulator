@@ -78,6 +78,8 @@ export interface FloorWorld extends World {
   stats(): { calls: number; triangles: number; programs: number; pixelRatio: number };
   /** The far stand-ins and their draw-call budget (for the dev floor and the headless checks). */
   readonly lod: StationLod;
+  /** Turn the glow (High's bloom) off and back on, for the checks that compare the two. */
+  glow(on: boolean): void;
   /**
    * What the walker and the camera bump into. Something standing on the floor adds itself here, as
    * dealers in the open staff area do: `collider.post(x, z, 0.28, 1.9, { cam: false })`.
@@ -271,6 +273,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
     plan,
     quality,
     lod,
+    glow: (on) => bloom.setEnabled(on && quality === 'high'),
     collider: col,
     player: {
       character,
