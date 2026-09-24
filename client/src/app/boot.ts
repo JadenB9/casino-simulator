@@ -41,19 +41,19 @@ export async function boot(): Promise<void> {
   let app: App | null = null;
   // nothing is drawn behind the loading screen (see Engine3D.paused)
   engine.paused = true;
-  const [world] = await Promise.all([
-    createWorld(engine, {
-      ui,
-      sfx,
-      onProgress: (k) => {
-        if (fill) fill.style.width = `${Math.round(k * 100)}%`;
-      },
-      onEscape: () => app?.escape(),
-    }),
-    loadCards(),
-    sfx.load().catch((err) => console.warn('sounds failed to load', err)),
-  ]);
+  const world = await createWorld(engine, {
+    ui,
+    sfx,
+    onProgress: (k) => {
+      if (fill) fill.style.width = `${Math.round(k * 100)}%`;
+    },
+    onEscape: () => app?.escape(),
+  });
   engine.paused = false;
+  // The cards' faces and the sounds aren't needed to show the floor: they load behind the login
+  // (a quarter of a megabyte each), and sitting down at a table waits for the cards.
+  loadCards().catch((err) => console.warn('cards failed to load', err));
+  sfx.load().catch((err) => console.warn('sounds failed to load', err));
   app = new App(engine, world, sfx, ui);
   // Handles for the console and the headless checks; nothing here can move money.
   (window as unknown as { casino: unknown }).casino = { engine, world, app, session };
@@ -468,6 +468,8 @@ class App {
       await this.world.exitTable();
       return;
     }
+    // loaded behind the login long before anyone gets here; a failure still opens the table
+    await loadCards().catch(() => {});
     this.openTable(station, choice);
   }
 

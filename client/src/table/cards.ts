@@ -33,8 +33,17 @@ async function raster(url: string): Promise<THREE.Texture> {
   return tex;
 }
 
-/** Rasterize all 52 faces and the back. Call once behind the loading screen. */
-export async function loadCards(): Promise<void> {
+let loading: Promise<void> | null = null;
+
+/** Rasterize all 52 faces and the back, once: a second call waits on the first (after a failure, tries again). */
+export function loadCards(): Promise<void> {
+  return (loading ??= rasterAll().catch((err: unknown) => {
+    loading = null;
+    throw err;
+  }));
+}
+
+async function rasterAll(): Promise<void> {
   const ranks = 'A23456789TJQK';
   const jobs: Promise<void>[] = [];
   for (const s of 'shdc') {
