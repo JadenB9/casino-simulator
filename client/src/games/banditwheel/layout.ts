@@ -16,7 +16,7 @@ export interface Pose {
 // ---------------------------------------------------------------------------------------------
 // The wheel
 
-/** Height of the hub. The band tops out at 2.64 m and the sign at 3.31 m. */
+/** Height of the hub. The band tops out at 2.64 m. */
 export const HUB_Y = 1.6;
 /** The painted face's plane; the disc is DISC_T thick behind it. */
 export const WHEEL_Z = -0.9;
@@ -42,6 +42,8 @@ export const POST_X = 1.24;
 export const POST_W = 0.17;
 export const BEAM_Y = 2.88;
 export const BEAM_H = 0.18;
+/** The top of the sign on the beam, the station's highest point (under a 3.4 m ceiling). */
+export const SIGN_TOP = 3.26;
 /** The heavy base the frame stands on. */
 export const BASE_H = 0.3;
 export const BASE_W = 3.0;

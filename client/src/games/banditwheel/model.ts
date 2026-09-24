@@ -15,7 +15,7 @@ import { SLOTS } from '../../../../shared/src/games/banditwheel/rules.ts';
 import type { Quality } from '../../render/engine3d.ts';
 import {
   HUB_Y, WHEEL_Z, DISC_T, FACE_R, RING_IN, BAND_R, BAND_LIP, PEG_R, PEG_RADIUS, PEG_OUT, PIVOT_R, FLAP_L, FLAP_Z,
-  FRAME_Z, POST_X, POST_W, BEAM_Y, BEAM_H, BASE_H, BASE_W, BASE_Z0, BASE_Z1,
+  FRAME_Z, POST_X, POST_W, BEAM_Y, BEAM_H, BASE_H, BASE_W, BASE_Z0, BASE_Z1, SIGN_TOP,
   TERMINALS, TERM_R, STOOL_R, TERM_W, TERM_D, TOP_Y, STOOL_TOP, STOOL_SEAT_R, CUP_PITCH, CUP_Z,
   onArc, terminalYaw,
 } from './layout.ts';
@@ -449,19 +449,20 @@ function buildFrame(m: Shared): THREE.Object3D[] {
   }
   const bulbMesh = bulbs.mesh(m.bulb, LAMPS_NAME);
 
-  // the sign on the beam: a sheet of corrugated iron, wired to two uprights
-  const signW = 1.5;
+  // the sign: a sheet of corrugated iron bolted over the front of the beam, standing a little
+  // proud of it; the whole station tops out at SIGN_TOP, under a 3.4 m ceiling
+  const signW = 1.36;
   const signH = signW / 4;
   const sheet = new THREE.PlaneGeometry(signW, signH, 44, 1);
   const sp = sheet.getAttribute('position') as THREE.BufferAttribute;
   for (let i = 0; i < sp.count; i++) sp.setZ(i, Math.sin((sp.getX(i) / signW) * 22 * Math.PI * 2) * 0.008);
   sheet.computeVertexNormals();
-  const signY = BEAM_Y + BEAM_H / 2 + signH / 2 + 0.03;
+  const signY = SIGN_TOP - signH / 2;
+  const signZ = FRAME_Z + (POST_W + 0.02) / 2 + 0.022;
   const signMesh = new THREE.Mesh(sheet, m.sign);
-  signMesh.position.set(0, signY, FRAME_Z + POST_W / 2 + 0.02);
-  signMesh.rotation.x = -0.06;
+  signMesh.position.set(0, signY, signZ);
   signMesh.name = 'bw-sign';
-  for (const x of [-signW / 2 + 0.12, signW / 2 - 0.12]) rust.add(box(0.04, signH + 0.06, 0.012, METAL_M, 'y', off()), [x, signY - 0.02, FRAME_Z + POST_W / 2 + 0.006]);
+  for (const x of [-signW / 2 + 0.12, signW / 2 - 0.12]) rust.add(box(0.04, signH + 0.04, 0.012, METAL_M, 'y', off()), [x, signY - 0.01, signZ - 0.014]);
 
   const out: THREE.Object3D[] = [signMesh, ...lamps];
   for (const mesh of [wood.mesh(m.wood, 'bw-frame-wood'), rust.mesh(m.rust, 'bw-frame-iron'), red.mesh(m.red, 'bw-pointer'), bulbMesh]) if (mesh) out.push(mesh);
