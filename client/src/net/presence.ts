@@ -76,7 +76,8 @@ export interface FloorTransport {
 }
 
 export interface FloorLinkOptions {
-  url?: () => string;
+  /** The floor socket's URL, asked for on every attempt (by default with a fresh ticket). */
+  url?: () => string | Promise<string>;
   /** Replace the socket (tests drive FloorLink without a network this way). */
   open?: (onMessage: (msg: unknown) => void, onState: (state: SocketState, code?: number) => void) => FloorTransport;
 }

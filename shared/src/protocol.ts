@@ -43,6 +43,8 @@ export const CLOSE = {
   NOT_FOUND: 4004,
   /** Not allowed at this table (full, private without the PIN, someone else's solo table). */
   FORBIDDEN: 4005,
+  /** The socket's ticket was expired, already used or for somewhere else. Get a new one and reconnect. */
+  TICKET: 4006,
   /** Kept breaking the rate limits. Back off. */
   RATE_LIMITED: 4008,
   /** Client and server speak different protocol versions. Reload the page. */
@@ -158,6 +160,19 @@ export interface JoinByPinRequest {
 export interface JoinByPinResponse {
   tableId: string;
   game: GameId;
+}
+/**
+ * A ticket for one socket: `target` is the path it opens ('floor', 'table/<tableId>',
+ * 'solo/<game>'). It is good for one connection, within a minute; the 30-day token itself never
+ * travels in a URL.
+ */
+export interface TicketRequest {
+  target: string;
+}
+export interface TicketResponse {
+  ticket: string;
+  /** Server time it stops working. */
+  exp: number;
 }
 export interface HttpError {
   error: ErrorCode;

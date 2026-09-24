@@ -34,6 +34,7 @@ import { applyTransfer, buyInStatements, cashOutStatements, refundStatements, mo
 import { Bucket, KeyedBuckets } from '../ratelimit.ts';
 import { closeWith } from '../http.ts';
 import { ipKey } from '../floor/directory.ts';
+import { spendTicket } from '../tickets.ts';
 import type { CasinoFloor } from '../floor/index.ts';
 import { ChatRoom } from '../floor/chat.ts';
 import { bigWinsIn, type BigWinReport } from '../floor/wins.ts'; // features: big wins
@@ -392,6 +393,11 @@ export class CasinoTable extends DurableObject<Env> {
     const m = this.meta;
     if (!m || m.closed) return closeWith(CLOSE.NOT_FOUND, 'no such table');
     if (m.mode === 'solo' && !tableName.endsWith(`:${accountId}`)) return closeWith(CLOSE.FORBIDDEN, 'not your table');
+    // The ticket that let this socket through the Worker opens it once (tickets.ts). Spent only
+    // once the table is known to exist, so probing a made-up id still writes nothing.
+    if (!spendTicket(this.sql, request.headers.get('x-casino-ticket'), Number(request.headers.get('x-casino-ticket-exp')), now)) {
+      return closeWith(CLOSE.TICKET, 'ticket used');
+    }
     let mem = this.members.get(accountId);
     if (!mem) {
       if (this.members.size >= m.config.maxSeats) return closeWith(CLOSE.FORBIDDEN, 'table full');

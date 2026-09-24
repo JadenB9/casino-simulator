@@ -16,6 +16,7 @@ import { Directory, ipKey } from './directory.ts';
 import { FloorChat } from './chat.ts';
 import { Wins, type BigWinReport } from './wins.ts';
 import { Bucket, KeyedBuckets } from '../ratelimit.ts';
+import { spendTicket } from '../tickets.ts';
 
 /** A hard cap on floor connections; a busy night past this gets a polite "casino is full". */
 export const MAX_FLOOR = 150;
@@ -74,6 +75,12 @@ export class CasinoFloor extends DurableObject<Env> {
     if (!this.connects.take(`a:${accountId}`) || (ip && !this.addrConnects.take(ipKey(ip)))) {
       server.accept();
       server.close(CLOSE.RATE_LIMITED, 'slow down');
+      return new Response(null, { status: 101, webSocket: client });
+    }
+    // The ticket that let this socket through the Worker opens it once (tickets.ts).
+    if (!spendTicket(this.ctx.storage.sql, request.headers.get('x-casino-ticket'), Number(request.headers.get('x-casino-ticket-exp')), Date.now())) {
+      server.accept();
+      server.close(CLOSE.TICKET, 'ticket used');
       return new Response(null, { status: 101, webSocket: client });
     }
     if (this.ctx.getWebSockets().length >= MAX_FLOOR && this.ctx.getWebSockets(`a:${accountId}`).length === 0) {

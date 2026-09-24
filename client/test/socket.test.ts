@@ -203,6 +203,93 @@ describe('Socket', () => {
     expect(waits.at(-1)!).toBeGreaterThan(20_000);
   });
 
+  describe('with a ticket per attempt (an async URL)', () => {
+    /** A URL source whose calls the test resolves or rejects by hand. */
+    function tickets() {
+      const pending: { resolve: (u: string) => void; reject: (e: unknown) => void }[] = [];
+      let n = 0;
+      const url = () =>
+        new Promise<string>((resolve, reject) => {
+          n++;
+          pending.push({ resolve, reject });
+        });
+      return { url, pending, calls: () => n };
+    }
+    const flush = async () => {
+      for (let i = 0; i < 5; i++) await Promise.resolve();
+    };
+
+    it('asks for a fresh URL on every attempt, and connects with it', async () => {
+      const t = tickets();
+      const s = new Socket({ url: t.url, onMessage: () => {} });
+      expect(FakeWS.all).toHaveLength(0);
+      t.pending[0]!.resolve('wss://casino.test/ws?ticket=one');
+      await flush();
+      expect(FakeWS.all.map((w) => w.url)).toEqual(['wss://casino.test/ws?ticket=one']);
+      FakeWS.all[0]!.accept();
+      FakeWS.all[0]!.drop(1006);
+      vi.advanceTimersByTime(30_000);
+      expect(t.calls()).toBe(2);
+      t.pending[1]!.resolve('wss://casino.test/ws?ticket=two');
+      await flush();
+      expect(FakeWS.all.map((w) => w.url)).toEqual(['wss://casino.test/ws?ticket=one', 'wss://casino.test/ws?ticket=two']);
+      expect(s.state).toBe('reconnecting');
+    });
+
+    it('a refused token ends it as a 4003 would (back to logging in), with no retry', async () => {
+      const t = tickets();
+      const states: [string, number | undefined][] = [];
+      const s = new Socket({ url: t.url, onMessage: () => {}, onState: (st, code) => states.push([st, code]) });
+      t.pending[0]!.reject(Object.assign(new Error('Log in again.'), { status: 401 }));
+      await flush();
+      vi.advanceTimersByTime(60_000);
+      expect(s.state).toBe('closed');
+      expect(states.at(-1)).toEqual(['closed', 4003]);
+      expect(t.calls()).toBe(1);
+      expect(FakeWS.all).toHaveLength(0);
+    });
+
+    it('offline, or the casino not answering: it tries again after a backoff, and gets there', async () => {
+      const t = tickets();
+      const s = new Socket({ url: t.url, onMessage: () => {} });
+      t.pending[0]!.reject(new TypeError('Failed to fetch'));
+      await flush();
+      expect(s.state).toBe('reconnecting');
+      vi.advanceTimersByTime(30_000);
+      expect(t.calls()).toBe(2);
+      t.pending[1]!.resolve('wss://casino.test/ws?ticket=later');
+      await flush();
+      expect(FakeWS.all).toHaveLength(1);
+      FakeWS.all[0]!.accept();
+      expect(s.state).toBe('open');
+    });
+
+    it('a wake-up while a ticket is on its way does not start a second attempt', async () => {
+      const t = tickets();
+      new Socket({ url: t.url, onMessage: () => {} });
+      t.pending[0]!.reject(new TypeError('Failed to fetch'));
+      await flush();
+      fire('online'); // back online: try now...
+      expect(t.calls()).toBe(2);
+      fire('visibilitychange'); // ...and a tab switch meanwhile changes nothing
+      fire('online');
+      expect(t.calls()).toBe(2);
+      t.pending[1]!.resolve('wss://casino.test/ws?ticket=once');
+      await flush();
+      expect(FakeWS.all).toHaveLength(1);
+    });
+
+    it('closed while a ticket was on its way: no socket opens when it arrives', async () => {
+      const t = tickets();
+      const s = new Socket({ url: t.url, onMessage: () => {} });
+      s.close();
+      t.pending[0]!.resolve('wss://casino.test/ws?ticket=late');
+      await flush();
+      expect(FakeWS.all).toHaveLength(0);
+      expect(s.state).toBe('closed');
+    });
+  });
+
   it('close() is final: nothing reconnects, and late events from the old socket are ignored', () => {
     const { s, states } = make();
     const ws = FakeWS.all[0]!;
