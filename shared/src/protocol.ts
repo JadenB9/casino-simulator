@@ -222,7 +222,8 @@ export type FloorServerMsg =
   | { t: 'lobby'; game: GameId; lobby: LobbySummary }
   | { t: 'lobby.gone'; game: GameId; tableId: string }
   | { t: 'emote'; id: number; e: EmoteId }
-  | { t: 'err'; code: ErrorCode; msg: string };
+  | { t: 'err'; code: ErrorCode; msg: string }
+  | ChatServerMsg;
 
 /** Floor bounds in centimetres; positions outside are clamped. */
 export const FLOOR_BOUNDS = { minX: -2000, maxX: 2000, minZ: -1500, maxZ: 1500 } as const;
@@ -276,7 +277,8 @@ export type TableServerMsg =
   | { t: 'seat'; status: SeatStatus; stack: Cents; escrow: Cents; seat: number | null }
   | { t: 'balance'; balance: Cents; inPlay: Cents; rev: number }
   | { t: 'closed'; reason: string }
-  | { t: 'err'; ref?: string; code: ErrorCode; msg: string };
+  | { t: 'err'; ref?: string; code: ErrorCode; msg: string }
+  | ChatServerMsg;
 
 const AID_RE = /^[A-Za-z0-9_-]{1,24}$/;
 
@@ -311,6 +313,70 @@ export function parseTableMsg(raw: unknown): TableClientMsg | null {
 /** Inbound frame caps, checked before JSON.parse. */
 export const MAX_FLOOR_FRAME = 512;
 export const MAX_TABLE_FRAME = 4096;
+
+// ---------------------------------------------------------------------------------------------
+// Chat, on both sockets: the floor's room (everyone on the floor) and each lobby table's room
+// (its members). Text only. The server cleans every line with cleanChat, masks a short list of
+// words, and signs it with the name on the account; the client never names the speaker.
+
+/** The longest line, in characters (code points) once cleaned. */
+export const CHAT_MAX = 200;
+/** Lines a room keeps for whoever arrives next. */
+export const CHAT_HISTORY = 30;
+/** Lines one account may say in a burst, then lines per second after it (per room). */
+export const CHAT_BURST = 3;
+export const CHAT_PER_S = 1;
+
+export interface ChatLine {
+  /** Counts up by one per line in its room, so a reconnect's backlog can skip lines already shown. */
+  n: number;
+  /** The speaker's account id and name, both from their token. */
+  id: number;
+  name: string;
+  text: string;
+  /** Server time. */
+  at: number;
+}
+
+export type ChatClientMsg = { t: 'say'; text: string };
+
+export type ChatServerMsg =
+  /** New lines; `backlog` marks the room's last lines, sent once right after joining it. */
+  | { t: 'chat'; lines: ChatLine[]; backlog?: true }
+  /** Why your last line didn't go out. A mute ends at `until` (server time). */
+  | { t: 'chat.no'; code: 'RATE_LIMITED' | 'MUTED' | 'BAD_REQUEST'; msg: string; until?: number; now: number };
+
+export function parseSay(raw: unknown): ChatClientMsg | null {
+  // Generous: an emoji is two UTF-16 units, and cleaning (not this) decides what counts.
+  if (!isObj(raw) || raw.t !== 'say' || typeof raw.text !== 'string' || raw.text.length > CHAT_MAX * 4) return null;
+  return { t: 'say', text: raw.text };
+}
+
+/**
+ * Invisible characters that can disguise a line: lone surrogates, the soft hyphen, zero-width
+ * spaces and joiners that aren't needed (ZWJ and ZWNJ stay, for emoji and scripts), and every
+ * bidi control (an override would run the rest of the line, or the next name, backwards).
+ */
+const INVISIBLE = /[\p{Cc}\p{Cs}\u00ad\u061c\u180e\u200b\u200e\u200f\u202a-\u202e\u2060-\u2064\u2066-\u206f\ufff9-\ufffb]/gu;
+
+/**
+ * A chat line the way a room shows it: NFC, every whitespace character a plain space and runs of
+ * them one space, control and invisible characters removed, a pile of combining marks (the
+ * "zalgo" trick that draws over the lines around it) cut to four, trimmed. Null when nothing is
+ * left or it's over CHAT_MAX characters. The server applies it to every line; the client uses it
+ * to send only what the server would take.
+ */
+export function cleanChat(text: string): string | null {
+  const out = text
+    .normalize('NFC')
+    .replace(/[\s\u0085]/gu, ' ')
+    .replace(INVISIBLE, '')
+    .replace(/ {2,}/g, ' ')
+    .replace(/(\p{M}{4})\p{M}+/gu, '$1')
+    .trim();
+  const n = [...out].length;
+  return n >= 1 && n <= CHAT_MAX ? out : null;
+}
 
 // ---------------------------------------------------------------------------------------------
 // Small validators, shared by the game modules' parseAction functions.

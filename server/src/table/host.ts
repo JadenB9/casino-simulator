@@ -21,6 +21,8 @@ import {
   MAX_TABLE_FRAME,
   PROTOCOL_VERSION,
   parseTableMsg,
+  parseSay,
+  type ChatServerMsg,
   type ErrorCode,
   type LobbySummary,
   type Member,
@@ -32,6 +34,7 @@ import { applyTransfer, buyInStatements, cashOutStatements, refundStatements, mo
 import { Bucket } from '../ratelimit.ts';
 import { closeWith } from '../http.ts';
 import type { CasinoFloor } from '../floor/index.ts';
+import { ChatRoom } from '../floor/chat.ts';
 
 /** How long a dropped player keeps their seat before being cashed out. */
 export const GRACE_MS = 120_000;
@@ -364,6 +367,7 @@ export class CasinoTable extends DurableObject<Env> {
     this.ctx.acceptWebSocket(server, [`a:${accountId}`]);
     server.serializeAttachment({ accountId } satisfies Att);
     this.send(server, this.snapshotFor(accountId, now));
+    this.chatJoin(server);
     this.broadcastMembers();
     this.runTicks(now);
     this.ctx.waitUntil(this.noteFloor(accountId, station));
@@ -399,6 +403,9 @@ export class CasinoTable extends DurableObject<Env> {
     } catch {
       return;
     }
+    // Chat keeps its own limits and mutes (floor/chat.ts), so it goes round the buckets below.
+    const say = parseSay(data);
+    if (say) return this.chatSay(ws, att.accountId, say.text);
     const msg = parseTableMsg(data);
     if (!msg) return;
     const b = this.bucketsFor(ws);
@@ -1194,6 +1201,48 @@ export class CasinoTable extends DurableObject<Env> {
       if (m.pin) await this.floor().releasePin(m.name);
     } catch (err) {
       console.error('floor close failed', err);
+    }
+  }
+
+  // ------------------------------------------------------------------------------------------
+  // Chat: a lobby table's own room, heard and used by its members only. The room and its rules
+  // (cleaning, the word mask, limits, mutes, the stored backlog) are floor/chat.ts; this is
+  // just who may read and post here. Solo tables have no room.
+
+  private chatRoom: ChatRoom | null = null;
+
+  private chat(): ChatRoom | null {
+    const m = this.meta;
+    if (!m || m.mode !== 'multi' || m.closed) return null;
+    return (this.chatRoom ??= new ChatRoom(this.sql));
+  }
+
+  /** A member's new socket gets the room's last lines, after the table snapshot. */
+  private chatJoin(ws: WebSocket): void {
+    const room = this.chat();
+    if (room) this.send(ws, { t: 'chat', lines: room.backlog(), backlog: true });
+  }
+
+  private chatSay(ws: WebSocket, accountId: number, text: string): void {
+    const room = this.chat();
+    const mem = this.members.get(accountId);
+    if (!room || !mem) return;
+    // Signed with the name the table holds for this member, which came from their token.
+    const out = room.say({ id: accountId, name: mem.name }, text);
+    if (!out.ok) {
+      this.send(ws, out.notice);
+      if (out.close) ws.close(CLOSE.RATE_LIMITED, 'slow down');
+      return;
+    }
+    const msg = JSON.stringify({ t: 'chat', lines: [out.line] } satisfies ChatServerMsg);
+    for (const other of this.ctx.getWebSockets()) {
+      const att = other.deserializeAttachment() as Att | null;
+      if (!att || !this.members.has(att.accountId)) continue;
+      try {
+        other.send(msg);
+      } catch {
+        /* closing */
+      }
     }
   }
 }
