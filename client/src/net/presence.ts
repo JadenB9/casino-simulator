@@ -14,7 +14,7 @@ import { Socket, type SocketState } from './socket.ts';
 import { socketUrl } from './api.ts';
 import { observeServerTime, serverNow } from './clock.ts';
 import { Track, type Pose } from './interp.ts';
-import type { EmoteId, FloorClientMsg, FloorServerMsg, PlayerInfo } from '../../../shared/src/protocol.ts';
+import type { ChatClientMsg, ChatServerMsg, EmoteId, FloorClientMsg, FloorServerMsg, PlayerInfo } from '../../../shared/src/protocol.ts';
 import type { Look } from '../../../shared/src/look.ts';
 
 /** Shortest gap between two `mv` messages, in ms (the protocol's limit). */
@@ -63,6 +63,8 @@ export interface FloorEvents {
   message: (msg: FloorServerMsg) => void;
   /** Someone (you included) made a gesture. */
   emote: (id: number, e: EmoteId) => void;
+  /** Floor chat: new lines (your own come back too), the room's backlog after each hello, or why your last line was refused. */
+  chat: (msg: ChatServerMsg) => void;
 }
 
 type Listeners = { [K in keyof FloorEvents]: Set<FloorEvents[K]> };
@@ -85,7 +87,7 @@ export class FloorLink {
   you: PlayerInfo | null = null;
   onlineCount = 0;
   private readonly socket: FloorTransport;
-  private readonly listeners: Listeners = { hello: new Set(), join: new Set(), leave: new Set(), look: new Set(), at: new Set(), online: new Set(), state: new Set(), message: new Set(), emote: new Set() };
+  private readonly listeners: Listeners = { hello: new Set(), join: new Set(), leave: new Set(), look: new Set(), at: new Set(), online: new Set(), state: new Set(), message: new Set(), emote: new Set(), chat: new Set() };
   private connected = false;
   private placed = false;
   private sent: { x: number; z: number; r: number } | null = null;
@@ -118,6 +120,11 @@ export class FloorLink {
   /** Make a gesture everyone on the floor sees (the server echoes it back to you too). */
   emote(e: EmoteId): boolean {
     return this.socket.send({ t: 'emote', e } satisfies FloorClientMsg);
+  }
+
+  /** Say a line in the floor's chat (ui/chat keeps it to what the server takes). False while reconnecting. */
+  say(text: string): boolean {
+    return this.socket.send({ t: 'say', text } satisfies ChatClientMsg);
   }
 
   /** Send something other than movement (a lobby watch). False while reconnecting. */
@@ -210,6 +217,10 @@ export class FloorLink {
         break;
       case 'emote':
         this.emit('emote', m.id, m.e);
+        break;
+      case 'chat':
+      case 'chat.no':
+        this.emit('chat', m);
         break;
     }
     this.emit('message', m);

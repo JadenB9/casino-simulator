@@ -1,15 +1,9 @@
 # Table Game Rules and Odds
 
-Blackjack, roulette, craps, baccarat and Casino War as this casino deals them. For each game this page lists the
-house rules, every bet's payout, its house edge with a source, and the standard deviation (SD) per
-bet. The Monte Carlo tests use the SD to work out how many rounds they need.
-||||||| 9239b79
-Blackjack, roulette, craps and baccarat as this casino deals them. For each game this page lists the
-house rules, every bet's payout, its house edge with a source, and the standard deviation (SD) per
-bet. The Monte Carlo tests use the SD to work out how many rounds they need.
-Blackjack, roulette, craps, baccarat, Casino War, the Big Six wheel and Sic Bo as this casino deals them. For each game
-this page lists the house rules, every bet's payout, its house edge with a source, and the standard
-deviation (SD) per bet. The Monte Carlo tests use the SD to work out how many rounds they need.
+Blackjack, roulette, craps, baccarat, Casino War, the Big Six wheel and Sic Bo as this casino
+deals them. For each game this page lists the house rules, every bet's payout, its house edge with
+a source, and the standard deviation (SD) per bet. The Monte Carlo tests use the SD to work out how
+many rounds they need.
 
 Researched 2026-09-22. Defaults follow standard Las Vegas Strip practice. Where sources disagree,
 both are shown and one is picked, with the reason.
@@ -872,7 +866,6 @@ cut-card effect, so the full-shoe figures are the test targets.
 - W1. Wizard of Odds, "Casino War" (rules; six-deck return tables with no bonus, a bonus equal to the bet, and a 3x bonus; house edge for 1 to 8 decks with and without the bonus, surrendering, and the Tie bet; Tie bet analysis). Updated 2026-08-03. https://wizardofodds.com/games/casino-war/
 - W2. 58 Pa. Code Chapter 651a, Casino War (decks §651a.3, shuffle and cut §651a.5, ranks §651a.6, wagers §651a.7, dealing §651a.8, settlement §651a.9, payout odds §651a.10). https://www.pacodeandbulletin.gov/Display/pacode?file=/secure/pacode/data/058/chapter651a/chap651atoc.html
 - W3. Wikipedia, "Casino War" (game play, the tie in the war, history). https://en.wikipedia.org/wiki/Casino_War
-||||||| 9239b79
 ## 8. Big Six Wheel
 
 The money wheel: an upright wheel of 54 stops, a leather clapper at the top, and a layout with one

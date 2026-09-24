@@ -3,15 +3,11 @@
 Every game in the casino follows standard Las Vegas Strip rules and pays real odds. This page
 is the summary. The full rules, every paytable, the strategy charts and the sources are in:
 
-- [rules/table-games.md](rules/table-games.md): blackjack, roulette, craps, baccarat, Sic Bo
-||||||| 9239b79
-- [rules/table-games.md](rules/table-games.md): blackjack, roulette, craps, baccarat
-- [rules/table-games.md](rules/table-games.md): blackjack, roulette, craps, baccarat, Casino War
-||||||| 9239b79
-- [rules/table-games.md](rules/table-games.md): blackjack, roulette, craps, baccarat
-- [rules/table-games.md](rules/table-games.md): blackjack, roulette, craps, baccarat, Big Six
+- [rules/table-games.md](rules/table-games.md): blackjack, roulette, craps, baccarat, Casino War,
+  the Big Six wheel and Sic Bo
 - [rules/cards-and-machines.md](rules/cards-and-machines.md): Three Card Poker, video poker,
   slots, Texas Hold'em
+- [rules/online-games.md](rules/online-games.md): the online games on the lounge computers
 - [math/](math/): the dependency-free Node scripts that enumerate each game exactly
   (`node docs/math/three-card-poker.mjs` and so on)
 
@@ -21,7 +17,8 @@ is the summary. The full rules, every paytable, the strategy charts and the sour
   is paid to the cent with no rounding. The few craps bets that would need fractions of a cent
   take bets in their real-table steps instead (place 6/8 in $6 units, lay bets in $2, $3 or $6
   units). Hold'em pots that don't split evenly give the odd chip to the first winner left of
-  the button.
+  the button. Online Dice, whose multiplier (99 over the win chance) is rarely a whole number of
+  cents, floors each win to the cent, and its published return includes that floor exactly.
 - **The server draws every card and number** with `crypto.getRandomValues` and rejection
   sampling (no modulo bias), and shuffles shoes with Fisher-Yates.
 - **Rule tables are tested cell by cell** (the blackjack chart, the baccarat drawing rules, the
@@ -69,11 +66,19 @@ inside 3. Seeds are fixed, so `npm run test:mc` reproduces these exactly.
 | | | Totals: 7 or 14 at 12:1 (best) to 9 or 12 at 6:1 (worst) | 9.722% to 18.981% | 9.507% on 7, 19.080% on 9 (4M rolls, z −1.30, +0.88) |
 | | | Specific triple (180:1) / any triple (30:1) | 16.204% / 13.889% | 15.799% on 6-6-6, 14.197% (4M rolls, z −0.66, +1.21) |
 | | | Double (10:1) / two-dice combination (5:1) | 18.519% / 16.667% | 18.524% on 5-5, 16.857% on 2-5 (4M rolls, z +0.04, +1.84) |
-||||||| 98527a4
 | | | D "Diamond Line" (3 reels, doubling diamond wild) | 94.983% RTP | 94.929% (10M spins, z −0.28) |
 | | | E "Lucky Cherries" (5x3, 10 lines, Cherry Wheel) | 94.028% RTP | 94.126% (10M spins, z +0.90) |
 | | | F "Gold Rush" (5x4, 40 lines, sticky-wild free games) | 92.994% RTP | 93.138% (10M spins, z +1.22) |
 | Texas Hold'em | no-limit, blinds, Poker TDA rules, no rake | | no house edge | every seat within 1.2 SE of 0 (300K hands, 6 seats); deals uniform (chi-square z 0.45, 2M deals) |
+| Plinko (online) | 8 to 16 rows, Low/Medium/High (Stake's tables), each bounce 50/50 | 16 rows High (top pay 1,000×) | 98.976% RTP | 98.938% (4M drops, z −0.12) |
+| | | 11 rows High (best) / 8 rows Medium (worst) | 99.160% / 98.906% RTP | 99.405% / 98.913% (4M drops, z +1.18, +0.10) |
+| | | Every board | 98.906% to 99.160% RTP | all 27 within 2.2 SE (4M drops each) |
+| Dice (online) | roll 0.00 to 99.99 over or under a target, multiplier 99/chance, wins floored to the cent | 49.50% (2×), $1 | 99.000% RTP | 98.978% (10M rolls, z −0.68) |
+| | | 70% at $1 (the floor costs 0.3 points) | 98.700% RTP | 98.700% (10M rolls, z +0.01) |
+| | | Any chance, any bet | 98.031% (97.06% at $1) to 99.000% RTP | 8 bets within 1.4 SE (10M rolls) |
+| Limbo (online) | target 1.01× to 1,000,000×, P(result ≥ x) = 0.99/x exactly | Every target | 99.000% RTP | 98.974% at 2× (10M bets, z −0.83); 9 targets to 100,000× within 1.5 SE |
+| Keno (online) | 40 numbers, 10 drawn, 1 to 10 picks, Classic/Low/Medium/High (Stake's tables) | Classic, 10 picks | 99.037% RTP | 99.057% (5M draws, z +0.32) |
+| | | Every table | 98.654% to 99.069% RTP | all 40 within 1.9 SE (5M draws) |
 
 The blackjack figure is for exactly these rules. The often-quoted 0.26-0.28% assumes aces can be
 resplit, which this table doesn't allow, and a cut card adds about 0.02 points over dealing each

@@ -6,12 +6,12 @@ dependencies explicitly, so `app/boot.ts` decides the flow and nothing here reac
 
 | export | what it is | returns |
 |---|---|---|
-| `mountLogin({ root, api, session, onDone, backdrop?, sfx? })` | name field with the live rule, "Continue as", API errors inline | `{ root, close }` |
+| `mountLogin({ root, api, session, onDone, backdrop?, sfx? })` | name and password fields with their live rules, Show/Hide, "Continue as" (asks for the password), API errors under the field they're about | `{ root, close }` |
 | `mountMenu({ root, session, onEnter, onCharacter, onProfile, onSettings, onLogout, backdrop?, sfx? })` | Enter Casino, Character, Profile, Settings, Log out; arrows/W/S + Enter | `{ root, close, setOnline(n), focus() }` |
 | `openProfile({ root, api, session, onClose? })` | balance, chips on tables, per-game stats, loans | `{ root, close }` |
 | `openEditor({ root, api, session, engine, characters?, at?, onClose?(saved), sfx? })` | 3D preview you can turn, body/outfit/colours, Save = `PUT /me/look` | `{ root, close }` |
 | `mountHud({ root, session, sfx, onSettings?, onProfile?, onMenu? })` | name, balance, chips at table, session net/time, online, mute, settings, "?" | `{ root, close, setTableChips(stack, escrow?), setOnline(n), toggleShortcuts() }` |
-| `openBank({ root, api, session, onClose?, sfx? })` | cashier: balance, chips on tables, the loan rule, Take loan | `{ root, close }` |
+| `openBank({ root, api, session, onClose?, sfx? })` | cashier: balance, chips on tables, loans taken, the top-up rule (under $10,000 in all, back to $50,000), Top up | `{ root, close }` |
 | `openSettings({ root, sfx, quality?, reload? })`, `openShortcuts({ root })` | the two sheets the HUD opens; the menu's Settings uses the first | `{ root, close }` |
 | `overlayCount()`, `onOverlayChange(fn)` | how many sheets/editor are up: pause the floor controller while > 0 | |
 

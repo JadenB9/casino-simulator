@@ -1,0 +1,5 @@
+// Placeholder until the Hi-Lo engine lands: a table that takes no bets.
+
+import { stubEngine } from '../stub.ts';
+
+export const engine = stubEngine('hilo');

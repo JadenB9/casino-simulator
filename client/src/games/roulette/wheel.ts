@@ -1,19 +1,22 @@
-// The wheel, built in code: a lathed wooden bowl with the ball track and the sloped apron and its
-// eight deflectors; the rotor (wheel head) with its number ring, pocket floors and brass frets,
-// the cone and the chrome turret; and the ball. Pocket order and colours come from the shared
-// rules, laid clockwise, so the pocket the ball stops in is the pocket the server drew.
+// The wheel, built in code the way a real one is made. The bowl: a dark lacquered wooden rim, a
+// brushed steel ball track turned into its inside, and the veneered apron sloping down to the
+// rotor with its eight chrome diamonds. The rotor (wheel head): a chrome rim, the enamelled number
+// ring, flocked pockets between raised chrome frets, the veneered cone with its turned rings, and
+// the turned chrome turret with its cross arms. And the ball. Pocket order and colours come from
+// the shared rules, laid clockwise, so the pocket the ball stops in is the pocket the server drew.
+// The surfaces themselves are painted in textures.ts.
 
 import * as THREE from 'three';
-import { WHEEL, colorOf, pocketLabel, type Variant } from '../../../../shared/src/games/roulette/rules.ts';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { WHEEL, type Variant } from '../../../../shared/src/games/roulette/rules.ts';
 import type { Quality } from '../../render/engine3d.ts';
 import { DIMS, TAU } from './spin.ts';
+import { veneer, plainWood, brushedSteel, numberRing, pocketFloor, VENEER_R0, VENEER_R1 } from './textures.ts';
+import { reflectCasino, buildOnFirstDraw } from './env.ts';
 
 export const WHEEL_R = 0.414;
 export const ROTOR_NAME = 'roulette-rotor';
 export const BALL_NAME = 'roulette-ball';
-
-const FILL = { red: '#a3161c', black: '#141414', green: '#0c7a3c' } as const;
-const POCKET = { red: '#7c1015', black: '#0d0d0d', green: '#085a2c' } as const;
 
 /** Rotor-frame angle of the centre of a pocket: wheel position i sits at −(i + ½) pockets. */
 export function pocketAngle(v: Variant, pocket: number): number {
@@ -28,257 +31,443 @@ export function sectorOf(v: Variant): number {
 /** Bowl deflector angles (fixed to the bowl). */
 export const DEFLECTORS = Array.from({ length: 8 }, (_, i) => (i + 0.5) * (TAU / 8));
 
-const textures = new Map<string, THREE.CanvasTexture>();
+// ------------------------------------------------------------------------------------------------
+// Profiles, (radius, height) from outside in, metres above the wheel's base
 
-function stripTexture(key: string, w: number, h: number, draw: (g: CanvasRenderingContext2D) => void): THREE.CanvasTexture {
-  let t = textures.get(key);
-  if (!t) {
-    const c = document.createElement('canvas');
-    c.width = w;
-    c.height = h;
-    draw(c.getContext('2d')!);
-    t = new THREE.CanvasTexture(c);
-    t.colorSpace = THREE.SRGBColorSpace;
-    t.anisotropy = 8;
-    textures.set(key, t);
+/** The rim: up the outside past a bead at the foot, over the rounded top, to the track's lip. */
+const RIM: [number, number][] = [
+  [0.4085, 0],
+  [0.4122, 0.0035],
+  [0.4135, 0.009],
+  [0.4127, 0.0145],
+  [0.4131, 0.02],
+  [0.414, 0.05],
+  [0.4138, 0.0625],
+  [0.4128, 0.0695],
+  [0.4102, 0.0748],
+  [0.406, 0.0782],
+  [0.4005, 0.0795],
+  [0.3948, 0.0788],
+  [0.3902, 0.0766],
+  [0.3868, 0.0732],
+];
+
+/** The ball track: down the wall, then round the groove the ball runs in to the apron's edge. */
+function trackProfile(): [number, number][] {
+  const pts: [number, number][] = [
+    [0.3868, 0.0732],
+    [0.3843, 0.0697],
+    [0.3821, 0.0655],
+    [0.3803, 0.061],
+    [0.3787, 0.0578],
+  ];
+  // a groove a little wider than the ball, round the ball's centre on the track
+  const R = DIMS.ballR + 0.0004;
+  for (const deg of [12, 0, -15, -30, -45, -56]) {
+    const a = (deg * Math.PI) / 180;
+    pts.push([DIMS.trackR + R * Math.cos(a), DIMS.trackY + R * Math.sin(a)]);
   }
-  return t;
+  pts.push(DIMS.apron[0]!);
+  return pts;
+}
+
+/** The apron (the flight uses the same points) and the lip where the bowl meets the rotor. */
+const APRON: [number, number][] = [...DIMS.apron, [0.2836, 0.0183], [0.2829, 0.0136], [0.2826, 0.001]];
+
+/** The rotor's chrome: its outer rim, the pockets' outer wall and their inner wall. */
+const ROTOR_RIM: [number, number][] = [
+  [0.2795, 0.0015],
+  [0.28, 0.0035],
+  [0.28, 0.0165],
+  [0.2793, 0.0183],
+  [0.2778, 0.0194],
+  [0.2758, 0.0197],
+  [DIMS.ringOutR, DIMS.ringOutY],
+];
+const POCKET_OUTER: [number, number][] = [
+  [DIMS.ringInR, DIMS.ringInY],
+  [0.2462, 0.0128],
+  [0.2456, 0.0118],
+  [0.2453, 0.0095],
+  [0.2452, DIMS.pocketY],
+];
+const POCKET_INNER: [number, number][] = [
+  [DIMS.pocketInR, DIMS.pocketY],
+  [0.1969, 0.011],
+  [0.1963, 0.0133],
+  [0.195, 0.0146],
+  [0.1932, 0.0151],
+  [0.1905, 0.0153],
+];
+
+/** The cone: a gentle dome from the pockets' inner wall to the turret, with two turned grooves. */
+function coneProfile(): [number, number][] {
+  const r0 = 0.1905;
+  const y = (r: number) => 0.0153 + 0.0405 * (1 - (r / r0) ** 1.6);
+  const pts: [number, number][] = [];
+  const grooves = [0.152, 0.093];
+  for (let r = r0; r > 0.0405; r -= 0.006) {
+    const g = grooves.find((c) => Math.abs(r - c) < 0.004);
+    if (g !== undefined) continue;
+    pts.push([r, y(r)]);
+  }
+  // add each groove as a small V cut, in order
+  for (const c of grooves) {
+    const at = pts.findIndex(([r]) => r < c);
+    pts.splice(at, 0, [c + 0.0012, y(c + 0.0012)], [c, y(c) - 0.0009], [c - 0.0012, y(c - 0.0012)]);
+  }
+  pts.push([0.0405, y(0.0405)]);
+  return pts;
+}
+
+/** The turret, base flange to finial. The cross arms meet its hub at ARM_Y. */
+const TURRET: [number, number][] = [
+  [0.0425, 0.0508],
+  [0.0428, 0.0538],
+  [0.0415, 0.0556],
+  [0.0385, 0.0566],
+  [0.033, 0.0571],
+  [0.0305, 0.0586],
+  [0.0302, 0.0612],
+  [0.0285, 0.0628],
+  [0.024, 0.0638],
+  [0.0222, 0.0658],
+  [0.0232, 0.0695],
+  [0.0228, 0.0735],
+  [0.0205, 0.0765],
+  [0.0165, 0.0788],
+  [0.0128, 0.0805],
+  [0.0112, 0.0828],
+  [0.0108, 0.0905],
+  [0.0128, 0.0918],
+  [0.0142, 0.0935],
+  [0.0142, 0.0955],
+  [0.0125, 0.0968],
+  [0.0118, 0.0985],
+  [0.0118, 0.1065],
+  [0.0132, 0.1078],
+  [0.0136, 0.1095],
+  [0.0118, 0.1108],
+  [0.0085, 0.1118],
+  [0.0072, 0.1135],
+  [0.0088, 0.1165],
+  [0.0094, 0.1195],
+  [0.0082, 0.1225],
+  [0.0055, 0.1248],
+  [0.0022, 0.1258],
+  [0, 0.126],
+];
+const ARM_Y = 0.1025;
+
+/** One cross arm along its own axis (distance from the spindle, radius): collar, taper, knob. */
+const ARM: [number, number][] = [
+  [0.0035, 0.0105],
+  [0.0035, 0.016],
+  [0.0046, 0.0168],
+  [0.0046, 0.0196],
+  [0.0033, 0.0206],
+  [0.0026, 0.07],
+  [0.0032, 0.0712],
+  [0.0032, 0.0734],
+  [0.0024, 0.0745],
+  [0.0024, 0.0778],
+  [0.0045, 0.0802],
+  [0.006, 0.0832],
+  [0.0063, 0.0858],
+  [0.0056, 0.0888],
+  [0.0036, 0.0914],
+  [0, 0.0924],
+];
+
+// ------------------------------------------------------------------------------------------------
+// Geometry helpers
+
+function lathe(points: [number, number][], segments: number): THREE.LatheGeometry {
+  return new THREE.LatheGeometry(
+    points.map(([r, y]) => new THREE.Vector2(r, y)),
+    segments,
+  );
+}
+
+/** A lathe whose v is its radius's place between r0 and r1 (for the polar veneer), u unchanged. */
+function radialV(geo: THREE.BufferGeometry, r0: number, r1: number): THREE.BufferGeometry {
+  const pos = geo.attributes.position!;
+  const uv = geo.attributes.uv!;
+  for (let i = 0; i < pos.count; i++) uv.setY(i, (Math.hypot(pos.getX(i), pos.getZ(i)) - r0) / (r1 - r0));
+  return geo;
 }
 
 /**
- * The number ring as a strip: position i of the wheel occupies the i-th segment from the right,
- * because the lathe's u runs counterclockwise while the wheel order runs clockwise. The strip's
- * bottom is the ring's outer edge, so the numbers stand up toward the centre, as on a real head.
+ * A convex polygon in the xy plane pushed along z from z0 to z1, flat-shaded so its facets catch
+ * the light separately. `lift` raises the far end's top (y above `topFrom`) by that much.
  */
-function numberRing(v: Variant): THREE.CanvasTexture {
-  const order = WHEEL[v];
-  const n = order.length;
-  const midR = (DIMS.ringOutR + DIMS.ringInR) / 2;
-  const slant = Math.hypot(DIMS.ringOutR - DIMS.ringInR, DIMS.ringOutY - DIMS.ringInY);
-  const W = 4096;
-  const H = Math.round((W * slant) / (TAU * midR));
-  return stripTexture(`ring:${v}`, W, H, (g) => {
-    const seg = W / n;
-    g.textAlign = 'center';
-    g.textBaseline = 'middle';
-    order.forEach((p, i) => {
-      const x = (n - 1 - i) * seg;
-      g.fillStyle = FILL[colorOf(p)];
-      g.fillRect(x, 0, seg + 1, H);
-      g.fillStyle = '#f4ead2';
-      g.font = `600 ${Math.round(H * 0.66)}px "Barlow Condensed", "Arial Narrow", sans-serif`;
-      g.fillText(pocketLabel(p), x + seg / 2, H * 0.54);
-    });
-    // brass separators and edges
-    g.fillStyle = '#d7b46a';
-    for (let i = 0; i <= n; i++) g.fillRect(Math.round(i * seg) - 1, 0, 2, H);
-    g.fillRect(0, 0, W, 2);
-    g.fillRect(0, H - 3, W, 3);
-  });
+function prism(poly: [number, number][], z0: number, z1: number, lift = 0, topFrom = Infinity): THREE.BufferGeometry {
+  const pos: number[] = [];
+  const at = (p: [number, number], z: number): THREE.Vector3 => new THREE.Vector3(p[0], p[1] + (p[1] > topFrom && z === z1 ? lift : 0), z);
+  const tri = (a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3) => pos.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
+  const n = poly.length;
+  for (let i = 0; i < n; i++) {
+    const p = poly[i]!;
+    const q = poly[(i + 1) % n]!;
+    const a = at(p, z0);
+    const b = at(q, z0);
+    const c = at(q, z1);
+    const d = at(p, z1);
+    tri(a, b, c);
+    tri(a, c, d);
+  }
+  for (let i = 1; i < n - 1; i++) {
+    tri(at(poly[0]!, z0), at(poly[i + 1]!, z0), at(poly[i]!, z0));
+    tri(at(poly[0]!, z1), at(poly[i]!, z1), at(poly[i + 1]!, z1));
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.computeVertexNormals();
+  return g;
 }
 
-function pocketFloor(v: Variant): THREE.CanvasTexture {
-  const order = WHEEL[v];
-  const n = order.length;
-  const W = 2048;
-  const H = Math.round((W * (DIMS.pocketOutR - DIMS.pocketInR)) / (TAU * DIMS.restR));
-  return stripTexture(`pockets:${v}`, W, H, (g) => {
-    const seg = W / n;
-    order.forEach((p, i) => {
-      const x = (n - 1 - i) * seg;
-      const grad = g.createLinearGradient(0, 0, 0, H);
-      grad.addColorStop(0, POCKET[colorOf(p)]);
-      grad.addColorStop(1, FILL[colorOf(p)]);
-      g.fillStyle = grad;
-      g.fillRect(x, 0, seg + 1, H);
-    });
-  });
+/**
+ * A diamond deflector: a rhombus base, long axis along x, rising in four facets to a narrow crown
+ * (topL and topW of the base's length and width), nearly a ridge, like a cut stone. Flat-shaded.
+ */
+function diamondGeometry(length: number, width: number, height: number, topL: number, topW: number): THREE.BufferGeometry {
+  const base = [
+    new THREE.Vector3(length / 2, 0, 0),
+    new THREE.Vector3(0, 0, width / 2),
+    new THREE.Vector3(-length / 2, 0, 0),
+    new THREE.Vector3(0, 0, -width / 2),
+  ];
+  const crown = base.map((p) => new THREE.Vector3(p.x * topL, height, p.z * topW));
+  const pos: number[] = [];
+  const tri = (a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3) => pos.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
+  for (let i = 0; i < 4; i++) {
+    const j = (i + 1) % 4;
+    tri(base[i]!, crown[j]!, base[j]!);
+    tri(base[i]!, crown[i]!, crown[j]!);
+  }
+  tri(crown[0]!, crown[2]!, crown[1]!);
+  tri(crown[0]!, crown[3]!, crown[2]!);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.computeVertexNormals();
+  return g;
 }
 
-function lathe(points: [number, number][], segments: number, mat: THREE.Material): THREE.Mesh {
-  const geo = new THREE.LatheGeometry(points.map(([r, y]) => new THREE.Vector2(r, y)), segments);
-  const m = new THREE.Mesh(geo, mat);
+// ------------------------------------------------------------------------------------------------
+// Materials, made once per quality (and per variant for the ring and pockets) and shared
+
+interface WheelMaterials {
+  rim: THREE.MeshStandardMaterial;
+  track: THREE.MeshStandardMaterial;
+  veneer: THREE.MeshStandardMaterial;
+  chrome: THREE.MeshStandardMaterial;
+  ball: THREE.MeshStandardMaterial;
+}
+
+const materialCache = new Map<Quality, WheelMaterials>();
+const faceCache = new Map<string, { ring: THREE.Material; pockets: THREE.Material }>();
+const PHYSICAL_ONLY = ['clearcoat', 'clearcoatRoughness', 'sheen', 'sheenColor', 'sheenRoughness', 'specularIntensity'] as const;
+
+/** A physical material on High; on Low the standard one, without the physical-only layers. */
+function surface(high: boolean, p: THREE.MeshPhysicalMaterialParameters): THREE.MeshStandardMaterial {
+  if (high) return new THREE.MeshPhysicalMaterial(p);
+  const q: Record<string, unknown> = { ...p };
+  for (const k of PHYSICAL_ONLY) delete q[k];
+  return new THREE.MeshStandardMaterial(q as THREE.MeshStandardMaterialParameters);
+}
+
+/**
+ * On High the lacquered wood is a physical material, dull wood under a thin clear coat, and the
+ * ball has a soft sheen; on Low they're standard materials with the same maps.
+ */
+function wheelMaterials(q: Quality): WheelMaterials {
+  const cached = materialCache.get(q);
+  if (cached) return cached;
+  const high = q === 'high';
+  const Physical = (p: THREE.MeshPhysicalMaterialParameters) => surface(high, p);
+
+  // the table's mahogany, stained nearly black
+  const rimMaps = plainWood(q);
+  const rimMap = rimMaps.map.clone();
+  const rimSurface = rimMaps.surface.clone();
+  for (const t of [rimMap, rimSurface]) t.repeat.set(5, 1);
+  const rim = Physical({
+    color: '#5a4038',
+    map: rimMap,
+    roughness: 1,
+    roughnessMap: rimSurface,
+    bumpMap: rimSurface,
+    bumpScale: 0.5,
+    specularIntensity: 0.4,
+    clearcoat: 0.55,
+    clearcoatRoughness: 0.07,
+    side: THREE.DoubleSide,
+  });
+
+  const ven = veneer(q);
+  const veneerMat = Physical({
+    map: ven.map,
+    roughness: 1,
+    roughnessMap: ven.surface,
+    bumpMap: ven.surface,
+    bumpScale: 0.35,
+    // the wood under the lacquer is dull; the shine is the lacquer's
+    specularIntensity: 0.3,
+    clearcoat: 0.24,
+    clearcoatRoughness: 0.15,
+    side: THREE.DoubleSide,
+  });
+
+  const steel = brushedSteel(q);
+  const steelNormal = steel.normal.clone();
+  const steelRough = steel.roughness.clone();
+  for (const t of [steelNormal, steelRough]) t.repeat.set(16, 1);
+  // Brushed, but isotropic: an anisotropic lobe smears the lamp's highlight right round the
+  // ring into a white band, where real steel shows a thin bright line and dark metal.
+  const track = new THREE.MeshStandardMaterial({
+    color: '#a9adb3',
+    metalness: 1,
+    roughness: 0.62,
+    roughnessMap: steelRough,
+    normalMap: steelNormal,
+    normalScale: new THREE.Vector2(0.5, 0.5),
+    side: THREE.DoubleSide,
+  });
+
+  // polished, but not a perfect mirror: the floor's spotlights make small glints, not bloom halos
+  const chrome = new THREE.MeshStandardMaterial({ color: '#dde0e4', metalness: 1, roughness: 0.14, side: THREE.DoubleSide });
+  buildOnFirstDraw(chrome);
+  const ball = Physical({ color: '#efe8d8', roughness: 0.16, sheen: 0.5, sheenColor: new THREE.Color('#fff4e2'), sheenRoughness: 0.45 });
+  const m = { rim, track, veneer: veneerMat, chrome, ball };
+  reflectCasino([
+    [chrome, 1],
+    [track, 0.9],
+    [rim, 0.75],
+    [veneerMat, 0.55],
+    [ball, 0.6],
+  ]);
+  materialCache.set(q, m);
   return m;
 }
 
-export interface WheelMaterials {
-  wood: THREE.MeshStandardMaterial;
-  apron: THREE.MeshStandardMaterial;
-  cone: THREE.MeshStandardMaterial;
-  brass: THREE.MeshStandardMaterial;
-  chrome: THREE.MeshStandardMaterial;
+function faceMaterials(v: Variant, q: Quality): { ring: THREE.Material; pockets: THREE.Material } {
+  const key = `${v}:${q}`;
+  let m = faceCache.get(key);
+  if (!m) {
+    const ring = new THREE.MeshStandardMaterial({ map: numberRing(v, q), roughness: 0.3, side: THREE.DoubleSide });
+    m = { ring, pockets: new THREE.MeshStandardMaterial({ map: pocketFloor(v, q), roughness: 0.95, side: THREE.DoubleSide }) };
+    reflectCasino([[ring, 0.5]]);
+    faceCache.set(key, m);
+  }
+  return m;
 }
 
-export function wheelMaterials(): WheelMaterials {
-  return {
-    wood: new THREE.MeshStandardMaterial({ color: '#2a1209', roughness: 0.28, side: THREE.DoubleSide }),
-    apron: new THREE.MeshStandardMaterial({ color: '#3f1f10', roughness: 0.34, side: THREE.DoubleSide }),
-    cone: new THREE.MeshStandardMaterial({ color: '#4a2915', roughness: 0.22, side: THREE.DoubleSide }),
-    brass: new THREE.MeshStandardMaterial({ color: '#cfa857', roughness: 0.28, metalness: 1, side: THREE.DoubleSide }),
-    chrome: new THREE.MeshStandardMaterial({ color: '#e4e7ea', roughness: 0.14, metalness: 1 }),
-  };
-}
+// ------------------------------------------------------------------------------------------------
 
 /** The whole wheel, origin at the centre of its base on the table top. */
 export function buildWheel(v: Variant, quality: Quality): THREE.Group {
-  const seg = quality === 'high' ? 144 : 72;
-  const m = wheelMaterials();
+  const high = quality === 'high';
+  const seg = high ? 160 : 72;
+  const m = wheelMaterials(quality);
+  const faces = faceMaterials(v, quality);
   const g = new THREE.Group();
   g.name = 'roulette-wheel';
   g.userData.variant = v;
 
-  // The bowl: outer rim and ball track (polished), then the apron sloping to the rotor.
+  // The bowl
   g.add(
-    lathe(
-      [
-        [0.41, 0],
-        [0.414, 0.028],
-        [0.413, 0.06],
-        [0.408, 0.071],
-        [0.4, 0.0765],
-        [0.392, 0.0755],
-        [0.386, 0.068],
-        [0.379, 0.052],
-        [0.374, 0.0452],
-        [0.372, 0.044],
-      ],
-      seg,
-      m.wood,
-    ),
-    lathe([...DIMS.apron, [0.282, 0.014], [0.281, 0]], seg, m.apron),
+    new THREE.Mesh(lathe(RIM, seg), m.rim),
+    new THREE.Mesh(lathe(trackProfile(), seg), m.track),
+    new THREE.Mesh(radialV(lathe(APRON, seg), VENEER_R0, VENEER_R1), m.veneer),
   );
-  const inlay = new THREE.Mesh(new THREE.TorusGeometry(0.4015, 0.0022, 8, seg), m.brass);
-  inlay.rotation.x = Math.PI / 2;
-  inlay.position.y = 0.0768;
-  g.add(inlay);
 
-  // deflectors: alternately lying along the track and standing across it
-  const diamond = new THREE.OctahedronGeometry(1, 0);
+  // Diamonds on the apron, alternately along the ball's path and across it, lying on the slope.
+  const slope = (DIMS.apron[1]![1] - DIMS.apron[2]![1]) / (DIMS.apron[1]![0] - DIMS.apron[2]![0]);
+  const r = DIMS.deflectorR;
+  const surf = DIMS.apron[2]![1] + (r - DIMS.apron[2]![0]) * slope;
+  const diamonds = new THREE.InstancedMesh(diamondGeometry(0.044, 0.016, 0.0075, 0.55, 0.1), m.chrome, DEFLECTORS.length);
+  const tangent = new THREE.Vector3();
+  const normal = new THREE.Vector3();
+  const radial = new THREE.Vector3();
+  const basis = new THREE.Matrix4();
+  const turn = new THREE.Matrix4().makeRotationY(Math.PI / 2);
   DEFLECTORS.forEach((a, i) => {
-    const d = new THREE.Mesh(diamond, m.chrome);
-    const r = DIMS.deflectorR;
-    const surf = DIMS.apron[2]![1] + ((r - 0.3) / (0.35 - 0.3)) * (DIMS.apron[1]![1] - DIMS.apron[2]![1]);
-    d.position.set(r * Math.sin(a), surf + 0.004, r * Math.cos(a));
-    d.rotation.y = a;
-    if (i % 2 === 0) d.scale.set(0.021, 0.0055, 0.008);
-    else d.scale.set(0.007, 0.0105, 0.017);
-    g.add(d);
+    tangent.set(Math.cos(a), 0, -Math.sin(a));
+    radial.set(Math.sin(a), slope, Math.cos(a)).normalize();
+    normal.crossVectors(radial, tangent).normalize();
+    basis.makeBasis(tangent, normal, radial);
+    if (i % 2 === 1) basis.multiply(turn);
+    basis.setPosition(r * Math.sin(a), surf - 0.0006, r * Math.cos(a));
+    diamonds.setMatrixAt(i, basis);
   });
+  diamonds.instanceMatrix.needsUpdate = true;
+  g.add(diamonds);
 
   // The rotor turns; everything on it is in its frame.
   const rotor = new THREE.Group();
   rotor.name = ROTOR_NAME;
-  rotor.add(
-    lathe(
-      [
-        [0.2795, 0.002],
-        [0.2795, 0.0172],
-        [DIMS.ringOutR, DIMS.ringOutY],
-      ],
-      seg,
-      m.brass,
-    ),
+
+  const arm = lathe(ARM, high ? 20 : 12).rotateZ(-Math.PI / 2);
+  const arms = [0, 1, 2, 3].map((i) =>
+    arm
+      .clone()
+      .rotateY((i * Math.PI) / 2)
+      .translate(0, ARM_Y, 0),
   );
-  const ringMat = new THREE.MeshStandardMaterial({ map: numberRing(v), roughness: 0.34, side: THREE.DoubleSide });
+  const chromeParts = [lathe(ROTOR_RIM, seg), lathe(POCKET_OUTER, seg), lathe(POCKET_INNER, seg), lathe(TURRET, high ? 64 : 32), ...arms];
+  rotor.add(new THREE.Mesh(mergeGeometries(chromeParts), m.chrome));
+
   rotor.add(
-    lathe(
-      [
-        [DIMS.ringOutR, DIMS.ringOutY],
-        [DIMS.ringInR, DIMS.ringInY],
-      ],
-      seg * 2,
-      ringMat,
+    new THREE.Mesh(
+      lathe(
+        [
+          [DIMS.ringOutR, DIMS.ringOutY],
+          [DIMS.ringInR, DIMS.ringInY],
+        ],
+        seg * 2,
+      ),
+      faces.ring,
     ),
-  );
-  rotor.add(
-    lathe(
-      [
-        [DIMS.ringInR, DIMS.ringInY],
-        [DIMS.pocketOutR, DIMS.pocketY],
-      ],
-      seg,
-      m.brass,
+    new THREE.Mesh(
+      lathe(
+        [
+          [0.2452, DIMS.pocketY],
+          [DIMS.pocketInR, DIMS.pocketY],
+        ],
+        seg * 2,
+      ),
+      faces.pockets,
     ),
-  );
-  const floorMat = new THREE.MeshStandardMaterial({ map: pocketFloor(v), roughness: 0.5, side: THREE.DoubleSide });
-  rotor.add(
-    lathe(
-      [
-        [DIMS.pocketOutR, DIMS.pocketY],
-        [DIMS.pocketInR, DIMS.pocketY - 0.0005],
-      ],
-      seg * 2,
-      floorMat,
-    ),
-  );
-  rotor.add(
-    lathe(
-      [
-        [DIMS.pocketInR, DIMS.pocketY - 0.0005],
-        [0.1945, 0.0145],
-        [0.186, 0.018],
-      ],
-      seg,
-      m.brass,
-    ),
-    lathe(
-      [
-        [0.186, 0.018],
-        [0.14, 0.03],
-        [0.09, 0.0435],
-        [0.05, 0.052],
-        [0.034, 0.0565],
-      ],
-      seg,
-      m.cone,
-    ),
+    new THREE.Mesh(radialV(lathe(coneProfile(), seg), VENEER_R0, VENEER_R1), m.veneer),
   );
 
-  // frets: one per pocket boundary, radial
+  // Frets: one per pocket boundary, a blade with a chamfered ridge, rising toward the rim.
   const n = WHEEL[v].length;
-  const fretLen = DIMS.pocketOutR - DIMS.pocketInR;
-  const fretH = DIMS.fretTop - DIMS.pocketY;
-  const frets = new THREE.InstancedMesh(new THREE.BoxGeometry(0.003, fretH, fretLen), m.brass, n);
-  const mid = (DIMS.pocketOutR + DIMS.pocketInR) / 2;
+  const t = 0.0024;
+  const c = 0.0012;
+  const y0 = DIMS.pocketY;
+  const y1 = DIMS.fretTop - 0.0012;
+  const blade = prism(
+    [
+      [-t / 2, y0],
+      [t / 2, y0],
+      [t / 2, y1 - c],
+      [0, y1],
+      [-t / 2, y1 - c],
+    ],
+    DIMS.pocketInR + 0.0002,
+    0.2453,
+    0.0012,
+    y0 + 0.002,
+  );
+  const frets = new THREE.InstancedMesh(blade, m.chrome, n);
   const mtx = new THREE.Matrix4();
-  const q = new THREE.Quaternion();
-  const up = new THREE.Vector3(0, 1, 0);
-  for (let k = 0; k < n; k++) {
-    const a = -k * (TAU / n);
-    q.setFromAxisAngle(up, a);
-    mtx.compose(new THREE.Vector3(mid * Math.sin(a), DIMS.pocketY + fretH / 2, mid * Math.cos(a)), q, new THREE.Vector3(1, 1, 1));
-    frets.setMatrixAt(k, mtx);
-  }
+  for (let k = 0; k < n; k++) frets.setMatrixAt(k, mtx.makeRotationY(-k * (TAU / n)));
   frets.instanceMatrix.needsUpdate = true;
   rotor.add(frets);
-
-  // turret: base, spindle, four arms with knobs, cap
-  const turret = new THREE.Group();
-  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.035, 0.012, 32), m.chrome);
-  base.position.y = 0.062;
-  const spindle = new THREE.Mesh(new THREE.CylinderGeometry(0.0065, 0.009, 0.05, 20), m.chrome);
-  spindle.position.y = 0.09;
-  turret.add(base, spindle);
-  const armGeo = new THREE.CylinderGeometry(0.0038, 0.0038, 0.064, 12);
-  const knobGeo = new THREE.SphereGeometry(0.0082, 16, 12);
-  for (let i = 0; i < 4; i++) {
-    const armPivot = new THREE.Group();
-    armPivot.rotation.y = (i / 4) * TAU;
-    const bar = new THREE.Mesh(armGeo, m.chrome);
-    bar.rotation.x = Math.PI / 2;
-    bar.position.set(0, 0.108, 0.032);
-    const knob = new THREE.Mesh(knobGeo, m.chrome);
-    knob.position.set(0, 0.108, 0.066);
-    armPivot.add(bar, knob);
-    turret.add(armPivot);
-  }
-  const cap = new THREE.Mesh(new THREE.SphereGeometry(0.0105, 20, 14), m.chrome);
-  cap.position.y = 0.117;
-  turret.add(cap);
-  rotor.add(turret);
   g.add(rotor);
 
-  const ball = new THREE.Mesh(new THREE.SphereGeometry(DIMS.ballR, 24, 16), new THREE.MeshStandardMaterial({ color: '#f6f2e8', roughness: 0.22 }));
+  const ball = new THREE.Mesh(new THREE.SphereGeometry(DIMS.ballR, 32, 24), m.ball);
   ball.name = BALL_NAME;
   ball.visible = false;
   g.add(ball);
