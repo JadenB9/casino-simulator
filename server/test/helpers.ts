@@ -65,12 +65,36 @@ export class Client {
   }
 }
 
-/** Open a socket; `ip` is the client address the edge would report (none by default). */
-export async function connect(path: string, token: string, extra = '', ip?: string): Promise<{ res: Response; client: Client | null }> {
+/**
+ * A single-use ticket for one socket path, the way the client gets one right before connecting;
+ * null when the token is refused.
+ */
+export async function ticketFor(path: string, token: string, ip?: string): Promise<string | null> {
   const res = await exports.default.fetch(
-    new Request(`http://casino.test/casino/ws/${path}?v=1&t=${encodeURIComponent(token)}${extra}`, {
+    new Request('http://casino.test/casino/api/ticket', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: ORIGIN, Authorization: `Bearer ${token}`, ...(ip ? { 'CF-Connecting-IP': ip } : {}) },
+      body: JSON.stringify({ target: path }),
+    }),
+  );
+  return res.status === 200 ? ((await res.json()) as { ticket: string }).ticket : null;
+}
+
+/** Open a socket with a raw query (a ticket or not); `ip` is the client address the edge would report. */
+export async function connectRaw(path: string, query: string, ip?: string): Promise<{ res: Response; client: Client | null }> {
+  const res = await exports.default.fetch(
+    new Request(`http://casino.test/casino/ws/${path}?v=1${query}`, {
       headers: { Upgrade: 'websocket', Origin: ORIGIN, ...(ip ? { 'CF-Connecting-IP': ip } : {}) },
     }),
   );
   return { res, client: res.webSocket ? new Client(res.webSocket) : null };
+}
+
+/**
+ * Open a socket as the client does: a fresh ticket for the path, then the upgrade with it. A token
+ * the ticket route refuses connects with no ticket at all (and is refused, 4003).
+ */
+export async function connect(path: string, token: string, extra = '', ip?: string): Promise<{ res: Response; client: Client | null }> {
+  const ticket = await ticketFor(path, token, ip);
+  return connectRaw(path, `${ticket ? `&ticket=${encodeURIComponent(ticket)}` : ''}${extra}`, ip);
 }

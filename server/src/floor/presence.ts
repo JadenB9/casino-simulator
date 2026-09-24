@@ -1,9 +1,11 @@
 // Presence: who is on the floor, where they are standing, and where they are sitting.
 //
-// Movement arrives at up to 10 Hz per walking player and is coalesced into snapshots as it
-// arrives: at most one every FLUSH_MS, holding only the players who moved since the last one.
-// There is no server timer, so the object bills handler time only and hibernates when nobody
-// walks. A stop is flushed at once, so nobody is left walking in place until someone else moves.
+// Movement arrives a few times a second per walking player (client/src/net/send-policy.ts) and is
+// coalesced into snapshots as it arrives: at most one every FLUSH_MS, holding only the players who
+// moved since the last one, each row with its age (how long ago that position arrived) so clients
+// place it at the right moment whatever the flush added. A row that arrives too soon after a
+// flush goes out when the interval is up (a stop too): one short timer, only while someone moves,
+// so the object still hibernates when nobody walks.
 //
 // Memory is a cache. What has to survive hibernation lives elsewhere: each socket's attachment
 // holds that player's identity and last resting pose (the roster is rebuilt from them on wake),
@@ -14,7 +16,8 @@ import type { FloorClientMsg, FloorServerMsg, PlayerInfo } from '../../../shared
 import { FLOOR_BOUNDS, PROTOCOL_VERSION } from '../../../shared/src/protocol.ts';
 import type { Look } from '../../../shared/src/look.ts';
 
-export const FLUSH_MS = 66;
+/** Snapshots go out at most this often (rows carry their own age, so a coarser flush costs no smoothness). */
+export const FLUSH_MS = 100;
 /** Fastest anyone may move, in cm/s: well above a character's walk, so honest jitter never trips it. */
 export const MAX_SPEED = 900;
 /**
@@ -39,6 +42,11 @@ export interface FloorAtt {
   t: number;
   /** No position has arrived on this connection yet; the first one places the player. */
   fresh?: boolean;
+  /**
+   * Server time of the last thing this player really did (connected, moved or turned, spoke,
+   * waved, opened a lobby list, said `here`); the floor closes a socket IDLE_MS after it.
+   */
+  active?: number;
 }
 
 type Broadcast = (msg: FloorServerMsg, except?: WebSocket) => void;
@@ -60,6 +68,8 @@ export class Presence {
   private readonly leaving = new Map<number, FloorAtt>();
   private lastFlush = 0;
   private lastTs = 0;
+  /** A flush owed to rows that arrived too soon after the last one (see onMessage). */
+  private flushTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private readonly ctx: DurableObjectState,
@@ -90,6 +100,7 @@ export class Presence {
       watch: null,
       t: now,
       fresh: true,
+      active: now,
     };
     ws.serializeAttachment(att);
     this.live.set(ws, { att, moving: false, bank: MAX_BANK });
@@ -103,7 +114,7 @@ export class Presence {
     }
   }
 
-  onMessage(ws: WebSocket, msg: Exclude<FloorClientMsg, { t: 'watch' } | { t: 'emote' }>): void {
+  onMessage(ws: WebSocket, msg: Extract<FloorClientMsg, { t: 'mv' | 'st' }>): void {
     const w = this.live.get(ws);
     if (!w) return;
     const a = w.att;
@@ -128,6 +139,9 @@ export class Presence {
       }
       w.bank = Math.max(0, w.bank - Math.hypot(x - a.x, z - a.z));
     }
+    // Moving or turning is activity; the same pose again is not. (Walkers keep the object awake,
+    // so this is saved with the pose at the next stop.)
+    if (x !== a.x || z !== a.z || msg.r !== a.r) a.active = now;
     a.x = x;
     a.z = z;
     a.r = msg.r;
@@ -136,7 +150,11 @@ export class Presence {
     this.dirty.add(ws);
     // Only resting poses need to outlive the object: a walking player keeps it awake anyway.
     if (!w.moving || placing) this.save(ws, a);
-    if (!w.moving || now - this.lastFlush >= FLUSH_MS) this.flush(now);
+    if (now - this.lastFlush >= FLUSH_MS) this.flush(now);
+    // Too soon after the last flush (a stop included): send this row when the interval is up,
+    // rather than whenever the next message happens to arrive (walkers send only a few times a
+    // second, so on a quiet floor that could be a while). Only ever pending while someone moves.
+    else if (!this.flushTimer) this.flushTimer = setTimeout(() => this.flush(Date.now()), FLUSH_MS - (now - this.lastFlush));
   }
 
   onClose(ws: WebSocket): void {
@@ -167,6 +185,20 @@ export class Presence {
     if (this.update(accountId, (a) => (a.look = look))) this.broadcast({ t: 'player', id: accountId, look });
   }
 
+  /** Something this player did besides moving (see FloorAtt.active); kept through hibernation. */
+  touch(ws: WebSocket, now: number): void {
+    const w = this.live.get(ws);
+    if (!w) return;
+    w.att.active = now;
+    this.save(ws, w.att);
+  }
+
+  /** When this socket's player last did something, or null for a socket that isn't a player's. */
+  activeAt(ws: WebSocket): number | null {
+    const w = this.live.get(ws);
+    return w ? (w.att.active ?? w.att.t) : null;
+  }
+
   /** Accounts with an open floor connection. */
   onlineCount(): number {
     const ids = new Set<number>();
@@ -182,17 +214,21 @@ export class Presence {
   }
 
   private flush(now: number): void {
-    if (this.dirty.size === 0) return;
-    const p: [number, number, number, number, 0 | 1][] = [];
-    for (const ws of this.dirty) {
-      const w = this.live.get(ws);
-      if (w) p.push([w.att.accountId, w.att.x, w.att.z, w.att.r, w.moving ? 1 : 0]);
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
     }
-    this.dirty.clear();
-    this.lastFlush = now;
+    if (this.dirty.size === 0) return;
     // Clients drop a sample that isn't newer than the last one, so ts must strictly increase even
     // when a stop is flushed in the same millisecond as the snapshot before it.
     this.lastTs = Math.max(now, this.lastTs + 1);
+    const p: [number, number, number, number, 0 | 1, number][] = [];
+    for (const ws of this.dirty) {
+      const w = this.live.get(ws);
+      if (w) p.push([w.att.accountId, w.att.x, w.att.z, w.att.r, w.moving ? 1 : 0, Math.max(0, this.lastTs - w.att.t)]);
+    }
+    this.dirty.clear();
+    this.lastFlush = now;
     if (p.length) this.broadcast({ t: 's', ts: this.lastTs, p });
   }
 

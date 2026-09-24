@@ -3,7 +3,7 @@
 // a one-click "Continue as ...".
 
 import type {
-  CreateTableResponse, HttpError, JoinByPinResponse, LoanResponse, LoginResponse, MeResponse, Profile,
+  CreateTableResponse, HttpError, JoinByPinResponse, LoanResponse, LoginResponse, MeResponse, Profile, TicketResponse,
 } from '../../../shared/src/protocol.ts';
 import type { GameId } from '../../../shared/src/engine.ts';
 import type { Look } from '../../../shared/src/look.ts';
@@ -71,12 +71,23 @@ export const createTable = (game: GameId, visibility: 'public' | 'private', vari
   call<CreateTableResponse>('tables', { method: 'POST', body: JSON.stringify({ game, visibility, variant }) });
 export const joinByPin = (pin: string): Promise<JoinByPinResponse> => call<JoinByPinResponse>('tables/join', { method: 'POST', body: JSON.stringify({ pin }) });
 
-/** ws(s):// URL for a socket path, carrying the protocol version and token. */
-export function socketUrl(path: string, params: Record<string, string> = {}): string {
+/**
+ * A single-use ticket for one socket path, good for a minute: sockets connect with one of these,
+ * so the token itself never travels in a URL.
+ */
+export const socketTicket = async (path: string): Promise<string> =>
+  (await call<TicketResponse>('ticket', { method: 'POST', body: JSON.stringify({ target: path }) })).ticket;
+
+/**
+ * ws(s):// URL for a socket path, carrying the protocol version and a fresh ticket for it. Ask for
+ * one per connection attempt (a ticket opens one socket, once); an ApiError with status 401 means
+ * the token is no good any more.
+ */
+export async function socketUrl(path: string, params: Record<string, string> = {}): Promise<string> {
   const base = API_ORIGIN || location.origin;
   const u = new URL(`/casino/ws/${path}`, base.replace(/^http/, 'ws'));
   u.searchParams.set('v', '1');
-  u.searchParams.set('t', savedToken() ?? '');
+  u.searchParams.set('ticket', await socketTicket(path));
   for (const [k, v] of Object.entries(params)) u.searchParams.set(k, v);
   return u.toString();
 }

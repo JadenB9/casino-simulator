@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import type { FloorLink as FloorLinkT, FloorTransport } from '../src/net/presence.ts';
 import type { PlayerInfo } from '../../shared/src/protocol.ts';
+import { SEND_MS } from '../src/net/send-policy.ts';
 import { DEFAULT_LOOK } from '../../shared/src/look.ts';
 
 // api.ts reads a constant Vite defines at build time; the unit project has no Vite define.
@@ -55,22 +56,40 @@ describe('FloorLink sending', () => {
     expect(sent.length).toBe(1);
   });
 
-  it('walking sends mv at most every 100 ms in integer cm, and one st once it has stopped', () => {
+  it('walking sends a position only when the others need it, in integer cm, and one st once it has stopped', () => {
     const { link, sent, recv } = rig();
     recv(hello());
     link.update({ x: 0, z: 18, yaw: 0, moving: false }, -1000);
     sent.length = 0;
-    // 16 ms frames for about half a second, 2 cm a frame along +x.
-    for (let f = 1; f <= 30; f++) link.update({ x: f * 0.02, z: 18, yaw: Math.PI / 2, moving: true }, f * 16 + 1);
-    expect(sent.every((m) => m.t === 'mv' && m.z === 1800 && m.r === 64)).toBe(true);
-    expect(sent.map((m) => m.x)).toEqual([2, 16, 30, 44, 58]); // frames at 17, 129, 241, 353, 465 ms
-    // The last step lands on the frame the controller stops; the next still frame sends the stop.
-    link.update({ x: 0.7512, z: 18, yaw: Math.PI / 2, moving: false }, 497);
-    expect(sent.length).toBe(5);
-    link.update({ x: 0.7512, z: 18, yaw: Math.PI / 2, moving: false }, 513);
-    expect(sent.at(-1)).toEqual({ t: 'st', x: 75, z: 1800, r: 64 });
-    for (let f = 0; f < 20; f++) link.update({ x: 0.7512, z: 18, yaw: Math.PI / 2, moving: false }, 529 + f * 16);
-    expect(sent.length).toBe(6);
+    // 16 ms frames for about a second, 2 cm a frame along +x: a steady straight line.
+    const at: number[] = [];
+    let frame = 0;
+    const walk = (dx: number, dz: number, yaw: number, frames: number, from: { x: number; z: number }) => {
+      for (let f = 1; f <= frames; f++) {
+        frame++;
+        const before = sent.length;
+        link.update({ x: from.x + f * dx, z: from.z + f * dz, yaw, moving: true }, frame * 16 + 1);
+        if (sent.length > before) at.push(frame * 16 + 1);
+      }
+      return { x: from.x + frames * dx, z: from.z + frames * dz };
+    };
+    const end = walk(0.02, 0, Math.PI / 2, 60, { x: 0, z: 18 });
+    expect(sent.every((m) => m.t === 'mv' && Number.isInteger(m.x) && m.z === 1800 && m.r === 64)).toBe(true);
+    // The first two positions set the line; after that it goes out every STEADY_MS only.
+    expect(at).toEqual([17, 225, 545, 865]);
+    expect(sent.map((m) => m.x)).toEqual([2, 28, 68, 108]);
+    // A turn is news: it goes out as soon as SEND_MS allows, off the line.
+    const turnAt = frame * 16 + 1;
+    walk(0, 0.02, 0, 12, end);
+    expect(at.at(-1)! - turnAt).toBeLessThanOrEqual(SEND_MS + 16);
+    expect(sent.at(-1)!.r).toBe(0);
+    // Stopping goes out at once, on the next still frame.
+    const count = sent.length;
+    link.update({ x: end.x, z: end.z + 0.24, yaw: 0, moving: false }, (frame + 1) * 16 + 1);
+    expect(sent.length).toBe(count + 1);
+    expect(sent.at(-1)!.t).toBe('st');
+    for (let f = 0; f < 20; f++) link.update({ x: end.x, z: end.z + 0.24, yaw: 0, moving: false }, (frame + 2 + f) * 16 + 1);
+    expect(sent.length).toBe(count + 1);
   });
 
   it('turning on the spot, or being moved by the scene, sends mv and then settles with st', () => {
@@ -78,13 +97,14 @@ describe('FloorLink sending', () => {
     recv(hello());
     link.update({ x: 0, z: 18, yaw: 0, moving: false }, -1000);
     sent.length = 0;
-    for (let f = 1; f <= 12; f++) link.update({ x: 0, z: 18, yaw: f * 0.1, moving: false }, f * 16);
+    // A third of a second of turning: a turn is news, but no more than SEND_MS allows.
+    for (let f = 1; f <= 20; f++) link.update({ x: 0, z: 18, yaw: f * 0.1, moving: false }, f * 16);
     expect(sent.map((m) => m.t)).toEqual(['mv', 'mv']);
-    link.update({ x: 0, z: 18, yaw: 1.2, moving: false }, 13 * 16);
-    expect(sent.at(-1)).toEqual({ t: 'st', x: 0, z: 1800, r: mod.yawToByte(1.2) });
+    link.update({ x: 0, z: 18, yaw: 2, moving: false }, 21 * 16);
+    expect(sent.at(-1)).toEqual({ t: 'st', x: 0, z: 1800, r: mod.yawToByte(2) });
     // Sitting down: one jump to the seat.
-    link.update({ x: -2.4, z: 15.15, yaw: Math.PI, moving: false }, 400);
-    link.update({ x: -2.4, z: 15.15, yaw: Math.PI, moving: false }, 416);
+    link.update({ x: -2.4, z: 15.15, yaw: Math.PI, moving: false }, 600);
+    link.update({ x: -2.4, z: 15.15, yaw: Math.PI, moving: false }, 616);
     expect(sent.slice(-2)).toEqual([
       { t: 'mv', x: -240, z: 1515, r: 128 },
       { t: 'st', x: -240, z: 1515, r: 128 },
@@ -124,8 +144,11 @@ describe('FloorLink receiving', () => {
     recv({ t: 's', ts: 1_000_200, p: [[2, 120, 200, 0, 0]] });
     expect(link.players.has(1)).toBe(false); // our own rows are ignored, as are strangers'
     expect(link.players.has(99)).toBe(false);
-    // Drawn 200 ms behind: at server time 1_000_350 we see the pose from 1_000_150.
-    expect(link.players.get(2)!.track.at(1_000_350)!.x).toBeCloseTo(115);
+    // Drawn DELAY_MS (300 ms) behind: at server time 1_000_450 we see the pose from 1_000_150.
+    expect(link.players.get(2)!.track.at(1_000_450)!.x).toBeCloseTo(115);
+    // A row's age places it when its position reached the server, not when the snapshot went out.
+    recv({ t: 's', ts: 1_000_400, p: [[2, 140, 200, 0, 1, 100]] });
+    expect(link.players.get(2)!.track.at(1_000_600)!.x).toBeCloseTo(140);
 
     const look = { ...DEFAULT_LOOK, top: '#aa0000' };
     recv({ t: 'player', id: 3, look });
