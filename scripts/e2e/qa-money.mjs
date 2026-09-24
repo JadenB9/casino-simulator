@@ -822,6 +822,19 @@ if (wanted('money')) {
     await settled(broke);
     await setBalance('qm_broke', 100_000);
     await broke.page.evaluate(async () => window.casino.session.set(await (await import('/casino/src/net/api.ts')).me()));
+    // the picker says so before sitting down when a tier's buy-in is past the balance
+    await walkUp(broke, 'dc-1');
+    await broke.page.waitForSelector('.lim-opt', { timeout: 20_000 });
+    await broke.page.click('.lim-opt:has-text("Penthouse")');
+    const shortLine = await broke.page.textContent('.lim-buyin');
+    const isShort = await broke.page.$eval('.lim-buyin', (e) => e.classList.contains('short'));
+    check(isShort && shortLine === 'Buy-in $10,000–$10,000,000 · you have $1,000', `a tier past the balance says so in the picker: "${shortLine}"`);
+    await shoot(broke.page, 'money-4b-picker-short');
+    await broke.page.click('.lim-opt:has-text("Standard")');
+    check(!(await broke.page.$eval('.lim-buyin', (e) => e.classList.contains('short'))), 'and Standard, which $1,000 covers, does not');
+    await broke.page.keyboard.press('Escape');
+    await broke.page.waitForFunction(() => !document.querySelector('.lim-opt'), null, { timeout: 5000 });
+    await broke.page.waitForTimeout(1200);
     await broke.page.evaluate(() => window.casino.app.openCashier());
     await broke.page.waitForSelector('.bank-sheet', { timeout: 10_000 });
     await broke.page.waitForTimeout(600);
