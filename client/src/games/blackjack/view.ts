@@ -328,7 +328,7 @@ export class BlackjackTable implements TableView {
         return true;
       }
       if (e.key === 'Backspace') return this.act({ type: 'undo' }), true;
-      if (k === 'm' && !e.shiftKey) return this.max(), true;
+      if (k === 'a' && !e.shiftKey) return this.max(), true;
       if (k === 'x') return this.act({ type: 'clear' }), true;
       if (k === 'r') return this.rebet(e.shiftKey ? 2 : 1), true;
       if (e.code === 'Space') return this.primary(), true;

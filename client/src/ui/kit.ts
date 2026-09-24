@@ -118,14 +118,14 @@ export function askBuyIn(opts: { min: Cents; max: Cents; balance: Cents; suggest
 export type TrayMax = { mode: 'bet'; run: () => void } | { mode: 'pick' };
 
 /**
- * The Max button every table shares: gold, with its M key. A tray builds its own; a game with
- * its own bet panel can use this for the same look.
+ * The Max button every table shares: gold, with its A key ("all in", as at Hold'em; M stays the
+ * casino's mute). A tray builds its own; a game with its own bet panel can use this for the same look.
  */
-export function maxButton(onClick: () => void, title = 'Max: the most this bet takes, or all your chips if that is less (M)'): HTMLButtonElement {
+export function maxButton(onClick: () => void, title = 'Max: the most this bet takes, or all your chips if that is less (A)'): HTMLButtonElement {
   const b = el('button', 'btn max-btn');
   b.type = 'button';
   b.title = title;
-  b.append(document.createTextNode('Max'), el('span', 'key', 'M'));
+  b.append(document.createTextNode('Max'), el('span', 'key', 'A'));
   b.addEventListener('click', onClick);
   return b;
 }
@@ -165,7 +165,7 @@ export class ChipTray {
       const mode = this.maxMode;
       this.maxBtn = mode.mode === 'bet'
         ? maxButton(() => mode.run())
-        : maxButton(() => this.pickMax(), 'Max: pick it, then click a spot to bet the most it takes, or all your chips if that is less (M)');
+        : maxButton(() => this.pickMax(), 'Max: pick it, then click a spot to bet the most it takes, or all your chips if that is less (A)');
       chips.append(this.maxBtn);
     }
     const acts = el('div', 'acts');
@@ -223,7 +223,7 @@ export class ChipTray {
   }
 
   /**
-   * Number keys pick chips (a chip this table keeps in the rack does nothing) and M is Max;
+   * Number keys pick chips (a chip this table keeps in the rack does nothing) and A is Max;
    * returns true if the key was one of them.
    */
   key(e: KeyboardEvent): boolean {
@@ -234,7 +234,7 @@ export class ChipTray {
       if (!this.buttons.get(spec.value)!.hidden) this.select(spec);
       return true;
     }
-    if (this.maxMode && (e.key === 'm' || e.key === 'M') && !e.shiftKey) {
+    if (this.maxMode && (e.key === 'a' || e.key === 'A') && !e.shiftKey) {
       if (this.maxMode.mode === 'bet') this.maxMode.run();
       else this.pickMax();
       return true;

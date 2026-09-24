@@ -247,7 +247,7 @@ export function mountWar(ctx: TableViewCtx): TableView {
       p(
         `House edge: always going to war ${pct(-o.goToWar)} of the bet (${pct(-noBonus.goToWar)} at tables without the bonus on a tie in the war), always surrendering ${pct(-o.surrender)}, the Tie bet ${pct(-o.tieBet)}.`,
       ),
-      el('p', 'wr-keys', '1-8 chips · B bet · T tie · M max · Space deal · W war · S surrender · R rebet · Shift R double · X clear · Backspace undo'),
+      el('p', 'wr-keys', '1-8 chips · B bet · T tie · A max · Space deal · W war · S surrender · R rebet · Shift R double · X clear · Backspace undo'),
     );
   };
 
@@ -1010,8 +1010,8 @@ export function mountWar(ctx: TableViewCtx): TableView {
         case 'KeyT':
           addChip('tie');
           return true;
-        case 'KeyM':
-          // Max while a bet can go down; otherwise M is the casino's mute
+        case 'KeyA':
+          // Max, while a bet can go down
           if (e.shiftKey || !canBet()) return false;
           betMax();
           return true;

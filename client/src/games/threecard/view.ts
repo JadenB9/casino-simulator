@@ -290,7 +290,7 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
       table('Pair Plus, paid on your own hand', pay.pairPlus.map((x, i) => [cat(i), x])),
       p('Hands, best first: straight flush, three of a kind, straight, flush, pair, high card. A-K-Q is the top straight and A-2-3 the lowest.'),
       p(`Best play: Play with Q-6-4 or better, fold the rest.${bonus145 ? ' That gives the house 3.37% of the Ante.' : ''} Pair Plus: ${(edge * 100).toFixed(2)}%.`),
-      el('p', 'tc-keys', '1-8 chips · M max, then click the Ante or Pair Plus · Space deal · P play · F fold · R rebet · Shift R double · X clear · Backspace undo'),
+      el('p', 'tc-keys', '1-8 chips · A max, then click the Ante or Pair Plus · Space deal · P play · F fold · R rebet · Shift R double · X clear · Backspace undo'),
     );
   };
 
@@ -970,8 +970,8 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
         rebet(e.shiftKey ? 2 : 1);
         return true;
       }
-      // Max while a bet can go down; otherwise M is the casino's mute
-      if (e.code === 'KeyM' && !e.shiftKey && canBet()) {
+      // Max, while a bet can go down
+      if (e.code === 'KeyA' && !e.shiftKey && canBet()) {
         tray.pickMax();
         return true;
       }

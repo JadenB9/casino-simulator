@@ -1,8 +1,9 @@
 // The action bar under the table: Fold, Check or Call, Bet or Raise with a slider and pot-size
 // presets, All-in. Keys: F fold, C check/call, R or Enter bet/raise the slider amount, A all-in
-// (press twice), Q W E set a third of the pot, half the pot, the pot, M the most you can (all
-// in); arrows nudge the slider. All-in and Max wear the gold every table's Max does. Every
-// amount is a street total, the same as the engine's `raise.to`.
+// (press twice), Q W E set a third of the pot, half the pot, the pot; arrows nudge the slider.
+// All-in and the Max size (everything you have in, then Raise sends it) wear the gold every
+// table's Max does, and A is Max's key at every table. Every amount is a street total, the same
+// as the engine's `raise.to`.
 
 import { el } from '../../ui/kit.ts';
 import { formatMoney, type Cents } from '../../../../shared/src/money.ts';
@@ -12,15 +13,16 @@ const PRESETS: { key: string; label: string; frac: number }[] = [
   { key: 'Q', label: '⅓ pot', frac: 1 / 3 },
   { key: 'W', label: '½ pot', frac: 1 / 2 },
   { key: 'E', label: 'Pot', frac: 1 },
-  // no limit: the most you can bet is everything you have in
-  { key: 'M', label: 'Max', frac: Infinity },
+  // no limit: the most you can bet is everything you have in (A, the All-in button's key, sends it)
+  { key: '', label: 'Max', frac: Infinity },
 ];
 
 function keyed(label: string, key: string, cls: string, onClick: () => void): HTMLButtonElement {
   const b = el('button', `btn ${cls}`);
   b.type = 'button';
   const text = el('span', 'he-btn-text', label);
-  b.append(text, el('span', 'key', key));
+  b.append(text);
+  if (key) b.append(el('span', 'key', key));
   b.addEventListener('click', onClick);
   return b;
 }
@@ -263,7 +265,7 @@ export class ActionBar {
         this.nudge(-1);
         return true;
     }
-    const p = PRESETS.find((x) => x.key === k);
+    const p = PRESETS.find((x) => x.key && x.key === k);
     if (p) {
       this.preset(p.frac);
       return true;

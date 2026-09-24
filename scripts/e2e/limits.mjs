@@ -26,6 +26,12 @@ const check = (ok, what) => {
   if (!ok) errors.push(what);
   log(`${ok ? 'ok  ' : 'FAIL'} ${what}`);
 };
+/** A step that threw: say so now (and in the summary), with where it was. */
+const failed = (where, err) => {
+  const text = `${where}: ${String(err?.message ?? err).split('\n')[0]}`;
+  errors.push(text);
+  log(`FAIL ${text}`);
+};
 
 const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 
@@ -171,8 +177,8 @@ try {
   check(over === 'The table maximum is $3,000.', `a bet over the table maximum is refused: "${over}"`);
   const under = await tryAct(b.page, { type: 'bet', amount: 3_000_00 + 100 });
   check(under !== null, 'and so is any bet past it');
-  // Max: his $1,000 is under the $3,000 maximum, so all of it goes down.
-  await b.page.keyboard.press('m');
+  // Max (A): his $1,000 is under the $3,000 maximum, so all of it goes down.
+  await b.page.keyboard.press('a');
   await b.page.waitForFunction(() => {
     const s = window.casino.app.table.session;
     return s.__view?.bets?.[s.snapshot.you.seat] === 100_000;
@@ -190,7 +196,7 @@ try {
   await a.page.context().close();
   await b.page.context().close();
 } catch (err) {
-  errors.push(`part 1: ${err?.stack ?? err}`);
+  failed('part 1', err);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -227,7 +233,7 @@ const regionAt = (page, pattern) =>
 const stackOf = (page) => page.evaluate(() => window.casino.table.snapshot.you.stack);
 
 async function pickAndClick(page, at, file) {
-  await page.keyboard.press('m');
+  await page.keyboard.press('a');
   await page.waitForSelector('.tray .max-btn[aria-pressed="true"]', { timeout: 5000 });
   await page.mouse.move(at.x, at.y);
   await page.waitForTimeout(250);
@@ -242,14 +248,14 @@ async function pickAndClick(page, at, file) {
 
 const solo = [
   ['blackjack', '10000-1000000', 3000, async (page) => {
-    await page.keyboard.press('m');
+    await page.keyboard.press('a');
     await page.waitForFunction(() => window.casino.table.snapshot.you.stack === 0, null, { timeout: 8000 });
     await page.waitForTimeout(600);
     await shot(page, 'max-blackjack');
     return 300_000;
   }, 300_000],
   ['war', '2500-250000', 1001, async (page) => {
-    await page.keyboard.press('m');
+    await page.keyboard.press('a');
     await page.waitForFunction(() => window.casino.table.snapshot.you.stack === 50_100, null, { timeout: 8000 });
     await page.waitForTimeout(600);
     await shot(page, 'max-war');
@@ -270,7 +276,7 @@ for (const [game, limits, buyIn, run, want] of solo) {
     check(got === want, `${game}: Max put down $${got / 100} (want $${want / 100})`);
     await page.context().close();
   } catch (err) {
-    errors.push(`${game}: ${err?.stack ?? err}`);
+    failed(game, err);
   }
 }
 
@@ -280,15 +286,15 @@ try {
   await page.waitForSelector('.he-bar.he-live', { timeout: 60_000 });
   await page.waitForTimeout(400);
   await shot(page, 'max-holdem');
-  await page.keyboard.press('m');
+  await page.click('.he-preset:has-text("Max")');
   const raise = (await page.textContent('.he-raise .he-btn-text')).trim();
-  check(/^All-in \$/.test(raise), `Hold'em's Max sets the raise to all in: "${raise}"`);
+  check(/^All-in \$/.test(raise), `Hold'em's Max size sets the raise to all in: "${raise}"`);
   await shot(page, 'max-holdem-sized');
   const blinds = await page.evaluate(() => window.casino.table.snapshot.view.blinds);
   check(blinds.sb === 100 && blinds.bb === 200, `Hold'em plays the chosen blinds: ${JSON.stringify(blinds)}`);
   await page.context().close();
 } catch (err) {
-  errors.push(`holdem: ${err?.stack ?? err}`);
+  failed('holdem', err);
 }
 
 await browser.close();

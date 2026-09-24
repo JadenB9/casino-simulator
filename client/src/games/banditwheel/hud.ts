@@ -161,9 +161,9 @@ export class Panel {
     this.showHint(null);
   }
 
-  /** Keys 1..n pick chips (the ones this table shows), M picks Max. */
+  /** Keys 1..n pick chips (the ones this table shows), A picks Max (M is the casino's mute). */
   key(e: KeyboardEvent): boolean {
-    if (e.key === 'm' || e.key === 'M') {
+    if (e.key === 'a' || e.key === 'A') {
       this.select(this.chipBtns[this.chipBtns.length - 1]!.pick);
       return true;
     }

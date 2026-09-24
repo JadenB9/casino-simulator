@@ -11,12 +11,12 @@ type Row = [keys: string, action: string];
 
 export const SHORTCUTS: readonly { title: string; rows: readonly Row[] }[] = [
   { title: 'Floor', rows: [['W A S D', 'Walk'], ['↑ ← ↓ →', 'Walk, on the arrow keys'], ['E', 'Sit down, use a machine, visit the cashier'], ['G', 'Emotes'], ['T or Enter', 'Chat']] },
-  { title: 'Anywhere', rows: [['Esc', 'Leave the table or close a panel'], ['M', 'Mute or unmute (Max while a bet can go down)'], ['?', 'This list']] },
+  { title: 'Anywhere', rows: [['Esc', 'Leave the table or close a panel'], ['M', 'Mute or unmute'], ['?', 'This list']] },
   {
     title: 'Any table',
     rows: [
       ['1-9 / 0', 'Pick a chip, left to right'],
-      ['M', 'Max: the most the bet takes, or all your chips (at a layout, then click a spot)'],
+      ['A', 'Max: the most the bet takes, or all your chips (at a layout, then click a spot)'],
       ['⌫ / ⌘ Z', 'Take back the last chip'],
       ['X', 'Clear your bets'],
       ['R', 'Rebet'],
@@ -39,7 +39,6 @@ export const SHORTCUTS: readonly { title: string; rows: readonly Row[] }[] = [
       ['R', 'Bet or raise'],
       ['A', 'All in (asks first)'],
       ['Q W E', 'Preset bet sizes'],
-      ['M', 'Size the bet to all in'],
       ['↑ / ↓', 'Adjust the amount'],
       ['Enter', 'Confirm the amount'],
     ],

@@ -82,8 +82,9 @@ table's limits while you are seated at it.
 
 ## Max
 
-Every table has a gold **Max** in its chip tray (key **M** while a bet can go down) that bets the most
-the spot takes or every chip you have at the table, whichever is less:
+Every table has a gold **Max** in its chip tray (key **A**, for "all in", while a bet can go down; M
+stays the casino's mute) that bets the most the spot takes or every chip you have at the table,
+whichever is less:
 
 | Table | What Max bets |
 |---|---|
@@ -93,8 +94,8 @@ the spot takes or every chip you have at the table, whichever is less:
 | Baccarat | Pick Max, then click Player, Banker, Tie or a pair (or press P, B, T) |
 | Roulette, Big Six, Sic Bo | Pick Max, then click any spot: its own maximum, within what the table maximum a round leaves |
 | Craps | Pick Max, then click: a flat bet to its maximum (a lay bet with its commission paid from what you have), or full odds behind your line or come bet |
-| Hold'em | All-in (A, pressed twice), and Max (M) beside the pot-size presets sets the amount to all in |
-| Bandit Wheel | Pick Max (M) in the terminal, then a number |
+| Hold'em | All-in (A, pressed twice), and Max beside the pot-size presets sets the amount to all in |
+| Bandit Wheel | Pick Max (A) in the terminal, then a number |
 | The online games | Max in the bet panel |
 
 The hover over a spot says what Max would add there. The server checks every bet as it always has,

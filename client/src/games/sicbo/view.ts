@@ -622,8 +622,8 @@ export function mountSicBo(ctx: TableViewCtx): TableView {
       if (e.metaKey || e.ctrlKey || e.altKey) return false;
       const n = Number(e.key);
       if (Number.isInteger(n) && n >= 1 && n <= BETTING_CHIPS.length) return tray.key(e);
-      // Max while a bet can go down; otherwise M is the casino's mute
-      if ((e.key === 'm' || e.key === 'M') && !e.shiftKey && canBet()) {
+      // Max, while a bet can go down
+      if ((e.key === 'a' || e.key === 'A') && !e.shiftKey && canBet()) {
         tray.pickMax();
         return true;
       }
