@@ -1153,6 +1153,22 @@ if (checks.includes('read')) {
   for (const r of readRows) console.log(`READ ${r.where} | ${r.quality} | ${r.state} | ${r.station} | ${r.name} | ${r.lift} | ${r.p95} | ${r.clip} | ${r.contrast}`);
 }
 
+// --- the big-win sign and the day's meter (features' floor life) on High and Low -----------------
+if (checks.includes('signs')) {
+  for (const quality of ['high', 'low']) {
+    for (const view of ['front', 'marquee', 'tally']) {
+      const { page, errors } = await openFloor(`quality=${quality}&view=${view}&win=1`, `http://localhost:${port}/casino/src/ui/feed/dev.html`);
+      await frames(page, 6);
+      await page.waitForTimeout(2500);
+      const file = `${out}/world3-signs-${view}-${quality}.png`;
+      await page.screenshot({ path: file });
+      console.log(JSON.stringify({ check: 'signs', view, quality, file, errors: errors.slice(0, 3) }));
+      if (errors.length) fail(`signs ${view} ${quality}: ${errors[0]}`);
+      await page.close();
+    }
+  }
+}
+
 await browser.close();
 console.log(failed ? `${failed} check(s) failed` : 'all checks passed');
 process.exit(failed ? 1 : 0);
