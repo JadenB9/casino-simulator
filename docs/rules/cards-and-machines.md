@@ -16,7 +16,8 @@ enumerates the game exactly. Where both exist, they agree to the digits shown.
 
 - **Money.** Balances and payouts are integer cents. Table bets are whole dollars. Video poker and slots
   bet whole coins (or credits) of a fixed denomination such as $0.25, $1 or $5, and every paytable entry is
-  a whole number of coins, so every payout is exact.
+  a whole number of coins, so every payout is exact. Each machine's coin values (high-limit ones included)
+  and every table's choosable limits are in [limits.md](limits.md); a table's limits never change a payout.
 - **House edge** is the expected loss divided by the initial wager (for Three Card Poker, the Ante).
   **Return to player (RTP)** is 1 minus the house edge. **Element of risk** is the expected loss divided by
   the average total amount wagered in a round (it counts the Play bet too).
@@ -212,7 +213,8 @@ Ante Bonus.
 
 ### 2.1 Rules
 
-- One 52-card deck, freshly shuffled for every hand. The player bets 1 to 5 coins and is dealt five cards.
+- One 52-card deck, freshly shuffled for every hand. The player bets 1 to 5 coins of $1, $5, $25 or $100 and
+  is dealt five cards.
 - The player holds any subset of the five (none to all) and the rest are replaced from the same shuffled
   deck. In code: shuffle all 52 once, deal positions 0-4, and fill discards from positions 5, 6, 7 and so
   on. Every unseen card is then equally likely, which is what Nevada requires of a machine that represents
@@ -851,7 +853,7 @@ Top award (three 5X): 1 in 93312 spins
 ### 3.7 Machine D: "Diamond Line" (3 reels, 1 line, doubling diamond wild)
 
 - **Format:** 3 reels, 22 physical stops (11 symbols alternating with 11 blanks), **64 virtual stops per
-  reel**, one center payline, 1-3 coins at $1, $2 or $5. Pays are per coin and linear, so one RTP covers
+  reel**, one center payline, 1-3 coins at $1, $2, $5, $25 or $100. Pays are per coin and linear, so one RTP covers
   every bet. Cycle: 64^3 = 262,144.
 - **Diamond wild:** the DIAMOND substitutes for every symbol, cherries included, and each DIAMOND in a win
   doubles it: one pays x2, two pay x4. Three DIAMONDs pay the top award.
@@ -1317,8 +1319,9 @@ tournaments; where cash games differ, Robert's Rules governs.
 
 ### 4.1 Table and stakes
 
-- 2 to 9 seats. One 52-card deck, shuffled for every hand. Two blinds, small (SB) and big (BB), for
-  example $1/$2 or $5/$10. No antes, no straddles, no rake.
+- 2 to 9 seats. One 52-card deck, shuffled for every hand. Two blinds, small (SB) and big (BB), chosen when
+  the table is started: $1/$2 to $1,000/$2,000, or custom ([limits.md](limits.md)); $5/$10 at Standard. No
+  antes, no straddles, no rake.
 - **Table stakes:** only chips on the table when the hand starts can be bet, and chips cannot be added or
   removed during a hand ([Wikipedia][wikibet]). Buy-in: 20 to 100 big blinds, a common convention ("in a $1/2
   No Limit cash game, the minimum stake is often set at $40 while maximum stake is often set at $200"

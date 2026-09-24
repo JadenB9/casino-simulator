@@ -64,8 +64,8 @@ reconnect.
 | GET | `/me` | | `{ profile }` | 401 |
 | PUT | `/me/look` | `{ look }` | `{ look }` | 400, 401, 403 `NOT_ELIGIBLE` (wears a piece you don't own) |
 | POST | `/bank/loan` | | `{ profile, loan }` | 409 `NOT_ELIGIBLE {balance, inPlay}`, 409 `BUSY` |
-| POST | `/tables` | `{ game, variant?, visibility }` | `{ tableId, pin? }` | 400, 429 |
-| POST | `/tables/join` | `{ pin }` | `{ tableId, game }` | 404 `BAD_PIN`, 429 |
+| POST | `/tables` | `{ game, variant?, visibility, limits?: { min, max } }` | `{ tableId, pin? }` | 400, 429 |
+| POST | `/tables/join` | `{ pin }` | `{ tableId, game, lobby?: LobbySummary }` | 404 `BAD_PIN`, 429 |
 | GET | `/leaderboard` | | `LeaderboardResponse` | 401 |
 | GET | `/shop` | | `ShopResponse` | 401 |
 | POST | `/shop/buy` | `{ item, op }` | `BuyResponse` | 400 (op), 404 `NOT_FOUND`, 409 `INSUFFICIENT_FUNDS {balance, inPlay}`, 409 `NOT_ELIGIBLE` (already yours), 429 |
@@ -191,7 +191,8 @@ Server to client:
 type PlayerInfo = { id: number; name: string; look: Look; x: number; z: number; r: number;
                     at: { station: string } | null };   // never a private table's id
 type LobbySummary = { tableId: string; game: GameId; variant?: string; leader: string;
-                      players: number; max: number; started: boolean };  // public lobbies only
+                      players: number; max: number; started: boolean;   // public lobbies only
+                      limits?: { min: number; max: number } };           // cents; Hold'em: the blinds
 type BigWin = { name: string; game: GameId; amount: number;   // cents won: returned - wagered
                 what: string;                                  // "Straight 17", "Royal Flush", "Neon Nights, 250x"
                 at: number;                                    // server time the winner sees it
@@ -211,7 +212,15 @@ paid, a machine's own display. A Hold'em pot won without a showdown is just "Too
 ## Table socket
 
 Lobby: `wss://api.j4den.com/casino/ws/table/<tableId>?v=1&t=<token>[&pin=<pin>]`
-Solo: `wss://api.j4den.com/casino/ws/solo/<game>?v=1&t=<token>&variant=<variant>`
+Solo: `wss://api.j4den.com/casino/ws/solo/<game>?v=1&t=<token>&variant=<variant>[&limits=<min>-<max>]`
+
+Table limits (`shared/src/limits.ts`, docs/rules/limits.md). A lobby's are the `limits` of the
+`/tables` call that made it: two whole numbers of cents or the call is a 400, moved to the nearest
+limits the game allows otherwise, and Standard when left out. A solo table takes the `limits` of each
+connection the same way (anything else in the parameter is ignored), unless chips are still on it:
+then it keeps the limits they were bought in at until they are cashed out. Either way the table's
+`meta.config` carries what it got (every bet's limits and the buy-in), and `/tables/join` returns the
+table's summary so the join can show its limits first.
 
 Client to server:
 
