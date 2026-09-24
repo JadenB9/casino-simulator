@@ -62,20 +62,43 @@ const CLEAR = 0.04;
 /** Half the body's width with the arms at its sides. */
 const HALF_WIDTH = 0.3;
 
+/** Heights and offsets across the body where standBehind looks for the table in front. */
+const PROBE_Y = [0.05, 0.3, 0.55, 0.7, 0.8, 0.9, 1.0, 1.1, 1.25, 1.45, 1.65];
+const PROBE_X = [-0.26, -0.13, 0, 0.13, 0.26];
+
 /**
  * The dealer's z (in the station's frame, dealer side -z) for a body centred on x: as close to the
- * model as bodyFront allows at every height, a few centimetres clear. `points` is the model's
- * geometry sampled in the station's frame (x, y, z triples).
+ * model as bodyFront allows at every height, a few centimetres clear. `hit(x, y)` is the z where a
+ * ray from far behind the dealer (-z) heading +z first meets the model, or null.
  */
-export function standBehind(points: ArrayLike<number>, x: number): number {
+export function standBehind(hit: (x: number, y: number) => number | null, x: number): number {
   let z = Infinity;
-  for (let i = 0; i + 2 < points.length; i += 3) {
-    const px = points[i]!;
-    const py = points[i + 1]!;
-    if (Math.abs(px - x) > HALF_WIDTH || py < 0.02 || py > 1.9) continue;
-    z = Math.min(z, points[i + 2]! - bodyFront(py) - CLEAR);
+  for (const y of PROBE_Y) {
+    for (const dx of PROBE_X) {
+      const h = hit(x + dx, y);
+      if (h !== null) z = Math.min(z, h - bodyFront(y) - CLEAR);
+    }
   }
   return Number.isFinite(z) ? z : -0.9;
+}
+
+/** Rays against a station's model, in its own frame: the first surface met heading +z from far behind. */
+function modelHits(s: WorldStation): (x: number, y: number) => number | null {
+  const ray = new THREE.Raycaster();
+  const from = new THREE.Vector3();
+  const dir = new THREE.Vector3();
+  const local = new THREE.Vector3();
+  s.anchor.updateWorldMatrix(true, true);
+  const q = new THREE.Quaternion();
+  s.anchor.getWorldQuaternion(q);
+  return (x, y) => {
+    s.anchor.localToWorld(from.set(x, y, -4));
+    dir.set(0, 0, 1).applyQuaternion(q);
+    ray.set(from, dir);
+    ray.far = 8;
+    const hit = ray.intersectObject(s.model, true).find((h) => (h.object as THREE.Mesh).isMesh && !(h.object as THREE.SkinnedMesh).isSkinnedMesh);
+    return hit ? s.anchor.worldToLocal(local.copy(hit.point)).z : null;
+  };
 }
 
 /** True when no part of the model is inside a body standing at (x, z) facing +z. */
@@ -152,9 +175,7 @@ function dealerSpot(s: WorldStation, points: Float32Array): { x: number; z: numb
       x = cx + Math.sign(-cx || 1) * 0.36;
     }
   }
-  let z = standBehind(points, x);
-  for (let k = 0; k < 8 && !standsClear(points, x, z); k++) z -= 0.05;
-  return { x, z, turn: 0 };
+  return { x, z: standBehind(modelHits(s), x), turn: 0 };
 }
 
 /** Every post on the floor: the tables' dealers, then the bartender and the cashier. */
