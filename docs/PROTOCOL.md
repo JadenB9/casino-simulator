@@ -62,11 +62,14 @@ reconnect.
 |---|---|---|---|---|
 | POST | `/login` | `{ name, password }` | `{ token, profile }` | 400 `BAD_NAME`, 400 `BAD_REQUEST` (password), 401 `UNAUTHORIZED`, 429 |
 | GET | `/me` | | `{ profile }` | 401 |
-| PUT | `/me/look` | `{ look }` | `{ look }` | 400, 401 |
+| PUT | `/me/look` | `{ look }` | `{ look }` | 400, 401, 403 `NOT_ELIGIBLE` (wears a piece you don't own) |
 | POST | `/bank/loan` | | `{ profile, loan }` | 409 `NOT_ELIGIBLE {balance, inPlay}`, 409 `BUSY` |
 | POST | `/tables` | `{ game, variant?, visibility }` | `{ tableId, pin? }` | 400, 429 |
 | POST | `/tables/join` | `{ pin }` | `{ tableId, game }` | 404 `BAD_PIN`, 429 |
 | GET | `/leaderboard` | | `LeaderboardResponse` | 401 |
+| GET | `/shop` | | `ShopResponse` | 401 |
+| POST | `/shop/buy` | `{ item, op }` | `BuyResponse` | 400 (op), 404 `NOT_FOUND`, 409 `INSUFFICIENT_FUNDS {balance, inPlay}`, 409 `NOT_ELIGIBLE` (already yours), 429 |
+| POST | `/bar/order` | `{ item, op }` | `OrderResponse` | 400 (op), 404 `NOT_FOUND`, 409 `INSUFFICIENT_FUNDS {balance, inPlay}`, 429 |
 | GET | `/health` | | `ok` | |
 
 **Logging in.** Names are first come, first served (3-16 of `A-Z a-z 0-9 _`, any case the same
@@ -100,7 +103,32 @@ type Profile = {
 };
 type Look = { v: 1; body: "m" | "f"; outfit: string;      // outfit ids per body in shared/src/look.ts
               skin: number;                                  // 0-7, lightest to darkest
-              hair: string; top: string; bottom: string; shoes: string };   // "#rrggbb"; either case in, lower case stored
+              hair: string; top: string; bottom: string; shoes: string;     // "#rrggbb"; either case in, lower case stored
+              chain?: string; grill?: string; clothes?: string;             // shop item ids you own
+              watch?: string; shades?: string; hat?: string;
+              held?: { item: string; order: string; until: number } };      // a bar order in your hand
+```
+
+**The boutique and the bar** (`shared/src/items.ts`). Both are paid from the balance only; chips
+on tables stay where they are. `op` is an id the client picks per purchase (8-40 of `A-Z a-z 0-9
+_ -`, a UUID): the same `op` again is the same purchase, answered with what it bought and never
+charged twice. A shop item is yours for good; buying it again with a new `op` is `409
+NOT_ELIGIBLE`. A bar order can be bought as often as you like. Each is limited to 20 a minute per
+account. A refusal for money says so in `msg` ("Not enough: the Rope Chain is $250,000 and your
+balance is $50,000.") and carries the numbers.
+
+What you own is worn through your look: `chain`, `grill`, `clothes`, `watch`, `shades`, `hat`
+(item ids of that kind). `/me/look` stores a look only if you own every piece on it (otherwise
+`403 NOT_ELIGIBLE`, nothing stored); an id that isn't an item of that kind is dropped. `held` is
+a bar order in your hand, `{ item, order, until }`: it stays only while `order` is one of your
+paid orders, of that `item`, less than five minutes old, and `until` is set from when it was
+paid. The floor sends looks to everyone, so what you wear and hold is seen by all.
+
+```ts
+type ShopResponse = { items: ShopItem[]; owned: { item: string; price: number; at: number }[]; balance: number };
+type BuyResponse = { item: string; price: number; at: number; balance: number; inPlay: number; rev: number };
+type BarOrder = { id: string; item: string; price: number; at: number; until: number };   // id = the op
+type OrderResponse = { order: BarOrder; balance: number; inPlay: number; rev: number };
 ```
 
 ```ts

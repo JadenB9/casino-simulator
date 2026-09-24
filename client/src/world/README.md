@@ -32,6 +32,7 @@ engine.onFrame((dt) => world.update(dt));
 | `setQuality(q)` | Live switch: bloom, pixel ratio, lights, materials, chandeliers. Station models keep the quality they were built with. |
 | `showEmote(who, e)` | An emote over a player: `'me'` or a floor id. A bubble with the gesture's icon for 2.8 s, and the character acts it out (wave, cheer with a hop, clap, thumbs up, shrug). False when that player has no character drawn. |
 | `useRemotes(source)` | Where `showEmote` finds other players' characters: pass the app's `RemotePlayers` (anything with `character(id)`), `null` to forget it. |
+| `holdItem(id)`, `dropHeld()` | A waiter hands over a paid bar order (its `id` from the bar's `onOrder`, or an item id for your newest paid order of it): it goes in your right hand, in your look, so everyone sees it. `dropHeld()` puts it down. Both go to the bar given to `useBar(bar)` (the app's, `ui/shop/bar.ts`; `null` to forget it). |
 | `mouse`, `setMouse({ sensitivity, capture })` | Mouse look settings (sensitivity 0.25-3, 1 = default; capture on/off), kept in localStorage (`casino.mouse.*`). |
 | `mouseCaptured`, `releaseMouse()` | Whether a click has captured the mouse; let it go. |
 | `stats()` | `{ calls, triangles, programs, pixelRatio }` of the last frame. |
@@ -71,6 +72,15 @@ played standing) `sit` is null and they stand.
 The "Press E" prompt sits bottom-centre, clear of the bottom-left corner (the site's back chip).
 Prompts read `Press E · Blackjack · $5–$5,000` with the limits from
 `ENGINES[game].config(variant, 'solo').limits.default`.
+
+### Wearables
+`wearables.ts` puts the boutique's pieces on any character the factory makes, from the look:
+chains fitted to each outfit's neck and chest, grills, watches, aviators and hats skinned to
+their bones and merged per material (at most two more draw calls near, one plain gold rope and a
+hat past 9 m); special clothes as a body material of their own (no extra draw call); a held bar
+order in the right hand, with a carrying pose added on top of the animation. characters.ts calls
+it from a handful of lines (`dressed(look)` in setLook, `wear.dress(...)` after painting,
+`wear.body(m)` on a quality change, `wear.dispose()`).
 
 ## The floor
 40 m x 30 m (x east, z south, the entrance on the south wall). Friedman-low 3.4 m ceilings over
