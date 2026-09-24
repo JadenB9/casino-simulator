@@ -321,6 +321,14 @@ export class Person implements Character {
     this.tag.visible = this.tagOn && name !== '';
   }
 
+  /**
+   * The soft shadow under the feet (none for staff, who share one instanced set). RemotePlayers
+   * hides it and draws everyone's from its world matrix in one instanced mesh.
+   */
+  get shadow(): THREE.Mesh | null {
+    return this.blobMesh;
+  }
+
   /** Called by the factory's label culling. */
   showTag(on: boolean): void {
     this.tagOn = on;

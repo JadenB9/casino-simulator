@@ -266,8 +266,11 @@ class App {
       seatOf: (station, slot) => this.seatOf(station, slot),
       // a stool, a sofa: sitting anywhere (world/life/)
       seatFor: (id) => this.world.life.seatFor(id),
-      // nobody in a room you can't see into, or behind you, is drawn or animated
+      // nobody in a room you can't see into, or behind you, is drawn or animated; in a crowd the
+      // nearest are, and everyone's shadow is one draw
       inView: (x, z) => this.world.canSee(x, z),
+      eye: () => this.engine.camera.position,
+      shadow: { geometry: this.world.characterFactory.blobGeometry, material: this.world.characterFactory.blob },
     });
     // Gestures show over whoever made them, you included (the server echoes yours back).
     this.world.useRemotes(this.remotes);
