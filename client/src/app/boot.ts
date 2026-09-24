@@ -32,7 +32,8 @@ import { CLOSE, type Profile } from '../../../shared/src/protocol.ts';
 export async function boot(): Promise<void> {
   const ui = document.getElementById('ui')!;
   const fill = document.getElementById('boot-fill');
-  const engine = new Engine3D(document.getElementById('scene') as HTMLCanvasElement, document.getElementById('labels')!, savedQuality());
+  // the floor's bloom multisamples the scene itself on High (see Engine3D)
+  const engine = new Engine3D(document.getElementById('scene') as HTMLCanvasElement, document.getElementById('labels')!, savedQuality(), { antialias: false });
   engine.onFrame((dt) => updateTweens(dt));
   const sfx = new Sfx();
   // A saved login is checked while the floor loads, not after it.

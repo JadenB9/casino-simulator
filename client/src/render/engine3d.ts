@@ -68,9 +68,16 @@ export class Engine3D {
   /** The ceiling on the pixel ratio: 1.5 on phones and tablets, 2 elsewhere. */
   readonly maxPixelRatio: number;
 
-  constructor(canvas: HTMLCanvasElement, labelRoot: HTMLElement, readonly quality: Quality) {
+  /**
+   * `antialias`: multisample the canvas itself (on High unless told otherwise). The floor passes
+   * false: on High its bloom (world/bloom.ts) draws the scene into a multisampled target of its own
+   * and puts only a full-screen picture on the canvas, so a multisampled canvas would be a second
+   * copy of the frame four samples deep, doing nothing but costing memory and making every resize
+   * (the pixel ratio stepping down) freeze the page.
+   */
+  constructor(canvas: HTMLCanvasElement, labelRoot: HTMLElement, readonly quality: Quality, opts: { antialias?: boolean } = {}) {
     const high = quality === 'high';
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: high, powerPreference: 'high-performance' });
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: opts.antialias ?? high, powerPreference: 'high-performance' });
     this.maxPixelRatio = isMobile() ? MOBILE_MAX_PIXEL_RATIO : 2;
     // Everything that sets the ratio later (the floor's adaptive step-down on High) goes through
     // the same ceiling, so a phone never renders at its full 3x.
