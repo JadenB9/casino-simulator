@@ -19,7 +19,7 @@ import { MapOverlay, buildDirectories } from './wayfinding.ts';
 import { buildRoom } from './room.ts';
 import { buildStations, type WorldStation } from './stations.ts';
 import { buildDecor } from './decor.ts';
-import { buildSigns, floorSigns, loadSignFonts } from './signs.ts';
+import { buildSigns, floorSigns, loadSignFonts, signGain } from './signs.ts';
 import { GlowMerge, Lighting, buildPools } from './lighting.ts';
 import { Props } from './props.ts';
 import { Characters } from './characters.ts';
@@ -89,6 +89,8 @@ export interface FloorWorld extends World {
   stats(): { calls: number; triangles: number; programs: number; pixelRatio: number };
   /** The far stand-ins and their draw-call budget (for the dev floor and the headless checks). */
   readonly lod: StationLod;
+  /** Hold the glow (High's bloom) at nothing and give it back, for the checks that compare the two. */
+  glow(on: boolean): void;
   /**
    * What the walker and the camera bump into. Something standing on the floor adds itself here, as
    * dealers in the open staff area do: `collider.post(x, z, 0.28, 1.9, { cam: false })`.
@@ -323,6 +325,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
     plan,
     quality,
     lod,
+    glow: (on) => bloom.mute(!on),
     collider: col,
     player: {
       character,
@@ -364,7 +367,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
       world.quality = q;
       mats.swap(root, q);
       mannequins.refresh();
-      if (signs) (signs.mesh.material as THREE.MeshBasicMaterial).color.setScalar(q === 'high' ? 2.4 : 1.6);
+      if (signs) (signs.mesh.material as THREE.MeshBasicMaterial).color.setScalar(signGain(q));
       lighting.setQuality(q);
       characters.setQuality(q);
       void props.setQuality(q).then(() => reflect());

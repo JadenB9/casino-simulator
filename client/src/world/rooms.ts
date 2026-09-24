@@ -436,7 +436,7 @@ export const ROOMS: RoomSpec[] = [
     ],
     fixtures: [{ kind: 'table-lamps' }],
     hanging: [],
-    spots: [{ x: 0, z: 0, tx: 0, tz: 0, k: 44, angle: 1.05 }],
+    spots: [{ x: 0, z: 0, tx: 0, tz: 0, k: 31, angle: 1.05 }],
     aisles: [],
     plants: [
       [-10.4, -5.4],
@@ -480,7 +480,7 @@ export const ROOMS: RoomSpec[] = [
     ],
     fixtures: [{ kind: 'neon', text: 'HIGH LIMIT', color: '#f2c86a', x: 0, y: 2.75, z: -5.85, ry: 0, w: 3.4, h: 0.5, font: 'Cinzel' }],
     hanging: [],
-    spots: [{ x: 0, z: -1.0, tx: 0, tz: -1.5, k: 40, angle: 1.1 }],
+    spots: [{ x: 0, z: -1.0, tx: 0, tz: -1.5, k: 28, angle: 1.1 }],
     aisles: [{ x0: -1.9, z0: 3.4, x1: 1.9, z1: 5.85 }],
     plants: [
       [-8.4, -5.4],
