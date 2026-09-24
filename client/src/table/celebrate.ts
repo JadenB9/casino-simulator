@@ -4,11 +4,13 @@
 // Callers decide whether a moment counts: never for a return at or below the stake (a push, or a
 // win that only gives the bet back).
 //
-// The light is a ring, not a patch: it starts just inside an object's outline, peaks a hair
-// outside it and falls away over a couple of centimetres, lying under the object (the side away
-// from the camera), so nothing is ever drawn over a card's face or a chip's value. It adds only a
-// little light to the felt, well short of what the bloom picks up, so the felt and its printing
-// show through it.
+// The light is a ring, not a patch drawn over things: it peaks a hair outside an object's
+// outline and falls away over a couple of centimetres, lying under the object (the side away from
+// the camera), so nothing is ever drawn over a card's face or a chip's value. Under a hand it also
+// fills the footprint, which only shows in the gaps between the cards (so they don't read as dark
+// seams); round a printed spot it's an outline only, so the spot's own words stay as printed. It
+// adds only a little light to the felt, well short of what the bloom picks up, so the felt and its
+// printing show through it.
 
 import * as THREE from 'three';
 import type { TableStage } from './stage.ts';
@@ -49,7 +51,7 @@ export interface Moment {
 
 const HOLD_MS: Record<Tier, number> = { nice: 1800, big: 2600, huge: 3600 };
 /** The ring's brightest point, by tier: a little light added to the felt, never a floodlight. */
-const PEAK: Record<Tier, number> = { nice: 0.3, big: 0.36, huge: 0.42 };
+const PEAK: Record<Tier, number> = { nice: 0.28, big: 0.34, huge: 0.4 };
 /** How much further the light reaches for a bigger moment. */
 const SPREAD: Record<Tier, number> = { nice: 1, big: 1.15, huge: 1.3 };
 const WARM = new THREE.Color(1, 0.8, 0.47);
@@ -80,6 +82,8 @@ function banner(ui: HTMLElement, m: Moment): void {
 
 /** An outline to ring, table-local: a (rounded) rectangle in the plane through `centre`. */
 interface Footprint {
+  /** Things lying on the felt (lit under as well as round them), or a printed spot (outline only). */
+  solid: boolean;
   centre: THREE.Vector3;
   /** Across (u) and along (v) the rectangle, and out of its plane toward the camera side (n). */
   u: THREE.Vector3;
@@ -99,6 +103,7 @@ const _cam = new THREE.Vector3();
 function spotPrint(s: Spot): Footprint {
   const a = s.w / 2;
   return {
+    solid: false,
     centre: new THREE.Vector3(s.x, s.y + 0.0003, s.z),
     u: new THREE.Vector3(1, 0, 0),
     v: new THREE.Vector3(0, 0, 1),
@@ -191,7 +196,7 @@ function footprintOf(stage: TableStage, objects: THREE.Object3D[]): Footprint | 
     .addScaledVector(u, (u0 + u1) / 2)
     .addScaledVector(v, (v0 + v1) / 2)
     .addScaledVector(n, depth);
-  return { centre, u, v, n, a: Math.max((u1 - u0) / 2, 0.004), b: Math.max((v1 - v0) / 2, 0.004), round };
+  return { solid: true, centre, u, v, n, a: Math.max((u1 - u0) / 2, 0.004), b: Math.max((v1 - v0) / 2, 0.004), round };
 }
 
 /** A mesh's box in its own space (an instanced mesh's across all its instances). */
@@ -224,14 +229,16 @@ function spread(pts: THREE.Vector3[], axis: THREE.Vector3): number {
 const INSET = 0.004;
 const CREST = 0.0015;
 
-let falloffTex: THREE.Texture | null = null;
+const falloffTex: Partial<Record<'solid' | 'outline', THREE.Texture>> = {};
 
 /**
- * The ring's profile across its width: nothing at the inner edge, rising to full at the middle
- * (the crest, just outside the object's outline), then easing away to nothing at the outer edge.
+ * The ring's profile across its width (u 0 -> 1): full at the crest (u 0.5, just outside the
+ * outline), easing away to nothing at the outer edge. Inside the crest a solid footprint stays
+ * full; an outline rises from nothing at the inner edge.
  */
-function falloff(): THREE.Texture {
-  if (falloffTex) return falloffTex;
+function falloff(kind: 'solid' | 'outline'): THREE.Texture {
+  const have = falloffTex[kind];
+  if (have) return have;
   const c = document.createElement('canvas');
   c.width = 128;
   c.height = 1;
@@ -242,7 +249,7 @@ function falloff(): THREE.Texture {
     let a: number;
     if (s <= 0.5) {
       const x = s / 0.5;
-      a = x * x * (3 - 2 * x);
+      a = kind === 'solid' ? 1 : x * x * (3 - 2 * x);
     } else {
       const x = (s - 0.5) / 0.5;
       a = Math.exp(-3.2 * x * x) * (1 - x * x);
@@ -256,21 +263,23 @@ function falloff(): THREE.Texture {
   t.magFilter = THREE.LinearFilter;
   t.generateMipmaps = false;
   t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
-  falloffTex = t;
+  falloffTex[kind] = t;
   return t;
 }
 
 /**
  * A band round a rounded rectangle (half sizes a, b, corner radius r) in the xz plane, in three
- * rows: INSET inside the outline, the crest just outside it, and `reach` out. The texture runs
- * across the band (u 0 -> 0.5 -> 1), so the profile stays the same whatever the size.
+ * rows: the inner edge, the crest just outside the outline, and `reach` out. The texture runs
+ * across the band (u 0 -> 0.5 -> 1), so the profile stays the same whatever the size. A solid
+ * band's inner edge is the middle of the footprint (the rectangle shrunk by r, plus a quad over
+ * it); an outline's is INSET inside the outline.
  */
-function bandGeometry(a: number, b: number, r: number, reach: number): THREE.BufferGeometry {
+function bandGeometry(a: number, b: number, r: number, reach: number, solid: boolean): THREE.BufferGeometry {
   // Every point of a rounded rectangle is a point q of the rectangle shrunk by r, pushed out r
   // along its normal; the rows are the same points pushed out further or less far.
   const qa = Math.max(0, a - r);
   const qb = Math.max(0, b - r);
-  const rows = [r - INSET, r + CREST, r + reach];
+  const rows = [solid ? 0 : r - INSET, r + CREST, r + reach];
   const corners: [number, number, number][] = [
     [qa, qb, 0],
     [-qa, qb, Math.PI / 2],
@@ -301,6 +310,12 @@ function bandGeometry(a: number, b: number, r: number, reach: number): THREE.Buf
       index.push(a0, b0, a0 + 1, a0 + 1, b0, b0 + 1);
     }
   }
+  if (solid && qa > 0 && qb > 0) {
+    const k = count * 3;
+    pos.push(-qa, 0, -qb, qa, 0, -qb, qa, 0, qb, -qa, 0, qb);
+    uv.push(0, 0.5, 0, 0.5, 0, 0.5, 0, 0.5);
+    index.push(k, k + 1, k + 2, k, k + 2, k + 3);
+  }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
@@ -311,25 +326,25 @@ function bandGeometry(a: number, b: number, r: number, reach: number): THREE.Buf
 /** Ring every footprint for `ms`; returns the early stop. */
 function rings(stage: TableStage, prints: Footprint[], tier: Tier, ms: number): () => void {
   if (!prints.length) return () => {};
-  const mat = new THREE.MeshBasicMaterial({
-    color: WARM,
-    alphaMap: falloff(),
-    transparent: true,
-    opacity: 0,
-    depthWrite: false,
-    side: THREE.DoubleSide,
-    blending: THREE.AdditiveBlending,
-    // drawn over the felt it lies on, never through the object above it
-    polygonOffset: true,
-    polygonOffsetFactor: -1,
-    polygonOffsetUnits: -2,
-  });
+  const material = (kind: 'solid' | 'outline') =>
+    new THREE.MeshBasicMaterial({
+      color: WARM,
+      alphaMap: falloff(kind),
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      // No depth offset: the ring lies a clear 0.2-0.6 mm above the felt, and pulling it forward
+      // would let it through a card face 0.2 mm above it when the camera looks along the table.
+      blending: THREE.AdditiveBlending,
+    });
+  const mats = { solid: material('solid'), outline: material('outline') };
   const meshes = prints.map((f) => {
     const small = Math.min(f.a, f.b) * 2;
     const reach = Math.min(0.024, Math.max(0.01, 0.012 + 0.1 * small)) * SPREAD[tier];
-    // corners at least as round as the band's inset, so the inner row never folds over itself
+    // an outline's corners at least as round as its inset, so its inner row never folds over itself
     const r = f.round ? Math.min(f.a, f.b) : Math.max(INSET, Math.min(0.1 * small, 0.008));
-    const mesh = new THREE.Mesh(bandGeometry(f.a, f.b, r, reach), mat);
+    const mesh = new THREE.Mesh(bandGeometry(f.a, f.b, r, reach, f.solid), f.solid ? mats.solid : mats.outline);
     mesh.matrix.makeBasis(f.u, f.n, f.v).setPosition(f.centre);
     mesh.matrixAutoUpdate = false;
     mesh.renderOrder = 1;
@@ -345,7 +360,8 @@ function rings(stage: TableStage, prints: Footprint[], tier: Tier, ms: number): 
       m.removeFromParent();
       m.geometry.dispose();
     }
-    mat.dispose();
+    mats.solid.dispose();
+    mats.outline.dispose();
   };
   const start = performance.now();
   const tick = () => {
@@ -355,7 +371,7 @@ function rings(stage: TableStage, prints: Footprint[], tier: Tier, ms: number): 
     // In over a fifth of a second, a slow breath, out over the last half second.
     const fadeIn = Math.min(1, t / 220);
     const fadeOut = Math.min(1, (ms - t) / 550);
-    mat.opacity = PEAK[tier] * fadeIn * fadeOut * (0.86 + 0.14 * Math.sin(t / 210));
+    mats.solid.opacity = mats.outline.opacity = PEAK[tier] * fadeIn * fadeOut * (0.86 + 0.14 * Math.sin(t / 210));
     requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);
