@@ -1,0 +1,47 @@
+/* Mines' board on the lounge site: raised slate tiles on a dark field, gems glowing green in
+   their wells, a red flash for the mine that ends a round. Sized in the site's design pixels. */
+
+.mn-board { position: absolute; inset: 0; display: grid; place-items: center; }
+.mn-grid {
+  display: grid; grid-template-columns: repeat(5, 108px); grid-auto-rows: 108px; gap: 12px;
+  padding: 22px; background: #132530; border: 1px solid #243b49; border-radius: 14px;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.38);
+}
+.mn-grid.shake { animation: mn-shake 0.42s linear; }
+@keyframes mn-shake {
+  15% { translate: -8px 2px; }
+  35% { translate: 7px -2px; }
+  55% { translate: -5px 1px; }
+  75% { translate: 3px 0; }
+}
+
+.mn-tile {
+  position: relative; display: grid; place-items: center; padding: 0; border: 0; border-radius: 10px;
+  background: #2f4553; box-shadow: 0 5px 0 #1a2c38; cursor: default;
+  transition: background 0.15s, transform 0.12s, box-shadow 0.12s, opacity 0.2s;
+}
+.mn-grid:not(.live) .mn-tile.closed { background: #253a47; box-shadow: 0 5px 0 #15242e; }
+.mn-grid.live .mn-tile.closed:not(:disabled) { cursor: pointer; }
+.mn-grid.live .mn-tile.closed:hover:not(:disabled) { background: #3e5b6e; transform: translateY(-3px); box-shadow: 0 8px 0 #1a2c38; }
+.mn-grid.live .mn-tile.closed:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 2px 0 #1a2c38; }
+
+.mn-tile.lit { background: #071824; box-shadow: inset 0 0 0 2px #1a4a35, 0 0 26px rgba(31, 214, 95, 0.18); }
+.mn-tile.hit { background: #4a121b; box-shadow: inset 0 0 0 2px #ff5a5f, 0 0 34px rgba(255, 90, 95, 0.5); }
+.mn-tile.dim { background: #0c1c27; box-shadow: none; opacity: 0.55; }
+.mn-tile.dim .mn-icon { scale: 0.72; }
+
+.mn-icon { display: block; width: 62px; height: auto; }
+.mn-mine { width: 64px; }
+.mn-tile.lit .mn-gem { filter: drop-shadow(0 0 10px rgba(52, 245, 143, 0.45)); }
+.mn-tile.hit .mn-mine { filter: drop-shadow(0 0 12px rgba(255, 59, 63, 0.7)); }
+
+.mn-tile.flip { animation: mn-flip 0.11s ease-in forwards; }
+@keyframes mn-flip { to { transform: scale(0.08); } }
+.mn-tile.land { animation: mn-land 0.3s cubic-bezier(0.22, 1, 0.36, 1); }
+@keyframes mn-land { from { transform: scale(0.08); } }
+
+/* Mines and Gems side by side (a typed field keeps its default width unless told otherwise) */
+.mn-counts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.mn-counts .os-field { min-width: 0; }
+.mn-counts .os-num-input { width: 0; }
+.os-action.mn-random { height: 44px; font-size: 15px; font-weight: 700; }

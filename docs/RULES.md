@@ -4,7 +4,7 @@ Every game in the casino follows standard Las Vegas Strip rules and pays real od
 is the summary. The full rules, every paytable, the strategy charts and the sources are in:
 
 - [rules/table-games.md](rules/table-games.md): blackjack, roulette, craps, baccarat, Casino War,
-  the Big Six wheel and Sic Bo
+  the Big Six wheel, Sic Bo and the Bandit Wheel
 - [rules/cards-and-machines.md](rules/cards-and-machines.md): Three Card Poker, video poker,
   slots, Texas Hold'em
 - [rules/online-games.md](rules/online-games.md): the online games on the lounge computers
@@ -18,7 +18,9 @@ is the summary. The full rules, every paytable, the strategy charts and the sour
   take bets in their real-table steps instead (place 6/8 in $6 units, lay bets in $2, $3 or $6
   units). Hold'em pots that don't split evenly give the odd chip to the first winner left of
   the button. Online Dice, whose multiplier (99 over the win chance) is rarely a whole number of
-  cents, floors each win to the cent, and its published return includes that floor exactly.
+  cents, floors each win to the cent, and its published return includes that floor exactly. Tower,
+  Mines and Hi-Lo floor their multipliers to the cent the same way (Hi-Lo only when it pays), and
+  their published returns include that floor exactly too.
 - **The server draws every card and number** with `crypto.getRandomValues` and rejection
   sampling (no modulo bias), and shuffles shoes with Fisher-Yates.
 - **Rule tables are tested cell by cell** (the blackjack chart, the baccarat drawing rules, the
@@ -44,6 +46,9 @@ inside 3. Seeds are fixed, so `npm run test:mc` reproduces these exactly.
 | Big Six Wheel | 54 stops: $1 ×24, $2 ×15, $5 ×7, $10 ×4, $20 ×2, Star and Crown pay 40:1 | $1 (1:1) | 11.111% | 11.109% (10M spins, z −0.08) |
 | | | $2, $5, $10, $20 | 16.667%, 22.222%, 18.519%, 22.222% | 16.705%, 22.147%, 18.492%, 22.299% (10M spins, z +0.91, −1.18, −0.29, +0.61) |
 | | | Star, Crown (40:1) | 24.074% | 23.921%, 24.214% (10M spins, z −0.87, +0.80) |
+| Bandit Wheel | Rust's big wheel: 25 slots, 1 ×12, 3 ×6, 5 ×4, 10 ×2, 20 ×1; a win pays the number to 1 and the bet back | 1, 3 or 5 (1:1, 3:1, 5:1) | 4.000% | 3.965%, 3.979%, 4.106% (10M spins, z −1.12, −0.39, +1.53) |
+| | | 10 (10:1) | 12.000% | 12.085% (10M spins, z +0.90) |
+| | | 20 (20:1) | 16.000% | 15.946% (10M spins, z −0.41) |
 | Craps | 3-4-5x odds, field pays 3:1 on 12, buy 4/10 with commission on a win, place bets off on the come-out | Pass line | 1.414% | 1.426% (4M bets, z +0.24) |
 | | | Don't pass (bar 12) | 1.364% | 1.389% (2M bets, z +0.37) |
 | | | Place 6 or 8 (7:6) | 1.515% | 1.658% (2M bets, z +1.87) |
@@ -79,6 +84,14 @@ inside 3. Seeds are fixed, so `npm run test:mc` reproduces these exactly.
 | Limbo (online) | target 1.01× to 1,000,000×, P(result ≥ x) = 0.99/x exactly | Every target | 99.000% RTP | 98.974% at 2× (10M bets, z −0.83); 9 targets to 100,000× within 1.5 SE |
 | Keno (online) | 40 numbers, 10 drawn, 1 to 10 picks, Classic/Low/Medium/High (Stake's tables) | Classic, 10 picks | 99.037% RTP | 99.057% (5M draws, z +0.32) |
 | | | Every table | 98.654% to 99.069% RTP | all 40 within 1.9 SE (5M draws) |
+| Tower (online) | 9 rows; Easy 4 tiles/1 dragon, Medium 3/1, Hard 2/1, Expert 3/2, Master 4/3 (Stake's Dragon Tower rows); a row pays 0.99 ÷ P(survive), floored to the cent | Hard, Expert, Master: any row | 99.000% RTP | 98.970% Hard row 1, 98.891% Master row 1 (4M climbs, z −0.61, −1.27); 4 more rows within 1.6 SE |
+| | | Easy, Medium: by row (the floor costs up to 0.33 points) | 98.667% to 99.000% RTP | Medium row 2 98.623%, Easy row 9 98.820% (4M climbs, z −0.79, −0.82) |
+| Mines (online) | 5×5, 1 to 24 mines; after k gems pays 0.99 · C(25, k) / C(25 − m, k), floored to the cent | 3 mines, 5 gems (1.99×) | 98.635% RTP | 98.683% (4M boards, z +0.97) |
+| | | Every (mines, gems) cell | 98.28% to 99.000% RTP | 10 cells within 1.6 SE (4M boards each) |
+| Hi-Lo (online) | cards with replacement; higher or same / lower or same (strict on an ace or a king); a guess on c ranks pays 12.87/c, the product floored at payout | One guess on the likelier side, then cash out | 98.728% RTP | 98.739% (10M rounds, z +0.62) |
+| | | Skip to an A, 3, 5, 9, J or K, then one guess | 99.000% RTP | exact (enumerated) |
+| | | Each further guess | 99% of what rides | two guesses 97.822%, three 96.824% (10M rounds, z +0.20, −0.18) |
+| Crash (online) | shared rounds, m(t) = e^(0.00006 t); P(crash point > x) = 0.99/x, so 1% of rounds end at 1.00×; paid only below the crash point | Every cash-out, auto or pressed | 99.000% RTP | 98.968% at 2× (10M rounds, z −1.03); 5 targets to 100× within 1.6 SE; presses through the engine 99.152% (60K rounds, z +0.39) |
 
 The blackjack figure is for exactly these rules. The often-quoted 0.26-0.28% assumes aces can be
 resplit, which this table doesn't allow, and a cut card adds about 0.02 points over dealing each

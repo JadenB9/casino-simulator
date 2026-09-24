@@ -1,0 +1,151 @@
+/* The Bandit Wheel: a betting panel after Rust's own terminal (flat charcoal boxes, square corners,
+   the time to the next spin in big figures, five painted squares, a green go button), the strip of
+   recent results, the players at the wheel and the tags over their terminals. The bottom-left
+   corner stays free for the site's back chip. */
+
+.bw-panel {
+  --bw-box: rgba(36, 34, 31, 0.92);
+  --bw-ink: #ebe6dc;
+  --bw-ink-2: #b4ac9e;
+  --bw-ink-3: #857d70;
+  --bw-go: #4d6b27;
+  --bw-go-ink: #d9f2ae;
+  position: fixed; right: 16px; bottom: 18px; width: 368px; display: grid; gap: 4px;
+  color: var(--bw-ink); font-family: var(--ui); letter-spacing: 0.01em;
+}
+.bw-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 0 2px 2px; }
+.bw-title { font-size: 27px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em; text-shadow: 0 2px 8px rgba(0, 0, 0, 0.7); }
+.bw-seat { font-size: 15px; color: var(--bw-ink-2); text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8); }
+.bw-box { background: var(--bw-box); border-radius: 2px; padding: 9px 12px; }
+.bw-row { display: grid; grid-template-columns: 1fr 104px; gap: 4px; }
+
+.bw-info { display: flex; align-items: center; gap: 12px; font-size: 15px; line-height: 1.3; color: var(--bw-ink-2); }
+.bw-info-icon { flex: none; width: 30px; height: 30px; }
+.bw-info-icon circle:first-child { fill: #a39b8e; }
+.bw-info-icon rect, .bw-info-icon circle + rect + circle { fill: #26241f; }
+
+.bw-time { display: grid; align-content: center; gap: 2px; }
+.bw-time-label { font-size: 24px; font-weight: 600; }
+.bw-time-note { font-size: 15px; color: var(--bw-ink-2); min-height: 1.2em; }
+.bw-secs { position: relative; display: grid; place-items: center; padding: 6px; }
+.bw-secs svg { width: 74px; height: 74px; display: block; }
+.bw-secs circle { fill: none; stroke-width: 4; }
+.bw-secs .track { stroke: rgba(255, 255, 255, 0.1); }
+.bw-secs .left { stroke: var(--bw-ink); stroke-linecap: butt; transform: rotate(-90deg); transform-origin: 50% 50%; transition: stroke-dashoffset 0.25s linear; }
+.bw-secs-num { position: absolute; inset: 0; display: grid; place-items: center; font-size: 36px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.bw-panel.late .bw-secs .left { stroke: #e8a23a; }
+.bw-panel.late .bw-secs-num { color: #f0b04a; }
+
+.bw-slot-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+.bw-slot { position: relative; display: grid; justify-items: center; gap: 2px; padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
+.bw-slot-face { display: block; width: 100%; aspect-ratio: 1; box-shadow: 0 2px 0 rgba(0, 0, 0, 0.5); transition: transform 0.12s var(--ease), box-shadow 0.12s; }
+.bw-slot:hover:not(:disabled) .bw-slot-face, .bw-slot:focus-visible .bw-slot-face { transform: translateY(-2px); box-shadow: 0 0 0 2px var(--bw-ink), 0 4px 0 rgba(0, 0, 0, 0.5); }
+.bw-slot:focus-visible { outline: none; }
+.bw-slot:disabled { cursor: default; }
+.bw-slot:disabled .bw-slot-face { filter: saturate(0.55) brightness(0.72); }
+.bw-slot.has .bw-slot-face { box-shadow: 0 0 0 2px #f1e3b0, 0 2px 0 rgba(0, 0, 0, 0.5); }
+.bw-slot.won .bw-slot-face { filter: none; box-shadow: 0 0 0 3px #ffe07a, 0 0 18px rgba(255, 214, 110, 0.75); animation: bw-won 0.6s steps(2) 4; }
+@keyframes bw-won { 50% { box-shadow: 0 0 0 3px rgba(255, 224, 122, 0.2), 0 0 4px rgba(255, 214, 110, 0.2); } }
+.bw-slot-mine { min-height: 18px; font-size: 16px; font-weight: 600; }
+.bw-slot-all { min-height: 15px; font-size: 13px; color: var(--bw-ink-3); }
+.bw-hint { margin-top: 6px; min-height: 18px; font-size: 14px; color: var(--bw-ink-2); }
+.bw-slot.tip-pick { box-shadow: none !important; }
+.bw-slot.tip-pick .bw-slot-face { box-shadow: 0 0 0 2px var(--brass-hi), 0 0 14px rgba(241, 213, 154, 0.5); }
+
+.bw-chips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.bw-chip { width: 40px; height: 40px; border-radius: 50%; border: 0; padding: 0; cursor: pointer; background: none; transition: transform 0.12s var(--ease); }
+.bw-chip .bw-chip-face { display: block; width: 100%; height: 100%; border-radius: 50%; }
+.bw-chip[aria-pressed='true'] { transform: translateY(-4px); box-shadow: 0 0 0 2px var(--bw-ink), 0 5px 10px rgba(0, 0, 0, 0.5); }
+.bw-max { margin-left: auto; width: auto; min-width: 58px; padding: 0 12px; border-radius: 3px; background: #7a2f1c; color: #f7e6d8; font-size: 16px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.3); }
+.bw-max[aria-pressed='true'] { background: #a13d22; box-shadow: 0 0 0 2px var(--bw-ink), inset 0 -3px 0 rgba(0, 0, 0, 0.3); }
+
+.bw-acts { display: flex; gap: 4px; }
+.bw-acts .btn { flex: 1; height: 36px; padding: 0 8px; border: 0; border-radius: 2px; background: var(--bw-box); color: var(--bw-ink); font-size: 15px; letter-spacing: 0.04em; white-space: nowrap; }
+.bw-acts .btn:hover:not(:disabled) { background: rgba(62, 59, 54, 0.95); }
+.bw-acts .bw-go { flex: 1.5; background: var(--bw-go); color: var(--bw-go-ink); }
+.bw-acts .bw-go:hover:not(:disabled) { background: #5c7f2f; }
+
+.bw-win { display: grid; align-content: center; gap: 1px; }
+.bw-win-label { font-size: 20px; font-weight: 600; }
+.bw-win-value { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.bw-win-value.win { color: #a7d86a; }
+.bw-win-value.quiet { color: var(--bw-ink-2); }
+.bw-win-note { font-size: 14px; color: var(--bw-ink-2); line-height: 1.25; }
+.bw-meters { display: grid; align-content: center; gap: 6px; }
+.bw-meter-label { font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--bw-ink-3); }
+.bw-meter-value { font-size: 19px; font-weight: 600; }
+
+/* the results strip, top left */
+.bw-history { position: fixed; top: var(--below-hud); left: 16px; padding: 8px 10px 10px; background: rgba(36, 34, 31, 0.92); border-radius: 2px; color: #ebe6dc; }
+.bw-history-label, .bw-players-label { margin-bottom: 6px; font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: #857d70; }
+/* the latest spin large on the left, the eleven before it on top and eleven more under them */
+.bw-history-row { display: grid; grid-template-columns: 52px repeat(11, 24px); grid-auto-rows: 24px; gap: 4px; align-items: center; }
+.bw-hist { display: block; width: 24px; height: 24px; }
+.bw-hist.latest { grid-row: span 2; width: 48px; height: 48px; box-shadow: 0 0 0 2px #ebe6dc; }
+.bw-history-empty { grid-column: 1 / -1; }
+.bw-history-empty { font-size: 14px; color: #857d70; }
+
+/* the players at the wheel, under the strip */
+.bw-players { position: fixed; top: calc(var(--below-hud) + 96px); left: 16px; width: 330px; display: grid; gap: 5px; padding: 8px 10px; background: rgba(38, 36, 33, 0.88); border-radius: 2px; color: #ebe6dc; }
+.bw-player { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; grid-template-areas: 'name status stack' 'bets bets bets'; column-gap: 8px; align-items: baseline; padding: 3px 0; border-top: 1px solid rgba(255, 255, 255, 0.06); font-size: 16px; }
+.bw-player.you .bw-player-name { color: #f1e3b0; }
+.bw-player.away { opacity: 0.55; }
+.bw-player-name { grid-area: name; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bw-player-status { grid-area: status; font-size: 14px; color: #857d70; }
+.bw-player-status.win { color: #a7d86a; }
+.bw-player-stack { grid-area: stack; color: #b4ac9e; }
+.bw-player-bets { grid-area: bets; display: flex; flex-wrap: wrap; gap: 4px; }
+.bw-player-bets:empty { display: none; }
+.bw-bet-tag { display: inline-flex; gap: 4px; align-items: baseline; padding: 0 6px 0 0; font-size: 13px; background: rgba(0, 0, 0, 0.3); color: #d6cfc2; }
+.bw-bet-tag b { padding: 0 5px; color: #1b1714; font-family: 'Courier New', Courier, monospace; font-weight: 700; }
+.bw-bet-tag.n1 b { background: #dcb534; }
+.bw-bet-tag.n3 b { background: #3f9a3a; }
+.bw-bet-tag.n5 b { background: #3a6fb4; }
+.bw-bet-tag.n10 b { background: #a64aa9; }
+.bw-bet-tag.n20 b { background: #cf4a26; }
+
+/* tags over the terminals */
+.bw-tag { display: grid; justify-items: center; padding: 3px 9px; background: rgba(24, 22, 20, 0.82); border-radius: 2px; font-family: var(--ui); color: #ebe6dc; white-space: nowrap; pointer-events: none; }
+.bw-tag.you { box-shadow: 0 0 0 1px rgba(241, 227, 176, 0.6); }
+.bw-tag-name { font-size: 14px; }
+.bw-tag.you .bw-tag-name { color: #f1e3b0; }
+.bw-tag-note { font-size: 13px; color: #b4ac9e; }
+.bw-tag-note:empty { display: none; }
+.bw-tag-note.win { color: #a7d86a; font-weight: 600; }
+
+@media (max-height: 820px) {
+  .bw-info, .bw-win-note { display: none; }
+}
+/* phones: the panel across the bottom, only what betting needs, the wheel above it */
+@media (max-width: 760px) {
+  .bw-panel { left: 8px; right: 8px; bottom: 8px; width: auto; gap: 3px; }
+  .bw-title { font-size: 20px; }
+  .bw-seat { font-size: 13px; }
+  .bw-box { padding: 6px 9px; }
+  .bw-info, .bw-win-note, .bw-hint { display: none; }
+  .bw-row { grid-template-columns: 1fr 70px; gap: 3px; }
+  .bw-time-label { font-size: 17px; }
+  .bw-time-note { font-size: 13px; }
+  .bw-secs { padding: 3px; }
+  .bw-secs svg { width: 52px; height: 52px; }
+  .bw-secs-num { font-size: 24px; }
+  .bw-slot-row { gap: 6px; }
+  .bw-slot-mine { min-height: 15px; font-size: 13px; }
+  .bw-slot-all { min-height: 13px; font-size: 11px; }
+  .bw-chip { width: 34px; height: 34px; }
+  .bw-max { min-width: 48px; padding: 0 8px; font-size: 14px; }
+  .bw-acts .btn { height: 32px; font-size: 13px; padding: 0 4px; }
+  .bw-win-label { font-size: 15px; }
+  .bw-win-value { font-size: 19px; }
+  .bw-meters { gap: 2px; }
+  .bw-meter-value { font-size: 15px; }
+  .bw-history { left: 8px; padding: 6px 8px; }
+  .bw-history-label { display: none; }
+  .bw-history-row { grid-template-columns: 36px repeat(8, 18px); grid-auto-rows: 18px; }
+  .bw-hist { width: 18px; height: 18px; }
+  .bw-hist.latest { width: 36px; height: 36px; }
+  .bw-hist:nth-child(n + 18) { display: none; }
+  .bw-players { display: none; }
+  /* the tip line sits over the panel, not under it */
+  :root:has(.bw-panel) { --tip-bottom: 372px; }
+}
