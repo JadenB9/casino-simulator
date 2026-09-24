@@ -265,7 +265,7 @@ interface WheelMaterials {
 }
 
 const materialCache = new Map<Quality, WheelMaterials>();
-const PHYSICAL_ONLY = ['clearcoat', 'clearcoatRoughness', 'sheen', 'sheenColor', 'sheenRoughness'] as const;
+const PHYSICAL_ONLY = ['clearcoat', 'clearcoatRoughness', 'sheen', 'sheenColor', 'sheenRoughness', 'specularIntensity'] as const;
 
 /** A physical material on High; on Low the standard one, without the physical-only layers. */
 function surface(high: boolean, p: THREE.MeshPhysicalMaterialParameters): THREE.MeshStandardMaterial {
@@ -277,7 +277,7 @@ function surface(high: boolean, p: THREE.MeshPhysicalMaterialParameters): THREE.
 const faceCache = new Map<string, { ring: THREE.Material; pockets: THREE.Material }>();
 
 /**
- * On High the lacquered wood is a physical material with a thin clear coat over the grain and the
+ * On High the lacquered wood is a physical material, dull wood under a thin clear coat, and the
  * ball has a soft sheen; on Low they're standard materials with the same maps.
  */
 function wheelMaterials(q: Quality): WheelMaterials {
@@ -298,6 +298,7 @@ function wheelMaterials(q: Quality): WheelMaterials {
     roughnessMap: rimSurface,
     bumpMap: rimSurface,
     bumpScale: 0.5,
+    specularIntensity: 0.4,
     clearcoat: 0.55,
     clearcoatRoughness: 0.07,
     side: THREE.DoubleSide,
@@ -310,8 +311,10 @@ function wheelMaterials(q: Quality): WheelMaterials {
     roughnessMap: ven.surface,
     bumpMap: ven.surface,
     bumpScale: 0.35,
-    clearcoat: 0.3,
-    clearcoatRoughness: 0.18,
+    // the wood under the lacquer is dull; the shine is the lacquer's
+    specularIntensity: 0.3,
+    clearcoat: 0.24,
+    clearcoatRoughness: 0.15,
     side: THREE.DoubleSide,
   });
 
