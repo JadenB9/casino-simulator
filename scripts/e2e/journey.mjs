@@ -84,6 +84,9 @@ async function login() {
  * under a run (the dev server's live-reload socket can drop under load, and its client reloads).
  */
 async function onFloor(page) {
+  // a reload under way: let the new page load first
+  await page.waitForLoadState('load').catch(() => {});
+  await page.waitForFunction(() => document.getElementById('boot')?.classList.contains('done'), null, { timeout: 600_000 }).catch(() => {});
   if (await page.evaluate(() => !!window.casino?.app && !!document.querySelector('.hud')).catch(() => false)) return;
   await page.waitForSelector('.front:not(.closing) .name-input, .menu-item, .editor-panel.guided, .hud', { timeout: 600_000 });
   if (await page.$('.front:not(.closing) .name-input')) {
@@ -710,6 +713,7 @@ for (const id of only.length ? only : Object.keys(STATIONS)) {
       // the page reloaded under this station (not the game's doing): forget what it half checked
       log(`${id}: the page reloaded mid-station; again from the floor`);
       problems.splice(mark);
+      await page.waitForTimeout(3000);
       await play();
     }
   } catch (err) {
