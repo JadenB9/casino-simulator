@@ -244,7 +244,8 @@ async function playStation(page, id) {
   const buyIn = Math.round(Number(await page.inputValue('.modal input[type=number]')) * 100);
   await shot(page, `${tag}-1-buyin`);
   await page.click('.modal .btn.primary');
-  await page.waitForFunction(() => window.casino.app.table?.seated === true, null, { timeout: 60_000 });
+  // (buying in counts as seated before the chips arrive: wait for them)
+  await page.waitForFunction(() => window.casino.app.table?.session.snapshot?.you?.status === 'seated', null, { timeout: 60_000 });
   await trackSession(page);
   const stack0 = await stackOf(page);
   check(stack0 === buyIn, `${id}: bought in for ${buyIn / 100} (${note.trim()}; picks ${picks.join(', ')}), stack ${stack0 / 100}`);
@@ -539,7 +540,8 @@ async function sitAlone(page, id, tier) {
   await page.click('.modal .row:first-of-type .btn >> nth=-1');
   const buyIn = Math.round(Number(await page.inputValue('.modal input[type=number]')) * 100);
   await page.click('.modal .btn.primary');
-  await page.waitForFunction(() => window.casino.app.table?.seated === true, null, { timeout: 60_000 });
+  // (buying in counts as seated before the chips arrive: wait for them)
+  await page.waitForFunction(() => window.casino.app.table?.session.snapshot?.you?.status === 'seated', null, { timeout: 60_000 });
   await trackSession(page);
   const stack0 = await stackOf(page);
   check(stack0 === buyIn, `${id}: bought in for ${buyIn / 100}, stack ${stack0 / 100}`);
@@ -645,7 +647,8 @@ async function playMachine(page, id, game) {
       const s = window.casino.app.table.session;
       const r = s.__events.find((e) => e.type === 'result');
       const go = s.__events.find((e) => e.type === 'spin' || e.type === 'deal');
-      return { bet: r?.bet ?? 0, win: (r?.win ?? 0) + (r?.freeWin ?? 0), coins: go?.coins ?? 0, most: s.snapshot.meta.config.options?.maxCoins, cel: s.__celebrations, errs: s.__errs };
+      // (video poker's bet is on its deal; the slots' on the result)
+      return { bet: r?.bet ?? go?.bet ?? 0, win: (r?.win ?? 0) + (r?.freeWin ?? 0), coins: go?.coins ?? 0, most: s.snapshot.meta.config.options?.maxCoins, cel: s.__celebrations, errs: s.__errs };
     });
     const after = await stackOf(page);
     if (r === 0) check(res.coins === res.most, `${id}: Max (A) set the most coins (${res.coins} of ${res.most}, ${res.bet / 100} a ${game === 'videopoker' ? 'hand' : 'spin'})`);
