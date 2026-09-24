@@ -249,7 +249,8 @@ if (wanted('desks')) {
     p = await player('qm_desks');
     pages.push(p);
     const { page } = p;
-    const start = await me(p);
+    // chips still held on a table from an interrupted run come home first (two minutes at most)
+    const start = await settled(p, 180_000);
     log(`qm_desks: balance ${money(start.balance)}`);
 
     const games = (process.env.GAMES ?? 'plinko,dice,limbo,keno,tower,mines,hilo,crash').split(',');
