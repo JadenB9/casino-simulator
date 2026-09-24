@@ -153,8 +153,9 @@ console.log(JSON.stringify({ stackBefore: before, max: maxBet, maxOk }));
 await page.keyboard.press('Backspace');
 await until(() => !window.casino.table.view.debug.state().bets[5], 15000);
 
-// A Twenty played through the view (the server's draw can't be steered), for the celebration
-await freshWindow(9000);
+// A Twenty played through the view (the server's draw can't be steered), for the celebration. The
+// real wheel keeps its own clock, so the replay starts as a window opens and fits inside it.
+await freshWindow(11000);
 await page.evaluate(() => {
   const t = window.casino.table;
   const v = t.view;
@@ -163,19 +164,18 @@ await page.evaluate(() => {
   v.onTable(snap);
   const now = Date.now();
   const seats = { 0: { wagered: 1500, returned: 10500, bets: [[1, 1000, 0], [20, 500, 10500]] } };
-  const next = { ...snap.view, phase: 'results', bets: {}, deadline: now + 12000, spin: { round: 99, slot: 0, number: 20, startAt: now, restAt: now + 7000 }, settled: seats, history: [0, ...snap.view.history] };
-  void v.onEvents([{ type: 'spin', round: 99, slot: 0, number: 20, startAt: now, restAt: now + 7000 }, { type: 'settle', round: 99, slot: 0, number: 20, seats }], next);
+  const next = { ...snap.view, phase: 'results', bets: {}, deadline: now + 10000, spin: { round: 99, slot: 0, number: 20, startAt: now, restAt: now + 5000 }, settled: seats, history: [0, ...snap.view.history] };
+  void v.onEvents([{ type: 'spin', round: 99, slot: 0, number: 20, startAt: now, restAt: now + 5000 }, { type: 'settle', round: 99, slot: 0, number: 20, seats }], next);
 });
 await until(() => window.casino.table.view.debug.state().spin?.slot === 0, 10000);
 const sp2 = (await state()).spin;
 await until(`window.casino.table.view.debug.state().s >= ${sp2.tRest}`);
-await page.waitForTimeout(300);
+const twentyShows = (await state()).shows;
+await page.waitForTimeout(250);
 await shot('8-twenty-rest');
 await until(() => !!document.querySelector('.celebrate'), 30000);
-await page.waitForTimeout(700);
+await page.waitForTimeout(600);
 await shot('9-twenty-celebrate');
-await until(() => !window.casino.table.view.debug.state().animating, 90000);
-const twentyShows = (await state()).shows;
 console.log(JSON.stringify({ twentyShows, errors: errors.slice(0, 10) }, null, 1));
 await browser.close();
 // Fail on a flapper off the drawn slot (the live spin, or the Twenty at slot 0), a wrong Max, or page errors.

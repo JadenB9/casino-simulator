@@ -17,7 +17,7 @@ import type { Member } from '../../../../shared/src/protocol.ts';
 import type { BanditView, SeatSettle, Bets } from '../../../../shared/src/games/banditwheel/protocol.ts';
 import { NUMBERS, SPOTS, SLOTS, type WheelNumber, spotOf, paysLabel, callFor, edgePercent } from '../../../../shared/src/games/banditwheel/rules.ts';
 import { formatMoney, type Cents } from '../../../../shared/src/money.ts';
-import { tween, wait, ease } from '../../table/tween.ts';
+import { tween, ease } from '../../table/tween.ts';
 import { celebrate } from '../../table/celebrate.ts';
 import { serverNow } from '../../net/clock.ts';
 import {
@@ -107,6 +107,41 @@ function mountBanditWheel(ctx: TableViewCtx): TableView {
   /** The spin being watched came from a snapshot (outside the event queue); a new window ends it. */
   let resumed = false;
 
+  // The payout and the camera run on the wall clock, like the wheel: a table's rounds follow the
+  // server's clock, so at a low frame rate they play choppier but never later. A snapshot or
+  // leaving the table snaps whatever is running to its end.
+  type Anim = { t0: number; ms: number; apply: (k: number) => void; done: () => void; ease: (t: number) => number };
+  const anims = new Set<Anim>();
+  function play(ms: number, apply: (k: number) => void, e: (t: number) => number = ease.inOut): Promise<void> {
+    return new Promise((done) => {
+      if (ms <= 0) {
+        apply(1);
+        done();
+        return;
+      }
+      anims.add({ t0: performance.now(), ms, apply, done, ease: e });
+    });
+  }
+  const pause = (ms: number) => play(ms, () => {});
+  function stepAnims(): void {
+    const now = performance.now();
+    for (const a of anims) {
+      const k = Math.min(1, (now - a.t0) / a.ms);
+      a.apply(a.ease(k));
+      if (k >= 1) {
+        anims.delete(a);
+        a.done();
+      }
+    }
+  }
+  function finishAnims(): void {
+    for (const a of anims) {
+      a.apply(1);
+      a.done();
+    }
+    anims.clear();
+  }
+
   const placeOf = (seat: number, key: WheelNumber): THREE.Vector3 => new THREE.Vector3(...cupPlace(terminalOfSeat(seat), NUMBERS.indexOf(key)));
   const chips = new CupChips(placeOf);
   scene.add(chips.root);
@@ -139,35 +174,53 @@ function mountBanditWheel(ctx: TableViewCtx): TableView {
 
   // ------------------------------------------------------------------------------------------
   // The camera: at your terminal while betting; to the wheel when it's pulled, close on the
-  // flapper as it slows, then back to exactly where it was for the payout.
+  // flapper as it slows, then back to exactly where it was for the payout. The flow only says
+  // where the camera should be; every frame it eases there, so a step that comes late or twice
+  // can't leave it anywhere else. At the seat it is the world's again: nothing here touches it.
 
+  type CamMode = 'seat' | 'wheel' | 'flapper';
   const camera = stage.engine.camera;
+  let camMode: CamMode = 'seat';
+  /** Where the camera was when it left the seat; null while it is there. */
   let camHome: { pos: THREE.Vector3; quat: THREE.Quaternion } | null = null;
-  function glide(pos: THREE.Vector3, quat: THREE.Quaternion, ms: number): Promise<void> {
-    const p0 = camera.position.clone();
-    const q0 = camera.quaternion.clone();
-    return tween(ms, (k) => {
-      if (disposed) return;
-      camera.position.lerpVectors(p0, pos, k);
-      camera.quaternion.slerpQuaternions(q0, quat, k);
-    }, ease.inOut);
+  let camClock = performance.now();
+  const camQuat = new THREE.Quaternion();
+  const camLook = new THREE.Matrix4();
+
+  function aimCamera(mode: CamMode): void {
+    if (mode !== 'seat' && camHome === null) camHome = { pos: camera.position.clone(), quat: camera.quaternion.clone() };
+    camMode = mode;
   }
-  function glideTo(pose: Pose, ms: number): Promise<void> {
-    camHome ??= { pos: camera.position.clone(), quat: camera.quaternion.clone() };
-    const to = stage.worldPose(pose);
-    const q = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(to.position, to.target, camera.up));
-    return glide(to.position, q, ms);
-  }
-  function glideHome(ms: number): Promise<void> {
-    const home = camHome;
-    camHome = null;
-    if (!home) return Promise.resolve();
-    if (ms <= 0) {
-      camera.position.copy(home.pos);
-      camera.quaternion.copy(home.quat);
-      return Promise.resolve();
+
+  /** Straight back to the seat (a snapshot, leaving the table). */
+  function snapHome(): void {
+    if (camHome) {
+      camera.position.copy(camHome.pos);
+      camera.quaternion.copy(camHome.quat);
     }
-    return glide(home.pos, home.quat, ms);
+    camHome = null;
+    camMode = 'seat';
+  }
+
+  function moveCamera(): void {
+    const now = performance.now();
+    const dt = Math.min(0.1, (now - camClock) / 1000);
+    camClock = now;
+    if (camHome === null) return;
+    let pos: THREE.Vector3;
+    let quat: THREE.Quaternion;
+    if (camMode === 'seat') {
+      pos = camHome.pos;
+      quat = camHome.quat;
+    } else {
+      const to = stage.worldPose(camMode === 'wheel' ? wheelPose(mySeat) : FLAPPER_POSE);
+      pos = to.position;
+      quat = camQuat.setFromRotationMatrix(camLook.lookAt(to.position, to.target, camera.up));
+    }
+    const k = 1 - Math.exp(-dt / 0.3);
+    camera.position.lerp(pos, k);
+    camera.quaternion.slerp(quat, k);
+    if (camMode === 'seat' && camera.position.distanceTo(pos) < 0.003 && camera.quaternion.angleTo(quat) < 0.003) snapHome();
   }
 
   // ------------------------------------------------------------------------------------------
@@ -354,6 +407,8 @@ function mountBanditWheel(ctx: TableViewCtx): TableView {
   let tickIdx = 0;
   let relIdx = 0;
   let stopHeard = true;
+  let spinClock = 0;
+  let spinDone: (() => void) | null = null;
   const sound = new WheelSound(ctx.sfx);
 
   /** Put the wheel at rest on a slot, the flapper hanging free just inside it (as every spin ends). */
@@ -363,6 +418,10 @@ function mountBanditWheel(ctx: TableViewCtx): TableView {
   }
 
   function turnWheel(): void {
+    if (spin && driving) {
+      s = Math.min(spin.tRest, (performance.now() - spinClock) / 1000);
+      if (s >= spin.tRest) spinDone?.();
+    }
     if (spin) theta = spin.angle(s);
     rotor.rotation.z = -theta;
     let since: number | null = null;
@@ -451,13 +510,18 @@ function mountBanditWheel(ctx: TableViewCtx): TableView {
     stopHeard = false;
     if (duration > 3) sound.pull();
     ctx.kit.say('No more bets', 2400);
-    void glideTo(wheelPose(mySeat), 1000);
+    aimCamera('wheel');
     const token = spin;
-    void wait(Math.max(0.8, duration - 2.5) * 1000).then(() => {
-      if (!disposed && g === gen && spin === token) void glideTo(FLAPPER_POSE, 1900);
+    void pause(Math.max(0.8, duration - 2.5) * 1000).then(() => {
+      if (!disposed && g === gen && spin === token && driving) aimCamera('flapper');
     });
+    // The wheel keeps the wall clock (it is the same wheel for everyone at the table), so a slow
+    // frame rate never leaves it behind the server; the tween is there so a session catching up
+    // (finishAll) can still snap the spin to its end.
     driving = true;
-    await tween(duration * 1000, (k) => (s = k * duration), ease.linear);
+    spinClock = performance.now();
+    await Promise.race([new Promise<void>((res) => (spinDone = res)), tween(duration * 1000, () => {}, ease.linear)]);
+    spinDone = null;
     driving = false;
     if (disposed || g !== gen) return;
     s = duration;
@@ -465,8 +529,8 @@ function mountBanditWheel(ctx: TableViewCtx): TableView {
       // watched from a snapshot: the chips already went home, so just the result
       showResult(e, settle, next);
       animating = false;
-      await wait(900);
-      if (!disposed && g === gen) await glideHome(700);
+      await pause(900);
+      if (!disposed && g === gen) aimCamera('seat');
       return;
     }
     await payOut(e, settle, next, g);
@@ -475,20 +539,20 @@ function mountBanditWheel(ctx: TableViewCtx): TableView {
 
   function lift(p: THREE.Object3D, to: THREE.Vector3, ms: number, arc = 0.02): Promise<void> {
     const from = p.position.clone();
-    return tween(ms, (k) => {
+    return play(ms, (k) => {
       p.position.lerpVectors(from, to, k);
       p.position.y = from.y + (to.y - from.y) * k + Math.sin(Math.PI * k) * arc;
-    }, ease.inOut);
+    });
   }
 
   /** Chips going down into a terminal's hopper: they sink into the plate and are gone. */
   function sink(p: THREE.Object3D, ms: number): Promise<void> {
     const y = p.position.y;
-    return tween(ms, (k) => {
+    return play(ms, (k) => {
       p.position.y = y - 0.02 * k;
       p.scale.setScalar(Math.max(0.001, 1 - k));
       if (k >= 1) p.removeFromParent();
-    }, ease.inOut);
+    });
   }
 
   /** Where a terminal's winnings come up from: out of the hood behind its screen. */
@@ -544,9 +608,10 @@ function mountBanditWheel(ctx: TableViewCtx): TableView {
     const ms = (x: number) => x * k;
 
     // a moment on the flapper, then back to the terminal
-    await wait(ms(1100));
+    await pause(ms(1100));
     if (disposed || g !== gen) return;
-    await glideHome(ms(800));
+    aimCamera('seat');
+    await pause(ms(700));
     if (disposed || g !== gen) return;
 
     // losing chips go down the hoppers
@@ -600,7 +665,7 @@ function mountBanditWheel(ctx: TableViewCtx): TableView {
         },
       );
     }
-    await wait(ms(winners.length ? 1200 : 400));
+    await pause(ms(winners.length ? 1200 : 400));
     if (disposed || g !== gen) return;
 
     // winning bets and their payouts go home to the players
@@ -640,6 +705,7 @@ function mountBanditWheel(ctx: TableViewCtx): TableView {
   const tableView: TableView & { debug: unknown } = {
     onTable(snap: TableSnapshot) {
       gen++;
+      finishAnims();
       mode = snap.meta.mode;
       mySeat = snap.you.seat;
       stack = snap.you.stack;
@@ -650,7 +716,7 @@ function mountBanditWheel(ctx: TableViewCtx): TableView {
       const v = snap.view as BanditView;
       animating = false;
       driving = false;
-      void glideHome(0);
+      snapHome();
       loose.clear();
       chips.clear();
       clearResult();
@@ -686,7 +752,7 @@ function mountBanditWheel(ctx: TableViewCtx): TableView {
               animating = false;
               driving = false;
               if (spin) restOn(spin.plan.slot);
-              void glideHome(0);
+              aimCamera('seat');
             }
             clearResult();
             lastNet = {};
@@ -701,7 +767,7 @@ function mountBanditWheel(ctx: TableViewCtx): TableView {
             const grown = chips.sync(bets);
             for (const pile of grown) {
               const y = pile.position.y;
-              void tween(140, (k) => pile.position.setY(y + 0.03 * (1 - k)), ease.out);
+              void play(140, (k) => pile.position.setY(y + 0.03 * (1 - k)), ease.out);
             }
             if (e.seat !== mySeat && grown.length) ctx.sfx.play('chip-lay', { volume: 0.3 });
             refresh();
@@ -759,7 +825,9 @@ function mountBanditWheel(ctx: TableViewCtx): TableView {
     },
 
     update() {
+      stepAnims();
       turnWheel();
+      moveCamera();
       clicks();
       updateTime();
       lamps();
@@ -769,12 +837,9 @@ function mountBanditWheel(ctx: TableViewCtx): TableView {
     },
 
     dispose() {
-      if (camHome) {
-        camera.position.copy(camHome.pos);
-        camera.quaternion.copy(camHome.quat);
-        camHome = null;
-      }
+      snapHome();
       disposed = true;
+      finishAnims();
       offTips();
       if (tipShown) ctx.kit.tip(null);
       removeEventListener('pointerdown', onDown);
@@ -810,6 +875,10 @@ function mountBanditWheel(ctx: TableViewCtx): TableView {
         /** ms left in the betting window (null outside one) */
         left: view?.phase === 'betting' && view.deadline !== null ? view.deadline - serverNow() : null,
         animating,
+        camera: camera.position.toArray().map((x) => +x.toFixed(2)),
+        camHome: camHome !== null,
+        gen,
+        resumed,
         bets: myBets(),
         history: view?.history ?? [],
         stack,
