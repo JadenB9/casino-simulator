@@ -27,7 +27,7 @@ import { Player } from './player.ts';
 import { Interact } from './interact.ts';
 import { TouchControls } from './touch.ts';
 import { StationLod } from './lod.ts';
-import { Bloom, FLOOR_BLOOM, MACHINE_BLOOM, PixelRatio, TABLE_BLOOM, type BloomLook } from './bloom.ts';
+import { Bloom, FLOOR_BLOOM, MACHINE_BLOOM, PixelRatio, STUDIO_BELOW, STUDIO_BLOOM, TABLE_BLOOM, type BloomLook } from './bloom.ts';
 import type { MouseSettings } from './mouse.ts';
 import { Emotes, OWN_BUBBLE_Y, BUBBLE_Y, type CharacterSource } from './emotes.ts';
 import { Staff, measureSeats, type StaffGesture } from './npcs.ts';
@@ -397,7 +397,8 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
       // Seated, the camera is a metre from lit felt, cards and brass: nothing on a table glows
       // there; at a machine its own lights do, a little.
       const seat = interact.seated;
-      const want = !seat ? FLOOR_BLOOM : seat.zone === 'slots' || seat.game === 'videopoker' ? MACHINE_BLOOM : TABLE_BLOOM;
+      const studio = engine.camera.position.y < STUDIO_BELOW;
+      const want = studio ? STUDIO_BLOOM : !seat ? FLOOR_BLOOM : seat.zone === 'slots' || seat.game === 'videopoker' ? MACHINE_BLOOM : TABLE_BLOOM;
       if (want !== bloomLook) {
         bloomLook = want;
         bloom.setLook(want);
