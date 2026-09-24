@@ -33,7 +33,7 @@ export const SEAT_COUNT = 6;
 export const SPOT_R = { pairPlus: 0.745, ante: 0.862, play: 0.98 } as const;
 export type SpotKind = keyof typeof SPOT_R;
 export const SPOT_RADIUS = 0.044;
-const HAND_R = 0.575;
+export const HAND_R = 0.575;
 const FAN = 0.036;
 const TEXT_R = 0.48;
 
@@ -90,8 +90,8 @@ export function dealerSlot(i: number): THREE.Vector3 {
   return new THREE.Vector3((i - 1) * DEALER_CARD_GAP, TOP_Y + 0.001, DEALER_CARDS_Z);
 }
 
-/** The dealer's hand label sits in front of the cards, between them and the printed arc. */
-export const DEALER_LABEL = new THREE.Vector3(0, TOP_Y + 0.01, DEALER_CARDS_Z + (CARD_H * DEALER_CARD_SCALE) / 2 + 0.04);
+/** The dealer's hand label hangs from the cards' near edge, between them and the printed arc. */
+export const DEALER_LABEL = new THREE.Vector3(0, TOP_Y + 0.01, DEALER_CARDS_Z + (CARD_H * DEALER_CARD_SCALE) / 2 + 0.006);
 
 /** Toward the player from their play spot, where collected chips go. */
 export function railPoint(seat: number): THREE.Vector3 {

@@ -10,6 +10,7 @@
 // decided ringed on the felt; one war deal then settles every spot that went to war.
 
 import * as THREE from 'three';
+import type { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import type { TableView, TableViewCtx } from '../contract.ts';
 import type { Member } from '../../../../shared/src/protocol.ts';
 import type { TableConfig, GameEvent } from '../../../../shared/src/engine.ts';
@@ -37,6 +38,7 @@ import {
   besideSpot,
   cardSlot,
   dealerSlot,
+  DEALER_LABEL_Z,
   handLabelPoint,
   makeFelt,
   payoutPoint,
@@ -159,9 +161,15 @@ export function mountWar(ctx: TableViewCtx): TableView {
   const discard = discardStack();
   root.add(discard.mesh);
   let discardCount = 0;
-  const labels = new Map<string, { el: HTMLElement; obj: THREE.Object3D }>();
+  const labels = new Map<string, { el: HTMLElement; obj: CSS2DObject }>();
 
-  const setLabel = (key: string, at: THREE.Vector3, parts: { text: string; cls?: string }[], cls: string): void => {
+  /**
+   * A label pinned to the table. `hang` hangs it from `at` instead of centring it there: 'below' puts
+   * its top edge at the point, 'above' its bottom edge, so a label anchored at a card's edge never
+   * covers the card, however far back the camera is (the label's size is the screen's, the card's
+   * the table's).
+   */
+  const setLabel = (key: string, at: THREE.Vector3, parts: { text: string; cls?: string }[], cls: string, hang?: 'below' | 'above'): void => {
     let l = labels.get(key);
     if (!l) {
       const e = el('div', cls);
@@ -171,6 +179,7 @@ export function mountWar(ctx: TableViewCtx): TableView {
     l.el.className = cls;
     l.el.replaceChildren(...parts.map((p) => el('span', p.cls ?? '', p.text)));
     l.obj.position.copy(at);
+    l.obj.center.set(0.5, hang === 'below' ? 0 : hang === 'above' ? 1 : 0.5);
   };
   const dropLabel = (key: string): void => {
     const l = labels.get(key);
@@ -384,7 +393,8 @@ export function mountWar(ctx: TableViewCtx): TableView {
   };
 
   const handLabel = (seat: number, sv: SeatView): void => {
-    const cls = `wr-hand${owns(seat) ? ' mine' : ''}`;
+    // several of your spots side by side: the card over its result, narrow enough not to meet
+    const cls = `wr-hand${owns(seat) ? ' mine' : ''}${owns(seat) && spots.length > 1 ? ' stack' : ''}`;
     if (!sv.card) {
       dropLabel(`hand:${seat}`);
       return;
@@ -402,13 +412,13 @@ export function mountWar(ctx: TableViewCtx): TableView {
     } else if (sv.decision === 'war') {
       parts.push({ text: 'At war', cls: 'muted' });
     }
-    setLabel(`hand:${seat}`, handLabelPoint(seat), parts, cls);
+    setLabel(`hand:${seat}`, handLabelPoint(seat), parts, cls, 'below');
   };
 
   const dealerLabel = (card: Card, war: Card | null): void => {
     const parts: { text: string; cls?: string }[] = [{ text: `Dealer: ${cardName(card)}` }];
     if (war) parts.push({ text: `war ${cardName(war)}`, cls: 'muted' });
-    setLabel('dealer', new THREE.Vector3(0, TOP_Y + 0.01, dealerSlot(false).z - 0.09), parts, 'wr-hand dealer');
+    setLabel('dealer', new THREE.Vector3(0, TOP_Y + 0.01, DEALER_LABEL_Z), parts, 'wr-hand dealer', 'above');
   };
 
   const clearPayouts = (): void => {

@@ -7,6 +7,8 @@
 .tc-hand .net { font-family: var(--ui); font-size: 1.05em; letter-spacing: 0.02em; color: var(--ink-2); }
 .tc-hand .net.up { color: var(--win); }
 .tc-hand .net.down { color: var(--lose); }
+/* several of your hands side by side: the hand over its result, narrow enough not to meet */
+.tc-hand.stack { flex-direction: column; align-items: center; gap: 0; padding: 2px 9px 3px; line-height: 1.2; }
 
 .tc-name { padding: 1px 8px; border-radius: 3px; font-size: 13px; letter-spacing: 0.05em; color: var(--ink-2); background: rgba(12, 10, 8, 0.66); white-space: nowrap; pointer-events: none; }
 .tc-name.mine { color: var(--brass-hi); }
