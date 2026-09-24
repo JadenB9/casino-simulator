@@ -23,6 +23,7 @@ import { session } from '../../app/session.ts';
 import { ActionBar } from './actionbar.ts';
 import { advise, bannerOf, estimateEquity, onBoard, positionOf } from './advice.ts';
 import { holdemFelt, dealerButton, slotPoint, slotEdge, slotYaw, boardPoint, BOARD_SCALE, DEALER_POINT, TOP_Y } from './table.ts';
+import { hideNearChairs } from './model.ts';
 import './holdem.css';
 
 const SVG = 'http://www.w3.org/2000/svg';
@@ -115,6 +116,8 @@ export function mountHoldem(ctx: TableViewCtx): TableView {
   const button = dealerButton();
   button.visible = false;
   stage.root.add(button);
+  // the chairs between the camera and the rail stay out of the way while you play
+  const chairsBack = hideNearChairs(stage.anchor);
 
   const potLabelEl = el('div', 'he-pot', '');
   const potLabel = stage.label(potLabelEl, new THREE.Vector3(0, TOP_Y + 0.01, 0.2));
@@ -1010,6 +1013,7 @@ export function mountHoldem(ctx: TableViewCtx): TableView {
       tickTimers();
     },
     dispose() {
+      chairsBack();
       offTips();
       clearTip();
       for (const stop of glows.splice(0)) stop();
