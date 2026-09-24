@@ -14,7 +14,7 @@ import { celebrate } from '../../table/celebrate.ts';
 import { wait } from '../../table/tween.ts';
 import { el } from '../../ui/kit.ts';
 import { attractTexture, pcModel, pcPose, pcScreenCorners, PC_FOOTPRINT, PC_SEAT } from '../online/pc.ts';
-import { OnlineScreen, BetBox, actionButton, InfoList, SessionTally, OutcomePop, CardTrail, commitTyping, winTier, siteTone, drawSiteBar, drawAttractPanel, multText, pctText, type TrailEntry } from '../online/screen.ts';
+import { OnlineScreen, AddChips, BetBox, actionButton, InfoList, SessionTally, OutcomePop, CardTrail, commitTyping, winTier, siteTone, drawSiteBar, drawAttractPanel, multText, pctText, type TrailEntry } from '../online/screen.ts';
 
 /** The chair's trim on the floor: Hi-Lo's violet. */
 const ACCENT = '#8b5cff';
@@ -141,6 +141,7 @@ export const hilo: GameClientModule = {
   mount(ctx): TableView {
     const screen = new OnlineScreen('Hi-Lo');
     ctx.ui.append(screen.root);
+    const cashier = new AddChips(screen, ctx);
     const corners = pcScreenCorners();
 
     let view: HiloView | null = null;
@@ -377,6 +378,7 @@ export const hilo: GameClientModule = {
 
     return {
       onTable(snap) {
+        cashier.table(snap);
         stack = snap.you.stack;
         busy = false;
         animating = false;
@@ -430,12 +432,14 @@ export const hilo: GameClientModule = {
       },
 
       onSeat(msg) {
+        cashier.seat(msg);
         stack = msg.stack;
         bet?.setMax(stack);
         sync();
       },
 
       onError() {
+        cashier.refused();
         busy = false;
         sync();
       },

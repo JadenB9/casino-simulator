@@ -11,8 +11,10 @@
 
 import * as THREE from 'three';
 import './online.css';
-import { formatMoney, type Cents } from '../../../../shared/src/money.ts';
+import { DOLLAR, formatMoney, type Cents } from '../../../../shared/src/money.ts';
 import { el } from '../../ui/kit.ts';
+import { session } from '../../app/session.ts';
+import type { SeatMsg, TableSnapshot, TableViewCtx } from '../contract.ts';
 
 export const SCREEN_PX = { w: 1280, h: 800 } as const;
 
@@ -679,5 +681,92 @@ export class PlayersTable {
       }),
     );
     if (rows.length === 0) this.list.append(el('div', 'os-players-empty', 'No bets yet this round'));
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Added with the money pass (additions only): the site's cashier beside the chips at the top.
+
+/**
+ * "Add chips", beside the chips at the top of the page, the way a site's wallet button sits by the
+ * balance. With chips here it tops the stack up from your balance (as much as the table's buy-in
+ * still has room for); with none, after a bust or a buy-in turned down, it buys in. It follows the
+ * table snapshot and the seat messages its game already gets, and waits while chips are moving.
+ */
+export class AddChips {
+  readonly button = el('button', 'os-add', 'Add chips');
+  private status: SeatMsg['status'] = 'watching';
+  private stack: Cents = 0;
+  private buyIn = { min: 0, max: 0 };
+  private asking = false;
+  /** A top-up sent and not yet landed: the table takes one at a time. */
+  private sent = false;
+
+  constructor(screen: OnlineScreen, private readonly ctx: Pick<TableViewCtx, 'kit' | 'link'>) {
+    this.button.type = 'button';
+    this.button.title = 'Add chips from your balance';
+    this.button.addEventListener('mousedown', (e) => e.preventDefault());
+    this.button.addEventListener('click', () => void this.ask());
+    screen.root.querySelector('.os-stack')?.append(this.button);
+    this.paint();
+  }
+
+  table(snap: TableSnapshot): void {
+    this.buyIn = snap.meta.config.buyIn;
+    this.status = snap.you.status;
+    this.stack = snap.you.stack;
+    this.sent = false;
+    this.paint();
+  }
+
+  seat(msg: SeatMsg): void {
+    // any seat message after a top-up means it landed (or was turned down, with an err before it)
+    if (msg.stack !== this.stack || msg.status !== this.status) this.sent = false;
+    this.status = msg.status;
+    this.stack = msg.stack;
+    this.paint();
+  }
+
+  /** The table turned something down: a top-up in flight isn't one any more. */
+  refused(): void {
+    this.sent = false;
+    this.paint();
+  }
+
+  private room(): Cents {
+    const r = Math.max(0, this.buyIn.max - this.stack);
+    return r - (r % DOLLAR);
+  }
+
+  private paint(): void {
+    const seated = this.status === 'seated';
+    this.button.textContent = seated || this.status === 'buying_in' ? 'Add chips' : 'Buy in';
+    this.button.disabled = this.asking || this.sent || (this.status !== 'seated' && this.status !== 'watching') || (seated && this.room() < DOLLAR);
+    this.button.title = seated && this.room() < DOLLAR ? `You have the ${formatMoney(this.buyIn.max)} this table takes at most` : 'Add chips from your balance';
+  }
+
+  private async ask(): Promise<void> {
+    const p = session.profile;
+    if (!p || this.asking || this.sent) return;
+    const seated = this.status === 'seated';
+    if (!seated && this.status !== 'watching') return;
+    const max = seated ? this.room() : this.buyIn.max;
+    if (max < DOLLAR) return;
+    this.asking = true;
+    this.paint();
+    const amount = await this.ctx.kit.askBuyIn({
+      min: seated ? DOLLAR : this.buyIn.min,
+      max,
+      balance: p.balance,
+      verb: seated ? 'Add chips' : 'Buy in',
+      title: seated ? 'Add chips' : 'Buy in',
+      ...(seated ? { note: `You have ${formatMoney(this.stack)} here, and this table takes ${formatMoney(this.buyIn.max)} at most: add up to ${formatMoney(max)}.` } : {}),
+    });
+    this.asking = false;
+    if (amount && this.status === 'seated') {
+      this.sent = true;
+      this.ctx.link.topUp(amount);
+    } else if (amount && this.status === 'watching') this.ctx.link.buyIn(amount);
+    this.paint();
   }
 }

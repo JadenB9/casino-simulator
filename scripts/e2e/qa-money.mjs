@@ -290,6 +290,20 @@ if (wanted('desks')) {
       await playOne(p, game, since);
       await page.waitForTimeout(1500);
       await shoot(page, `desk-${game}-4-played`);
+      if (game === 'dice') {
+        // the site's cashier: Add chips tops the stack up from the balance, saying how much fits
+        const stackBefore = await page.evaluate(() => window.casino.app.table.session.snapshot.you.stack);
+        await page.click('.os-add');
+        await page.waitForSelector('.modal input[type=number]', { timeout: 10_000 });
+        const said = await page.textContent('.modal p');
+        check(/You have \$[0-9,.]+ here, and this table takes \$100,000 at most: add up to \$[0-9,]+\./.test(said), `Add chips says how much more fits: "${said}"`);
+        await shoot(page, 'desk-dice-4b-add-chips');
+        await page.fill('.modal input[type=number]', '250');
+        await page.click('.modal .btn.primary');
+        await page.waitForFunction((b) => window.casino.app.table.session.snapshot.you.stack === b + 25_000, stackBefore, { timeout: 15_000 });
+        await page.waitForTimeout(400);
+        check((await page.textContent('.os-stack-value')) === money(stackBefore + 25_000), `Add chips: $250 more on the stack, ${await page.textContent('.os-stack-value')} shown`);
+      }
 
       // what the page shows is what the server holds
       const seat = lastSeat(p);

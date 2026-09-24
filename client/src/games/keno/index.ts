@@ -12,7 +12,7 @@ import { wait } from '../../table/tween.ts';
 import { celebrate } from '../../table/celebrate.ts';
 import { el } from '../../ui/kit.ts';
 import { attractTexture, pcModel, pcPose, pcScreenCorners, PC_FOOTPRINT, PC_SEAT } from '../online/pc.ts';
-import { OnlineScreen, BetBox, actionButton, SegChoice, InfoList, SessionTally, commitTyping, labelled, winTier, siteTone, drawSiteBar, drawAttractPanel } from '../online/screen.ts';
+import { OnlineScreen, AddChips, BetBox, actionButton, SegChoice, InfoList, SessionTally, commitTyping, labelled, winTier, siteTone, drawSiteBar, drawAttractPanel } from '../online/screen.ts';
 
 /** The chair's trim on the floor: Keno's violet. */
 const ACCENT = '#9b5cff';
@@ -82,6 +82,7 @@ export const keno: GameClientModule = {
   mount(ctx): TableView {
     const screen = new OnlineScreen('Keno');
     ctx.ui.append(screen.root);
+    const cashier = new AddChips(screen, ctx);
     const corners = pcScreenCorners();
 
     /** The picks, in the order they were made. */
@@ -363,6 +364,7 @@ export const keno: GameClientModule = {
 
     return {
       onTable(snap) {
+        cashier.table(snap);
         stack = snap.you.stack;
         busy = false;
         screen.setStack(stack);
@@ -402,6 +404,7 @@ export const keno: GameClientModule = {
       },
 
       onSeat(msg) {
+        cashier.seat(msg);
         stack = msg.stack;
         if (playing === 0) screen.setStack(stack);
         bet?.setMax(stack);
@@ -409,6 +412,7 @@ export const keno: GameClientModule = {
       },
 
       onError() {
+        cashier.refused();
         busy = false;
         render();
       },

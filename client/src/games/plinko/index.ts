@@ -11,7 +11,7 @@ import { ROWS, RISKS, RISK_NAMES, MULTS, binChance, boardRtp, bestBoard, returnR
 import type { DropEvent, PlinkoView } from '../../../../shared/src/games/plinko/engine.ts';
 import { celebrate } from '../../table/celebrate.ts';
 import { attractTexture, pcModel, pcPose, pcScreenCorners, PC_FOOTPRINT, PC_SEAT } from '../online/pc.ts';
-import { OnlineScreen, BetBox, actionButton, SegChoice, InfoList, SessionTally, commitTyping, labelled, winTier, siteTone, drawSiteBar, drawAttractPanel } from '../online/screen.ts';
+import { OnlineScreen, AddChips, BetBox, actionButton, SegChoice, InfoList, SessionTally, commitTyping, labelled, winTier, siteTone, drawSiteBar, drawAttractPanel } from '../online/screen.ts';
 import { PlinkoBoard, binColor, multText } from './board.ts';
 
 /** The chair's trim on the floor: Plinko's pink. */
@@ -74,6 +74,7 @@ export const plinko: GameClientModule = {
   mount(ctx): TableView {
     const screen = new OnlineScreen('Plinko');
     ctx.ui.append(screen.root);
+    const cashier = new AddChips(screen, ctx);
     const corners = pcScreenCorners();
 
     let rows: Rows = 16;
@@ -230,6 +231,7 @@ export const plinko: GameClientModule = {
 
     return {
       onTable(snap) {
+        cashier.table(snap);
         stack = snap.you.stack;
         waiting = 0;
         falling = 0;
@@ -287,11 +289,13 @@ export const plinko: GameClientModule = {
       },
 
       onSeat(msg) {
+        cashier.seat(msg);
         stack = msg.stack;
         sync();
       },
 
       onError() {
+        cashier.refused();
         waiting = Math.max(0, waiting - 1);
         sync();
       },

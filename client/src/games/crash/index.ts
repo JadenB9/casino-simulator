@@ -18,6 +18,7 @@ import { attractTexture, pcModel, pcPose, pcScreenCorners, PC_FOOTPRINT, PC_SEAT
 import {
   OnlineScreen, BetBox, NumberField, SegChoice, actionButton, InfoList, SessionTally, ResultStrip, PlayersTable, OutcomePop,
   commitTyping, labelled, winTier, siteTone, drawSiteBar, drawAttractPanel, multText, pctText,
+  AddChips,
 } from '../online/screen.ts';
 import { CrashGraph } from './graph.ts';
 
@@ -87,6 +88,7 @@ export const crash: GameClientModule = {
   mount(ctx): TableView {
     const screen = new OnlineScreen('Crash');
     ctx.ui.append(screen.root);
+    const cashier = new AddChips(screen, ctx);
     const corners = pcScreenCorners();
 
     let view: CrashView | null = null;
@@ -356,6 +358,7 @@ export const crash: GameClientModule = {
 
     return {
       onTable(snap) {
+        cashier.table(snap);
         stack = snap.you.stack;
         mySeat = snap.you.status === 'watching' ? null : snap.you.seat;
         busy = false;
@@ -422,6 +425,7 @@ export const crash: GameClientModule = {
       },
 
       onSeat(msg) {
+        cashier.seat(msg);
         stack = msg.stack;
         mySeat = msg.status === 'watching' ? null : msg.seat;
         bet?.setMax(stack);
@@ -429,6 +433,7 @@ export const crash: GameClientModule = {
       },
 
       onError() {
+        cashier.refused();
         busy = false;
         sync();
       },
