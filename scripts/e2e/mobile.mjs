@@ -141,13 +141,17 @@ for (const key of list) {
     await page.waitForSelector('.name-input, .menu-item', { timeout: 240_000 });
     await sleep(700);
     await shot('login');
-    if (await visible('.continue-btn')) {
-      await tap('.continue-btn');
-    } else if (await visible('.name-input')) {
+    if (await visible('.name-input')) {
       await tap('.name-input');
       await page.fill('.name-input', NAMES[key]);
-      await tap('.enter-btn');
     }
+    // the dev pages' password (DEV_PASSWORD in client/src/net/api.ts); the first one claims the name
+    if (await visible('.pass-input')) {
+      await tap('.pass-input');
+      await page.fill('.pass-input', 'casino-dev');
+      await shot('login-typed');
+    }
+    await tap((await visible('.continue-btn')) ? '.continue-btn' : '.enter-btn');
     await page.waitForSelector('.menu-item', { timeout: 30_000 });
     await sleep(900);
     await shot('menu');
