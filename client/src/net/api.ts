@@ -50,8 +50,15 @@ async function call<T>(path: string, init: RequestInit & { token?: string | null
   return body;
 }
 
-export async function login(name: string): Promise<Profile> {
-  const r = await call<LoginResponse>('login', { method: 'POST', body: JSON.stringify({ name }), token: null });
+/**
+ * What the dev pages and the headless scripts log in with, so the fixed names they use stay
+ * theirs from one run to the next. Players never see it: the login screen sends what was typed.
+ */
+export const DEV_PASSWORD = 'casino-dev';
+
+/** Log in, or take the name if it's new (or from before passwords): see shared/src/password.ts. */
+export async function login(name: string, password: string): Promise<Profile> {
+  const r = await call<LoginResponse>('login', { method: 'POST', body: JSON.stringify({ name, password }), token: null });
   store('session')?.setItem(TOKEN_KEY, r.token);
   store('local')?.setItem(NAME_KEY, r.profile.name);
   return r.profile;

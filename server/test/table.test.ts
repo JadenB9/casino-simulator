@@ -94,7 +94,7 @@ describe('solo table, end to end', () => {
     expect(code).toBe(4009);
   });
 
-  it('the bank lends only after a player has lost everything, table chips included', async () => {
+  it('the bank tops a player up to $50,000 only once they are under $10,000', async () => {
     const { token, profile } = await login('loan_seeker');
     const refused = await api('bank/loan', token, { method: 'POST' });
     expect(refused.status).toBe(409);

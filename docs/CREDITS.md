@@ -2,7 +2,8 @@
 
 Everything in this game that wasn't written for it, with its licence. Code is MIT (see LICENSE).
 Anything not listed here (chips, tables, the roulette wheel, slot machines, felt layouts, the
-carpet, neon signs) is drawn in code in this repo.
+carpet, neon signs, the LED sign over the pit and its 5x7 dot font, the day's meter) is drawn in
+code in this repo.
 
 | What | Where | By | Licence | Source |
 |---|---|---|---|---|
@@ -13,6 +14,8 @@ carpet, neon signs) is drawn in code in this repo.
 | Limelight font | `fonts/limelight/` | Nicole Fally / Sorkin Type | SIL Open Font License 1.1 | https://fonts.google.com/ |
 | Tilt Neon font | `fonts/tiltneon/` | Andy Clymer | SIL Open Font License 1.1 | https://fonts.google.com/ |
 | Casino and UI sound effects | `assets/sfx/` | Kenney (kenney.nl) | CC0 1.0 | https://kenney.nl/assets/casino-audio |
+| The room's sound: room tone, crowd murmur, slot chimes, big-win bells | synthesized in `client/src/audio/ambience.ts` (no files) | this repo | MIT, with the code | |
+| Distant chips in the room's sound | the chip sounds above, played again from the tables' spots | Kenney (kenney.nl) | CC0 1.0 | https://kenney.nl/assets/casino-audio |
 | Character (men): suit | `assets/models/char-m-suit.glb` | Quaternius | CC0 1.0 | https://poly.pizza/m/JFrLIKqvCH |
 | Character (men): casual | `assets/models/char-m-casual.glb` | Quaternius | CC0 1.0 | https://poly.pizza/m/kZ3DmIoGip |
 | Character (men): hoodie | `assets/models/char-m-hoodie.glb` | Quaternius | CC0 1.0 | https://poly.pizza/m/gKLBoRsyKe |

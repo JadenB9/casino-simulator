@@ -11,8 +11,10 @@ import { mkdirSync } from 'node:fs';
 const [port = '5173', out = '/tmp/casino-accounts'] = process.argv.slice(2);
 mkdirSync(out, { recursive: true });
 const base = `http://localhost:${port}/casino/src/ui/menu/dev.html`;
-// One account for every run, so repeated runs don't use up the new-account limit.
+// One account for every run, so repeated runs don't use up the new-account limit, and the
+// password the dev pages use (DEV_PASSWORD in client/src/net/api.ts) so it stays ours.
 const NAME = 'e2e_tour';
+const PASS = 'casino-dev';
 
 const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 const errors = [];
@@ -52,6 +54,7 @@ const selected = (p) => p.getAttribute('.menu-item.sel', 'data-id');
   await shot(p, '02-login-rule');
   await p.fill('.name-input', NAME);
   check('enter enabled for a good name', !(await p.isDisabled('.enter-btn')));
+  await p.fill('.pass-input', PASS);
   await p.keyboard.press('Enter');
   await p.waitForSelector('.front-menu .menu-item.sel');
   await p.waitForTimeout(800);
@@ -79,7 +82,9 @@ const selected = (p) => p.getAttribute('.menu-item.sel', 'data-id');
   await p.waitForTimeout(700);
   await shot(p, '05-login-remembered');
   check('continue as the remembered name', (await text(p, '.continue-name')) === NAME);
-  await p.keyboard.press('Enter'); // empty field: continue as the remembered name
+  check('the password field waits for it', await p.evaluate(() => document.activeElement?.classList.contains('pass-input')));
+  await p.keyboard.type(PASS);
+  await p.keyboard.press('Enter'); // empty name field: continue as the remembered name
   await p.waitForSelector('.front-menu .menu-item.sel');
   check('Enter continued as the remembered name', true);
   await p.context().close();
@@ -168,9 +173,9 @@ const selected = (p) => p.getAttribute('.menu-item.sel', 'data-id');
   await p.keyboard.press('Escape');
   await p.waitForSelector('.sheet-scrim', { state: 'detached' });
   await p.keyboard.press('m');
-  check('M mutes', (await p.getAttribute('.hud-btn[aria-pressed]', 'aria-pressed')) === 'true');
+  check('M mutes', (await p.getAttribute('.hud-btn[aria-label="Mute (M)"]', 'aria-pressed')) === 'true');
   await p.keyboard.press('m');
-  check('M unmutes', (await p.getAttribute('.hud-btn[aria-pressed]', 'aria-pressed')) === 'false');
+  check('M unmutes', (await p.getAttribute('.hud-btn[aria-label="Mute (M)"]', 'aria-pressed')) === 'false');
   await p.context().close();
 }
 

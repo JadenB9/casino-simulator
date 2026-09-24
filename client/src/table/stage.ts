@@ -17,6 +17,7 @@ export class TableStage {
   readonly root = new THREE.Group();
   private readonly ray = new THREE.Raycaster();
   private felts: Felt[] = [];
+  private rest: { position: THREE.Vector3; quaternion: THREE.Quaternion } | null = null;
 
   constructor(readonly engine: Engine3D, readonly anchor: THREE.Object3D) {
     anchor.add(this.root);
@@ -53,6 +54,22 @@ export class TableStage {
     obj.position.copy(local);
     this.root.add(obj);
     return obj;
+  }
+
+  /**
+   * Where the camera rests at this table: the play pose of your seat, set by the app as it flies
+   * you there. Views that swing the camera away (to the wheel, the dice) come back to this, not to
+   * wherever the camera was when they left, which is halfway in if the round began mid-flight.
+   */
+  setRest(p: Pose): void {
+    const w = this.worldPose(p);
+    const quaternion = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(w.position, w.target, new THREE.Vector3(0, 1, 0)));
+    this.rest = { position: w.position, quaternion };
+  }
+
+  /** A copy of the resting pose, or of the camera's own pose if the app hasn't set one. */
+  restPose(camera: THREE.Camera): { pos: THREE.Vector3; quat: THREE.Quaternion } {
+    return this.rest ? { pos: this.rest.position.clone(), quat: this.rest.quaternion.clone() } : { pos: camera.position.clone(), quat: camera.quaternion.clone() };
   }
 
   /** Local -> world, for flying the camera. */
