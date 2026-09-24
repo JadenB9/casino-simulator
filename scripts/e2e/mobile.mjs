@@ -166,23 +166,39 @@ for (const key of list) {
     await shot('floor');
   }
 
+  /** Seconds of game time so far. A slow frame counts at most 0.1 s, so on a loaded machine game time runs behind the clock. */
+  const gameTime = () =>
+    page.evaluate(() => {
+      const w = window;
+      if (w.__gameT === undefined) {
+        w.__gameT = 0;
+        w.casino.engine.onFrame((dt) => (w.__gameT += dt));
+      }
+      return w.__gameT;
+    });
+
   async function floorChecks() {
-    // Walk with the stick: a thumb on the resting ring, pushed up (forward) for a second and a half.
-    await approach(STATIONS.blackjack, 6);
+    // Walk with the stick: a thumb on the resting ring, pushed up (forward) to just inside the rim.
+    // Walking speed is 2.6 m/s at the rim; allow for the start-up and a slow frame or two.
+    await approach(STATIONS.blackjack, 7);
     await sleep(600);
     const ring = await box('.touch-stick');
     const [sx, sy] = centre(ring);
     const p0 = await where();
-    await drag([[[sx, sy], [sx + 2, sy - 44]]], 250, 1400, async () => {
-      if (!(await page.evaluate(() => document.querySelector('.touch-stick')?.classList.contains('held')))) return false;
+    const t0 = await gameTime();
+    let shotTaken = false;
+    await drag([[[sx, sy], [sx + 2, sy - 44]]], 250, 1800, async () => {
+      if (shotTaken || !(await page.evaluate(() => document.querySelector('.touch-stick')?.classList.contains('held')))) return false;
+      shotTaken = true;
       await shot('walking');
-      return true;
+      return false;
     });
-    await drag([[[sx, sy], [sx + 2, sy - 44]]], 250, 900);
+    const t1 = await gameTime();
     const p1 = await where();
     const walked = Math.hypot(p1.x - p0.x, p1.z - p0.z);
-    log(`${key}: the stick walked ${walked.toFixed(2)} m`);
-    if (walked < 1.5) fail(`the stick walked only ${walked.toFixed(2)} m`);
+    const speed = walked / Math.max(0.1, t1 - t0);
+    log(`${key}: the stick walked ${walked.toFixed(2)} m in ${(t1 - t0).toFixed(2)} s of game time (${speed.toFixed(2)} m/s)`);
+    if (speed < 1.6) fail(`the stick walked at only ${speed.toFixed(2)} m/s`);
 
     // Two thumbs: the stick and a look drag on the right at the same time.
     const y0 = await camYaw();

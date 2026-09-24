@@ -70,6 +70,18 @@ function press(key: string, code: string): void {
   document.body.dispatchEvent(new KeyboardEvent('keyup', { key, code, bubbles: true, cancelable: true }));
 }
 
+/**
+ * What the stick says for a thumb `dx`, `dy` px from where it came down: a direction (x to the
+ * right, y forward) scaled by the pace, which climbs from nothing at the edge of the dead zone to a
+ * full walk at the rim, and a run once the thumb is pulled well past the rim.
+ */
+export function stickInput(dx: number, dy: number): { x: number; y: number; run: boolean } {
+  const d = Math.hypot(dx, dy);
+  if (!(d >= TRAVEL * DEAD)) return { x: 0, y: 0, run: false };
+  const pace = (Math.min(d, TRAVEL) / TRAVEL - DEAD) / (1 - DEAD);
+  return { x: (dx / d) * pace, y: (-dy / d) * pace, run: d > TRAVEL * RUN_AT };
+}
+
 const NS = 'http://www.w3.org/2000/svg';
 
 /** A line icon on the menu icons' 24-unit grid (ui/menu/icons.ts). */
@@ -282,15 +294,9 @@ export class TouchControls {
       const d = Math.hypot(dx, dy);
       const k = d > TRAVEL ? TRAVEL / d : 1;
       this.knob.style.transform = `translate(${(dx * k).toFixed(1)}px, ${(dy * k).toFixed(1)}px)`;
-      const run = d > TRAVEL * RUN_AT;
-      this.ring.classList.toggle('run', run);
-      if (d < TRAVEL * DEAD) {
-        this.deps.player.setMoveInput(0, 0);
-        return;
-      }
-      // past the dead zone the pace climbs from a creep to a walk at the rim
-      const pace = (Math.min(d, TRAVEL) / TRAVEL - DEAD) / (1 - DEAD);
-      this.deps.player.setMoveInput((dx / d) * pace, (-dy / d) * pace, run);
+      const move = stickInput(dx, dy);
+      this.ring.classList.toggle('run', move.run);
+      this.deps.player.setMoveInput(move.x, move.y, move.run);
       return;
     }
     const l = this.look;
