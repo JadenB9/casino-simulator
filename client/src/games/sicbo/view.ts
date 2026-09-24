@@ -475,7 +475,10 @@ export function mountSicBo(ctx: TableViewCtx): TableView {
         sweeps.push(lift(pile, DEALER.clone(), 520 + Math.random() * 160));
       }
     }
-    if (sweeps.length) ctx.sfx.play('chips-collide', { volume: 0.7 });
+    if (sweeps.length) {
+      ctx.sfx.play('chips-collide', { volume: 0.7 });
+      ctx.stage.gesture('sweep');
+    }
     for (const key of new Set(winners.map((w) => w.key))) chips.restack(key);
     await Promise.all(sweeps);
     if (disposed) return;
@@ -499,7 +502,10 @@ export function mountSicBo(ctx: TableViewCtx): TableView {
         ctx.kit.pill(stage, new THREE.Vector3(to.x, TOP_Y + 0.06, to.z), `+${formatMoney(w.returned - w.amount)} · ${k} to 1`, net > 0 ? 'win' : 'push', 3200);
       }
     }
-    if (pays.length) ctx.sfx.play(net > 0 ? 'chips-stack' : 'chips-handle', { volume: 0.8 });
+    if (pays.length) {
+      ctx.sfx.play(net > 0 ? 'chips-stack' : 'chips-handle', { volume: 0.8 });
+      ctx.stage.gesture('pay');
+    }
     await Promise.all(pays);
     if (mine && mine.returned > 0) lastWin = mine.returned;
     if (disposed) return;

@@ -788,6 +788,7 @@ export function mountWar(ctx: TableViewCtx): TableView {
       const slot = cardSlot(seat, war);
       const delay = n++ * 90;
       ctx.sfx.play('card-deal', { delay: delay / 1000, volume: 0.8 });
+      ctx.stage.gesture('deal');
       jobs.push(wait(delay).then(() => dealCard(m, SHOE_MOUTH, slot.pos, { faceUp: true, ms: 300, yaw: slot.yaw })));
     }
     const d = newCard(dealer);
@@ -815,6 +816,7 @@ export function mountWar(ctx: TableViewCtx): TableView {
     const moving = kinds.map((k) => spotStack(seat, k)).filter((s) => s.amount > 0);
     if (moving.length === 0) return;
     ctx.sfx.play('chips-collide', { volume: 0.7 });
+    ctx.stage.gesture('sweep');
     await Promise.all(moving.map((s) => slideStack(s, RACK_POINT, 380)));
     // emptied where they stopped; draw() puts every stack back on its spot after the batch
     for (const s of moving) s.set(0);
@@ -850,6 +852,7 @@ export function mountWar(ctx: TableViewCtx): TableView {
   const settleTie = async (seat: number, tiePaid: Cents | null, stake: Cents): Promise<void> => {
     if (!tiePaid) return;
     ctx.sfx.play('chips-stack');
+    ctx.stage.gesture('pay');
     const paid = await payOut(seat, 'tie', tiePaid - stake);
     if (!owns(seat)) return;
     pill(seat, 'tie', `${signed(tiePaid - stake)} · ${rules.tiePays} TO 1`, 'win');
@@ -909,7 +912,10 @@ export function mountWar(ctx: TableViewCtx): TableView {
         }
         break;
     }
-    if (jobs.length > 0) ctx.sfx.play('chips-stack');
+    if (jobs.length > 0) {
+      ctx.sfx.play('chips-stack');
+      ctx.stage.gesture('pay');
+    }
     jobs.push(sweep(seat, lost));
     await Promise.all(jobs);
     if (mineSeat && (r.outcome === 'war-win' || r.outcome === 'war-tie')) {

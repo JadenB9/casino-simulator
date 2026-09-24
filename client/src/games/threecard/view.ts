@@ -773,6 +773,7 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
         const to = target < 0 ? dealerSlot(round) : handSlot(target, round).pos;
         const yaw = target < 0 ? 0 : handSlot(target, round).yaw;
         ctx.sfx.play('card-deal', { delay: delay / 1000, volume: 0.8 });
+        ctx.stage.gesture('deal');
         // the dealer's own cards grow to their larger size on the way out
         jobs.push(wait(delay).then(() => Promise.all([dealCard(m, SHUFFLER, to, { faceUp: false, ms: 260, yaw }), target < 0 ? scaleTo(m, DEALER_CARD_SCALE, 260) : null]).then(() => {})));
       }
@@ -813,6 +814,7 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
     const moving = kinds.map((k) => spotStack(seat, k)).filter((s) => s.amount > 0);
     if (moving.length === 0) return;
     ctx.sfx.play('chips-collide', { volume: 0.7 });
+    ctx.stage.gesture('sweep');
     await Promise.all(moving.map((s) => slideStack(s, RACK_POINT, 380)));
     for (const s of moving) s.set(0);
   };
@@ -865,7 +867,10 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
       jobs.push(payOut(seat, 'ante', r.bonus, -1));
       if (owns(seat)) pill(seat, 'ante', `BONUS ${signed(r.bonus)}`, 'win', 0.13);
     }
-    if (jobs.length > 0) ctx.sfx.play('chips-stack');
+    if (jobs.length > 0) {
+      ctx.sfx.play('chips-stack');
+      ctx.stage.gesture('pay');
+    }
     jobs.push(sweep(seat, lost));
     await Promise.all(jobs);
   };

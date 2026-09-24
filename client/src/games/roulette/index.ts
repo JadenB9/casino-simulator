@@ -585,7 +585,10 @@ function mountRoulette(ctx: TableViewCtx): TableView {
         sweeps.push(lift(pile, DEALER.clone(), 520 + Math.random() * 160));
       }
     }
-    if (sweeps.length) ctx.sfx.play('chips-collide', { volume: 0.7 });
+    if (sweeps.length) {
+      ctx.sfx.play('chips-collide', { volume: 0.7 });
+      ctx.stage.gesture('sweep');
+    }
     for (const key of new Set(winners.map((w) => w.key))) chips.restack(key);
     await Promise.all(sweeps);
     if (disposed) return;
@@ -611,7 +614,10 @@ function mountRoulette(ctx: TableViewCtx): TableView {
         ctx.kit.pill(stage, new THREE.Vector3(to.x, TOP_Y + 0.07, to.z), text, net > 0 ? 'win' : 'push', 3000);
       }
     }
-    if (pays.length) ctx.sfx.play(net > 0 ? 'chips-stack' : 'chips-handle', { volume: 0.8 });
+    if (pays.length) {
+      ctx.sfx.play(net > 0 ? 'chips-stack' : 'chips-handle', { volume: 0.8 });
+      ctx.stage.gesture('pay');
+    }
     await Promise.all(pays);
     // a straight-up (or split or street) hit that beat the whole stake: light the number and the bet
     const moment = mine && mySeat !== null ? rouletteMoment(variant, mine) : null;

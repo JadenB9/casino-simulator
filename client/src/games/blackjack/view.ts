@@ -797,6 +797,7 @@ export class BlackjackTable implements TableView {
     this.root.add(m);
     this.cards.set(key, m);
     this.ctx.sfx.play('card-deal');
+    this.ctx.stage.gesture('deal');
     // The dealer's own cards grow to their larger size on the way out of the shoe.
     const grow = key.startsWith('d:') ? this.scaleTo(m, L.DEALER_CARD_SCALE, ms) : null;
     await dealCard(m, L.SHOE_MOUTH.clone(), to.pos, { faceUp: false, ms, yaw: to.yaw });
@@ -1054,6 +1055,7 @@ export class BlackjackTable implements TableView {
         const sp = this.spots.find((s) => s.seat === e.seat);
         if (e.payout > 0) {
           this.ctx.sfx.play('chips-stack');
+          this.ctx.stage.gesture('pay');
           await this.slideIn(`iw:${e.seat}`, e.payout - e.bet, L.RACK, this.insuranceWinPos(e.seat));
         } else await this.slideAway(`i:${e.seat}`, L.RACK);
         if (sp) sp.insured = e.bet;
@@ -1085,6 +1087,7 @@ export class BlackjackTable implements TableView {
     const n = sp.hands.length;
     const keys = [`h:${e.seat}:${e.hand}`, `x:${e.seat}:${e.hand}`];
     if (e.outcome === 'lose' || e.outcome === 'bust' || e.outcome === 'surrender') {
+      this.ctx.stage.gesture('sweep');
       await Promise.all(keys.map((k) => this.slideAway(k, L.RACK)));
       h.cards.forEach((_, ci) => {
         const m = this.cards.get(`c:${e.seat}:${e.hand}:${ci}`);
@@ -1092,6 +1095,7 @@ export class BlackjackTable implements TableView {
       });
     } else if (e.payout > e.bet) {
       this.ctx.sfx.play('chips-stack');
+      this.ctx.stage.gesture('pay');
       await this.slideIn(`w:${e.seat}:${e.hand}`, e.payout - e.bet, L.RACK, L.winChips(e.seat, e.hand, n));
     }
     const p = pillFor(e.outcome, e.bet, e.payout);

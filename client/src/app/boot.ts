@@ -479,6 +479,8 @@ class App {
     const module = party ? withParty(GAMES[station.game], party) : GAMES[station.game];
     const stage = new TableStage(this.engine, station.anchor);
     stage.setRest(GAMES[station.game].playPose(station.variant, null));
+    // the table's dealer moves as the view deals, sweeps and pays (machines have none)
+    stage.dealer = (g) => void this.world.dealerGesture(station.id, g);
     table = new TableSession(
       { ...choice, game: station.game, variant: station.variant, station: station.id },
       module,

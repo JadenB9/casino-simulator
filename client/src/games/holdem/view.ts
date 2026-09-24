@@ -675,6 +675,7 @@ export function mountHoldem(ctx: TableViewCtx): TableView {
       }
       case 'deal': {
         sfx.play('card-deal');
+        stage.gesture('deal');
         let last: Promise<void> = Promise.resolve();
         for (let round = 0; round < 2; round++) {
           for (const seat of e.order) {
@@ -746,6 +747,7 @@ export function mountHoldem(ctx: TableViewCtx): TableView {
           .filter(({ o }) => o.bet.amount > 0);
         if (moving.length) {
           sfx.play('chips-collide', { volume: 0.7 });
+          stage.gesture('sweep');
           await Promise.all(
             moving.map(async ({ o }) => {
               const amount = o.bet.amount;
@@ -797,6 +799,7 @@ export function mountHoldem(ctx: TableViewCtx): TableView {
           return { m, code, i };
         });
         sfx.play('card-deal');
+        stage.gesture('deal');
         await Promise.all(
           cards.map(async ({ m, i }) => {
             await pause(i * 110);
@@ -879,6 +882,7 @@ export function mountHoldem(ctx: TableViewCtx): TableView {
           kit.pill(stage, new THREE.Vector3(p.x, p.y + 0.06, p.z), mine && net <= 0 ? `Back ${money(w.amount)}` : `+${money(w.amount)}`, mine && net <= 0 ? 'push' : 'win', 2600);
         }
         sfx.play('chips-stack', { volume: up ? 1 : 0.6 });
+        stage.gesture('pay');
         // Your last pot of the hand has landed: mark the win, if it is one.
         if (e.winners.some((w) => w.seat === mySeat) && --myWins.left === 0) celebrateWin(e, next);
         await pause(520);

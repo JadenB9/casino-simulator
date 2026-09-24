@@ -644,6 +644,7 @@ export class BaccaratTable implements TableView {
     this.root.add(m);
     this.cards[hand].push(m);
     this.ctx.sfx.play('card-deal');
+    this.ctx.stage.gesture('deal');
     // a hand's cards grow to their larger size on the way out of the shoe
     await this.play(faceUp ? 400 : 300, (ms) => Promise.all([dealCard(m, SHOE_MOUTH, slot.pos, { faceUp, ms, yaw: slot.sideways ? Math.PI / 2 : 0 }), this.scaleTo(m, HAND_CARD_SCALE, ms)]));
   }
@@ -833,6 +834,7 @@ export class BaccaratTable implements TableView {
     }
     if (losers.length) {
       this.ctx.sfx.play('chips-collide');
+      this.ctx.stage.gesture('sweep');
       await this.play(420, (ms) => Promise.all(losers.map((s) => slideStack(s, RACK_POINT, ms).then(() => s.set(0)))));
       for (const r of results) for (const spot of SPOTS) this.stackFor(r.seat, spot).position.copy(this.spotPos(r.seat, spot));
     }
@@ -846,6 +848,7 @@ export class BaccaratTable implements TableView {
       if (paying.length) {
         // no celebration unless the seat got back more than it staked
         this.ctx.sfx.play(r.seat === this.mySeat && r.returned > r.wagered ? 'chips-stack' : 'chips-handle', { volume: r.seat === this.mySeat ? 1 : 0.5 });
+        this.ctx.stage.gesture('pay');
         await this.play(440, (ms) => Promise.all(paying.map(({ pay, to }) => slideStack(pay, to, ms))));
       }
       if (r.commission > 0) this.commission(seatNumber(r.seat), r.commission);
