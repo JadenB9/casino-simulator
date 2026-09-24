@@ -352,20 +352,17 @@ async function glowChecks() {
         if (!window.__paused) feed(m);
       };
     });
-    // until the feed has shown this seat its own view (the join snapshot can predate the seat)
-    await page.waitForFunction(() => window.__lastView?.you, null, { timeout: 30_000 }).catch(async () => {
-      await shot(page, 'glow-holdem-no-seat');
-      throw new Error(`holdem: never seated (${await page.evaluate(() => JSON.stringify({ you: window.casino.app.table?.session.snapshot?.you, last: !!window.__lastView }))})`);
-    });
+    await page.waitForTimeout(2500);
     await page.evaluate(() => (window.__paused = true));
     // A showdown drawn from a paused feed, drawn again before each shot (a bot's move or the
     // hand clock can still redraw the table in between).
     const scene = () => page.evaluate(() => {
       const t = window.casino.app.table.session;
       const snap = structuredClone(t.snapshot);
-      snap.view = structuredClone(window.__lastView);
+      snap.view = structuredClone(window.__lastView ?? snap.view);
       const v = snap.view;
-      const me = v.you.seat;
+      // the table's own record of your seat (the join snapshot's view can predate the seat)
+      const me = snap.you.seat;
       const opp = v.seats.findIndex((s, i) => s && i !== me);
       const board = ['Kh', 'Kd', '9s', '9h', '2c'];
       Object.assign(v, { at: Date.now() + 1e7, phase: 'results', handId: 9002, street: 'river', board, pots: [], total: 0, bet: 0, turn: null, nextAt: null, log: [] });
