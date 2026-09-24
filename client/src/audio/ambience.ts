@@ -92,7 +92,7 @@ export class Ambience {
       this.nextChime[i]! -= dt;
       if (this.nextChime[i]! > 0) return;
       this.nextChime[i] = 3 + Math.random() * 7;
-      this.chime(s.x + (Math.random() - 0.5) * 2.4, s.z + (Math.random() - 0.5) * 2, 2 + Math.floor(Math.random() * 4), 0.05);
+      this.chime(s.x + (Math.random() - 0.5) * 2.4, s.z + (Math.random() - 0.5) * 2, 2 + Math.floor(Math.random() * 4), 0.16);
     });
   }
 
@@ -101,7 +101,8 @@ export class Ambience {
     if (this.disposed || this.ctx.state !== 'running' || this.sfx.muted) return;
     const x = at?.x ?? 0;
     const z = at?.z ?? 0;
-    this.chime(x, z, 9, 0.16, 0.085, at === null);
+    // a win is news: louder than the machines' chatter, and it carries across the room
+    this.chime(x, z, 9, 0.42, 0.085, at === null, 7);
   }
 
   dispose(): void {
@@ -156,7 +157,7 @@ export class Ambience {
       depth.gain.value = 0.28;
       mod.connect(depth).connect(amp.gain);
       const level = ctx.createGain();
-      level.gain.value = 0.11 * Math.sqrt(c.size);
+      level.gain.value = 0.09 * Math.sqrt(c.size);
       const pan = this.panner(c.x, 1.4, c.z, 5.5);
       src.connect(hp).connect(body).connect(lp).connect(lp2).connect(amp).connect(level).connect(pan).connect(this.bus);
       this.nodes.push(hp, body, lp, lp2, amp, depth, level, pan);
@@ -215,10 +216,10 @@ export class Ambience {
   // --- one-shots -----------------------------------------------------------------------------
 
   /** A run of FM bells climbing the pentatonic scale, from a spot on the floor. */
-  private chime(x: number, z: number, notes: number, level: number, step = 0.11, near = false): void {
+  private chime(x: number, z: number, notes: number, level: number, step = 0.11, near = false, ref = 3.5): void {
     const ctx = this.ctx;
     const t0 = ctx.currentTime + 0.02;
-    const pan = near ? null : this.panner(x, 1.6, z, 3.5);
+    const pan = near ? null : this.panner(x, 1.6, z, ref);
     const out = ctx.createGain();
     out.gain.value = level;
     const tone = biquad(ctx, 'lowpass', 4200, 0.7);

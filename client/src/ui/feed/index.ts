@@ -203,7 +203,7 @@ function entry(w: BigWin): SignEntry {
 }
 
 /** Where the room's sounds come from, from the floor plan. */
-function spotsOf(world: FloorWorld): AmbienceSpots {
+export function spotsOf(world: FloorWorld): AmbienceSpots {
   const p = world.plan;
   const mid = (r: { x0: number; x1: number; z0: number; z1: number }) => ({ x: (r.x0 + r.x1) / 2, z: (r.z0 + r.z1) / 2 });
   return {
