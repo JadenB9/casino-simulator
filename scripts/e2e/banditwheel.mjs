@@ -36,6 +36,12 @@ const shot = async (name) => {
 };
 const state = () => page.evaluate(() => window.casino.table.view.debug.state());
 const until = (fn, timeout = 120000) => page.waitForFunction(fn, null, { timeout, polling: 50 });
+/** The wheel runs on its own clock: wait for a betting window with at least `ms` left in it. */
+const freshWindow = (ms = 8000) =>
+  page.waitForFunction((m) => {
+    const s = window.casino.table.view.debug.state();
+    return s.phase === 'betting' && !s.animating && s.left !== null && s.left > m;
+  }, ms, { timeout: 90000, polling: 50 });
 
 /** Buy in, unless this player is still sitting at their solo table from an earlier run. */
 async function sitDown(p, dollars) {
@@ -92,7 +98,8 @@ if (flag('--quick')) {
   process.exit(errors.length ? 1 : 0);
 }
 
-// chips through the panel: $25 on 1, $5 on 3, $5 on 10, $1 on 20, then Max on 5 with a $1 top-up after
+// chips through the panel: $25 on 1, $5 on 3, $5 on 10, $1 on 20
+await freshWindow(9000);
 const pickChip = async (key) => page.keyboard.press(key);
 const slot = async (n) => {
   await page.click(`.bw-slot[data-n="${n}"]`);
@@ -135,7 +142,7 @@ const ok = rest.shows === sp.slot && after.history[0] === sp.slot;
 console.log(JSON.stringify({ slot: sp.slot, flapperShows: rest.shows, history: after.history.slice(0, 6), stack: after.stack, phase: after.phase, revolutions: sp.revolutions, ticks: sp.ticks, ok }, null, 1));
 
 // Max: the table's $1,000 or the stack, whichever is less
-await until(() => window.casino.table.view.debug.state().phase === 'betting' && !window.casino.table.view.debug.state().animating, 30000);
+await freshWindow(6000);
 const before = (await state()).stack;
 await page.keyboard.press('m');
 await slot(5);
@@ -147,6 +154,7 @@ await page.keyboard.press('Backspace');
 await until(() => !window.casino.table.view.debug.state().bets[5], 15000);
 
 // A Twenty played through the view (the server's draw can't be steered), for the celebration
+await freshWindow(9000);
 await page.evaluate(() => {
   const t = window.casino.table;
   const v = t.view;

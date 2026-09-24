@@ -196,11 +196,18 @@ export class Panel {
     this.seatNote.textContent = text;
   }
 
+  private timeKey = '';
+
+  /** The time box: written only when something in it changes (it is asked every frame). */
   setTime(label: string, note: string, secs: string, k: number, late: boolean): void {
+    const offset = (this.ringLen * (1 - Math.max(0, Math.min(1, k)))).toFixed(1);
+    const key = `${label}|${note}|${secs}|${offset}|${late}`;
+    if (key === this.timeKey) return;
+    this.timeKey = key;
     this.timeLabel.textContent = label;
     this.timeNote.textContent = note;
     this.secs.textContent = secs;
-    this.ring.setAttribute('stroke-dashoffset', String(this.ringLen * (1 - Math.max(0, Math.min(1, k)))));
+    this.ring.setAttribute('stroke-dashoffset', offset);
     this.root.classList.toggle('late', late);
   }
 

@@ -34,6 +34,8 @@ import { drawScreen, type ScreenState } from './art.ts';
 const SEATS = seatPositions();
 /** Clicks are handed to the audio clock this far ahead. */
 const LOOKAHEAD_S = 0.12;
+/** The payout's natural length, from the wheel at rest to the chips home. */
+const PAYOUT_MS = 4600;
 
 export const banditwheel: GameClientModule = {
   game: 'banditwheel',
@@ -102,6 +104,8 @@ function mountBanditWheel(ctx: TableViewCtx): TableView {
   let gen = 0;
   let lastNet: Record<number, Cents> = {};
   let shownNumber: WheelNumber | null = null;
+  /** The spin being watched came from a snapshot (outside the event queue); a new window ends it. */
+  let resumed = false;
 
   const placeOf = (seat: number, key: WheelNumber): THREE.Vector3 => new THREE.Vector3(...cupPlace(terminalOfSeat(seat), NUMBERS.indexOf(key)));
   const chips = new CupChips(placeOf);
@@ -432,7 +436,7 @@ function mountBanditWheel(ctx: TableViewCtx): TableView {
   // ------------------------------------------------------------------------------------------
   // The spin and the payout
 
-  async function playSpin(e: SpinEvent, settle: SettleEvent | undefined, next: BanditView): Promise<void> {
+  async function playSpin(e: SpinEvent, settle: SettleEvent | undefined, next: BanditView, quick = false): Promise<void> {
     const g = gen;
     animating = true;
     clearResult();
@@ -457,6 +461,14 @@ function mountBanditWheel(ctx: TableViewCtx): TableView {
     driving = false;
     if (disposed || g !== gen) return;
     s = duration;
+    if (quick) {
+      // watched from a snapshot: the chips already went home, so just the result
+      showResult(e, settle, next);
+      animating = false;
+      await wait(900);
+      if (!disposed && g === gen) await glideHome(700);
+      return;
+    }
     await payOut(e, settle, next, g);
     if (g === gen) animating = false;
   }
@@ -491,7 +503,8 @@ function mountBanditWheel(ctx: TableViewCtx): TableView {
     return new THREE.Vector3(x, TOP_Y - 0.01, z);
   }
 
-  async function payOut(e: SpinEvent, settle: SettleEvent | undefined, next: BanditView, g: number): Promise<void> {
+  /** The number that came up: on the wheel, every terminal, the panel and the call. Returns this player's net. */
+  function showResult(e: SpinEvent, settle: SettleEvent | undefined, next: BanditView): number {
     const n = e.number;
     const spot = spotOf(n)!;
     shownNumber = n;
@@ -509,13 +522,31 @@ function mountBanditWheel(ctx: TableViewCtx): TableView {
       else if (mine.returned > 0) panel.setWin(net === 0 ? 'Even' : `−${formatMoney(-net)}`, `${callFor(n)} paid ${formatMoney(mine.returned)}, less than you had down`, 'quiet');
       else panel.setWin(`−${formatMoney(mine.wagered)}`, `${callFor(n)} came up. No winning bets`, 'quiet');
     }
+    if (n >= 10) flashUntil = performance.now() + 2200;
+    drawPlayers();
+    return net;
+  }
+
+  /**
+   * The payout, after the wheel stops: losing chips down the hoppers, winners paid beside their
+   * bets, then everything home. It is paced to finish before the server opens the next window,
+   * so a slow machine plays it faster rather than eating into the next round's betting.
+   */
+  async function payOut(e: SpinEvent, settle: SettleEvent | undefined, next: BanditView, g: number): Promise<void> {
+    const n = e.number;
+    const spot = spotOf(n)!;
+    const net = showResult(e, settle, next);
+    const seats = settle?.seats ?? {};
+    const mine = mySeat !== null ? seats[mySeat] : undefined;
     const big = n >= 10;
-    if (big) flashUntil = performance.now() + 2200;
+    const budget = next.deadline !== null ? next.deadline - serverNow() - 400 : PAYOUT_MS;
+    const k = Math.max(0.25, Math.min(1, budget / PAYOUT_MS));
+    const ms = (x: number) => x * k;
 
     // a moment on the flapper, then back to the terminal
-    await wait(1100);
+    await wait(ms(1100));
     if (disposed || g !== gen) return;
-    await glideHome(800);
+    await glideHome(ms(800));
     if (disposed || g !== gen) return;
 
     // losing chips go down the hoppers
@@ -531,7 +562,7 @@ function mountBanditWheel(ctx: TableViewCtx): TableView {
         const pile = chips.detach(seat, key);
         if (!pile) continue;
         loose.add(pile);
-        drops.push(sink(pile, 380 + Math.random() * 140));
+        drops.push(sink(pile, ms(380 + Math.random() * 140)));
       }
     }
     if (drops.length) sound.drop();
@@ -547,7 +578,7 @@ function mountBanditWheel(ctx: TableViewCtx): TableView {
       loose.add(pile);
       const bet = chips.pile(w.seat, w.key);
       const at = placeOf(w.seat, w.key);
-      pays.push(lift(pile, at.clone().setY(at.y + (bet?.height ?? 0)), 560, 0.05));
+      pays.push(lift(pile, at.clone().setY(at.y + (bet?.height ?? 0)), ms(560), 0.05));
       paid.push({ seat: w.seat, key: w.key, pile });
       if (w.seat === mySeat) ctx.kit.pill(stage, at.clone().setY(TOP_Y + 0.1), `+${formatMoney(w.returned - w.amount)} · ${paysLabel(spot)}`, 'win', 2800);
     }
@@ -569,18 +600,18 @@ function mountBanditWheel(ctx: TableViewCtx): TableView {
         },
       );
     }
-    await wait(winners.length ? 1200 : 400);
+    await wait(ms(winners.length ? 1200 : 400));
     if (disposed || g !== gen) return;
 
     // winning bets and their payouts go home to the players
     const homes: Promise<void>[] = [];
     for (const p of paid) {
       const dest = home(p.seat);
-      homes.push(lift(p.pile, dest, 460).then(() => void p.pile.removeFromParent()));
+      homes.push(lift(p.pile, dest, ms(460)).then(() => void p.pile.removeFromParent()));
       const bet = chips.detach(p.seat, p.key);
       if (bet) {
         loose.add(bet);
-        homes.push(lift(bet, dest, 460).then(() => void bet.removeFromParent()));
+        homes.push(lift(bet, dest, ms(460)).then(() => void bet.removeFromParent()));
       }
     }
     await Promise.all(homes);
@@ -596,8 +627,11 @@ function mountBanditWheel(ctx: TableViewCtx): TableView {
     const sp = v.spin!;
     const e: SpinEvent = { type: 'spin', round: sp.round, slot: sp.slot, number: sp.number, startAt: sp.startAt, restAt: sp.restAt };
     const settle: SettleEvent = { type: 'settle', round: sp.round, slot: sp.slot, number: sp.number, seats: v.settled };
-    void playSpin(e, settle, v).then(() => {
-      if (!disposed && view === v) draw(v);
+    resumed = true;
+    const g = gen;
+    void playSpin(e, settle, v, true).then(() => {
+      if (g === gen) resumed = false;
+      if (!disposed && g === gen && view === v) draw(v);
     });
   }
 
@@ -640,11 +674,20 @@ function mountBanditWheel(ctx: TableViewCtx): TableView {
 
     async onEvents(events: GameEvent[], v: unknown) {
       const next = v as BanditView;
-      const g = gen;
+      let g = gen;
       for (const e of events) {
         if (disposed || g !== gen) return;
         switch (e.type) {
           case 'betting':
+            if (resumed) {
+              // still finishing a spin seen from a snapshot: stop it where it is and bet
+              g = ++gen;
+              resumed = false;
+              animating = false;
+              driving = false;
+              if (spin) restOn(spin.plan.slot);
+              void glideHome(0);
+            }
             clearResult();
             lastNet = {};
             ctx.kit.say(mode === 'solo' ? 'Place your chips' : 'Place your chips. The wheel spins when the clock runs out', 2600);
@@ -764,6 +807,8 @@ function mountBanditWheel(ctx: TableViewCtx): TableView {
         mySeat,
         phase: view?.phase,
         round: view?.round,
+        /** ms left in the betting window (null outside one) */
+        left: view?.phase === 'betting' && view.deadline !== null ? view.deadline - serverNow() : null,
         animating,
         bets: myBets(),
         history: view?.history ?? [],
