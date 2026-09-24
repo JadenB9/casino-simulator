@@ -62,8 +62,10 @@ Seats with a chair or stool are measured once the floor has loaded (`measureSeat
 ray straight down at every `seats()` position against the station's model and the floor props; a
 top 0.3-0.95 m up counts). `seatWorld(station, slot)` returns it as `sit`, and `RemotePlayers`
 calls `character.sit(sit)`: hips and knees bend until the shins reach the floor (a high stool
-leaves them bent at the limit), the body drops onto the seat and the forearms come forward onto
-the rail. Where there is no seat (most tables are played standing) `sit` is null and they stand.
+leaves them bent at the limit), the character drops onto the seat and the forearms come forward
+onto the rail. The drop moves the whole root, so the name tag and speech or emote bubbles hung on
+it come down with the head (the shadow stays on the floor). Where there is no seat (most tables are
+played standing) `sit` is null and they stand.
 
 ### Screen space
 The "Press E" prompt sits bottom-centre, clear of the bottom-left corner (the site's back chip).
@@ -117,9 +119,11 @@ The players' seated cameras look over the table at the dealer, who frames it fro
   them for a couple of seconds at a time; with nobody near, a dealer glances over the layout. When
   you sit at a table its dealer turns (up to 46 degrees) and looks at you, now and then down at the
   layout. The bartender strolls a few steps along the bar every 8-22 s.
-- **Cost**: staff are hidden and not animated past `CULL_M` (15 m, back inside 14 m) or outside the
-  camera's view, and all their shadows are one instanced mesh, so a view pays one call per dealer it
-  can see. Each stands on a collision post (0.28 m, `cam: false`) so nobody walks through them; the
+- **Cost**: staff outside the camera's view are hidden and not animated. Past `CULL_M` (15 m, back
+  inside 14 m) each gives way to a still copy of itself (`Person.bake()`, posed at rest), drawn with
+  everyone in the same uniform and colour as one instanced mesh: a view pays one call per live
+  dealer it can see plus at most four for the whole far floor. All their shadows are one instanced
+  mesh. Each stands on a collision post (0.28 m, `cam: false`) so nobody walks through them; the
   bartender's post follows the stroll.
 - `node scripts/e2e/npcs.mjs <port> <dir> [tables seated staff gestures sitting calls]` screenshots
   every table with its dealer from its players' side, the seated views, the bar, the cage and the

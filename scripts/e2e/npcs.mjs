@@ -116,6 +116,12 @@ if (checks.includes('staff')) {
     const p = window.casino.world.plan;
     return { bar: p.bar, cashier: p.cashier };
   });
+  // the dev floor's own view from inside the doors: the pit is past CULL_M, so still copies
+  await settle(page, 1500);
+  await page.screenshot({ path: `${out}/staff-overview.png` });
+  const far = await page.evaluate(() => window.casino.world.staff.group.children.filter((o) => o.name === 'staff-far').reduce((n, o) => n + (o.visible ? o.count : 0), 0));
+  console.log(`staff: ${far} still copies from the doors`);
+  if (far === 0) fail('no staff drawn from the doors');
   const bz = (plan.bar.stools[0] + plan.bar.stools[plan.bar.stools.length - 1]) / 2;
   await place(page, [plan.bar.front - 2.6, 1.6, bz + 1.2], [plan.bar.front + 1.2, 1.25, bz]);
   await settle(page, 1200);

@@ -250,6 +250,10 @@ export class Person implements Character {
   private legs: { hip: number; thigh: number; knee: number; thighTip: number; shinTip: number } | null = null;
   /** Idle clip speed and phase (staff breathe out of step with each other). */
   private pace: { rate: number; phase: number } | null = null;
+  /** The shadow under the feet (none for staff), and the root height the caller last gave us. */
+  private blobMesh: THREE.Mesh | null = null;
+  private rootFloor = 0;
+  private rootSet = Number.NaN;
 
   constructor(
     private readonly factory: Characters,
@@ -266,7 +270,7 @@ export class Person implements Character {
     this.tag.position.set(0, NAME_Y, 0);
     this.root.add(this.tag);
     if (opts.blob ?? true) {
-      const blob = new THREE.Mesh(factory.blobGeometry, factory.blob);
+      const blob = (this.blobMesh = new THREE.Mesh(factory.blobGeometry, factory.blob));
       blob.position.y = 0.012;
       blob.renderOrder = 1;
       this.root.add(blob);
@@ -340,11 +344,34 @@ export class Person implements Character {
 
   /**
    * Sit on a seat whose top is `seatTop` above the feet (the root's own units: metres unless the
-   * root is scaled): hips and knees bend until the shins hang onto the floor, the model drops
-   * onto the seat and the forearms come forward onto the table's rail. Null stands up again.
+   * root is scaled): hips and knees bend until the shins hang onto the floor, the character drops
+   * onto the seat (its name tag and bubbles with it) and the forearms come forward onto the
+   * table's rail. Null stands up again.
    */
   sit(seatTop: number | null): void {
     this.seatTop = seatTop;
+  }
+
+  /**
+   * A still copy of the character as posed now, in its root's frame: skinned on the CPU, in its
+   * own colours, for a far-away stand-in (world/npcs.ts). Null until its model has loaded.
+   */
+  bake(): THREE.BufferGeometry | null {
+    const mesh = this.mesh;
+    const index = mesh?.geometry.getIndex();
+    if (!mesh || !this.colors || !index) return null;
+    this.root.updateWorldMatrix(true, true);
+    const toRoot = new THREE.Matrix4().copy(this.root.matrixWorld).invert().multiply(mesh.matrixWorld);
+    const n = mesh.geometry.getAttribute('position').count;
+    const pos = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) mesh.getVertexPosition(i, _v).applyMatrix4(toRoot).toArray(pos, i * 3);
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    g.setAttribute('color', new THREE.BufferAttribute((this.colors.array as Uint16Array).slice(), 3, true));
+    g.setIndex(new THREE.BufferAttribute((index.array as Uint16Array | Uint32Array).slice(), 1));
+    g.computeVertexNormals();
+    g.computeBoundingSphere();
+    return g;
   }
 
   /** The idle clip's speed (1 = as made) and where in it to start (0-1), so a crowd breathes out of step. */
@@ -377,11 +404,13 @@ export class Person implements Character {
     this.root.updateWorldMatrix(true, false);
     this.root.getWorldQuaternion(_rootQ).invert();
     let y = 0;
-    if (this.seatTop !== null) y -= this.sitPose();
+    let drop = 0;
+    if (this.seatTop !== null) drop = this.sitPose();
     else if (this.swaySeed !== null) this.swayPose(dt);
     this.lookPose(dt);
     if (this.act) y += this.perform(dt);
     if (this.model) this.model.position.y = this.modelY + y;
+    this.settle(drop);
   }
 
   /** Turn the arms for the emote being acted out; returns how high it hops. */
@@ -468,7 +497,20 @@ export class Person implements Character {
     this.turn('chest', [0.012 * Math.sin(t * 0.61), 0.03 * Math.sin(t * 0.37), 0]);
   }
 
-  /** The sitting pose (see sit()); returns how far the model drops. */
+  /**
+   * Lower the whole character onto its seat, so its name tag and anything else hung on the root
+   * (speech and emote bubbles) drop with it, while its shadow stays on the floor. The caller owns
+   * the root's height: whatever it last set is the floor this works from.
+   */
+  private settle(drop: number): void {
+    const p = this.root.position;
+    if (p.y !== this.rootSet) this.rootFloor = p.y;
+    p.y = this.rootFloor - drop * this.root.scale.y;
+    this.rootSet = p.y;
+    if (this.blobMesh) this.blobMesh.position.y = 0.012 + drop;
+  }
+
+  /** The sitting pose (see sit()); returns how far the character drops (root units). */
   private sitPose(): number {
     const legs = (this.legs ??= this.measureLegs());
     if (!legs) return 0;
@@ -502,6 +544,7 @@ export class Person implements Character {
     const foot = this.model?.getObjectByName('FootR') ?? this.model?.getObjectByName('Foot.R');
     if (!this.model || !hipBone || !kneeBone || !foot) return null;
     this.model.updateWorldMatrix(true, true);
+    // (in the model's own frame, so neither a hop nor the root lowered onto a seat counts)
     const lift = this.model.position.y - this.modelY;
     const hip = this.root.worldToLocal(hipBone.getWorldPosition(new THREE.Vector3()));
     const knee = this.root.worldToLocal(kneeBone.getWorldPosition(new THREE.Vector3()));

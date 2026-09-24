@@ -15,8 +15,10 @@
 // glance over their layout. When you sit at a table its dealer turns to face you. Table views can
 // ask for a deal, sweep or pay motion (FloorWorld.dealerGesture).
 //
-// Cost: staff are hidden (and not animated) beyond CULL_M or outside the camera's view; their
-// shadows are one instanced mesh. Each stands on a collision post so nobody walks through them.
+// Cost: staff out of the camera's view are hidden and not animated. Past CULL_M each one gives way
+// to a still copy of itself, drawn with everyone else in the same uniform as one instanced mesh
+// (a few draw calls for the whole far floor), and their shadows are one instanced mesh too. Each
+// stands on a collision post so nobody walks through them.
 
 import * as THREE from 'three';
 import type { GameId } from '../../../shared/src/engine.ts';
@@ -302,6 +304,16 @@ interface Member {
   /** The bartender's stroll: where to, and the pause before the next one. */
   walkTo: number | null;
   rest: number;
+  /** The still copy that stands in past CULL_M, and whether it is standing in now. */
+  far: FarGroup | null;
+  farShown: boolean;
+}
+
+/** Still copies of everyone in one uniform and colour, as one instanced mesh. */
+interface FarGroup {
+  mesh: THREE.InstancedMesh;
+  members: Member[];
+  dirty: boolean;
 }
 
 export class Staff {
@@ -309,6 +321,7 @@ export class Staff {
   readonly posts: StaffPost[];
   private readonly members: Member[] = [];
   private readonly blobs: THREE.InstancedMesh;
+  private readonly far: FarGroup[] = [];
   private readonly frustum = new THREE.Frustum();
   private readonly viewProj = new THREE.Matrix4();
   private readonly sphere = new THREE.Sphere(new THREE.Vector3(), 1.1);
@@ -356,6 +369,8 @@ export class Staff {
         gazeUntil: 0,
         walkTo: null,
         rest: 6 + r() * 10,
+        far: null,
+        farShown: false,
       });
     });
     this.blobs = new THREE.InstancedMesh(characters.blobGeometry, characters.blob, this.members.length);
@@ -376,7 +391,8 @@ export class Staff {
       seen.add(key);
       waits.push(this.characters.load(look));
     }
-    await Promise.all(waits);
+    await Promise.all(waits.map((w) => w.catch((err) => console.warn('uniform failed to load', err))));
+    this.buildFar();
   }
 
   /** The staff member posted at a station (its dealer or stickman). */
@@ -411,6 +427,12 @@ export class Staff {
       const near = m.shown ? d < CULL_M : d < CULL_M - 1;
       this.sphere.center.set(root.position.x, 0.95, root.position.z);
       const show = mine || (near && this.frustum.intersectsSphere(this.sphere));
+      // past CULL_M (not merely out of view) the still copy stands in
+      const farShow = !show && !near;
+      if (m.far && farShow !== m.farShown) {
+        m.farShown = farShow;
+        m.far.dirty = true;
+      }
       if (show !== m.shown) {
         m.shown = show;
         root.visible = show;
@@ -422,11 +444,20 @@ export class Staff {
       m.ch.update(dt);
     }
     if (this.blobsDirty) this.placeBlobs();
+    const mat = this.characters.material();
+    for (const g of this.far) {
+      if (g.mesh.material !== mat) g.mesh.material = mat;
+      if (g.dirty) this.placeFar(g);
+    }
   }
 
   dispose(): void {
     for (const m of this.members) m.ch.dispose();
     this.blobs.dispose();
+    for (const g of this.far) {
+      g.mesh.geometry.dispose();
+      g.mesh.dispose();
+    }
     this.group.removeFromParent();
   }
 
@@ -542,6 +573,54 @@ export class Staff {
       m.rest = 8 + this.rand() * 14;
       m.turn = Math.atan2(Math.sin(root.rotation.y - m.post.yaw), Math.cos(root.rotation.y - m.post.yaw));
     }
+  }
+
+  /** One baked copy per uniform and colour, posed at rest, shared by everyone wearing it. */
+  private buildFar(): void {
+    const groups = new Map<string, Member[]>();
+    for (const m of this.members) {
+      const l = m.ch.currentLook;
+      const key = `${l.body}|${l.outfit}|${l.top}`;
+      groups.set(key, [...(groups.get(key) ?? []), m]);
+    }
+    for (const members of groups.values()) {
+      const first = members[0]!;
+      const root = first.ch.root;
+      // bake at the origin, facing +z, unscaled: each copy's own matrix places it
+      const saved = { p: root.position.clone(), r: root.rotation.y, s: root.scale.x, v: root.visible };
+      root.position.set(0, 0, 0);
+      root.rotation.y = 0;
+      root.scale.setScalar(1);
+      first.ch.update(0);
+      const geo = first.ch.bake();
+      root.position.copy(saved.p);
+      root.rotation.y = saved.r;
+      root.scale.setScalar(saved.s);
+      root.visible = saved.v;
+      if (!geo) continue;
+      const mesh = new THREE.InstancedMesh(geo, this.characters.material(), members.length);
+      mesh.name = 'staff-far';
+      mesh.count = 0;
+      mesh.visible = false;
+      this.group.add(mesh);
+      const g: FarGroup = { mesh, members, dirty: true };
+      for (const m of members) m.far = g;
+      this.far.push(g);
+    }
+  }
+
+  private placeFar(g: FarGroup): void {
+    g.dirty = false;
+    let n = 0;
+    for (const m of g.members) {
+      if (!m.farShown) continue;
+      m.ch.root.updateMatrix();
+      g.mesh.setMatrixAt(n++, m.ch.root.matrix);
+    }
+    g.mesh.count = n;
+    g.mesh.visible = n > 0;
+    g.mesh.instanceMatrix.needsUpdate = true;
+    if (n > 0) g.mesh.computeBoundingSphere();
   }
 
   private placeBlobs(): void {
