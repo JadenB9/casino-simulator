@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 // Headless checks for the v3 floor. Usage:
 //   node scripts/e2e/world3.mjs [port] [out dir] [checks...]
-//   checks: shots layout lod (dev floor, Vite only); lock onboard (the game proper, needs the
-//   worker too: PORT_BASE=<port> npm run dev). Default: all.
+//   checks: shots calls layout lod (dev floor, Vite only); lock onboard (the game proper, needs
+//   the worker too: PORT_BASE=<port> npm run dev). Default: all.
+// calls sweeps the busiest camera poses on the floor with the big-win sign and meter up (the
+// feed dev page) and fails past CALL_LIMIT (235: room under 250 for the dealers).
 // SHOTS=pit,poker limits the fixed views. GPU=1 renders on the machine's GPU (Metal) for real
 // frame times; otherwise SwiftShader. Runs Chrome's new headless mode (channel 'chromium'): the
 // headless shell refuses Pointer Lock.
@@ -13,7 +15,7 @@ import { mkdirSync } from 'node:fs';
 
 const [port = '5930', out = '/tmp/world3', ...wanted] = process.argv.slice(2);
 mkdirSync(out, { recursive: true });
-const all = ['shots', 'layout', 'lod', 'lock', 'onboard'];
+const all = ['shots', 'calls', 'layout', 'lod', 'lock', 'onboard', 'bloom'];
 const checks = wanted.length ? wanted : all;
 const gpu = process.env.GPU === '1';
 const args = gpu ? ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'];
@@ -33,10 +35,10 @@ function watch(page) {
   return errors;
 }
 
-async function openFloor(query) {
+async function openFloor(query, url = floorUrl) {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
   const errors = watch(page);
-  await page.goto(`${floorUrl}?${query}`, { timeout: 300000 });
+  await page.goto(`${url}?${query}`, { timeout: 300000 });
   await page.waitForFunction(() => document.getElementById('boot')?.classList.contains('done'), null, { timeout: 600000 });
   return { page, errors };
 }
@@ -110,6 +112,79 @@ if (checks.includes('shots')) {
     if (errors.length) fail(`${view}/${quality}: ${errors[0]}`);
     await page.close();
   }
+}
+
+// --- draw calls at the busiest poses, the features' sign and meter up ------------------------------
+const CALL_LIMIT = Number(process.env.CALL_LIMIT ?? 235);
+if (checks.includes('calls')) {
+  const quality = process.env.QUALITY ?? 'high';
+  const { page, errors } = await openFloor(`quality=${quality}&stats=1&slots=sevens,neon,wild,diamonds,cherries,goldrush`, `http://localhost:${port}/casino/src/ui/feed/dev.html`);
+  const poses = await page.evaluate(() => {
+    const p = window.casino.world.plan;
+    const m = window.casino.marqueeAt ?? { x: 0, z: (p.staff.z0 + p.staff.z1) / 2 };
+    const t = window.casino.tallyAt ?? { x: p.pit.x0 - 3, z: (p.aisles[0].z0 + p.aisles[0].z1) / 2 };
+    const mz = (p.staff.z0 + p.staff.z1) / 2;
+    const out = [];
+    // the north row's players looking south across the pit, and the south row's looking north
+    for (const x of [-9, -6, -3, 0, 3, 6, 9]) out.push([`north${x}`, [m.x + x - 1.2, 1.7, p.staff.z0 - 3.4], [m.x + x, 3.3, mz]]);
+    for (const x of [-9, -5, 0, 5, 9]) out.push([`south${x}`, [x + 1.2, 1.7, p.pit.z1 + 0.6], [x, 1.2, mz]]);
+    out.push(['marquee', [m.x + 1.6, 1.7, p.staff.z1 + 3.6], [m.x, 3.3, m.z]]);
+    out.push(['staffE', [p.staff.x0 + 0.5, 1.7, mz], [p.staff.x1, 0.8, mz]]);
+    out.push(['staffW', [p.staff.x1 - 0.5, 1.7, mz], [p.staff.x0, 0.8, mz]]);
+    // standing on the cross aisle, turning round
+    const cz = (p.aisles[0].z0 + p.aisles[0].z1) / 2;
+    for (const x of [-12, -6, 0, 6]) for (let k = 0; k < 8; k++) {
+      const a = (k * Math.PI) / 4;
+      out.push([`cross${x}@${k * 45}`, [x, 1.7, cz], [x + Math.sin(a) * 10, 1.1, cz - Math.cos(a) * 10]]);
+    }
+    out.push(['tally', [t.x + 2.2, 1.7, t.z + 6.2], [t.x, 2.85, t.z]]);
+    out.push(['tallyback', [t.x - 1.4, 1.7, t.z - 5.0], [t.x, 2.85, t.z]]);
+    out.push(['front', [0.6, 1.75, p.entrance.z0 - 1.6], [-1.6, 2.6, m.z]]);
+    out.push(['slotsSE', [p.slotsZone.x1 - 3.1, 2.5, p.slotsZone.z1 - 0.7], [p.slotsZone.x0 + 3, 0.8, p.slotsZone.z0 + 2]]);
+    out.push(['slotsN', [-11.4, 1.7, p.slotsZone.z0 - 1], [-11.4, 0.9, p.slotsZone.z1]]);
+    out.push(['entrance', [0, 1.7, p.entrance.z0 + 1], [0, 1.2, p.pit.z0]]);
+    out.push(['barN', [p.bar.front - 5, 1.7, p.bar.z0 - 2], [p.bar.front, 1, p.bar.z1]]);
+    out.push(['poker', [p.pokerRoom.x0 + 0.5, 1.8, p.pokerRoom.z1 - 0.4], [p.pokerRoom.x1 - 1.5, 0.8, p.pokerRoom.z0 + 2.5]]);
+    return out;
+  });
+  const results = [];
+  for (const [name, pos, at] of poses) {
+    const calls = await page.evaluate(async ([pos, at]) => {
+      const { world, engine } = window.casino;
+      world.player.setEnabled(false);
+      world.player.character.root.visible = false;
+      window.__cam?.();
+      window.__cam = engine.onFrame(() => {
+        engine.camera.position.set(...pos);
+        engine.camera.lookAt(...at);
+      });
+      for (let i = 0; i < 3; i++) await new Promise((r) => requestAnimationFrame(r));
+      let max = 0;
+      for (let i = 0; i < 4; i++) {
+        await new Promise((r) => requestAnimationFrame(r));
+        max = Math.max(max, world.stats().calls);
+      }
+      return max;
+    }, [pos, at]);
+    results.push([name, calls]);
+  }
+  results.sort((a, b) => b[1] - a[1]);
+  const worst = results[0];
+  await page.evaluate(([pos, at]) => {
+    const { engine } = window.casino;
+    window.__cam?.();
+    window.__cam = engine.onFrame(() => {
+      engine.camera.position.set(...pos);
+      engine.camera.lookAt(...at);
+    });
+  }, poses.find((p) => p[0] === worst[0]).slice(1));
+  await page.waitForTimeout(800);
+  await page.screenshot({ path: `${out}/world3-calls-worst-${quality}.png` });
+  console.log(JSON.stringify({ check: 'calls', quality, worst, top: results.slice(0, 8).map(([n, c]) => `${n}:${c}`), all: results.length, errors: errors.slice(0, 3) }));
+  const over = results.filter(([, c]) => c > CALL_LIMIT);
+  if (over.length) fail(`calls over ${CALL_LIMIT}: ${over.map(([n, c]) => `${n} ${c}`).join(', ')}`);
+  if (errors.length) fail(`calls: ${errors[0]}`);
+  await page.close();
 }
 
 // --- clipping: the plan's own check, then the real geometry against the plan -----------------------
@@ -560,6 +635,49 @@ if (checks.includes('onboard')) {
   if (!r.secondVisitMenu) fail('onboard: a returning player did not get the menu');
   if (!r.oldGotLook) fail('onboard: an account in the default suit kept it on entering');
   if (errors.length) fail(`onboard: ${errors[0]}`);
+}
+
+// --- bloom you can see through: seated at baccarat with the cards out, on High ----------------------
+// A round of baccarat (a banker bet), then the table and its cards as the player sees them. The
+// numbers are the brightest card pixels and how much the glow lifts the felt beside them.
+if (checks.includes('bloom')) {
+  const { ctx, page, errors } = await openGame('world3_e2e', () => localStorage.setItem('casino.quality', 'high'));
+  if (await page.$('.editor-panel.guided')) {
+    for (let i = 0; i < 3; i++) await page.click('.editor-panel .ed-buttons .btn.primary');
+  } else {
+    await page.click('.menu-item >> nth=0');
+  }
+  await page.waitForSelector('.hud', { timeout: 30000 });
+  const station = process.env.BLOOM_STATION ?? 'bc-1';
+  await page.evaluate((id) => {
+    const w = window.casino.world;
+    w.enter(w.stations.find((s) => s.id === id));
+  }, station);
+  await page.waitForSelector('.lobby-choice', { timeout: 20000 });
+  await page.keyboard.press('s');
+  await page.waitForSelector('.modal input[type=number]', { timeout: 30000 });
+  await page.fill('.modal input[type=number]', '1000');
+  await page.click('.modal .btn.primary');
+  await page.waitForFunction(() => window.casino.app.table?.seated === true, null, { timeout: 30000 });
+  await page.evaluate(() => {
+    const s = window.casino.app.table.session;
+    s.__done = false;
+    const orig = s.onMessage.bind(s);
+    s.onMessage = (m) => {
+      orig(m);
+      if (m.t === 'ev' && m.events.some((e) => ['result', 'settle', 'done'].includes(e.type))) s.__done = true;
+    };
+    setTimeout(() => s.link.act({ type: 'bet', banker: 2500 }), 300);
+    setTimeout(() => s.link.act({ type: 'deal' }), 1000);
+  });
+  const t0 = Date.now();
+  while (Date.now() - t0 < 120000 && !(await page.evaluate(() => window.casino.app.table?.session.__done))) await page.waitForTimeout(1000);
+  await page.waitForTimeout(6000);
+  const file = `${out}/world3-bloom-${station}.png`;
+  await page.screenshot({ path: file });
+  console.log(JSON.stringify({ check: 'bloom', station, file, errors: errors.slice(0, 3) }));
+  if (errors.length) fail(`bloom: ${errors[0]}`);
+  await ctx.close();
 }
 
 await browser.close();
