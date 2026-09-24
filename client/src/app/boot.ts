@@ -22,6 +22,7 @@ import { isTyping } from '../ui/keyboard.ts';
 import { mountEmotes, openLeaderboard, socialApi, socialButton, type EmoteWheel } from '../ui/social/index.ts';
 import { createChat, type Chat } from '../ui/chat/index.ts';
 import { mountFloorLife, type FloorLife } from '../ui/feed/index.ts';
+import { Bar, openBarMenu, openShop, shopApi, shopButton } from '../ui/shop/index.ts';
 import { button, modal, toast } from '../ui/kit.ts';
 import { ENGINES } from '../../../shared/src/games/index.ts';
 import { CLOSE, type Profile } from '../../../shared/src/protocol.ts';
@@ -69,6 +70,8 @@ class App {
   private hud: Hud | null = null;
   private emotes: EmoteWheel | null = null;
   private chat: Chat | null = null;
+  /** The bar's orders, from paying to your hand (ui/shop/bar.ts); world.holdItem lands here. */
+  private bar: Bar | null = null;
   /** Big wins on the floor: the marquee, the toast, the day's meter and the room's sound. */
   private readonly life: FloorLife;
   private lifeOff: (() => void) | null = null;
@@ -246,9 +249,19 @@ class App {
       this.menu?.setOnline(n);
     });
     link.on('state', (_s, code) => void this.endsSession(code));
+    this.bar = new Bar({
+      session,
+      api: { order: shopApi.order, saveLook: api.saveLook },
+      seated: () => this.table !== null || this.world.seated !== null,
+      onSit: (fn) => this.world.onEnter(() => fn()),
+    });
+    this.world.useBar(this.bar);
   }
 
   private disconnectFloor(): void {
+    this.world.useBar(null);
+    this.bar?.dispose();
+    this.bar = null;
     this.lifeOff?.();
     this.lifeOff = null;
     this.chat?.dispose();
@@ -293,6 +306,8 @@ class App {
     const first = bar.querySelector('.hud-btn');
     bar.insertBefore(socialButton('emotes', 'Emotes (G)', () => this.emotes?.toggle()), first);
     bar.insertBefore(socialButton('leaderboard', 'Leaderboards', () => openLeaderboard({ root: this.ui, api: socialApi })), first);
+    bar.insertBefore(shopButton('boutique', 'Boutique', () => this.openShop()), first);
+    bar.insertBefore(shopButton('bar', 'Bar', () => this.openBarMenu()), first);
     this.chat?.setVisible(true);
   }
 
@@ -305,6 +320,37 @@ class App {
     this.hud?.close();
     this.hud = null;
     this.showMenu();
+  }
+
+  /**
+   * The boutique, from the HUD for now (a storefront and shopkeeper on the floor later); `item`
+   * opens it at that piece. On the floor only: it borrows the camera a table would be using.
+   */
+  openShop(item?: string): void {
+    if (!this.hud) return;
+    if (this.table || this.world.seated) {
+      toast('Stand up from the table to go to the boutique.');
+      return;
+    }
+    this.world.player.setEnabled(false);
+    openShop({
+      root: this.ui,
+      api: { shop: shopApi.shop, buy: shopApi.buy, saveLook: api.saveLook },
+      session,
+      engine: this.engine,
+      characters: this.world.characterFactory,
+      sfx: this.sfx,
+      item,
+      onClose: () => this.world.player.setEnabled(true),
+    });
+  }
+
+  /** The bar's menu, from the HUD for now (a waiter's, later). */
+  openBarMenu(): void {
+    if (!this.bar) return;
+    const walking = this.table === null && this.world.seated === null;
+    if (walking) this.world.player.setEnabled(false);
+    openBarMenu({ root: this.ui, bar: this.bar, session, sfx: this.sfx, onClose: () => walking && this.world.player.setEnabled(true) });
   }
 
   private openCashier(): void {

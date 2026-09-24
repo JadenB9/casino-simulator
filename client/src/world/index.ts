@@ -99,6 +99,15 @@ export interface FloorWorld extends World {
    * table view to call as it animates; false when that station has no dealer.
    */
   dealerGesture(stationId: string, g: StaffGesture): boolean;
+  /**
+   * A waiter hands over a paid bar order: it goes in your right hand, where everyone sees it. The
+   * order's id (from the bar's onOrder), or an item id for your newest paid order of that item.
+   */
+  holdItem(id: string): void;
+  /** Put down what you're holding. */
+  dropHeld(): void;
+  /** Where holdItem and dropHeld go (the app's bar, ui/shop/bar.ts); null to forget. */
+  useBar(bar: { hold(id: string): unknown; drop(): unknown } | null): void;
 }
 
 export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Promise<FloorWorld> {
@@ -187,6 +196,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
 
   const emotes = new Emotes();
   let remotes: CharacterSource | null = null;
+  let bar: Parameters<FloorWorld['useBar']>[0] = null;
 
   let lastCalls = 0;
   let lastTris = 0;
@@ -274,6 +284,11 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
     },
     staff,
     dealerGesture: (id, g) => staff.gesture(id, g),
+    holdItem: (id) => void bar?.hold(id),
+    dropHeld: () => void bar?.drop(),
+    useBar(b) {
+      bar = b;
+    },
     dispose() {
       touch.dispose();
       emotes.dispose();
