@@ -6,6 +6,8 @@
 //   seatcam   (dev floor) sitting on a bench against a wall, the banquette under its palm and an
 //             armchair backed by a lamp: the camera settles a proper distance off, not in the hair
 //   bubble    (dev floor) a staff line with the camera right in front of the speaker stays on screen
+//   deskfly   (dev floor) flying in to every computer and back out, the camera keeps clear of the
+//             gaming chair's back and headrest (a straight line went through it for a frame)
 //   panels    walking with W held, the map, the emotes and the keyboard sheet stop the walker, and W
 //             or E typed into an open panel neither walks nor sits you down
 //   onboard   a new name's "Pick your look" shows the character in the dressing room (the floor's
@@ -24,7 +26,7 @@ import { execFileSync } from 'node:child_process';
 
 const [port = '6090', out = '/tmp/qa-world', ...wanted] = process.argv.slice(2);
 mkdirSync(out, { recursive: true });
-const all = ['prompts', 'seatcam', 'bubble', 'panels', 'onboard', 'race', 'away'];
+const all = ['prompts', 'seatcam', 'bubble', 'deskfly', 'panels', 'onboard', 'race', 'away'];
 const checks = wanted.length ? wanted : all;
 const browser = await chromium.launch(process.env.GPU === '1' ? { channel: 'chromium', args: ['--ignore-gpu-blocklist'] } : { args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 let failed = 0;
@@ -66,7 +68,7 @@ async function devFloor() {
 
 // --- the dev floor ----------------------------------------------------------------------------------
 
-if (checks.some((c) => ['prompts', 'seatcam', 'bubble'].includes(c))) {
+if (checks.some((c) => ['prompts', 'seatcam', 'bubble', 'deskfly'].includes(c))) {
   const { p, errors } = await devFloor();
 
   if (checks.includes('prompts')) {
@@ -154,6 +156,34 @@ if (checks.some((c) => ['prompts', 'seatcam', 'bubble'].includes(c))) {
       window.casino.qaHold?.();
       window.casino.world.player.setEnabled(true);
     });
+  }
+
+  if (checks.includes('deskfly')) {
+    const worst = await p.evaluate(async () => {
+      const w = window.casino.world;
+      const cam = window.casino.engine.camera;
+      let out = { d: Infinity, id: '' };
+      for (const s of w.stations.filter((x) => x.footprint.width === 1.2 && x.footprint.depth === 1.6)) {
+        const f = [Math.sin(s.yaw), Math.cos(s.yaw)];
+        const d = s.footprint.depth / 2 + 0.7;
+        w.teleport(s.anchor.position.x + f[0] * d, s.anchor.position.z + f[1] * d, s.yaw + Math.PI);
+        await new Promise((res) => setTimeout(res, 300));
+        const inv = s.anchor.matrixWorld.clone().invert();
+        let min = Infinity;
+        const off = window.casino.engine.onFrame(() => {
+          // the chair's back and headrest in the station's frame (games/online/pc.ts)
+          const l = cam.position.clone().applyMatrix4(inv);
+          min = Math.min(min, Math.hypot(Math.max(0, Math.abs(l.x) - 0.25), Math.max(0, 0.5 - l.y, l.y - 1.35), Math.max(0, 0.66 - l.z, l.z - 0.86)));
+        });
+        w.enter(s);
+        await new Promise((res) => setTimeout(res, 1200));
+        await w.exitTable();
+        off();
+        if (min < out.d) out = { d: min, id: s.id };
+      }
+      return out;
+    });
+    ok(worst.d > 0.1, `flying in to a computer and out, the camera keeps clear of the gaming chair (closest ${worst.d.toFixed(2)} m, at ${worst.id})`);
   }
 
   if (errors.length) fail(`dev floor errors: ${errors.slice(0, 3).join(' | ')}`);

@@ -21,6 +21,13 @@ const REACH = 1.6;
  */
 const STATION_FIRST = 0.5;
 const FLY_IN = 0.9;
+/**
+ * Flying in to a seat and back out, the path rises this much per metre in the middle (at most
+ * ARC_MAX): a straight line from behind the player to a computer's screen went through the gaming
+ * chair's headrest for a frame.
+ */
+const ARC = 0.12;
+const ARC_MAX = 0.6;
 const FLY_OUT = 0.75;
 const AIM = 0.6;
 
@@ -52,7 +59,7 @@ export class Interact {
   /** The cage's own prompt; off while tellers at its windows take the customers (world/life/). */
   cashierPrompt = true;
   seated: WorldStation | null = null;
-  private fly: { from: THREE.Vector3; fromT: THREE.Vector3; to: THREE.Vector3; toT: THREE.Vector3; t: number; dur: number; done: () => void } | null = null;
+  private fly: { from: THREE.Vector3; fromT: THREE.Vector3; to: THREE.Vector3; toT: THREE.Vector3; t: number; dur: number; lift: number; done: () => void } | null = null;
   private readonly look = new THREE.Vector3();
 
   constructor(
@@ -106,6 +113,8 @@ export class Interact {
       f.t = Math.min(1, f.t + dt / f.dur);
       const k = f.t < 0.5 ? 4 * f.t ** 3 : 1 - (-2 * f.t + 2) ** 3 / 2;
       this.camera.position.lerpVectors(f.from, f.to, k);
+      // over whatever stands between (a gaming chair's back, a table's chair): an arc, not a line
+      this.camera.position.y += 4 * k * (1 - k) * f.lift;
       this.look.lerpVectors(f.fromT, f.toT, k);
       this.camera.lookAt(this.look);
       if (f.t >= 1) {
@@ -129,7 +138,7 @@ export class Interact {
     this.player.setEnabled(false);
     this.player.character.root.visible = false;
     const pose = playPoseWorld(s, seat);
-    this.flyTo(pose.position, pose.target, FLY_IN, () => {});
+    this.flyTo(pose.position, pose.target, FLY_IN, () => {}, ARC);
     for (const cb of this.enterCbs) cb(s);
   }
 
@@ -151,10 +160,16 @@ export class Interact {
     this.player.character.root.visible = true;
     const back = this.player.followPose();
     return new Promise((resolve) =>
-      this.flyTo(back.position, back.target, FLY_OUT, () => {
-        this.player.setEnabled(true);
-        resolve();
-      }),
+      this.flyTo(
+        back.position,
+        back.target,
+        FLY_OUT,
+        () => {
+          this.player.setEnabled(true);
+          resolve();
+        },
+        ARC,
+      ),
     );
   }
 
@@ -163,12 +178,14 @@ export class Interact {
     this.prompt.remove();
   }
 
-  private flyTo(to: THREE.Vector3, toT: THREE.Vector3, dur: number, done: () => void): void {
+  /** Fly the camera to a pose; `arc` (m per metre flown, at most ARC_MAX) lifts the middle of the path. */
+  private flyTo(to: THREE.Vector3, toT: THREE.Vector3, dur: number, done: () => void, arc = 0): void {
     const dir = new THREE.Vector3();
     this.camera.getWorldDirection(dir);
     const from = this.camera.position.clone();
     const fromT = from.clone().addScaledVector(dir, from.distanceTo(toT));
-    this.fly = { from, fromT, to: to.clone(), toT: toT.clone(), t: 0, dur, done };
+    const lift = Math.min(ARC_MAX, from.distanceTo(to) * arc);
+    this.fly = { from, fromT, to: to.clone(), toT: toT.clone(), t: 0, dur, lift, done };
   }
 
   /** The closest thing within reach and roughly in front of the player. */
