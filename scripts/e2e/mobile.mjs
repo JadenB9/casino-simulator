@@ -197,27 +197,36 @@ for (const key of list) {
     });
 
   async function floorChecks() {
-    // Walk with the stick: a thumb on the resting ring, pushed up (forward) to just inside the rim.
-    // Walking speed is 2.6 m/s at the rim; allow for the start-up and a slow frame or two.
-    await approach(STATIONS.blackjack, 7);
+    // Walk with the stick in the open: inside the doors, facing down the entrance aisle, a thumb on
+    // the resting ring pushed up (forward) to just inside the rim, which is 95% of a walk (2.6 m/s).
+    // The speed is read between two moments mid-stride, in game time: no start-up, no slowing to a
+    // stop, and nothing a slow screenshot or a slow frame could skew.
+    await page.evaluate(() => window.casino.world.teleport(0, 12.8, Math.PI));
+    await gameTime();
     await sleep(600);
     const ring = await box('.touch-stick');
     const [sx, sy] = centre(ring);
-    const p0 = await where();
-    const t0 = await gameTime();
-    let shotTaken = false;
-    await drag([[[sx, sy], [sx + 2, sy - 44]]], 250, 1800, async () => {
-      if (shotTaken || !(await page.evaluate(() => document.querySelector('.touch-stick')?.classList.contains('held')))) return false;
-      shotTaken = true;
-      await shot('walking');
+    const sample = () => page.evaluate(() => ({ t: window.__gameT, x: window.casino.world.player.position.x, z: window.casino.world.player.position.z }));
+    const samples = [];
+    const t0 = Date.now();
+    await drag([[[sx, sy], [sx + 2, sy - 44]]], 250, 3000, async () => {
+      const held = Date.now() - t0;
+      if (samples.length === 0 && held > 700) samples.push(await sample());
+      else if (samples.length === 1 && held > 1500) samples.push(await sample());
+      else if (samples.length === 2) {
+        await shot('walking');
+        return true;
+      }
       return false;
     });
-    const t1 = await gameTime();
-    const p1 = await where();
-    const walked = Math.hypot(p1.x - p0.x, p1.z - p0.z);
-    const speed = walked / Math.max(0.1, t1 - t0);
-    log(`${key}: the stick walked ${walked.toFixed(2)} m in ${(t1 - t0).toFixed(2)} s of game time (${speed.toFixed(2)} m/s)`);
-    if (speed < 1.6) fail(`the stick walked at only ${speed.toFixed(2)} m/s`);
+    if (samples.length < 2) fail('the stick walk was not sampled');
+    else {
+      const [a, b] = samples;
+      const dist = Math.hypot(b.x - a.x, b.z - a.z);
+      const speed = dist / Math.max(1e-3, b.t - a.t);
+      log(`${key}: the stick walked ${dist.toFixed(2)} m in ${(b.t - a.t).toFixed(2)} s of game time: ${speed.toFixed(2)} m/s (a walk is 2.6)`);
+      if (speed < 2 || speed > 2.8) fail(`the stick walked at ${speed.toFixed(2)} m/s`);
+    }
 
     // Two thumbs: the stick and a look drag on the right at the same time.
     const y0 = await camYaw();
