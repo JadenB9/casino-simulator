@@ -118,10 +118,20 @@ if (checks.includes('dev')) {
     const z = L.z1 - 1.0;
     w.life.useBoutique({ keeper: { x, z, yaw: -Math.PI / 2 }, customer: { x: x - 1.4, z, yaw: Math.PI / 2 }, cases: [{ x, z: z - 1.4, yaw: -Math.PI / 2, top: 0.95 }], mannequins: [{ x: x - 0.2, z: z - 2.6, yaw: -Math.PI / 2 }] });
   });
+  // from the customer's side of the counter, a step back and to the side
   const follow = () =>
-    p.evaluate(() => {
+    p.evaluate(async () => {
+      const { lifePoints } = await import('/casino/src/world/life-points.ts');
+      const b = lifePoints(window.casino.world.plan).boutique;
       const m = window.casino.world.life.shopkeeper.m;
-      window.casino.shot = { follow: () => m, world: [-1.9, 1.6, -1.5, 1.15] };
+      if (!b) {
+        window.casino.shot = { follow: () => m, world: [-1.9, 1.6, -1.5, 1.15] };
+        return;
+      }
+      const c = b.customer;
+      const fx = Math.sin(c.yaw);
+      const fz = Math.cos(c.yaw);
+      window.casino.shot = { follow: () => m, world: [c.x - fx * 1.2 + fz * 0.9 - m.x, 1.62, c.z - fz * 1.2 - fx * 0.9 - m.z, 1.2] };
     });
   await p.evaluate(() => {
     const m = window.casino.world.life.shopkeeper.m;
@@ -152,7 +162,7 @@ if (checks.includes('dev')) {
   }
   // sitting: the player on a sofa place and on a bar stool, from behind (the game's own camera)
   await p.evaluate(() => (window.casino.shot = null));
-  for (const [id, name] of [['lounge.sofa.1a.2', 'sit-sofa'], ['bar.stool.3', 'sit-stool']]) {
+  for (const [id, name] of [['lounge.sofa.1a.2', 'sit-sofa'], ['bar.stool.3', 'sit-stool'], ['pit.banquette.1.2', 'sit-banquette']]) {
     await p.evaluate((sid) => {
       const w = window.casino.world;
       const s = w.life.seating;
@@ -239,18 +249,16 @@ if (checks.includes('floor')) {
   const seat = await a.p.evaluate(async () => {
     const { lifePoints } = await import('/casino/src/world/life-points.ts');
     const w = window.casino.world;
-    const s = lifePoints(w.plan).seats.find((x) => x.id === 'lounge.sofa.1a.2');
-    w.teleport(s.x + Math.sin(s.yaw) * 0.75, s.z + Math.cos(s.yaw) * 0.75, s.yaw + Math.PI);
-    return s;
+    return lifePoints(w.plan).seats.find((x) => x.id === 'lounge.sofa.1a.2');
   });
-  await a.p.waitForTimeout(900);
+  await travel(a.p, seat.x + Math.sin(seat.yaw) * 0.75, seat.z + Math.cos(seat.yaw) * 0.75, seat.yaw + Math.PI);
   await a.p.evaluate(() => {
     const w = window.casino.world;
     w.life.seating.spots(w.player.position).find((x) => x.key === 'sit:lounge.sofa.1a.2')?.use();
   });
   await a.p.waitForTimeout(1500);
   await shot(a.p, 'floor-a-sitting');
-  await b.p.evaluate(([x, z]) => window.casino.world.teleport(x, z, Math.PI * 0.75), [seat.x + 2.6, seat.z + 2.2]);
+  await travel(b.p, seat.x + 2.6, seat.z + 2.2, Math.PI * 0.75);
   await b.p.waitForTimeout(2500);
   const seen = await b.p.evaluate((id) => {
     const l = window.casino.world.life;
@@ -262,7 +270,7 @@ if (checks.includes('floor')) {
   await b.p.waitForTimeout(900);
   await shot(b.p, 'floor-b-sees-a-sitting');
   // B tries the same seat: refused with A's name (the floor's word)
-  await b.p.evaluate(async ([x, z]) => window.casino.world.teleport(x, z, 0), [seat.x + Math.sin(seat.yaw) * 0.75, seat.z + Math.cos(seat.yaw) * 0.75]);
+  await travel(b.p, seat.x + Math.sin(seat.yaw) * 0.75, seat.z + Math.cos(seat.yaw) * 0.75, 0);
   await b.p.waitForTimeout(600);
   const offered = await b.p.evaluate((id) => {
     const w = window.casino.world;
@@ -316,12 +324,8 @@ if (checks.includes('floor')) {
     const r = await fetch('/casino/api/me', { headers: { Authorization: `Bearer ${t}` } });
     window.casino.session.set((await r.json()).profile);
   });
-  await a.p.evaluate(() => {
-    const w = window.casino.world;
-    const t = w.life.bankers.tellers[1];
-    w.teleport(t.customer.x, t.customer.z + 0.5, Math.PI);
-  });
-  await a.p.waitForTimeout(900);
+  const win = await a.p.evaluate(() => window.casino.world.life.bankers.tellers[1].customer);
+  await travel(a.p, win.x, win.z + 0.5, Math.PI);
   await a.p.evaluate(() => {
     const w = window.casino.world;
     w.life.bankers.spots(w.player.position)[0]?.use();
@@ -344,6 +348,19 @@ if (checks.includes('floor')) {
   for (const [who, r] of [['a', a], ['b', b]]) if (r.errors.length) fail(`${who} errors: ${r.errors.slice(0, 5).join(' | ')}`);
   await a.ctx.close();
   await b.ctx.close();
+}
+
+/**
+ * Go somewhere the way the floor believes it: the server moves a player at most a walk's worth a
+ * second (presence.ts MAX_BANK), so a long jump goes in hops with a pause after each.
+ */
+async function travel(p, x, z, yaw) {
+  const from = await p.evaluate(() => ({ x: window.casino.world.player.position.x, z: window.casino.world.player.position.z }));
+  const n = Math.max(1, Math.ceil(Math.hypot(x - from.x, z - from.z) / 7));
+  for (let i = 1; i <= n; i++) {
+    await p.evaluate(([a, b, c]) => window.casino.world.teleport(a, b, c), [from.x + ((x - from.x) * i) / n, from.z + ((z - from.z) * i) / n, yaw]);
+    await p.waitForTimeout(1100);
+  }
 }
 
 async function exists(path) {
