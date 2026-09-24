@@ -689,8 +689,10 @@ export class CrapsTable implements TableView {
   onTable(snap: Parameters<TableView['onTable']>[0]): void {
     this.cfg = snap.meta.config;
     this.stack = snap.you.stack;
-    // chips over anything this table takes (its laid odds are the most) stay in the rack
-    this.tray.setChipMax(Math.max(...Object.values(this.cfg.limits).map((l) => l.max)));
+    // the rack: chips up to anything this table takes (its laid odds are the most), from what its
+    // smallest bet needs
+    const lims = Object.values(this.cfg.limits);
+    this.tray.setChipMax(Math.max(...lims.map((l) => l.max)), Math.min(...lims.map((l) => l.min)));
     this.solo = snap.meta.mode === 'solo';
     this.mySeat = snap.you.status === 'watching' ? null : snap.you.seat;
     this.names = new Map(snap.members.filter((m) => m.seat !== null).map((m) => [m.seat!, m.name]));

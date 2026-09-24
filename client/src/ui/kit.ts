@@ -63,6 +63,14 @@ export function modal(title: string, body: (HTMLElement | string)[], actions: HT
   return { close, root: box };
 }
 
+/** A round amount at or under `x`: 1, 2 or 5 times a power of ten dollars ($1 at the least). */
+function roundDown(x: Cents): Cents {
+  const d = Math.floor(x / 100);
+  if (d < 1) return 100;
+  const p = 10 ** (String(d).length - 1);
+  return (d / p >= 5 ? 5 : d / p >= 2 ? 2 : 1) * p * 100;
+}
+
 /** Ask how much to bring to the table. Resolves with cents, or null if cancelled. */
 export function askBuyIn(opts: { min: Cents; max: Cents; balance: Cents; suggested?: Cents; verb?: string }, signal?: AbortSignal): Promise<Cents | null> {
   return new Promise((resolve) => {
@@ -84,7 +92,11 @@ export function askBuyIn(opts: { min: Cents; max: Cents; balance: Cents; suggest
       m = modal('Not enough to sit down', [note, loan], [button('Close', dismiss)], dismiss);
       return;
     }
-    const picks = [opts.min, opts.min * 5, opts.min * 20, max].filter((v, i, a) => v >= opts.min && v <= max && a.indexOf(v) === i);
+    // the minimum, round amounts up the range (a hundredth, a tenth, half), and the most you can
+    const picks = [opts.min, roundDown(max / 100), roundDown(max / 10), roundDown(max / 2), max]
+      .filter((v) => v >= opts.min && v <= max)
+      .sort((a, b) => a - b)
+      .filter((v, i, a) => a.indexOf(v) === i);
     const input = el('input');
     input.type = 'number';
     input.min = String(opts.min / 100);
@@ -200,19 +212,18 @@ export class ChipTray {
   }
 
   /**
-   * The table's largest bet: chips above it go back in the rack (the smallest always stays), and a
-   * picked chip that went moves to the largest one left.
+   * The table's largest bet and its smallest: chips above the largest go back in the rack, and so
+   * do chips under a twentieth of the smallest (nobody stacks $1 chips at a $5,000 table), though
+   * one chip always stays. A picked chip that went moves to the first one left that covers the
+   * minimum.
    */
-  setChipMax(max: Cents): void {
-    let largest: ChipSpec | null = null;
-    for (const spec of BETTING_CHIPS) {
-      const hide = spec.value > max && spec !== BETTING_CHIPS[0];
-      this.buttons.get(spec.value)!.hidden = hide;
-      if (!hide) largest = spec;
-    }
-    if (this.buttons.get(this.selected.value)!.hidden && largest) {
+  setChipMax(max: Cents, min = 0): void {
+    const shown = BETTING_CHIPS.filter((c) => c.value <= max && c.value * 20 >= min);
+    if (shown.length === 0) shown.push(BETTING_CHIPS.filter((c) => c.value <= max).at(-1) ?? BETTING_CHIPS[0]!);
+    for (const spec of BETTING_CHIPS) this.buttons.get(spec.value)!.hidden = !shown.includes(spec);
+    if (!shown.includes(this.selected)) {
       const keepMax = this.maxOn;
-      this.select(largest);
+      this.select(shown.find((c) => c.value >= min) ?? shown.at(-1)!);
       if (keepMax) this.pickMax();
     }
   }
@@ -223,15 +234,14 @@ export class ChipTray {
   }
 
   /**
-   * Number keys pick chips (a chip this table keeps in the rack does nothing) and A is Max;
+   * Number keys pick the chips on show, left to right (1-9, and 0 for a tenth), and A is Max;
    * returns true if the key was one of them.
    */
   key(e: KeyboardEvent): boolean {
-    // 1-9 left to right, and 0 for the tenth
     const n = e.key === '0' ? 10 : Number(e.key);
     if (Number.isInteger(n) && n >= 1 && n <= BETTING_CHIPS.length) {
-      const spec = BETTING_CHIPS[n - 1]!;
-      if (!this.buttons.get(spec.value)!.hidden) this.select(spec);
+      const spec = BETTING_CHIPS.filter((c) => !this.buttons.get(c.value)!.hidden)[n - 1];
+      if (spec) this.select(spec);
       return true;
     }
     if (this.maxMode && (e.key === 'a' || e.key === 'A') && !e.shiftKey) {

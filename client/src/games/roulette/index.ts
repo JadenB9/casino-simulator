@@ -662,7 +662,7 @@ function mountRoulette(ctx: TableViewCtx): TableView {
     onTable(snap: TableSnapshot) {
       mode = snap.meta.mode;
       cfg = snap.meta.config;
-      tray.setChipMax(cfg.limits.outside?.max ?? TRAY_MAX);
+      tray.setChipMax(cfg.limits.outside?.max ?? TRAY_MAX, cfg.limits.inside?.min ?? 0);
       mySeat = snap.you.seat;
       stack = snap.you.stack;
       members = snap.members;

@@ -185,8 +185,8 @@ export class BaccaratTable implements TableView {
   onTable(snap: TableSnapshot): void {
     this.mode = snap.meta.mode;
     this.config = snap.meta.config;
-    // chips over the Player and Banker maximum stay in the rack
-    this.tray.setChipMax(limitsFor(this.config, 'banker').max);
+    // the rack: chips up to the Player and Banker maximum, from what the smallest bet (a pair) needs
+    this.tray.setChipMax(limitsFor(this.config, 'banker').max, limitsFor(this.config, 'playerPair').min);
     this.mySeat = snap.you.seat;
     this.stack = snap.you.stack;
     this.members = snap.members;

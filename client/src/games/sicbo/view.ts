@@ -543,7 +543,7 @@ export function mountSicBo(ctx: TableViewCtx): TableView {
     onTable(snap: TableSnapshot) {
       mode = snap.meta.mode;
       cfg = snap.meta.config;
-      tray.setChipMax(cfg.limits.even?.max ?? TRAY_MAX);
+      tray.setChipMax(cfg.limits.even?.max ?? TRAY_MAX, Math.min(...Object.values(cfg.limits).map((l) => l.min)));
       mySeat = snap.you.status === 'watching' ? null : snap.you.seat;
       stack = snap.you.stack;
       members = snap.members;

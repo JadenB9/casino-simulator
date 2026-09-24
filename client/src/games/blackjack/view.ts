@@ -211,7 +211,7 @@ export class BlackjackTable implements TableView {
   onTable(snap: TableSnapshot): void {
     this.mode = snap.meta.mode;
     this.limits = snap.meta.config.limits.default ?? this.limits;
-    this.tray.setChipMax(this.limits.max);
+    this.tray.setChipMax(this.limits.max, this.limits.min);
     this.seat = snap.you.seat;
     this.seated = snap.you.status === 'seated';
     this.stack = snap.you.stack;
@@ -324,7 +324,7 @@ export class BlackjackTable implements TableView {
     if (this.canBet()) {
       const n = Number(e.key);
       if (Number.isInteger(n) && n >= 1 && n <= BETTING_CHIPS.length) {
-        if (BETTING_CHIPS[n - 1]!.value <= this.limits.max) this.tray.key(e);
+        this.tray.key(e);
         return true;
       }
       if (e.key === 'Backspace') return this.act({ type: 'undo' }), true;

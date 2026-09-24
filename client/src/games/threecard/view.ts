@@ -905,9 +905,8 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
         sign = placard(cfg);
         root.add(sign);
       }
-      // hide chips the table can't take
-      const max = limitMax();
-      tray.root.querySelectorAll<HTMLButtonElement>('.chip-btn').forEach((b, i) => (b.hidden = (BETTING_CHIPS[i]?.value ?? 0) > max));
+      // the rack: chips the table can take, from what its smallest bet (Pair Plus) needs
+      tray.setChipMax(limitMax(), (cfg.limits.pairPlus ?? cfg.limits.default).min);
       fillRules();
       renderNames();
       draw(v);
@@ -947,7 +946,7 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
       if (e.repeat && !/^[1-8]$/.test(e.key)) return true;
       const n = Number(e.key);
       if (Number.isInteger(n) && n >= 1 && n <= BETTING_CHIPS.length) {
-        if ((BETTING_CHIPS[n - 1]?.value ?? 0) <= limitMax()) tray.key(e);
+        tray.key(e);
         return true;
       }
       if (e.code === 'Space') {
