@@ -111,7 +111,13 @@ try {
   await a.page.waitForSelector('.lim-opt', { timeout: 10_000 });
   await a.page.waitForTimeout(400);
   const tiers = await a.page.$$eval('.lim-opt', (bs) => bs.map((x) => x.textContent.trim()));
-  check(tiers.length === 6 && tiers[1] === 'Standard$25–$5K', `the first screen offers every tier: ${tiers.join(' | ')}`);
+  check(tiers.length === 7 && tiers[1] === 'Standard$25–$5K' && tiers[5] === 'Penthouse$5K–$500K', `the first screen offers every tier: ${tiers.join(' | ')}`);
+  check((await a.page.textContent('.lim-buyin')) === 'Buy-in $100–$500,000', 'and the Standard buy-in, up to a hundred times the maximum');
+  await a.page.click('.lim-opt:has-text("Penthouse")');
+  const pent = await a.page.textContent('.lim-buyin');
+  check(pent === 'Buy-in $20,000–$50,000,000', `Penthouse brings the buy-in with it: "${pent}"`);
+  await shot(a.page, 'limits-1-picker-penthouse');
+  await a.page.click('.lim-opt:has-text("Standard")');
   await shot(a.page, 'limits-1-picker');
 
   await a.page.keyboard.press('m');
@@ -130,7 +136,7 @@ try {
   await a.page.click('.party-row .btn:has-text("Sit down")');
   await a.page.waitForSelector('.modal input[type=number]', { timeout: 10_000 });
   const noteA = await a.page.textContent('.modal p');
-  check(noteA.includes('$120 to $30,000'), `the buy-in follows the limits: "${noteA.trim()}"`);
+  check(noteA.includes('$120 to $300,000'), `the buy-in follows the limits: "${noteA.trim()}"`);
   await a.page.fill('.modal input[type=number]', '2000');
   await a.page.click('.modal .btn.primary');
   await a.page.waitForFunction(() => window.casino.app.table?.seated === true, null, { timeout: 20_000 });
