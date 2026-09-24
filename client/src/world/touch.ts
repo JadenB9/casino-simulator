@@ -2,8 +2,9 @@
 // the site's back chip, which keeps the corner itself), drag-to-look everywhere else on the floor
 // view, and a large action button over the right thumb whenever a table, a machine or the cashier
 // is in reach. At a table the stick and the look layer step aside so taps land on the felt and the
-// table's own buttons, and a Leave button joins the HUD. A phone held upright at a table gets one
-// quiet note to turn it sideways: every felt is laid out for a wide screen.
+// table's own buttons, and a Leave button joins the HUD. A phone held upright at a table too wide
+// for it (roulette, craps, the poker room, a lounge computer) gets one quiet note to turn it
+// sideways.
 //
 // Nothing here moves the player or opens anything itself: the stick and the drags go through the
 // walker's input API (Player.setMoveInput / addLook), and the two buttons press E and Esc, so a
@@ -117,9 +118,11 @@ export class TouchControls {
   private readonly leave = el('button', 'touch-leave');
   private readonly note = el('div', 'touch-note');
   private readonly noteText = el('span');
-  /** The finger on the stick: where it came down, and the ring's centre (kept on screen). */
-  private stick: { id: number; x0: number; y0: number; cx: number; cy: number } | null = null;
+  /** The finger on the stick and where it came down. */
+  private stick: { id: number; x0: number; y0: number } | null = null;
   private look: { id: number; x: number; y: number } | null = null;
+  /** Whether the touch that just came down landed on something that scrolls or slides. */
+  private mayScroll = false;
   private prompt: HTMLElement | null = null;
   private target = '';
   /** The station the note was last shown (or dismissed) for; it comes back at the next table. */
@@ -272,7 +275,7 @@ export class TouchControls {
       // The ring comes to the thumb, kept whole on screen and clear of the back chip.
       const cx = Math.max(RING + 8, Math.min(innerWidth * STICK_X, e.clientX));
       const cy = Math.max(RING + 8, Math.min(innerHeight - CHIP_TOP - RING, e.clientY));
-      this.stick = { id: e.pointerId, x0: e.clientX, y0: e.clientY, cx, cy };
+      this.stick = { id: e.pointerId, x0: e.clientX, y0: e.clientY };
       this.ring.classList.add('held');
       this.ring.style.left = `${cx - RING}px`;
       this.ring.style.top = `${cy - RING}px`;
@@ -347,9 +350,6 @@ export class TouchControls {
     this.endStick();
     this.endLook();
   };
-
-  /** Whether the touch that just came down landed on something that scrolls or slides. */
-  private mayScroll = false;
 
   private onTouchStart = (e: TouchEvent): void => {
     if (e.touches.length === 1) this.mayScroll = scrollsOrSlides(e.target);
