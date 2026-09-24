@@ -1,11 +1,13 @@
-/* "Hands 1 2 3" at the head of the chip tray: a small caption over a segmented choice, the chosen
-   count lit in brass like a pressed chip. */
+/* "Hands 1 2 3" just above the chip tray: a caption and a segmented choice, the chosen count lit
+   in brass like a pressed chip. While it's up the tips line moves above it. It follows the tray
+   on every screen (ui/mobile.css): centred over it, and on a phone to the left of the chat dock's
+   column or, on its side, over the tray at the right. */
 
-.mh-picker { display: grid; justify-items: center; gap: 3px; }
-.mh-word { font-size: 11px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-3); }
+.mh-picker { position: fixed; left: 50%; bottom: 98px; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; padding: 6px 8px 6px 14px; }
+.mh-word { font-size: 12px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-3); }
 .mh-seg { display: flex; border: 1px solid var(--line-strong); border-radius: 4px; overflow: hidden; }
 .mh-n {
-  width: 30px;
+  width: 34px;
   height: 30px;
   border: 0;
   border-left: 1px solid var(--line);
@@ -22,13 +24,24 @@
 .mh-n[aria-checked='true'] { background: linear-gradient(#e2bf7c, #b98d45); color: #1d140a; cursor: default; }
 .mh-n:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 
-/* A phone upright: the tray wraps, chips on the first row; the picker leads the second. */
-@media (max-width: 560px) {
-  .mh-picker { grid-auto-flow: column; align-items: center; gap: 6px; }
-  .mh-n { width: 28px; height: 32px; }
+:root:has(.mh-picker:not([hidden])) { --tip-bottom: 146px; }
+
+@media (pointer: coarse) {
+  .mh-n { width: 44px; height: 40px; }
 }
-/* 390 px of height: no room for the caption beside the chips. */
+/* Upright: the tray sits higher, clear of the back chip. */
+@media (max-aspect-ratio: 1/1) {
+  .mh-picker { bottom: 134px; }
+  :root:has(.mh-picker:not([hidden])) { --tip-bottom: 190px; }
+}
+/* A phone upright: the tray is two rows; the picker keeps left of the chat dock's column. */
+@media (max-width: 560px) {
+  .mh-picker { bottom: 176px; left: 10px; transform: none; }
+  :root:has(.mh-picker:not([hidden])) { --tip-bottom: 236px; }
+}
+/* On its side: over the tray, at the right. */
 @media (max-height: 480px) {
-  .mh-word { display: none; }
-  .mh-n { width: 26px; height: 30px; font-size: 15px; }
+  .mh-picker { left: auto; right: 10px; bottom: 70px; transform: none; padding: 4px 6px 4px 12px; }
+  .mh-n { height: 34px; }
+  :root:has(.mh-picker:not([hidden])) { --tip-bottom: 122px; }
 }

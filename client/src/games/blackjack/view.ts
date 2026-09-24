@@ -124,7 +124,9 @@ export class BlackjackTable implements TableView {
   /** Rings round your circles while you bet on several, and round the one whose hand is up. */
   private readonly rings = new Map<number, THREE.Mesh>();
   private readonly ringMat = new THREE.MeshBasicMaterial({ color: '#f1d59a', transparent: true, opacity: 0.4, depthWrite: false });
-  private readonly litMat = new THREE.MeshBasicMaterial({ color: '#ffe3a3', transparent: true, opacity: 0.9, depthWrite: false });
+  private readonly litMat = new THREE.MeshBasicMaterial({ color: '#ffe7ad', transparent: true, opacity: 0.9, depthWrite: false });
+  private readonly ringGeo = new THREE.RingGeometry(L.SPOT_R + 0.011, L.SPOT_R + 0.017, 64);
+  private readonly litGeo = new THREE.RingGeometry(L.SPOT_R + 0.01, L.SPOT_R + 0.024, 64);
   private v: BlackjackView | null = null;
   /** The round as the animation has got through it (the view is where it ends up). */
   private spots: SpotView[] = [];
@@ -192,7 +194,6 @@ export class BlackjackTable implements TableView {
     this.tray.select(BETTING_CHIPS[2]!);
     this.tray.root.classList.add('bj-tray');
     this.picker = new SpotPicker(MAX_SPOTS, (n) => this.act({ type: 'spots', n }));
-    this.picker.mount(this.tray.root);
 
     for (const m of ['hit', 'stand', 'double', 'split', 'surrender'] as Move[]) {
       const b = button(MOVE_LABEL[m], () => this.decide({ type: m }), { key: MOVE_KEYS[m], cls: m === 'stand' ? 'primary' : '' });
@@ -218,7 +219,7 @@ export class BlackjackTable implements TableView {
     this.timer.append(track, this.timerLeft);
 
     for (const node of [this.tray.root, this.actions, this.insure]) node.hidden = true;
-    ctx.ui.append(this.tray.root, this.actions, this.insure, this.meters);
+    ctx.ui.append(this.tray.root, this.picker.root, this.actions, this.insure, this.meters);
 
     this.onPointer = (e: PointerEvent) => {
       if (e.target !== ctx.stage.engine.renderer.domElement) return;
@@ -513,18 +514,19 @@ export class BlackjackTable implements TableView {
     for (const [spot, mat] of want) {
       let ring = this.rings.get(spot);
       if (!ring) {
-        ring = new THREE.Mesh(new THREE.RingGeometry(L.SPOT_R + 0.011, L.SPOT_R + 0.017, 64), mat);
+        ring = new THREE.Mesh(this.ringGeo, mat);
         ring.rotation.x = -Math.PI / 2;
         ring.position.copy(L.spotAt(spot, L.TOP_Y + 0.0014));
         this.root.add(ring);
         this.rings.set(spot, ring);
       }
       ring.material = mat;
+      // The circle whose hand is up wears a wider band, and it breathes (update()).
+      ring.geometry = mat === this.litMat ? this.litGeo : this.ringGeo;
     }
     for (const [spot, ring] of this.rings) {
       if (want.has(spot)) continue;
       ring.removeFromParent();
-      ring.geometry.dispose();
       this.rings.delete(spot);
     }
   }
@@ -632,7 +634,7 @@ export class BlackjackTable implements TableView {
     const v = this.v;
     const betting = this.canBet();
     this.tray.root.hidden = !betting;
-    this.picker.show(this.mode === 'solo');
+    this.picker.show(betting && this.mode === 'solo');
     this.picker.set(Math.max(1, this.mine.length));
     if (betting) {
       const bet = this.myBet();
@@ -740,6 +742,8 @@ export class BlackjackTable implements TableView {
   }
 
   update(): void {
+    // The lit circle breathes, so the hand being played is found at a glance.
+    this.litMat.opacity = 0.62 + 0.3 * Math.sin(performance.now() / 260);
     const v = this.v;
     if (this.timerObj && v?.deadline) {
       const left = Math.max(0, v.deadline - serverNow());
@@ -1127,14 +1131,13 @@ export class BlackjackTable implements TableView {
 
   dispose(): void {
     this.disposed = true;
-    for (const ring of this.rings.values()) ring.geometry.dispose();
-    this.ringMat.dispose();
-    this.litMat.dispose();
+    for (const g of [this.ringGeo, this.litGeo, this.ringMat, this.litMat]) g.dispose();
     removeEventListener('pointerdown', this.onPointer);
     this.offTips();
     this.lowerBanner();
     this.ctx.kit.tip(null);
     this.tray.root.remove();
+    this.picker.root.remove();
     this.actions.remove();
     this.insure.remove();
     this.meters.remove();

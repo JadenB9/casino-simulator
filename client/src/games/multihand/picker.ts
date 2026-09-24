@@ -1,13 +1,13 @@
 // "Hands 1 2 3": how many spots a solo player plays at the tables that deal each player a hand of
-// their own (blackjack, Three Card Poker, Casino War). It lives at the head of the chip tray, so it
-// shows exactly while bets can go down and moves with the tray on every screen; the table keeps the
-// choice from round to round (games/spots.ts), and this only shows it and asks for a change.
+// their own (blackjack, Three Card Poker, Casino War). A small panel just above the chip tray,
+// shown while bets can go down at a solo table; the table keeps the choice from round to round
+// (games/spots.ts), and this only shows it and asks for a change.
 
 import { el } from '../../ui/kit.ts';
 import './multihand.css';
 
 export class SpotPicker {
-  readonly root = el('div', 'mh-picker');
+  readonly root = el('div', 'mh-picker panel');
   private readonly buttons: HTMLButtonElement[] = [];
   private current = 1;
 
@@ -19,7 +19,7 @@ export class SpotPicker {
       const b = el('button', 'mh-n', String(n));
       b.type = 'button';
       b.setAttribute('role', 'radio');
-      b.title = n === 1 ? `Play one ${word.toLowerCase().replace(/s$/, '')}` : `Play ${n} ${word.toLowerCase()} at once`;
+      b.title = n === 1 ? 'Play one hand' : `Play ${n} hands at once`;
       b.addEventListener('click', () => {
         if (n !== this.current) onPick(n);
       });
@@ -27,6 +27,7 @@ export class SpotPicker {
       seg.append(b);
     }
     this.root.append(el('span', 'mh-word', word), seg);
+    this.root.hidden = true;
     this.set(1);
   }
 
@@ -36,15 +37,8 @@ export class SpotPicker {
     this.buttons.forEach((b, i) => b.setAttribute('aria-checked', String(i + 1 === n)));
   }
 
-  /** Put the picker at the head of a chip tray, with the tray's own divider after it. */
-  mount(tray: HTMLElement): void {
-    tray.prepend(this.root, el('div', 'sep mh-sep'));
-  }
-
-  /** Solo tables only: a shared table plays one spot each. */
+  /** While bets can go down at a solo table (a shared table plays one spot each). */
   show(on: boolean): void {
     this.root.hidden = !on;
-    const sep = this.root.nextElementSibling;
-    if (sep instanceof HTMLElement && sep.classList.contains('mh-sep')) sep.hidden = !on;
   }
 }
