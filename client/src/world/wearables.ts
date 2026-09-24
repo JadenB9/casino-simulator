@@ -301,8 +301,6 @@ interface Fit {
   rest: THREE.BufferAttribute;
   restN: THREE.BufferAttribute;
   slot: THREE.BufferAttribute;
-  /** The jacket's front opening, for lapels: from the button (yB) to the collar (yC), and its half-width at eight heights between. */
-  lapel: { yB: number; yC: number; v: number[] };
   /** Each bone's rotation at rest, for turning it in the character's frame. */
   quats: THREE.Quaternion[];
   /** The carrying pose (turns per bone, added on top of the animation) and where a held order sits, at rest. */
@@ -406,35 +404,6 @@ function fitFor(tpl: TemplateLike, female: boolean): Fit | null {
   }
   const mouthY = nose.y - (female ? 0.015 : 0.031);
 
-  // The jacket's opening: at each height, the jacket's front comes no nearer the mid-line than
-  // its opening edge. Where that edge meets the mid-line the jacket closes (the button). A top
-  // with no opening (a blouse) gets a plain V drawn on it.
-  const yC = neck.y - 0.03;
-  const front: [number, number][] = [];
-  for (let i = 0; i < n; i++) {
-    if (tpl.slot[i] !== SLOT.top || !/^(Chest|Torso|Abdomen|ShoulderL|ShoulderR)$/.test(names[main[i]!] ?? '')) continue;
-    if (rest[i * 3 + 2]! < zc + 0.05 || restN[i * 3 + 2]! < 0.3) continue;
-    front.push([Math.abs(rest[i * 3]! - cx), rest[i * 3 + 1]!]);
-  }
-  const edgeAt = (y: number): number | null => {
-    let m = Infinity;
-    for (const [dx, yy] of front) if (Math.abs(yy - y) < 0.012) m = Math.min(m, dx);
-    return Number.isFinite(m) ? m : null;
-  };
-  let yB = neck.y - 0.3;
-  let opening = Array.from({ length: 8 }, (_, k) => 0.012 + (0.05 - 0.012) * (k / 7));
-  const topEdge = edgeAt(yC - 0.01);
-  if (topEdge !== null && topEdge > 0.02) {
-    // walk down from the collar until the opening closes
-    for (let y = yC - 0.01; y > neck.y - 0.4; y -= 0.005) {
-      const e = edgeAt(y);
-      if (e !== null && e < 0.012) break;
-      yB = y;
-    }
-    opening = Array.from({ length: 8 }, (_, k) => edgeAt(yB + ((yC - yB) * k) / 7) ?? NaN);
-    for (let k = 0; k < 8; k++) if (!Number.isFinite(opening[k]!)) opening[k] = k ? opening[k - 1]! : 0.01;
-    for (let k = 1; k < 8; k++) opening[k] = Math.max(opening[k]!, opening[k - 1]!);
-  }
   // the neck's reach from its axis (a hood's collar counts: a chain goes over it)
   const neckPts = pick((b) => b === 'Neck');
   const neckR = { side: 0.045, back: 0.045, front: 0.045 };
@@ -464,7 +433,6 @@ function fitFor(tpl: TemplateLike, female: boolean): Fit | null {
     rest: new THREE.BufferAttribute(rest, 3),
     restN: new THREE.BufferAttribute(restN, 3),
     slot: new THREE.BufferAttribute(Float32Array.from(tpl.slot), 1),
-    lapel: { yB, yC, v: opening },
     quats: bones.map((b) => b.getWorldQuaternion(new THREE.Quaternion())),
     carry: null,
   };
@@ -1494,6 +1462,16 @@ interface ClothesSpec {
   cloth: 'lame' | 'tux' | 'velvet' | 'fur' | 'studs';
 }
 
+/**
+ * The jacket's front opening on the two models jackets are cut from (measured off them): the
+ * height it closes at (the button) and the collar, below the neck's base, and its half-width at
+ * each. The lapels lie along it.
+ */
+const OPENING: Record<'m' | 'f', { button: number; collar: number; v0: number; v1: number }> = {
+  m: { button: 0.09, collar: 0.005, v0: 0.012, v1: 0.07 },
+  f: { button: 0.26, collar: 0.03, v0: 0.01, v1: 0.046 },
+};
+
 const CLOTHES: Record<string, ClothesSpec> = {
   'gold-tracksuit': { outfit: { m: 'hoodie', f: 'smart' }, top: '#c9962e', bottom: '#c9962e', shoes: '#e8e4dc', cloth: 'lame' },
   'white-tuxedo': { outfit: { m: 'suit', f: 'smart' }, top: '#e9e2d0', bottom: '#111114', shoes: '#0b0b0d', cloth: 'tux' },
@@ -1583,14 +1561,13 @@ function clothesMaterial(id: string, fit: Fit): THREE.MeshPhysicalMaterial | nul
   m.name = `clothes:${id}`;
   const time = { value: 0 };
   timeUniforms.push(time);
-  const L = fit.lapel;
+  const O = OPENING[fit.female ? 'f' : 'm'];
   m.onBeforeCompile = (s) => {
     s.uniforms.uTime = time;
     s.uniforms.uCx = { value: fit.cx };
     s.uniforms.uGold = { value: new THREE.Color(spec.top) };
     s.uniforms.uNeckY = { value: fit.neckY };
-    s.uniforms.uLapel = { value: new THREE.Vector2(L.yB, L.yC) };
-    s.uniforms.uV = { value: L.v };
+    s.uniforms.uLapel = { value: new THREE.Vector4(fit.neckY - O.button, fit.neckY - O.collar, O.v0, O.v1) };
     s.vertexShader = s.vertexShader
       .replace('#include <common>', '#include <common>\nattribute float wSlot;\nattribute vec3 wRest;\nattribute vec3 wRestN;\nvarying float vSlot;\nvarying vec3 vRest;\nvarying vec3 vRestN;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvSlot = wSlot;\nvRest = wRest;\nvRestN = wRestN;');
@@ -1599,16 +1576,14 @@ function clothesMaterial(id: string, fit: Fit): THREE.MeshPhysicalMaterial | nul
         '#include <common>',
         `#include <common>
 varying float vSlot; varying vec3 vRest; varying vec3 vRestN;
-uniform float uTime; uniform float uCx; uniform float uNeckY; uniform vec2 uLapel; uniform float uV[8]; uniform vec3 uGold;
+uniform float uTime; uniform float uCx; uniform float uNeckY; uniform vec4 uLapel; uniform vec3 uGold;
 ${NOISE_GLSL}
 // The jacket's lapels: a band beside the front opening from the button up to the collar, wider
 // at the top, and the collar round the back of the neck.
 float lapel(vec3 p, vec3 n) {
   float dx = abs(p.x - uCx);
   float t = clamp((p.y - uLapel.x) / (uLapel.y - uLapel.x), 0.0, 1.0);
-  float f = t * 7.0;
-  int i = int(min(6.0, floor(f)));
-  float inner = mix(uV[i], uV[i + 1], f - float(i));
+  float inner = mix(uLapel.z, uLapel.w, t);
   float outer = inner + mix(0.006, 0.036, smoothstep(0.0, 0.85, t)) * (1.0 - smoothstep(0.9, 1.0, t) * 0.3);
   float front = step(0.25, n.z) * step(uLapel.x, p.y) * step(p.y, uLapel.y + 0.02);
   float band = step(inner - 0.004, dx) * step(dx, outer);
