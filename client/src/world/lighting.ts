@@ -23,6 +23,8 @@ const SPOTS = 3;
 /** Candela of the pit's two wide spots and the focus spot (the other rooms' spots are in rooms.ts). */
 const PIT_SPOT = 50;
 const FOCUS_SPOT = 11;
+/** The rooms' spots, unless a room asks for its own colour. */
+const SPOT_COLOR = '#ffcf94';
 
 export class Lighting {
   readonly group = new THREE.Group();
@@ -53,7 +55,7 @@ export class Lighting {
       this.ambient.set(r.id, { sky: new THREE.Color(a.sky), ground: new THREE.Color(a.ground), k: a.k });
     }
     for (let i = 0; i < SPOTS; i++) {
-      const s = new THREE.SpotLight('#ffcf94', 0, 16, 1, 0.7, 1.6);
+      const s = new THREE.SpotLight(SPOT_COLOR, 0, 16, 1, 0.7, 1.6);
       this.spots.push(s);
     }
     this.focus = new THREE.SpotLight('#ffd9a3', 0, 9, 0.62, 0.55, 1.5);
@@ -148,6 +150,7 @@ export class Lighting {
         return;
       }
       s.angle = sp.angle;
+      s.color.set(sp.color ?? SPOT_COLOR);
       s.position.set(sp.x, (sp as SpotItem & { y?: number }).y ?? 3.3, sp.z);
       s.target.position.set(sp.tx, 0.8, sp.tz);
       s.target.updateMatrixWorld();

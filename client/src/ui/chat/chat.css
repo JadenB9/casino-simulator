@@ -245,7 +245,8 @@
   position: absolute;
   left: 0;
   bottom: 20px;
-  translate: -50% 0;
+  /* --fit-*: kept on screen up close (world/onscreen.ts) */
+  translate: calc(-50% + var(--fit-x, 0px)) var(--fit-y, 0px);
   width: max-content;
   max-width: 230px;
   padding: 5px 10px 6px;
@@ -274,6 +275,7 @@
   border-bottom: 1px solid var(--line-strong);
   transform: rotate(45deg);
 }
+.say-bubble.pinned::after { display: none; }
 .say.own .say-bubble { bottom: 8px; }
 .say.lifted .say-bubble { bottom: 30px; }
 .say-bubble.leaving { animation: say-out 0.4s ease-in forwards; }

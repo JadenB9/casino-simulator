@@ -234,10 +234,13 @@ export class TouchControls {
     this.act.hidden = this.caption.hidden = !key;
     if (!key) return;
     if (spot) {
-      // "Order a drink" is the whole caption; the button says its first word
-      this.actLabel.textContent = spot.split(' ')[0]!;
+      // "Order a drink" is the whole caption; the button says its first word. A one-word spot
+      // ("Sit", "Bank", "Browse") is all on the button: the caption would only say it again.
+      const first = spot.split(' ')[0]!;
+      this.actLabel.textContent = first;
       this.act.setAttribute('aria-label', spot);
       this.caption.textContent = spot;
+      this.caption.hidden = first === spot;
       return;
     }
     this.actLabel.textContent = station ? 'Play' : 'Visit';

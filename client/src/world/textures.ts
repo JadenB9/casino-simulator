@@ -42,8 +42,9 @@ export function drawTiles(size: number, seed: number): HTMLCanvasElement {
   const t = size / n;
   for (let i = 0; i < n; i++) {
     for (let j = 0; j < n; j++) {
-      const shade = 22 + Math.floor(rand() * 7);
-      ctx.fillStyle = `rgb(${shade},${shade + 1},${shade + 5})`;
+      // a dark charcoal-violet pile: dark enough for the neon, light enough to catch the room's light
+      const shade = 40 + Math.floor(rand() * 9);
+      ctx.fillStyle = `rgb(${shade},${shade + 2},${shade + 12})`;
       ctx.fillRect(i * t, j * t, t, t);
       // the tile's pile runs one way, the next tile's the other
       ctx.strokeStyle = 'rgba(255,255,255,0.035)';
@@ -226,12 +227,12 @@ export function drawPlanks(size: number, seed: number, rough: boolean): HTMLCanv
 export function drawAcoustic(size: number, seed: number): HTMLCanvasElement {
   const [c, ctx] = canvas(size);
   const rand = rng(seed);
-  ctx.fillStyle = '#0b0b0e';
+  ctx.fillStyle = '#121218';
   ctx.fillRect(0, 0, size, size);
   const slats = 16;
   const sw = size / slats;
   for (let i = 0; i < slats; i++) {
-    const v = 30 + Math.floor(rand() * 8);
+    const v = 46 + Math.floor(rand() * 9);
     ctx.fillStyle = `rgb(${v},${v},${v + 4})`;
     ctx.fillRect(i * sw + sw * 0.18, 0, sw * 0.64, size);
     ctx.fillStyle = 'rgba(255,255,255,0.05)';

@@ -10,13 +10,23 @@ import { keycap } from '../menu/parts.ts';
 type Row = [keys: string, action: string];
 
 export const SHORTCUTS: readonly { title: string; rows: readonly Row[] }[] = [
-  { title: 'Floor', rows: [['W A S D', 'Walk'], ['↑ ← ↓ →', 'Walk, on the arrow keys'], ['E', 'Sit down, use a machine, visit the cashier'], ['N', 'Map of the casino'], ['T or Enter', 'Chat']] },
+  {
+    title: 'Floor',
+    rows: [
+      ['W A S D', 'Walk'],
+      ['↑ ← ↓ →', 'Walk, on the arrow keys'],
+      ['⇧', 'Run, held while walking'],
+      ['E', 'Whatever the prompt offers; again to stand up'],
+      ['N', 'Map of the casino'],
+      ['T or Enter', 'Chat'],
+    ],
+  },
   {
     title: 'Anywhere',
     rows: [
       ['G', 'Emotes, on the floor or at a table'],
       ['1-6', 'Pick one while the emotes are open'],
-      ['Esc', 'Leave the table or close a panel'],
+      ['Esc', 'Free the mouse, close a panel, stand up, leave'],
       ['M', 'Mute or unmute'],
       ['?', 'This list'],
     ],
@@ -40,6 +50,17 @@ export const SHORTCUTS: readonly { title: string; rows: readonly Row[] }[] = [
   { title: 'Three Card Poker', rows: [['P', 'Play'], ['F', 'Fold']] },
   { title: 'Video poker', rows: [['1-5', 'Hold or release a card'], ['Space', 'Deal, then draw'], ['↑ / ↓', 'Bet up or down']] },
   { title: 'Slots', rows: [['Space', 'Spin'], ['↑ / ↓', 'Bet up or down'], ['I', 'Pays and rules']] },
+  {
+    title: 'House Originals',
+    rows: [
+      ['Space', 'The green button: bet or cash out'],
+      ['H / L', 'Hi-Lo: higher or lower (or ↑ ↓), S skips'],
+      ['1-4', 'Tower: a tile on the row'],
+      ['R', 'Mines and Tower: a tile at random'],
+      ['A', 'Keno: pick for me'],
+      ['C', 'Keno: clear the picks'],
+    ],
+  },
   {
     title: "Hold'em",
     rows: [

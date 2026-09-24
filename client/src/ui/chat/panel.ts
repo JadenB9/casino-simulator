@@ -557,12 +557,24 @@ export class ChatPanel {
     const top = bottom - height;
     let lift = 0;
     let ceiling = 0;
+    const below: DOMRect[] = [];
     for (const p of this.deps.root.querySelectorAll<HTMLElement>('.panel')) {
       if (this.root.contains(p)) continue;
       const r = p.getBoundingClientRect();
       if (r.width === 0 || r.height === 0 || r.right <= r0.left || r.left >= r0.right) continue;
       if (r.top < innerHeight * 0.5) ceiling = Math.max(ceiling, r.bottom);
-      else if (r.bottom > top && r.top < bottom) lift = Math.max(lift, bottom - r.top + GAP);
+      else below.push(r);
+    }
+    // Over whatever is in the way, then over whatever that lift runs into (a table's tray with the
+    // hands picker stacked over it, on a phone on its side), until nothing is.
+    for (let moved = true, n = 0; moved && n < 8; n++) {
+      moved = false;
+      for (const r of below) {
+        if (r.bottom > top - lift && r.top < bottom - lift) {
+          lift = bottom - r.top + GAP;
+          moved = true;
+        }
+      }
     }
     let room = bottom - lift - ceiling - GAP;
     const least = height - log + MIN_LOG;

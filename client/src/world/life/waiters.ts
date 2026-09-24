@@ -31,7 +31,7 @@ const ACCEL = 1.4;
 /** A waiter's E prompt shows within this (m). */
 const REACH = 1.3;
 /** How close to you a waiter stops to hand a drink over (m), and to someone in their way. */
-const HAND_M = 0.85;
+const HAND_M = 1.0;
 const AHEAD_M = 1.5;
 const SIDESTEP = 0.55;
 /** How long a waiter waits for you to pick from the menu before going back to work (s). */
@@ -110,6 +110,11 @@ export class Waiters {
    * Bring `order` over: the waiter who took it, else the free one nearest the bar. `ready` says
    * when the bartender has it, `taken` hears it go onto the tray. False when every waiter is busy.
    */
+  /** A waiter is on the way with this order (or waiting at the bar for it). */
+  carrying(id: string): boolean {
+    return this.list.some((w) => w.job?.kind === 'deliver' && w.job.order.id === id && w.job.phase !== 'back');
+  }
+
   deliver(order: BarOrder, ready: () => boolean, taken?: () => void): boolean {
     const pickup = this.ctx.points.bar.pickup;
     let w = this.attending();
