@@ -408,10 +408,7 @@ export class Staff {
     return true;
   }
 
-  /**
-   * Every frame: show who's near and in view, and give them their life. `you` is your own
-   * character's root (null while it isn't on the floor); `seated` the table you sit at.
-   */
+  /** Every frame: show who's near and in view, and give them their life; `seated` is the table you sit at. */
   update(dt: number, camera: THREE.Camera, seated: WorldStation | null): void {
     this.clock += dt;
     camera.updateMatrixWorld();

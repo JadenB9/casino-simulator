@@ -360,7 +360,10 @@ export class Person implements Character {
     const mesh = this.mesh;
     const index = mesh?.geometry.getIndex();
     if (!mesh || !this.colors || !index) return null;
-    this.root.updateWorldMatrix(true, true);
+    // updateMatrixWorld, not updateWorldMatrix: only the former refreshes the skinned mesh's
+    // bindMatrixInverse, which getVertexPosition works through
+    this.root.updateWorldMatrix(true, false);
+    this.root.updateMatrixWorld(true);
     const toRoot = new THREE.Matrix4().copy(this.root.matrixWorld).invert().multiply(mesh.matrixWorld);
     const n = mesh.geometry.getAttribute('position').count;
     const pos = new Float32Array(n * 3);
