@@ -30,7 +30,14 @@ const TINY_M = 0.035;
 /** Textured parts smaller than this (bounding sphere, metres) are drawn in their average colour. */
 const SMALL_M = 0.3;
 
-type Piece = { geo: THREE.BufferGeometry; matrix: THREE.Matrix4; start: number; count: number };
+type Piece = {
+  geo: THREE.BufferGeometry;
+  matrix: THREE.Matrix4;
+  start: number;
+  count: number;
+  /** A reel band's curvature darkening, pow(normal.z, curve), as its shader draws it (reel strips only). */
+  curve?: number;
+};
 
 /** A station, its baked stand-in, and where it stands (stations never move). */
 interface Entry {
@@ -120,14 +127,17 @@ export class StationLod {
       const mats = Array.isArray(o.material) ? o.material : [o.material];
       const total0 = geo.index ? geo.index.count : geo.attributes.position.count;
       // A small custom-shaded part drawing a texture (a reel strip behind its glass): lit, in the
-      // strip's average colour.
+      // strip's average colour, darkening toward the band's top and bottom as the reel shader does.
       const sm = mats[0];
       if (!(o instanceof THREE.InstancedMesh) && mats.length === 1 && sm instanceof THREE.ShaderMaterial && radius < SMALL_M && !Object.keys(geo.morphAttributes).length) {
         const avg = averageColor(sm.uniforms.map?.value);
         if (avg) {
           const tint = sm.uniforms.uTint?.value;
           if (tint instanceof THREE.Color) avg.multiply(tint);
-          glow.push({ geo, matrix, start: 0, count: total0, color: avg });
+          const bright = sm.uniforms.uBright?.value;
+          avg.multiplyScalar(typeof bright === 'number' ? bright : Array.isArray(bright) ? (bright[0] ?? 1) : 1);
+          const curve = sm.uniforms.uCurve?.value;
+          glow.push({ geo, matrix, start: 0, count: total0, color: avg, curve: typeof curve === 'number' ? curve : undefined });
           return;
         }
       }
@@ -240,9 +250,11 @@ function merge(pieces: (Piece & { color?: THREE.Color })[], extra: 'color' | 'uv
       normal[o3 + 2] = v.z;
       if (extra === 'color') {
         const c = p.color!;
-        second[o3] = c.r;
-        second[o3 + 1] = c.g;
-        second[o3 + 2] = c.b;
+        // the shader's shade uses the band's own normal, before any transform
+        const sh = p.curve === undefined ? 1 : Math.pow(Math.max(nrm.getZ(v0 + k), 0), p.curve);
+        second[o3] = c.r * sh;
+        second[o3 + 1] = c.g * sh;
+        second[o3 + 2] = c.b * sh;
       } else if (uv) {
         const o2 = (vo + k) * 2;
         second[o2] = uv.getX(v0 + k);

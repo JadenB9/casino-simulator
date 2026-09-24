@@ -7,7 +7,7 @@ import type { Engine3D, Quality } from '../render/engine3d.ts';
 import { DEFAULT_LOOK, type Look } from '../../../shared/src/look.ts';
 import { GAMES } from '../games/index.ts';
 import type { CashierPoint, Station, World } from './contract.ts';
-import { planFloor, slotVariants, type FloorPlan } from './layout.ts';
+import { planFloor, setVpMode, slotVariants, type FloorPlan } from './layout.ts';
 import { Mats, loadTextures } from './materials.ts';
 import { Batch } from './batch.ts';
 import { Collider } from './collision.ts';
@@ -115,8 +115,10 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
   stationRoot.name = 'stations';
   root.add(stationRoot);
   const { stations, vpMode } = buildStations(plan, stationRoot, quality, col);
+  // bar-top video poker changes the bar's counter, its stools and what fits round them
+  if (vpMode !== plan.vpMode) setVpMode(plan, vpMode);
   const lod = new StationLod(stations, quality);
-  const decor = buildDecor(plan, stations, vpMode, batch, mats, col);
+  const decor = buildDecor(plan, stations, batch, mats, col);
   buildPools(decor.pools, batch, mats);
   const signSpecs = [...floorSigns(plan, batch, mats), ...decor.signs];
   const staticMeshes = batch.build(root, 'floor');

@@ -1,17 +1,17 @@
 // The built-in furniture of the floor, drawn in code: slot bank islands (plinth, LED underglow,
 // end caps, topper), the bar (counter, foot rail, back bar with lit shelves and a mirror, pendant
-// lamps), the cashier cage, the pit podium, velvet ropes on brass stanchions, planters, and the
-// lounge's coffee tables. Loose props (stools, couches, bottles, plants) are placed here but
-// drawn by props.ts; sign faces are collected here and drawn by signs.ts.
+// lamps), the cashier cage, the pit podium, planters and the lounge's coffee tables. Loose props
+// (stools, couches, bottles, plants) are placed here but drawn by props.ts; sign faces are
+// collected here and drawn by signs.ts. Where things stand and how big they are comes from the
+// floor plan (layout.ts), which checks that none of them pass through each other.
 
 import * as THREE from 'three';
 import type { Batch } from './batch.ts';
 import type { Mats } from './materials.ts';
 import { hdr } from './materials.ts';
 import type { Collider } from './collision.ts';
-import { CEILING, type FloorPlan } from './layout.ts';
-import type { WorldStation, VpMode } from './stations.ts';
-import { BAR_TOP } from './stations.ts';
+import { BAR_TOP, CEILING, COFFEE_TABLE, COUCH, FLOOR_LAMP, LEAVES, LOUNGE_LAMP_X, PALM_PLANTER, PLANTER, PODIUM, STOOL, type FloorPlan } from './layout.ts';
+import type { WorldStation } from './stations.ts';
 import { CATALOG } from '../../../shared/src/games/catalog.ts';
 import type { SignSpec } from './signs.ts';
 
@@ -68,7 +68,7 @@ function bankTitle(variant: string): string {
   return BANK_TITLES[variant] ?? (CATALOG.slots.variants.find((v) => v.id === variant)?.name ?? variant).toUpperCase();
 }
 
-export function buildDecor(plan: FloorPlan, stations: WorldStation[], vpMode: VpMode, b: Batch, m: Mats, col: Collider): Decor {
+export function buildDecor(plan: FloorPlan, stations: WorldStation[], b: Batch, m: Mats, col: Collider): Decor {
   const out: Decor = { props: [], signs: [], pools: [] };
   const brass = m.get('brass');
   const lacquer = m.get('lacquer');
@@ -136,19 +136,9 @@ export function buildDecor(plan: FloorPlan, stations: WorldStation[], vpMode: Vp
   // --- the bar -------------------------------------------------------------------------------
   const bar = plan.bar;
   const vps = stations.filter((s) => s.game === 'videopoker');
-  const gaps: [number, number][] = vpMode === 'floor' ? vps.map((s) => [s.anchor.position.z - s.footprint.width / 2 - 0.04, s.anchor.position.z + s.footprint.width / 2 + 0.04]) : [];
-  const segs: [number, number][] = [];
-  {
-    let z = bar.z0;
-    for (const [a, c] of gaps.sort((p, q) => p[0] - q[0])) {
-      if (a > z + 0.05) segs.push([z, a]);
-      z = Math.max(z, c);
-    }
-    if (bar.z1 > z + 0.05) segs.push([z, bar.z1]);
-  }
   const bx = bar.front + bar.depth / 2;
   const leather = m.get('leather');
-  for (const [z0, z1] of segs) {
+  for (const [z0, z1] of bar.segments) {
     const len = z1 - z0;
     const zc = (z0 + z1) / 2;
     b.box(wood, bx, 0.53, zc, bar.depth, 1.02, len, 1.2);
@@ -169,7 +159,7 @@ export function buildDecor(plan: FloorPlan, stations: WorldStation[], vpMode: Vp
     b.box(marble, (x0 + x1) / 2, BAR_TOP - 0.025, z, x1 - x0, 0.05, 0.2, 1.4);
     col.box((x0 + x1) / 2, z, x1 - x0, 0.3, 0, BAR_TOP, { cam: false });
   }
-  if (vpMode === 'bartop') {
+  if (plan.vpMode === 'bartop') {
     for (const s of vps) col.box(s.anchor.position.x, s.anchor.position.z, 0.3, s.footprint.width, 0, BAR_TOP, { cam: false });
   }
   // back bar: cabinet, mirror, three lit glass shelves of bottles, and a crown for the sign
@@ -196,23 +186,18 @@ export function buildDecor(plan: FloorPlan, stations: WorldStation[], vpMode: Vp
     col.box((x0 + x1) / 2, zc, x1 - x0, len, 0, CEILING);
     out.signs.push({ kind: 'neon', text: 'BAR', sub: 'COCKTAILS · WINE · SPIRITS', color: '#3fe0d0', font: 'Limelight', at: [x0 - 0.06, 3.17, zc], ry: -Math.PI / 2, w: 3.0, h: 0.46 });
   }
-  // cocktail glasses along the counter, stools in front of the plain run
+  // stools along the counter (and in front of bar-top video poker), cocktail glasses on the plain run
+  const vpAt = new Set(plan.vpMode === 'bartop' ? vps.map((s) => s.anchor.position.z) : []);
   for (const z of bar.stools) {
-    out.props.push({ kind: 'stool', x: bar.front - 0.5, y: 0, z, ry: Math.PI / 2, size: 0.8 });
-    col.post(bar.front - 0.5, z, 0.2, 0.8, { cam: false });
-    if (Math.round(z * 10) % 3 !== 0) out.props.push({ kind: 'glass-cocktail', x: bar.front + 0.12, y: BAR_TOP, z: z + 0.12, ry: z, size: 0.17 });
-  }
-  if (vpMode === 'bartop') {
-    for (const s of vps) {
-      out.props.push({ kind: 'stool', x: bar.front - 0.5, y: 0, z: s.anchor.position.z, ry: Math.PI / 2, size: 0.8 });
-      col.post(bar.front - 0.5, s.anchor.position.z, 0.2, 0.8, { cam: false });
-    }
+    out.props.push({ kind: 'stool', x: bar.stoolX, y: 0, z, ry: Math.PI / 2, size: STOOL.h });
+    col.post(bar.stoolX, z, STOOL.r, STOOL.h, { cam: false });
+    if (!vpAt.has(z) && Math.round(z * 10) % 3 !== 0) out.props.push({ kind: 'glass-cocktail', x: bar.front + 0.12, y: BAR_TOP, z: z + 0.12, ry: z, size: 0.17 });
   }
   // drum pendants over the counter
   {
     const shade = new THREE.CylinderGeometry(0.19, 0.21, 0.26, 24, 1, true);
     const diffuser = new THREE.CircleGeometry(0.19, 24);
-    for (let z = bar.z0 + 0.9; z < bar.z1 - 0.5; z += 1.9) {
+    for (const z of bar.pendants) {
       const x = bar.front + bar.depth / 2 - 0.1;
       b.add(shade, m.get('shade'), { x, y: 2.28, z });
       b.add(diffuser, m.get('glow-soft'), new THREE.Matrix4().makeRotationX(Math.PI / 2).premultiply(new THREE.Matrix4().makeTranslation(x, 2.16, z)));
@@ -261,97 +246,49 @@ export function buildDecor(plan: FloorPlan, stations: WorldStation[], vpMode: Vp
     out.pools.push({ x: plan.cashier.x, z: c.z1 + 0.6, r: 2.2 });
   }
 
-  // --- the pit: podium in the staff area, ropes closing the gaps between tables ---------------
+  // --- the pit: the podium in the staff area, and the light over every table ------------------
   {
-    const st = plan.staff;
-    const cx = (st.x0 + st.x1) / 2;
-    const cz = (st.z0 + st.z1) / 2;
-    b.box(wood, cx, 0.52, cz, 1.3, 1.04, 0.56, 1.2);
-    b.box(marble, cx, 1.06, cz, 1.4, 0.04, 0.64, 1.4);
+    const { x: cx, z: cz } = plan.podium;
+    b.box(wood, cx, 0.52, cz, PODIUM.w - 0.1, 1.04, PODIUM.d - 0.08, 1.2);
+    b.box(marble, cx, 1.06, cz, PODIUM.w, 0.04, PODIUM.d, 1.4);
     b.add(new THREE.CylinderGeometry(0.012, 0.012, 0.36, 8), brass, { x: cx + 0.45, y: 1.26, z: cz });
     b.add(new THREE.CylinderGeometry(0.09, 0.11, 0.1, 16, 1, true), m.get('shade'), { x: cx + 0.45, y: 1.44, z: cz });
-    for (const row of ['north', 'south'] as const) {
-      const tables = stations
-        .filter((s) => s.zone === 'pit' && (row === 'north' ? s.yaw !== 0 : s.yaw === 0))
-        .sort((p, q) => p.anchor.position.x - q.anchor.position.x);
-      const z = row === 'north' ? st.z0 + 0.05 : st.z1 - 0.05;
-      for (let i = 0; i + 1 < tables.length; i++) {
-        const a = tables[i]!;
-        const c = tables[i + 1]!;
-        const xa = a.anchor.position.x + a.footprint.width / 2 - 0.15;
-        const xc = c.anchor.position.x - c.footprint.width / 2 + 0.15;
-        if (xc - xa > 0.3) plan.ropes.push({ points: [[xa, z], [xc, z]] });
-      }
-    }
+    col.box(cx, cz, PODIUM.w, PODIUM.d, 0, 1.1, { cam: false });
     for (const s of stations) if (s.zone === 'pit' || s.zone === 'poker' || s.zone === 'feature') out.pools.push({ x: s.anchor.position.x, z: s.anchor.position.z, r: Math.max(s.footprint.width, s.footprint.depth) * 0.6 + 0.4 });
   }
 
-  // --- velvet ropes --------------------------------------------------------------------------
-  const velvet = m.get('velvet');
-  const baseG = new THREE.CylinderGeometry(0.13, 0.16, 0.035, 20);
-  const poleG = new THREE.CylinderGeometry(0.022, 0.022, 0.9, 10);
-  const ballG = new THREE.SphereGeometry(0.042, 12, 8);
-  for (const r of plan.ropes) {
-    const posts: THREE.Vector2[] = [];
-    for (let i = 0; i + 1 < r.points.length; i++) {
-      const a = new THREE.Vector2(...r.points[i]!);
-      const c = new THREE.Vector2(...r.points[i + 1]!);
-      const n = Math.max(1, Math.ceil(a.distanceTo(c) / 2.0));
-      for (let k = i === 0 ? 0 : 1; k <= n; k++) posts.push(a.clone().lerp(c, k / n));
-      const mid = a.clone().add(c).multiplyScalar(0.5);
-      col.box(mid.x, mid.y, Math.max(0.1, Math.abs(c.x - a.x)), Math.max(0.1, Math.abs(c.y - a.y)), 0, 0.95, { cam: false });
-    }
-    for (const p of posts) {
-      b.add(baseG, brass, { x: p.x, y: 0.018, z: p.y });
-      b.add(poleG, brass, { x: p.x, y: 0.48, z: p.y });
-      b.add(ballG, brass, { x: p.x, y: 0.96, z: p.y });
-    }
-    for (let i = 0; i + 1 < posts.length; i++) {
-      const a = posts[i]!;
-      const c = posts[i + 1]!;
-      const pts: THREE.Vector3[] = [];
-      for (let t = 0; t <= 1.0001; t += 0.125) {
-        const sag = 0.13 * 4 * t * (1 - t);
-        pts.push(new THREE.Vector3(a.x + (c.x - a.x) * t, 0.86 - sag, a.y + (c.y - a.y) * t));
-      }
-      b.add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 16, 0.02, 6, false), velvet, new THREE.Matrix4());
-    }
-  }
-
   // --- planters, palms and plants --------------------------------------------------------------
-  const planter = (x: number, z: number, r: number, h: number) => {
+  // Walkers keep off the leaves as well as the pot: they brush the tips, never walk through.
+  const planter = (x: number, z: number, r: number, h: number, reach: number) => {
     b.add(new THREE.CylinderGeometry(r, r * 0.82, h, 24), lacquer, { x, y: h / 2, z });
     b.add(new THREE.TorusGeometry(r, 0.02, 6, 28), brass, new THREE.Matrix4().makeRotationX(Math.PI / 2).premultiply(new THREE.Matrix4().makeTranslation(x, h, z)));
-    col.post(x, z, r, h + 0.6, { cam: false });
+    col.post(x, z, Math.max(r, reach), h + 0.6, { cam: false });
   };
-  for (const [x, z] of plan.palms) {
-    planter(x, z, 0.5, 0.62);
-    out.props.push({ kind: 'palm', x, y: 0.55, z, ry: x, size: 3.1 });
+  for (const p of plan.palms) {
+    planter(p.x, p.z, PALM_PLANTER.r, PALM_PLANTER.h, 1.0);
+    out.props.push({ kind: 'palm', x: p.x, y: PALM_PLANTER.seat, z: p.z, ry: p.x, size: p.size });
   }
-  for (const [x, z, k] of plan.plants) {
-    planter(x, z, 0.32, 0.46);
-    out.props.push({ kind: k ? 'plant-b' : 'plant-a', x, y: 0.42, z, ry: x + z, size: 1.1 });
+  for (const p of plan.plants) {
+    planter(p.x, p.z, PLANTER.r, PLANTER.h, LEAVES[p.kind].r * p.size - 0.25);
+    out.props.push({ kind: p.kind, x: p.x, y: PLANTER.seat, z: p.z, ry: p.x + p.z, size: p.size });
   }
 
   // --- the lounge: two couch groups round marble coffee tables --------------------------------
-  {
-    const L = plan.lounge;
-    const groups = L.z1 - L.z0 > 6.5 ? [L.z0 + 2.2, L.z1 - 2.3] : [(L.z0 + L.z1) / 2];
-    const cx = (L.x0 + L.x1) / 2;
-    for (const cz of groups) {
-      out.props.push({ kind: 'couch', x: cx, y: 0, z: cz - 1.25, ry: 0, size: 2.2 });
-      out.props.push({ kind: 'couch', x: cx, y: 0, z: cz + 1.25, ry: Math.PI, size: 2.2 });
-      col.box(cx, cz - 1.3, 2.2, 0.9, 0, 0.9, { cam: false });
-      col.box(cx, cz + 1.3, 2.2, 0.9, 0, 0.9, { cam: false });
-      b.box(marble, cx, 0.42, cz, 1.3, 0.04, 0.7, 1.4);
-      for (const [dx, dz] of [[-0.55, -0.27], [0.55, -0.27], [-0.55, 0.27], [0.55, 0.27]] as const) b.box(brass, cx + dx, 0.2, cz + dz, 0.03, 0.4, 0.03);
-      col.box(cx, cz, 1.3, 0.7, 0, 0.45, { cam: false });
-      out.props.push({ kind: 'lamp-floor', x: cx + 1.5, y: 0, z: cz - 1.25, ry: 0, size: 1.45 });
-      out.props.push({ kind: 'lamp-floor', x: cx - 1.5, y: 0, z: cz + 1.25, ry: 0, size: 1.45 });
-      col.post(cx + 1.45, cz - 1.25, 0.2, 1.6, { cam: false });
-      col.post(cx - 1.45, cz + 1.25, 0.2, 1.6, { cam: false });
-      out.pools.push({ x: cx, z: cz, r: 2.4 });
+  for (const { x: cx, z: cz } of plan.loungeGroups) {
+    out.props.push({ kind: 'couch', x: cx, y: 0, z: cz - 1.25, ry: 0, size: COUCH.w });
+    out.props.push({ kind: 'couch', x: cx, y: 0, z: cz + 1.25, ry: Math.PI, size: COUCH.w });
+    col.box(cx, cz - 1.25, COUCH.w, COUCH.d + 0.1, 0, 0.9, { cam: false });
+    col.box(cx, cz + 1.25, COUCH.w, COUCH.d + 0.1, 0, 0.9, { cam: false });
+    b.box(marble, cx, COFFEE_TABLE.h - 0.02, cz, COFFEE_TABLE.w, 0.04, COFFEE_TABLE.d, 1.4);
+    for (const [dx, dz] of [[-0.55, -0.27], [0.55, -0.27], [-0.55, 0.27], [0.55, 0.27]] as const) b.box(brass, cx + dx, 0.2, cz + dz, 0.03, 0.4, 0.03);
+    col.box(cx, cz, COFFEE_TABLE.w, COFFEE_TABLE.d, 0, COFFEE_TABLE.h, { cam: false });
+    for (const s of [-1, 1]) {
+      const x = cx - s * LOUNGE_LAMP_X;
+      const z = cz + s * 1.25;
+      out.props.push({ kind: 'lamp-floor', x, y: 0, z, ry: 0, size: FLOOR_LAMP.h });
+      col.post(x, z, FLOOR_LAMP.r - 0.1, 1.6, { cam: false });
     }
+    out.pools.push({ x: cx, z: cz, r: 2.4 });
   }
 
   // --- the entrance doors ----------------------------------------------------------------------

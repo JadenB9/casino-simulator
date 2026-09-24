@@ -1,8 +1,12 @@
 // The floor plan, as data. Everything that stands on the floor is placed from here: the table
 // pit, the slot banks (one island per slots variant in the catalogue), the Big Six wheel, the
-// video poker bar, the cashier, the poker room, the lounge, the aisles and the columns. Station
-// spacing comes from each game module's footprint, so when a real table or machine replaces a
-// stub the floor re-flows around it and the aisles stay clear.
+// video poker bar, the cashier, the poker room, the lounge, the aisles, the columns, the plants
+// and the hanging signs. Station spacing comes from each game module's footprint, so when a real
+// table or machine replaces a stub the floor re-flows around it and the aisles stay clear.
+//
+// Only real things block the way: walls, tables, machines, the bar, columns, plants and counters.
+// Every one of them is also listed as a solid (its footprint and height), and checkLayout() checks
+// that no two of them pass through each other, a wall or a ceiling.
 //
 // Coordinates: metres, +x east, +z south (toward the entrance), y up. Station yaw follows
 // Object3D.rotation.y; a station's player side is its local +z, so yaw 0 faces the players south.
@@ -54,17 +58,68 @@ export interface Column {
   r: number;
 }
 
-export interface Rope {
-  /** A run of velvet rope between stanchions, as a polyline on the floor. */
-  points: [number, number][];
+export type PlantKind = 'plant-a' | 'plant-b';
+
+/** A plant in a lacquer planter. `size` is the plant's height above the pot. */
+export interface Plant {
+  kind: PlantKind;
+  x: number;
+  z: number;
+  size: number;
 }
+
+export interface Palm {
+  x: number;
+  z: number;
+  size: number;
+}
+
+export type HangingId = 'table-games' | 'slots' | 'poker' | 'entrance' | 'cashier';
+
+/** A sign box hung from the ceiling on two rods: centre, turn and the face's size. */
+export interface Hanging {
+  id: HangingId;
+  x: number;
+  y: number;
+  z: number;
+  ry: number;
+  w: number;
+  h: number;
+}
+
+/** Something solid on the floor besides the stations, for the clipping checks. */
+export interface Solid {
+  id: string;
+  /** Parts of one thing (a planter and its leaves, the bar's counter and foot rail) share a group and may touch. */
+  group: string;
+  /** Centre, size along its own x and z, and turn (Object3D.rotation.y). A round solid's diameter is `w`. */
+  x: number;
+  z: number;
+  w: number;
+  d: number;
+  yaw: number;
+  /** Bottom and top above the floor. */
+  y0: number;
+  y1: number;
+  round?: boolean;
+  /** Built against a wall on purpose (the back bar, the cashier's cage): it may meet the wall's face. */
+  wall?: boolean;
+  /** Stations standing in or on it (a slot island's machines, video poker on a bar-top counter). */
+  holds?: string[];
+  /** Standing on the floor in someone's way (planters, stools, furniture): kept out of the aisles. */
+  floor?: boolean;
+}
+
+/** Bar-top video poker sits on the counter; a taller cabinet stands on the floor in a gap in the bar. */
+export type VpMode = 'bartop' | 'floor';
 
 export interface FloorPlan {
   room: Rect;
   stations: Placement[];
   pit: Rect;
-  /** The dealers' side between the two rows: roped off, with the pit podium. */
+  /** The dealers' side between the two rows, with the pit podium. */
   staff: Rect;
+  podium: { x: number; z: number };
   aisles: Rect[];
   entrance: Rect;
   door: { x0: number; x1: number; height: number };
@@ -82,9 +137,16 @@ export interface FloorPlan {
     z1: number;
     /** The back bar against the east wall. */
     back: number;
+    /** The runs of counter (z0, z1): the whole bar, less a gap for each floor-standing video poker cabinet. */
+    segments: [number, number][];
+    /** Bar stools: their line (x) and where along it. */
+    stoolX: number;
     stools: number[];
     vp: string[];
+    /** Drum pendants over the counter (z of each). */
+    pendants: number[];
   };
+  vpMode: VpMode;
   cashier: {
     counter: Rect;
     /** Where a player stands to use it, and which way they face (yaw of a character looking at the counter). */
@@ -93,10 +155,14 @@ export interface FloorPlan {
     face: number;
   };
   lounge: Rect;
+  /** Couch groups round a coffee table (the table's centre). */
+  loungeGroups: { x: number; z: number }[];
   columns: Column[];
-  ropes: Rope[];
-  plants: [number, number, number][];
-  palms: [number, number][];
+  plants: Plant[];
+  palms: Palm[];
+  hanging: Hanging[];
+  /** Everything solid besides the stations: see Solid. */
+  solids: Solid[];
 }
 
 export const ROOM: Rect = { x0: -20, z0: -15, x1: 20, z1: 15 };
@@ -105,6 +171,31 @@ export const CEILING = 3.4;
 /** The grand coffered ceiling over the table pit. */
 export const PIT_CEILING = 6.6;
 export const WALL = 0.3;
+/** How far the wainscot, chair rail and crown stand proud of a wall's face. */
+const TRIM = 0.08;
+
+// The loose props' shapes at their placed sizes, measured from the models (world3.mjs audits them).
+/** Planters: radius and height of the pot, and the height the plant stands at. */
+export const PLANTER = { r: 0.32, h: 0.46, seat: 0.42 };
+export const PALM_PLANTER = { r: 0.5, h: 0.62, seat: 0.55 };
+/** Leaf spread (radius) per metre of plant, and where the leaves start, as a fraction of its height. */
+export const LEAVES: Record<PlantKind | 'palm', { r: number; from: number }> = {
+  'plant-a': { r: 0.71, from: 0.08 },
+  'plant-b': { r: 0.77, from: 0.05 },
+  palm: { r: 0.64, from: 0.39 },
+};
+/** A palm's trunk leans off the pot's centre (the model is centred on its fronds): its reach, per metre. */
+const PALM_TRUNK = 0.23;
+export const STOOL = { r: 0.21, h: 0.8 };
+export const COUCH = { w: 2.2, d: 0.8, h: 0.85 };
+export const FLOOR_LAMP = { r: 0.42, h: 1.45 };
+export const COFFEE_TABLE = { w: 1.3, d: 0.7, h: 0.44 };
+export const PODIUM = { w: 1.4, d: 0.64, h: 1.49 };
+/** The bar counter's height (the video poker bar-top units stand on it). */
+export const BAR_TOP = 1.08;
+
+/** How tall each kind of station stands, for checking what hangs or leans over it. */
+export const STATION_H: Record<Zone, number> = { pit: 1.45, poker: 1.45, slots: 2.45, bar: 1.8, feature: 3.05, cashier: 1.2 };
 
 const TABLE_GAP = 1.7;
 const NORTH_AISLE = 3.4;
@@ -112,7 +203,6 @@ const STAFF_DEPTH = 2.6;
 /** Standing or seated players in front of a table or machine. */
 const PLAYER_ZONE = 0.95;
 const CROSS_AISLE = 2.8;
-const LANE = 3.4;
 
 interface Want {
   id: string;
@@ -155,14 +245,14 @@ const VP_COUNT = 4;
 const ISLAND_GAP = 1.6;
 const ISLAND_LANE = 1.3;
 
-export function planFloor(footprint: (game: GameId) => Footprint, slots: readonly string[] = slotVariants()): FloorPlan {
+export function planFloor(footprint: (game: GameId) => Footprint, slots: readonly string[] = slotVariants(), opts: { vpMode?: VpMode } = {}): FloorPlan {
   const stations: Placement[] = [];
   const fp = (g: GameId) => {
     const f = footprint(g);
     return { width: Math.max(0.4, f.width), depth: Math.max(0.4, f.depth) };
   };
 
-  // --- table pit: two rows facing out, dealers back to back across a roped staff area ----------
+  // --- table pit: two rows facing out, dealers back to back across the staff area ---------------
   const rowLen = (row: Want[]) => row.reduce((s, w) => s + fp(w.game).width, 0) + TABLE_GAP * (row.length - 1);
   const rowDepth = (row: Want[]) => Math.max(...row.map((w) => fp(w.game).depth));
   const dN = rowDepth(NORTH_ROW);
@@ -183,6 +273,7 @@ export function planFloor(footprint: (game: GameId) => Footprint, slots: readonl
   const pit: Rect = { x0: -half - 1.9, x1: half + 1.9, z0: zN - dN / 2 - PLAYER_ZONE - 0.8, z1: zS + dS / 2 + PLAYER_ZONE + 0.7 };
   const staffHalf = Math.min(rowLen(NORTH_ROW), rowLen(SOUTH_ROW)) / 2;
   const staff: Rect = { x0: -staffHalf, x1: staffHalf, z0: zN + dN / 2, z1: zS - dS / 2 };
+  const podium = { x: (staff.x0 + staff.x1) / 2, z: (staff.z0 + staff.z1) / 2 };
 
   // --- aisles --------------------------------------------------------------------------------
   const crossZ0 = zS + dS / 2 + PLAYER_ZONE;
@@ -194,8 +285,8 @@ export function planFloor(footprint: (game: GameId) => Footprint, slots: readonl
     { x0: pit.x0 - 0.2, x1: pit.x1 + 0.2, z0: ROOM.z0 + WALL, z1: zN - dN / 2 - PLAYER_ZONE },
   ];
 
-  // --- cashier: a cage on the north wall in the west corner -----------------------------------
-  const counter: Rect = { x0: ROOM.x0 + WALL, x1: -12.6, z0: ROOM.z0 + WALL, z1: -12.4 };
+  // --- cashier: a cage on the north wall in the west corner, wall to wall -----------------------
+  const counter: Rect = { x0: ROOM.x0, x1: -12.6, z0: ROOM.z0, z1: -12.4 };
   const cashier = { counter, x: (counter.x0 + counter.x1) / 2 + 0.4, z: counter.z1 + 0.75, face: Math.PI };
 
   // --- poker room: north-east, two hold'em tables. Side on (dealers against the east wall) when
@@ -328,10 +419,14 @@ export function planFloor(footprint: (game: GameId) => Footprint, slots: readonl
       fp: vf,
     });
   }
-  const stools: number[] = [];
-  for (let z = barZ0 + 0.9 + VP_COUNT * vpPitch + 0.75; z < barZ1 - 0.5; z += 0.95) stools.push(z);
+  const pendants: number[] = [];
+  for (let z = barZ0 + 0.9; z < barZ1 - 0.5; z += 1.9) pendants.push(z);
+  // stools stand far enough out that their legs clear the foot rail
+  const stoolX = front - 0.52;
+  const bar: FloorPlan['bar'] = { front, depth: 0.78, z0: barZ0, z1: barZ1, back, segments: [], stoolX, stools: [], vp, pendants };
 
   const lounge: Rect = { x0: 4.2, x1: front - 3.2, z0: Math.max(barZone.z0 + 3.2, 4.2), z1: ROOM.z1 - WALL - 1.2 };
+  const loungeGroups = (lounge.z1 - lounge.z0 > 6.5 ? [lounge.z0 + 2.2, lounge.z1 - 2.3] : [(lounge.z0 + lounge.z1) / 2]).map((z) => ({ x: (lounge.x0 + lounge.x1) / 2, z }));
 
   // --- columns: the pit corners, the main aisle and the vestibule -----------------------------
   const columns: Column[] = [
@@ -345,40 +440,26 @@ export function planFloor(footprint: (game: GameId) => Footprint, slots: readonl
     { x: 2.95, z: entrance.z0 - 2.6, r: 0.34 },
   ];
 
-  // --- velvet ropes: close the pit's staff area, front the poker room, queue for the cashier ---
-  const ropes: Rope[] = [
-    { points: [[-staffHalf - 0.35, zN + dN / 2 - 0.2], [-staffHalf - 0.35, zS - dS / 2 + 0.2]] },
-    { points: [[staffHalf + 0.35, zN + dN / 2 - 0.2], [staffHalf + 0.35, zS - dS / 2 + 0.2]] },
-    { points: [[pokerRoom.x0, pokerRoom.z0 + 1.2], [pokerRoom.x0, (pokerRoom.z0 + pokerRoom.z1) / 2 - 1.0]] },
-    { points: [[pokerRoom.x0, (pokerRoom.z0 + pokerRoom.z1) / 2 + 1.0], [pokerRoom.x0, pokerRoom.z1], [pokerRoom.x1 - 0.4, pokerRoom.z1]] },
-    { points: [[cashier.x - 1.5, counter.z1 + 0.25], [cashier.x - 1.5, counter.z1 + 2.2]] },
-    { points: [[cashier.x + 1.5, counter.z1 + 0.25], [cashier.x + 1.5, counter.z1 + 2.2]] },
+  // --- hanging signs ----------------------------------------------------------------------------
+  const cross = { z: (crossZ0 + crossZ1) / 2 };
+  const slotCols = columns.filter((c) => c.x < 0 && c.z > crossZ1);
+  const hanging: Hanging[] = [
+    // under the pit's south cove, over the cross aisle
+    { id: 'table-games', x: 0, y: 2.96, z: pit.z1 + 0.2, ry: 0, w: 4.6, h: 0.6 },
+    // over the slot floor's edge facing the main aisle, midway between its two columns so
+    // neither stands in front of it
+    { id: 'slots', x: slotsZone.x1 - 0.35, y: 2.92, z: slotCols.length === 2 ? (slotCols[0]!.z + slotCols[1]!.z) / 2 : slotsZone.z0 + 3.2, ry: Math.PI / 2, w: 2.4, h: 0.66 },
+    { id: 'poker', x: pokerRoom.x0 - 0.05, y: 2.98, z: (pokerRoom.z0 + pokerRoom.z1) / 2, ry: -Math.PI / 2, w: 2.2, h: 0.6 },
+    { id: 'entrance', x: 0, y: 3.0, z: entrance.z0 - 0.9, ry: 0, w: 5.2, h: 0.5 },
+    { id: 'cashier', x: pit.x0 - 1.2, y: 3.02, z: cross.z, ry: Math.PI / 2, w: 3.2, h: 0.44 },
   ];
 
-  // the west wall's corner plant keeps clear of the Big Six's south end (or goes, if it can't)
-  const wheel = stations.find((p) => p.zone === 'feature');
-  const cornerZ = Math.max(crossZ0 - 0.8, wheel ? wheel.z + wheel.fp.width / 2 + 0.55 : -Infinity);
-  const plants: [number, number, number][] = [
-    ...(cornerZ <= crossZ0 - 0.45 ? [[ROOM.x0 + 0.8, cornerZ, 1] as [number, number, number]] : []),
-    [-12.2, ROOM.z0 + 1.0, 0],
-    [pokerRoom.x0 + 0.7, ROOM.z0 + 0.9, 1],
-    [ROOM.x1 - 0.8, crossZ1 + 0.8, 0],
-    [front - 0.6, barZ1 + 0.7, 1],
-    [ROOM.x0 + 0.8, ROOM.z1 - 0.8, 0],
-    [-5.3, ROOM.z1 - 0.8, 1],
-    [5.3, ROOM.z1 - 0.8, 1],
-    [lounge.x0 + 0.4, lounge.z1 + 0.5, 0],
-  ];
-  const palms: [number, number][] = [
-    [-3.5, 13.6],
-    [3.5, 13.6],
-  ];
-
-  return {
+  const plan: FloorPlan = {
     room: ROOM,
     stations,
     pit,
     staff,
+    podium,
     aisles,
     entrance,
     door: { x0: -1.3, x1: 1.3, height: 2.9 },
@@ -387,23 +468,214 @@ export function planFloor(footprint: (game: GameId) => Footprint, slots: readonl
     feature,
     barZone,
     banks,
-    bar: { front, depth: 0.78, z0: barZ0, z1: barZ1, back, stools, vp },
+    bar,
+    vpMode: 'floor',
     cashier,
     lounge,
+    loungeGroups,
     columns,
-    ropes,
-    plants,
-    palms,
+    plants: [],
+    palms: [],
+    hanging,
+    solids: [],
   };
+  setVpMode(plan, opts.vpMode ?? 'floor');
+  return plan;
 }
 
-export function inRect(r: Rect, x: number, z: number, pad = 0): boolean {
-  return x >= r.x0 - pad && x <= r.x1 + pad && z >= r.z0 - pad && z <= r.z1 + pad;
+/**
+ * The bar's counter runs and stools for how video poker stands (on the counter or in gaps in
+ * it), then the plants (which keep clear of everything) and the solids list. planFloor() calls it;
+ * call it again if the machines turn out to be bar-top units.
+ */
+export function setVpMode(plan: FloorPlan, mode: VpMode): void {
+  plan.vpMode = mode;
+  const bar = plan.bar;
+  const vps = plan.stations.filter((s) => s.game === 'videopoker');
+  const gaps: [number, number][] = mode === 'floor' ? vps.map((s) => [s.z - s.fp.width / 2 - 0.04, s.z + s.fp.width / 2 + 0.04]) : [];
+  const segments: [number, number][] = [];
+  let z = bar.z0;
+  for (const [a, c] of gaps.sort((p, q) => p[0] - q[0])) {
+    if (a > z + 0.05) segments.push([z, a]);
+    z = Math.max(z, c);
+  }
+  if (bar.z1 > z + 0.05) segments.push([z, bar.z1]);
+  bar.segments = segments;
+  const vpEnd = vps.length ? Math.max(...vps.map((s) => s.z + s.fp.width / 2)) : bar.z0;
+  const stools: number[] = [];
+  for (let s = vpEnd + 0.1 + 0.75; s < bar.z1 - 0.5; s += 0.95) stools.push(s);
+  // bar-top units get a stool each, in front of the counter
+  if (mode === 'bartop') stools.unshift(...vps.map((s) => s.z));
+  bar.stools = stools;
+  plan.plants = [];
+  plan.palms = [];
+  plan.solids = baseSolids(plan);
+  placePalms(plan);
+  placePlants(plan);
 }
 
-// --- checks ----------------------------------------------------------------------------------
+// --- solids -----------------------------------------------------------------------------------
+
+/** The fixed furniture's solids: everything but the plants, which are fitted in round these. */
+function baseSolids(plan: FloorPlan): Solid[] {
+  const out: Solid[] = [];
+  const box = (id: string, group: string, x0: number, x1: number, z0: number, z1: number, y0: number, y1: number, extra: Partial<Solid> = {}) =>
+    out.push({ id, group, x: (x0 + x1) / 2, z: (z0 + z1) / 2, w: x1 - x0, d: z1 - z0, yaw: 0, y0, y1, ...extra });
+  const round = (id: string, group: string, x: number, z: number, r: number, y0: number, y1: number, extra: Partial<Solid> = {}) =>
+    out.push({ id, group, x, z, w: 2 * r, d: 2 * r, yaw: 0, y0, y1, round: true, ...extra });
+
+  plan.columns.forEach((c, i) => round(`column-${i + 1}`, `column-${i + 1}`, c.x, c.z, c.r + 0.12, 0, CEILING));
+
+  // slot islands: plinth, spine, end caps and LED strips; the topper on its mast above
+  for (const b of plan.banks) {
+    const g = `bank-${b.variant}`;
+    out.push({ id: `${g}-island`, group: g, x: b.x, z: b.z, w: b.length + 0.54, d: b.depth + 0.2, yaw: b.yaw, y0: 0, y1: 1.95, holds: b.ids, floor: true });
+    const tw = Math.min(Math.max(b.length * 0.9, 1.6), 3.2);
+    out.push({ id: `${g}-topper`, group: g, x: b.x, z: b.z, w: tw + 0.16, d: 0.22, yaw: b.yaw, y0: 2.31, y1: 2.945 });
+  }
+
+  // the bar: counter runs (the marble top overhangs the front, the armrest further), the foot
+  // rail, the returns closing the bartenders' side, the back bar, the pendants over the counter
+  const bar = plan.bar;
+  const onCounter = plan.vpMode === 'bartop' ? bar.vp : undefined;
+  bar.segments.forEach(([z0, z1], i) => {
+    box(`bar-counter-${i + 1}`, 'bar', bar.front - 0.145, bar.front + bar.depth + 0.04, z0 - 0.03, z1 + 0.03, 0, BAR_TOP + 0.065, { holds: onCounter, floor: true });
+    box(`bar-rail-${i + 1}`, 'bar', bar.front - 0.262, bar.front, z0, z1, 0.17, 0.23, { holds: onCounter });
+  });
+  for (const [k, z] of [bar.z0, bar.z1].entries()) box(`bar-return-${k + 1}`, 'bar', bar.front + bar.depth, bar.back, z - 0.1, z + 0.1, 0, BAR_TOP);
+  box('back-bar', 'bar', bar.back, plan.room.x1, bar.z0 + 0.15, bar.z1 - 0.15, 0, CEILING, { wall: true });
+  bar.pendants.forEach((z, i) => round(`bar-pendant-${i + 1}`, 'bar', bar.front + bar.depth / 2 - 0.1, z, 0.21, 2.15, CEILING));
+  bar.stools.forEach((z, i) => round(`stool-${i + 1}`, `stool-${i + 1}`, bar.stoolX, z, STOOL.r, 0, STOOL.h, { floor: true }));
+
+  // the cashier's cage: counter, bars, fascia and its side wall, wall to wall in the corner
+  {
+    const c = plan.cashier.counter;
+    box('cashier-cage', 'cashier', c.x0, c.x1 + 0.22, plan.room.z0, c.z1 + 0.06, 0, CEILING, { wall: true, floor: true });
+  }
+
+  // the pit podium, with its lamp
+  box('podium', 'podium', plan.podium.x - PODIUM.w / 2, plan.podium.x + PODIUM.w / 2, plan.podium.z - PODIUM.d / 2, plan.podium.z + PODIUM.d / 2, 0, PODIUM.h, { floor: true });
+
+  // the lounge: couches facing each other across a coffee table, a floor lamp at each end
+  plan.loungeGroups.forEach((gp, i) => {
+    const g = `lounge-${i + 1}`;
+    for (const [k, s] of [-1, 1].entries()) {
+      box(`${g}-couch-${k + 1}`, g, gp.x - COUCH.w / 2, gp.x + COUCH.w / 2, gp.z + s * 1.25 - COUCH.d / 2, gp.z + s * 1.25 + COUCH.d / 2, 0, COUCH.h, { floor: true });
+      round(`${g}-lamp-${k + 1}`, `${g}-lamp-${k + 1}`, gp.x - s * loungeLampX(), gp.z + s * 1.25, FLOOR_LAMP.r, 0, FLOOR_LAMP.h, { floor: true });
+    }
+    box(`${g}-table`, g, gp.x - COFFEE_TABLE.w / 2, gp.x + COFFEE_TABLE.w / 2, gp.z - COFFEE_TABLE.d / 2, gp.z + COFFEE_TABLE.d / 2, 0, COFFEE_TABLE.h, { floor: true });
+  });
+
+  // hanging signs: the box with its brass trims
+  for (const h of plan.hanging) {
+    out.push({ id: `sign-${h.id}`, group: `sign-${h.id}`, x: h.x, z: h.z, w: h.w + 0.2, d: 0.17, yaw: h.ry, y0: h.y - h.h / 2 - 0.08, y1: h.y + h.h / 2 + 0.08 });
+  }
+  return out;
+}
+
+/** How far from the lounge's centre line its floor lamps stand: clear of the couch's arm. */
+function loungeLampX(): number {
+  return COUCH.w / 2 + FLOOR_LAMP.r + 0.1;
+}
+export const LOUNGE_LAMP_X = loungeLampX();
+
+function palmSolids(p: Palm, i: number): Solid[] {
+  const g = `palm-${i + 1}`;
+  const r = LEAVES.palm.r * p.size;
+  return [
+    { id: `${g}-planter`, group: g, x: p.x, z: p.z, w: 2 * PALM_PLANTER.r, d: 2 * PALM_PLANTER.r, yaw: 0, y0: 0, y1: PALM_PLANTER.h, round: true, floor: true },
+    { id: `${g}-trunk`, group: g, x: p.x, z: p.z, w: 2 * PALM_TRUNK * p.size, d: 2 * PALM_TRUNK * p.size, yaw: 0, y0: PALM_PLANTER.seat, y1: PALM_PLANTER.seat + p.size, round: true },
+    { id: `${g}-fronds`, group: g, x: p.x, z: p.z, w: 2 * r, d: 2 * r, yaw: 0, y0: PALM_PLANTER.seat + LEAVES.palm.from * p.size, y1: PALM_PLANTER.seat + p.size, round: true },
+  ];
+}
+
+/**
+ * A palm either side of the doors, as big as fits: under the ceiling, the fronds clear of the
+ * door frame, the front wall and the players at the nearest slot machines.
+ */
+function placePalms(plan: FloorPlan): void {
+  const R = plan.room;
+  for (const size of [2.6, 2.4, 2.2, 2.0, 1.8]) {
+    if (PALM_PLANTER.seat + size > CEILING - 0.15) continue;
+    const r = LEAVES.palm.r * size;
+    const x = plan.door.x1 + 0.2 + r;
+    const z = R.z1 - TRIM - 0.02 - r;
+    const palms: Palm[] = [
+      { x: -x, z, size },
+      { x, z, size },
+    ];
+    const parts = palms.flatMap((p, i) => palmSolids(p, i));
+    if (parts.every((s) => clashes(plan, s, plan.solids).length === 0)) {
+      plan.palms = palms;
+      plan.solids.push(...parts);
+      return;
+    }
+  }
+}
+
+function plantSolids(p: Plant, i: number): Solid[] {
+  const g = `plant-${i + 1}`;
+  const leaves = LEAVES[p.kind];
+  return [
+    { id: `${g}-planter`, group: g, x: p.x, z: p.z, w: 2 * PLANTER.r, d: 2 * PLANTER.r, yaw: 0, y0: 0, y1: PLANTER.h, round: true, floor: true },
+    { id: `${g}-leaves`, group: g, x: p.x, z: p.z, w: 2 * leaves.r * p.size, d: 2 * leaves.r * p.size, yaw: 0, y0: PLANTER.seat + leaves.from * p.size, y1: PLANTER.seat + p.size, round: true },
+  ];
+}
+
+/**
+ * Plants for the corners and ends that want one. Each spot says where the plant stands for a
+ * given leaf spread (so it can hug a wall); the plant is the largest of a few sizes whose leaves
+ * clear the walls, the stations, their players and every solid, or the spot is left bare.
+ */
+function placePlants(plan: FloorPlan): void {
+  const R = plan.room;
+  const bar = plan.bar;
+  const wheel = plan.stations.find((s) => s.zone === 'feature');
+  const inset = (r: number) => r + TRIM + 0.02;
+  type Spot = { kind: PlantKind; at: (r: number) => [number, number] };
+  const spots: Spot[] = [
+    // the west wall beside the Big Six: north of it (toward the cashier's queue), or south
+    ...(wheel
+      ? ([
+          { kind: 'plant-b', at: (r) => [R.x0 + inset(r), wheel.z - wheel.fp.width / 2 - r - 0.08] },
+          { kind: 'plant-b', at: (r) => [R.x0 + inset(r), wheel.z + wheel.fp.width / 2 + r + 0.08] },
+        ] as Spot[])
+      : []),
+    // beside the cashier's cage, in the north-west corner of the pit's aisle
+    { kind: 'plant-a', at: (r) => [plan.cashier.counter.x1 + 0.22 + r + 0.06, R.z0 + inset(r)] },
+    // the poker room's north-west corner
+    { kind: 'plant-b', at: (r) => [plan.pokerRoom.x0 + 0.7, R.z0 + inset(r)] },
+    // the east wall north of the bar
+    { kind: 'plant-a', at: (r) => [R.x1 - inset(r), bar.z0 - 0.1 - r - 0.06] },
+    // the south end of the bar
+    { kind: 'plant-b', at: (r) => [bar.front - 0.145 - r - 0.06, R.z1 - inset(r)] },
+    // the south-west corner of the slot floor
+    { kind: 'plant-a', at: (r) => [R.x0 + inset(r), R.z1 - inset(r)] },
+    // either side of the vestibule, by the front wall
+    { kind: 'plant-b', at: (r) => [-5.3, R.z1 - inset(r)] },
+    { kind: 'plant-b', at: (r) => [5.3, R.z1 - inset(r)] },
+    // the lounge's far corner
+    { kind: 'plant-a', at: (r) => [plan.lounge.x1 - 0.6, R.z1 - inset(r)] },
+  ];
+  for (const spot of spots) {
+    for (const size of [1.1, 0.95, 0.8]) {
+      const r = LEAVES[spot.kind].r * size;
+      const [x, z] = spot.at(r);
+      const p: Plant = { kind: spot.kind, x, z, size };
+      const parts = plantSolids(p, plan.plants.length);
+      if (parts.every((s) => clashes(plan, s, plan.solids).length === 0)) {
+        plan.plants.push(p);
+        plan.solids.push(...parts);
+        break;
+      }
+    }
+  }
+}
+
+// --- geometry ------------------------------------------------------------------------------------
 
 type Poly = [number, number][];
+type Shape = { poly: Poly } | { x: number; z: number; r: number };
 
 function corners(x: number, z: number, w: number, d: number, yaw: number): Poly {
   const c = Math.cos(yaw);
@@ -433,6 +705,48 @@ function overlaps(a: Poly, b: Poly): boolean {
   return true;
 }
 
+/** Distance from a point to a convex quad (0 inside). */
+function pointToPoly(x: number, z: number, poly: Poly): number {
+  let inside = true;
+  let best = Infinity;
+  for (let i = 0; i < poly.length; i++) {
+    const [px, pz] = poly[i]!;
+    const [qx, qz] = poly[(i + 1) % poly.length]!;
+    const ex = qx - px;
+    const ez = qz - pz;
+    // the quads are wound the same way throughout, so one side of every edge is inside
+    if (ex * (z - pz) - ez * (x - px) < 0) inside = false;
+    const t = Math.max(0, Math.min(1, ((x - px) * ex + (z - pz) * ez) / (ex * ex + ez * ez)));
+    best = Math.min(best, Math.hypot(px + ex * t - x, pz + ez * t - z));
+  }
+  return inside ? 0 : best;
+}
+
+function shapeOf(s: Solid): Shape {
+  return s.round ? { x: s.x, z: s.z, r: s.w / 2 } : { poly: corners(s.x, s.z, s.w, s.d, s.yaw) };
+}
+
+function shapesOverlap(a: Shape, b: Shape): boolean {
+  if ('poly' in a && 'poly' in b) return overlaps(a.poly, b.poly);
+  if ('r' in a && 'r' in b) return Math.hypot(a.x - b.x, a.z - b.z) < a.r + b.r - 1e-6;
+  const c = ('r' in a ? a : b) as { x: number; z: number; r: number };
+  const p = ('poly' in a ? a : b) as { poly: Poly };
+  return pointToPoly(c.x, c.z, p.poly) < c.r - 1e-6;
+}
+
+/** The solid's extent on the floor, as [x0, x1, z0, z1]. */
+function extent(s: Solid): [number, number, number, number] {
+  if (s.round) return [s.x - s.w / 2, s.x + s.w / 2, s.z - s.w / 2, s.z + s.w / 2];
+  const p = corners(s.x, s.z, s.w, s.d, s.yaw);
+  const xs = p.map((q) => q[0]);
+  const zs = p.map((q) => q[1]);
+  return [Math.min(...xs), Math.max(...xs), Math.min(...zs), Math.max(...zs)];
+}
+
+export function inRect(r: Rect, x: number, z: number, pad = 0): boolean {
+  return x >= r.x0 - pad && x <= r.x1 + pad && z >= r.z0 - pad && z <= r.z1 + pad;
+}
+
 function rectPoly(r: Rect): Poly {
   return [
     [r.x0, r.z0],
@@ -442,9 +756,51 @@ function rectPoly(r: Rect): Poly {
   ];
 }
 
+/** The ceiling over a solid: the pit's coffers only when it is wholly inside the pit, clear of the cove's lip. */
+function ceilingOver(plan: FloorPlan, s: Solid): number {
+  const [x0, x1, z0, z1] = extent(s);
+  const p = plan.pit;
+  const lip = 0.45;
+  return x0 >= p.x0 + lip && x1 <= p.x1 - lip && z0 >= p.z0 + lip && z1 <= p.z1 - lip ? PIT_CEILING : CEILING;
+}
+
+/** A station's standing room: a strip along its player side (tables, and machines on the floor). */
+function playerStrip(p: Placement): Poly | null {
+  if (p.zone === 'bar') return null;
+  const off = p.fp.depth / 2 + 0.45;
+  return corners(p.x + Math.sin(p.yaw) * off, p.z + Math.cos(p.yaw) * off, p.fp.width * 0.8, 0.7, p.yaw);
+}
+
+/** What `s` passes through, as readable strings: walls, the ceiling, stations, their players, aisles, other solids. */
+function clashes(plan: FloorPlan, s: Solid, others: Solid[]): string[] {
+  const out: string[] = [];
+  const R = plan.room;
+  const [x0, x1, z0, z1] = extent(s);
+  const margin = s.wall ? -0.001 : TRIM;
+  if (x0 < R.x0 + margin || x1 > R.x1 - margin || z0 < R.z0 + margin || z1 > R.z1 - margin) out.push(`${s.id} pokes through a wall`);
+  if (s.y1 > ceilingOver(plan, s) + 0.001) out.push(`${s.id} pokes through the ceiling`);
+  const shape = shapeOf(s);
+  for (const p of plan.stations) {
+    if (s.holds?.includes(p.id)) continue;
+    const box = corners(p.x, p.z, p.fp.width, p.fp.depth, p.yaw);
+    if (s.y0 < STATION_H[p.zone] && shapesOverlap(shape, { poly: box })) out.push(`${s.id} clips ${p.id}`);
+    const strip = playerStrip(p);
+    // anything at body height in front of a station is in its players' way
+    if (strip && s.y0 < 1.8 && !s.holds?.length && shapesOverlap(shape, { poly: strip })) out.push(`${s.id} blocks the players of ${p.id}`);
+  }
+  if (s.floor) for (const [k, aisle] of plan.aisles.entries()) if (shapesOverlap(shape, { poly: rectPoly(aisle) })) out.push(`${s.id} stands in aisle ${k}`);
+  for (const o of others) {
+    if (o === s || o.group === s.group) continue;
+    if (s.y0 >= o.y1 || o.y0 >= s.y1) continue;
+    if (shapesOverlap(shape, shapeOf(o))) out.push(`${s.id} clips ${o.id}`);
+  }
+  return out;
+}
+
 /**
  * Problems with a plan, as readable strings (empty when it's sound): stations overlapping each
- * other, the walls or an aisle, and players' standing room in front of a station blocked.
+ * other, the walls or an aisle, players' standing room blocked, and any solid (furniture, plants,
+ * signs, the bar, columns) passing through another, a station, a wall or a ceiling.
  */
 export function checkLayout(plan: FloorPlan): string[] {
   const out: string[] = [];
@@ -459,19 +815,13 @@ export function checkLayout(plan: FloorPlan): string[] {
       if (overlaps(a.poly, b.poly)) out.push(`${a.s.id} overlaps ${b.s.id}`);
     }
     for (const [k, aisle] of plan.aisles.entries()) if (overlaps(a.poly, rectPoly(aisle))) out.push(`${a.s.id} stands in aisle ${k}`);
-    // a strip of standing room along the player side (tables, and machines on the floor)
-    if (a.s.zone !== 'bar') {
-      const off = a.s.fp.depth / 2 + 0.45;
-      const fx = a.s.x + Math.sin(a.s.yaw) * off;
-      const fz = a.s.z + Math.cos(a.s.yaw) * off;
-      const front = corners(fx, fz, a.s.fp.width * 0.8, 0.7, a.s.yaw);
+    const front = playerStrip(a.s);
+    if (front) {
       for (const b of boxes) if (b !== a && overlaps(front, b.poly)) out.push(`${b.s.id} blocks the players of ${a.s.id}`);
-      for (const bank of plan.banks) {
-        if (bank.ids.includes(a.s.id)) continue;
-        if (overlaps(front, corners(bank.x, bank.z, bank.length + 0.6, bank.depth + 0.2, bank.yaw))) out.push(`bank ${bank.variant} blocks the players of ${a.s.id}`);
-      }
       for (const [x, z] of front) if (!inRect(inner, x, z, 0.01)) out.push(`${a.s.id} has its players against a wall`);
     }
   }
+  // every solid against everything else (each pair once)
+  plan.solids.forEach((s, i) => out.push(...clashes(plan, s, plan.solids.slice(i + 1))));
   return [...new Set(out)];
 }
