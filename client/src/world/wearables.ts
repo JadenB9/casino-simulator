@@ -63,7 +63,7 @@ type Metal = keyof typeof METALS;
 let env: THREE.Texture | null = null;
 let envStarted = false;
 const reflective = new Set<THREE.MeshStandardMaterial>();
-const clock = { t: 0, frame: -1 };
+let tickedFrame = -1;
 
 function reflect(m: THREE.MeshStandardMaterial): void {
   reflective.add(m);
@@ -79,10 +79,10 @@ function reflect(m: THREE.MeshStandardMaterial): void {
  */
 function beforeDraw(renderer: THREE.WebGLRenderer): void {
   const frame = renderer.info.render.frame;
-  if (frame !== clock.frame) {
-    clock.frame = frame;
-    clock.t = performance.now() / 1000;
-    for (const u of timeUniforms) u.value = clock.t;
+  if (frame !== tickedFrame) {
+    tickedFrame = frame;
+    const t = performance.now() / 1000;
+    for (const u of timeUniforms) u.value = t;
   }
   if (envStarted) return;
   envStarted = true;
@@ -116,7 +116,7 @@ function casinoEnvironment(renderer: THREE.WebGLRenderer): THREE.Texture {
 
   const spot = new THREE.CircleGeometry(0.1, 16).rotateX(Math.PI / 2);
   const at: THREE.Matrix4[] = [];
-  for (let x = -6; x <= 6; x += 1.1) for (let z = -6; z <= 6; z += 1.1) at.push(new THREE.Matrix4().makeTranslation(x + 0.25, 2.2, z - 0.35));
+  for (let x = -6; x <= 6; x += 1.1) for (let z = -6; z <= 6; z += 1.1) at.push(translate(x + 0.25, 2.2, z - 0.35));
   const downlights = new THREE.InstancedMesh(spot, lit(9, 6.6, 4), at.length);
   at.forEach((m, i) => downlights.setMatrixAt(i, m));
   scene.add(downlights);
@@ -265,8 +265,6 @@ export interface TemplateLike {
   root: THREE.Object3D;
   geometry: THREE.BufferGeometry;
   slot: Uint8Array;
-  /** Per-vertex authored colours (linear rgb), for the pieces of a model that aren't Look slots. */
-  base?: Float32Array;
   clips?: THREE.AnimationClip[];
 }
 
@@ -288,7 +286,6 @@ interface Fit {
   /** Rest positions (xyz...) of the vertices a piece has to clear. */
   torso: Float32Array;
   headSkin: Float32Array;
-  head: Float32Array;
   forearmL: Float32Array;
   /** The neck (with a hood's collar, where there is one): half-widths to the side, back and front. */
   neck: { side: number; back: number; front: number };
@@ -301,8 +298,6 @@ interface Fit {
   rest: THREE.BufferAttribute;
   restN: THREE.BufferAttribute;
   slot: THREE.BufferAttribute;
-  /** Each bone's rotation at rest, for turning it in the character's frame. */
-  quats: THREE.Quaternion[];
   /** The carrying pose (turns per bone, added on top of the animation) and where a held order sits, at rest. */
   carry: { turns: Map<string, THREE.Quaternion>; grip: THREE.Matrix4 } | null;
 }
@@ -370,7 +365,6 @@ function fitFor(tpl: TemplateLike, female: boolean): Fit | null {
   const head = at[idx('Head')] ?? V(0, 1.55, 0.09);
   const cx = neck.x;
   const zc = neck.z;
-  const headAll = pick((b) => b === 'Head');
   const headSkin = pick((b, s) => b === 'Head' && s === SLOT.skin);
 
   // Eyes: the dark little pieces at the front of the face, one cluster each side of the mid-line.
@@ -426,14 +420,12 @@ function fitFor(tpl: TemplateLike, female: boolean): Fit | null {
     neck: neckR,
     shoulders: pick((b, s) => /^(Chest|Torso|Abdomen|ShoulderL|ShoulderR)$/.test(b) || (b === 'Neck' && s !== SLOT.skin)),
     headSkin,
-    head: headAll,
     forearmL: pick((b) => b === 'LowerArmL' || b === 'WristL'),
     eyes: [eyeL, eyeR],
     mouthY,
     rest: new THREE.BufferAttribute(rest, 3),
     restN: new THREE.BufferAttribute(restN, 3),
     slot: new THREE.BufferAttribute(Float32Array.from(tpl.slot), 1),
-    quats: bones.map((b) => b.getWorldQuaternion(new THREE.Quaternion())),
     carry: null,
   };
   fit.carry = carryPose(tpl, body, fit);
@@ -667,6 +659,8 @@ interface Out {
   glass: Bucket;
 }
 
+const translate = (x: number, y: number, z: number): THREE.Matrix4 => new THREE.Matrix4().makeTranslation(x, y, z);
+
 /** A matrix from an origin and three axes (x, y, z columns). */
 function frame(o: V3, x: V3, y: V3, z: V3): THREE.Matrix4 {
   return new THREE.Matrix4().makeBasis(x, y, z).setPosition(o);
@@ -856,7 +850,7 @@ function buildChain(fit: Fit, spec: ChainSpec, out: Out, chest: number): Path {
       const twist = (i % 2 ? 1 : -1) * 0.42;
       const r = new THREE.Matrix4().makeRotationX(twist);
       out.metal.add(base!.clone(), m.clone().multiply(r), GOLD, chest);
-      if (ice) out.gem.add(ice.clone(), m.clone().multiply(r).multiply(new THREE.Matrix4().makeTranslation(0, 0, w * 0.08)), null, chest);
+      if (ice) out.gem.add(ice.clone(), m.clone().multiply(r).multiply(translate(0, 0, w * 0.08)), null, chest);
     }
     s += len;
     i++;
@@ -907,10 +901,10 @@ function buildPendant(fit: Fit, kind: 'dice' | 'ace', path: Path, out: Out, ches
       40,
     ).rotateX(Math.PI / 2);
     out.metal.add(disc, m, GOLD, chest);
-    out.metal.add(new THREE.TorusGeometry(r - 0.0012, 0.0016, 8, 48), m.clone().multiply(new THREE.Matrix4().makeTranslation(0, 0, 0.0017)), GOLD, chest);
-    out.gem.add(new THREE.TorusGeometry(r - 0.0042, 0.0013, 6, 48), m.clone().multiply(new THREE.Matrix4().makeTranslation(0, 0, 0.0019)), null, chest);
+    out.metal.add(new THREE.TorusGeometry(r - 0.0012, 0.0016, 8, 48), m.clone().multiply(translate(0, 0, 0.0017)), GOLD, chest);
+    out.gem.add(new THREE.TorusGeometry(r - 0.0042, 0.0013, 6, 48), m.clone().multiply(translate(0, 0, 0.0019)), null, chest);
     const spade = new THREE.ExtrudeGeometry(spadeShape(0.0135), { depth: 0.0007, bevelEnabled: false, curveSegments: 10 });
-    out.metal.add(spade, m.clone().multiply(new THREE.Matrix4().makeTranslation(0, -0.001, 0.0026)), ENAMEL, chest);
+    out.metal.add(spade, m.clone().multiply(translate(0, -0.001, 0.0026)), ENAMEL, chest);
     return;
   }
   // two dice side by side, paved in diamonds, with black pips, hanging at easy angles
@@ -1029,7 +1023,7 @@ function buildGrill(fit: Fit, spec: GrillSpec, out: Out, headBone: number): void
       const m = surfaceFrame(V(fit.cx + dx, y, z0 - k * dx * dx), V(1, 0, slope), n);
       const tooth = new RoundedBoxGeometry(tw * 0.95, th, 0.0036, 4, 0.0017);
       out.metal.add(tooth, m, metal, headBone);
-      if (spec.iced) out.gem.add(new RoundedBoxGeometry(tw * 0.74, th * 0.76, 0.001, 1, 0.0003), m.clone().multiply(new THREE.Matrix4().makeTranslation(0, 0, 0.0017)), null, headBone);
+      if (spec.iced) out.gem.add(new RoundedBoxGeometry(tw * 0.74, th * 0.76, 0.001, 1, 0.0003), m.clone().multiply(translate(0, 0, 0.0017)), null, headBone);
     }
   }
 }
@@ -1068,17 +1062,17 @@ function buildWatch(fit: Fit, iced: boolean, out: Out): void {
   const caseAt = c.clone().addScaledVector(outward, bandR + 0.0032);
   const face = frame(caseAt, axis, outward.clone().cross(axis).normalize(), outward);
   out.metal.add(new THREE.CylinderGeometry(0.0165, 0.017, 0.0068, 36).rotateX(Math.PI / 2), face, metal, fore);
-  out.metal.add(new THREE.CylinderGeometry(0.0138, 0.0138, 0.0008, 36).rotateX(Math.PI / 2), face.clone().multiply(new THREE.Matrix4().makeTranslation(0, 0, 0.0034)), iced ? DIAL_ICE : DIAL, fore);
+  out.metal.add(new THREE.CylinderGeometry(0.0138, 0.0138, 0.0008, 36).rotateX(Math.PI / 2), face.clone().multiply(translate(0, 0, 0.0034)), iced ? DIAL_ICE : DIAL, fore);
   // the hands at ten past ten: the minute hand on the two, the hour hand just past the ten
   for (const [ang, len] of [
     [-1.05, 0.0105],
     [0.96, 0.0072],
   ] as const) {
     const hand = new THREE.BoxGeometry(0.0011, len, 0.0005).translate(0, len / 2, 0);
-    out.metal.add(hand, face.clone().multiply(new THREE.Matrix4().makeTranslation(0, 0, 0.0041)).multiply(new THREE.Matrix4().makeRotationZ(ang)), HANDS, fore);
+    out.metal.add(hand, face.clone().multiply(translate(0, 0, 0.0041)).multiply(new THREE.Matrix4().makeRotationZ(ang)), HANDS, fore);
   }
-  if (iced) out.gem.add(new THREE.TorusGeometry(0.0153, 0.0017, 6, 40), face.clone().multiply(new THREE.Matrix4().makeTranslation(0, 0, 0.0036)), null, fore);
-  else out.metal.add(new THREE.TorusGeometry(0.0154, 0.0012, 6, 40), face.clone().multiply(new THREE.Matrix4().makeTranslation(0, 0, 0.0035)), GOLD, fore);
+  if (iced) out.gem.add(new THREE.TorusGeometry(0.0153, 0.0017, 6, 40), face.clone().multiply(translate(0, 0, 0.0036)), null, fore);
+  else out.metal.add(new THREE.TorusGeometry(0.0154, 0.0012, 6, 40), face.clone().multiply(translate(0, 0, 0.0035)), GOLD, fore);
 }
 
 // --- shades --------------------------------------------------------------------------------------
@@ -1105,7 +1099,7 @@ function buildShades(fit: Fit, out: Out, headBone: number): void {
     const eye = side > 0 ? eyeL : eyeR;
     const o = V(eye.x + side * 0.004, eye.y - 0.004, zFace);
     // turned a little round the face, the teardrop drooping to the outside
-    const m = new THREE.Matrix4().makeTranslation(o.x, o.y, o.z).multiply(new THREE.Matrix4().makeRotationY(side * 0.2));
+    const m = translate(o.x, o.y, o.z).multiply(new THREE.Matrix4().makeRotationY(side * 0.2));
     const lens = new THREE.ShapeGeometry(aviatorShape(w, h, side), 12);
     const top = eye.y + h * 0.5;
     out.metal.add(
@@ -1120,7 +1114,7 @@ function buildShades(fit: Fit, out: Out, headBone: number): void {
     );
     // the back of the lens (the outline mirrored, then turned round to face in)
     const back = new THREE.ShapeGeometry(aviatorShape(w, h, -side), 12).rotateY(Math.PI);
-    out.metal.add(back, m.clone().multiply(new THREE.Matrix4().makeTranslation(0, 0, -0.0005)), fin(0.02, 0.013, 0.008, 0.2, 0.2), headBone);
+    out.metal.add(back, m.clone().multiply(translate(0, 0, -0.0005)), fin(0.02, 0.013, 0.008, 0.2, 0.2), headBone);
     // wire rim round the lens
     const rim = aviatorShape(w, h, side).getSpacedPoints(48).map((p) => V(p.x, p.y, 0.0004));
     out.metal.add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(rim, true), 64, 0.0009, 5, true), m, GOLD, headBone);
@@ -1246,11 +1240,10 @@ function buildHeld(fit: Fit, model: BarModel, out: Out): void {
   // The item's frame in the hand: x ahead along the fingers, y up, z out to the side. Stemmed
   // glasses are held by the stem, a tumbler up in the fingers, a cup's saucer resting inward.
   const shift = GRIP_SHIFT[model] ?? [0, 0, 0];
-  const m = h.m.clone().multiply(new THREE.Matrix4().makeTranslation(shift[0], shift[1], shift[2]));
+  const m = h.m.clone().multiply(translate(shift[0], shift[1], shift[2]));
   const add = (g: THREE.BufferGeometry, paint: Paint | null, bucket: 'metal' | 'glass' = 'metal', local?: THREE.Matrix4) =>
     out[bucket].add(g, local ? m.clone().multiply(local) : m, paint, h.bone);
   const lathe = (pts: [number, number][], segs = 24) => new THREE.LatheGeometry(pts.map(([r, y]) => new THREE.Vector2(r, y)), segs);
-  const at = (x: number, y: number, z: number) => new THREE.Matrix4().makeTranslation(x, y, z);
   switch (model) {
     case 'bottle': {
       // an amber beer bottle held round its body, a cream label
@@ -1276,8 +1269,8 @@ function buildHeld(fit: Fit, model: BarModel, out: Out): void {
     case 'martini': {
       add(lathe([[0.0001, -0.075], [0.03, -0.075], [0.031, -0.072], [0.004, -0.068], [0.003, 0.0], [0.05, 0.06], [0.052, 0.062], [0.049, 0.062], [0.004, 0.004]]), null, 'glass');
       add(lathe([[0.0001, 0.006], [0.042, 0.05], [0.0001, 0.05]]), WATER);
-      add(new THREE.SphereGeometry(0.0065, 12, 8).scale(1, 1.25, 1), fin(0.12, 0.2, 0.02, 0, 0.35), 'metal', at(0.008, 0.035, 0));
-      add(new THREE.CylinderGeometry(0.0008, 0.0008, 0.06, 5), fin(0.6, 0.45, 0.25, 0, 0.6), 'metal', at(0.004, 0.045, 0).multiply(new THREE.Matrix4().makeRotationZ(0.35)));
+      add(new THREE.SphereGeometry(0.0065, 12, 8).scale(1, 1.25, 1), fin(0.12, 0.2, 0.02, 0, 0.35), 'metal', translate(0.008, 0.035, 0));
+      add(new THREE.CylinderGeometry(0.0008, 0.0008, 0.06, 5), fin(0.6, 0.45, 0.25, 0, 0.6), 'metal', translate(0.004, 0.045, 0).multiply(new THREE.Matrix4().makeRotationZ(0.35)));
       break;
     }
     case 'wine': {
@@ -1288,7 +1281,7 @@ function buildHeld(fit: Fit, model: BarModel, out: Out): void {
     case 'rocks': {
       add(lathe([[0.0001, -0.035], [0.037, -0.035], [0.038, 0.045], [0.035, 0.045], [0.034, -0.025], [0.0001, -0.025]]), null, 'glass');
       add(lathe([[0.0001, -0.024], [0.0335, -0.024], [0.0335, 0.008], [0.0001, 0.008]]), fin(0.45, 0.16, 0.02, 0, 0.05));
-      add(new RoundedBoxGeometry(0.026, 0.026, 0.026, 2, 0.004), fin(0.7, 0.75, 0.78, 0, 0.1), 'glass', at(0.004, 0.012, -0.004).multiply(new THREE.Matrix4().makeRotationY(0.5)));
+      add(new RoundedBoxGeometry(0.026, 0.026, 0.026, 2, 0.004), fin(0.7, 0.75, 0.78, 0, 0.1), 'glass', translate(0.004, 0.012, -0.004).multiply(new THREE.Matrix4().makeRotationY(0.5)));
       break;
     }
     case 'cup': {
@@ -1297,13 +1290,13 @@ function buildHeld(fit: Fit, model: BarModel, out: Out): void {
       add(lathe([[0.0001, -0.03], [0.058, -0.028], [0.06, -0.022], [0.0001, -0.026]], 32), china);
       add(lathe([[0.0001, -0.024], [0.022, -0.024], [0.028, 0.0], [0.03, 0.022], [0.028, 0.022], [0.026, 0.004], [0.0001, 0.004]], 28), china);
       add(lathe([[0.0001, 0.016], [0.027, 0.016]], 28), fin(0.05, 0.022, 0.01, 0, 0.3));
-      add(new THREE.TorusGeometry(0.009, 0.0028, 6, 14, Math.PI * 1.3), china, 'metal', at(0.031, 0.006, 0).multiply(new THREE.Matrix4().makeRotationZ(-Math.PI * 0.65)));
+      add(new THREE.TorusGeometry(0.009, 0.0028, 6, 14, Math.PI * 1.3), china, 'metal', translate(0.031, 0.006, 0).multiply(new THREE.Matrix4().makeRotationZ(-Math.PI * 0.65)));
       break;
     }
     case 'plate': {
       // a white plate, held level by its rim, with the order on it
       const china = fin(0.85, 0.84, 0.8, 0, 0.2);
-      add(lathe([[0.0001, -0.004], [0.075, -0.004], [0.1, 0.004], [0.104, 0.008], [0.1, 0.008], [0.075, 0.0], [0.0001, 0.0]], 36), china, 'metal', at(0, 0, PLATE_Z));
+      add(lathe([[0.0001, -0.004], [0.075, -0.004], [0.1, 0.004], [0.104, 0.008], [0.1, 0.008], [0.075, 0.0], [0.0001, 0.0]], 36), china, 'metal', translate(0, 0, PLATE_Z));
       break;
     }
   }
@@ -1324,9 +1317,9 @@ const PLATE_Z = -0.085;
 function buildPlateFood(fit: Fit, item: string, out: Out): void {
   const h = handFrame(fit);
   if (!h) return;
-  const hand = h.m.clone().multiply(new THREE.Matrix4().makeTranslation(0, 0.002, PLATE_Z));
+  const hand = h.m.clone().multiply(translate(0, 0.002, PLATE_Z));
   const put = (g: THREE.BufferGeometry, f: Finish, x: number, y: number, z: number, rot = 0) =>
-    out.metal.add(g, hand.clone().multiply(new THREE.Matrix4().makeTranslation(x, y, z)).multiply(new THREE.Matrix4().makeRotationY(rot)), f, h.bone);
+    out.metal.add(g, hand.clone().multiply(translate(x, y, z)).multiply(new THREE.Matrix4().makeRotationY(rot)), f, h.bone);
   const bun = fin(0.55, 0.26, 0.07, 0, 0.55);
   switch (item) {
     case 'sliders':
@@ -1572,12 +1565,14 @@ function clothesMaterial(id: string, fit: Fit): THREE.MeshPhysicalMaterial | nul
   const time = { value: 0 };
   timeUniforms.push(time);
   const O = OPENING[fit.female ? 'f' : 'm'];
+  const cx = fit.cx;
+  const neckY = fit.neckY;
   m.onBeforeCompile = (s) => {
     s.uniforms.uTime = time;
-    s.uniforms.uCx = { value: fit.cx };
+    s.uniforms.uCx = { value: cx };
     s.uniforms.uGold = { value: new THREE.Color(spec.top) };
-    s.uniforms.uNeckY = { value: fit.neckY };
-    s.uniforms.uLapel = { value: new THREE.Vector4(fit.neckY - O.button, fit.neckY - O.collar, O.v0, O.v1) };
+    s.uniforms.uNeckY = { value: neckY };
+    s.uniforms.uLapel = { value: new THREE.Vector4(neckY - O.button, neckY - O.collar, O.v0, O.v1) };
     s.vertexShader = s.vertexShader
       .replace('#include <common>', '#include <common>\nattribute float wSlot;\nattribute vec3 wRest;\nattribute vec3 wRestN;\nvarying float vSlot;\nvarying vec3 vRest;\nvarying vec3 vRestN;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvSlot = wSlot;\nvRest = wRest;\nvRestN = wRestN;');
@@ -1616,7 +1611,8 @@ ${code.color ?? ''}`,
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\n${code.emissive ?? ''}`)
       .replace('#include <lights_physical_fragment>', `#include <lights_physical_fragment>\n${code.sheen ? `#ifdef USE_SHEEN\n${code.sheen}\n#endif` : ''}`);
   };
-  m.customProgramCacheKey = () => `wear-clothes-${spec.cloth}-${fit.id}`;
+  const cacheKey = `wear-clothes-${spec.cloth}-${fit.id}`;
+  m.customProgramCacheKey = () => cacheKey;
   reflect(m);
   clothesMats.set(key, m);
   return m;
@@ -1805,12 +1801,6 @@ export class Wearables {
     for (const k of a.builds) release(k);
   }
 }
-
-/**
- * Where world.holdItem and world.dropHeld go: the app's bar (ui/shop/bar.ts) puts itself here
- * while you're on the floor and takes itself away when you leave.
- */
-export const hands: { bar: { hold(id: string): unknown; drop(): unknown } | null } = { bar: null };
 
 /** Past this distance (m) a character's small pieces aren't drawn, and its chain is one plain rope. */
 const FAR_M = 9;

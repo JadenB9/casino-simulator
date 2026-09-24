@@ -64,14 +64,6 @@ export function itemOfKind(id: unknown, kind: ItemKind): ShopItem | null {
   return item && item.kind === kind ? item : null;
 }
 
-/** The shop items a look wears, one per kind at most, in the order of ITEM_KINDS. */
-export function wornItems(look: Look): ShopItem[] {
-  return ITEM_KINDS.flatMap((k) => {
-    const item = itemOfKind(look[k], k);
-    return item ? [item] : [];
-  });
-}
-
 /** The look wearing `id` in place of whatever it wore of that kind, or with the kind taken off (null). */
 export function withItem(look: Look, kind: ItemKind, id: string | null): Look {
   const next: Look = { ...look };
@@ -141,7 +133,7 @@ export function barItem(id: unknown): BarItem | null {
 export const HOLD_MS = 5 * 60_000;
 
 /** Operation ids the client picks for a purchase, so a retry is the same purchase. */
-export const OP_RE = /^[A-Za-z0-9_-]{8,40}$/;
+const OP_RE = /^[A-Za-z0-9_-]{8,40}$/;
 
 export function isOp(x: unknown): x is string {
   return typeof x === 'string' && OP_RE.test(x);

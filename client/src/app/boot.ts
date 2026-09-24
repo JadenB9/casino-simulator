@@ -23,7 +23,6 @@ import { mountEmotes, openLeaderboard, socialApi, socialButton, type EmoteWheel 
 import { createChat, type Chat } from '../ui/chat/index.ts';
 import { mountFloorLife, type FloorLife } from '../ui/feed/index.ts';
 import { Bar, openBarMenu, openShop, shopApi, shopButton } from '../ui/shop/index.ts';
-import { hands } from '../world/wearables.ts';
 import { button, modal, toast } from '../ui/kit.ts';
 import { ENGINES } from '../../../shared/src/games/index.ts';
 import { CLOSE, type Profile } from '../../../shared/src/protocol.ts';
@@ -256,11 +255,11 @@ class App {
       seated: () => this.table !== null || this.world.seated !== null,
       onSit: (fn) => this.world.onEnter(() => fn()),
     });
-    hands.bar = this.bar;
+    this.world.useBar(this.bar);
   }
 
   private disconnectFloor(): void {
-    hands.bar = null;
+    this.world.useBar(null);
     this.bar?.dispose();
     this.bar = null;
     this.lifeOff?.();

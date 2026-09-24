@@ -17,8 +17,7 @@ import { bumpRate, orderKey } from './db.ts';
 import { moneyOf } from './transfer.ts';
 
 /** Purchases per account per minute, for the shop and the bar each. */
-const BUY_LIMIT = 20;
-const ORDER_LIMIT = 20;
+const LIMIT = 20;
 
 export async function shopApi(request: Request, env: Env, route: string, accountId: number, cors: Record<string, string>): Promise<Response> {
   const now = Date.now();
@@ -33,7 +32,7 @@ export async function shopApi(request: Request, env: Env, route: string, account
     const item = shopItem(body?.item);
     if (!item) return fail(404, 'NOT_FOUND', "The shop doesn't sell that.", cors);
     if (!isOp(body?.op)) return fail(400, 'BAD_REQUEST', 'A purchase needs an operation id.', cors);
-    if (!(await bumpRate(db, 'casino-shop', `a${accountId}`, BUY_LIMIT, 60_000, now))) return fail(429, 'RATE_LIMITED', 'Give it a minute.', cors);
+    if (!(await bumpRate(db, 'casino-shop', `a${accountId}`, LIMIT, 60_000, now))) return fail(429, 'RATE_LIMITED', 'Give it a minute.', cors);
     const r = await buyItem(db, accountId, item, body.op, now);
     if (r.kind === 'owned') return fail(409, 'NOT_ELIGIBLE', `You already own the ${item.name}.`, cors);
     if (r.kind === 'short') return notEnough(item, r, cors);
@@ -45,7 +44,7 @@ export async function shopApi(request: Request, env: Env, route: string, account
     const item = barItem(body?.item);
     if (!item) return fail(404, 'NOT_FOUND', "The bar doesn't serve that.", cors);
     if (!isOp(body?.op)) return fail(400, 'BAD_REQUEST', 'An order needs an operation id.', cors);
-    if (!(await bumpRate(db, 'casino-bar', `a${accountId}`, ORDER_LIMIT, 60_000, now))) return fail(429, 'RATE_LIMITED', 'The bar is busy. Give it a minute.', cors);
+    if (!(await bumpRate(db, 'casino-bar', `a${accountId}`, LIMIT, 60_000, now))) return fail(429, 'RATE_LIMITED', 'The bar is busy. Give it a minute.', cors);
     const r = await placeOrder(db, accountId, item, body.op, now);
     if (r.kind === 'short') return notEnough(item, r, cors);
     const order = { id: r.id, item: r.item, price: r.price, at: r.at, until: r.until };
@@ -62,7 +61,7 @@ function notEnough(item: ShopItem | BarItem, money: { balance: Cents; inPlay: Ce
   });
 }
 
-export async function catalogFor(db: D1Database, accountId: number): Promise<ShopResponse> {
+async function catalogFor(db: D1Database, accountId: number): Promise<ShopResponse> {
   const [owned, money] = await db.batch([
     db.prepare(`SELECT item, price, bought_at FROM casino_items WHERE account_id = ?1 ORDER BY bought_at`).bind(accountId),
     db.prepare(`SELECT balance FROM casino_accounts WHERE id = ?1`).bind(accountId),
@@ -80,7 +79,19 @@ interface Money {
   rev: number;
 }
 
-export type BuyOutcome = ({ kind: 'bought'; price: Cents; at: number } & Money) | { kind: 'owned' } | ({ kind: 'short' } & Money);
+type BuyOutcome = ({ kind: 'bought'; price: Cents; at: number } & Money) | { kind: 'owned' } | ({ kind: 'short' } & Money);
+
+/** A purchase's own row and the price off the balance, in one batch; the money after it. */
+async function pay(db: D1Database, row: D1PreparedStatement, accountId: number, price: Cents, now: number): Promise<Money> {
+  const [, paid] = await db.batch<{ balance: number; in_play: number; rev: number }>([
+    row,
+    db
+      .prepare(`UPDATE casino_accounts SET balance = balance - ?2, rev = rev + 1, last_seen = ?3 WHERE id = ?1 RETURNING balance, in_play, rev`)
+      .bind(accountId, price, now),
+  ]);
+  const m = paid!.results[0]!;
+  return { balance: m.balance, inPlay: m.in_play, rev: m.rev };
+}
 
 /**
  * Buy a shop item: the row that says you own it and the price off your balance, together. Owning
@@ -90,16 +101,8 @@ export type BuyOutcome = ({ kind: 'bought'; price: Cents; at: number } & Money) 
 export async function buyItem(db: D1Database, accountId: number, item: ShopItem, op: string, now: number): Promise<BuyOutcome> {
   const opId = `shop:${accountId}:${op}`;
   try {
-    const [, paid] = await db.batch<{ balance: number; in_play: number; rev: number }>([
-      db
-        .prepare(`INSERT INTO casino_items (account_id, item, price, bought_at, op_id) VALUES (?1, ?2, ?3, ?4, ?5)`)
-        .bind(accountId, item.id, item.price, now, opId),
-      db
-        .prepare(`UPDATE casino_accounts SET balance = balance - ?2, rev = rev + 1, last_seen = ?3 WHERE id = ?1 RETURNING balance, in_play, rev`)
-        .bind(accountId, item.price, now),
-    ]);
-    const m = paid!.results[0]!;
-    return { kind: 'bought', price: item.price, at: now, balance: m.balance, inPlay: m.in_play, rev: m.rev };
+    const row = db.prepare(`INSERT INTO casino_items (account_id, item, price, bought_at, op_id) VALUES (?1, ?2, ?3, ?4, ?5)`).bind(accountId, item.id, item.price, now, opId);
+    return { kind: 'bought', price: item.price, at: now, ...(await pay(db, row, accountId, item.price, now)) };
   } catch (err) {
     const row = await db
       .prepare(`SELECT price, bought_at, op_id FROM casino_items WHERE account_id = ?1 AND item = ?2`)
@@ -114,22 +117,14 @@ export async function buyItem(db: D1Database, accountId: number, item: ShopItem,
   }
 }
 
-export type OrderOutcome = ({ kind: 'ordered'; id: string; item: string; price: Cents; at: number; until: number } & Money) | ({ kind: 'short' } & Money);
+type OrderOutcome = ({ kind: 'ordered'; id: string; item: string; price: Cents; at: number; until: number } & Money) | ({ kind: 'short' } & Money);
 
 /** Order from the bar: the order row and the price off your balance, together. */
 export async function placeOrder(db: D1Database, accountId: number, item: BarItem, op: string, now: number): Promise<OrderOutcome> {
   const opId = orderKey(accountId, op);
   try {
-    const [, paid] = await db.batch<{ balance: number; in_play: number; rev: number }>([
-      db
-        .prepare(`INSERT INTO casino_orders (op_id, account_id, item, price, created_at) VALUES (?1, ?2, ?3, ?4, ?5)`)
-        .bind(opId, accountId, item.id, item.price, now),
-      db
-        .prepare(`UPDATE casino_accounts SET balance = balance - ?2, rev = rev + 1, last_seen = ?3 WHERE id = ?1 RETURNING balance, in_play, rev`)
-        .bind(accountId, item.price, now),
-    ]);
-    const m = paid!.results[0]!;
-    return { kind: 'ordered', id: op, item: item.id, price: item.price, at: now, until: now + HOLD_MS, balance: m.balance, inPlay: m.in_play, rev: m.rev };
+    const row = db.prepare(`INSERT INTO casino_orders (op_id, account_id, item, price, created_at) VALUES (?1, ?2, ?3, ?4, ?5)`).bind(opId, accountId, item.id, item.price, now);
+    return { kind: 'ordered', id: op, item: item.id, price: item.price, at: now, until: now + HOLD_MS, ...(await pay(db, row, accountId, item.price, now)) };
   } catch (err) {
     // The key holds the account, so a row here is this account's own order with this op: a
     // retry, answered with what was ordered the first time.

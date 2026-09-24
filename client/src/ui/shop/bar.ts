@@ -1,7 +1,8 @@
 // The bar's side of an order, from the moment it's paid until it leaves your hand. An order is
 // paid at once (POST /bar/order) and then brought over. Until the floor has waiters, it's handed
 // over after a short wait; a waiter takes over by calling deliverWith() and hearing onOrder(),
-// then calling world.holdItem(order.id) (which lands in hold() here) when it reaches you.
+// then calling world.holdItem(order.id) (the app hands this bar to world.useBar, so that lands
+// in hold() here) when it reaches you.
 //
 // Holding is part of your look (look.held), so everyone on the floor sees it, and the server
 // keeps it only while it's a recent paid order of yours. It leaves your hand when its time is up

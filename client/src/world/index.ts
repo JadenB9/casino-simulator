@@ -24,7 +24,6 @@ import { StationLod } from './lod.ts';
 import { Bloom, PixelRatio } from './bloom.ts';
 import type { MouseSettings } from './mouse.ts';
 import { Emotes, OWN_BUBBLE_Y, BUBBLE_Y, type CharacterSource } from './emotes.ts';
-import { hands } from './wearables.ts';
 import type { EmoteId } from '../../../shared/src/protocol.ts';
 import './world.css';
 
@@ -98,6 +97,8 @@ export interface FloorWorld extends World {
   holdItem(id: string): void;
   /** Put down what you're holding. */
   dropHeld(): void;
+  /** Where holdItem and dropHeld go (the app's bar, ui/shop/bar.ts); null to forget. */
+  useBar(bar: { hold(id: string): unknown; drop(): unknown } | null): void;
 }
 
 export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Promise<FloorWorld> {
@@ -176,6 +177,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
 
   const emotes = new Emotes();
   let remotes: CharacterSource | null = null;
+  let bar: Parameters<FloorWorld['useBar']>[0] = null;
 
   let lastCalls = 0;
   let lastTris = 0;
@@ -259,8 +261,11 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
     useRemotes(source) {
       remotes = source;
     },
-    holdItem: (id) => void hands.bar?.hold(id),
-    dropHeld: () => void hands.bar?.drop(),
+    holdItem: (id) => void bar?.hold(id),
+    dropHeld: () => void bar?.drop(),
+    useBar(b) {
+      bar = b;
+    },
     dispose() {
       emotes.dispose();
       lod.dispose();

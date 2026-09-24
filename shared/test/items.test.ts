@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from 'vitest';
 import {
-  BAR_MENU, HOLD_MS, ITEM_KINDS, KIND_LABELS, SHOP_ITEMS, barItem, isOp, itemOfKind, shopItem, withItem, wornItems,
+  BAR_MENU, HOLD_MS, ITEM_KINDS, KIND_LABELS, SHOP_ITEMS, barItem, isOp, itemOfKind, shopItem, withItem,
 } from '../src/items.ts';
 import { DEFAULT_LOOK, lookFromJson, parseLook, type Look } from '../src/look.ts';
 import { DOLLAR, LOAN_AMOUNT, STARTING_BALANCE, isCents } from '../src/money.ts';
@@ -102,7 +102,6 @@ describe('looks with items', () => {
   it('keeps worn items of the right kind', () => {
     const look = parseLook({ ...base, chain: 'iced-cuban', grill: 'diamond-set', clothes: 'white-tuxedo', watch: 'gold-watch', shades: 'gold-aviators', hat: 'black-fedora' });
     expect(look).toMatchObject({ chain: 'iced-cuban', grill: 'diamond-set', clothes: 'white-tuxedo', watch: 'gold-watch', shades: 'gold-aviators', hat: 'black-fedora' });
-    expect(wornItems(look!).map((i) => i.id)).toEqual(['iced-cuban', 'diamond-set', 'white-tuxedo', 'gold-watch', 'gold-aviators', 'black-fedora']);
   });
 
   it('drops unknown ids and items in the wrong slot, but keeps the rest of the look', () => {

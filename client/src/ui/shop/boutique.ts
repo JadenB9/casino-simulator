@@ -184,8 +184,7 @@ export function openShop(deps: ShopDeps): Closable {
   const paint = () => {
     const it = picked;
     balVal.textContent = formatMoney(balance());
-    const n = owned ? owned.size : SHOP_ITEMS.filter((i) => wearing(i)).length;
-    ownVal.textContent = owned ? `${n} ${n === 1 ? 'piece' : 'pieces'} owned` : '';
+    ownVal.textContent = owned ? `${owned.size} ${owned.size === 1 ? 'piece' : 'pieces'} owned` : '';
     capName.textContent = it.name;
     capLine.textContent = `${KIND_ONE[it.kind]} · ${formatMoney(it.price)}`;
     selName.textContent = it.name;
@@ -231,14 +230,13 @@ export function openShop(deps: ShopDeps): Closable {
   };
 
   // ---- buying and wearing
-  const wear = async (it: ShopItem, on: boolean): Promise<boolean> => {
+  const wear = async (it: ShopItem, on: boolean): Promise<void> => {
     const p = session.profile;
-    if (!p) return false;
+    if (!p) return;
     const stored = await deps.api.saveLook(withItem(p.look, it.kind, on ? it.id : null));
     const now = session.profile;
     if (now) session.set({ ...now, look: stored });
     room.setLook(withItem(stored, it.kind, it.id));
-    return true;
   };
 
   const buy = (it: ShopItem) => {
@@ -257,7 +255,7 @@ export function openShop(deps: ShopDeps): Closable {
         (owned ??= new Map()).set(it.id, r.at);
         deps.sfx?.play('chips-stack', { volume: 0.5 });
         // walk out wearing it, the way a shop hands it over
-        await wear(it, true).catch(() => false);
+        await wear(it, true).catch(() => {});
         note = { text: `The ${it.name} is yours. You're wearing it.`, kind: 'ok' };
         toast(`Bought the ${it.name} for ${formatMoney(r.price)}.`);
       } catch (err) {
