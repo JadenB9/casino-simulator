@@ -2,6 +2,7 @@
 // Headless check of several hands at the solo tables, in the dev harness: pick three hands in the
 // tray, bet each spot by clicking it on the felt, deal, play every hand in turn (blackjack splits
 // one when it can), and screenshot each stage.
+// Fixed player names (mh_e2e_*), so reruns don't spend the new-account limit.
 // Usage: node scripts/e2e/multihand.mjs [port] [outDir] [blackjack|threecard|war|all]
 
 import { chromium } from 'playwright';
@@ -18,9 +19,13 @@ async function open(game, name) {
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
   page.on('pageerror', (e) => errors.push(String(e)));
   await page.goto(`http://localhost:${port}/casino/?dev=table&game=${game}&name=${name}`);
-  await page.waitForSelector('.modal input[type=number]', { timeout: 30000 });
-  await page.fill('.modal input[type=number]', '5000');
-  await page.click('.modal .btn.primary');
+  // A name used before may still have chips at its table; otherwise the table asks for a buy-in.
+  await page.waitForFunction(() => window.casino?.table?.snapshot || document.querySelector('.modal input[type=number]'), null, { timeout: 30000 });
+  await page.waitForTimeout(500);
+  if (await page.$('.modal input[type=number]')) {
+    await page.fill('.modal input[type=number]', '5000');
+    await page.click('.modal .btn.primary');
+  }
   await page.waitForFunction(() => window.casino?.table?.snapshot?.you?.status === 'seated', null, { timeout: 30000 });
   await page.waitForTimeout(600);
   const shots = [];
@@ -49,13 +54,31 @@ async function open(game, name) {
       p.project(engine.camera);
       return { x: ((p.x + 1) / 2) * innerWidth, y: ((1 - p.y) / 2) * innerHeight };
     }, id);
-  /** Choose how many hands in the tray's picker. */
-  const pick = (n) => page.click(`.mh-picker .mh-n:nth-child(${n})`);
+  /** The camera has stopped moving (a glide runs on the frame clock, slow in a headless browser). */
+  const still = async () => {
+    const at = () => page.evaluate(() => window.casino.engine.camera.position.toArray().map((x) => x.toFixed(4)).join());
+    for (let prev = await at(), n = 0; n < 40; n++) {
+      await page.waitForTimeout(250);
+      const now = await at();
+      if (now === prev) return;
+      prev = now;
+    }
+  };
+  /** Choose how many hands in the picker, and let the camera settle on them. */
+  const pick = async (n) => {
+    // a rerun under the same name can find last run's chips still on the layout
+    await page.keyboard.press('x');
+    await settle(100);
+    await page.click(`.mh-picker .mh-n:nth-child(${n})`);
+    await page.waitForFunction((n) => document.querySelector('.mh-n[aria-checked="true"]')?.textContent === String(n), n, { timeout: 10000 });
+    await page.waitForTimeout(300);
+    await still();
+  };
   return { page, errors, shots, shot, settle, region, pick };
 }
 
 async function blackjack() {
-  const t = await open('blackjack', `mhbj_${Date.now().toString(36).slice(-5)}`);
+  const t = await open('blackjack', 'mh_e2e_bj');
   const { page } = t;
   const state = () =>
     page.evaluate(() => {
@@ -74,8 +97,6 @@ async function blackjack() {
     return ace && sum <= 11 ? sum + 10 : sum;
   };
   await t.pick(3);
-  await page.waitForFunction(() => window.casino.table.view.mine.length === 3, null, { timeout: 10000 });
-  await page.waitForTimeout(1100);
   await t.shot('1-three-spots');
 
   const did = { split: false, turnShot: false, insurance: false };
@@ -141,12 +162,10 @@ async function blackjack() {
 }
 
 async function threecard() {
-  const t = await open('threecard', `mhtc_${Date.now().toString(36).slice(-5)}`);
+  const t = await open('threecard', 'mh_e2e_tc');
   const { page } = t;
   const decideUp = () => page.waitForSelector('.tc-decide:not([hidden])', { timeout: 30000 });
   await t.pick(3);
-  await page.waitForFunction(() => document.querySelector('.mh-n[aria-checked="true"]')?.textContent === '3', null, { timeout: 10000 });
-  await page.waitForTimeout(1100);
   await t.shot('1-three-hands');
   // $25 Antes on all three (the tray starts on the $25 chip), $5 Pair Plus on the first two.
   for (const spot of [0, 1, 2]) {
@@ -191,9 +210,59 @@ async function threecard() {
   await page.close();
 }
 
+async function war() {
+  const t = await open('war', 'mh_e2e_wr');
+  const { page } = t;
+  await t.pick(3);
+  await t.shot('1-three-spots');
+  // $25 bets on all three spots (the tray starts on the $25 chip), a $5 Tie bet on the middle one.
+  for (const spot of [0, 1, 2]) {
+    const at = await t.region(`bet:${spot}`);
+    await page.mouse.click(at.x, at.y);
+    await page.waitForTimeout(150);
+  }
+  await page.keyboard.press('2');
+  const tie = await t.region('tie:0');
+  await page.mouse.click(tie.x, tie.y);
+  await page.waitForFunction(() => /Bet\$80/.test(document.querySelector('.wr-meters')?.textContent ?? ''), null, { timeout: 10000 });
+  await t.settle(200);
+  await t.shot('2-bets');
+  let tied = false;
+  let rounds = 0;
+  for (; rounds < 30 && !tied; rounds++) {
+    if (rounds > 0) {
+      await page.keyboard.press('r');
+      await page.waitForFunction(() => /Bet\$80/.test(document.querySelector('.wr-meters')?.textContent ?? ''), null, { timeout: 10000 });
+      await t.settle(100);
+    }
+    await page.keyboard.press('Space');
+    await t.settle(500);
+    if (rounds === 0) await t.shot('3-deal');
+    for (let k = 0; k < 3; k++) {
+      const up = await page.$('.wr-decide:not([hidden])');
+      if (!up) break;
+      if (!tied) {
+        tied = true;
+        await t.shot('4-tie-decide');
+      }
+      await page.keyboard.press('w');
+      await t.settle(400);
+    }
+    await t.settle(600);
+  }
+  if (tied) await t.shot('5-war-results');
+  await page.waitForFunction(() => /Bet\$0/.test(document.querySelector('.wr-meters')?.textContent ?? ''), null, { timeout: 30000 });
+  await t.settle(300);
+  await t.shot('6-settled');
+  const meters = await page.textContent('.wr-meters');
+  report.war = { rounds, tied, meters, shots: t.shots, errors: t.errors.slice(0, 10) };
+  await page.close();
+}
+
 try {
   if (which === 'all' || which === 'blackjack') await blackjack();
   if (which === 'all' || which === 'threecard') await threecard();
+  if (which === 'all' || which === 'war') await war();
 } catch (err) {
   report.error = String(err?.stack ?? err);
 }

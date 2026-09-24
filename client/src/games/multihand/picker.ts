@@ -1,7 +1,7 @@
 // "Hands 1 2 3": how many spots a solo player plays at the tables that deal each player a hand of
-// their own (blackjack, Three Card Poker, Casino War). A small panel just above the chip tray,
-// shown while bets can go down at a solo table; the table keeps the choice from round to round
-// (games/spots.ts), and this only shows it and asks for a change.
+// their own (blackjack, Three Card Poker, Casino War). A small panel by the chip tray (where, on
+// each screen, is multihand.css), shown while bets can go down at a solo table; the table keeps
+// the choice from round to round (games/spots.ts), and this only shows it and asks for a change.
 
 import { el } from '../../ui/kit.ts';
 import './multihand.css';

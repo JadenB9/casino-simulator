@@ -3,6 +3,11 @@
 // dealer; each spot is swept or paid where it lies, right to left; a tie pays its Tie bet and waits
 // for War or Surrender; the dealer burns three into the discard holder and deals the war; and the
 // chips go back to the players.
+//
+// Hands sit at spots numbered like the seats (the key everywhere below). At a shared table you
+// play your seat's; alone you can play up to three, chosen in the Hands picker, each with its own
+// bet and Tie bet. Ties are decided one at a time, first base first, the War box of the tie being
+// decided ringed on the felt; one war deal then settles every spot that went to war.
 
 import * as THREE from 'three';
 import type { TableView, TableViewCtx } from '../contract.ts';
@@ -10,7 +15,7 @@ import type { Member } from '../../../../shared/src/protocol.ts';
 import type { TableConfig, GameEvent } from '../../../../shared/src/engine.ts';
 import type { Card } from '../../../../shared/src/cards.ts';
 import { type Cents, BETTING_CHIPS, formatMoney } from '../../../../shared/src/money.ts';
-import { BETTING_MS, DECISION_MS } from '../../../../shared/src/games/war/engine.ts';
+import { BETTING_MS, DECISION_MS, MAX_SPOTS } from '../../../../shared/src/games/war/engine.ts';
 import type { WarView, WarEvent, SeatView } from '../../../../shared/src/games/war/protocol.ts';
 import { DEFAULT_RULES, SHOE_CARDS, bestChoice, cardName, exactOdds, pluralName, type Settlement, type WarRules } from '../../../../shared/src/games/war/rules.ts';
 import { CardMesh, dealCard } from '../../table/cards.ts';
@@ -37,11 +42,17 @@ import {
   positionOf,
   railPoint,
   spotPoint,
+  spotsPose,
+  cameraPose,
 } from './layout.ts';
 import { FLOOR_FELT, discardStack } from './model.ts';
+import { SpotPicker } from '../multihand/picker.ts';
+import { glideTo, setSpotsInPlay } from '../multihand/frame.ts';
 import './war.css';
 
 const KINDS: SpotKind[] = ['tie', 'bet', 'war'];
+/** Between one spot's celebration and the next, so each banner has its moment. */
+const CELEBRATION_GAP_MS = 2100;
 const RACK_POINT = new THREE.Vector3(RACK.x, TOP_Y + 0.012, RACK.z);
 
 type Bets = { bet: Cents; tie: Cents };
@@ -95,16 +106,39 @@ export function mountWar(ctx: TableViewCtx): TableView {
   // the newest state from the server, which can be ahead of what is drawn while a round animates
   let latest: WarView | null = null;
   let members: Member[] = [];
+  // the spots I play (one at a shared table), first spot first
+  let spots: number[] = [];
 
-  // my bets as I've asked for them, ahead of the server's answer, and the steps to undo
-  let mine: Bets = { ...NO_BETS };
-  let history: Bets[] = [];
-  let last: Bets | null = null;
+  // my bets as I've asked for them, by spot, ahead of the server's answer, and the steps to undo
+  let wanted: Record<number, Bets> = {};
+  let history: Record<number, Bets>[] = [];
+  let last: Record<number, Bets> | null = null;
   let lastNet: Cents | null = null;
+  // this round's net over my spots so far (a surrender settles before the war)
+  let roundNet: Cents = 0;
   let readyOn = false;
   let lastAction: 'bet' | 'other' = 'other';
-  // set once my War or Surrender is on its way, so a stale view can't bring the buttons back
-  let decided = false;
+  // ties whose War or Surrender is on its way, so a stale view can't bring their buttons back
+  const sent = new Set<number>();
+  // how many spots the camera was last framed for (null until the first view)
+  let framed: number | null = null;
+  let celebrateAt = 0;
+  let disposed = false;
+
+  /** A spot is mine: my seat's at a shared table, every one at my own. */
+  const owns = (spot: number): boolean => me !== null && (mode === 'solo' || spot === me);
+  const betsOf = (spot: number): Bets => wanted[spot] ?? NO_BETS;
+  const total = (b: Record<number, Bets>): Cents => Object.values(b).reduce((a, x) => a + x.bet + x.tie, 0);
+  const byPosition = (a: number, b: number): number => positionOf(a) - positionOf(b);
+
+  /** A banner for one of my spots, a couple of seconds after the one before it. */
+  const celebrateSoon = (show: () => void): void => {
+    const now = performance.now();
+    const at = Math.max(now, celebrateAt);
+    celebrateAt = at + CELEBRATION_GAP_MS;
+    if (at <= now) show();
+    else setTimeout(() => !disposed && show(), at - now);
+  };
 
   // ---- table objects -----------------------------------------------------------------------
 
@@ -175,6 +209,8 @@ export function mountWar(ctx: TableViewCtx): TableView {
   });
   tray.select(BETTING_CHIPS[2]!);
   ctx.ui.append(tray.root);
+  const picker = new SpotPicker(MAX_SPOTS, (n) => pickSpots(n));
+  ctx.ui.append(picker.root);
 
   const warBtn = button('Go to war', () => decide('war'), { cls: 'primary', key: 'W' });
   const surrenderBtn = button('Surrender', () => decide('surrender'), { key: 'S' });
@@ -252,6 +288,11 @@ export function mountWar(ctx: TableViewCtx): TableView {
   // ---- helpers over the current view -------------------------------------------------------
 
   const seatView = (seat: number | null): SeatView | undefined => (seat === null || !view ? undefined : view.seats[seat]);
+  /** My tie waiting on War or Surrender, first base first: the one the bar and the ring are for. */
+  const deciding = (): number | null => {
+    if (view?.phase !== 'deciding') return null;
+    return spots.filter((s) => seatView(s)?.decision === 'pending' && !sent.has(s)).sort(byPosition)[0] ?? null;
+  };
   const canBet = (): boolean => {
     if (me === null || !latest) return false;
     if (mode === 'multi') return latest.phase === 'betting';
@@ -261,10 +302,7 @@ export function mountWar(ctx: TableViewCtx): TableView {
     if (!cfg) return Infinity;
     return Math.max((cfg.limits.bet ?? cfg.limits.default).max, (cfg.limits.tie ?? cfg.limits.default).max);
   };
-  const myTiePending = (): boolean => {
-    const sv = seatView(me);
-    return view?.phase === 'deciding' && sv?.decision === 'pending' && !decided;
-  };
+  const myTiePending = (): boolean => deciding() !== null;
 
   /** Advice while the player has Tips on: the war call on a tie, the Tie bet's cost while betting. */
   const renderTip = (): void => {
@@ -289,25 +327,36 @@ export function mountWar(ctx: TableViewCtx): TableView {
   const unsubscribeTips = ctx.tips.subscribe(() => renderTip());
 
   const renderMeters = (): void => {
-    const sv = seatView(me);
-    const live = view && sv && !sv.result && (view.phase === 'betting' || view.phase === 'deciding') ? sv.bet + (view.phase === 'betting' ? sv.tie : 0) + sv.raise : 0;
+    let live = 0;
+    for (const spot of spots) {
+      const sv = seatView(spot);
+      if (view && sv && !sv.result && (view.phase === 'betting' || view.phase === 'deciding')) live += sv.bet + (view.phase === 'betting' ? sv.tie : 0) + sv.raise;
+    }
     meterStack.textContent = money(stack);
-    meterBet.textContent = money(view?.phase === 'betting' ? mine.bet + mine.tie : live);
+    meterBet.textContent = money(view?.phase === 'betting' ? total(wanted) : live);
     meterLast.textContent = lastNet === null ? '–' : signed(lastNet);
     meterLast.className = `money ${lastNet === null || lastNet === 0 ? '' : lastNet > 0 ? 'up' : 'down'}`;
   };
 
   const renderControls = (): void => {
-    const sv = seatView(me);
-    const deciding = myTiePending();
-    decideBar.hidden = !deciding;
-    tray.root.classList.toggle('wr-away', deciding);
-    if (deciding && sv) warBtn.firstChild!.textContent = `Go to war ${money(sv.bet)}`;
+    const up = deciding();
+    const sv = seatView(up);
+    decideBar.hidden = up === null;
+    tray.root.classList.toggle('wr-away', up !== null);
+    if (up !== null && sv) {
+      warBtn.firstChild!.textContent = `Go to war ${money(sv.bet)}`;
+      // With several ties, which one this is: they go first base first.
+      const ties = spots.filter((s) => seatView(s)?.decision != null).sort(byPosition);
+      decideHint.textContent = ties.length > 1 ? `Tie ${ties.indexOf(up) + 1} of ${ties.length} · Surrender gives back half the bet` : 'Surrender gives back half the bet';
+    }
+    picker.show(mode === 'solo' && canBet());
+    picker.set(Math.max(1, spots.length));
     if (mode === 'solo') {
-      tray.setPrimary('Deal', !!view && view.phase === 'betting' && mine.bet > 0);
+      tray.setPrimary('Deal', !!view && view.phase === 'betting' && spots.some((s) => betsOf(s).bet > 0));
     } else {
       tray.setPrimary(readyOn ? 'Waiting' : 'Ready', !!view && view.phase === 'betting' && me !== null);
     }
+    renderRings();
     renderMeters();
     renderTip();
   };
@@ -337,7 +386,7 @@ export function mountWar(ctx: TableViewCtx): TableView {
   };
 
   const handLabel = (seat: number, sv: SeatView): void => {
-    const cls = `wr-hand${seat === me ? ' mine' : ''}`;
+    const cls = `wr-hand${owns(seat) ? ' mine' : ''}`;
     if (!sv.card) {
       dropLabel(`hand:${seat}`);
       return;
@@ -347,7 +396,8 @@ export function mountWar(ctx: TableViewCtx): TableView {
     if (r) {
       // the round's net, Tie bet included: a lost war can still come out even
       const net = r.returned - r.wagered;
-      parts.push({ text: OUTCOME_WORDS[r.outcome], cls: 'muted' });
+      // side by side, several spots' labels only have room for the card and the net
+      if (spots.length < 2 || !owns(seat)) parts.push({ text: OUTCOME_WORDS[r.outcome], cls: 'muted' });
       parts.push({ text: net === 0 ? 'Even' : signed(net), cls: net > 0 ? 'net up' : net < 0 ? 'net down' : 'net' });
     } else if (sv.decision === 'pending') {
       parts.push({ text: 'Tie', cls: 'muted' });
@@ -376,6 +426,9 @@ export function mountWar(ctx: TableViewCtx): TableView {
 
   const draw = (v: WarView): void => {
     view = v;
+    spots = v.mine ?? (me !== null ? [me] : []);
+    // a tie the table has answered for is no longer on its way
+    for (const spot of [...sent]) if (v.seats[spot]?.decision !== 'pending') sent.delete(spot);
     clearPayouts();
     for (let seat = 0; seat < SEAT_COUNT; seat++) {
       const sv = v.seats[seat];
@@ -383,9 +436,9 @@ export function mountWar(ctx: TableViewCtx): TableView {
       for (const kind of KINDS) {
         const s = spotStack(seat, kind);
         s.position.copy(spotPoint(seat, kind));
-        const own = seat === me && v.phase === 'betting';
+        const own = spots.includes(seat) && v.phase === 'betting';
         let amount = 0;
-        if (own) amount = kind === 'bet' ? mine.bet : kind === 'tie' ? mine.tie : 0;
+        if (own) amount = kind === 'bet' ? betsOf(seat).bet : kind === 'tie' ? betsOf(seat).tie : 0;
         else if (live && sv) amount = kind === 'bet' ? sv.bet : kind === 'war' ? sv.raise : v.phase === 'betting' ? sv.tie : 0;
         if (s.amount !== amount) s.set(amount);
       }
@@ -422,37 +475,74 @@ export function mountWar(ctx: TableViewCtx): TableView {
     }
     if (v.phase !== 'betting') {
       // the round is over (or cards are out): the next bet starts from nothing
-      mine = { ...NO_BETS };
+      wanted = {};
       history = [];
     }
+    frame();
     renderControls();
   };
 
-  /** What the table itself holds for me right now. */
-  const serverBets = (): Bets => {
-    const sv = seatView(me);
-    return view?.phase === 'betting' && sv ? { bet: sv.bet, tie: sv.tie } : { ...NO_BETS };
+  /**
+   * The camera takes in every spot I play: the app flies to the module's play pose when I sit down
+   * (it asks after this view has seen the table), and a change of count at the table glides.
+   */
+  const frame = (): void => {
+    const n = mode === 'solo' ? Math.max(1, spots.length) : 1;
+    setSpotsInPlay('war', n);
+    if (framed !== null && framed !== n && !disposed) void glideTo(ctx.stage, n > 1 ? spotsPose(spots) : cameraPose(me ?? 0));
+    framed = n;
+  };
+
+  /** What the table itself holds for me right now, by spot. */
+  const serverBets = (): Record<number, Bets> => {
+    const out: Record<number, Bets> = {};
+    if (view?.phase !== 'betting') return out;
+    for (const spot of spots) {
+      const sv = seatView(spot);
+      if (sv) out[spot] = { bet: sv.bet, tie: sv.tie };
+    }
+    return out;
   };
 
   // ---- the player's moves --------------------------------------------------------------------
 
-  const sendBets = (next: Bets, push = true): void => {
-    if (!canBet() || (next.bet === mine.bet && next.tie === mine.tie)) return;
-    if (push) history.push({ ...mine });
-    mine = next;
-    if (me !== null) {
-      spotStack(me, 'bet').set(next.bet);
-      spotStack(me, 'tie').set(next.tie);
-    }
+  /**
+   * Set my spots' bets to `next` (every spot I play), sending one message per spot that changed.
+   * `push` keeps the step for Undo.
+   */
+  const sendBets = (next: Record<number, Bets>, push = true): void => {
+    if (!canBet()) return;
+    const changed = spots.filter((s) => {
+      const a = betsOf(s);
+      const b = next[s] ?? NO_BETS;
+      return a.bet !== b.bet || a.tie !== b.tie;
+    });
+    if (changed.length === 0) return;
+    if (push) history.push(structuredClone(wanted));
+    wanted = structuredClone(next);
     lastAction = 'bet';
-    ctx.link.act({ type: 'bet', bet: next.bet, tie: next.tie });
+    for (const spot of changed) {
+      const b = betsOf(spot);
+      spotStack(spot, 'bet').set(b.bet);
+      spotStack(spot, 'tie').set(b.tie);
+      ctx.link.act({ type: 'bet', bet: b.bet, tie: b.tie, spot });
+    }
     renderControls();
   };
 
-  const addChip = (kind: 'bet' | 'tie'): void => {
+  const addChip = (spot: number, kind: 'bet' | 'tie'): void => {
     if (!canBet()) return;
     ctx.sfx.play('chip-lay');
-    sendBets({ ...mine, [kind]: mine[kind] + tray.selected.value });
+    const b = betsOf(spot);
+    sendBets({ ...wanted, [spot]: { ...b, [kind]: b[kind] + tray.selected.value } });
+  };
+  /** The keyboard's B and T: the chosen chip on each spot I play. */
+  const addChipEverywhere = (kind: 'bet' | 'tie'): void => {
+    if (!canBet()) return;
+    ctx.sfx.play('chip-lay');
+    const next = structuredClone(wanted);
+    for (const spot of spots) next[spot] = { ...betsOf(spot), [kind]: betsOf(spot)[kind] + tray.selected.value };
+    sendBets(next);
   };
 
   const undo = (): void => {
@@ -460,19 +550,32 @@ export function mountWar(ctx: TableViewCtx): TableView {
     if (prev) sendBets(prev, false);
   };
   const clear = (): void => {
-    if (mine.bet + mine.tie > 0) sendBets({ ...NO_BETS });
+    if (total(wanted) > 0) sendBets({});
   };
+  /** Rebet: last round's spots again, one by one; ×2 doubles what's down (or last round's). */
   const rebet = (times: number): void => {
-    const from = times > 1 && mine.bet + mine.tie > 0 ? mine : last;
+    const from = times > 1 && total(wanted) > 0 ? wanted : last;
     if (!from) return;
+    const next: Record<number, Bets> = {};
+    for (const spot of spots) if (from[spot]) next[spot] = { bet: from[spot]!.bet * times, tie: from[spot]!.tie * times };
     ctx.sfx.play('chips-handle');
-    sendBets({ bet: from.bet * times, tie: from.tie * times });
+    sendBets(next);
+  };
+
+  /** Solo: play `n` spots; bets on the spots let go come back (the table returns them). */
+  const pickSpots = (n: number): void => {
+    if (mode !== 'solo' || !canBet()) return;
+    for (const spot of Object.keys(wanted).map(Number)) if (spot >= n) delete wanted[spot];
+    history = [];
+    lastAction = 'other';
+    ctx.sfx.play('ui-click');
+    ctx.link.act({ type: 'spots', n });
   };
 
   const primary = (): void => {
     if (!latest || me === null) return;
     if (mode === 'solo') {
-      if (latest.phase === 'betting' && mine.bet > 0) {
+      if (latest.phase === 'betting' && spots.some((s) => betsOf(s).bet > 0)) {
         lastAction = 'other';
         ctx.link.act({ type: 'deal' });
       }
@@ -485,15 +588,16 @@ export function mountWar(ctx: TableViewCtx): TableView {
     renderControls();
   };
 
+  /** War or Surrender on the tie being decided; the next of mine waiting comes up when the table answers. */
   const decide = (choice: 'war' | 'surrender'): void => {
-    const sv = me === null ? undefined : latest?.seats[me];
-    if (decided || latest?.phase !== 'deciding' || sv?.decision !== 'pending') return;
+    const spot = deciding();
+    if (spot === null || latest?.phase !== 'deciding' || latest.seats[spot]?.decision !== 'pending') return;
     ctx.sfx.play('ui-click');
-    decided = true;
+    sent.add(spot);
     decideBar.hidden = true;
-    tray.root.classList.remove('wr-away');
     lastAction = 'other';
-    ctx.link.act({ type: choice });
+    ctx.link.act({ type: choice, spot });
+    renderRings();
     renderTip();
   };
 
@@ -510,33 +614,69 @@ export function mountWar(ctx: TableViewCtx): TableView {
   const tipObj = ctx.stage.label(tip, new THREE.Vector3());
   tipObj.visible = false;
 
-  const mySpotAt = (e: PointerEvent): 'bet' | 'tie' | null => {
+  /** One of my spots' Bet or Tie circles under the pointer. */
+  const mySpotAt = (e: PointerEvent): { spot: number; kind: 'bet' | 'tie' } | null => {
     if (e.target !== canvas || me === null) return null;
-    const id = ctx.stage.pick(e)?.region;
-    if (id === `bet:${me}`) return 'bet';
-    if (id === `tie:${me}`) return 'tie';
+    const id = ctx.stage.pick(e)?.region ?? '';
+    for (const spot of spots) {
+      if (id === `bet:${spot}`) return { spot, kind: 'bet' };
+      if (id === `tie:${spot}`) return { spot, kind: 'tie' };
+    }
     return null;
   };
   const onDown = (e: PointerEvent): void => {
     if (e.button !== 0) return;
-    const kind = mySpotAt(e);
-    if (kind) addChip(kind);
+    const at = mySpotAt(e);
+    if (at) addChip(at.spot, at.kind);
   };
   const onMove = (e: PointerEvent): void => {
-    const kind = canBet() ? mySpotAt(e) : null;
-    hoverRing.visible = kind !== null;
-    tipObj.visible = kind !== null;
-    canvas.style.cursor = kind ? 'pointer' : '';
-    if (!kind || me === null) return;
-    hoverRing.position.copy(spotPoint(me, kind, TOP_Y + 0.0015));
+    const at = canBet() ? mySpotAt(e) : null;
+    hoverRing.visible = at !== null;
+    tipObj.visible = at !== null;
+    canvas.style.cursor = at ? 'pointer' : '';
+    if (!at) return;
+    const { spot, kind } = at;
+    hoverRing.position.copy(spotPoint(spot, kind, TOP_Y + 0.0015));
     hoverRing.scale.setScalar(SPOT_SIZE[kind]);
-    tipObj.position.copy(besideSpot(me, kind, -0.16));
-    const amount = kind === 'bet' ? mine.bet : mine.tie;
+    tipObj.position.copy(besideSpot(spot, kind, -0.16));
+    const amount = betsOf(spot)[kind];
     const pays = kind === 'bet' ? 'pays 1 to 1' : `pays ${rules.tiePays} to 1 on a tie`;
     tip.textContent = `${kind === 'bet' ? 'BET' : 'TIE'} · ${pays}${amount ? ` · ${money(amount)}` : ''}`;
   };
   addEventListener('pointerdown', onDown);
   addEventListener('pointermove', onMove);
+
+  // ---- rings: faint ones round my Bet circles while I bet on several, a lit one round the War
+  // box of the tie I'm deciding -------------------------------------------------------------------
+
+  const ringMat = new THREE.MeshBasicMaterial({ color: '#f5dc9c', transparent: true, opacity: 0.38, depthWrite: false });
+  const litMat = new THREE.MeshBasicMaterial({ color: '#ffe7ad', transparent: true, opacity: 0.9, depthWrite: false });
+  const ringGeo = new THREE.RingGeometry(SPOT_SIZE.bet * 1.16, SPOT_SIZE.bet * 1.3, 48);
+  const litGeo = new THREE.RingGeometry(SPOT_SIZE.war * 1.18, SPOT_SIZE.war * 1.5, 48);
+  const rings = new Map<string, THREE.Mesh>();
+  const renderRings = (): void => {
+    const want = new Map<string, { at: THREE.Vector3; lit: boolean }>();
+    if (mode === 'solo' && spots.length > 1 && canBet() && view?.phase !== 'deciding') {
+      for (const spot of spots) want.set(`b:${spot}`, { at: spotPoint(spot, 'bet', TOP_Y + 0.0013), lit: false });
+    }
+    const up = spots.length > 1 ? deciding() : null;
+    if (up !== null) want.set(`w:${up}`, { at: spotPoint(up, 'war', TOP_Y + 0.0013), lit: true });
+    for (const [key, w] of want) {
+      let ring = rings.get(key);
+      if (!ring) {
+        ring = new THREE.Mesh(w.lit ? litGeo : ringGeo, w.lit ? litMat : ringMat);
+        ring.rotation.x = -Math.PI / 2;
+        root.add(ring);
+        rings.set(key, ring);
+      }
+      ring.position.copy(w.at);
+    }
+    for (const [key, ring] of rings) {
+      if (want.has(key)) continue;
+      ring.removeFromParent();
+      rings.delete(key);
+    }
+  };
 
   // ---- name tags for the other players -------------------------------------------------------
 
@@ -683,17 +823,19 @@ export function mountWar(ctx: TableViewCtx): TableView {
     if (!tiePaid) return;
     ctx.sfx.play('chips-stack');
     const paid = await payOut(seat, 'tie', tiePaid - stake);
-    if (seat !== me) return;
+    if (!owns(seat)) return;
     pill(seat, 'tie', `${signed(tiePaid - stake)} · ${rules.tiePays} TO 1`, 'win');
     // the light goes under the chips: a halo laid over a flat card washes its face out
-    celebrate(
-      { stage: ctx.stage, ui: ctx.ui, sfx: ctx.sfx },
-      {
-        title: `Tie pays ${rules.tiePays} to 1`,
-        sub: `${signed(tiePaid - stake)} on the Tie bet`,
-        tier: 'big',
-        glow: present(spotStack(seat, 'tie'), paid),
-      },
+    celebrateSoon(() =>
+      celebrate(
+        { stage: ctx.stage, ui: ctx.ui, sfx: ctx.sfx },
+        {
+          title: `Tie pays ${rules.tiePays} to 1`,
+          sub: `${signed(tiePaid - stake)} on the Tie bet`,
+          tier: 'big',
+          glow: present(spotStack(seat, 'tie'), paid),
+        },
+      ),
     );
   };
 
@@ -701,7 +843,7 @@ export function mountWar(ctx: TableViewCtx): TableView {
   const settleSeat = async (seat: number, r: Settlement, bets: SeatView): Promise<void> => {
     const jobs: Promise<unknown>[] = [];
     const lost: SpotKind[] = [];
-    const mineSeat = seat === me;
+    const mineSeat = owns(seat);
     let warPaid: ChipStack | null = null;
     // the Tie bet was settled at the deal when the cards tied; otherwise it lost here
     if (bets.tie > 0 && r.outcome !== 'surrender' && !r.outcome.startsWith('war')) {
@@ -744,14 +886,17 @@ export function mountWar(ctx: TableViewCtx): TableView {
     await Promise.all(jobs);
     if (mineSeat && (r.outcome === 'war-win' || r.outcome === 'war-tie')) {
       const win = r.war - bets.raise;
-      celebrate(
-        { stage: ctx.stage, ui: ctx.ui, sfx: ctx.sfx },
-        {
-          title: r.outcome === 'war-win' ? 'War won' : 'Tie in the war',
-          sub: `The raise pays ${r.outcome === 'war-win' ? 1 : rules.warTiePays} to 1 · ${signed(win)}`,
-          tier: 'nice',
-          glow: present(spotStack(seat, 'war'), warPaid),
-        },
+      const paid = warPaid;
+      celebrateSoon(() =>
+        celebrate(
+          { stage: ctx.stage, ui: ctx.ui, sfx: ctx.sfx },
+          {
+            title: r.outcome === 'war-win' ? 'War won' : 'Tie in the war',
+            sub: `The raise pays ${r.outcome === 'war-win' ? 1 : rules.warTiePays} to 1 · ${signed(win)}`,
+            tier: 'nice',
+            glow: present(spotStack(seat, 'war'), paid),
+          },
+        ),
       );
     }
   };
@@ -822,7 +967,7 @@ export function mountWar(ctx: TableViewCtx): TableView {
           break;
         case 'bets':
           // my own bets are already on the felt as I asked for them; this is the echo
-          if (e.seat === me) break;
+          if (spots.includes(e.seat)) break;
           ctx.sfx.play('chip-lay', { volume: 0.4 });
           spotStack(e.seat, 'bet').set(e.bet);
           spotStack(e.seat, 'tie').set(e.tie);
@@ -831,27 +976,32 @@ export function mountWar(ctx: TableViewCtx): TableView {
           await sweepCards();
           await shuffleShoe();
           break;
-        case 'deal':
-          if (me !== null && e.seats.includes(me)) last = { ...mine };
+        case 'deal': {
+          const dealtMine = e.seats.filter(owns);
+          if (dealtMine.length) {
+            last = Object.fromEntries(dealtMine.map((spot) => [spot, betsOf(spot)]));
+            roundNet = 0;
+          }
           if (mode === 'multi') ctx.kit.say('No more bets', 1400);
           await sweepCards();
           await dealOut(e.seats, e.cards, e.dealer, false);
           dealerLabel(e.dealer, null);
-          if (me === null || !e.seats.includes(me)) ctx.kit.say(`Dealer shows ${aName(e.dealer)}`, 2200);
+          if (dealtMine.length !== 1) ctx.kit.say(`Dealer shows ${aName(e.dealer)}`, 2200);
           await wait(250);
           break;
+        }
         case 'cut':
           ctx.kit.say('The cover card is out: last round before the shuffle', 2600);
           break;
         case 'decide':
-          decided = false;
-          if (me !== null && next.seats[me]?.decision === 'pending') {
+          sent.clear();
+          if (spots.some((spot) => next.seats[spot]?.decision === 'pending')) {
             view = next;
             renderControls();
           }
           break;
         case 'decision':
-          if (e.seat === me) {
+          if (owns(e.seat)) {
             decideBar.hidden = true;
             if (e.auto) ctx.kit.say(e.choice === 'war' ? 'Time: going to war for you' : 'Time: surrendered for you', 2400);
             else if (e.choice === 'war') ctx.kit.say('Going to war', 1600);
@@ -878,15 +1028,19 @@ export function mountWar(ctx: TableViewCtx): TableView {
             if (!sv) continue;
             settled = true;
             if (x.type === 'tie') {
-              if (x.seat === me && sv.card) ctx.kit.say(`Tie, ${pluralName(sv.card)}: go to war or surrender`, 4000);
+              if (owns(x.seat) && sv.card) ctx.kit.say(`Tie, ${pluralName(sv.card)}: go to war or surrender`, 4000);
               await settleTie(x.seat, x.tiePaid, sv.tie);
               handLabel(x.seat, { ...sv, result: null });
               continue;
             }
-            if (x.seat === me) lastNet = x.result.returned - x.result.wagered;
+            if (owns(x.seat)) {
+              roundNet += x.result.returned - x.result.wagered;
+              lastNet = roundNet;
+            }
             await settleSeat(x.seat, x.result, sv);
             handLabel(x.seat, sv);
-            if (x.seat === me) callResult(x.result, sv, next);
+            // one spot: the dealer calls the hand; several: the pills and labels say it spot by spot
+            if (owns(x.seat) && spots.length === 1) callResult(x.result, sv, next);
             renderMeters();
             await wait(mode === 'solo' ? 250 : 180);
           }
@@ -932,7 +1086,8 @@ export function mountWar(ctx: TableViewCtx): TableView {
       rules = v.rules ?? DEFAULT_RULES;
       view = v;
       latest = v;
-      mine = serverBets();
+      spots = v.mine ?? (me !== null ? [me] : []);
+      wanted = serverBets();
       if (!felt) {
         felt = makeFelt(rules, 1400);
         ctx.stage.addFelt(felt, TOP_Y + 0.0006);
@@ -968,9 +1123,9 @@ export function mountWar(ctx: TableViewCtx): TableView {
       // a refused move: go back to what the table really holds
       if (lastAction === 'bet') {
         history.pop();
-        mine = serverBets();
+        wanted = serverBets();
       } else {
-        decided = false;
+        sent.clear();
       }
       if (view) draw(view);
     },
@@ -994,10 +1149,10 @@ export function mountWar(ctx: TableViewCtx): TableView {
           decide('surrender');
           return true;
         case 'KeyB':
-          addChip('bet');
+          addChipEverywhere('bet');
           return true;
         case 'KeyT':
-          addChip('tie');
+          addChipEverywhere('tie');
           return true;
         case 'KeyX':
           clear();
@@ -1018,9 +1173,14 @@ export function mountWar(ctx: TableViewCtx): TableView {
 
     update() {
       tickClock();
+      // the ring round the tie being decided breathes, so it's found at a glance
+      litMat.opacity = 0.62 + 0.3 * Math.sin(performance.now() / 260);
     },
 
     dispose() {
+      disposed = true;
+      for (const x of [ringMat, litMat, ringGeo, litGeo]) x.dispose();
+      picker.root.remove();
       unsubscribeTips();
       ctx.kit.tip(null);
       removeEventListener('pointerdown', onDown);
