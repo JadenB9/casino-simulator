@@ -16,7 +16,8 @@
 // --crowd     put every bot in the lobby instead (everyone arrives there)
 // --uncapped  no vsync or frame-rate cap, so the frame rate shows the headroom past 60/120
 // --only high|low  one quality for flow and sweep
-// The worker must be the dev stack's (PORT_BASE + 1); bots log in as perfbot00.. with the dev password.
+// --worker N  the worker the bots use (default: the page's port + 1, the dev stack's)
+// Bots log in as perfbot00.. with the dev password.
 
 import { chromium } from 'playwright';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -28,7 +29,7 @@ const opt = (n, d) => {
   const i = argv.indexOf(`--${n}`);
   return i >= 0 ? argv[i + 1] : d;
 };
-const positional = argv.filter((a, i) => !a.startsWith('--') && !['--bots', '--only'].includes(argv[i - 1]));
+const positional = argv.filter((a, i) => !a.startsWith('--') && !['--bots', '--only', '--worker'].includes(argv[i - 1]));
 const [port = '5173', out = '/tmp/casino-perf', ...wanted] = positional;
 const checks = wanted.length ? wanted : ['flow', 'sweep', 'mobile'];
 const botCount = Number(opt('bots', 24));
@@ -223,7 +224,7 @@ let bots = null;
 async function ensureBots(page) {
   if (bots || botCount <= 0) return;
   const plan = await planFor(page);
-  bots = await startBots({ port: Number(port) + 1, origin: `http://localhost:${port}`, count: botCount, ...plan, only: flag('crowd') ? ['lobby'] : null });
+  bots = await startBots({ port: Number(opt('worker', Number(port) + 1)), origin: `http://localhost:${port}`, count: botCount, ...plan, only: flag('crowd') ? ['lobby'] : null });
   console.log('bots', JSON.stringify(bots.stats));
   // their looks load, their first positions arrive
   await page.waitForTimeout(4000);
