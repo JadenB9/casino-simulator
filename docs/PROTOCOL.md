@@ -250,7 +250,7 @@ Server to client:
 ```ts
 type TableMeta = { tableId: string; game: GameId; variant?: string; mode: "solo" | "multi";
                    visibility: "public" | "private"; pin?: string;   // pin: members only
-                   started: boolean; maxSeats: number; limits: TableLimits };
+                   started: boolean; config: TableConfig };   // seats, every bet's limits, the buy-in
 type Member = { accountId: number; name: string; look: Look; seat: number | null; joinedAt: number;
                 connected: boolean; ready: boolean; stack?: number; bot?: true };
 ```
