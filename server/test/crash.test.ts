@@ -11,7 +11,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { env, exports } from 'cloudflare:workers';
 import { runDurableObjectAlarm, runInDurableObject } from 'cloudflare:test';
-import { ORIGIN, connect, type Client } from './helpers.ts';
+import { ORIGIN, TEST_PASSWORD, connect, type Client } from './helpers.ts';
 import type { CasinoFloor } from '../src/floor/index.ts';
 import type { CasinoTable } from '../src/table/host.ts';
 import { ALL_IN_MS, BETTING_MS, CRASHED_MS } from '../../shared/src/games/crash/engine.ts';
@@ -32,7 +32,7 @@ async function player(tag: string): Promise<Player> {
     new Request('http://casino.test/casino/api/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Origin: ORIGIN, 'CF-Connecting-IP': nextIp() },
-      body: JSON.stringify({ name: `cs${tag}${++seq}` }),
+      body: JSON.stringify({ name: `cs${tag}${++seq}`, password: TEST_PASSWORD }),
     }),
   );
   expect(res.status).toBe(200);
@@ -137,9 +137,10 @@ describe('crash at a shared table', () => {
     const launch = await ca.next<any>(has('launch'));
     await cb.next(has('launch'));
     const launchAt = ev(launch, 'launch').launchAt as number;
-    // In flight, the crash point is nowhere to be seen.
+    // In flight, the crash point is nowhere to be seen: not in the view, not in an event. (Only
+    // the fields are checked: the message's server timestamps can contain any digits.)
     expect(launch.view).toMatchObject({ phase: 'running', crash: null, deadline: null });
-    expect(JSON.stringify(launch)).not.toContain('250');
+    expect(launch.events).toEqual([{ type: 'launch', round: 1, launchAt }]);
 
     await at(tableId, launchAt + timeTo(150));
     const cashed = await cb.next<any>(has('cashout'));
