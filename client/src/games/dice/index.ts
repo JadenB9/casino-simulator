@@ -232,7 +232,7 @@ export const dice: GameClientModule = {
       const b = bet.value;
       const c = chance();
       if ((b * RETURN_ROLLS) % c === 0) {
-        ctx.kit.tip(`Every win chance returns 99% here; ${hund(c)}% pays exactly ${multOf(c).toFixed(4)}×.`);
+        ctx.kit.tip(`${hund(c)}% returns exactly 99% at ${formatMoney(b)}: a win pays ${cents(winPayout(b, c))}, no cents lost.`);
         return;
       }
       const best = nearestExactChance(b, c);
