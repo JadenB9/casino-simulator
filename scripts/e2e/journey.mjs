@@ -319,10 +319,12 @@ async function playStation(page, id) {
       placed = -1;
     } else {
       // as a player would: the smallest chip on show, on the same spot (a chip under the spot's
-      // minimum puts the minimum down); at craps a winning bet stays up, so clear the layout first
+      // minimum puts the minimum down); at craps a winning bet stays up: take it down first, with
+      // a right-click on it, as the table's tip says
       if (game === 'craps') {
-        await page.keyboard.press('x');
-        await page.waitForTimeout(700);
+        const up = await screenOf(page, spec.max(seat));
+        if (up) await page.mouse.click(up.x, up.y, { button: 'right' });
+        await page.waitForTimeout(900);
       }
       const before = await stackOf(page);
       await page.keyboard.press('1');
