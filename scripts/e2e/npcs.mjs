@@ -3,14 +3,14 @@
 // where its players stand, the seated views (the dealer must frame the table, not block it), the
 // bar and the cashier, a dealer's deal/sweep/pay, and draw calls in the dev views. Vite only.
 // Usage: node scripts/e2e/npcs.mjs [port] [out dir] [checks...]
-//   checks: tables seated staff gestures calls (default: all)
+//   checks: tables seated staff gestures sitting calls (default: all)
 
 import { chromium } from 'playwright';
 import { mkdirSync } from 'node:fs';
 
 const [port = '5940', out = '/tmp/npcs', ...wanted] = process.argv.slice(2);
 mkdirSync(out, { recursive: true });
-const checks = wanted.length ? wanted : ['tables', 'seated', 'staff', 'gestures', 'calls'];
+const checks = wanted.length ? wanted : ['tables', 'seated', 'staff', 'gestures', 'sitting', 'calls'];
 const quality = process.env.QUALITY ?? 'high';
 const base = `http://localhost:${port}/casino/src/world/dev-floor.html`;
 const browser = await chromium.launch({ channel: 'chromium', args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
@@ -89,17 +89,21 @@ if (checks.includes('seated')) {
   const seats = { 'bj-1': [0, 3, 6], 'rl-us': [null], 'cr-1': [0, 5], 'bc-1': [0, 6], 'tc-1': [0, 5], 'wr-1': [2], 'sb-1': [null], 'b6-1': [null], 'he-1': [null] };
   for (const [id, list] of Object.entries(seats)) {
     for (const seat of list) {
-      await page.evaluate(([id, seat]) => {
+      await page.evaluate(async ([id, seat]) => {
         const c = window.casino;
         c.shot = null;
         const s = c.world.stations.find((x) => x.id === id);
-        if (c.world.seated) c.world.exitTable();
+        const { playPoseWorld } = await import('/casino/src/world/stations.ts');
+        c.goal = playPoseWorld(s, seat).position;
         c.world.enter(s, seat);
       }, [id, seat]);
-      await settle(page, 2200);
+      // the fly-in is 0.9 s of frames, however long those frames take here
+      await page.waitForFunction(() => window.casino.engine.camera.position.distanceTo(window.casino.goal) < 0.01, null, { polling: 250 });
+      await settle(page, 1200);
       await page.screenshot({ path: `${out}/seated-${id}-${seat ?? 'x'}.png` });
       await page.evaluate(() => window.casino.world.exitTable());
-      await settle(page, 900);
+      await page.waitForFunction(() => !window.casino.world.seated && window.casino.world.player.character.root.visible, null, { polling: 250 });
+      await settle(page, 300);
     }
   }
   if (errors.length) fail(`seated: ${errors.join(' | ')}`);
@@ -145,6 +149,64 @@ if (checks.includes('gestures')) {
   const none = await page.evaluate(() => window.casino.world.dealerGesture('slots-sevens-1', 'deal'));
   if (none) fail('a slot machine has a dealer');
   if (errors.length) fail(`gestures: ${errors.join(' | ')}`);
+  await page.close();
+}
+
+if (checks.includes('sitting')) {
+  // Two other players at Hold'em, drawn by the real RemotePlayers from a stand-in floor link. The
+  // chairs are stand-ins too (tables3 builds the real ones at the same seats), added to the
+  // table's model before the seats are measured again, as createWorld measures them.
+  const { page, errors } = await open(`quality=${quality}`);
+  const info = await page.evaluate(async () => {
+    const c = window.casino;
+    const THREE = c.THREE;
+    const { GAMES } = await import('/casino/src/games/index.ts');
+    const { measureSeats } = await import('/casino/src/world/npcs.ts');
+    const { seatWorld } = await import('/casino/src/world/stations.ts');
+    const { RemotePlayers } = await import('/casino/src/world/remote-players.ts');
+    const st = c.world.stations.find((x) => x.id === 'he-1');
+    const leather = new THREE.MeshStandardMaterial({ color: 0x3a1c14, roughness: 0.6 });
+    const chrome = new THREE.MeshStandardMaterial({ color: 0x8a8a8a, roughness: 0.3, metalness: 0.8 });
+    for (const seat of GAMES.holdem.seats('')) {
+      const chair = new THREE.Group();
+      const cushion = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.08, 0.44), leather);
+      cushion.position.y = 0.44;
+      const back = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.42, 0.07), leather);
+      back.position.set(0, 0.7, -0.22);
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.4, 10), chrome);
+      post.position.y = 0.2;
+      const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.24, 0.03, 20), chrome);
+      foot.position.y = 0.015;
+      chair.add(cushion, back, post, foot);
+      chair.position.set(...seat.position);
+      chair.rotation.y = seat.yaw;
+      st.model.add(chair);
+    }
+    measureSeats([st], (s) => GAMES[s.game].seats(s.variant));
+    const look = (body, outfit, skin, hair, top, bottom) => ({ v: 1, body, outfit, skin, hair, top, bottom, shoes: '#1a1a1a' });
+    const players = new Map([
+      [101, { info: { id: 101, name: 'Marisol', look: look('f', 'dress', 3, '#2b1a12', '#7a1f3d', '#7a1f3d'), at: { station: 'he-1' } }, track: { at: () => ({ x: 0, z: 0, r: 0, moving: false }) }, last: null }],
+      [102, { info: { id: 102, name: 'Dev', look: look('m', 'casual', 1, '#4a3020', '#2f5d7c', '#2a3140'), at: { station: 'he-1' } }, track: { at: () => ({ x: 0, z: 0, r: 0, moving: false }) }, last: null }],
+    ]);
+    const link = { players, on: () => () => {} };
+    for (const p of players.values()) await c.world.characterFactory.load(p.info.look);
+    const remotes = new RemotePlayers(link, c.engine.scene, { factory: c.world.characterFactory, seatOf: (id, slot) => seatWorld(c.world.stations.find((x) => x.id === id), slot) });
+    c.engine.onFrame((dt) => remotes.update(dt));
+    return { tops: st.seatTops, seat0: seatWorld(st, 0), seat1: seatWorld(st, 1) };
+  });
+  console.log(`sitting: seat tops ${info.tops.map((t) => (t === null ? '-' : t.toFixed(2))).join(' ')}; seat 0 sit ${info.seat0.sit}`);
+  if (!info.tops.every((t) => t !== null && Math.abs(t - 0.48) < 0.02)) fail('sitting: chair tops not measured at 0.48 m');
+  const st = await page.evaluate(() => {
+    const s = window.casino.world.stations.find((x) => x.id === 'he-1');
+    return { x: s.anchor.position.x, z: s.anchor.position.z };
+  });
+  await place(page, [st.x - 2.3, 1.75, st.z + 2.6], [st.x - 0.2, 0.7, st.z + 0.1]);
+  await settle(page, 1500);
+  await page.screenshot({ path: `${out}/sitting-holdem.png` });
+  await place(page, [st.x - 2.6, 1.0, st.z + 0.9], [st.x - 0.9, 0.62, st.z + 0.55]);
+  await settle(page, 1200);
+  await page.screenshot({ path: `${out}/sitting-holdem-side.png` });
+  if (errors.length) fail(`sitting: ${errors.join(' | ')}`);
   await page.close();
 }
 

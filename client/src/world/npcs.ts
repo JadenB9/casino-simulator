@@ -62,8 +62,11 @@ const CLEAR = 0.04;
 /** Half the body's width with the arms at its sides. */
 const HALF_WIDTH = 0.3;
 
-/** Heights and offsets across the body where standBehind looks for the table in front. */
-const PROBE_Y = [0.05, 0.3, 0.55, 0.7, 0.8, 0.9, 1.0, 1.1, 1.25, 1.45, 1.65];
+/**
+ * Heights and offsets across the body where standBehind looks for the table in front: every few
+ * centimetres through table height, so a thin top or rail can't slip between two rays.
+ */
+const PROBE_Y = [0.04, 0.2, 0.35, 0.5, 0.6, 0.65, 0.69, 0.72, 0.75, 0.78, 0.81, 0.84, 0.87, 0.91, 0.95, 1.0, 1.05, 1.1, 1.2, 1.35, 1.5, 1.7];
 const PROBE_X = [-0.26, -0.13, 0, 0.13, 0.26];
 
 /**
