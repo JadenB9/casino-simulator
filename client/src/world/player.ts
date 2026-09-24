@@ -154,7 +154,10 @@ export class Player {
     this.vel.set(0, 0);
     this.dist = this.camDist;
     this.syncCharacter();
-    this.placeCamera(1);
+    // While the controls are lent out (the look editor, the shop, a table) the camera is theirs:
+    // the floor's first hello lands during a new player's "Pick your look" and used to pull the
+    // camera off the dressing room onto the lobby. The next enabled frame places it anyway.
+    if (this.enabled) this.placeCamera(1);
   }
 
   get isEnabled(): boolean {
