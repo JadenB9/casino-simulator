@@ -90,6 +90,7 @@
 .party-vis { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-2); }
 .party-vis .lb-icon { width: 13px; height: 13px; color: var(--brass); }
 .party-pin-mini { font-family: var(--meter); font-size: 13px; letter-spacing: 0.2em; color: #ffb347; }
+.party-limits { font-size: 14px; color: var(--brass-hi); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .party-count { margin-left: auto; font-size: 14px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
 .party-head .lb-chev { color: var(--ink-3); transition: transform 0.2s var(--ease); }
 .party.collapsed .lb-chev { transform: rotate(-90deg); }
