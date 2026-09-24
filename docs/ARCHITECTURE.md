@@ -179,10 +179,19 @@ password it is given, which claims it from then on.
 
 `POST /casino/api/login {name, password}` does that and returns a signed token
 `v2.<payload>.<HMAC-SHA256>` carrying the account id and name. The Worker verifies it with
-`crypto.subtle.verify` on every request and WebSocket upgrade, strips any `x-casino-*`
-headers the client sent, and forwards the upgrade to the Durable Object with trusted ones.
-Durable Objects can only be reached through the Worker, so they never see a token. v1 tokens
-came from the name-only login and are refused, so every session logs in once with a password.
+`crypto.subtle.verify` on every HTTP request. v1 tokens came from the name-only login and are
+refused, so every session logs in once with a password.
+
+Sockets never carry the token (URLs end up in logs). Right before each connection attempt the
+client trades it for a socket ticket (`POST /casino/api/ticket {target}`, `server/src/tickets.ts`):
+`k1.<payload>.<HMAC-SHA256>`, signed apart from tokens so neither passes for the other, naming the
+account and the one path it opens (`floor`, `table/<id>`, `solo/<game>`), good for a minute and
+for one socket. The Worker checks the signature, the time and the path, strips any `x-casino-*`
+headers the client sent, and forwards the upgrade to the Durable Object with trusted ones,
+the ticket's id among them; the object spends that id in its own SQLite (a restart doesn't forget
+it), so a ticket opens one socket once. A late, used or misdirected ticket closes with 4006 and the
+client gets another; a page from before tickets (sending its token) is told to reload (4009).
+Durable Objects can only be reached through the Worker, so they never see a token.
 
 Passwords (4-64 characters, NFC-normalized) are hashed with PBKDF2-HMAC-SHA256 through
 WebCrypto: a random 16-byte salt per account and 100,000 iterations (the Workers cap), stored
@@ -190,12 +199,13 @@ as `pbkdf2:<iterations>:<hex>` beside the salt in `pass_hash` / `pass_salt`, and
 `crypto.subtle.timingSafeEqual`. Nothing logs a password and no hash leaves the Worker. A
 wrong password gets one answer whatever the account (`401 Wrong name or password.`).
 
-Every login attempt counts against 30 a minute per IP, and a new account against 10 an hour
-per IP (the `casino_rate` counter, one atomic statement per bump). Wrong passwords count
-against 20 per 15 minutes per IP and 60 per 15 minutes per name; past either, logins from
+Every login attempt counts against 30 a minute per address, and a new account against 10 an
+hour per address (the `casino_rate` counter, one atomic statement per bump). Wrong passwords
+count against 20 per 15 minutes per address and 60 per 15 minutes per name; past either, logins from
 that address or to that name get `429` without any password work until the window ends. A
 name takes more misses than one address can send, so nobody can lock a player out from a
-single connection.
+single connection. "Per address" means per IP, and per /64 for IPv6, where one user can take a
+fresh address from their /64 for every request.
 
 The client keeps the token in `sessionStorage`, so two tabs can be two different players, and
 remembers the last name (never the password) in `localStorage`: "Continue as ..." fills in the
@@ -203,12 +213,18 @@ name and asks only for its password.
 
 ## CasinoFloor (one object, "main")
 
-- **Presence.** Clients send their position (integer centimetres, yaw as a byte) at most
-  every 100 ms while moving, and one stop message when they stop. The floor keeps positions
-  in memory and, as messages arrive, flushes one snapshot of everyone who moved if at least
-  66 ms have passed since the last one. There is no timer, so the object only bills handler
-  time and hibernates when nobody is moving. Positions are clamped to the floor and
-  speed-checked; presence carries no money, so that is all the checking it needs.
+- **Presence.** Every position is an event the one floor object must handle, so clients send
+  one only when the others need it (`client/src/net/send-policy.ts`): at most every 200 ms while
+  moving, every 320 ms on a steady straight line (everyone else draws the line between two
+  positions), never for a change too small to see, and one stop message when they stop. The
+  floor keeps positions in memory and, as messages arrive, flushes one snapshot of everyone who
+  moved if at least 100 ms have passed since the last one; a row that arrives sooner (a stop too)
+  goes out when the 100 ms are up, on a short timer that only runs while someone moves, so the
+  object still hibernates when nobody walks. Each row carries its age, so clients place it when
+  it arrived, and draw other players 300 ms back. At 150 walkers that is about 420 messages a
+  second in (1,013 before this scheme) and 718 if everyone zig-zags nonstop (1,192), under the
+  object's roughly 1,000 a second (`scripts/load/floor.mjs` measures it). Positions are clamped to
+  the floor and speed-checked; presence carries no money, so that is all the checking it needs.
 - **One connection per account.** A newer tab replaces the older one (close 4001).
 - **Online count** is the number of connected accounts.
 - **Lobby directory.** Public lobbies per game and private lobbies by PIN, persisted in the
@@ -216,7 +232,8 @@ name and asks only for its password.
   every change and heartbeat every 60 s, entries older than 150 s are dropped, and the table
   re-checks capacity and PIN when someone actually joins.
 - **PINs** are four digits, assigned by the server, held back for 10 minutes before reuse, and
-  guessing is limited per account (5/min, 30/h) and per IP (10/min, 60/h).
+  guessing is limited per account (5/min, 30/h) and per address (10/min, 60/h, per /64 for
+  IPv6). A private table adds its own limits on top (see CasinoTable).
 
 ## CasinoTable (one object per lobby or solo session)
 
@@ -237,7 +254,8 @@ name and asks only for its password.
   deadlines are pushed out by the grace period so a restart doesn't auto-stand the table.
 - **Party.** Members are ordered by join time. The creator is the leader. The leader switches
   public/private (private gets a PIN) and presses Start. If the leader leaves, the
-  earliest-joined remaining member takes over. Seat limits: blackjack 7, baccarat 7,
+  earliest-joined remaining member takes over, someone connected if possible; a leader who
+  drops (or whom a restart drops), and a successor who is away, hand the lead on after 20 s. Seat limits: blackjack 7, baccarat 7,
   roulette 8, craps 8, Three Card Poker 6, Hold'em 2-9. Slots and video poker are one-player
   machines.
 - **Disconnects.** "Connected" is never stored; it's read from the live sockets. A seat is
@@ -246,6 +264,18 @@ name and asks only for its password.
   live on the layout, the seat is cashed out.
 - **Hidden information stays on the server.** Each socket gets its own view: no hole cards,
   no shoe order, no bot cards, no future results in any message.
+- **Seats changing hands.** Engines key a round by seat number, so a newcomer must never see a
+  seat's view while the engine still holds the last occupant's round under it. A seat given up
+  while a round is in play is held until nothing is on the layout anywhere (newcomers get other
+  seats first; buying into a held one gets `BUSY`), a member gets their seat's view and events
+  only once their chips have landed (the spectator view while buying in), and the card games clear
+  a departed occupant's unshown cards when someone new sits down. `server/test/engines.test.ts`
+  plays every multiplayer game with seats changing hands mid-round and checks every view and
+  event per recipient.
+- **Private tables** refuse a newcomer without the PIN (4005). Five wrong PINs from one account or
+  one address lock it out for 10 minutes, and 30 wrong guesses at one PIN from everyone lock that
+  PIN for everyone until the leader draws a new one: accounts are free and addresses cheap, so the
+  per-PIN count is what stops many hands sweeping 10,000 PINs.
 
 ## The engine contract
 
@@ -334,13 +364,26 @@ exactly what the tests ran.
 
 ## Security
 
-- Origin allowlist on HTTP and WebSocket upgrades (j4den.com, www.j4den.com, localhost).
-- Every message is size-capped before parsing and then validated; unknown types and wrong
-  shapes are dropped. Token buckets per socket for movement, game actions, lobby actions and
-  PIN guesses; repeated abuse closes the socket.
+- Origin allowlist on HTTP and WebSocket upgrades (j4den.com, www.j4den.com, localhost); a
+  socket upgrade with no Origin is refused too.
+- Sockets open with a single-use, one-minute ticket for their path, never the token.
+- Every frame is size-capped before parsing and counted, junk included; then it is validated,
+  and unknown types and wrong shapes are dropped. Each socket has token buckets for every kind
+  of message (movement, game actions, money, lobby and party messages, emotes, chat), and frames
+  dropped for a limit or for being junk are strikes that are forgiven slowly; too many close the
+  socket (4008). Connecting is limited too, per account and per address. The HTTP routes with
+  side effects have their own limits. `docs/PROTOCOL.md` lists them all.
+- Rate limits keyed by address count an IPv6 /64 as one address.
 - Table ids are validated by the Worker, and a table that was never initialized answers 404
-  without writing anything, so probing can't create storage.
-- Names are only ever rendered as text (`textContent`, canvas).
+  without writing anything (a ticket is spent only once the table is known to exist), so probing
+  can't create storage.
+- Errors tell the player what went wrong in a sentence and nothing about the inside; details go
+  to the log.
+- Names and chat are only ever rendered as text (`textContent`, canvas).
+- `server/test/security.test.ts`, `tickets.test.ts`, `seats.test.ts` and `engines.test.ts` pin
+  these down, and `scripts/load/run.mjs` plays every multiplayer game with eight players, storms
+  of dropped sockets, leader handoffs, money races and a busy floor against `wrangler dev`,
+  auditing every account's money in D1 afterwards.
 - The page's CSP allows its own scripts, styles, fonts and media, `blob:` for textures inside
   models, and `https://api.j4den.com` plus `wss://api.j4den.com` (browsers don't treat the
   first as covering the second).
