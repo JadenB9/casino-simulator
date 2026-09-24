@@ -86,8 +86,8 @@ describe('a lobby at chosen limits', () => {
     const { tableId } = await res.json<any>();
     const [ca, snapA] = await enter(a, `table/${tableId}`);
     expect(snapA.meta.config.limits.default).toEqual({ min: 10_000, max: 1_000_000, step: 100 });
-    // the buy-in scales with them: four times the minimum to ten times the maximum
-    expect(snapA.meta.config.buyIn).toEqual({ min: 40_000, max: 10_000_000 });
+    // the buy-in scales with them: four times the minimum to a hundred times the maximum
+    expect(snapA.meta.config.buyIn).toEqual({ min: 40_000, max: 100_000_000 });
 
     // The second player sees the limits in the list before joining.
     const listed = await w.next<any>((m) => m.t === 'lobby' && m.lobby.tableId === tableId);
@@ -100,7 +100,7 @@ describe('a lobby at chosen limits', () => {
     // ... and is held to them: the buy-in range, then the bets.
     cb.send({ t: 'buyin', aid: 'short', amount: 30_000 });
     expect(await cb.next<any>((m) => m.t === 'err' && m.ref === 'short')).toMatchObject({ code: 'LIMIT' });
-    cb.send({ t: 'buyin', aid: 'over', amount: 10_000_100 });
+    cb.send({ t: 'buyin', aid: 'over', amount: 100_000_100 });
     expect(await cb.next<any>((m) => m.t === 'err' && m.ref === 'over')).toMatchObject({ code: 'LIMIT' });
     await buyIn(cb, 2_000_000);
     await buyIn(ca, 200_000);
@@ -122,7 +122,7 @@ describe('a lobby at chosen limits', () => {
     }
     const cases: [unknown, { min: number; max: number }][] = [
       [{ min: 1, max: 1 }, { min: 100, max: 1_000 }],
-      [{ min: 1e15, max: 1e15 }, { min: 500_000, max: 5_000_000 }],
+      [{ min: 1e15, max: 1e15 }, { min: 10_000_000, max: 100_000_000 }],
       [{ min: 2_550, max: 100_000 }, { min: 2_500, max: 100_000 }],
       [{ min: 10_000, max: 20_000 }, { min: 10_000, max: 100_000 }],
     ];
@@ -185,7 +185,7 @@ describe('a solo table', () => {
     const p = await player('solo');
     const [c1, s1] = await enter(p, 'solo/highcard', '&limits=500-500000');
     expect(s1.meta.config.limits.default).toEqual({ min: 500, max: 500_000, step: 100 });
-    expect(s1.meta.config.buyIn).toEqual({ min: 5_000, max: 5_000_000 });
+    expect(s1.meta.config.buyIn).toEqual({ min: 5_000, max: 50_000_000 });
     c1.send({ t: 'buyin', aid: 'low', amount: 4_900 });
     expect(await c1.next<any>((m) => m.t === 'err' && m.ref === 'low')).toMatchObject({ code: 'LIMIT' });
     await buyIn(c1, 100_000);
@@ -205,7 +205,7 @@ describe('a solo table', () => {
     expect((await balance(p.id)).in_play).toBe(0);
     const [c3, s3] = await enter(p, 'solo/highcard', '&limits=10000-2500000');
     expect(s3.meta.config.limits.default).toEqual({ min: 10_000, max: 2_500_000, step: 100 });
-    expect(s3.meta.config.buyIn).toEqual({ min: 100_000, max: 25_000_000 });
+    expect(s3.meta.config.buyIn).toEqual({ min: 100_000, max: 250_000_000 });
     await buyIn(c3, 100_000);
     expect(await refusal(c3, { type: 'bet', amount: 5_000 })).toMatchObject({ code: 'LIMIT' });
     expect(await refusal(c3, { type: 'bet', amount: 10_000 })).toBeNull();

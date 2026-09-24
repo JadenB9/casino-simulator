@@ -372,7 +372,7 @@ describe('video poker engine', () => {
     const cfg = engine.config('', 'solo');
     expect(cfg.maxSeats).toBe(1);
     expect(cfg.limits.default).toEqual({ min: 100, max: 50_000, step: 100 });
-    expect(cfg.buyIn).toEqual({ min: 2_000, max: 5_000_000 });
+    expect(cfg.buyIn).toEqual({ min: 2_000, max: 50_000_000 });
     expect(engine.seats.multiplayer).toBe(false);
   });
 });

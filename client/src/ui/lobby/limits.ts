@@ -81,9 +81,9 @@ export class LimitsPicker {
     head.append(this.title, this.buyIn);
     this.grid.setAttribute('role', 'radiogroup');
     this.grid.setAttribute('aria-label', blinds ? 'Blinds' : 'Table limits');
-    this.grid.classList.toggle('wide', tiers.length + 1 > 6);
-    tiers.forEach((t, i) => this.grid.append(this.option(i, t.name || limitsLabel(game, t), t.name ? limitsLabel(game, t, true) : '')));
-    // Hold'em's options are the blinds themselves, one line each; Custom there is one line too.
+    // Hold'em's options are the blinds themselves, one short line each ("$1K/$2K")
+    this.grid.classList.toggle('blinds', blinds);
+    tiers.forEach((t, i) => this.grid.append(this.option(i, t.name || limitsLabel(game, t, true), t.name ? limitsLabel(game, t, true) : '')));
     this.grid.append(this.option(tiers.length, 'Custom', blinds ? '' : 'Your own'));
 
     // Custom: two amounts in whole dollars, and the rule they have to meet.
@@ -200,7 +200,7 @@ export class LimitsPicker {
       const opt = this.buttons[this.spec.tiers.length]!;
       const optRange = opt.querySelector('.lim-opt-range');
       if (optRange) optRange.textContent = v ? limitsLabel(this.game, v, true) : 'Your own';
-      else opt.querySelector('.lim-opt-name')!.textContent = v ? limitsLabel(this.game, v) : 'Custom';
+      else opt.querySelector('.lim-opt-name')!.textContent = v ? limitsLabel(this.game, v, true) : 'Custom';
     }
     if (!v) {
       this.buyIn.textContent = '';

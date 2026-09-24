@@ -279,7 +279,7 @@ describe('engine', () => {
     expect(engine.config('sevens', 'solo')).toMatchObject({ game: 'slots', variant: 'sevens', maxSeats: 1, limits: { default: { min: 25, max: 30_000, step: 25 } } });
     expect(engine.config('neon', 'solo').limits.default).toEqual({ min: 100, max: 50_000, step: 100 });
     expect(engine.config('wild', 'solo').limits.default).toEqual({ min: 100, max: 30_000, step: 100 });
-    expect(engine.config('sevens', 'solo').buyIn).toEqual({ min: 2_000, max: 5_000_000 });
+    expect(engine.config('sevens', 'solo').buyIn).toEqual({ min: 2_000, max: 50_000_000 });
     expect(engine.config('nope', 'solo').variant).toBe('sevens');
     expect(engine.seats).toEqual({ min: 1, max: 1, multiplayer: false });
   });

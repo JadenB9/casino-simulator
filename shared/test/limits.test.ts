@@ -77,14 +77,16 @@ describe('every tier', () => {
           expect(lim.min, key).toBeGreaterThanOrEqual(step);
           expect(lim.max, key).toBeGreaterThanOrEqual(lim.min);
         }
-        // buy-ins in whole dollars, enough to make the table's smallest bet
+        // buy-ins in whole dollars, enough to make the table's smallest bet, and up to a hundred
+        // of its biggest (Hold'em: poker's 20 to 100 big blinds)
         expect(cfg.buyIn.min % D).toBe(0);
         expect(cfg.buyIn.max % D).toBe(0);
         expect(cfg.buyIn.max).toBeGreaterThanOrEqual(cfg.buyIn.min);
         if (spec.kind === 'bets') {
           expect(cfg.buyIn.min).toBeGreaterThanOrEqual(l.min);
-          // room to make the biggest bet at least once
-          expect(cfg.buyIn.max).toBeGreaterThanOrEqual(l.max);
+          expect(cfg.buyIn.max).toBe(100 * l.max);
+        } else {
+          expect(cfg.buyIn).toEqual({ min: 20 * l.max, max: 100 * l.max });
         }
         // the rules and seats are the Standard table's
         expect(cfg.maxSeats).toBe(base.maxSeats);
@@ -100,7 +102,7 @@ describe('per-spot limits scale with the table', () => {
     expect(c.limits.outside).toEqual({ min: 25 * D, max: 10_000 * D, step: D });
     expect(c.limits.inside).toEqual({ min: 5 * D, max: 1_000 * D, step: D });
     expect(c.limits.default).toEqual({ min: 5 * D, max: 20_000 * D, step: D });
-    expect(c.buyIn).toEqual({ min: 100 * D, max: 40_000 * D });
+    expect(c.buyIn).toEqual({ min: 100 * D, max: 1_000_000 * D });
   });
 
   it('roulette at $1: the inside minimum stays one whole chip', () => {
@@ -120,7 +122,7 @@ describe('per-spot limits scale with the table', () => {
     expect(c.limits.place4).toEqual({ min: 15 * D, max: 10_000 * D, step: 5 * D });
     expect(c.limits.lay5!.max % (3 * D)).toBe(0);
     expect(c.limits.horn!.min % (4 * D)).toBe(0);
-    expect(c.buyIn).toEqual({ min: 250 * D, max: 100_000 * D });
+    expect(c.buyIn).toEqual({ min: 250 * D, max: 1_000_000 * D });
   });
 
   it('craps at $5: every minimum is at least its step', () => {
@@ -168,34 +170,38 @@ describe('per-spot limits scale with the table', () => {
     for (const g of ['dice', 'plinko', 'crash', 'banditwheel'] as GameId[]) {
       const c = cfgAt(g, { min: 25 * D, max: 10_000 * D });
       expect(c.limits.default).toEqual({ min: 25 * D, max: 10_000 * D, step: D });
-      expect(c.buyIn).toEqual({ min: 250 * D, max: 100_000 * D });
+      expect(c.buyIn).toEqual({ min: 250 * D, max: 1_000_000 * D });
     }
   });
 });
 
 describe('custom limits', () => {
   it('explains each rule it breaks', () => {
-    expect(limitsProblem('blackjack', { min: 50, max: 500_000 })).toMatch(/minimum is \$1 to \$5,000/);
-    expect(limitsProblem('blackjack', { min: 6_000 * D, max: 60_000 * D })).toMatch(/minimum is/);
+    expect(limitsProblem('blackjack', { min: 50, max: 500_000 })).toMatch(/minimum is \$1 to \$100,000/);
+    expect(limitsProblem('blackjack', { min: 200_000 * D, max: 2_000_000 * D })).toMatch(/minimum is/);
     expect(limitsProblem('blackjack', { min: 25 * D, max: 200 * D })).toBe('The maximum is at least 10 times the minimum ($250).');
-    expect(limitsProblem('blackjack', { min: 25 * D, max: 60_000 * D })).toBe('The maximum here is at most $50,000.');
+    expect(limitsProblem('blackjack', { min: 25 * D, max: 1_500_000 * D })).toBe('The maximum here is at most $1,000,000.');
+    // the high-limit rooms: a $1,000,000 table, and a Big Six spot up to $100,000
+    expect(limitsProblem('blackjack', { min: 10_000 * D, max: 1_000_000 * D })).toBeNull();
+    expect(limitsProblem('bigsix', { min: 1_000 * D, max: 200_000 * D })).toBe('The maximum here is at most $100,000.');
     expect(limitsProblem('blackjack', { min: 25 * D, max: 2_550 })).toMatch(/whole number of dollars/);
     expect(limitsProblem('blackjack', { min: 30 * D, max: 3_000 * D })).toBeNull();
     expect(limitsProblem('slots', { min: D, max: 10 * D })).not.toBeNull();
   });
 
-  it("Hold'em: the big blind two to three times the small, up to $200", () => {
+  it("Hold'em: the big blind two to three times the small, up to $10,000", () => {
     expect(limitsProblem('holdem', { min: 2 * D, max: 5 * D })).toBeNull();
     expect(limitsProblem('holdem', { min: 1 * D, max: 3 * D })).toBeNull();
+    expect(limitsProblem('holdem', { min: 5_000 * D, max: 10_000 * D })).toBeNull();
     expect(limitsProblem('holdem', { min: 5 * D, max: 5 * D })).toMatch(/at least twice/);
     expect(limitsProblem('holdem', { min: 10 * D, max: 40 * D })).toMatch(/at most three times/);
-    expect(limitsProblem('holdem', { min: 100 * D, max: 300 * D })).toBe('The big blind here is at most $200.');
-    expect(limitsProblem('holdem', { min: 150 * D, max: 300 * D })).toMatch(/small blind is \$1 to \$100/);
+    expect(limitsProblem('holdem', { min: 4_000 * D, max: 12_000 * D })).toBe('The big blind here is at most $10,000.');
+    expect(limitsProblem('holdem', { min: 6_000 * D, max: 12_000 * D })).toMatch(/small blind is \$1 to \$5,000/);
   });
 
   it('the clamp brings anything to the nearest allowed table', () => {
     expect(clampLimits('blackjack', { min: 1, max: 1 })).toEqual({ min: D, max: 10 * D });
-    expect(clampLimits('blackjack', { min: 9_999_999_999, max: 9_999_999_999 })).toEqual({ min: 5_000 * D, max: 50_000 * D });
+    expect(clampLimits('blackjack', { min: 9_999_999_999, max: 9_999_999_999 })).toEqual({ min: 100_000 * D, max: 1_000_000 * D });
     expect(clampLimits('blackjack', { min: 2_550, max: 500_099 })).toEqual({ min: 25 * D, max: 5_000 * D });
     expect(clampLimits('blackjack', { min: 25 * D, max: 100 * D })).toEqual({ min: 25 * D, max: 250 * D });
     expect(clampLimits('holdem', { min: 10 * D, max: 500 * D })).toEqual({ min: 10 * D, max: 30 * D });
@@ -239,14 +245,14 @@ describe('words', () => {
     expect(limitsLabel('blackjack', { min: 25 * D, max: 5_000 * D })).toBe('$25–$5,000');
     expect(limitsLabel('blackjack', { min: 1_000 * D, max: 50_000 * D }, true)).toBe('$1K–$50K');
     expect(limitsLabel('holdem', { min: D, max: 2 * D })).toBe('$1/$2');
-    expect(limitsSpan('blackjack')).toBe('$5–$50,000');
-    expect(limitsSpan('holdem')).toBe('$1/$2 to $100/$200');
+    expect(limitsSpan('blackjack')).toBe('$5–$500,000');
+    expect(limitsSpan('holdem')).toBe('$1/$2 to $1,000/$2,000');
     expect(limitsSpan('slots')).toBeNull();
   });
 
   it('the details a picker shows', () => {
-    expect(limitsDetail(cfgAt('roulette', { min: 25 * D, max: 10_000 * D }))).toEqual(['Inside $5–$1,000 a number', '$20,000 a spin', 'Buy-in $100–$40,000']);
-    expect(limitsDetail(ENGINES.blackjack.config('', 'solo'))).toEqual(['Buy-in $100–$50,000']);
+    expect(limitsDetail(cfgAt('roulette', { min: 25 * D, max: 10_000 * D }))).toEqual(['Inside $5–$1,000 a number', '$20,000 a spin', 'Buy-in $100–$1,000,000']);
+    expect(limitsDetail(ENGINES.blackjack.config('', 'solo'))).toEqual(['Buy-in $100–$500,000']);
   });
 });
 

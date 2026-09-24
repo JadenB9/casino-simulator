@@ -128,7 +128,7 @@ export function maxButton(onClick: () => void, title = 'Max: the most this bet t
   return b;
 }
 
-/** The chip tray: pick a denomination (keys 1-8), plus Undo / Clear / Rebet / x2, Max and a primary action. */
+/** The chip tray: pick a denomination (keys 1-9 and 0), plus Undo / Clear / Rebet / x2, Max and a primary action. */
 export class ChipTray {
   readonly root = el('div', 'tray panel');
   private buttons = new Map<number, HTMLButtonElement>();
@@ -225,7 +225,8 @@ export class ChipTray {
    * returns true if the key was one of them.
    */
   key(e: KeyboardEvent): boolean {
-    const n = Number(e.key);
+    // 1-9 left to right, and 0 for the tenth
+    const n = e.key === '0' ? 10 : Number(e.key);
     if (Number.isInteger(n) && n >= 1 && n <= BETTING_CHIPS.length) {
       const spec = BETTING_CHIPS[n - 1]!;
       if (!this.buttons.get(spec.value)!.hidden) this.select(spec);

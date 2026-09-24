@@ -5,8 +5,10 @@
 // Each engine's config() is the Standard table. A table at other limits keeps the rules and the
 // shape of the Standard one: every per-bet limit (roulette's inside and outside, the craps odds
 // and props, a side bet) and the buy-in scale from the chosen minimum and maximum in the same
-// proportion the Standard table has, rounded to that bet's step. Only how much may be bet
-// changes, never what a bet pays, so the published odds hold at every table.
+// proportion the Standard table has, rounded to that bet's step. Every Standard table takes a
+// buy-in of up to a hundred times its maximum bet, so every table does (Hold'em keeps poker's
+// 20 to 100 big blinds). Only how much may be bet changes, never what a bet pays, so the
+// published odds hold at every table.
 
 import type { GameId, TableConfig } from './engine.ts';
 import { type BetLimits, type Cents, DOLLAR, formatCompact, formatMoney } from './money.ts';
@@ -43,47 +45,56 @@ function tiers(...list: [name: string, min: number, max: number][]): LimitTier[]
   return list.map(([name, min, max]) => ({ name, min: min * D, max: max * D }));
 }
 
-const NAMES = ['Low', 'Standard', 'High', 'High limit', 'Salon'] as const;
+const NAMES = ['Low', 'Standard', 'High', 'High limit', 'Salon', 'Penthouse'] as const;
 
-/** Five tiers named Low to Salon, Standard second. */
+/** Six tiers named Low to Penthouse, Standard second. */
 function ladder(...pairs: [min: number, max: number][]): LimitTier[] {
   return tiers(...pairs.map(([min, max], i) => [NAMES[i]!, min, max] as [string, number, number]));
 }
 
-function bets(key: string, tierList: LimitTier[], minHigh: number, ceiling: number, minLow = 1): LimitSpec {
+/**
+ * A game of bets: its tiers, and a custom minimum from $1 up to a tenth of `ceiling` with a
+ * maximum at least ten times it, never above `ceiling`.
+ */
+function bets(key: string, tierList: LimitTier[], ceiling: number): LimitSpec {
   return {
     kind: 'bets',
     key,
     tiers: tierList,
     standard: 1,
-    min: { low: minLow * D, high: minHigh * D, step: D },
+    min: { low: D, high: (ceiling / 10) * D, step: D },
     max: { ratio: 10, ceiling: ceiling * D, step: D },
   };
 }
 
+/** Table games go up to $500,000 a bet as a tier and $1,000,000 as custom limits. */
+const TABLE_CEILING = 1_000_000;
+/** The Big Six wheel, the Bandit Wheel and the online games stop at $100,000. */
+const WHEEL_CEILING = 100_000;
+
 /** The online games and the Bandit Wheel: $1 to $1,000 a bet at Standard. */
-const ONLINE = (): LimitSpec => bets('default', ladder([1, 100], [1, 1_000], [5, 5_000], [25, 10_000], [100, 25_000]), 2_500, 25_000);
+const ONLINE = (): LimitSpec => bets('default', ladder([1, 100], [1, 1_000], [5, 5_000], [25, 10_000], [100, 50_000], [1_000, 100_000]), WHEEL_CEILING);
 
 export const LIMITS: Partial<Record<GameId, LimitSpec>> = {
-  blackjack: bets('default', ladder([5, 500], [25, 5_000], [100, 10_000], [500, 25_000], [1_000, 50_000]), 5_000, 50_000),
+  blackjack: bets('default', ladder([5, 500], [25, 5_000], [100, 10_000], [500, 50_000], [1_000, 100_000], [5_000, 500_000]), TABLE_CEILING),
   // the headline is the outside bet; inside bets are a tenth of its maximum a number
-  roulette: bets('outside', ladder([1, 1_000], [5, 5_000], [25, 10_000], [100, 25_000], [500, 50_000]), 5_000, 50_000),
+  roulette: bets('outside', ladder([1, 1_000], [5, 5_000], [25, 10_000], [100, 50_000], [1_000, 100_000], [5_000, 500_000]), TABLE_CEILING),
   // the headline is the line bet
-  craps: bets('line', ladder([5, 1_000], [10, 5_000], [25, 10_000], [100, 25_000], [500, 50_000]), 5_000, 50_000),
-  baccarat: bets('default', ladder([5, 1_000], [10, 5_000], [50, 10_000], [100, 25_000], [1_000, 100_000]), 10_000, 100_000),
-  threecard: bets('ante', ladder([5, 500], [10, 1_000], [25, 2_500], [100, 5_000], [500, 10_000]), 1_000, 10_000),
-  war: bets('bet', ladder([5, 500], [10, 1_000], [25, 2_500], [100, 10_000], [500, 25_000]), 2_500, 25_000),
+  craps: bets('line', ladder([5, 1_000], [10, 5_000], [25, 10_000], [100, 50_000], [1_000, 100_000], [5_000, 500_000]), TABLE_CEILING),
+  baccarat: bets('default', ladder([5, 1_000], [10, 5_000], [50, 10_000], [100, 50_000], [1_000, 100_000], [5_000, 500_000]), TABLE_CEILING),
+  threecard: bets('ante', ladder([5, 500], [10, 1_000], [25, 5_000], [100, 10_000], [1_000, 100_000], [5_000, 500_000]), TABLE_CEILING),
+  war: bets('bet', ladder([5, 500], [10, 1_000], [25, 5_000], [100, 10_000], [1_000, 100_000], [5_000, 500_000]), TABLE_CEILING),
   // each spot; the most on the layout a spin is five times it
-  bigsix: bets('spot', ladder([1, 100], [1, 500], [5, 1_000], [25, 2_500], [100, 5_000]), 500, 5_000),
+  bigsix: bets('spot', ladder([1, 100], [1, 500], [5, 1_000], [25, 5_000], [100, 25_000], [1_000, 100_000]), WHEEL_CEILING),
   // Small, Big, Odd and Even; the other bets scale from them
-  sicbo: bets('even', ladder([1, 500], [5, 5_000], [25, 10_000], [100, 25_000], [500, 50_000]), 5_000, 50_000),
+  sicbo: bets('even', ladder([1, 500], [5, 5_000], [25, 10_000], [100, 50_000], [1_000, 100_000], [5_000, 500_000]), TABLE_CEILING),
   holdem: {
     kind: 'blinds',
     key: 'default',
-    tiers: tiers(['', 1, 2], ['', 2, 5], ['', 5, 10], ['', 10, 20], ['', 25, 50], ['', 50, 100], ['', 100, 200]),
+    tiers: tiers(['', 1, 2], ['', 2, 5], ['', 5, 10], ['', 10, 20], ['', 25, 50], ['', 50, 100], ['', 100, 200], ['', 500, 1_000], ['', 1_000, 2_000]),
     standard: 2,
-    min: { low: D, high: 100 * D, step: D },
-    max: { ratio: 2, ratioMax: 3, ceiling: 200 * D, step: D },
+    min: { low: D, high: 5_000 * D, step: D },
+    max: { ratio: 2, ratioMax: 3, ceiling: 10_000 * D, step: D },
   },
   banditwheel: ONLINE(),
   plinko: ONLINE(),

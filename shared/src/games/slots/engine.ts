@@ -53,8 +53,8 @@ function config(variant: string, mode: TableMode): TableConfig {
     variant: m.id,
     mode,
     maxSeats: 1,
-    // up to what the cashier tops a player up to: the high-limit coins bet as much as $500 a spin
-    buyIn: { min: 20 * DOLLAR, max: 50_000 * DOLLAR },
+    // up to a thousand of its largest bets ($500 a spin at the high-limit coins)
+    buyIn: { min: 20 * DOLLAR, max: 500_000 * DOLLAR },
     limits: { default: betRange(m) },
     options: { machine: m.id, denoms: [...m.denoms], maxCoins: m.maxCoins, lines: m.lines },
   };

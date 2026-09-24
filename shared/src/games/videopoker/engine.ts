@@ -65,8 +65,8 @@ function config(_variant: string, mode: TableMode): TableConfig {
     variant: '',
     mode,
     maxSeats: 1,
-    // up to what the cashier tops a player up to: five $100 coins are $500 a hand
-    buyIn: { min: 20 * DOLLAR, max: 50_000 * DOLLAR },
+    // up to a thousand of its largest bets (five $100 coins are $500 a hand)
+    buyIn: { min: 20 * DOLLAR, max: 500_000 * DOLLAR },
     // One $1 coin up to five $100 coins.
     limits: { default: { min: DENOMS[0]!, max: MAX_COINS * DENOMS[DENOMS.length - 1]!, step: DOLLAR } },
     options: { paytable: 'jacks-or-better-9-6', denoms: DENOMS, maxCoins: MAX_COINS },

@@ -54,7 +54,8 @@ function config(_variant: string, mode: TableMode): TableConfig {
     variant: '',
     mode,
     maxSeats: mode === 'solo' ? 1 : 8,
-    buyIn: { min: 20 * D, max: 20_000 * D },
+    // up to a hundred times the table maximum (shared/src/limits.ts scales it with the table)
+    buyIn: { min: 20 * D, max: 500_000 * D },
     // Every pay is a whole k to 1, so whole-dollar steps keep every payout exact.
     limits: {
       // the table: smallest chip, and the most one player may have on the layout for a roll
