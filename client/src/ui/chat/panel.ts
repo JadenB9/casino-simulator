@@ -423,6 +423,9 @@ export class ChatPanel {
   /** A line from the game itself (a refusal), in that room's log. */
   private system(id: RoomId, text: string): void {
     const room = this.rooms[id];
+    // The same refusal again (a burst of them) says nothing new.
+    const last = room.list.lastElementChild;
+    if (last?.classList.contains('chat-sys') && last.textContent === text) return;
     room.list.append(el('p', 'chat-line chat-sys', text));
     trim(room.list);
     if (id === this.active) this.toBottom();
