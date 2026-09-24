@@ -1,11 +1,12 @@
 // Canned accounts for the dev page (?fixture=1): a regular with a few weeks of play across every
-// game, and the same player at $0 for the cashier. The API stand-in behaves like the real one,
-// including the bank's 409 with the numbers.
+// game, and the same player down to their last few thousand for the cashier. The API stand-in
+// behaves like the real one, including the bank's 409 with the numbers.
 
 import type { LoanResponse, Profile } from '../../../../shared/src/protocol.ts';
 import type { GameStats } from '../../../../shared/src/protocol.ts';
 import type { GameId } from '../../../../shared/src/engine.ts';
 import { LOAN_AMOUNT } from '../../../../shared/src/money.ts';
+import { notYet, refillFor } from '../../../../shared/src/bank.ts';
 import type { Look } from '../../../../shared/src/look.ts';
 import { ApiError } from '../../net/api.ts';
 import type { AccountApi } from './deps.ts';
@@ -39,7 +40,7 @@ export function regular(now = Date.now()): Profile {
     ],
     loansTaken: 2,
     loans: [
-      { amount: LOAN_AMOUNT, at: now - 3 * DAY - 5 * HOUR },
+      { amount: 4_612_300, at: now - 3 * DAY - 5 * HOUR },
       { amount: LOAN_AMOUNT, at: now - 17 * DAY - 2 * HOUR },
     ],
     stats: withTotals({
@@ -54,19 +55,25 @@ export function regular(now = Date.now()): Profile {
   };
 }
 
-/** The same player after losing it all, chips on tables included. */
+/** The same player down to $3,250, nothing on any table: under the bank's line. */
 export function broke(now = Date.now()): Profile {
-  return { ...regular(now), balance: 0, inPlay: 0, tables: [], rev: 97 };
+  return { ...regular(now), balance: 325_000, inPlay: 0, tables: [], rev: 97 };
 }
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** The canned player's password on the dev page. Any other name is new there and takes any. */
+export const FIXTURE_PASSWORD = 'ace-high';
 
 export function fixtureApi(start: Profile, opts: { lastName?: string | null; latency?: number } = {}): AccountApi {
   let p = structuredClone(start);
   const ms = opts.latency ?? 220;
   return {
-    async login(name: string) {
+    async login(name: string, password: string) {
       await wait(ms);
+      if (name.toLowerCase() === start.name.toLowerCase() && password !== FIXTURE_PASSWORD) {
+        throw new ApiError(401, { error: 'UNAUTHORIZED', msg: 'Wrong name or password.' });
+      }
       p = { ...p, name };
       return structuredClone(p);
     },
@@ -82,12 +89,14 @@ export function fixtureApi(start: Profile, opts: { lastName?: string | null; lat
     },
     async takeLoan(): Promise<LoanResponse> {
       await wait(ms * 2);
-      if (p.balance > 0 || p.inPlay > 0) {
-        throw new ApiError(409, { error: 'NOT_ELIGIBLE', msg: 'The bank only lends when you have nothing left, on the tables included.', balance: p.balance, inPlay: p.inPlay });
+      const chips = p.tables.reduce((sum, t) => sum + (t.stack ?? t.escrow), 0);
+      const amount = refillFor(p.balance + chips);
+      if (amount === 0) {
+        throw new ApiError(409, { error: 'NOT_ELIGIBLE', msg: notYet(p.balance + chips, chips), balance: p.balance, inPlay: p.inPlay });
       }
       const at = Date.now();
-      p = { ...p, balance: LOAN_AMOUNT, loansTaken: p.loansTaken + 1, loans: [{ amount: LOAN_AMOUNT, at }, ...p.loans], rev: p.rev + 1 };
-      return { profile: structuredClone(p), loan: { amount: LOAN_AMOUNT, at } };
+      p = { ...p, balance: p.balance + amount, loansTaken: p.loansTaken + 1, loans: [{ amount, at }, ...p.loans], rev: p.rev + 1 };
+      return { profile: structuredClone(p), loan: { amount, at } };
     },
     forgetToken() {},
   };

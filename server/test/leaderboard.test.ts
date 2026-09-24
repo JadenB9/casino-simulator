@@ -12,7 +12,7 @@ import { signToken } from '../src/auth.ts';
 import { CACHE_MS, SQL, WIN_ROWS, clearLeaderboardCache, leaderboard } from '../src/leaderboard.ts';
 import { CATALOG } from '../../shared/src/games/catalog.ts';
 import { LEADERBOARD_TOP, LEADERBOARDS, type LeaderboardResponse } from '../../shared/src/protocol.ts';
-import { ORIGIN, api } from './helpers.ts';
+import { ORIGIN, TEST_PASSWORD, api } from './helpers.ts';
 
 /** Far above anything a real account holds, so these players own the top of every board. */
 const HUGE = 9_000_000_000_000;
@@ -34,7 +34,7 @@ async function player(name: string): Promise<Player> {
       method: 'POST',
       // an address per login keeps this file under the new-account limit
       headers: { 'Content-Type': 'application/json', Origin: ORIGIN, 'CF-Connecting-IP': `203.0.113.${++ipSeq}` },
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({ name, password: TEST_PASSWORD }),
     }),
   );
   expect(res.status).toBe(200);

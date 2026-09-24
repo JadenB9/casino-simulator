@@ -60,14 +60,32 @@ reconnect.
 
 | method | path | body | success | errors |
 |---|---|---|---|---|
-| POST | `/login` | `{ name }` | `{ token, profile }` | 400 `BAD_NAME`, 429 |
+| POST | `/login` | `{ name, password }` | `{ token, profile }` | 400 `BAD_NAME`, 400 `BAD_REQUEST` (password), 401 `UNAUTHORIZED`, 429 |
 | GET | `/me` | | `{ profile }` | 401 |
 | PUT | `/me/look` | `{ look }` | `{ look }` | 400, 401 |
-| POST | `/bank/loan` | | `{ profile, loan }` | 409 `NOT_ELIGIBLE {balance, inPlay}` |
+| POST | `/bank/loan` | | `{ profile, loan }` | 409 `NOT_ELIGIBLE {balance, inPlay}`, 409 `BUSY` |
 | POST | `/tables` | `{ game, variant?, visibility }` | `{ tableId, pin? }` | 400, 429 |
 | POST | `/tables/join` | `{ pin }` | `{ tableId, game }` | 404 `BAD_PIN`, 429 |
 | GET | `/leaderboard` | | `LeaderboardResponse` | 401 |
 | GET | `/health` | | `ok` | |
+
+**Logging in.** Names are first come, first served (3-16 of `A-Z a-z 0-9 _`, any case the same
+name) and a password keeps one yours: 4-64 characters of anything, spaces included, counted
+after NFC normalization. A new name is created with the password it came with; a name that has
+one needs it; an account from before passwords takes the first password it is given and is
+claimed from then on. A wrong password is `401 { error: 'UNAUTHORIZED', msg: 'Wrong name or
+password.' }` whichever account it was. Past 20 wrong passwords from one address, or 60 to one
+name, in 15 minutes, logins from there or to it are `429` until the window ends; so are more
+than 30 attempts a minute, or 10 new names an hour, from one address. Tokens are `v2.`; a `v1.`
+token (from the name-only login) is a 401 like any other bad token.
+
+**The bank.** Under $10,000 in all (the balance plus every chip on every table, bets out
+included, as the tables report them when asked), `/bank/loan` tops the balance up to exactly
+$50,000 and records the difference as a loan: `loan.amount` is that difference, and
+`profile.loansTaken` / `profile.loans` count it. At $10,000 or more it is `409 NOT_ELIGIBLE`
+whose `msg` says what the bank counted; `balance` and `inPlay` are the profile's. While chips
+are moving between a table and D1 (a buy-in, top-up or cash-out in flight) it is `409 BUSY`:
+ask again in a moment.
 
 ```ts
 type Profile = {

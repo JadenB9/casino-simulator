@@ -5,7 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import { exports } from 'cloudflare:workers';
 import { EMOTES } from '../../shared/src/protocol.ts';
-import { ORIGIN, connect, type Client } from './helpers.ts';
+import { ORIGIN, TEST_PASSWORD, connect, type Client } from './helpers.ts';
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -16,7 +16,7 @@ async function arrive(name: string): Promise<{ id: number; c: Client }> {
     new Request('http://casino.test/casino/api/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Origin: ORIGIN, 'CF-Connecting-IP': `192.0.2.${++ipSeq}` },
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({ name, password: TEST_PASSWORD }),
     }),
   );
   expect(res.status).toBe(200);

@@ -126,6 +126,8 @@ export interface Profile {
 
 export interface LoginRequest {
   name: string;
+  /** 4-64 characters (shared/src/password.ts); sets the password of a new or unclaimed name */
+  password: string;
 }
 export interface LoginResponse {
   token: string;

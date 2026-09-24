@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { env, exports } from 'cloudflare:workers';
 import { evictDurableObject } from 'cloudflare:test';
-import { ORIGIN, api, connect, type Client } from './helpers.ts';
+import { ORIGIN, TEST_PASSWORD, api, connect, type Client } from './helpers.ts';
 import type { CasinoFloor } from '../src/floor/index.ts';
 import { FLUSH_MS, MAX_BANK, SPAWN } from '../src/floor/presence.ts';
 import { FLOOR_BOUNDS } from '../../shared/src/protocol.ts';
@@ -19,7 +19,7 @@ async function login(name: string): Promise<{ token: string; profile: any }> {
     new Request('http://casino.test/casino/api/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Origin: ORIGIN, 'CF-Connecting-IP': `10.41.0.${++ipSeq}` },
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({ name, password: TEST_PASSWORD }),
     }),
   );
   if (res.status !== 200) throw new Error(`login ${res.status} ${await res.text()}`);
