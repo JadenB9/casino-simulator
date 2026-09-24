@@ -7,7 +7,7 @@ import type { Engine3D, Quality } from '../render/engine3d.ts';
 import { DEFAULT_LOOK, type Look } from '../../../shared/src/look.ts';
 import { GAMES } from '../games/index.ts';
 import type { CashierPoint, Station, World } from './contract.ts';
-import { planFloor, setVpMode, slotVariants, type FloorPlan } from './layout.ts';
+import { SPAWN, planFloor, setVpMode, slotVariants, type FloorPlan } from './layout.ts';
 import { Mats, loadTextures } from './materials.ts';
 import { Batch } from './batch.ts';
 import { Collider } from './collision.ts';
@@ -32,8 +32,8 @@ import './world.css';
 
 export type { WorldStation } from './stations.ts';
 
-/** Where a player first appears: inside the doors on the marble, facing into the casino (-z). */
-export const SPAWN = { x: 0, z: 12.8, yaw: Math.PI };
+export { SPAWN };
+export { lifePoints, type LifePoints, type Seatable, type Stand } from './life-points.ts';
 export type { World } from './contract.ts';
 
 export interface WorldOptions {
