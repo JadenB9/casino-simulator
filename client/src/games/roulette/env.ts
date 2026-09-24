@@ -50,10 +50,22 @@ function casino(renderer: THREE.WebGLRenderer): THREE.Texture {
   carpet.position.y = -0.77;
   scene.add(room, carpet);
 
-  // downlights across the ceiling, and a few chandeliers hanging lower
+  // downlights across the ceiling, not quite in rows (a perfect grid reads as a disco ball in
+  // the turret), and a few chandeliers hanging lower
   const spot = new THREE.CircleGeometry(0.11, 20).rotateX(Math.PI / 2);
   const lights: THREE.Matrix4[] = [];
-  for (let x = -6; x <= 6; x += 0.9) for (let z = -6; z <= 6; z += 0.9) lights.push(new THREE.Matrix4().makeTranslation(x + 0.3, 2.35, z - 0.2));
+  let seed = 11;
+  const rand = () => {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    return seed / 4294967296;
+  };
+  for (let x = -6; x <= 6; x += 1.1) {
+    for (let z = -6; z <= 6; z += 1.1) {
+      if (rand() < 0.3) continue;
+      const k = 0.6 + 0.8 * rand();
+      lights.push(new THREE.Matrix4().makeScale(k, 1, k).setPosition(x + 0.6 * (rand() - 0.5), 2.35 - 0.3 * rand(), z + 0.6 * (rand() - 0.5)));
+    }
+  }
   const downlights = new THREE.InstancedMesh(spot, basic(6, 4.6, 3), lights.length);
   lights.forEach((m, i) => downlights.setMatrixAt(i, m));
   scene.add(downlights);
