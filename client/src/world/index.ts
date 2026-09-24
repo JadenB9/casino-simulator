@@ -234,6 +234,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
     mannequins.setRooms(vis);
     for (const d of directories.meshes) d.visible = vis.has(d.userData.room as string);
   };
+  const sees = (room: string, box: THREE.Box3) => visibility.sees(room, box);
   const map = new MapOverlay({ plan, ui, you: () => ({ x: player.position.x, z: player.position.z, heading: player.heading }) });
   // On the floor with the mouse free (after Esc, or before the first click on the dev floor): how
   // to get looking around back. Only where there's a mouse to hold (the player knows).
@@ -364,9 +365,9 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
       touch.update();
       if (visibility.update(engine.camera)) applyRooms();
       lighting.setRoom(visibility.room);
-      lod.update(engine.camera, interact.seated, visibility.visible);
+      lod.update(engine.camera, interact.seated, visibility.visible, sees);
       character.update(dt);
-      staff.update(dt, engine.camera, interact.seated, visibility.visible);
+      staff.update(dt, engine.camera, interact.seated, visibility.visible, sees);
       map.update(dt);
       emotes.update(dt);
       const f = world.focus;

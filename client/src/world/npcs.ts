@@ -329,6 +329,7 @@ export class Staff {
   private readonly frustum = new THREE.Frustum();
   private readonly viewProj = new THREE.Matrix4();
   private readonly sphere = new THREE.Sphere(new THREE.Vector3(), 1.1);
+  private readonly box = new THREE.Box3();
   private readonly cam = new THREE.Vector3();
   private readonly people: THREE.Vector3[] = [];
   private readonly pool: THREE.Vector3[] = [];
@@ -416,7 +417,7 @@ export class Staff {
    * Every frame: show who's near and in view, and give them their life; `seated` is the table you
    * sit at, `rooms` the rooms that can be seen (visibility.ts): anyone elsewhere isn't drawn.
    */
-  update(dt: number, camera: THREE.Camera, seated: WorldStation | null, rooms: Set<string> | null = null): void {
+  update(dt: number, camera: THREE.Camera, seated: WorldStation | null, rooms: Set<string> | null = null, sees: ((room: string, box: THREE.Box3) => boolean) | null = null): void {
     this.clock += dt;
     camera.updateMatrixWorld();
     camera.getWorldPosition(this.cam);
@@ -430,7 +431,9 @@ export class Staff {
       const d = Math.hypot(root.position.x - this.cam.x, root.position.z - this.cam.z);
       const near = m.shown ? d < CULL_M : d < CULL_M - 1;
       this.sphere.center.set(root.position.x, 0.95, root.position.z);
-      const seen = mine || !rooms || rooms.has(m.post.room);
+      this.box.min.set(root.position.x - 0.4, 0, root.position.z - 0.4);
+      this.box.max.set(root.position.x + 0.4, 1.9, root.position.z + 0.4);
+      const seen = mine || !rooms || (rooms.has(m.post.room) && (!sees || sees(m.post.room, this.box)));
       const show = mine || (seen && near && this.frustum.intersectsSphere(this.sphere));
       // past CULL_M (not merely out of view) the still copy stands in, if its room can be seen
       const farShow = !show && !near && seen;
