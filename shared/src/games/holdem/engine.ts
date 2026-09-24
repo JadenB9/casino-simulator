@@ -897,6 +897,12 @@ export const engine: GameEngine<HoldemState, HoldemAction, HoldemView> = {
       sync(s, ctx);
     } else {
       delete s.seats[seat];
+      // A newcomer in a seat someone gave up: the hand (still on the table through the results
+      // and until the next deal) keeps the last occupant's hole cards under this number, and a
+      // seat is always shown its own. Cards never shown (folded, or a pot won uncontested) go:
+      // the host only frees a seat once nothing of it is live, so no one's hand needs them.
+      const gone = s.hand ? R.player(s.hand, seat) : undefined;
+      if (gone && !gone.shown && (gone.folded || (s.phase !== 'playing' && s.phase !== 'runout'))) gone.hole = [];
       sync(s, ctx);
     }
     const st = s.seats[seat];

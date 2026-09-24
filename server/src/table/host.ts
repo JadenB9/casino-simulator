@@ -31,8 +31,9 @@ import {
   type TableServerMsg,
 } from '../../../shared/src/protocol.ts';
 import { applyTransfer, buyInStatements, cashOutStatements, refundStatements, moneyOf, type SeatStats } from '../transfer.ts';
-import { Bucket } from '../ratelimit.ts';
+import { Bucket, KeyedBuckets } from '../ratelimit.ts';
 import { closeWith } from '../http.ts';
+import { ipKey } from '../floor/directory.ts';
 import type { CasinoFloor } from '../floor/index.ts';
 import { ChatRoom } from '../floor/chat.ts';
 import { bigWinsIn, type BigWinReport } from '../floor/wins.ts'; // features: big wins
@@ -51,6 +52,26 @@ const RETRY_MAX_MS = 60_000;
 /** Wrong PINs one account may try at a private table before it is refused for a while. */
 const PIN_MISSES = 5;
 const PIN_LOCK_MS = 10 * 60_000;
+/**
+ * Wrong PINs the whole world may try against one PIN of one table in that window. Accounts are
+ * free and addresses are cheap, so without this many hands could still sweep 10,000 PINs; the
+ * leader can draw a fresh PIN (private, public, private) to open the door again.
+ */
+export const PIN_TABLE_MISSES = 30;
+/**
+ * Connections one account may open to this table: a burst, then one every few seconds. Each
+ * connect sends a whole snapshot and tells everyone, so a reconnect loop is a broadcast loop.
+ */
+export const CONNECT_BURST = 10;
+const CONNECT_PER_SEC = 1 / 3;
+/** What an honest client never gets near: a burst of frames of any kind, then a steady rate. */
+const FRAME_BURST = 60;
+const FRAME_PER_SEC = 30;
+/** Dropped or refused frames a socket may run up before it is closed; they're forgiven slowly. */
+export const STRIKES = 40;
+const STRIKE_FORGIVE_PER_SEC = 0.2;
+/** Longest the alarm waits before retrying an engine deadline that tick() couldn't clear. */
+const OVERDUE_MAX_MS = 5_000;
 
 type MemberRow = {
   account_id: number;
@@ -100,10 +121,40 @@ interface Meta {
   engineVersion: number;
   createdAt: number;
   closed: boolean;
+  /**
+   * Seats given up while a round was in play. The engine may still hold the last occupant's
+   * round under that number, so nobody new buys into one until the table is quiet again.
+   * (Absent in tables made before this existed.)
+   */
+  held?: number[];
 }
 
 interface Att {
   accountId: number;
+}
+
+/** Per-socket limits: every frame, then per kind of message, and the strikes that close it. */
+interface SocketLimits {
+  frames: Bucket;
+  act: Bucket;
+  misc: Bucket;
+  money: Bucket;
+  strikes: Bucket;
+}
+
+/** A card code as the engines write them ("As", "Td"). */
+const CARD_RE = /^[2-9TJQKA][shdc]$/;
+
+/** Every card code anywhere in a view. */
+function cardsIn(x: unknown, out: string[] = []): string[] {
+  if (typeof x === 'string') {
+    if (CARD_RE.test(x)) out.push(x);
+  } else if (Array.isArray(x)) {
+    for (const v of x) cardsIn(v, out);
+  } else if (typeof x === 'object' && x !== null) {
+    for (const v of Object.values(x)) cardsIn(v, out);
+  }
+  return out;
 }
 
 type Engine = GameEngine<unknown, unknown, unknown>;
@@ -126,7 +177,10 @@ export class CasinoTable extends DurableObject<Env> {
   private rng: Rng = cryptoRng();
   private pumping: Promise<void> | null = null;
   private alarmAt: number | null = null;
-  private buckets = new Map<WebSocket, { act: Bucket; misc: Bucket; money: Bucket; strikes: number }>();
+  private buckets = new Map<WebSocket, SocketLimits>();
+  private connects = new KeyedBuckets(CONNECT_BURST, CONNECT_PER_SEC);
+  /** Alarms in a row that found the engine's deadline still due after running it. */
+  private overdue = 0;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -167,12 +221,12 @@ export class CasinoTable extends DurableObject<Env> {
     this.state = st ? JSON.parse(st.json) : null;
 
     const now = Date.now();
-    if (m.engineVersion !== this.engine.stateVersion || this.state === null) {
-      // The stored round was written by a different version of the rules. Void it: every seat
-      // gets back what it had on the layout, and a fresh game state starts.
-      this.voidRound(now);
-      return;
-    }
+    const voided = m.engineVersion !== this.engine.stateVersion || this.state === null;
+    // The stored round was written by a different version of the rules. Void it: every seat
+    // gets back what it had on the layout, and a fresh game state starts. The seats themselves
+    // are still held below like after any restart (returning here left dropped players' seats,
+    // and their escrows, open with no grace period to close them).
+    if (voided) this.voidRound(now);
     // Sockets don't survive a restart and no close events arrive for them, so anyone seated
     // without a socket has just been dropped by us, not by their network. Start their grace
     // period now and give the table's timers the same breathing room, once.
@@ -186,7 +240,12 @@ export class CasinoTable extends DurableObject<Env> {
         this.setDeadline(`grace:${mem.account_id}`, now + GRACE_MS);
       }
     }
-    if (dropped && this.engine.deadline(this.state) !== null) {
+    // A leader the restart dropped hands on the lead like one whose network dropped, rather than
+    // keeping it through the whole grace period while everyone else waits to press Start.
+    if (m.mode === 'multi' && m.leader !== null && !live.has(m.leader) && !this.hasDeadline('leader')) {
+      this.setDeadline('leader', now + LEADER_HANDOFF_MS);
+    }
+    if (!voided && dropped && this.engine.deadline(this.state) !== null) {
       this.state = this.engine.shiftDeadlines(this.state, RESTART_SHIFT_MS);
       this.sql.exec(`INSERT OR REPLACE INTO state (id, json) VALUES (1, ?1)`, JSON.stringify(this.state));
     }
@@ -207,6 +266,9 @@ export class CasinoTable extends DurableObject<Env> {
       m.engineVersion = engine.stateVersion;
       this.sql.exec(`INSERT OR REPLACE INTO state (id, json) VALUES (1, ?1)`, JSON.stringify(this.state));
       this.putMeta('engineVersion', m.engineVersion);
+      // A fresh state remembers nobody's round.
+      m.held = [];
+      this.putMeta('held', m.held);
     });
   }
 
@@ -319,6 +381,9 @@ export class CasinoTable extends DurableObject<Env> {
     const solo = request.headers.get('x-casino-solo');
     const now = Date.now();
 
+    // Before anything is written or sent: a reconnect loop gets a burst, then waits (4008 makes
+    // the client back off).
+    if (!this.connects.take(`a:${accountId}`)) return closeWith(CLOSE.RATE_LIMITED, 'slow down');
     if (!this.meta && solo) {
       const [game, variant] = solo.split('|');
       if (!isGameId(game)) return new Response('bad game', { status: 400 });
@@ -379,13 +444,16 @@ export class CasinoTable extends DurableObject<Env> {
 
   /** Null if this PIN opens the table; otherwise why not. */
   private checkPin(accountId: number, ip: string, pin: string | null, now: number): 'wrong' | 'locked' | null {
-    // Names are free, so the address counts too (when the edge gave us one).
-    const keys = [`a:${accountId}`, ...(ip ? [`ip:${ip}`] : [])];
+    // Names are free, so the address counts too (when the edge gave us one), per /64 for IPv6
+    // since one user can pick a new address from theirs for every try. And everyone's misses
+    // against this PIN count together, so many accounts on many addresses can't sweep it either.
+    const keys: [string, number][] = [[`a:${accountId}`, PIN_MISSES], [`pin:${this.meta!.pin}`, PIN_TABLE_MISSES]];
+    if (ip) keys.push([`ip:${ipKey(ip)}`, PIN_MISSES]);
     this.sql.exec(`DELETE FROM pin_misses WHERE until <= ?1`, now);
     const misses = (who: string) => this.sql.exec<{ n: number }>(`SELECT n FROM pin_misses WHERE who = ?1`, who).toArray()[0]?.n ?? 0;
-    if (keys.some((k) => misses(k) >= PIN_MISSES)) return 'locked';
+    if (keys.some(([k, limit]) => misses(k) >= limit)) return 'locked';
     if (pin !== null && pin === this.meta!.pin) return null;
-    for (const k of keys) {
+    for (const [k] of keys) {
       this.sql.exec(`INSERT INTO pin_misses (who, n, until) VALUES (?1, 1, ?2) ON CONFLICT(who) DO UPDATE SET n = n + 1`, k, now + PIN_LOCK_MS);
     }
     return 'wrong';
@@ -398,22 +466,28 @@ export class CasinoTable extends DurableObject<Env> {
       ws.close(1009, 'frame too large');
       return;
     }
+    const b = this.bucketsFor(ws);
+    // Every frame counts, junk and chat included: a flood that fails to parse costs the table as
+    // much as one that doesn't. Junk and overflow are dropped without a reply and count as strikes.
     let data: unknown;
-    try {
-      data = JSON.parse(raw);
-    } catch {
-      return;
+    if (b.frames.take()) {
+      try {
+        data = JSON.parse(raw);
+      } catch {
+        /* not JSON */
+      }
     }
-    // Chat keeps its own limits and mutes (floor/chat.ts), so it goes round the buckets below.
+    // Chat keeps its own limits and mutes (floor/chat.ts) on top of the frame count.
     const say = parseSay(data);
     if (say) return this.chatSay(ws, att.accountId, say.text);
     const msg = parseTableMsg(data);
-    if (!msg) return;
-    const b = this.bucketsFor(ws);
+    if (!msg) {
+      this.strike(ws, b);
+      return;
+    }
     const bucket = msg.t === 'act' ? b.act : msg.t === 'buyin' || msg.t === 'topup' || msg.t === 'cashout' ? b.money : b.misc;
     if (!bucket.take()) {
-      if (++b.strikes > 40) ws.close(CLOSE.RATE_LIMITED, 'slow down');
-      else this.send(ws, { t: 'err', code: 'RATE_LIMITED', msg: 'Too fast.' });
+      if (this.strike(ws, b)) this.send(ws, { t: 'err', code: 'RATE_LIMITED', msg: 'Too fast.' });
       return;
     }
     const mem = this.members.get(att.accountId);
@@ -525,6 +599,15 @@ export class CasinoTable extends DurableObject<Env> {
     } catch (err) {
       console.error('table alarm failed', this.meta?.name, err);
     }
+    // An engine deadline still due after running it (tick() had nothing to do, or its step was
+    // refused) would bring the alarm straight back, every 10 ms, for as long as it lasts. Retry
+    // with a growing wait instead, and say so once.
+    const due = this.engine && this.state !== null ? this.engine.deadline(this.state) : null;
+    if (due !== null && due <= now) {
+      if (++this.overdue === 3) console.error('engine deadline stuck; backing off', this.meta?.name, due);
+    } else {
+      this.overdue = 0;
+    }
     this.alarmAt = null;
     this.scheduleAlarm();
   }
@@ -535,8 +618,13 @@ export class CasinoTable extends DurableObject<Env> {
   private addMember(accountId: number, name: string, look: string, station: string | null, now: number): MemberRow {
     const m = this.meta!;
     const taken = new Set([...this.members.values()].map((x) => x.seat));
-    let seat = 0;
-    while (taken.has(seat)) seat++;
+    // The lowest free seat, passing over seats held since someone left mid-round (a newcomer
+    // could only watch from one of those until the round ends) unless no other is free.
+    // (The caller has checked the table isn't full, so a seat below maxSeats is free.)
+    const free: number[] = [];
+    for (let s = 0; s < m.config.maxSeats; s++) if (!taken.has(s)) free.push(s);
+    const held = new Set(m.held ?? []);
+    const seat = free.find((s) => !held.has(s)) ?? free[0]!;
     // joined_at orders the party (who leads next), so two joins in one millisecond still get
     // distinct, increasing times.
     const last = Math.max(0, ...[...this.members.values()].map((x) => x.joined_at));
@@ -595,6 +683,22 @@ export class CasinoTable extends DurableObject<Env> {
         m.leader = next ? next.account_id : null;
         this.putMeta('leader', m.leader);
         this.clearDeadline('leader');
+        // Nobody else was connected, so the lead went to someone who is away: they keep it only
+        // as long as any dropped leader would before it moves to whoever is here by then.
+        if (next && !this.isConnected(next.account_id)) this.setDeadline('leader', now + LEADER_HANDOFF_MS);
+      }
+      // The engine may still hold this seat's part of the round in play (a folded hand, say), so
+      // the number isn't handed to anyone new until the table is quiet.
+      const held = m.held ?? [];
+      let next = held;
+      if (this.roundInPlay()) {
+        if (mem.seat !== null && !held.includes(mem.seat)) next = [...held, mem.seat];
+      } else if (held.length) {
+        next = [];
+      }
+      if (next !== held) {
+        m.held = next;
+        this.putMeta('held', next);
       }
       if (this.members.size === 0 && m.mode === 'multi') this.setDeadline('close', now + EMPTY_CLOSE_MS);
     });
@@ -661,6 +765,7 @@ export class CasinoTable extends DurableObject<Env> {
     if (kind === 'buyin' && mem.status !== 'watching') return this.err(ws, 'BUSY', "You're already sitting down.", aid);
     if (kind === 'topup' && mem.status !== 'seated') return this.err(ws, 'NOT_SEATED', 'Sit down first.', aid);
     if (kind === 'topup' && this.topUpPending(mem.account_id)) return this.err(ws, 'BUSY', 'Your last chips are still on the way.', aid);
+    if (kind === 'buyin' && this.seatNotReady(mem, now)) return this.err(ws, 'BUSY', 'This seat opens when the round in play ends.', aid);
     const after = mem.stack + amount;
     if (amount % 100 !== 0 || amount < (kind === 'buyin' ? cfg.buyIn.min : 100) || after > cfg.buyIn.max) {
       return this.err(ws, 'LIMIT', `Bring between $${cfg.buyIn.min / 100} and $${cfg.buyIn.max / 100} to this table.`, aid);
@@ -842,6 +947,13 @@ export class CasinoTable extends DurableObject<Env> {
     if (!mem) return;
     if (!applied) {
       for (const ws of this.ctx.getWebSockets(`a:${mem.account_id}`)) this.err(ws, 'INSUFFICIENT_FUNDS', "Your balance doesn't cover that.");
+      // They asked to leave while it was in flight and there are no chips to cash out: go now,
+      // rather than staying a member nobody can remove until a grace period runs out (and who
+      // can't come back to the table until then).
+      if (job.kind === 'buyin' && mem.leaving) {
+        this.removeMember(mem, now);
+        return;
+      }
     }
     this.sendSeat(mem);
     this.broadcastMembers();
@@ -979,11 +1091,45 @@ export class CasinoTable extends DurableObject<Env> {
       m.seq += 1;
       this.putMeta('seq', m.seq);
     });
+    this.overdue = 0;
     this.broadcastEvents(step.events, now);
     for (const seat of stacks.keys()) this.sendSeat(bySeat.get(seat)!);
     if (readyCleared) this.broadcastMembers();
     if (step.rounds?.length) this.announceBigWins(step, bySeat, now); // features: big wins
+    // Nothing on the layout anywhere: the round a seat was given up in is over.
+    if (m.held?.length && !this.roundInPlay()) {
+      m.held = [];
+      this.putMeta('held', m.held);
+    }
     return true;
+  }
+
+  /** Someone seated still has chips on the layout: a round is in play. */
+  private roundInPlay(): boolean {
+    for (const mem of this.members.values()) if (mem.status === 'seated' && mem.live > 0) return true;
+    return false;
+  }
+
+  /**
+   * Whether a newcomer can't buy into this seat yet: it was given up mid-round and the table
+   * hasn't been quiet since, or the engine would show whoever sits there a card nobody else at the
+   * table can see (nobody new has been dealt anything, so it can only be the last occupant's).
+   */
+  private seatNotReady(mem: MemberRow, now: number): boolean {
+    if (mem.seat === null) return false;
+    if ((this.meta!.held ?? []).includes(mem.seat)) return true;
+    try {
+      const engine = this.engine!;
+      const ctx = this.engineCtx(now);
+      const seats = [...ctx.seats.filter((x) => x.seat !== mem.seat), { seat: mem.seat, accountId: mem.account_id, name: mem.name, stack: 0, connected: true, ready: false }];
+      seats.sort((a, b) => a.seat - b.seat);
+      const probe = engine.seatJoined(this.state, mem.seat, { ...ctx, seats });
+      const open = new Set(cardsIn(engine.view(probe.state, null)));
+      return cardsIn(engine.view(probe.state, mem.seat)).some((c) => !open.has(c));
+    } catch (err) {
+      console.error('seat probe failed', this.meta!.name, err);
+      return false;
+    }
   }
 
   private engineCtx(now: number): EngineCtx {
@@ -1027,7 +1173,7 @@ export class CasinoTable extends DurableObject<Env> {
     if (o !== null) times.push(o);
     if (this.engine && this.state !== null) {
       const e = this.engine.deadline(this.state);
-      if (e !== null) times.push(e);
+      if (e !== null) times.push(this.overdue > 0 ? Math.max(e, Date.now() + Math.min(OVERDUE_MAX_MS, 50 * 2 ** this.overdue)) : e);
     }
     if (times.length === 0) return;
     const at = Math.max(Math.min(...times), Date.now() + 10);
@@ -1095,7 +1241,7 @@ export class CasinoTable extends DurableObject<Env> {
       members: this.memberList(),
       leader: m.leader,
       you: { accountId, seat: mem?.seat ?? null, status: mem?.status ?? 'watching', stack: mem?.stack ?? 0 },
-      view: this.engine!.view(this.state, mem && mem.status !== 'watching' ? mem.seat : null),
+      view: this.engine!.view(this.state, this.viewerSeat(mem)),
       seq: m.seq,
       now,
     };
@@ -1131,10 +1277,19 @@ export class CasinoTable extends DurableObject<Env> {
       if (!att) continue;
       const mem = this.members.get(att.accountId);
       if (!mem) continue;
-      const seat = mem.status !== 'watching' ? mem.seat : null;
+      const seat = this.viewerSeat(mem);
       const mine = events.filter((e) => e.to === undefined || e.to === 'all' || e.to === seat);
       this.send(ws, { t: 'ev', seq: m.seq, events: mine, view: engine.view(this.state, seat), now });
     }
+  }
+
+  /**
+   * The seat whose private view (and events addressed to it) a member gets: only once their chips
+   * have landed. Someone still buying in holds a seat number the engine hasn't given them yet, and
+   * whatever the engine keeps under that number belongs to whoever sat there before.
+   */
+  private viewerSeat(mem: MemberRow | undefined): number | null {
+    return mem && (mem.status === 'seated' || mem.status === 'cashing_out') ? mem.seat : null;
   }
 
   private sendSeat(mem: MemberRow): void {
@@ -1143,13 +1298,30 @@ export class CasinoTable extends DurableObject<Env> {
     }
   }
 
-  private bucketsFor(ws: WebSocket) {
+  private bucketsFor(ws: WebSocket): SocketLimits {
     let b = this.buckets.get(ws);
     if (!b) {
-      b = { act: new Bucket(24, 12), misc: new Bucket(8, 4), money: new Bucket(3, 1), strikes: 0 };
+      b = {
+        frames: new Bucket(FRAME_BURST, FRAME_PER_SEC),
+        act: new Bucket(24, 12),
+        misc: new Bucket(8, 4),
+        money: new Bucket(3, 1),
+        strikes: new Bucket(STRIKES, STRIKE_FORGIVE_PER_SEC),
+      };
       this.buckets.set(ws, b);
     }
     return b;
+  }
+
+  /** Count a dropped or refused frame; false (and the socket closed) once there are too many. */
+  private strike(ws: WebSocket, b: SocketLimits): boolean {
+    if (b.strikes.take()) return true;
+    try {
+      ws.close(CLOSE.RATE_LIMITED, 'slow down');
+    } catch {
+      /* already closing */
+    }
+    return false;
   }
 
   // ------------------------------------------------------------------------------------------

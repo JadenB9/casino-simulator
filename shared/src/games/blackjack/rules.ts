@@ -107,6 +107,8 @@ export interface Spot {
   returned: Cents;
   /** Chips of this seat still on the layout. */
   live: Cents;
+  /** This seat's round was reported early, as it left with nothing live (the round's end skips it). */
+  reported?: true;
 }
 
 export type Stage = 'insurance' | 'play' | 'done';
