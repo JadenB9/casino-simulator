@@ -9,6 +9,18 @@ export type Quality = 'high' | 'low';
 
 const QUALITY_KEY = 'casino.quality';
 
+/**
+ * Phones and tablets: a touch screen is the main pointer. They start on Low graphics and never
+ * render more than 1.5 device pixels per CSS pixel; a 3x phone screen would otherwise ask for
+ * four times the pixels of a laptop's, on a much smaller GPU.
+ */
+export function isMobile(): boolean {
+  return typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches && navigator.maxTouchPoints > 0;
+}
+
+/** The most device pixels per CSS pixel the renderer ever uses. */
+export const MOBILE_MAX_PIXEL_RATIO = 1.5;
+
 export function savedQuality(): Quality {
   try {
     const q = localStorage.getItem(QUALITY_KEY);
@@ -16,7 +28,7 @@ export function savedQuality(): Quality {
   } catch {
     /* storage blocked */
   }
-  return 'high';
+  return isMobile() ? 'low' : 'high';
 }
 
 export function saveQuality(q: Quality): void {
@@ -29,18 +41,40 @@ export function saveQuality(q: Quality): void {
 
 export type FrameFn = (dt: number, time: number) => void;
 
+/** Vertical field of view on a landscape or square screen, degrees. */
+export const FOV = 55;
+
+/**
+ * A phone held upright would see a narrow slot of the room at 55 degrees (27 across). The view
+ * opens up as the screen narrows, by the square root of the aspect so it never bulges at the
+ * edges: 75 degrees tall (39 across) on a 390 x 844 phone. Landscape keeps 55.
+ */
+export function fovFor(aspect: number): number {
+  if (!(aspect > 0) || aspect >= 1) return FOV;
+  const half = Math.tan(THREE.MathUtils.degToRad(FOV / 2)) / Math.sqrt(aspect);
+  return THREE.MathUtils.radToDeg(2 * Math.atan(half));
+}
+
 export class Engine3D {
   readonly renderer: THREE.WebGLRenderer;
   readonly labels: CSS2DRenderer;
   readonly scene = new THREE.Scene();
-  readonly camera = new THREE.PerspectiveCamera(55, 1, 0.05, 200);
+  readonly camera = new THREE.PerspectiveCamera(FOV, 1, 0.05, 200);
   readonly timer = new THREE.Timer();
   private frames = new Set<FrameFn>();
   private frameTimes: number[] = [];
 
+  /** The ceiling on the pixel ratio: 1.5 on phones and tablets, 2 elsewhere. */
+  readonly maxPixelRatio: number;
+
   constructor(canvas: HTMLCanvasElement, labelRoot: HTMLElement, readonly quality: Quality) {
     const high = quality === 'high';
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: high, powerPreference: 'high-performance' });
+    this.maxPixelRatio = isMobile() ? MOBILE_MAX_PIXEL_RATIO : 2;
+    // Everything that sets the ratio later (the floor's adaptive step-down on High) goes through
+    // the same ceiling, so a phone never renders at its full 3x.
+    const setPixelRatio = this.renderer.setPixelRatio.bind(this.renderer);
+    this.renderer.setPixelRatio = (value: number) => setPixelRatio(Math.min(value, this.maxPixelRatio));
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, high ? 2 : 1));
     this.renderer.toneMapping = THREE.NeutralToneMapping;
     this.renderer.toneMappingExposure = 1;
@@ -85,6 +119,7 @@ export class Engine3D {
     this.renderer.setSize(w, h, false);
     this.labels.setSize(w, h);
     this.camera.aspect = w / h;
+    this.camera.fov = fovFor(w / h);
     this.camera.updateProjectionMatrix();
   };
 }
