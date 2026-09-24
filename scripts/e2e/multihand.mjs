@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Headless check of several hands at the solo tables, in the dev harness: pick three hands in the
-// tray, bet each spot by clicking it on the felt, deal, play every hand in turn (blackjack splits
-// one when it can), and screenshot each stage.
+// Hands picker, bet each spot by clicking it on the felt, deal, play every hand in turn, and
+// screenshot each stage (blackjack deals on until it has shown a split, a second spot's turn, the
+// insurance question and a celebration; War until a tie).
 // Fixed player names (mh_e2e_*), so reruns don't spend the new-account limit.
 // Usage: node scripts/e2e/multihand.mjs [port] [outDir] [blackjack|threecard|war|all]
 
