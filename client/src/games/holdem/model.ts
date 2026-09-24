@@ -1,7 +1,7 @@
 // The Hold'em table as it stands on the floor: a racetrack oval with green speed cloth, a walnut
 // racetrack round the felt, a padded black leather rail with stitched seams (broken at the middle
 // of the far side for the dealer), the dealer's chip tray with the deck on their left and the
-// muck on their right, a chrome cup holder in the rail at every seat, a walnut apron on two
+// muck on their right, a steel cup holder in the rail at every seat, a walnut apron on two
 // turned pedestals, and nine chairs pulled up to it. Built in code; the textures are shared.
 //
 // Heights and radii are from the felt's oval (table.ts): everything is swept round the same two
@@ -384,8 +384,8 @@ function pedestals(mats: PokerMaterials, high: boolean): THREE.Group {
 }
 
 /**
- * A chrome cup holder set into the rail's crown at each chair, to the sitter's right, clear of
- * the dealer's gap.
+ * A brushed steel cup holder set into the rail's crown at each chair, to the sitter's right,
+ * clear of the dealer's gap.
  */
 function cupHolders(mats: PokerMaterials, high: boolean): THREE.Group {
   const g = new THREE.Group();
