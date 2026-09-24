@@ -37,6 +37,7 @@ if (floor) {
   await page.goto(`http://localhost:${port}/casino/`);
   await page.waitForSelector('.name-input', { timeout: 60000 });
   await page.fill('.name-input', 'rl3floor');
+  if (await page.$('.pass-input')) await page.fill('.pass-input', 'casino-dev');
   await page.click('.enter-btn');
   await page.waitForSelector('.menu-item', { timeout: 20000 });
   await page.click('.menu-item >> nth=0');

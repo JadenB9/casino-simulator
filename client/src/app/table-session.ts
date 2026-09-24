@@ -13,6 +13,7 @@ import type { Sfx } from '../audio/sfx.ts';
 import { session } from './session.ts';
 import { tips } from './tips.ts';
 import type { GameEvent } from '../../../shared/src/engine.ts';
+import type { ChatServerMsg } from '../../../shared/src/protocol.ts';
 
 export interface TableTarget {
   kind: 'solo' | 'lobby';
@@ -30,6 +31,8 @@ export interface TableHooks {
   onSeat?(msg: SeatMsg): void;
   /** A view asked to stand up; the app leaves the table the way Esc does. */
   onLeave?(): void;
+  /** The lobby's chat room: new lines, the backlog after each snapshot, refusals (ui/chat). */
+  onChat?(msg: ChatServerMsg): void;
 }
 
 export class TableSession {
@@ -187,6 +190,10 @@ export class TableSession {
         break;
       case 'closed':
         if (!this.ended) this.onClosed();
+        break;
+      case 'chat':
+      case 'chat.no':
+        this.hooks.onChat?.(m);
         break;
     }
   }

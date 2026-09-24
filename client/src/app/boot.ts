@@ -20,6 +20,8 @@ import { openTableFlow, PartyPanel, withParty, type TableChoice } from '../ui/lo
 import { mountHud, mountLogin, mountMenu, openBank, openEditor, openProfile, openSettings, overlayCount, type Hud, type MenuHandle } from '../ui/menu/index.ts';
 import { isTyping } from '../ui/keyboard.ts';
 import { mountEmotes, openLeaderboard, socialApi, socialButton, type EmoteWheel } from '../ui/social/index.ts';
+import { createChat, type Chat } from '../ui/chat/index.ts';
+import { mountFloorLife, type FloorLife } from '../ui/feed/index.ts';
 import { button, modal, toast } from '../ui/kit.ts';
 import { ENGINES } from '../../../shared/src/games/index.ts';
 import { CLOSE, type Profile } from '../../../shared/src/protocol.ts';
@@ -66,6 +68,10 @@ class App {
   private remotes: RemotePlayers | null = null;
   private hud: Hud | null = null;
   private emotes: EmoteWheel | null = null;
+  private chat: Chat | null = null;
+  /** Big wins on the floor: the marquee, the toast, the day's meter and the room's sound. */
+  private readonly life: FloorLife;
+  private lifeOff: (() => void) | null = null;
   private menu: MenuHandle | null = null;
   private table: OpenTable | null = null;
   private passUsers = 0;
@@ -110,6 +116,7 @@ class App {
       },
       true,
     );
+    this.life = mountFloorLife({ engine, world, sfx, ui });
   }
 
   async start(saved: Promise<Profile | null>): Promise<void> {
@@ -218,6 +225,17 @@ class App {
     });
     // Gestures show over whoever made them, you included (the server echoes yours back).
     this.world.useRemotes(this.remotes);
+    // Chat, made with the socket so the floor's backlog is caught behind the menu; shown on the
+    // floor. A floor line floats over whoever said it, you included.
+    this.chat = createChat({
+      root: this.ui,
+      floor: link,
+      character: (id) => (id === link.you?.id ? this.world.player.character : this.remotes?.character(id)),
+      onFrame: (fn) => this.engine.onFrame(fn),
+      camera: this.engine.camera,
+    });
+    // Big wins are announced to people out on the floor, never to the winner at their table.
+    this.lifeOff = this.life.connect(link, { onFloor: () => this.hud !== null && this.table === null && this.world.seated === null });
     link.on('emote', (id, e) => void this.world.showEmote(id === link.you?.id ? 'me' : id, e));
     link.on('hello', (you, first) => {
       // A tab that takes over from another one carries on where that one stood.
@@ -231,6 +249,10 @@ class App {
   }
 
   private disconnectFloor(): void {
+    this.lifeOff?.();
+    this.lifeOff = null;
+    this.chat?.dispose();
+    this.chat = null;
     this.world.useRemotes(null);
     this.remotes?.dispose();
     this.remotes = null;
@@ -271,6 +293,7 @@ class App {
     const first = bar.querySelector('.hud-btn');
     bar.insertBefore(socialButton('emotes', 'Emotes (G)', () => this.emotes?.toggle()), first);
     bar.insertBefore(socialButton('leaderboard', 'Leaderboards', () => openLeaderboard({ root: this.ui, api: socialApi })), first);
+    this.chat?.setVisible(true);
   }
 
   private async backToMenu(): Promise<void> {
@@ -278,6 +301,7 @@ class App {
     if (this.table) await this.leaveTable();
     this.emotes?.dispose();
     this.emotes = null;
+    this.chat?.setVisible(false);
     this.hud?.close();
     this.hud = null;
     this.showMenu();
@@ -350,9 +374,13 @@ class App {
           this.hud?.setTableChips(seated ? m.stack : null, m.escrow);
           if (seated) this.poseForSeat(m.seat);
         },
+        onChat: (m) => current() && this.chat?.tableMessage(m),
       },
     );
     this.table = { station, session: table, party, seated: false, posed: null };
+    // A lobby table has a chat room of its own (members only); a solo table doesn't.
+    const socket = table.socket;
+    this.chat?.setTable(choice.kind === 'lobby' ? { say: (text) => socket.send({ t: 'say', text }) } : null);
   }
 
   /**
@@ -404,6 +432,7 @@ class App {
     // The session closes itself (and its stage) once the leave has gone out.
     open.session.leave();
     open.party?.dispose();
+    this.chat?.setTable(null);
     this.hud?.setTableChips(null);
     void this.refreshProfile();
     await this.world.exitTable();
@@ -433,6 +462,7 @@ class App {
     this.table = null;
     open.session.close();
     open.party?.dispose();
+    this.chat?.setTable(null);
     this.hud?.setTableChips(null);
     toast(code === CLOSE.FORBIDDEN ? "You can't join that table." : code === CLOSE.NOT_FOUND ? 'That table has closed.' : 'Lost the table.', 'err');
     void this.world.exitTable();

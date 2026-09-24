@@ -34,6 +34,7 @@ async function player(name, quality) {
   await page.waitForSelector('.name-input, .menu-item', { timeout: 240_000 });
   if (await page.$('.name-input')) {
     await page.fill('.name-input', name);
+    if (await page.$('.pass-input')) await page.fill('.pass-input', 'casino-dev');
     await page.click('.enter-btn');
   }
   await page.waitForSelector('.menu-item', { timeout: 30_000 });

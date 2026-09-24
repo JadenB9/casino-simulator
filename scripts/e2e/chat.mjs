@@ -39,6 +39,7 @@ async function player(name) {
   await page.goto(`http://localhost:${port}/casino/`);
   await page.waitForSelector('.name-input', { timeout: Number(process.env.BOOT_MS ?? 300_000) });
   await page.fill('.name-input', name);
+  if (await page.$('.pass-input')) await page.fill('.pass-input', 'casino-dev');
   await page.click('.enter-btn');
   await page.waitForSelector('.menu-item', T(20_000));
   await page.click('.menu-item >> nth=0');
