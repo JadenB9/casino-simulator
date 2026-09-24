@@ -265,6 +265,8 @@ class App {
       seatOf: (station, slot) => this.seatOf(station, slot),
       // a stool, a sofa: sitting anywhere (world/life/)
       seatFor: (id) => this.world.life.seatFor(id),
+      // nobody in a room you can't see into, or behind you, is drawn or animated
+      inView: (x, z) => this.world.canSee(x, z),
     });
     // Gestures show over whoever made them, you included (the server echoes yours back).
     this.world.useRemotes(this.remotes);

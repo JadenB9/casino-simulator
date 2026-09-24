@@ -114,6 +114,11 @@ export interface FloorWorld extends World {
   showEmote(who: number | 'me', e: EmoteId): boolean;
   /** Where showEmote finds other players' characters (the app's RemotePlayers); null to forget. */
   useRemotes(source: CharacterSource | null): void;
+  /**
+   * Whether someone standing at (x, z) could be seen from the camera this frame: in a room being
+   * drawn and in view (RemotePlayers' `inView`: nobody else is drawn or animated).
+   */
+  canSee(x: number, z: number): boolean;
   /** The dealers, bartender and cashier (npcs.ts). */
   readonly staff: Staff;
   /** The floor's life (world/life/): sitting anywhere, waiters, the bartender, bankers, the shopkeeper. */
@@ -428,6 +433,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
     useRemotes(source) {
       remotes = source;
     },
+    canSee: (x, z) => everything || visibility.seesPerson(x, z),
     staff,
     life,
     dealerGesture: (id, g) => staff.gesture(id, g),

@@ -479,7 +479,7 @@ export class Staff {
     for (const p of this.characters.people()) {
       const r = p.root;
       let shown = r.parent !== null;
-      for (let o: THREE.Object3D | null = r; o && shown; o = o.parent) shown = o.visible;
+      for (let o: THREE.Object3D | null = r; o && shown; o = o.parent) shown = o.visible || (o === r && r.userData.offscreen === true);
       if (!shown) continue;
       const head = this.pool[n] ?? (this.pool[n] = new THREE.Vector3());
       n++;

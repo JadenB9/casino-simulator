@@ -40,6 +40,11 @@ export interface RemotePlayersOptions {
   seatFor?: (id: number) => SeatPose | null;
   /** Ground speed in m/s that reads as a full walk; slower motion blends toward idle. */
   walkSpeed?: number;
+  /**
+   * Whether someone standing at (x, z) could be seen from the camera now (their room is drawn and
+   * they're in view). Anyone who can't be isn't drawn or animated until they can; none: everyone is.
+   */
+  inView?: (x: number, z: number) => boolean;
 }
 
 interface Drawn {
@@ -102,14 +107,13 @@ export class RemotePlayers {
       const station = p?.info.at?.station;
       const floorSeat = station ? null : (this.opts.seatFor?.(id) ?? null);
       if (floorSeat && (!pose || Math.hypot(pose.x / 100 - floorSeat.x, pose.z / 100 - floorSeat.z) < ARRIVED_M)) {
-        root.visible = true;
         d.onFloor = false;
         d.speed = 0;
         root.position.set(floorSeat.x, floorSeat.y ?? 0, floorSeat.z);
         root.rotation.y = floorSeat.yaw;
         d.ch.setMotion(0);
         d.ch.sit?.(floorSeat.sit ?? null);
-        d.ch.update(dt);
+        this.show(d, dt);
         continue;
       }
       // Someone the snapshots show walking has stood up, even if the table hasn't said so yet.
@@ -117,7 +121,6 @@ export class RemotePlayers {
         const slot = slots.get(station) ?? 0;
         slots.set(station, slot + 1);
         const seat = this.opts.seatOf?.(station, slot) ?? null;
-        root.visible = seat !== null;
         d.onFloor = false;
         d.speed = 0;
         if (seat) {
@@ -125,13 +128,13 @@ export class RemotePlayers {
           root.rotation.y = seat.yaw;
           d.ch.setMotion(0);
           d.ch.sit?.(seat.sit ?? null);
-          d.ch.update(dt);
-        }
+          this.show(d, dt);
+        } else this.hide(d);
         continue;
       }
       d.ch.sit?.(null);
       if (!pose) {
-        root.visible = false;
+        this.hide(d);
         d.onFloor = false;
         continue;
       }
@@ -144,13 +147,31 @@ export class RemotePlayers {
       d.x = x;
       d.z = z;
       d.onFloor = true;
-      root.visible = true;
       root.position.set(x, 0, z);
       root.rotation.y = byteToYaw(pose.r);
       // Past a walking pace the blend leans toward the run cycle, as it does for your own character.
       d.ch.setMotion(Math.min(2, d.speed / this.walkSpeed));
-      d.ch.update(dt);
+      this.show(d, dt);
     }
+  }
+
+  /**
+   * Draw and animate a placed player if the camera can see where they are. One it can't (another
+   * room, behind the camera) is hidden but still there: `userData.offscreen` tells the floor's
+   * staff and waiters, who look at and step round everyone present.
+   */
+  private show(d: Drawn, dt: number): void {
+    const root = d.ch.root;
+    const seen = this.opts.inView?.(root.position.x, root.position.z) ?? true;
+    root.visible = seen;
+    root.userData.offscreen = !seen;
+    if (seen) d.ch.update(dt);
+  }
+
+  /** Not drawn at all: not placed yet, or at a table with no seat to show them on. */
+  private hide(d: Drawn): void {
+    d.ch.root.visible = false;
+    d.ch.root.userData.offscreen = false;
   }
 
   dispose(): void {
