@@ -3,7 +3,9 @@
 // the desk's pcPose there): buy in, play against the real server through the page's own buttons,
 // and screenshot each game at rest, mid-round and after. Each page also checks what it shows
 // against what the server sent (the chips, the last result), and a page error fails the run.
-// Usage: node scripts/e2e/online-a.mjs [port] [outDir] [games...]
+// `desks` as the only game instead stands the four desks in a row, as the lounge will, and shoots
+// their attract pictures and chair colours from the floor.
+// Usage: node scripts/e2e/online-a.mjs [port] [outDir] [games... | desks]
 
 import { chromium } from 'playwright';
 import { mkdirSync } from 'node:fs';
@@ -20,6 +22,42 @@ const glArgs = gl === 'metal' ? ['--use-angle=metal', '--enable-gpu', '--ignore-
 const browser = await chromium.launch({ args: [...glArgs, `--explicitly-allowed-ports=${port},${Number(port) + 1}`] });
 const report = [];
 let failed = false;
+
+if (games[0] === 'desks') {
+  const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  await page.goto(`http://localhost:${port}/casino/?dev=table&game=plinko&name=oa_desks`);
+  await page.waitForSelector('.modal .btn', { timeout: 30000 }).catch(() => null);
+  await page.keyboard.press('Escape');
+  await page.evaluate(async () => {
+    const { engine, table } = window.casino;
+    // The harness's own desk (Plinko) loses its page; Dice, Limbo and Keno stand to its right.
+    table.view.dispose();
+    const { GAMES } = await import('/casino/src/games/index.ts');
+    const anchor = table.stage.anchor;
+    ['dice', 'limbo', 'keno'].forEach((id, i) => {
+      const m = GAMES[id].createModel({ variant: '', quality: engine.quality });
+      m.position.set(anchor.position.x + 1.35 * (i + 1), 0, anchor.position.z);
+      engine.scene.add(m);
+    });
+    engine.camera.position.set(2.1, 1.75, 3.1);
+    engine.camera.lookAt(2.0, 0.85, -0.3);
+  });
+  await page.waitForTimeout(600);
+  const path = `${outDir}/desks-row.png`;
+  await page.screenshot({ path });
+  await page.evaluate(() => {
+    const { engine } = window.casino;
+    engine.camera.position.set(0.55, 1.3, 1.25);
+    engine.camera.lookAt(0.05, 1.0, -0.47);
+  });
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: `${outDir}/desks-plinko.png` });
+  console.log(JSON.stringify({ shots: [path, `${outDir}/desks-plinko.png`], errors }, null, 1));
+  await browser.close();
+  process.exit(errors.length ? 1 : 0);
+}
 
 for (const game of games) {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });

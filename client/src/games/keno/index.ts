@@ -340,7 +340,9 @@ export const keno: GameClientModule = {
 
     const playDraw = async (ev: KenoEvent) => {
       screen.setStack(ev.stack - ev.payout);
-      // The board shows what was bet (it matches the page; this keeps a replay honest too).
+      // A draw starts on a clean board (a bet from this page cleared it already; a draw that
+      // arrives any other way must not inherit the last one's marks), showing what was bet.
+      clearMarks();
       picks = ev.picks.slice();
       risk = ev.risk;
       riskSeg.set(risk);
