@@ -10,26 +10,41 @@ money is play money.
 
 ## What's in it
 
-- **The floor.** A 40 × 30 m room built in code: a table pit, a poker room, six banks of slot
-  machines, a Big Six wheel, video poker set into the bar, a cashier cage and a lounge. You walk it
-  with WASD, look around with the mouse, and see everyone else on it walking, standing or sitting
-  at a table, with their name over their head. Press E at a table to sit down, G to wave, cheer or
-  clap at the people around you.
-- **Eleven games.** Blackjack, roulette (American and European wheels), craps, baccarat, Three
-  Card Poker, Casino War, Sic Bo, the Big Six wheel, Jacks or Better video poker, six slot machines
-  and no-limit Texas Hold'em. Every table game can be played alone or in a lobby with others:
-  public lobbies are listed for anyone at that table, private ones take a four-digit PIN. Hold'em
-  can be played against other people or against bots.
+- **The building.** A 62 × 46 m casino built in code, in eleven rooms: a lobby, the table pit,
+  a slots hall, a bar and a lounge, a poker room, a high limit salon, an online lounge of gaming
+  desks, Bandit Camp (a Rust-style wheel in a scrap yard), the cashier and bank, and a boutique.
+  You walk it with WASD and the mouse (N opens a map), sit on any chair, stool or sofa, and see
+  everyone else walking, sitting and emoting, with their name over their head. Rooms and what's
+  in them are data (`client/src/world/rooms.ts`), so adding a table or a room is a data edit.
+- **People who work there.** A dealer at every table, bankers at the teller windows who greet you
+  by name, a bartender, a shopkeeper, and waiters who carry your order across the floor to you.
+- **Twenty games.** Blackjack, roulette (American and European), craps, baccarat, Three Card
+  Poker, Casino War, Sic Bo, the Big Six wheel, the Bandit Wheel, no-limit Texas Hold'em, Jacks or
+  Better video poker and six slot machines, plus eight online-style games on the lounge's
+  computers: Plinko, Dice, Limbo, Keno, Tower, Mines, Hi-Lo and Crash. Every table game can be
+  played alone or in a lobby with others (public, or private with a four-digit PIN); alone you can
+  play up to five blackjack spots, or three hands at Three Card Poker and War.
+- **Your limits.** Before you sit you pick the table's limits, from $5–$500 up to $5,000–$500,000
+  or your own up to $1,000,000, and bring up to 100 times the table maximum. Every table has a
+  Max bet (A).
 - **Tips when you want them.** Turn on the bulb and each game shows its best play as you go: the
   basic-strategy move at blackjack, the best hold at video poker, pot odds and equity at Hold'em,
   the bets with the lowest edge at the dice and wheel games.
 - **Wins you can see.** A made hand, a blackjack or a big slot line gets its name on screen and
-  the cards or spots that made it light up; the biggest wins drop a shower of chips on the felt.
-  Leaderboards show the richest players and the biggest single wins.
+  the cards or spots that made it light up; the biggest wins drop a shower of chips on the felt,
+  scroll across the LED sign over the pit, and add to the day's meter. Leaderboards show the
+  richest players and the biggest single wins.
+- **Things to spend it on.** The boutique sells gold chains, grills, watches and designer clothes
+  from $60,000 to $10,000,000, worn on your character where everyone can see them; the bar sells
+  drinks and food, brought to you by a waiter.
+- **Other people.** Chat on the floor and at your table, speech bubbles, and six emotes (wave,
+  cheer, clap, thumbs up, shrug and 67). Fifteen minutes without input and you're asked if you're
+  still there, then stood up and shown the way back.
 - **Money that stays put.** Accounts start with $50,000. The server holds every balance and deals
   every card; the browser only sends what you want to do. Whenever you're down to less than
-  $10,000, balance and table chips together, the cashier tops you back up to $50,000 and the
+  $10,000, balance and table chips together, a banker tops you back up to $50,000 and the
   profile counts the loans.
+- **Phones and tablets.** A thumb stick, drag to look, and layouts that fit either way up.
 
 ## Rules and odds
 
@@ -59,6 +74,15 @@ within three standard errors of the published one:
 | | Star or Crown (40:1) | 24.074% | 23.921% / 24.214% (10M spins) |
 | Slots: Classic Sevens / Neon Nights / 5x Wild | | 94.428% / 95.374% / 89.820% RTP | 94.563% / 95.325% / 89.968% RTP |
 | Slots: Diamond Line / Lucky Cherries / Gold Rush | | 94.983% / 94.028% / 92.994% RTP | 94.929% / 94.126% / 93.138% RTP |
+| Bandit Wheel | 1 / 10 / 20 | 4% / 12% / 16% | 3.965% / 12.085% / 15.946% (10M spins) |
+| Plinko | 16 rows, High | 98.976% RTP (every board 98.906–99.160%) | 98.938% RTP (4M drops) |
+| Dice | 49.50% to win, $1 | 99% RTP before the cent | 98.978% RTP (10M rolls) |
+| Limbo | 2× target | 99% RTP (every target) | 98.974% RTP (10M bets) |
+| Keno | Classic, 10 picks | 99.037% RTP | 99.057% RTP (5M draws) |
+| Tower | Easy, cash out at row 3 | 98.719% RTP (Hard to Master 99% every row) | 98.705% RTP (4M climbs) |
+| Mines | 3 mines, 5 gems | 98.635% RTP (no cell above 99%) | 98.683% RTP (4M boards) |
+| Hi-Lo | likelier side, one guess | 98.728% RTP | 98.739% RTP (10M guesses) |
+| Crash | auto cash-out at 2× | 99% RTP (every cash-out) | 98.968% RTP (10M rounds) |
 | Texas Hold'em | | no house edge, no rake | 0 per seat within 1.2 SE (300K hands, 6 seats) |
 
 Where the outcome space is small enough the engines are also enumerated exactly (every roulette
