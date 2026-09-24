@@ -130,6 +130,8 @@ export const dice: GameClientModule = {
     let limits: BetLimits | null = null;
     let bet: BetBox | null = null;
     let busy = false;
+    /** Results still playing out: the chips on the page wait for them. */
+    let playing = 0;
     let sentAt = 0;
     let tipShown = false;
     /** Where the result tag stands, as a percentage along the track. */
@@ -191,7 +193,7 @@ export const dice: GameClientModule = {
     rollBtn.title = 'Roll (Space)';
     rollBtn.classList.add('os-fixed');
     const info = new InfoList('This bet');
-    const log = new BetLog('Last rolls', ['Target', 'Roll', 'Payout']);
+    const log = new BetLog('Last rolls', ['Target', 'Roll', 'Payout'], 4);
     const tally = new SessionTally();
     screen.side.append(profit.root, rollBtn, info.root, log.root, tally.root);
 
@@ -379,7 +381,7 @@ export const dice: GameClientModule = {
         strip.clear();
         log.clear();
         for (const r of v.recent.slice(0, 9).reverse()) strip.push(hund(r.roll), r.win, false);
-        for (const r of v.recent.slice(0, 5).reverse()) log.push([`${r.over ? '>' : '<'} ${hund(r.target)}`, hund(r.roll), cents(r.payout)], r.win, false);
+        for (const r of v.recent.slice(0, 4).reverse()) log.push([`${r.over ? '>' : '<'} ${hund(r.target)}`, hund(r.roll), cents(r.payout)], r.win, false);
         const last = v.recent[0];
         if (last) {
           over = last.over;
@@ -393,12 +395,17 @@ export const dice: GameClientModule = {
       async onEvents(events) {
         // The server has answered: the next press can go while this roll slides.
         busy = false;
-        for (const e of events) if (e.type === 'roll') await playRoll(e as unknown as RollEvent);
+        playing++;
+        try {
+          for (const e of events) if (e.type === 'roll') await playRoll(e as unknown as RollEvent);
+        } finally {
+          playing--;
+        }
       },
 
       onSeat(msg) {
         stack = msg.stack;
-        if (!busy) screen.setStack(stack);
+        if (playing === 0) screen.setStack(stack);
         sync();
       },
 
