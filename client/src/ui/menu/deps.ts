@@ -10,6 +10,10 @@ export interface SessionLike {
   profile: Profile | null;
   set(p: Profile): void;
   on(fn: (p: Profile) => void): () => void;
+  /** Spent in the boutique and at the bar since the page loaded (the HUD's net leaves it out). */
+  readonly spent?: number;
+  /** A purchase landed for this much. */
+  spend?(amount: number): void;
 }
 
 /** The slice of net/api.ts these screens call. */

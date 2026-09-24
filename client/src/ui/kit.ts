@@ -72,11 +72,12 @@ function roundDown(x: Cents): Cents {
 }
 
 /** Ask how much to bring to the table. Resolves with cents, or null if cancelled. */
-export function askBuyIn(opts: { min: Cents; max: Cents; balance: Cents; suggested?: Cents; verb?: string }, signal?: AbortSignal): Promise<Cents | null> {
+export function askBuyIn(opts: { min: Cents; max: Cents; balance: Cents; suggested?: Cents; verb?: string; note?: string; title?: string }, signal?: AbortSignal): Promise<Cents | null> {
   return new Promise((resolve) => {
     if (signal?.aborted) return resolve(null);
     const max = Math.min(opts.max, Math.floor(opts.balance / 100) * 100);
-    const note = el('p', '', `Balance ${formatMoney(opts.balance)}. This table takes ${formatMoney(opts.min)} to ${formatMoney(opts.max)}.`);
+    // `note` says what the range means when it isn't the table's buy-in (a top-up's room)
+    const note = el('p', '', `Balance ${formatMoney(opts.balance)}. ${opts.note ?? `This table takes ${formatMoney(opts.min)} to ${formatMoney(opts.max)}.`}`);
     let m: { close: () => void };
     const done = (v: Cents | null) => {
       signal?.removeEventListener('abort', cancel);
@@ -115,7 +116,7 @@ export function askBuyIn(opts: { min: Cents; max: Cents; balance: Cents; suggest
       }
       done(v);
     }, { cls: 'primary' });
-    m = modal('Buy in', [note, quick, input], [ok, button('Cancel', dismiss, { cls: 'ghost' })], dismiss);
+    m = modal(opts.title ?? 'Buy in', [note, quick, input], [ok, button('Cancel', dismiss, { cls: 'ghost' })], dismiss);
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') ok.click();
     });

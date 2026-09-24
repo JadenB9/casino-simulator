@@ -251,7 +251,7 @@ export function openShop(deps: ShopDeps): Closable {
       paint();
       try {
         const r = await deps.api.buy(it.id, op);
-        applyMoney(session, r);
+        applyMoney(session, r, r.price);
         (owned ??= new Map()).set(it.id, r.at);
         deps.sfx?.play('chips-stack', { volume: 0.5 });
         // walk out wearing it, the way a shop hands it over

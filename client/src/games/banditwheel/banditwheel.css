@@ -10,7 +10,8 @@
   --bw-ink-3: #857d70;
   --bw-go: #4d6b27;
   --bw-go-ink: #d9f2ae;
-  position: fixed; right: 16px; bottom: 18px; width: 368px; display: grid; gap: 4px;
+  /* clear of the chat dock in the same corner (18px up, about 36px tall), so it never covers the meters */
+  position: fixed; right: 16px; bottom: 64px; width: 368px; display: grid; gap: 4px;
   color: var(--bw-ink); font-family: var(--ui); letter-spacing: 0.01em;
 }
 .bw-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 0 2px 2px; }

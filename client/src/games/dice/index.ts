@@ -13,7 +13,7 @@ import { tween, ease } from '../../table/tween.ts';
 import { celebrate } from '../../table/celebrate.ts';
 import { el } from '../../ui/kit.ts';
 import { attractTexture, pcModel, pcPose, pcScreenCorners, PC_FOOTPRINT, PC_SEAT } from '../online/pc.ts';
-import { OnlineScreen, BetBox, actionButton, NumberField, InfoList, ResultStrip, SessionTally, BetLog, commitTyping, winTier, siteTone, drawSiteBar, drawAttractPanel } from '../online/screen.ts';
+import { OnlineScreen, AddChips, BetBox, actionButton, NumberField, InfoList, ResultStrip, SessionTally, BetLog, commitTyping, winTier, siteTone, drawSiteBar, drawAttractPanel } from '../online/screen.ts';
 
 /** The chair's trim on the floor: Dice's blue. */
 const ACCENT = '#2f9bff';
@@ -98,6 +98,7 @@ export const dice: GameClientModule = {
   mount(ctx): TableView {
     const screen = new OnlineScreen('Dice');
     ctx.ui.append(screen.root);
+    const cashier = new AddChips(screen, ctx);
     const corners = pcScreenCorners();
 
     /** The target in hundredths, and the side: Roll Over wins above it, Roll Under below it. */
@@ -339,6 +340,7 @@ export const dice: GameClientModule = {
 
     return {
       onTable(snap) {
+        cashier.table(snap);
         stack = snap.you.stack;
         busy = false;
         screen.setStack(stack);
@@ -382,12 +384,14 @@ export const dice: GameClientModule = {
       },
 
       onSeat(msg) {
+        cashier.seat(msg);
         stack = msg.stack;
         if (playing === 0) screen.setStack(stack);
         sync();
       },
 
       onError() {
+        cashier.refused();
         busy = false;
         sync();
       },

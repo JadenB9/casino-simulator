@@ -53,6 +53,13 @@ export interface TableView {
   onError?(code: string, msg: string): void;
   /** Keyboard shortcuts at the table; return true when handled. */
   keydown?(e: KeyboardEvent): boolean;
+  /**
+   * Resolves once what the view shows has caught up with the events it was given, for a view
+   * that keeps animating after onEvents returns (a Plinko ball still falling). The HUD's chips
+   * wait for it, so they never tell a result before the table does. A view whose onEvents
+   * already awaits its animations leaves it out.
+   */
+  settled?(): Promise<void>;
   update(dt: number): void;
   dispose(): void;
 }
