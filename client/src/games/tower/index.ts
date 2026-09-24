@@ -206,7 +206,9 @@ export const tower: GameClientModule = {
           const best = bestStop(d, level);
           const now = ret(d, level);
           const above = Array.from({ length: LEVELS - level }, (_, i) => ret(d, level + 1 + i));
-          if (best > level) text = `Row ${best} returns ${pctText(ret(d, best))} against ${pctText(now)} for cashing out now, so climbing on is worth it, just.`;
+          // Given the eggs found, both are this row's chance of getting here away from their
+          // plans' returns, so the ratio of the returns is the gain from here.
+          if (best > level) text = `From here, stopping at row ${best} is worth ${pctText(ret(d, best) / now - 1)} more on average than cashing out now: the floor to the cent takes less there.`;
           else if (above.every((x) => x === now)) {
             text = `Every row above returns the same ${pctText(now)}: climbing adds risk, not value.`;
             ringMain = true;

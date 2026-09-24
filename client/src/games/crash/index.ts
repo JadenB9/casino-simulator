@@ -92,7 +92,9 @@ export const crash: GameClientModule = {
     let view: CrashView | null = null;
     let mySeat: number | null = null;
     let stack: Cents = 0;
+    /** An action of ours is on its way; `sentAt` lets a lost one stop holding the button. */
     let busy = false;
+    let sentAt = 0;
     /** A bet to place as soon as the next window opens. */
     let queued = false;
     let autoOn = false;
@@ -168,6 +170,7 @@ export const crash: GameClientModule = {
     const act = (a: object) => {
       if (busy) return;
       busy = true;
+      sentAt = performance.now();
       ctx.link.act(a);
       sync();
     };
@@ -374,7 +377,9 @@ export const crash: GameClientModule = {
         const before = view;
         const next = v as CrashView;
         view = next;
-        busy = false;
+        // Our answer is an event about our seat (or the phase moving on); other players' bets
+        // arriving in the meantime don't free the button.
+        if (events.some((e) => e.seat === mySeat || e.type === 'betting' || e.type === 'crash' || e.type === 'launch')) busy = false;
         for (const e of events) {
           switch (e.type) {
             case 'betting':
@@ -430,6 +435,7 @@ export const crash: GameClientModule = {
       },
 
       update() {
+        if (busy && performance.now() - sentAt > 5_000) busy = false;
         frame();
         const camera = ctx.stage.engine.camera;
         camera.updateMatrixWorld();

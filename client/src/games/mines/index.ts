@@ -199,7 +199,8 @@ export const mines: GameClientModule = {
           const best = bestStop(m, found);
           const now = ret(m, found);
           const later = Array.from({ length: gemsOf(m) - found }, (_, i) => ret(m, found + 1 + i));
-          if (best > found) text = `Stopping at ${best} gems returns ${pctText(ret(m, best))} against ${pctText(now)} for cashing out now.`;
+          // Given the gems found, the ratio of the two plans' returns is the gain from here.
+          if (best > found) text = `From here, stopping at ${best} gems is worth ${pctText(ret(m, best) / now - 1)} more on average than cashing out now: the floor to the cent takes less there.`;
           else if (later.every((x) => x === now)) {
             text = `Every later stop returns the same ${pctText(now)}: going on adds risk, not value.`;
             ring = true;
@@ -210,7 +211,12 @@ export const mines: GameClientModule = {
         }
       } else {
         const best = bestStop(count, 0);
-        text = `With ${count} mine${count > 1 ? 's' : ''}, cashing out after ${best} gem${best > 1 ? 's' : ''} returns the most, ${pctText(ret(count, best))}; every stop returns 99% before the cent floor.`;
+        const all = Array.from({ length: gemsOf(count) }, (_, i) => ret(count, i + 1));
+        const lo = Math.min(...all);
+        text =
+          lo === 0.99
+            ? `With ${count} mine${count > 1 ? 's' : ''} every cash-out returns exactly 99%: where you stop only changes the swings.`
+            : `With ${count} mine${count > 1 ? 's' : ''} a cash-out returns ${pctText(lo)} to ${pctText(ret(count, best))} (the floor to the cent is the difference); ${best} gem${best > 1 ? 's' : ''} returns the most.`;
       }
       tipShown = true;
       ctx.kit.tip(text);
