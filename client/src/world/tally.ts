@@ -207,7 +207,8 @@ export class Tally {
 }
 
 function gainFor(q: Quality): number {
-  return q === 'high' ? 2.3 : 1.4;
+  // past the floor's bloom threshold (1.65, bloom.ts) on High
+  return q === 'high' ? 2.6 : 1.4;
 }
 
 function buildGeometry(plan: FloorPlan): THREE.BufferGeometry {
