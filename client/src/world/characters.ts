@@ -24,6 +24,7 @@ import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { skipWhileHidden } from '../render/matrices.ts';
+import { modelBytes } from '../render/model-bytes.ts';
 import { DEFAULT_LOOK, OUTFITS, SKIN_TONES, type Body, type Look } from '../../../shared/src/look.ts';
 import type { Quality } from '../render/engine3d.ts';
 import type { Character, CharacterFactory } from './contract.ts';
@@ -161,10 +162,7 @@ export class Characters implements CharacterFactory {
     const entry = (body === 'f' ? man.f : man.m)[uniform ? uniform.base[body === 'f' ? 'f' : 'm'] : outfit] ?? man.m.suit!;
     let bytes = this.files.get(entry.file);
     if (!bytes) {
-      bytes = fetch(MODEL_BASE + entry.file).then((r) => {
-        if (!r.ok) throw new Error(`${entry.file}: ${r.status}`);
-        return r.arrayBuffer();
-      });
+      bytes = modelBytes(MODEL_BASE + entry.file);
       this.files.set(entry.file, bytes);
       bytes.catch(() => this.files.delete(entry.file));
     }

@@ -71,7 +71,7 @@ for (let run = 0; run < runs; run++) {
   // what the first minute on the floor fetches (characters, lazily loaded parts)
   await page.waitForTimeout(3000);
   const list = [...reqs.values()].filter((r) => r.url && !r.url.startsWith('data:'));
-  const kind = (r) => (/\.js(\?|$)/.test(r.url) ? 'js' : /\.css(\?|$)/.test(r.url) ? 'css' : /\.(glb|gltf)(\?|$)/.test(r.url) ? 'models' : /\.(png|jpe?g|webp|ktx2|avif|svg)(\?|$)/.test(r.url) ? 'images' : /\.(woff2?|ttf|otf)(\?|$)/.test(r.url) ? 'fonts' : /\.(ogg|mp3|m4a|wav|webm)(\?|$)/.test(r.url) ? 'audio' : /\.json(\?|$)/.test(r.url) ? 'json' : /\/api\//.test(r.url) ? 'api' : 'other');
+  const kind = (r) => (/\.js(\?|$)/.test(r.url) ? 'js' : /\.css(\?|$)/.test(r.url) ? 'css' : /\.(glb|gltf)(\.gz)?(\?|$)/.test(r.url) ? 'models' : /\.(png|jpe?g|webp|ktx2|avif|svg)(\?|$)/.test(r.url) ? 'images' : /\.(woff2?|ttf|otf)(\?|$)/.test(r.url) ? 'fonts' : /\.(ogg|mp3|m4a|wav|webm)(\?|$)/.test(r.url) ? 'audio' : /\.json(\?|$)/.test(r.url) ? 'json' : /\/api\//.test(r.url) ? 'api' : 'other');
   const by = {};
   for (const r of list) {
     const k = kind(r);
