@@ -12,7 +12,9 @@ import { closeWith, corsHeaders, fail, json, originAllowed, readJson } from './h
 import { bearer, logIn, signToken, verifyToken, type Claims } from './auth.ts';
 import { bumpRate, escrowsOf, getAccount, loadProfile, setLook } from './db.ts';
 import { takeLoan } from './transfer.ts';
+import { shopApi } from './shop.ts';
 import { leaderboard } from './leaderboard.ts';
+import { ipKey } from './floor/directory.ts';
 import type { CasinoFloor } from './floor/index.ts';
 import type { CasinoTable } from './table/host.ts';
 
@@ -35,7 +37,15 @@ export default {
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
     if (path === '/api/health') return json({ ok: true, v: PROTOCOL_VERSION }, 200, cors);
 
-    if (path.startsWith('/ws/')) return handleSocket(request, env, url, path.slice(4), origin);
+    if (path.startsWith('/ws/')) {
+      try {
+        return await handleSocket(request, env, url, path.slice(4), origin);
+      } catch (err) {
+        // A transient code, so the client reconnects with backoff; the reason says nothing inside.
+        console.error('socket routing failed', path, err);
+        return closeWith(1011, 'try again');
+      }
+    }
     if (path.startsWith('/api/')) {
       // Browsers always send Origin on these (they're cross-origin POST/PUT or credentialed GET);
       // refusing unknown origins keeps other sites from driving the API from a visitor's browser.
@@ -57,15 +67,18 @@ export default {
 async function handleApi(request: Request, env: Env, route: string, cors: Record<string, string>): Promise<Response> {
   const now = Date.now();
   const ip = request.headers.get('CF-Connecting-IP') ?? 'local';
+  // Limits count per address, and per /64 for IPv6: one user can take a fresh address from their
+  // /64 for every request, which would make a per-address limit on sign-ups no limit at all.
+  const addr = ipKey(ip);
 
   if (route === 'login' && request.method === 'POST') {
-    if (!(await bumpRate(env.DB, 'casino-login', ip, 30, 60_000, now))) return fail(429, 'RATE_LIMITED', 'Too many logins. Try again in a minute.', cors);
+    if (!(await bumpRate(env.DB, 'casino-login', addr, 30, 60_000, now))) return fail(429, 'RATE_LIMITED', 'Too many logins. Try again in a minute.', cors);
     const body = (await readJson(request)) as { name?: unknown; password?: unknown } | null;
     const name = body?.name;
     if (!isValidName(name)) return fail(400, 'BAD_NAME', 'Names are 3-16 letters, numbers or _.', cors);
     const password = body?.password;
     if (!isValidPassword(password)) return fail(400, 'BAD_REQUEST', `Passwords are ${PASSWORD_MIN} to ${PASSWORD_MAX} characters.`, cors);
-    const r = await logIn(env.DB, name, password, ip, now);
+    const r = await logIn(env.DB, name, password, addr, now);
     if (!r.ok) {
       // One message for a wrong password whichever part was wrong, and nothing about the account.
       if (r.why === 'wrong') return fail(401, 'UNAUTHORIZED', 'Wrong name or password.', cors);
@@ -93,19 +106,24 @@ async function handleApi(request: Request, env: Env, route: string, cors: Record
   }
 
   if (route === 'me/look' && request.method === 'PUT') {
+    // Each change is a D1 write and a message to everyone on the floor.
+    if (!(await bumpRate(env.DB, 'casino-look', `a${claims.a}`, 20, 60_000, now))) return fail(429, 'RATE_LIMITED', 'Give it a minute.', cors);
     const look = parseLook((await readJson(request, 1024) as { look?: unknown } | null)?.look);
     if (!look) return fail(400, 'BAD_REQUEST', "That look isn't valid.", cors);
-    await setLook(env.DB, claims.a, look);
+    const stored = await setLook(env.DB, claims.a, look, now);
+    if ('error' in stored) return fail(403, 'NOT_ELIGIBLE', stored.error, cors);
     try {
-      await floor(env).playerLook(claims.a, look);
+      await floor(env).playerLook(claims.a, stored.look);
     } catch (err) {
       console.error('floor look update failed', err);
     }
-    return json({ look }, 200, cors);
+    return json({ look: stored.look }, 200, cors);
   }
 
   // The cashier: under $10,000 in all, chips on tables included, a top-up to $50,000.
   if (route === 'bank/loan' && request.method === 'POST') {
+    // Each ask calls every table holding an escrow of yours, so it has a limit of its own.
+    if (!(await bumpRate(env.DB, 'casino-loan', `a${claims.a}`, 10, 60_000, now))) return fail(429, 'RATE_LIMITED', 'Give it a minute.', cors);
     const counted = await chipsOnTables(env, claims.a);
     if (!counted) return fail(409, 'BUSY', STILL_MOVING, cors);
     const loan = await takeLoan(env.DB, { opId: `loan:${claims.a}:${crypto.randomUUID()}`, accountId: claims.a, chips: counted.chips, inPlay: counted.inPlay, now });
@@ -145,6 +163,9 @@ async function handleApi(request: Request, env: Env, route: string, cors: Record
     }
     return json({ tableId: found.tableId, game: found.game } satisfies JoinByPinResponse, 200, cors);
   }
+
+  // The boutique and the bar (shop.ts): paid from the balance, never from chips on tables.
+  if (route === 'shop' || route.startsWith('shop/') || route.startsWith('bar/')) return shopApi(request, env, route, claims.a, cors);
 
   return fail(404, 'NOT_FOUND', 'Not here.', cors);
 }

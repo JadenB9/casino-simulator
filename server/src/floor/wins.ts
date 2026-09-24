@@ -184,8 +184,9 @@ export function describeWin(game: GameId, variant: string, events: readonly Game
       }
       case 'threecard': {
         const r = mine('result')[0]?.result as { pairPlus?: number; bonus?: number } | undefined;
-        // The winning hand is turned over to be paid, so naming it gives nothing away.
-        const hand = events.find((e) => e.type === 'hand' && e.seat === seat && Array.isArray(e.cards) && e.cards.length === 3);
+        // The winning hand is turned over to be paid (the public `show`, never the seat's own
+        // `hand` event), so naming it gives nothing away.
+        const hand = events.find((e) => e.type === 'show' && (e.to === undefined || e.to === 'all') && e.seat === seat && Array.isArray(e.cards) && e.cards.length === 3);
         const name = hand ? threeCardHand(threeCardScore(hand.cards as Card[])) : null;
         if (name && ((r?.pairPlus ?? 0) > 0 || (r?.bonus ?? 0) > 0)) return name;
         return name ? `${name}, beat the dealer` : 'Beat the dealer';

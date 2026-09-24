@@ -336,8 +336,16 @@ export const engine: GameEngine<ThreeCardState, ThreeCardAction, ThreeCardView> 
     return { ...state, deadline: state.deadline + ms };
   },
 
-  seatJoined(state) {
-    return { state, events: [] };
+  seatJoined(state, seat) {
+    // Chips only land on a seat with nothing live, so whatever this round still keeps under the
+    // number (a folded hand, its result) is the last occupant's, and view() shows a seat its own
+    // cards: clear it, so the newcomer never sees a hand nobody else was shown.
+    if (!state.hands[seat] && !state.bets[seat] && !state.results[seat]) return { state, events: [] };
+    const s = structuredClone(state);
+    delete s.hands[seat];
+    delete s.bets[seat];
+    delete s.results[seat];
+    return { state: s, events: [] };
   },
 
   seatLeaving(state, seat, ctx) {
