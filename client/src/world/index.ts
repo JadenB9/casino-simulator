@@ -155,34 +155,10 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
   const lighting = new Lighting(plan, quality);
   root.add(lighting.group);
 
-  // The floor's own reflections (High): the casino captured from inside the doors and
-  // prefiltered, for the polished marble, lacquer and wood, so they mirror its warm lights and
-  // signs instead of a studio.
-  let reflections: THREE.WebGLRenderTarget | null = null;
-  const reflect = () => {
-    if (reflections || quality !== 'high') return;
-    const pmrem = new THREE.PMREMGenerator(renderer);
-    props.glinting = false;
-    // from the main aisle just inside the vestibule: the pit, its lights and the signs ahead, the doors behind
-    reflections = pmrem.fromScene(scene, 0, 0.1, 60, { size: 256, position: new THREE.Vector3(0, 1.6, plan.entrance.z0 - 1.5) });
-    props.glinting = true;
-    pmrem.dispose();
-    for (const [name, k, rough] of REFLECTIVE) {
-      const m = mats.get(name) as THREE.MeshStandardMaterial;
-      if (!m.isMeshStandardMaterial) continue;
-      m.envMap = reflections.texture;
-      m.envMapIntensity = k;
-      if (rough !== undefined) m.roughness = rough;
-      m.needsUpdate = true;
-    }
-  };
-
   const characters = new Characters(quality, mats.get('blob'));
   const look = opts.look ?? DEFAULT_LOOK;
   await Promise.all([props.build(decor.props, chandeliers), characters.load(look).catch((err) => console.warn('character failed to load', err))]);
   progress(0.85);
-  // everything that stands on the floor is in: capture it before anyone walks in
-  reflect();
 
   const character = characters.create(look, opts.name ?? '');
   character.setName('');
@@ -222,6 +198,34 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
   } catch {
     /* compiled lazily instead */
   }
+  // The floor's own reflections (High): the casino captured from inside the doors and
+  // prefiltered, for the polished marble, lacquer and wood, so they mirror its warm lights and
+  // signs instead of a studio.
+  let reflections: THREE.WebGLRenderTarget | null = null;
+  const reflect = () => {
+    if (reflections || quality !== 'high') return;
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    // the floor as it stands: not the player, not the chandeliers' passing glints
+    props.glinting = false;
+    const shown = character.root.visible;
+    character.root.visible = false;
+    // from the main aisle just inside the vestibule: the pit, its lights and the signs ahead, the doors behind
+    reflections = pmrem.fromScene(scene, 0, 0.1, 60, { size: 256, position: new THREE.Vector3(0, 1.6, plan.entrance.z0 - 1.5) });
+    character.root.visible = shown;
+    props.glinting = true;
+    pmrem.dispose();
+    for (const [name, k, rough] of REFLECTIVE) {
+      const m = mats.get(name) as THREE.MeshStandardMaterial;
+      if (!m.isMeshStandardMaterial) continue;
+      m.envMap = reflections.texture;
+      m.envMapIntensity = k;
+      if (rough !== undefined) m.roughness = rough;
+      m.needsUpdate = true;
+    }
+  };
+
+  // with the shaders compiled, the capture is only the drawing
+  reflect();
   progress(1);
 
   const emotes = new Emotes();
