@@ -24,6 +24,7 @@ import { StationLod } from './lod.ts';
 import { Bloom, PixelRatio } from './bloom.ts';
 import type { MouseSettings } from './mouse.ts';
 import { Emotes, OWN_BUBBLE_Y, BUBBLE_Y, type CharacterSource } from './emotes.ts';
+import { hands } from './wearables.ts';
 import type { EmoteId } from '../../../shared/src/protocol.ts';
 import './world.css';
 
@@ -90,6 +91,13 @@ export interface FloorWorld extends World {
   showEmote(who: number | 'me', e: EmoteId): boolean;
   /** Where showEmote finds other players' characters (the app's RemotePlayers); null to forget. */
   useRemotes(source: CharacterSource | null): void;
+  /**
+   * A waiter hands over a paid bar order: it goes in your right hand, where everyone sees it. The
+   * order's id (from the bar's onOrder), or an item id for your newest paid order of that item.
+   */
+  holdItem(id: string): void;
+  /** Put down what you're holding. */
+  dropHeld(): void;
 }
 
 export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Promise<FloorWorld> {
@@ -251,6 +259,8 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
     useRemotes(source) {
       remotes = source;
     },
+    holdItem: (id) => void hands.bar?.hold(id),
+    dropHeld: () => void hands.bar?.drop(),
     dispose() {
       emotes.dispose();
       lod.dispose();

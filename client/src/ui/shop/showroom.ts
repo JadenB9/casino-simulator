@@ -15,7 +15,7 @@ export type Framing = 'full' | 'chest' | 'face' | 'head' | 'wrist' | 'hand';
 /** Where the camera looks (character frame, facing the camera at yaw 0), how much height it frames, and which way the figure turns to show it. */
 const FRAMES: Record<Framing, { at: [number, number, number]; height: number; yaw: number; sway: number }> = {
   full: { at: [0, 0.97, 0], height: 2.15, yaw: -0.35, sway: 0 },
-  chest: { at: [0, 1.37, 0.14], height: 0.5, yaw: -0.25, sway: 0.5 },
+  chest: { at: [0, 1.43, 0.13], height: 0.62, yaw: -0.25, sway: 0.5 },
   face: { at: [0, 1.62, 0.2], height: 0.3, yaw: -0.3, sway: 0.45 },
   head: { at: [0, 1.7, 0.12], height: 0.62, yaw: -0.4, sway: 0.45 },
   wrist: { at: [0.28, 1.0, 0.06], height: 0.3, yaw: -1.25, sway: 0.35 },

@@ -109,6 +109,86 @@ if (checks.includes('wear')) {
   await p.close();
 }
 
+// --- the boutique and the bar, with a canned high roller (no server) -------------------------------
+
+async function sheet(screen, viewport) {
+  const r = await page(`http://localhost:${port}/casino/src/ui/shop/dev.html?screen=${screen}&fixture=1&delay=1500`, viewport);
+  await r.p.waitForFunction(() => document.body.dataset.ready === '1', null, { timeout: 120000 });
+  return r;
+}
+
+async function shot(p, name) {
+  await frames(p, 20);
+  await p.screenshot({ path: `${out}/${name}.png` });
+  console.log('shot', `${out}/${name}.png`);
+}
+
+if (checks.includes('boutique')) {
+  const { p, errors } = await sheet('boutique', { width: 1440, height: 900 });
+  await p.waitForSelector('.bq-item');
+  await p.waitForFunction(() => !document.querySelector('.bq-status')?.textContent?.startsWith('Checking'));
+  await p.waitForTimeout(1200);
+  await shot(p, 'boutique-chains');
+  await p.click('.bq-item[data-id="iced-cuban"]');
+  await p.waitForTimeout(1200);
+  await shot(p, 'boutique-iced');
+  if (!(await p.textContent('.bq-primary'))?.startsWith('Buy')) fail('an unowned piece offers Buy');
+  await p.click('.bq-seg .seg-btn[data-id="grill"]');
+  await p.waitForTimeout(1200);
+  await shot(p, 'boutique-grills');
+  if ((await p.textContent('.bq-item[aria-selected="true"] .bq-chip')) !== 'Owned') fail('the grills tab opens on the one you own');
+  await p.click('.bq-seg .seg-btn[data-id="clothes"]');
+  await p.click('.bq-item[data-id="velvet-jacket"]');
+  await p.waitForTimeout(1500);
+  await shot(p, 'boutique-clothes');
+  // buy: a confirm that says the balance after, then it's yours and you're wearing it
+  await p.click('.bq-primary');
+  await p.waitForSelector('.modal');
+  await shot(p, 'boutique-confirm');
+  const confirm = await p.textContent('.modal');
+  if (!/Balance after: \$2,718,200/.test(confirm ?? '')) fail(`confirm shows the balance after: ${confirm}`);
+  await p.click('.modal .btn.primary');
+  await p.waitForFunction(() => document.querySelector('.bq-item[data-id="velvet-jacket"] .bq-chip')?.textContent === 'Wearing', null, { timeout: 10000 });
+  await p.waitForTimeout(800);
+  await shot(p, 'boutique-bought');
+  if ((await p.textContent('.bq-money-val')) !== '$2,718,200') fail('the balance drops by the price');
+  // too dear: the button says so and is off
+  await p.click('.bq-item[data-id="diamond-suit"]');
+  await p.waitForTimeout(600);
+  if (!(await p.isDisabled('.bq-primary'))) fail('an item you cannot afford cannot be bought');
+  await shot(p, 'boutique-short');
+  // Esc closes it
+  await p.keyboard.press('Escape');
+  await p.waitForTimeout(400);
+  if (await p.$('.boutique')) fail('Esc closes the boutique');
+  if (errors.length) fail(`boutique errors: ${errors.slice(0, 5).join(' | ')}`);
+  await p.close();
+  const phone = await sheet('boutique', { width: 390, height: 844 });
+  await phone.p.waitForSelector('.bq-item');
+  await phone.p.waitForTimeout(1500);
+  await shot(phone.p, 'boutique-phone');
+  await phone.p.close();
+}
+
+if (checks.includes('bar')) {
+  const { p, errors } = await sheet('bar', { width: 1280, height: 800 });
+  await p.waitForSelector('.bar-item');
+  await p.waitForTimeout(800);
+  await shot(p, 'bar-menu');
+  await p.click('.bar-order[aria-label^="Order Champagne"]');
+  await p.waitForFunction(() => document.querySelector('.bar-status')?.textContent?.includes('On its way'), null, { timeout: 5000 });
+  await shot(p, 'bar-ordered');
+  await p.waitForFunction(() => document.querySelector('.bar-status')?.textContent?.startsWith('In your hand: Champagne'), null, { timeout: 8000 });
+  await shot(p, 'bar-holding');
+  await p.keyboard.press('Escape');
+  await p.waitForTimeout(400);
+  await p.evaluate(() => window.dev.room.show('hand'));
+  await p.waitForTimeout(1500);
+  await shot(p, 'bar-in-hand');
+  if (errors.length) fail(`bar errors: ${errors.slice(0, 5).join(' | ')}`);
+  await p.close();
+}
+
 console.log(failed ? `${failed} failed` : 'ok');
 await browser.close();
 process.exit(failed ? 1 : 0);

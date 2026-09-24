@@ -191,7 +191,7 @@ vec3 wGlint(vec3 p, float cells, float t) {
   float h = wHash13(c + 11.0);
   float phase = fract(h * 13.7 + t * (0.18 + 0.5 * h));
   float g = pow(max(0.0, 1.0 - abs(phase - 0.5) * 9.0), 3.0);
-  vec3 fire = 0.62 + 0.38 * cos(6.2831 * (h * 3.0 + vec3(0.0, 0.33, 0.67)));
+  vec3 fire = 0.85 + 0.15 * cos(6.2831 * (h * 3.0 + vec3(0.0, 0.33, 0.67)));
   return fire * g;
 }
 `;
@@ -223,7 +223,7 @@ let gemMat: THREE.MeshStandardMaterial | null = null;
 /** Pavé diamonds: bright white metal broken into facets, each catching the light on its own. */
 function gem(): THREE.MeshStandardMaterial {
   if (gemMat) return gemMat;
-  const m = new THREE.MeshStandardMaterial({ color: new THREE.Color(0.95, 0.96, 1.0), metalness: 1, roughness: 0.05, envMapIntensity: 2.1, emissive: new THREE.Color(0.05, 0.055, 0.065) });
+  const m = new THREE.MeshStandardMaterial({ color: new THREE.Color(0.9, 0.94, 1.0), metalness: 1, roughness: 0.05, envMapIntensity: 1.5, emissive: new THREE.Color(0.2, 0.22, 0.26) });
   m.name = 'gem';
   const time = { value: 0 };
   timeUniforms.push(time);
@@ -1795,6 +1795,12 @@ export class Wearables {
     for (const k of a.builds) release(k);
   }
 }
+
+/**
+ * Where world.holdItem and world.dropHeld go: the app's bar (ui/shop/bar.ts) puts itself here
+ * while you're on the floor and takes itself away when you leave.
+ */
+export const hands: { bar: { hold(id: string): unknown; drop(): unknown } | null } = { bar: null };
 
 /** Past this distance (m) a character's small pieces aren't drawn, and its chain is one plain rope. */
 const FAR_M = 9;

@@ -90,6 +90,16 @@ export const KIND_LABELS: Record<ItemKind, string> = {
   hat: 'Hats',
 };
 
+/** One of a kind, for a label under a piece ("Chain · $250,000"). */
+export const KIND_ONE: Record<ItemKind, string> = {
+  chain: 'Chain',
+  grill: 'Grill',
+  clothes: 'Clothes',
+  watch: 'Watch',
+  shades: 'Shades',
+  hat: 'Hat',
+};
+
 // ---------------------------------------------------------------------------------------------
 // The bar
 
