@@ -209,11 +209,14 @@ for (const key of list) {
     const sample = () => page.evaluate(() => ({ t: window.__gameT, x: window.casino.world.player.position.x, z: window.casino.world.player.position.z }));
     const samples = [];
     const t0 = Date.now();
-    await drag([[[sx, sy], [sx + 2, sy - 44]]], 250, 3000, async () => {
-      const held = Date.now() - t0;
-      if (samples.length === 0 && held > 700) samples.push(await sample());
-      else if (samples.length === 1 && held > 1500) samples.push(await sample());
-      else if (samples.length === 2) {
+    await drag([[[sx, sy], [sx + 2, sy - 44]]], 250, 8000, async () => {
+      if (samples.length === 0) {
+        if (Date.now() - t0 > 700) samples.push(await sample());
+      } else if (samples.length === 1) {
+        // a quarter second of game time at least (a loaded machine may draw no frame for a while)
+        const s = await sample();
+        if (s.t - samples[0].t >= 0.25) samples.push(s);
+      } else {
         await shot('walking');
         return true;
       }

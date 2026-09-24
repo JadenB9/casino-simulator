@@ -30,6 +30,10 @@
 
 /* ---------------------------------------------------------------- upright screens */
 
+/* The chat dock (ui/chat/chat.css) keeps the bottom-right corner and, at a table, rises to just
+   above whatever sits low in its column: the tray, a game's bar. The panels below keep out of that
+   spot, above it or to its left. */
+
 /* A phone or tablet held upright: the tray and the tips line rise clear of the back chip. */
 @media (max-aspect-ratio: 1/1) {
   :root { --tip-bottom: 150px; }
@@ -54,7 +58,8 @@
   /* The dealer's call takes the HUD's second row (who's online and the buttons) for the moment
      it's up, so the game's own panels under the HUD stay in view. It lets taps through. */
   .dealer-line { top: 64px; left: 10px; right: 10px; transform: none; max-width: none; min-height: 44px; display: grid; place-items: center; z-index: 11; pointer-events: none; font-size: 16px; padding: 6px 12px; }
-  .tip-line { font-size: 14px; padding: 6px 12px; }
+  /* left of the chat dock's column (the dock rises to just above the tray on the right) */
+  .tip-line { left: 10px; right: 112px; transform: none; max-width: none; font-size: 14px; padding: 6px 12px; }
   .celebrate { max-width: calc(100vw - 24px); padding: 12px 22px; }
   .celebrate-title { font-size: 24px; text-wrap: balance; }
   .celebrate.tier-nice .celebrate-title { font-size: 21px; }

@@ -100,10 +100,10 @@
 }
 
 /* A phone upright: beside the shaker, the result board would sit behind the panels and off the
-   screen's edge; it goes just above the chip tray instead. (The label renderer places it with an
+   screen's edge; it goes over the table just above the chip tray (and the chat dock's spot) instead. (The label renderer places it with an
    inline transform; this pins it.) */
 @media (max-width: 560px) {
-  .sb-board { position: fixed !important; left: 50%; bottom: 180px; transform: translateX(-50%) !important; gap: 10px; padding: 8px 14px 8px 10px; }
+  .sb-board { position: fixed !important; left: 50%; bottom: 232px; transform: translateX(-50%) !important; gap: 10px; padding: 8px 14px 8px 10px; }
   .sb-die.big { width: 28px; height: 28px; }
   .sb-board-total { font-size: 28px; }
   .sb-board-tag { font-size: 16px; }

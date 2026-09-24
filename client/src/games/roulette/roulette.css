@@ -92,10 +92,10 @@
 }
 
 /* Phones: over the wheel, the result plaque would stand behind the panels under an upright HUD, or
-   under the HUD itself on its side. It sits just above the chip tray instead. (The label renderer
+   under the HUD itself on its side. It sits over the table just above the chip tray (and the chat dock's spot) instead. (The label renderer
    places it with an inline transform; these pin it.) */
 @media (max-width: 560px) {
-  .rl-result { position: fixed !important; left: 50%; bottom: 180px; transform: translateX(-50%) !important; }
+  .rl-result { position: fixed !important; left: 50%; bottom: 232px; transform: translateX(-50%) !important; }
 }
 @media (max-height: 480px) {
   .rl-result { position: fixed !important; left: 10px; bottom: 72px; transform: none !important; gap: 10px; padding: 8px 14px 8px 8px; }

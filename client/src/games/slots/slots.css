@@ -83,7 +83,7 @@
   .slots-deck .slots-coin { min-width: 0; }
   .slots-bet { flex: 1 1 0; min-width: 0; font-size: 16px; }
   .slots-deck .btn.primary { flex: 1 1 auto; min-width: 0; }
-  .slots-deck ~ .tip-line { right: 10px; max-width: calc(100vw - 20px); }
+  .slots-deck ~ .tip-line { left: 10px; right: 112px; max-width: none; }
   .slots-banner { padding: 14px 24px; max-width: calc(100vw - 24px); }
   .slots-banner .tier { font-size: 46px; }
   .slots-banner .amount { font-size: 28px; }
@@ -105,4 +105,5 @@
   .slots-countup { top: calc(40% + 50px); padding: 6px 18px 8px; }
   .slots-countup .amount { font-size: 32px; }
   .slots-pays { max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px); }
+  .slots-deck ~ .tip-line { left: 10px; right: auto; }
 }

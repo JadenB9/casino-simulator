@@ -33,8 +33,9 @@ const CHIP_TOP = 14 + 30 + 12;
 /** A touch this far across from the left (share of the width), and below the top share, drives the stick. */
 const STICK_X = 0.45;
 const STICK_Y = 0.3;
-/** A drag across the screen's shorter side turns the camera half way round. */
+/** A drag across the screen's shorter side turns the camera half way round (on a tablet, across 540 px). */
 const LOOK_TURN = Math.PI;
+const LOOK_SPAN = 540;
 const LOOK_PITCH = 0.7;
 /**
  * Games an upright phone can't really play: the layout runs off both sides (or, at video poker,
@@ -304,7 +305,7 @@ export class TouchControls {
     }
     const l = this.look;
     if (l && e.pointerId === l.id) {
-      const rate = (LOOK_TURN / Math.max(1, Math.min(innerWidth, innerHeight))) * (this.deps.sensitivity?.() ?? 1);
+      const rate = (LOOK_TURN / Math.max(1, Math.min(innerWidth, innerHeight, LOOK_SPAN))) * (this.deps.sensitivity?.() ?? 1);
       this.deps.player.addLook((e.clientX - l.x) * rate, (e.clientY - l.y) * rate * LOOK_PITCH);
       l.x = e.clientX;
       l.y = e.clientY;

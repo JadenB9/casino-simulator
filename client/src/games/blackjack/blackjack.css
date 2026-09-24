@@ -117,7 +117,7 @@
    and the meters sit on the right just above them. */
 @media (max-aspect-ratio: 1/1) {
   .bj-actions, .bj-insure { bottom: 54px; }
-  .bj-meters { bottom: 178px; right: 10px; }
+  .bj-meters { bottom: 232px; right: 10px; }
 }
 @media (max-width: 560px) {
   .bj-actions, .bj-insure { flex-wrap: wrap; justify-content: center; width: calc(100vw - 20px); max-width: 440px; padding: 8px 10px 10px; }
@@ -129,10 +129,11 @@
   /* The dealer's total grows left from the up card, off a narrow screen: lift it over the cards. */
   .bj-dealer { right: auto; left: 0; top: -20px; transform: translateY(-100%); }
 }
-/* On its side: the moves stay in one row, clear of the back chip; the meters above them. */
+/* On its side: the moves stay in one row, clear of the back chip; the meters on the left, over the
+   back chip, where the chat dock doesn't go. */
 @media (max-height: 480px) {
   .bj-actions, .bj-insure { bottom: max(8px, env(safe-area-inset-bottom, 0px)); padding: 6px 10px; }
   .bj-actions .btn { min-width: 88px; }
-  .bj-meters { right: 10px; bottom: 70px; padding: 5px 12px; }
+  .bj-meters { left: 10px; right: auto; bottom: 66px; padding: 5px 12px; }
   .bj-meter .money { font-size: 18px; }
 }
