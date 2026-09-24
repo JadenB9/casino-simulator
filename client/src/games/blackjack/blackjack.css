@@ -127,7 +127,7 @@
   .bj-meters { gap: 14px; padding: 6px 12px; }
   .bj-meter .money { font-size: 18px; }
   /* The dealer's total grows left from the up card, off a narrow screen: lift it over the cards. */
-  .bj-dealer { right: auto; left: 0; top: -10px; transform: translateY(-100%); }
+  .bj-dealer { right: auto; left: 0; top: -20px; transform: translateY(-100%); }
 }
 /* On its side: the moves stay in one row, clear of the back chip; the meters above them. */
 @media (max-height: 480px) {

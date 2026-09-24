@@ -210,7 +210,7 @@ export class TouchControls {
     this.target = key;
     this.act.hidden = this.caption.hidden = !key;
     if (!key) return;
-    this.actLabel.textContent = station ? 'Play' : 'Cashier';
+    this.actLabel.textContent = station ? 'Play' : 'Visit';
     this.act.setAttribute('aria-label', station ? `Play ${station.name}` : 'Open the cashier');
     this.caption.textContent = station ? [station.name, station.limits].filter(Boolean).join(' · ') : 'Cashier';
   }

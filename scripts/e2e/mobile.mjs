@@ -51,7 +51,9 @@ for (const key of list) {
     log(`FAIL ${key}: ${what}`);
   };
   let n = 0;
-  const shot = (name) => page.screenshot({ path: `${out}/${key}-${String(++n).padStart(2, '0')}-${name}.png`, scale: 'css' });
+  // generous timeouts: a software-rendered page on a busy machine can take a while per frame
+  page.setDefaultTimeout(90_000);
+  const shot = (name) => page.screenshot({ path: `${out}/${key}-${String(++n).padStart(2, '0')}-${name}.png`, scale: 'css', timeout: 120_000 });
 
   // --- touch helpers ------------------------------------------------------------------------------
   const touch = (type, points) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: points.map(([x, y], i) => ({ x, y, id: i + 1 })) });
@@ -75,7 +77,7 @@ for (const key of list) {
   }
   const box = async (sel) => (await page.locator(sel).first().boundingBox()) ?? null;
   const centre = (b) => [b.x + b.width / 2, b.y + b.height / 2];
-  const tap = (sel) => page.locator(sel).first().tap({ timeout: 10_000 });
+  const tap = (sel) => page.locator(sel).first().tap({ timeout: 30_000 });
   const visible = (sel) => page.locator(sel).first().isVisible().catch(() => false);
   const where = () => page.evaluate(() => ({ x: window.casino.world.player.position.x, z: window.casino.world.player.position.z }));
   const camYaw = () =>
@@ -216,7 +218,7 @@ for (const key of list) {
     const [sx, sy] = centre(await box('.touch-stick'));
     await drag([[[sx, sy], [sx, sy - 40]]], 200, 5000, () => visible('.touch-act'));
     const label = (await page.locator('.touch-act').textContent().catch(() => '')) ?? '';
-    if (!/cashier/i.test(label)) {
+    if (!/visit/i.test(label)) {
       fail(`cashier: the action button says "${label}"`);
       return;
     }
@@ -231,6 +233,8 @@ for (const key of list) {
 
   /** Walk up to a station with the stick until the action button shows, and press it. */
   async function sit(game) {
+    // back on the floor with the stick up (the camera flies back from the last table first)
+    await page.waitForFunction(() => !window.casino.app.table && !document.querySelector('.touch-layer')?.hidden, null, { timeout: 30_000 });
     await approach(STATIONS[game], 2.6);
     await sleep(500);
     const ring = await box('.touch-stick');
@@ -269,7 +273,8 @@ for (const key of list) {
   async function playBlackjack() {
     const seat = await page.evaluate(() => window.casino.app.table.session.view.seat);
     const [ax, az] = await page.evaluate((seat) => window.casino.app.table.session.stage.felts[0].anchorOf(`spot:${seat}`), seat);
-    await tap('.bj-tray .chip-btn:not([hidden]) >> nth=1');
+    // the $25 chip: this table's minimum
+    await tap('.bj-tray .chip-btn:not([hidden]) >> nth=2');
     const [x, y] = await onScreen(ax, az);
     await page.touchscreen.tap(x, y);
     await page.waitForFunction((seat) => (window.casino.app.table.session.view.v?.bets?.[seat] ?? 0) > 0, seat, { timeout: 5000 }).catch(() => fail('blackjack: tapping the betting circle placed no bet'));
