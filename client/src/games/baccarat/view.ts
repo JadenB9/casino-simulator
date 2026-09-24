@@ -26,6 +26,7 @@ import { CardMesh, CARD_H, dealCard, flipCard } from '../../table/cards.ts';
 import { ChipStack, slideStack } from '../../table/chips.ts';
 import { ease, tween, wait } from '../../table/tween.ts';
 import { ChipTray, button, el } from '../../ui/kit.ts';
+import { baccaratMax, maxRefusal } from '../../table/max.ts';
 import { serverNow } from '../../net/clock.ts';
 import { feltSpec, kidneyGeometry } from './felt.ts';
 import { setDiscardHeight } from './model.ts';
@@ -40,8 +41,6 @@ type ResultEvent = Extract<BaccaratEvent, { type: 'result' }>;
 
 const HANDS = ['player', 'banker'] as const;
 const KEYS: Record<Spot, string> = { player: 'P', banker: 'B', tie: 'T', playerPair: 'Shift P', bankerPair: 'Shift B' };
-/** The $25K chip is above this table's maximum, so the tray hides it (it's the 8th). */
-const HIDDEN_CHIP_KEY = '8';
 const PAYS_LONG: Record<Spot, string> = {
   player: 'pays 1 to 1',
   banker: 'pays 1 to 1 less 5% commission',
@@ -165,6 +164,7 @@ export class BaccaratTable implements TableView {
       clear: () => this.act({ type: 'clear' }),
       rebet: () => this.rebet(),
       double: () => this.double(),
+      max: { mode: 'pick' },
       primary: { label: 'Deal', run: () => this.primary() },
     });
     this.tray.root.classList.add('bc-tray');
@@ -185,6 +185,8 @@ export class BaccaratTable implements TableView {
   onTable(snap: TableSnapshot): void {
     this.mode = snap.meta.mode;
     this.config = snap.meta.config;
+    // chips over the Player and Banker maximum stay in the rack
+    this.tray.setChipMax(limitsFor(this.config, 'banker').max);
     this.mySeat = snap.you.seat;
     this.stack = snap.you.stack;
     this.members = snap.members;
@@ -321,7 +323,6 @@ export class BaccaratTable implements TableView {
       return true;
     }
     if (e.metaKey || e.ctrlKey || e.altKey) return false;
-    if (e.key === HIDDEN_CHIP_KEY) return true;
     if (this.tray.key(e)) return true;
     const k = e.key.toLowerCase();
     if (k === 'p') this.bet(e.shiftKey ? 'playerPair' : 'player');
@@ -409,8 +410,15 @@ export class BaccaratTable implements TableView {
     return this.play(n, (ms) => wait(ms));
   }
 
-  private bet(spot: Spot, amount: Cents = this.tray.selected.value): void {
+  private bet(spot: Spot): void {
     if (this.mySeat === null) return;
+    let amount = this.tray.selected.value;
+    // Max picked: the most this spot takes, or every chip here if that is less
+    if (this.tray.maxPicked) {
+      const m = baccaratMax(this.config, spot, this.myBets, this.stack);
+      if ('none' in m) return this.ctx.kit.toast(maxRefusal(m, limitsFor(this.config, spot)));
+      amount = m.amount;
+    }
     this.act({ type: 'bet', [spot]: amount });
   }
 
@@ -481,12 +489,19 @@ export class BaccaratTable implements TableView {
     this.tip.replaceChildren(
       el('b', '', `${SPOT_NAMES[s.spot]} (${KEYS[s.spot]})`),
       el('span', '', PAYS_LONG[s.spot]),
-      el('span', 'bc-tip-meta', `${formatMoney(lim.min)} to ${formatMoney(lim.max)}${mine ? ` · your bet ${formatMoney(mine)}` : ''}`),
+      el('span', 'bc-tip-meta', `${formatMoney(lim.min)} to ${formatMoney(lim.max)}${mine ? ` · your bet ${formatMoney(mine)}` : ''}${this.maxNote(s.spot)}`),
     );
     this.tip.hidden = false;
     this.tip.style.left = `${Math.min(innerWidth - 260, e.clientX + 16)}px`;
     this.tip.style.top = `${Math.max(8, e.clientY - 70)}px`;
   };
+
+  /** With Max picked, what a click on this spot would put down. */
+  private maxNote(spot: Spot): string {
+    if (!this.tray.maxPicked) return '';
+    const m = baccaratMax(this.config, spot, this.myBets, this.stack);
+    return 'amount' in m ? ` · Max adds ${formatMoney(m.amount)}` : '';
+  }
 
   private hideTip(): void {
     this.tip.hidden = true;

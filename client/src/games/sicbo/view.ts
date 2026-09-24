@@ -11,13 +11,14 @@ import * as THREE from 'three';
 import './sicbo.css';
 import type { TableView, TableViewCtx, TableSnapshot, MembersMsg } from '../contract.ts';
 import type { Pose } from '../../table/stage.ts';
-import type { GameEvent } from '../../../../shared/src/engine.ts';
+import type { GameEvent, TableConfig } from '../../../../shared/src/engine.ts';
 import type { Member } from '../../../../shared/src/protocol.ts';
 import type { SicBoView, SicBoAction, SeatSettle, RollInfo } from '../../../../shared/src/games/sicbo/protocol.ts';
 import { BETTING_MS } from '../../../../shared/src/games/sicbo/engine.ts';
 import { spots, spotByKey, spotName, paysLabel, spotRule, houseEdge, winPays, callRoll, facePlural, type Dice } from '../../../../shared/src/games/sicbo/rules.ts';
 import { BETTING_CHIPS, formatMoney, type Cents } from '../../../../shared/src/money.ts';
 import { ChipTray, el } from '../../ui/kit.ts';
+import { maxRefusal, sicBoMax, type MaxBet } from '../../table/max.ts';
 import { tween, wait, ease } from '../../table/tween.ts';
 import { CHIP_R, CHIP_H } from '../../table/chips.ts';
 import { celebrate, type Tier } from '../../table/celebrate.ts';
@@ -84,6 +85,7 @@ export function mountSicBo(ctx: TableViewCtx): TableView {
 
   // state
   let mode: 'solo' | 'multi' = 'solo';
+  let cfg: TableConfig | null = null;
   let mySeat: number | null = null;
   let view: SicBoView | null = null;
   let members: Member[] = [];
@@ -180,13 +182,12 @@ export function mountSicBo(ctx: TableViewCtx): TableView {
     clear: () => act({ type: 'clear' }),
     rebet: () => act({ type: 'rebet', double: false }),
     double: () => act({ type: 'rebet', double: true }),
+    max: { mode: 'pick' },
     primary: { label: 'Shake', key: 'Space', run: () => primary() },
   });
   ctx.ui.append(tray.root);
-  const chipButtons = [...tray.root.querySelectorAll<HTMLButtonElement>('.chip-btn')];
-  BETTING_CHIPS.forEach((spec, i) => {
-    if (spec.value > TRAY_MAX && chipButtons[i]) chipButtons[i]!.hidden = true;
-  });
+  // chips over the largest bet stay in the rack (the table's own limits arrive with it)
+  tray.setChipMax(TRAY_MAX);
   const [undoBtn, clearBtn, rebetBtn, doubleBtn] = [...tray.root.querySelectorAll<HTMLButtonElement>('.acts .btn')];
   const colorNote = el('span', 'sb-color-note');
   colorNote.hidden = true;
@@ -213,9 +214,17 @@ export function mountSicBo(ctx: TableViewCtx): TableView {
     if (canBet() && view?.phase === 'betting' && myTotal() > 0) ctx.link.act({ type: 'roll' });
   }
 
+  /** With Max picked, what a click on this box puts down: its maximum, or every chip here. */
+  function maxOn(key: string): MaxBet | null {
+    const spot = spotByKey(key);
+    return tray.maxPicked && cfg && spot ? sicBoMax(cfg, spot, myBets(), stack) : null;
+  }
+
   function place(key: string): void {
     if (!canBet()) return;
-    ctx.link.act({ type: 'bet', bets: [{ spot: key, amount: tray.selected.value }] });
+    const m = maxOn(key);
+    if (m && 'none' in m) return ctx.kit.toast(maxRefusal(m, cfg!.limits[spotByKey(key)!.limit] ?? cfg!.limits.default));
+    ctx.link.act({ type: 'bet', bets: [{ spot: key, amount: m ? m.amount : tray.selected.value }] });
     ctx.sfx.play('chip-lay', { volume: 0.7 });
   }
 
@@ -260,6 +269,8 @@ export function mountSicBo(ctx: TableViewCtx): TableView {
       { text: spotRule(spot), cls: 'sb-tip-rule' },
       { text: `House edge ${pct(houseEdge(spot))}`, cls: 'sb-tip-edge' },
     ];
+    const most = canBet() ? maxOn(key) : null;
+    if (most) lines.push({ text: 'amount' in most ? `Max adds ${formatMoney(most.amount)}` : most.none === 'AT_MAX' ? 'At the maximum' : 'Not enough chips for its minimum', cls: 'sb-tip-mine' });
     for (const [seatStr, bets] of Object.entries(view?.bets ?? {})) {
       const amount = bets[key];
       if (!amount) continue;
@@ -284,7 +295,7 @@ export function mountSicBo(ctx: TableViewCtx): TableView {
     const a = anchorOf(key)!;
     ghost.visible = canBet();
     ghost.position.set(a[0], CHIP_Y + chips.heightAt(key) + (CHIP_H * CHIP_SCALE) / 2, a[1]);
-    ghostMat.color.set(mode === 'multi' && mySeat !== null ? seatColor(mySeat) : tray.selected.body);
+    ghostMat.color.set(mode === 'multi' && mySeat !== null ? seatColor(mySeat) : tray.maxPicked ? '#e2bf7c' : tray.selected.body);
   }
 
   const onMove = (e: PointerEvent) => showHover(spotUnder(e), e);
@@ -531,6 +542,8 @@ export function mountSicBo(ctx: TableViewCtx): TableView {
   const tableView: TableView & { debug: unknown } = {
     onTable(snap: TableSnapshot) {
       mode = snap.meta.mode;
+      cfg = snap.meta.config;
+      tray.setChipMax(cfg.limits.even?.max ?? TRAY_MAX);
       mySeat = snap.you.status === 'watching' ? null : snap.you.seat;
       stack = snap.you.stack;
       members = snap.members;
@@ -608,9 +621,11 @@ export function mountSicBo(ctx: TableViewCtx): TableView {
       }
       if (e.metaKey || e.ctrlKey || e.altKey) return false;
       const n = Number(e.key);
-      if (Number.isInteger(n) && n >= 1 && n <= BETTING_CHIPS.length) {
-        if (BETTING_CHIPS[n - 1]!.value > TRAY_MAX) return true;
-        return tray.key(e);
+      if (Number.isInteger(n) && n >= 1 && n <= BETTING_CHIPS.length) return tray.key(e);
+      // Max while a bet can go down; otherwise M is the casino's mute
+      if ((e.key === 'm' || e.key === 'M') && !e.shiftKey && canBet()) {
+        tray.pickMax();
+        return true;
       }
       if (e.code === 'Space') {
         primary();

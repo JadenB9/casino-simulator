@@ -11,13 +11,14 @@ import * as THREE from 'three';
 import './bigsix.css';
 import type { GameClientModule, TableView, TableViewCtx, TableSnapshot, MembersMsg } from '../contract.ts';
 import type { Pose } from '../../table/stage.ts';
-import type { GameEvent } from '../../../../shared/src/engine.ts';
+import type { GameEvent, TableConfig } from '../../../../shared/src/engine.ts';
 import type { Member } from '../../../../shared/src/protocol.ts';
 import type { BigSixView, SeatSettle } from '../../../../shared/src/games/bigsix/protocol.ts';
 import { BETTING_MS } from '../../../../shared/src/games/bigsix/engine.ts';
 import { SPOTS, type SymbolId, spotOf, paysLabel, callFor, edgePercent } from '../../../../shared/src/games/bigsix/rules.ts';
 import { BETTING_CHIPS, formatMoney, type Cents } from '../../../../shared/src/money.ts';
 import { ChipTray, el } from '../../ui/kit.ts';
+import { bigSixMax, maxRefusal, type MaxBet } from '../../table/max.ts';
 import { tween, wait, ease } from '../../table/tween.ts';
 import { CHIP_R, CHIP_H } from '../../table/chips.ts';
 import { celebrate } from '../../table/celebrate.ts';
@@ -111,6 +112,7 @@ function mountBigSix(ctx: TableViewCtx): TableView {
 
   // state
   let mode: 'solo' | 'multi' = 'solo';
+  let cfg: TableConfig | null = null;
   let mySeat: number | null = null;
   let view: BigSixView | null = null;
   let members: Member[] = [];
@@ -226,13 +228,12 @@ function mountBigSix(ctx: TableViewCtx): TableView {
     clear: () => act({ type: 'clear' }),
     rebet: () => act({ type: 'rebet', double: false }),
     double: () => act({ type: 'rebet', double: true }),
+    max: { mode: 'pick' },
     primary: { label: 'Spin', key: 'Space', run: () => primary() },
   });
   ctx.ui.append(tray.root);
-  const chipButtons = [...tray.root.querySelectorAll<HTMLButtonElement>('.chip-btn')];
-  BETTING_CHIPS.forEach((spec, i) => {
-    if (spec.value > TRAY_MAX && chipButtons[i]) chipButtons[i]!.hidden = true;
-  });
+  // chips over the largest bet stay in the rack (the table's own limits arrive with it)
+  tray.setChipMax(TRAY_MAX);
   const [undoBtn, clearBtn, rebetBtn, doubleBtn] = [...tray.root.querySelectorAll<HTMLButtonElement>('.acts .btn')];
   const colorNote = el('span', 'bs-color-note');
   tray.root.append(colorNote);
@@ -260,9 +261,16 @@ function mountBigSix(ctx: TableViewCtx): TableView {
     if (canBet() && view?.phase === 'betting' && myTotal() > 0) ctx.link.act({ type: 'spin' });
   }
 
+  /** With Max picked, what a click on this spot puts down: its maximum, or every chip here. */
+  function maxOn(key: SymbolId): MaxBet | null {
+    return tray.maxPicked && cfg ? bigSixMax(cfg, key, myBets(), stack) : null;
+  }
+
   function place(key: SymbolId): void {
     if (!canBet()) return;
-    ctx.link.act({ type: 'bet', bets: [{ spot: key, amount: tray.selected.value }] });
+    const m = maxOn(key);
+    if (m && 'none' in m) return ctx.kit.toast(maxRefusal(m, cfg!.limits.spot ?? cfg!.limits.default));
+    ctx.link.act({ type: 'bet', bets: [{ spot: key, amount: m ? m.amount : tray.selected.value }] });
     ctx.sfx.play('chip-lay', { volume: 0.7 });
   }
 
@@ -314,6 +322,8 @@ function mountBigSix(ctx: TableViewCtx): TableView {
       { text: `${spot.stops} of 54 stops · house edge ${edgePercent(spot).toFixed(2)}%`, cls: 'bs-tip-odds' },
     ];
     if (key === 'star' || key === 'crown') lines.push({ text: `Pays only when the ${spot.name} stops`, cls: 'bs-tip-edge' });
+    const most = canBet() ? maxOn(key) : null;
+    if (most) lines.push({ text: 'amount' in most ? `Max adds ${formatMoney(most.amount)}` : most.none === 'AT_MAX' ? 'At the maximum' : 'Not enough chips for its minimum', cls: 'bs-tip-mine' });
     if (view) {
       for (const [seatStr, bets] of Object.entries(view.bets)) {
         const amount = bets[key];
@@ -342,7 +352,7 @@ function mountBigSix(ctx: TableViewCtx): TableView {
     const at = placeOf(mySeat ?? 0, key);
     const pile = mySeat !== null ? chips.pile(mySeat, key) : undefined;
     ghost.position.set(at.x, CHIP_Y + (pile?.height ?? 0) + (CHIP_H * CHIP_SCALE) / 2, at.z);
-    ghostMat.color.set(mode === 'multi' && mySeat !== null ? seatColor(mySeat) : tray.selected.body);
+    ghostMat.color.set(mode === 'multi' && mySeat !== null ? seatColor(mySeat) : tray.maxPicked ? '#e2bf7c' : tray.selected.body);
   }
 
   const onMove = (e: PointerEvent) => showHover(spotUnder(e), e);
@@ -659,6 +669,8 @@ function mountBigSix(ctx: TableViewCtx): TableView {
   const tableView: TableView & { debug: unknown } = {
     onTable(snap: TableSnapshot) {
       mode = snap.meta.mode;
+      cfg = snap.meta.config;
+      tray.setChipMax(cfg.limits.spot?.max ?? TRAY_MAX);
       mySeat = snap.you.seat;
       stack = snap.you.stack;
       members = snap.members;
@@ -739,9 +751,11 @@ function mountBigSix(ctx: TableViewCtx): TableView {
       }
       if (e.metaKey || e.ctrlKey || e.altKey) return false;
       const n = Number(e.key);
-      if (Number.isInteger(n) && n >= 1 && n <= BETTING_CHIPS.length) {
-        if (BETTING_CHIPS[n - 1]!.value > TRAY_MAX) return true;
-        return tray.key(e);
+      if (Number.isInteger(n) && n >= 1 && n <= BETTING_CHIPS.length) return tray.key(e);
+      // Max while a bet can go down; otherwise M is the casino's mute
+      if ((e.key === 'm' || e.key === 'M') && !e.shiftKey && canBet()) {
+        tray.pickMax();
+        return true;
       }
       if (e.code === 'Space') {
         primary();

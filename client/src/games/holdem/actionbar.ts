@@ -1,7 +1,8 @@
 // The action bar under the table: Fold, Check or Call, Bet or Raise with a slider and pot-size
 // presets, All-in. Keys: F fold, C check/call, R or Enter bet/raise the slider amount, A all-in
-// (press twice), Q W E set a third of the pot, half the pot, the pot; arrows nudge the slider.
-// Every amount is a street total, the same as the engine's `raise.to`.
+// (press twice), Q W E set a third of the pot, half the pot, the pot, M the most you can (all
+// in); arrows nudge the slider. All-in and Max wear the gold every table's Max does. Every
+// amount is a street total, the same as the engine's `raise.to`.
 
 import { el } from '../../ui/kit.ts';
 import { formatMoney, type Cents } from '../../../../shared/src/money.ts';
@@ -11,6 +12,8 @@ const PRESETS: { key: string; label: string; frac: number }[] = [
   { key: 'Q', label: '⅓ pot', frac: 1 / 3 },
   { key: 'W', label: '½ pot', frac: 1 / 2 },
   { key: 'E', label: 'Pot', frac: 1 },
+  // no limit: the most you can bet is everything you have in
+  { key: 'M', label: 'Max', frac: Infinity },
 ];
 
 function keyed(label: string, key: string, cls: string, onClick: () => void): HTMLButtonElement {
@@ -48,9 +51,11 @@ export class ActionBar {
     this.fold = keyed('Fold', 'F', 'he-fold', () => this.doFold());
     this.call = keyed('Check', 'C', 'he-call', () => this.doCall());
     this.raise = keyed('Raise', 'R', 'primary he-raise', () => this.doRaise());
-    this.allin = keyed('All-in', 'A', 'he-allin', () => this.doAllIn());
+    this.allin = keyed('All-in', 'A', 'he-allin max-btn', () => this.doAllIn());
+    this.allin.title = 'Everything you have in. Press twice (A, A) to be sure.';
     for (const p of PRESETS) {
-      const b = keyed(p.label, p.key, 'ghost he-preset', () => this.preset(p.frac));
+      const b = keyed(p.label, p.key, `ghost he-preset${p.frac === Infinity ? ' max-btn' : ''}`, () => this.preset(p.frac));
+      if (p.frac === Infinity) b.title = 'Set the amount to everything you have in; Raise sends it.';
       this.presets.push(b);
     }
     this.slider.type = 'range';
@@ -172,6 +177,11 @@ export class ActionBar {
   private preset(frac: number): void {
     const l = this.legal;
     if (!l) return;
+    const range = l.bet ?? l.raise;
+    if (frac === Infinity) {
+      if (range) this.setAmount(range.max);
+      return;
+    }
     const pot = this.total + l.call;
     const to = l.bet ? frac * this.total : l.street + l.call + frac * pot;
     this.setAmount(Math.round(to));

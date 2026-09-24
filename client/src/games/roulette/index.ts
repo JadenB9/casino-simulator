@@ -12,13 +12,14 @@ import * as THREE from 'three';
 import './roulette.css';
 import type { GameClientModule, TableView, TableViewCtx, TableSnapshot, MembersMsg } from '../contract.ts';
 import type { Pose } from '../../table/stage.ts';
-import type { GameEvent } from '../../../../shared/src/engine.ts';
+import type { GameEvent, TableConfig } from '../../../../shared/src/engine.ts';
 import type { Member } from '../../../../shared/src/protocol.ts';
 import type { RouletteView, SeatSettle } from '../../../../shared/src/games/roulette/protocol.ts';
 import { BETTING_MS, LAUNCH_LEAD_MS, LATE_SPIN_MS } from '../../../../shared/src/games/roulette/engine.ts';
 import { asVariant, spotByKey, spotName, paysLabel, describePocket, pocketLabel, type Spot } from '../../../../shared/src/games/roulette/rules.ts';
 import { BETTING_CHIPS, formatMoney, type Cents } from '../../../../shared/src/money.ts';
 import { ChipTray, el } from '../../ui/kit.ts';
+import { maxRefusal, rouletteMax, type MaxBet } from '../../table/max.ts';
 import { tween, wait, ease } from '../../table/tween.ts';
 import { CHIP_R, CHIP_H } from '../../table/chips.ts';
 import { serverNow } from '../../net/clock.ts';
@@ -36,7 +37,7 @@ const FELT_Y = TOP_Y + 0.0007;
 const CHIP_Y = TOP_Y + 0.0009;
 /** Where the dealer stands (losers go here, payouts come from here): beside the wheel, across from the players. */
 const DEALER = new THREE.Vector3(XZ - 0.02, CHIP_Y, ZT - 0.075);
-/** Tray chips above the table's outside maximum are hidden. */
+/** Tray chips above the table's outside maximum are hidden (until the table says what that is). */
 const TRAY_MAX: Cents = 500_000;
 
 /** Betting: the whole table from above the players' rail. The spin: close on the wheel. */
@@ -101,6 +102,7 @@ function mountRoulette(ctx: TableViewCtx): TableView {
 
   // state
   let mode: 'solo' | 'multi' = 'solo';
+  let cfg: TableConfig | null = null;
   let mySeat: number | null = null;
   let view: RouletteView | null = null;
   let members: Member[] = [];
@@ -218,13 +220,12 @@ function mountRoulette(ctx: TableViewCtx): TableView {
     clear: () => act({ type: 'clear' }),
     rebet: () => act({ type: 'rebet', double: false }),
     double: () => act({ type: 'rebet', double: true }),
+    max: { mode: 'pick' },
     primary: { label: 'Spin', key: 'Space', run: () => primary() },
   });
   ctx.ui.append(tray.root);
-  const chipButtons = [...tray.root.querySelectorAll<HTMLButtonElement>('.chip-btn')];
-  BETTING_CHIPS.forEach((spec, i) => {
-    if (spec.value > TRAY_MAX && chipButtons[i]) chipButtons[i]!.hidden = true;
-  });
+  // chips over the outside maximum stay in the rack (the table's own limits arrive with it)
+  tray.setChipMax(TRAY_MAX);
   const [undoBtn, clearBtn, rebetBtn, doubleBtn] = [...tray.root.querySelectorAll<HTMLButtonElement>('.acts .btn')];
   const colorNote = el('span', 'rl-color-note');
   tray.root.append(colorNote);
@@ -252,9 +253,17 @@ function mountRoulette(ctx: TableViewCtx): TableView {
     if (canBet() && view?.phase === 'betting' && myTotal() > 0) ctx.link.act({ type: 'spin' });
   }
 
+  /** With Max picked, what a click on this spot puts down: its maximum, or every chip here. */
+  function maxOn(spot: Spot): MaxBet | null {
+    return tray.maxPicked && cfg ? rouletteMax(cfg, spot, myBets(), stack) : null;
+  }
+
   function place(spot: Spot): void {
     if (!canBet()) return;
-    const amount = tray.selected.value;
+    let amount = tray.selected.value;
+    const m = maxOn(spot);
+    if (m && 'none' in m) return ctx.kit.toast(maxRefusal(m, cfg!.limits[spot.inside ? 'inside' : 'outside'] ?? cfg!.limits.default));
+    if (m) amount = m.amount;
     ctx.link.act({ type: 'bet', bets: [{ kind: spot.kind, ...(spot.inside ? { numbers: [...spot.numbers] } : {}), amount }] });
     ctx.sfx.play('chip-lay', { volume: 0.7 });
   }
@@ -299,6 +308,8 @@ function mountRoulette(ctx: TableViewCtx): TableView {
   function tipLines(spot: Spot): { text: string; cls?: string }[] {
     const lines: { text: string; cls?: string }[] = [{ text: `${spotName(spot)} · ${paysLabel(spot)}`, cls: 'rl-tip-name' }];
     if (spot.kind === 'topline') lines.push({ text: 'House edge 7.89%, against 5.26% on every other bet', cls: 'rl-tip-edge' });
+    const most = canBet() ? maxOn(spot) : null;
+    if (most) lines.push({ text: 'amount' in most ? `Max adds ${formatMoney(most.amount)}` : most.none === 'AT_MAX' ? 'At the maximum' : 'Not enough chips for its minimum', cls: 'rl-tip-mine' });
     if (view) {
       for (const [seatStr, bets] of Object.entries(view.bets)) {
         const amount = bets[spot.key];
@@ -327,7 +338,7 @@ function mountRoulette(ctx: TableViewCtx): TableView {
     ghost.visible = !!a && canBet();
     if (a) {
       ghost.position.set(a[0], CHIP_Y + chips.heightAt(spot.key) + (CHIP_H * CHIP_SCALE) / 2, a[1]);
-      ghostMat.color.set(mode === 'multi' && mySeat !== null ? seatColor(mySeat) : tray.selected.body);
+      ghostMat.color.set(mode === 'multi' && mySeat !== null ? seatColor(mySeat) : tray.maxPicked ? '#e2bf7c' : tray.selected.body);
     }
   }
 
@@ -650,6 +661,8 @@ function mountRoulette(ctx: TableViewCtx): TableView {
   const tableView: TableView & { debug: unknown } = {
     onTable(snap: TableSnapshot) {
       mode = snap.meta.mode;
+      cfg = snap.meta.config;
+      tray.setChipMax(cfg.limits.outside?.max ?? TRAY_MAX);
       mySeat = snap.you.seat;
       stack = snap.you.stack;
       members = snap.members;
@@ -737,9 +750,11 @@ function mountRoulette(ctx: TableViewCtx): TableView {
       }
       if (e.metaKey || e.ctrlKey || e.altKey) return false;
       const n = Number(e.key);
-      if (Number.isInteger(n) && n >= 1 && n <= BETTING_CHIPS.length) {
-        if (BETTING_CHIPS[n - 1]!.value > TRAY_MAX) return true;
-        return tray.key(e);
+      if (Number.isInteger(n) && n >= 1 && n <= BETTING_CHIPS.length) return tray.key(e);
+      // Max while a bet can go down; otherwise M is the casino's mute
+      if ((e.key === 'm' || e.key === 'M') && !e.shiftKey && canBet()) {
+        tray.pickMax();
+        return true;
       }
       if (e.code === 'Space') {
         primary();
