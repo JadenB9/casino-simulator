@@ -147,6 +147,8 @@ export class TableSession {
     this.kit.dispose();
     this.socket.close();
     this.offFrame();
+    // what the view has on the table, before its dispose takes it off: the stage gives it all back
+    this.stage.hold();
     this.view?.dispose();
     this.view = null;
     showLimits(this.stage.anchor, null);

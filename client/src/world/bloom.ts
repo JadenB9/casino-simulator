@@ -193,13 +193,17 @@ export class Bloom {
 
 /**
  * Pixel ratio on High: start at min(devicePixelRatio, 2); step down 0.25 (not below 1.25) when the
- * 90th-percentile frame is over 17 ms for two seconds, back up when under 12 ms for five. Resizing
- * is expensive, hence the long windows.
+ * 90th-percentile frame is over 17 ms for two seconds, back up when under 12 ms for eight, but
+ * never within half a minute of stepping down. Every step resizes the canvas, which stalls the page
+ * while the GPU catches up (a fifth of a second or more on a busy machine), so a frame rate hovering
+ * near the line mustn't see-saw.
  */
 export class PixelRatio {
   private samples: number[] = [];
   private slow = 0;
   private fast = 0;
+  /** Seconds since the last step down. */
+  private since = Infinity;
   private enabled = false;
   private max = 1;
   current = 1;
@@ -227,8 +231,11 @@ export class PixelRatio {
     } else {
       this.slow = this.fast = 0;
     }
-    if (this.slow > 2 && this.current > 1.25) this.apply(Math.max(1.25, this.current - 0.25));
-    else if (this.fast > 5 && this.current < this.max) this.apply(Math.min(this.max, this.current + 0.25));
+    this.since += dt;
+    if (this.slow > 2 && this.current > 1.25) {
+      this.apply(Math.max(1.25, this.current - 0.25));
+      this.since = 0;
+    } else if (this.fast > 8 && this.current < this.max && this.since > 30) this.apply(Math.min(this.max, this.current + 0.25));
   }
 
   private apply(pr: number): void {

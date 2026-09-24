@@ -23,6 +23,7 @@
 
 import * as THREE from 'three';
 import type { Quality } from '../render/engine3d.ts';
+import { skipWhileHidden } from '../render/matrices.ts';
 import type { WorldStation } from './stations.ts';
 
 const FAR_M = 11;
@@ -121,6 +122,9 @@ export class StationLod {
       b.copy.name = `far:${s.id}`;
       b.copy.visible = false;
       s.model.parent!.add(b.copy);
+      // whichever of the two is hidden sits out the frame's matrix update
+      skipWhileHidden(s.model);
+      skipWhileHidden(b.copy);
       return b;
     });
     // every stand-in's merged parts, in one batch per material beside the stations

@@ -318,6 +318,47 @@ bar over the bartender's Order, a computer over its own desk chair).
   doors, taken once at load); the metals keep the studio environment. The chandeliers glint (one
   point cloud, one draw call).
 - Low: no bloom, pixel ratio 1, Lambert/Basic materials, no spots, Quaternius chandeliers.
+- The canvas itself isn't multisampled (the app and the dev floor make the engine with
+  `antialias: false`): on High the bloom draws the scene into its own 4x target, and a
+  multisampled canvas would only cost memory and make each pixel-ratio step stall. The pixel ratio
+  steps back up only after eight fast seconds and never within 30 s of stepping down.
+
+### The frame's CPU
+- Labels (name tags, speech and emote bubbles, a table's totals) are drawn by render/labels.ts, a
+  pass over what's shown that reuses the render's matrices; three's CSS2DRenderer walked the whole
+  scene (6,000 objects) twice a frame and updated every matrix again. Make labels with
+  `CSS2DObject` as before; hide one with `visible`, never with its element's style.
+- Hidden things sit out the frame's matrix update (render/matrices.ts `skipWhileHidden`): every
+  character's root (seventy-odd bones each) and every station's model and stand-in copy. Only the
+  frame's own update skips them; an explicit `updateMatrixWorld(true)` still updates all of it.
+- Other players (remote-players.ts) are drawn and animated only where the camera can see them
+  (`world.canSee(x, z)`: in view, in a room being drawn, inside the doorway it's seen through), at
+  most the nearest `MAX_DRAWN` (40) of a crowd, and their shadows are one instanced mesh. One left
+  out is still there for the staff and waiters (`userData.offscreen`), who look at and step round
+  everyone present.
+- Nothing is drawn behind the loading screen (`engine.paused`): the world compiles every shader
+  with `compileAsync`, the hidden things too, and the first long frame (the floor going onto the
+  GPU) happens before the loading screen lifts.
+
+### GPU memory at the tables
+A table view's felt, dice, pucks and buttons are given back to the GPU when you stand up:
+`TableStage` notes what the view has on the table before the view is disposed (`stage.hold()`,
+table-session.ts) and releases every geometry, material and texture of it that nothing in the
+scene still draws. Caches every table shares say so with `userData.shared = true` (the cards'
+faces, box and edge, the chips' faces, sides and cylinder, the dice's materials), so they stay; a
+game's own cache that doesn't is uploaded again the next time it's drawn. `node
+scripts/e2e/session.mjs <port>` sits at a table of every kind round after round and counts what the
+renderer, the heap and the DOM hold.
+
+### Measuring
+- `node scripts/e2e/perf.mjs <port> <dir> [flow sweep mobile] --bots 24 [--crowd] [--uncapped]`:
+  frame rate, p95, the frame's own CPU time and draw calls over every room and doorway at High and
+  Low with other players on the floor (perf-bots.mjs), and a mid phone on Low with the CPU slowed 4x.
+- `node scripts/e2e/loadtime.mjs <port> [--net 4g]` on a production build (`vite preview` of
+  dist/casino): the time to the login screen and to the floor, requests and bytes by type, and
+  anything fetched twice.
+- Published builds carry every model gzipped beside itself (client/vite.config.ts) and
+  render/model-bytes.ts unpacks it: the site's CDN sends .glb files uncompressed.
 
 ## Assets
 `node scripts/assets-world.mjs [staging]` rebuilds `client/public/assets/models` (characters,

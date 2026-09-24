@@ -32,28 +32,35 @@ import { CLOSE, type Profile } from '../../../shared/src/protocol.ts';
 export async function boot(): Promise<void> {
   const ui = document.getElementById('ui')!;
   const fill = document.getElementById('boot-fill');
-  const engine = new Engine3D(document.getElementById('scene') as HTMLCanvasElement, document.getElementById('labels')!, savedQuality());
+  // the floor's bloom multisamples the scene itself on High (see Engine3D)
+  const engine = new Engine3D(document.getElementById('scene') as HTMLCanvasElement, document.getElementById('labels')!, savedQuality(), { antialias: false });
   engine.onFrame((dt) => updateTweens(dt));
   const sfx = new Sfx();
   // A saved login is checked while the floor loads, not after it.
   const saved = api.savedToken() ? api.me().catch(() => null) : Promise.resolve(null);
   let app: App | null = null;
-  const [world] = await Promise.all([
-    createWorld(engine, {
-      ui,
-      sfx,
-      onProgress: (k) => {
-        if (fill) fill.style.width = `${Math.round(k * 100)}%`;
-      },
-      onEscape: () => app?.escape(),
-    }),
-    loadCards(),
-    sfx.load().catch((err) => console.warn('sounds failed to load', err)),
-  ]);
+  // nothing is drawn behind the loading screen (see Engine3D.paused)
+  engine.paused = true;
+  const world = await createWorld(engine, {
+    ui,
+    sfx,
+    onProgress: (k) => {
+      if (fill) fill.style.width = `${Math.round(k * 100)}%`;
+    },
+    onEscape: () => app?.escape(),
+  });
+  engine.paused = false;
+  // The cards' faces and the sounds aren't needed to show the floor: they load behind the login
+  // (a quarter of a megabyte each), and sitting down at a table waits for the cards.
+  loadCards().catch((err) => console.warn('cards failed to load', err));
+  sfx.load().catch((err) => console.warn('sounds failed to load', err));
   app = new App(engine, world, sfx, ui);
   // Handles for the console and the headless checks; nothing here can move money.
   (window as unknown as { casino: unknown }).casino = { engine, world, app, session };
   await app.start(saved);
+  // the first frames put the floor on the GPU (the first is long): behind the loading screen, not
+  // on the login screen where they would hold up typing
+  for (let i = 0; i < 2; i++) await new Promise((r) => requestAnimationFrame(r));
 }
 
 interface OpenTable {
@@ -265,6 +272,11 @@ class App {
       seatOf: (station, slot) => this.seatOf(station, slot),
       // a stool, a sofa: sitting anywhere (world/life/)
       seatFor: (id) => this.world.life.seatFor(id),
+      // nobody in a room you can't see into, or behind you, is drawn or animated; in a crowd the
+      // nearest are, and everyone's shadow is one draw
+      inView: (x, z) => this.world.canSee(x, z),
+      eye: () => this.engine.camera.position,
+      shadow: { geometry: this.world.characterFactory.blobGeometry, material: this.world.characterFactory.blob },
     });
     // Gestures show over whoever made them, you included (the server echoes yours back).
     this.world.useRemotes(this.remotes);
@@ -463,6 +475,8 @@ class App {
       await this.world.exitTable();
       return;
     }
+    // loaded behind the login long before anyone gets here; a failure still opens the table
+    await loadCards().catch(() => {});
     this.openTable(station, choice);
   }
 

@@ -2,8 +2,9 @@
 // the dev harness add to this scene; nothing creates a second WebGL context.
 
 import * as THREE from 'three';
-import { CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { Labels } from './labels.ts';
+import { framePass } from './matrices.ts';
 
 export type Quality = 'high' | 'low';
 
@@ -57,19 +58,32 @@ export function fovFor(aspect: number): number {
 
 export class Engine3D {
   readonly renderer: THREE.WebGLRenderer;
-  readonly labels: CSS2DRenderer;
+  readonly labels: Labels;
   readonly scene = new THREE.Scene();
   readonly camera = new THREE.PerspectiveCamera(FOV, 1, 0.05, 200);
   readonly timer = new THREE.Timer();
   private frames = new Set<FrameFn>();
   private frameTimes: number[] = [];
+  /**
+   * Draw nothing (and run no frame callbacks) while set: behind a loading screen there is nothing
+   * to see, and drawing a scene still being built compiles each new material's shaders on the spot,
+   * holding up the build, where the floor's compileAsync would compile them all in parallel.
+   */
+  paused = false;
 
   /** The ceiling on the pixel ratio: 1.5 on phones and tablets, 2 elsewhere. */
   readonly maxPixelRatio: number;
 
-  constructor(canvas: HTMLCanvasElement, labelRoot: HTMLElement, readonly quality: Quality) {
+  /**
+   * `antialias`: multisample the canvas itself (on High unless told otherwise). The floor passes
+   * false: on High its bloom (world/bloom.ts) draws the scene into a multisampled target of its own
+   * and puts only a full-screen picture on the canvas, so a multisampled canvas would be a second
+   * copy of the frame four samples deep, doing nothing but costing memory and making every resize
+   * (the pixel ratio stepping down) freeze the page.
+   */
+  constructor(canvas: HTMLCanvasElement, labelRoot: HTMLElement, readonly quality: Quality, opts: { antialias?: boolean } = {}) {
     const high = quality === 'high';
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: high, powerPreference: 'high-performance' });
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: opts.antialias ?? high, powerPreference: 'high-performance' });
     this.maxPixelRatio = isMobile() ? MOBILE_MAX_PIXEL_RATIO : 2;
     // Everything that sets the ratio later (the floor's adaptive step-down on High) goes through
     // the same ceiling, so a phone never renders at its full 3x.
@@ -85,7 +99,7 @@ export class Engine3D {
     pmrem.dispose();
     this.scene.background = new THREE.Color('#0b0908');
 
-    this.labels = new CSS2DRenderer({ element: labelRoot });
+    this.labels = new Labels({ element: labelRoot });
     this.timer.connect(document);
     addEventListener('resize', this.resize);
     this.resize();
@@ -105,13 +119,18 @@ export class Engine3D {
 
   private tick(t: number): void {
     this.timer.update(t);
+    if (this.paused) return;
     const dt = Math.min(this.timer.getDelta(), 0.1);
     this.frameTimes.push(dt * 1000);
     if (this.frameTimes.length > 120) this.frameTimes.shift();
     for (const fn of this.frames) fn(dt, t / 1000);
-    this.renderer.render(this.scene, this.camera);
+    // hidden characters and far-off tables' models sit out the frame's matrix update (matrices.ts);
+    // the labels go straight after, on the same matrices
+    framePass(this.draw);
     this.labels.render(this.scene, this.camera);
   }
+
+  private draw = (): void => this.renderer.render(this.scene, this.camera);
 
   private resize = (): void => {
     const w = innerWidth;

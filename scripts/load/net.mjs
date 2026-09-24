@@ -68,7 +68,13 @@ export class Server {
     const headers = { Origin: this.origin, 'Content-Type': 'application/json' };
     if (token) headers.Authorization = `Bearer ${token}`;
     if (ip) headers['CF-Connecting-IP'] = ip;
-    const res = await fetch(`${this.base}/casino/api/${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+    // A request that hangs fails in 30 s with its path, rather than undici's silent five minutes.
+    let res;
+    try {
+      res = await fetch(`${this.base}/casino/api/${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(30_000) });
+    } catch (err) {
+      throw new Error(`${method} ${path}: ${err?.cause?.code ?? err?.name ?? err}`);
+    }
     const text = await res.text();
     let json = null;
     try {

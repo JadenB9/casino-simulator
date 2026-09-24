@@ -167,7 +167,7 @@ describe('Socket', () => {
   });
 
   it('stops on the codes that mean "not here any more" (away too long included), and reloads on a version change', () => {
-    for (const code of [4001, 4003, 4004, 4005, 4010]) {
+    for (const code of [1000, 4001, 4003, 4004, 4005, 4010]) {
       const { s, states } = make();
       const ws = FakeWS.all.at(-1)!;
       ws.accept();
@@ -288,6 +288,18 @@ describe('Socket', () => {
       expect(FakeWS.all).toHaveLength(0);
       expect(s.state).toBe('closed');
     });
+  });
+
+  it('closed while still connecting, the socket is closed once it opens, not mid-handshake', () => {
+    const { s } = make();
+    const ws = FakeWS.all[0]!;
+    s.close();
+    expect(ws.closedWith).toBe(null);
+    ws.accept();
+    expect(ws.closedWith).toBe(1000);
+    vi.advanceTimersByTime(60_000);
+    expect(FakeWS.all).toHaveLength(1);
+    expect(s.state).toBe('closed');
   });
 
   it('close() is final: nothing reconnects, and late events from the old socket are ignored', () => {

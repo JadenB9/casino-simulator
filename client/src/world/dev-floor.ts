@@ -55,7 +55,7 @@ function views(w: FloorWorld): Record<string, View | 'walk'> {
 export async function runDevFloor(params: URLSearchParams): Promise<FloorWorld> {
   const q = params.get('quality');
   const quality: Quality = q === 'low' || q === 'high' ? q : savedQuality();
-  const engine = new Engine3D(document.getElementById('scene') as HTMLCanvasElement, document.getElementById('labels')!, quality);
+  const engine = new Engine3D(document.getElementById('scene') as HTMLCanvasElement, document.getElementById('labels')!, quality, { antialias: false });
   const fill = document.getElementById('boot-fill');
   const world = await createWorld(engine, {
     quality,

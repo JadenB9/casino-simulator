@@ -17,9 +17,12 @@ export class TableStage {
   readonly root = new THREE.Group();
   private readonly ray = new THREE.Raycaster();
   private felts: Felt[] = [];
+  /** What the view had on the table when it was last noted (hold()), given back on dispose(). */
+  private held = new Set<Resource>();
   private rest: { position: THREE.Vector3; quaternion: THREE.Quaternion } | null = null;
 
   constructor(readonly engine: Engine3D, readonly anchor: THREE.Object3D) {
+    this.root.name = 'stage';
     anchor.add(this.root);
   }
 
@@ -81,10 +84,46 @@ export class TableStage {
     };
   }
 
+  /**
+   * Note everything the view has on the table now: views take their own things off the table as
+   * they're disposed, so the app calls this first and dispose() gives those back to the GPU too.
+   */
+  hold(): void {
+    this.root.traverse((o) => resources(o, (r) => this.held.add(r)));
+  }
+
   dispose(): void {
     this.root.traverse((o) => {
       if (o instanceof CSS2DObject) o.element.remove();
     });
     this.root.removeFromParent();
+    this.hold();
+    release(this.held, this.engine.scene);
+    this.held.clear();
+  }
+}
+
+type Resource = THREE.BufferGeometry | THREE.Material | THREE.Texture;
+
+/**
+ * Give the GPU back what a table view drew once it's gone: the felt's painted texture above all (a
+ * few thousand pixels a side, tens of MB with its mipmaps, every time you sat down), and the pucks,
+ * buttons, dice and meshes made for that sitting. Kept: the card, chip and dice sets every table
+ * shares (`userData.shared`), and anything the scene still draws. (three.js uploads a disposed
+ * resource again if it's ever drawn again, so a missed share costs an upload, never a picture.)
+ */
+function release(gone: Set<Resource>, scene: THREE.Object3D): void {
+  const inUse = new Set<Resource>();
+  scene.traverse((o) => resources(o, (r) => inUse.add(r)));
+  for (const r of gone) if (!inUse.has(r) && !r.userData.shared) r.dispose();
+}
+
+function resources(o: THREE.Object3D, fn: (r: Resource) => void): void {
+  const mesh = o as THREE.Mesh;
+  if (mesh.geometry) fn(mesh.geometry);
+  const mats = Array.isArray(mesh.material) ? mesh.material : mesh.material ? [mesh.material] : [];
+  for (const m of mats) {
+    fn(m);
+    for (const v of Object.values(m)) if ((v as THREE.Texture | null)?.isTexture) fn(v as THREE.Texture);
   }
 }
