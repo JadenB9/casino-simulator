@@ -33,7 +33,6 @@ export type CrashPhase = 'idle' | 'betting' | 'running' | 'crashed';
 
 export interface CrashBet {
   seat: number;
-  account: number;
   name: string;
   amount: Cents;
   /** Auto cash-out target in hundredths, or null. */
@@ -231,7 +230,7 @@ export const engine: GameEngine<CrashState, CrashAction, CrashView> = {
         return refuse('LIMIT', `Auto cash-out goes from ${formatMult(MIN_AUTO)} to ${formatMult(MAX_AUTO)}.`);
       }
       const s = structuredClone(state);
-      s.bets.push({ seat, account: me.accountId, name: me.name, amount: action.amount, auto, cashed: null, payout: 0 });
+      s.bets.push({ seat, name: me.name, amount: action.amount, auto, cashed: null, payout: 0 });
       const o = out();
       o.events.push({ type: 'bet', seat, name: me.name, amount: action.amount });
       o.chips.push({ seat, bet: action.amount });

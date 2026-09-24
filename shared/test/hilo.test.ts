@@ -6,6 +6,7 @@ import type { Rng } from '../src/rng.ts';
 import { TableSim } from './helpers/table-sim.ts';
 import { seededRng } from './helpers/seeded.ts';
 import { chiSquareUniform } from './helpers/stats.ts';
+import { queuedRng } from './online-rng.ts';
 
 type Sim = TableSim<HiloState, HiloAction, HiloView>;
 const DECK = newDeck();
@@ -227,5 +228,68 @@ describe('hi-lo engine', () => {
   it('reads ranks ace low', () => {
     expect(rankNumber('As')).toBe(1);
     expect(rankNumber('Kd')).toBe(13);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// The exact return (docs/rules/online-games-b.md §3.3), proved by enumeration.
+
+const likelier = (r: number): Guess => (winCount(r, 'hi') >= winCount(r, 'lo') ? 'hi' : 'lo');
+
+/** Exact return of "guess the likelier side n times, cash out after the n-th win", over all 13^(n+1) rank paths. */
+function strategyReturn(n: number): { num: bigint; den: bigint } {
+  let total = 0n;
+  const walk = (r: number, depth: number, counts: number[]) => {
+    if (depth === n) {
+      total += BigInt(payMult(counts));
+      return;
+    }
+    const g = likelier(r);
+    for (const next of ranks) if (wins(r, g, next)) walk(next, depth + 1, [...counts, winCount(r, g)]);
+  };
+  for (const r of ranks) walk(r, 0, []);
+  return { num: total, den: 100n * 13n ** BigInt(n + 1) };
+}
+
+describe('hi-lo exact return', () => {
+  it('guessing the likelier side and cashing out after n wins returns 98.7278%, 97.8166%, 96.8311% (n = 1, 2, 3)', () => {
+    const want = [
+      [16_685n, 16_900n],
+      [214_903n, 219_700n],
+      [2_765_594n, 2_856_100n],
+    ];
+    want.forEach(([num, den], i) => {
+      const got = strategyReturn(i + 1);
+      expect(got.num * den!).toBe(num! * got.den);
+      // below 0.99^n: each guess keeps 1% of what rides, and the floor takes a little more
+      expect(got.num * 100n ** BigInt(i + 1) < got.den * 99n ** BigInt(i + 1)).toBe(true);
+    });
+  });
+
+  it('the engine pays exactly those returns, over every path of ranks (one and two guesses, enumerated)', () => {
+    // one card per rank stands for its four: every rank is 4 of the 52 cards
+    const rep = ranks.map((r) => DECK.indexOf(`${'A23456789TJQK'[r - 1]}s` as never));
+    for (const n of [1, 2]) {
+      let paid = 0n;
+      let paths = 0n;
+      const run = (draws: number[]) => {
+        const rng = queuedRng([...draws]);
+        const sim = new TableSim(engine, rng, 'solo', [{ seat: 0, stack: 1_000_000_000 }]);
+        sim.act(0, { type: 'bet', amount: 100 });
+        while (sim.state.phase === 'playing' && sim.state.counts.length < n) sim.act(0, { type: 'guess', dir: likelier(rankNumber(sim.state.card)) });
+        if (sim.state.phase === 'playing') sim.act(0, { type: 'cashout' });
+        paid += BigInt(sim.view(0).result!.payout);
+        paths++;
+      };
+      const rec = (draws: number[]) => {
+        if (draws.length === n + 1) return run(draws);
+        for (const x of rep) rec([...draws, x]);
+      };
+      rec([]);
+      // payouts in cents on a $1 stake, over 13^(n+1) equally likely paths
+      const want = strategyReturn(n);
+      expect(paths).toBe(13n ** BigInt(n + 1));
+      expect(paid * want.den).toBe(want.num * 100n * paths);
+    }
   });
 });

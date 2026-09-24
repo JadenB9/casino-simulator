@@ -1,8 +1,7 @@
-// A generator that makes drawCrash come out on a chosen crash point, for tests that need a
-// particular flight (the unit tests and the worker's two-player rounds). It answers each of the
-// sampler's coins with the lowest draw (the multiplier goes on past mid) or the highest (it
-// crashes at or below mid), steering the bisection onto `c`; after that it falls back on a
-// seeded stream.
+// Scripted generators for the online games' tests: a queue of raw next32 values played first
+// (randInt(rng, n) returns a queued value v < n as it is), and the draws that make drawCrash come
+// out on a chosen crash point, for tests that need a particular flight (the unit tests and the
+// worker's two-player rounds).
 
 import type { Rng } from '../src/rng.ts';
 import { CAP, splitOdds } from '../src/games/crash/rules.ts';
@@ -10,7 +9,11 @@ import { seededRng } from './helpers/seeded.ts';
 
 const TWO_32 = 2 ** 32;
 
-/** The next32 values that make drawCrash(rng, cap) return exactly `c` (hundredths). */
+/**
+ * The next32 values that make drawCrash(rng, cap) return exactly `c` (hundredths): each of the
+ * sampler's coins gets the lowest draw (the multiplier goes on past mid) or the highest (it
+ * crashes at or below mid), steering the bisection onto `c`.
+ */
 export function forcedCrash(c: number, cap = CAP): number[] {
   if (c < 100 || c > cap || !Number.isInteger(c)) throw new RangeError(`forcedCrash: ${c}`);
   // randInt(rng, 100): 99 ends the round at 1.00×, 0 lets it fly

@@ -4,7 +4,7 @@ import { engine, BETTING_MS, ALL_IN_MS, CRASHED_MS, HISTORY_LEN, type CrashActio
 import type { Rng } from '../src/rng.ts';
 import { TableSim, type SimSeat } from './helpers/table-sim.ts';
 import { seededRng } from './helpers/seeded.ts';
-import { forcedCrash, queuedRng } from './crash-forced.ts';
+import { forcedCrash, queuedRng } from './online-rng.ts';
 
 type Sim = TableSim<CrashState, CrashAction, CrashView>;
 
@@ -62,11 +62,13 @@ describe('crash curve', () => {
 
   it('timeTo never goes backwards, over every hundredth to the cap', () => {
     let last = 0;
+    let backwards = 0;
     for (let k = 101; k <= CAP; k++) {
       const t = timeTo(k);
-      expect(t >= last).toBe(true);
+      if (t < last) backwards++;
       last = t;
     }
+    expect(backwards).toBe(0);
   });
 
   it('multAt(t) is the largest k with timeTo(k) ≤ t, for every millisecond of a long flight', () => {
@@ -114,8 +116,13 @@ describe('crash point', () => {
     }
   });
 
-  it('keeps every coin exact: integer odds below 2^53, numerator below denominator', () => {
-    // the production cap's whole tree, walked without the fractions
+  it('is exact at the production cap: every coin of the whole tree is P(c > mid | lo < c ≤ hi), in integers', () => {
+    // With S(x) = P(c > x) = 99/x below the cap and 0 at it, a node (lo, hi] is reached with
+    // probability S(lo) − S(hi) (the root: S(100) − S(cap) = 99/100, after the 1-in-100 coin), and
+    // its coin sends it to (mid, hi] with probability (S(mid) − S(hi)) / (S(lo) − S(hi)). So each
+    // leaf (k − 1, k] is reached with S(k − 1) − S(k), which is P(c = k), for all 999,900 of them.
+    // Checked here at all 999,899 coins as num × (S(lo) − S(hi)) = den × (S(mid) − S(hi)), with
+    // 99/x written over the common denominator lo × mid × hi.
     const stack: [number, number][] = [[100, CAP]];
     let nodes = 0;
     while (stack.length) {
@@ -123,11 +130,24 @@ describe('crash point', () => {
       if (hi - lo === 1) continue;
       const mid = Math.floor((lo + hi) / 2);
       const [num, den] = splitOdds(lo, hi, mid);
-      if (!(Number.isSafeInteger(den) && num >= 1 && num < den)) throw new Error(`coin ${lo} ${mid} ${hi}: ${num}/${den}`);
+      const L = BigInt(lo);
+      const M = BigInt(mid);
+      const H = BigInt(hi);
+      // 99/x × lo·mid·hi, and S(cap) = 0
+      const s = (x: bigint) => (99n * L * M * H) / x;
+      const sHi = hi === CAP ? 0n : s(H);
+      const ok = Number.isSafeInteger(den) && num >= 1 && num < den && BigInt(num) * (s(L) - sHi) === BigInt(den) * (s(M) - sHi);
+      if (!ok) throw new Error(`coin ${lo} ${mid} ${hi}: ${num}/${den}`);
       nodes++;
       stack.push([mid, hi], [lo, mid]);
     }
     expect(nodes).toBe(CAP - 101);
+  });
+
+  it('has hundredths that share a millisecond high up, which the engine still tells apart', () => {
+    // near 5,000× the curve climbs 30 hundredths a millisecond
+    expect(timeTo(500_001)).toBe(timeTo(500_000));
+    expect(multAt(timeTo(500_000))).toBeGreaterThan(500_001);
   });
 
   it('draws uniformly below 2^53, rejecting the top sliver', () => {
@@ -285,6 +305,27 @@ describe('crash engine: the round loop', () => {
     expect(types(sim)).toEqual(['launch', 'crash']);
     expect(sim.state).toMatchObject({ phase: 'crashed', crash: 100 });
     expect(sim.stack(0)).toBe(99_000);
+  });
+
+  it('pays an auto target exactly when the crash point is above it: return (k/100)(99/k) = 99% for every k', () => {
+    for (const [k, c, paid] of [
+      [150, 151, true],
+      [150, 150, false],
+      [150, 149, false],
+      [101, 102, true],
+      [MAX_AUTO, CAP, true],
+      // one millisecond carries both: the target is still reached first
+      [500_000, 500_001, true],
+    ] as const) {
+      const { sim, rng } = table([{ seat: 0, stack: 1e12 }]);
+      open(sim);
+      sim.act(0, { type: 'bet', amount: 100, auto: k });
+      const launchAt = launch(sim, rng, c);
+      sim.advance(launchAt + timeTo(c) - sim.now);
+      expect(sim.state.phase).toBe('crashed');
+      expect(sim.state.bets[0]!.cashed).toBe(paid ? k : null);
+      expect(sim.state.bets[0]!.payout).toBe(paid ? k : 0);
+    }
   });
 
   it('a click that arrives after the crash moment, before its tick, busts', () => {

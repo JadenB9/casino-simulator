@@ -4,6 +4,10 @@ import { engine, type TowerAction, type TowerState, type TowerView } from '../sr
 import { TableSim } from './helpers/table-sim.ts';
 import { seededRng } from './helpers/seeded.ts';
 import { chiSquareUniform } from './helpers/stats.ts';
+import { queuedRng } from './online-rng.ts';
+
+/** C(n, k) for the small counts here. */
+const choose = (n: number, k: number): number => (k === 0 ? 1 : (choose(n - 1, k - 1) * n) / k);
 
 type Sim = TableSim<TowerState, TowerAction, TowerView>;
 
@@ -79,19 +83,20 @@ describe('tower rules', () => {
   it('builds rows with exactly the right number of distinct dragons, uniformly placed', () => {
     const rng = seededRng(3);
     const counts: Record<Difficulty, number[]> = { easy: [0, 0, 0, 0], medium: [0, 0, 0], hard: [0, 0], expert: [0, 0, 0], master: [0, 0, 0, 0] };
+    let bad = 0;
     for (const d of DIFFICULTIES) {
       for (let n = 0; n < 4000; n++) {
         const t = drawTower(rng, d);
-        expect(t).toHaveLength(LEVELS);
+        if (t.length !== LEVELS) bad++;
         for (const row of t) {
-          expect(new Set(row).size).toBe(SPECS[d].bad);
+          if (new Set(row).size !== SPECS[d].bad) bad++;
           for (const x of row) {
-            expect(x).toBeGreaterThanOrEqual(0);
-            expect(x).toBeLessThan(SPECS[d].tiles);
+            if (!(x >= 0 && x < SPECS[d].tiles)) bad++;
             counts[d][x]!++;
           }
         }
       }
+      expect(bad).toBe(0);
       // chi-square at p = 0.001: 16.27 for 3 df (the largest here)
       expect(chiSquareUniform(counts[d])).toBeLessThan(16.27);
     }
@@ -218,5 +223,67 @@ describe('tower engine', () => {
     // nothing live, nothing more to pay
     expect(engine.liveBets(sim.state, 0)).toBe(0);
     expect(engine.seatLeaving(sim.state, 0, sim.ctx()).events).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// The exact return (docs/rules/online-games-b.md §1.3), proved by enumeration.
+
+/** Every sequence of the draws one row makes: randInt(tiles), randInt(tiles − 1), ... `bad` of them. */
+function rowDraws(d: Difficulty): number[][] {
+  const { tiles, bad } = SPECS[d];
+  let seqs: number[][] = [[]];
+  for (let i = 0; i < bad; i++) seqs = seqs.flatMap((s) => Array.from({ length: tiles - i }, (_, v) => [...s, v]));
+  return seqs;
+}
+
+describe('tower exact return', () => {
+  it('every row puts the dragons on each set of tiles equally often (all draw sequences)', () => {
+    for (const d of DIFFICULTIES) {
+      const seqs = rowDraws(d);
+      const seen = new Map<string, number>();
+      for (const seq of seqs) {
+        // row 0 from this sequence; the other eight rows from any draws
+        const row = drawTower(queuedRng([...seq]), d)[0]!;
+        seen.set(row.join(','), (seen.get(row.join(',')) ?? 0) + 1);
+      }
+      const { tiles, bad } = SPECS[d];
+      const sets = choose(tiles, bad);
+      expect(seen.size).toBe(sets);
+      for (const n of seen.values()) expect(n).toBe(seqs.length / sets);
+    }
+  });
+
+  it('the engine pays exactly multiplier × P(survive) on every row it can reach, over every tower (enumerated)', () => {
+    // As many rows as can be enumerated whole: 16,384 Easy towers, 19,683 Medium, 512 Hard,
+    // 7,776 Expert and 13,824 Master (each draw sequence equally likely).
+    const depth: Record<Difficulty, number> = { easy: 7, medium: 9, hard: 9, expert: 5, master: 3 };
+    for (const d of DIFFICULTIES) {
+      const K = depth[d];
+      const row = rowDraws(d);
+      const total = row.length ** K;
+      // survived[k]: towers on which the plan (pick tile row % tiles) finds k eggs or more
+      const survived = new Array<number>(K + 1).fill(0);
+      let paidAtTop = 0;
+      for (let n = 0; n < total; n++) {
+        const draws: number[] = [];
+        for (let r = 0, x = n; r < K; r++, x = Math.floor(x / row.length)) draws.push(...row[x % row.length]!);
+        const sim = new TableSim(engine, queuedRng(draws, n), 'solo', [{ seat: 0, stack: 1_000_000_000 }]);
+        sim.act(0, { type: 'bet', amount: 100, difficulty: d });
+        while (sim.state.phase === 'climbing' && sim.state.picks.length < K) sim.act(0, { type: 'pick', tile: sim.state.picks.length % SPECS[d].tiles });
+        const v = sim.view(0);
+        for (let k = 0; k <= v.level; k++) survived[k]!++;
+        if (sim.state.phase === 'climbing') sim.act(0, { type: 'cashout' });
+        paidAtTop += sim.view(0).result!.payout;
+      }
+      const g = eggs(d);
+      const { tiles } = SPECS[d];
+      for (let k = 1; k <= K; k++) {
+        // P(k safe rows) = (eggs / tiles)^k exactly
+        expect(survived[k]! * tiles ** k).toBe(total * g ** k);
+      }
+      // cash out at row K: sum of payouts (cents on $1) = total × m × P(K) exactly
+      expect(paidAtTop * tiles ** K).toBe(total * multiplier(d, K) * g ** K);
+    }
   });
 });

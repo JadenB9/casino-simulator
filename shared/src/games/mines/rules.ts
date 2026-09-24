@@ -44,7 +44,8 @@ export function returnAt(mines: number, k: number): { num: number; den: number }
 
 /** Where the mines are: a uniform choice of `mines` tiles out of 25 (partial Fisher-Yates), sorted. */
 export function drawField(rng: Rng, mines: number): number[] {
-  const order = Array.from({ length: TILES }, (_, i) => i);
+  const order: number[] = [];
+  for (let i = 0; i < TILES; i++) order.push(i);
   for (let i = 0; i < mines; i++) {
     const j = i + randInt(rng, TILES - i);
     const t = order[i]!;

@@ -4,6 +4,7 @@ import { engine, type MinesAction, type MinesState, type MinesView } from '../sr
 import { TableSim } from './helpers/table-sim.ts';
 import { seededRng } from './helpers/seeded.ts';
 import { chiSquareUniform } from './helpers/stats.ts';
+import { queuedRng } from './online-rng.ts';
 
 type Sim = TableSim<MinesState, MinesAction, MinesView>;
 
@@ -179,5 +180,61 @@ describe('mines engine', () => {
     sim.apply(engine.seatLeaving(sim.state, 0, sim.ctx()));
     expect(sim.stack(0)).toBe(99_000 + 1_120);
     expect(engine.liveBets(sim.state, 0)).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// The exact return (docs/rules/online-games-b.md §2.3), proved by enumeration.
+
+/** Every sequence of the draws placing m mines makes: randInt(25), randInt(24), ... */
+function fieldDraws(m: number): number[][] {
+  let seqs: number[][] = [[]];
+  for (let i = 0; i < m; i++) seqs = seqs.flatMap((s) => Array.from({ length: TILES - i }, (_, v) => [...s, v]));
+  return seqs;
+}
+
+describe('mines exact return', () => {
+  it('places every set of m mines equally often (all 25, 600 and 13,800 draw sequences for 1 to 3 mines)', () => {
+    for (const m of [1, 2, 3]) {
+      const seqs = fieldDraws(m);
+      const seen = new Map<string, number>();
+      for (const seq of seqs) {
+        const key = drawField(queuedRng([...seq]), m).join(',');
+        seen.set(key, (seen.get(key) ?? 0) + 1);
+      }
+      expect(seen.size).toBe(choose(TILES, m));
+      const each = seqs.length / choose(TILES, m);
+      expect([...seen.values()].every((n) => n === each)).toBe(true);
+    }
+  });
+
+  it('turning k tiles finds no mine with probability C(25−m, k) / C(25, k), whichever tiles (every cell)', () => {
+    // Uniform placements: of the C(25, m) sets, C(25 − k, m) avoid k given tiles; the same ratio.
+    for (let m = MIN_MINES; m <= MAX_MINES; m++) {
+      for (let k = 1; k <= gemsOf(m); k++) {
+        expect(BigInt(choose(TILES - k, m)) * BigInt(choose(TILES, k))).toBe(BigInt(choose(TILES - m, k)) * BigInt(choose(TILES, m)));
+      }
+    }
+  });
+
+  it('the engine pays exactly multiplier × P(k gems) for every k, over every board (1 and 2 mines, enumerated)', () => {
+    for (const m of [1, 2]) {
+      const seqs = fieldDraws(m);
+      const top = gemsOf(m);
+      const found = new Array<number>(top + 1).fill(0);
+      let paid = 0;
+      for (const seq of seqs) {
+        const sim = new TableSim(engine, queuedRng([...seq]), 'solo', [{ seat: 0, stack: 1_000_000_000 }]);
+        sim.act(0, { type: 'bet', amount: 100, mines: m });
+        // the plan: turn tiles in a scattered fixed order until a mine or the board is cleared
+        for (let i = 0; sim.state.phase === 'playing'; i++) sim.act(0, { type: 'reveal', tile: (i * 7) % TILES });
+        const gems = sim.view(0).result!.gems;
+        for (let k = 0; k <= gems; k++) found[k]!++;
+        paid += sim.view(0).result!.payout;
+      }
+      for (let k = 1; k <= top; k++) expect(found[k]! * choose(TILES, k)).toBe(seqs.length * choose(TILES - m, k));
+      // only clearing the board pays under this plan: the whole board's multiplier × P(clear)
+      expect(paid * choose(TILES, top)).toBe(seqs.length * multiplier(m, top) * choose(TILES - m, top));
+    }
   });
 });

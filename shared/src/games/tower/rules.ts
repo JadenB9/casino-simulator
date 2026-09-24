@@ -65,13 +65,15 @@ export function returnAt(d: Difficulty, k: number): { num: number; den: number }
 
 /**
  * A fresh tower: for each row, bottom first, the tiles that hide the dragon (sorted). Each row
- * is an independent uniform choice of `bad` tiles out of `tiles` (a partial Fisher-Yates).
+ * is an independent uniform choice of `bad` tiles out of `tiles` (a partial Fisher-Yates). The
+ * engine always builds all nine; the Monte Carlo test builds only the rows a plan can reach.
  */
-export function drawTower(rng: Rng, d: Difficulty): number[][] {
+export function drawTower(rng: Rng, d: Difficulty, levels = LEVELS): number[][] {
   const { tiles, bad } = SPECS[d];
   const rows: number[][] = [];
-  for (let r = 0; r < LEVELS; r++) {
-    const order = Array.from({ length: tiles }, (_, i) => i);
+  for (let r = 0; r < levels; r++) {
+    const order: number[] = [];
+    for (let i = 0; i < tiles; i++) order.push(i);
     for (let i = 0; i < bad; i++) {
       const j = i + randInt(rng, tiles - i);
       const t = order[i]!;
