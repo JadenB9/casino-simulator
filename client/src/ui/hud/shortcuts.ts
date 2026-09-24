@@ -10,8 +10,17 @@ import { keycap } from '../menu/parts.ts';
 type Row = [keys: string, action: string];
 
 export const SHORTCUTS: readonly { title: string; rows: readonly Row[] }[] = [
-  { title: 'Floor', rows: [['W A S D', 'Walk'], ['↑ ← ↓ →', 'Walk, on the arrow keys'], ['E', 'Sit down, use a machine, visit the cashier'], ['G', 'Emotes'], ['T or Enter', 'Chat']] },
-  { title: 'Anywhere', rows: [['Esc', 'Leave the table or close a panel'], ['M', 'Mute or unmute'], ['?', 'This list']] },
+  { title: 'Floor', rows: [['W A S D', 'Walk'], ['↑ ← ↓ →', 'Walk, on the arrow keys'], ['E', 'Sit down, use a machine, visit the cashier'], ['T or Enter', 'Chat']] },
+  {
+    title: 'Anywhere',
+    rows: [
+      ['G', 'Emotes, on the floor or at a table'],
+      ['1-6', 'Pick one while the emotes are open'],
+      ['Esc', 'Leave the table or close a panel'],
+      ['M', 'Mute or unmute'],
+      ['?', 'This list'],
+    ],
+  },
   {
     title: 'Any table',
     rows: [

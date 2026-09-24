@@ -15,6 +15,7 @@ export const EMOTE_LABELS: Record<EmoteId, string> = {
   clap: 'Clap',
   thumbs: 'Thumbs up',
   shrug: 'Shrug',
+  sixseven: 'Six seven',
 };
 
 function svg(cls: string): SVGSVGElement {
@@ -107,6 +108,13 @@ export function emoteGlyph(e: EmoteId): SVGSVGElement {
       bar(s, 18.6, 10.1, 21.4, 10.1, 1.8);
       bar(s, 10.9, 16.9, 10.3, 21.4, 2.4);
       bar(s, 13.1, 16.9, 13.7, 21.4, 2.4);
+      break;
+    case 'sixseven':
+      // The numbers themselves, drawn in the same round-capped strokes: a 6 (a loop with its
+      // stem curling up out of it) and a 7.
+      add(s, 'circle', { cx: 7, cy: 15.3, r: 3.75, 'stroke-width': 2.6 });
+      add(s, 'path', { d: 'M3.25 15.3C3.25 9.4 5.5 5 9.7 4.4', 'stroke-width': 2.6 });
+      add(s, 'path', { d: 'M13.3 4.6H20.9L15.3 19.5', 'stroke-width': 2.6 });
       break;
   }
   return s;

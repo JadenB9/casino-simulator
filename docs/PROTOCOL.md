@@ -243,7 +243,7 @@ Client to server:
 | `mv` | `x, z` (integer cm), `r` (yaw 0-255) | only while moving, and only when the others need it: at most every 200 ms, every 320 ms on a steady straight line, never for less than 5 cm or 2 yaw bytes (`client/src/net/send-policy.ts`) |
 | `st` | `x, z, r` | once when you stop |
 | `watch` | `game: GameId \| null` | subscribe to one game's lobby list |
-| `emote` | `e: "wave" \| "cheer" \| "clap" \| "thumbs" \| "shrug"` (`EMOTES`) | 3 in a burst, then one every 2 s; extras are dropped without a reply |
+| `emote` | `e: "wave" \| "cheer" \| "clap" \| "thumbs" \| "shrug" \| "sixseven"` (`EMOTES`, in the wheel's order: new ones go on the end) | 3 in a burst, then one every 2 s; extras are dropped without a reply |
 | `sit` | `seat` (a floor seat id, `SEAT_ID_RE`), `x, z` (cm, where the seat is), `r` (the way it faces) | with `watch`: 10 in a burst, then 4 a second |
 | `stand` | | same |
 | `here` | | the player is at the keyboard ([Idle](#idle)); at most once a minute, no reply |
