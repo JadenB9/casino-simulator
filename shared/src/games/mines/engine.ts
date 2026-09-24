@@ -1,4 +1,4 @@
-// Mines: a 5 × 5 board, 1 to 24 mines, gems under the rest (docs/rules/online-games-b.md §2).
+// Mines: a 5 × 5 board, 1 to 24 mines, gems under the rest (docs/rules/online-games.md §6).
 //
 // Bet takes the stake and places the mines with the server's Rng. Where they are stays in the
 // engine's state and never reaches a view or an event until the round is over. The player turns

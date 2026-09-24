@@ -1,4 +1,4 @@
-// Tower on the lounge computers (docs/rules/online-games-b.md §1): the desk as it stands on the
+// Tower on the lounge computers (docs/rules/online-games.md §5): the desk as it stands on the
 // floor, and the website on its monitor. Bet builds a tower on the server; each pick asks the
 // server whether that tile holds an egg, and nothing about the tiles you haven't picked reaches
 // this page until the climb is over. Cash out any time after the first egg.

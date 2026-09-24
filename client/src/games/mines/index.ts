@@ -1,4 +1,4 @@
-// Mines on the lounge computers (docs/rules/online-games-b.md §2): the desk as it stands on the
+// Mines on the lounge computers (docs/rules/online-games.md §6): the desk as it stands on the
 // floor, and the website on its monitor. Bet lays the mines on the server; each tile you turn
 // asks the server what is under it, and where the other mines are never reaches this page until
 // the round is over. Cash out any time after the first gem.

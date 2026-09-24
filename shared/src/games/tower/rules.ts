@@ -1,6 +1,6 @@
 // Tower as numbers: nine rows to climb, one tile picked per row. The difficulty sets how many
 // tiles a row has and how many of them hide the dragon; the rest hold an egg. The five
-// difficulties are Stake's Dragon Tower ones (docs/rules/online-games-b.md §1).
+// difficulties are Stake's Dragon Tower ones (docs/rules/online-games.md §5).
 //
 // The multiplier after k safe rows is 0.99 / P(surviving k rows), floored to the cent. In
 // hundredths that is floor(99 × tiles^k / eggs^k), all in integers, so the published table is

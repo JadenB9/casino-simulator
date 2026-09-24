@@ -1,4 +1,4 @@
-// Crash on the lounge computers (docs/rules/online-games-b.md §4): the desk as it stands on the
+// Crash on the lounge computers (docs/rules/online-games.md §8): the desk as it stands on the
 // floor, and the website on its monitor. The table runs its own rounds from its first seat: a
 // betting window, the flight, the crash. The page draws the curve from the server's launch time
 // on the server's clock (so every screen at the table shows the same multiplier) and knows the

@@ -9,7 +9,7 @@ declare const console: { log(...args: unknown[]): void };
 // One trial = one round: guess the likelier side (higher on a tie) until n right guesses, then
 // cash out. Cards come from drawCard, the engine's own draw; the payout is payMult, the engine's
 // own floored product. Published: the exact returns enumerated in hilo.test.ts
-// (docs/rules/online-games-b.md §3.3).
+// (docs/rules/online-games.md §7.3).
 
 const PUBLISHED: Record<number, number> = { 1: 1 - 16_685 / 16_900, 2: 1 - 214_903 / 219_700, 3: 1 - 2_765_594 / 2_856_100 };
 

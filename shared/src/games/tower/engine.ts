@@ -1,4 +1,4 @@
-// Tower: the online lounge's take on Stake's Dragon Tower (docs/rules/online-games-b.md §1).
+// Tower: the online lounge's take on Stake's Dragon Tower (docs/rules/online-games.md §5).
 //
 // Bet takes the stake and builds the whole tower from the server's Rng: for each of the nine
 // rows, which tiles hide the dragon. That layout stays in the engine's state and never reaches a

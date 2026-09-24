@@ -232,7 +232,7 @@ describe('hi-lo engine', () => {
 });
 
 // ---------------------------------------------------------------------------------------------
-// The exact return (docs/rules/online-games-b.md §3.3), proved by enumeration.
+// The exact return (docs/rules/online-games.md §7.3), proved by enumeration.
 
 const likelier = (r: number): Guess => (winCount(r, 'hi') >= winCount(r, 'lo') ? 'hi' : 'lo');
 

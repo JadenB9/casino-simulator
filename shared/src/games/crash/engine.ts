@@ -1,5 +1,5 @@
 // Crash: a multiplier climbs from 1.00× until it crashes; cash out before it does
-// (docs/rules/online-games-b.md §4).
+// (docs/rules/online-games.md §8).
 //
 // The table runs its own round loop from its first seat, solo or shared, whatever the host's
 // Start flag says: a betting window (7 s, or 1 s after every connected player has a bet in), the

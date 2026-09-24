@@ -1,4 +1,4 @@
-// Hi-Lo on the lounge computers (docs/rules/online-games-b.md §3): the desk as it stands on the
+// Hi-Lo on the lounge computers (docs/rules/online-games.md §7): the desk as it stands on the
 // floor, and the website on its monitor. A card is always face up; Bet starts a round on it, each
 // guess has the server draw the next card (there is no next card anywhere until then), and a trail
 // along the bottom keeps the round's cards. Cash out any time after a right guess.

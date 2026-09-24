@@ -1,4 +1,4 @@
-// Hi-Lo as numbers (docs/rules/online-games-b.md §3). Every card is drawn uniformly from a full
+// Hi-Lo as numbers (docs/rules/online-games.md §7). Every card is drawn uniformly from a full
 // 52-card deck, with replacement, so only its rank matters: ace low (1) to king high (13), each
 // 1 in 13. On any card from 2 to queen the two guesses are "higher or same" and "lower or same".
 // On an ace nothing is lower, so the second guess is "same" and the first becomes strictly

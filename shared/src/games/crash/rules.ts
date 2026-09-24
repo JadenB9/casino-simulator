@@ -1,4 +1,4 @@
-// Crash as numbers (docs/rules/online-games-b.md §4).
+// Crash as numbers (docs/rules/online-games.md §8).
 //
 // The curve. From launch the multiplier grows as m(t) = e^(0.00006 t), t in ms (Bustabit's
 // curve): 2× at 11.6 s, 10× at 38.4 s, 100× at 76.8 s. What the screen shows and what a cash-out

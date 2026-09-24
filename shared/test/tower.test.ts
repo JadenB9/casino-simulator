@@ -23,7 +23,7 @@ function tilesOf(sim: Sim): { safe: number; bad: number } {
   return { safe, bad: row[0]! };
 }
 
-// The published ladders (docs/rules/online-games-b.md §1.2): floor(99 × tiles^k / eggs^k) / 100.
+// The published ladders (docs/rules/online-games.md §5.2): floor(99 × tiles^k / eggs^k) / 100.
 const PUBLISHED: Record<Difficulty, number[]> = {
   easy: [1.32, 1.76, 2.34, 3.12, 4.17, 5.56, 7.41, 9.88, 13.18],
   medium: [1.48, 2.22, 3.34, 5.01, 7.51, 11.27, 16.91, 25.37, 38.05],
@@ -227,7 +227,7 @@ describe('tower engine', () => {
 });
 
 // ---------------------------------------------------------------------------------------------
-// The exact return (docs/rules/online-games-b.md §1.3), proved by enumeration.
+// The exact return (docs/rules/online-games.md §5.3), proved by enumeration.
 
 /** Every sequence of the draws one row makes: randInt(tiles), randInt(tiles − 1), ... `bad` of them. */
 function rowDraws(d: Difficulty): number[][] {

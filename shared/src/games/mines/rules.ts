@@ -5,7 +5,7 @@
 //
 // floored to the cent. In hundredths that is floor(99 × C(25, k) / C(25 − m, k)), all integers,
 // so cashing out after any number of gems returns at most 99% of the bet, exactly
-// (docs/rules/online-games-b.md §2).
+// (docs/rules/online-games.md §6).
 
 import { type Rng, randInt } from '../../rng.ts';
 

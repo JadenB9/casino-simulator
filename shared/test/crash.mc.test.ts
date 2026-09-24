@@ -9,7 +9,7 @@ declare const console: { log(...args: unknown[]): void };
 
 // One trial = one flight from drawCrash, the engine's own sampler; an auto cash-out at k pays
 // k/100 when the crash point is above k (the engine's rule). Published: 1% edge on every target
-// (docs/rules/online-games-b.md §4.3), and 1 round in 100 over at 1.00×.
+// (docs/rules/online-games.md §8.3), and 1 round in 100 over at 1.00×.
 
 const TARGETS = [101, 150, 200, 1_000, 10_000];
 const EDGE = 0.01;

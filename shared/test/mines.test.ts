@@ -184,7 +184,7 @@ describe('mines engine', () => {
 });
 
 // ---------------------------------------------------------------------------------------------
-// The exact return (docs/rules/online-games-b.md §2.3), proved by enumeration.
+// The exact return (docs/rules/online-games.md §6.3), proved by enumeration.
 
 /** Every sequence of the draws placing m mines makes: randInt(25), randInt(24), ... */
 function fieldDraws(m: number): number[][] {

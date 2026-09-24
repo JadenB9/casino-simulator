@@ -9,7 +9,7 @@ declare const console: { log(...args: unknown[]): void };
 // One trial = one board from drawField (the engine's own), turned over in tile order 0, 1, 2...
 // Its mines come back sorted, so the gems found before the first mine are exactly field[0], and a
 // cash-out after k gems pays multiplier(m, k) (the engine's own table) when field[0] ≥ k.
-// Published: the exact return of each (mines, gems) cell (docs/rules/online-games-b.md §2.3).
+// Published: the exact return of each (mines, gems) cell (docs/rules/online-games.md §6.3).
 
 const PLAN: [mines: number, gems: number[]][] = [
   [1, [5, 24]],

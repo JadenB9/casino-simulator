@@ -18,7 +18,9 @@ is the summary. The full rules, every paytable, the strategy charts and the sour
   take bets in their real-table steps instead (place 6/8 in $6 units, lay bets in $2, $3 or $6
   units). Hold'em pots that don't split evenly give the odd chip to the first winner left of
   the button. Online Dice, whose multiplier (99 over the win chance) is rarely a whole number of
-  cents, floors each win to the cent, and its published return includes that floor exactly.
+  cents, floors each win to the cent, and its published return includes that floor exactly. Tower,
+  Mines and Hi-Lo floor their multipliers to the cent the same way (Hi-Lo only when it pays), and
+  their published returns include that floor exactly too.
 - **The server draws every card and number** with `crypto.getRandomValues` and rejection
   sampling (no modulo bias), and shuffles shoes with Fisher-Yates.
 - **Rule tables are tested cell by cell** (the blackjack chart, the baccarat drawing rules, the
@@ -79,6 +81,14 @@ inside 3. Seeds are fixed, so `npm run test:mc` reproduces these exactly.
 | Limbo (online) | target 1.01× to 1,000,000×, P(result ≥ x) = 0.99/x exactly | Every target | 99.000% RTP | 98.974% at 2× (10M bets, z −0.83); 9 targets to 100,000× within 1.5 SE |
 | Keno (online) | 40 numbers, 10 drawn, 1 to 10 picks, Classic/Low/Medium/High (Stake's tables) | Classic, 10 picks | 99.037% RTP | 99.057% (5M draws, z +0.32) |
 | | | Every table | 98.654% to 99.069% RTP | all 40 within 1.9 SE (5M draws) |
+| Tower (online) | 9 rows; Easy 4 tiles/1 dragon, Medium 3/1, Hard 2/1, Expert 3/2, Master 4/3 (Stake's Dragon Tower rows); a row pays 0.99 ÷ P(survive), floored to the cent | Hard, Expert, Master: any row | 99.000% RTP | 98.970% Hard row 1, 98.891% Master row 1 (4M climbs, z −0.61, −1.27); 4 more rows within 1.6 SE |
+| | | Easy, Medium: by row (the floor costs up to 0.33 points) | 98.667% to 99.000% RTP | Medium row 2 98.623%, Easy row 9 98.820% (4M climbs, z −0.79, −0.82) |
+| Mines (online) | 5×5, 1 to 24 mines; after k gems pays 0.99 · C(25, k) / C(25 − m, k), floored to the cent | 3 mines, 5 gems (1.99×) | 98.635% RTP | 98.683% (4M boards, z +0.97) |
+| | | Every (mines, gems) cell | 98.28% to 99.000% RTP | 10 cells within 1.6 SE (4M boards each) |
+| Hi-Lo (online) | cards with replacement; higher or same / lower or same (strict on an ace or a king); a guess on c ranks pays 12.87/c, the product floored at payout | One guess on the likelier side, then cash out | 98.728% RTP | 98.739% (10M rounds, z +0.62) |
+| | | Skip to an A, 3, 5, 9, J or K, then one guess | 99.000% RTP | exact (enumerated) |
+| | | Each further guess | 99% of what rides | two guesses 97.822%, three 96.824% (10M rounds, z +0.20, −0.18) |
+| Crash (online) | shared rounds, m(t) = e^(0.00006 t); P(crash point > x) = 0.99/x, so 1% of rounds end at 1.00×; paid only below the crash point | Every cash-out, auto or pressed | 99.000% RTP | 98.968% at 2× (10M rounds, z −1.03); 5 targets to 100× within 1.6 SE; presses through the engine 99.152% (60K rounds, z +0.39) |
 
 The blackjack figure is for exactly these rules. The often-quoted 0.26-0.28% assumes aces can be
 resplit, which this table doesn't allow, and a cut card adds about 0.02 points over dealing each

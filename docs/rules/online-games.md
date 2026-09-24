@@ -6,8 +6,9 @@ right. Each game is a one-player table: you buy in at the desk and bet from thos
 fixes each game's rules, paytables and exact return, with the proof or the enumeration behind every
 number, and the Monte Carlo results that check the engines against them.
 
-Every figure here is printed by [`docs/math/plinko-dice-limbo-keno.mjs`](../math/plinko-dice-limbo-keno.mjs),
-which enumerates each game exactly in integer arithmetic without touching the game code
+Every figure here is printed by [`docs/math/plinko-dice-limbo-keno.mjs`](../math/plinko-dice-limbo-keno.mjs)
+(§1-4) and [`docs/math/tower-mines-hilo-crash.mjs`](../math/tower-mines-hilo-crash.mjs) (§5-8),
+which work each game out exactly in integer arithmetic without touching the game code
 (`node docs/math/plinko-dice-limbo-keno.mjs`). The unit tests check the same numbers a second time
 through the engines themselves.
 
@@ -17,6 +18,10 @@ through the engines themselves.
 | [2](#2-dice) | Dice: roll 0.00 to 99.99 over or under a target | 99% before the cent floor; at $1, 98.0306% to 99% by win chance |
 | [3](#3-limbo) | Limbo: a target from 1.01× to 1,000,000× | exactly 99% on every target |
 | [4](#4-keno) | Keno: 40 numbers, 10 drawn, 1 to 10 picks, four risks (Stake's tables) | 98.6538% to 99.0689% by risk and picks |
+| [5](#5-tower) | Tower: nine rows of 2 to 4 tiles, five difficulties (Stake's Dragon Tower rows) | exactly 99% on every row at Hard, Expert and Master; 98.6667% to 99% by row at Easy and Medium |
+| [6](#6-mines) | Mines: 5 × 5, 1 to 24 mines, cash out after any gem | 98.28% to 99% by mines and gems (all 300 cells); exactly 99% on 108 |
+| [7](#7-hi-lo) | Hi-Lo: higher or lower than the card, as many times as you dare | 99% of what rides on every guess before the cent floor; one guess, then cash out: 98.4615% to 99% by guess, exactly 99% after a skip to A, 3, 5, 9, J or K |
+| [8](#8-crash) | Crash: shared rounds, a multiplier climbing until it crashes | exactly 99% on every cash-out, manual or automatic |
 
 ## 0. Conventions
 
@@ -570,3 +575,465 @@ page alone.
 [stake-clone]: https://github.com/tanh1c/stake-originals-clone
 [verify-keno]: https://github.com/tokenwin/verify
 [vfair-keno]: https://github.com/vfairgames/vfair-games
+
+---
+
+## 5. Tower
+
+### 5.1 Rules
+
+1. Choose a difficulty and a bet, and press Bet. The server builds the tower at once: for each of
+   the nine rows, which tiles hide the dragon. Each row is an independent, uniform choice of `bad`
+   tiles out of `tiles` (a partial Fisher-Yates over the row's tiles, `drawTower`).
+2. Pick one tile on the lit row, starting at the bottom (click it, press 1 to 4, or Random pick,
+   which the server draws). An egg climbs a row and lights the next; the dragon ends the climb and
+   the bet is lost.
+3. Cash out any time after the first egg: the bet pays the multiplier of the rows climbed. The
+   ninth egg cashes out on its own.
+4. When the climb ends, whichever way, the whole tower turns over. Until then the tiles you haven't
+   picked live only in the server's state: no view and no event carries them.
+5. Standing up mid-climb cashes out the eggs found; before the first pick the bet simply comes
+   back and no round is counted.
+
+| Difficulty | Tiles a row | Dragons | Eggs | An egg's chance |
+|---|---:|---:|---:|---:|
+| Easy | 4 | 1 | 3 | 3/4 |
+| Medium | 3 | 1 | 2 | 2/3 |
+| Hard | 2 | 1 | 1 | 1/2 |
+| Expert | 3 | 2 | 1 | 1/3 |
+| Master | 4 | 3 | 1 | 1/4 |
+
+These are the rows of Stake's Dragon Tower ([casino-guide-tower], [americancasinos-tower]). Stake
+prices them at 98% and rounds its multipliers (Easy tops out at 13.05×, Master at 256,901.12×);
+here they are priced at 99% and floored to the cent.
+
+### 5.2 Multipliers
+
+After k eggs the multiplier is 0.99 / P(k eggs) = 0.99 × (tiles / eggs)^k, floored to the cent:
+⌊99 · tiles^k / eggs^k⌋ hundredths, all in integers.
+
+| Row | Easy | Medium | Hard | Expert | Master |
+|---:|---:|---:|---:|---:|---:|
+| 1 | 1.32× | 1.48× | 1.98× | 2.97× | 3.96× |
+| 2 | 1.76× | 2.22× | 3.96× | 8.91× | 15.84× |
+| 3 | 2.34× | 3.34× | 7.92× | 26.73× | 63.36× |
+| 4 | 3.12× | 5.01× | 15.84× | 80.19× | 253.44× |
+| 5 | 4.17× | 7.51× | 31.68× | 240.57× | 1,013.76× |
+| 6 | 5.56× | 11.27× | 63.36× | 721.71× | 4,055.04× |
+| 7 | 7.41× | 16.91× | 126.72× | 2,165.13× | 16,220.16× |
+| 8 | 9.88× | 25.37× | 253.44× | 6,495.39× | 64,880.64× |
+| 9 | 13.18× | 38.05× | 506.88× | 19,486.17× | 259,522.56× |
+
+### 5.3 Exact return
+
+The dragons are placed uniformly and independently of the picks, so any tile on a row is an egg
+with probability eggs/tiles whatever was picked before, and a cash-out after k eggs returns
+
+    RTP(k) = m_k · eggs^k / (100 · tiles^k),   m_k = ⌊99 · tiles^k / eggs^k⌋,
+
+whichever tiles were picked. The floor makes it at most 99%, and it takes less than a cent of the
+multiplier, so RTP(k) > 99% − (eggs/tiles)^k %. At Hard, Expert and Master tiles/eggs is a whole
+number (2, 3, 4), 99 · (tiles/eggs)^k is a whole number of hundredths, and every row returns
+exactly 99%. At Easy and Medium the floor takes a little:
+
+| Row | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Easy | 99.0000% | 99.0000% | 98.7188% | 98.7188% | 98.9561% | 98.9561% | 98.9116% | 98.9116% | 98.9616% |
+| Medium | 98.6667% | 98.6667% | 98.9630% | 98.9630% | 98.8971% | 98.9410% | 98.9703% | 98.9898% | 98.9768% |
+
+The lowest return on the tower is Medium's first two rows, 74/75 = 98.6667%. Which tile is picked
+never matters; only where the climb stops does, and only by the cent the floor takes. The unit tests
+check all 45 cells in integers, enumerate every draw sequence of a row (each set of dragon tiles
+comes up equally often), and play the engine through every tower they can enumerate whole (16,384
+Easy towers to row 7, 19,683 Medium to row 9, 512 Hard, 7,776 Expert to row 5, 13,824 Master to row
+3), summing the payouts exactly.
+
+### 5.4 Monte Carlo
+
+Four million towers per difficulty from the engine's `drawTower`, climbed with a fixed pick per
+row and cashed out at two rows from the same tower (so each difficulty's two tallies share their
+draws); then 100,000 climbs through the whole engine with the server's random picks.
+
+| Bet | N | Published | Measured | SE | z |
+|---|---:|---:|---:|---:|---:|
+| Easy, row 3 (2.34×) | 4,000,000 | 98.7188% | 98.7052% | 0.0578% | -0.23 |
+| Easy, row 9 (13.18×) | 4,000,000 | 98.9616% | 98.8197% | 0.1736% | -0.82 |
+| Medium, row 2 (2.22×) | 4,000,000 | 98.6667% | 98.6228% | 0.0552% | -0.79 |
+| Medium, row 5 (7.51×) | 4,000,000 | 98.8971% | 98.9110% | 0.1270% | +0.11 |
+| Hard, row 1 (1.98×) | 4,000,000 | 99.0000% | 98.9700% | 0.0495% | -0.61 |
+| Hard, row 4 (15.84×) | 4,000,000 | 99.0000% | 98.9679% | 0.1917% | -0.17 |
+| Expert, row 1 (2.97×) | 4,000,000 | 99.0000% | 99.0455% | 0.0700% | +0.65 |
+| Expert, row 3 (26.73×) | 4,000,000 | 99.0000% | 98.9324% | 0.2523% | -0.27 |
+| Master, row 1 (3.96×) | 4,000,000 | 99.0000% | 98.8908% | 0.0857% | -1.27 |
+| Master, row 2 (15.84×) | 4,000,000 | 99.0000% | 99.3077% | 0.1920% | +1.60 |
+| engine Medium, random picks, row 2 | 100,000 | 98.6667% | 98.5613% | 0.3488% | -0.30 |
+
+### 5.5 Implementation notes
+
+- `shared/src/games/tower/rules.ts`: `SPECS`, `multiplier` (hundredths), `returnAt` (the exact
+  fraction), `drawTower`, `bestStop` (the row with the best exact return, for Tips).
+- `engine.ts`: actions `bet { amount, difficulty }`, `pick { tile }`, `random`, `cashout`. The
+  state's `bad` rows are server-only; the view carries `tower` only once the climb is over, and the
+  `over` event is the first event to name a dragon the player didn't find.
+
+---
+
+## 6. Mines
+
+### 6.1 Rules
+
+1. Choose how many mines (1 to 24) and a bet, and press Bet. The server lays the mines at once: a
+   uniform choice of m of the 25 tiles (`drawField`, a partial Fisher-Yates).
+2. Turn tiles one at a time (click, or Random tile, which the server draws among the closed
+   tiles). A gem raises the multiplier; a mine ends the round and the bet is lost.
+3. Cash out any time after the first gem. Turning the last gem (25 − m of them) cashes out on its
+   own.
+4. When the round ends, whichever way, the whole board turns over. Until then the mines live only
+   in the server's state: no view and no event carries them.
+5. Standing up after a gem cashes out; before the first tile the bet comes back and no round is
+   counted.
+
+### 6.2 Multipliers
+
+After k gems with m mines on the board the multiplier is 0.99 / P(k gems), floored to the cent:
+
+    m_k = ⌊99 · C(25, k) / C(25 − m, k)⌋ hundredths,
+
+since the first k tiles turned are all safe with probability C(25 − m, k) / C(25, k), whichever
+tiles they are (the mines are a uniform set, so the order of turning doesn't matter; it is also
+C(25 − k, m) / C(25, m), the share of mine sets that miss k given tiles). A few rows (the math
+script prints all 300 cells):
+
+| Mines | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | Every gem |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 1.03 | 1.07 | 1.12 | 1.17 | 1.23 | 1.30 | 1.37 | 1.45 | 1.54 | 1.65 | 24.75 (24) |
+| 2 | 1.07 | 1.17 | 1.28 | 1.41 | 1.56 | 1.73 | 1.94 | 2.18 | 2.47 | 2.82 | 297.00 (23) |
+| 3 | 1.12 | 1.28 | 1.47 | 1.71 | 1.99 | 2.34 | 2.79 | 3.34 | 4.06 | 5.00 | 2,277.00 (22) |
+| 5 | 1.23 | 1.56 | 1.99 | 2.58 | 3.39 | 4.52 | 6.13 | 8.50 | 12.04 | 17.51 | 52,598.70 (20) |
+| 8 | 1.45 | 2.18 | 3.34 | 5.26 | 8.50 | 14.16 | 24.47 | 44.04 | 83.19 | 166.39 | 1,070,759.25 (17) |
+| 10 | 1.65 | 2.82 | 5.00 | 9.17 | 17.51 | 35.03 | 73.95 | 166.39 | 404.10 | 1,077.61 | 3,236,072.40 (15) |
+| 15 | 2.47 | 6.60 | 18.97 | 59.63 | 208.72 | 834.90 | 3,965.77 | 23,794.65 | 202,254.52 | 3,236,072.40 | 3,236,072.40 (10) |
+| 20 | 4.95 | 29.70 | 227.70 | 2,504.70 | 52,598.70 | | | | | | 52,598.70 (5) |
+| 24 | 24.75 | | | | | | | | | | 24.75 (1) |
+
+Stake's Mines uses the same 0.99 · C(25, k) / C(25 − m, k) ([stake-analyzer-mines],
+[stakearchive-mines]): 1.03× for the first gem with one mine, 24.75× with 24, 1.12× 1.28× 1.47×
+1.71× 1.99× with three. Where Stake rounds a cell up (6.19× for the first gem with 21 mines) this
+table floors it (6.18×), so no cell pays more than 99%. The largest multiplier on the board is
+5,148,297× (12 mines and all 13 gems, or 13 mines and all 12).
+
+### 6.3 Exact return
+
+A cash-out after k gems with m mines returns m_k · C(25 − m, k) / (100 · C(25, k)): at most 99% by
+the floor, and within a cent of the multiplier of it. Over all 300 (mines, gems) cells:
+
+- every cell returns at most 99% (checked in BigInt, since the products pass 2^53);
+- 108 cells return exactly 99%;
+- the lowest return is 98.28%, at 1 mine and 4 gems (1.17 × 21/25) and at 4 mines and 1 gem
+  (1.17 × 21/25);
+- by mine count, the range runs from 98.28% to 99% (1 and 4 mines) up to exactly 99% for every
+  stop (14, 20, 22 and 24 mines).
+
+The unit tests check every cell, enumerate every draw sequence for 1 to 3 mines (25, 600 and 13,800:
+every set of mines comes up equally often), and play the engine through every board with 1 and 2
+mines, summing the payouts exactly.
+
+### 6.4 Monte Carlo
+
+Four million boards per mine count from the engine's `drawField`, turned over in tile order (its
+mines come back sorted, so the gems found before the first mine are the first mine's index), each
+tallied at every stop in the plan; then 100,000 boards through the whole engine with the server's
+random tiles.
+
+| Bet | N | Published | Measured | SE | z |
+|---|---:|---:|---:|---:|---:|
+| 1 mine, 5 gems (1.23×) | 4,000,000 | 98.4000% | 98.4251% | 0.0246% | +1.02 |
+| 1 mine, 24 gems (24.75×) | 4,000,000 | 99.0000% | 98.9703% | 0.2425% | -0.12 |
+| 3 mines, 1 gem (1.12×) | 4,000,000 | 98.5600% | 98.5580% | 0.0182% | -0.11 |
+| 3 mines, 5 gems (1.99×) | 4,000,000 | 98.6348% | 98.6828% | 0.0497% | +0.97 |
+| 3 mines, 10 gems (5.00×) | 4,000,000 | 98.9130% | 99.0676% | 0.0996% | +1.55 |
+| 5 mines, 3 gems (1.99×) | 4,000,000 | 98.6348% | 98.6447% | 0.0497% | +0.20 |
+| 5 mines, 8 gems (8.50×) | 4,000,000 | 98.9987% | 98.8121% | 0.1362% | -1.37 |
+| 10 mines, 2 gems (2.82×) | 4,000,000 | 98.7000% | 98.7759% | 0.0673% | +1.13 |
+| 10 mines, 5 gems (17.51×) | 4,000,000 | 98.9696% | 98.7927% | 0.2020% | -0.88 |
+| 24 mines, 1 gem (24.75×) | 4,000,000 | 99.0000% | 98.9827% | 0.2425% | -0.07 |
+| engine 3 mines, random tiles, 5 gems | 100,000 | 98.6348% | 98.6801% | 0.3146% | +0.14 |
+
+### 6.5 Implementation notes
+
+- `shared/src/games/mines/rules.ts`: `choose`, `multiplier`, `returnAt`, `drawField`, `bestStop`.
+- `engine.ts`: actions `bet { amount, mines }`, `reveal { tile }`, `random`, `cashout`. The state's
+  `field` is server-only; the view carries it only once the round is over.
+
+---
+
+## 7. Hi-Lo
+
+### 7.1 Rules
+
+1. A card is always face up. Every card is drawn uniformly from a full 52-card deck, with
+   replacement: each rank, ace (low) to king (high), comes up 1 time in 13 whatever came before.
+2. Bet starts a round on the card showing. Skip replaces the card for free, between rounds as often
+   as you like and up to 52 times in a round.
+3. Guess what the next card will be. On a 2 to a queen: Higher or same, or Lower or same. On an ace
+   nothing is lower, so the choice is Higher (strictly) or Same; on a king it is Same or Lower
+   (strictly). That is Stake's Hi-Lo ([americancasinos-hilo], [ballislife-hilo]): neither button
+   is ever a sure thing.
+4. A right guess that wins on c ranks of 13 multiplies what rides by 0.99 × 13/c = 12.87/c. The
+   product is kept exact (as 1287ⁿ / (100ⁿ · Πc)) and floored to the cent only when paid. A wrong
+   guess loses the bet. Cash out any time after a right guess.
+5. The next card is drawn when the guess arrives: there is no next card anywhere before then, so
+   there is nothing to hide.
+6. A guess that would take the multiplier past 1,000,000× is refused: cash out first.
+7. Standing up after a right guess cashes out; before one, the bet comes back and no round counts.
+
+| Card | Higher (or same) | Lower (or same) |
+|---|---|---|
+| A | 12/13, ×1.07 (Higher) | 1/13, ×12.87 (Same) |
+| 2 | 12/13, ×1.07 | 2/13, ×6.43 |
+| 3 | 11/13, ×1.17 | 3/13, ×4.29 |
+| 4 | 10/13, ×1.28 | 4/13, ×3.21 |
+| 5 | 9/13, ×1.43 | 5/13, ×2.57 |
+| 6 | 8/13, ×1.60 | 6/13, ×2.14 |
+| 7 | 7/13, ×1.83 | 7/13, ×1.83 |
+| 8 | 6/13, ×2.14 | 8/13, ×1.60 |
+| 9 | 5/13, ×2.57 | 9/13, ×1.43 |
+| 10 | 4/13, ×3.21 | 10/13, ×1.28 |
+| J | 3/13, ×4.29 | 11/13, ×1.17 |
+| Q | 2/13, ×6.43 | 12/13, ×1.07 |
+| K | 1/13, ×12.87 (Same) | 12/13, ×1.07 (Lower) |
+
+(The factors are shown floored; the round keeps them exact.)
+
+### 7.2 Exact return
+
+Every guess is worth exactly 0.99 of what rides: it wins with probability c/13 and multiplies by
+12.87/c, for every card and either guess (the tests check all 26). The next card doesn't depend on
+anything before it, so the unfloored multiplier after n right guesses has expectation 0.99ⁿ times
+the bet, whatever guesses, skips and stopping rule the player uses (the multiplier over 0.99ⁿ is a
+martingale, and the ceiling and the skip limit bound the round). The floor at payout only takes
+more. So:
+
+- **every way of playing returns at most 99%**, and each extra guess costs another 1% of what
+  rides; once a guess has been won, cashing out keeps the most (the rest of the round is worth at
+  most 0.99 of what rides, which is less than the floored amount already there whenever it is at
+  least the bet);
+- **one guess and a cash-out** pays ⌊1287/c⌋ hundredths with probability c/13, a return of
+  ⌊1287/c⌋ · c / 1300:
+
+| Winning ranks c | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Pays | 12.87× | 6.43× | 4.29× | 3.21× | 2.57× | 2.14× | 1.83× | 1.60× | 1.43× | 1.28× | 1.17× | 1.07× |
+| Return | 99.0000% | 98.9231% | 99.0000% | 98.7692% | 98.8462% | 98.7692% | 98.5385% | 98.4615% | 99.0000% | 98.4615% | 99.0000% | 98.7692% |
+
+  One guess returns exactly 99% where c is 1, 3, 9 or 11: on an ace (Same), a 3 (either), a 5
+  (Higher or same), a 9 (Lower or same), a jack (either) or a king (Same). Skips are free, so
+  skipping to one of those six first makes a one-guess round return exactly 99.0000%, the most any
+  way of playing can.
+
+| Plan (exact, over every path of ranks) | Return |
+|---|---:|
+| Skip to A, 3, 5, 9, J or K, one guess on its 99% side, cash out | 99.0000% |
+| One guess on the side with the better floored return, cash out | 98.8817% (16,711/16,900) |
+| One guess on the likelier side (Higher on a 7), cash out | 98.7278% (3,337/3,380) |
+| The likelier side twice, cash out | 97.8166% (16,531/16,900) |
+| The likelier side three times, cash out | 96.8311% (106,369/109,850) |
+
+The unit tests enumerate those rounds over all 13ⁿ⁺¹ rank paths in BigInt, and play the engine
+through every path of one and two guesses (one card per rank stands for its four).
+
+### 7.3 Monte Carlo
+
+Ten million rounds per plan from the engine's `drawCard`, `wins` and `payMult`; then 100,000 rounds
+through the whole engine with a skip on every third.
+
+| Bet | N | Published | Measured | SE | z |
+|---|---:|---:|---:|---:|---:|
+| likelier side, cash out after 1 | 10,000,000 | 98.7278% | 98.7389% | 0.0179% | +0.62 |
+| likelier side, cash out after 2 | 10,000,000 | 97.8166% | 97.8224% | 0.0283% | +0.20 |
+| likelier side, cash out after 3 | 10,000,000 | 96.8311% | 96.8244% | 0.0380% | -0.18 |
+| engine, likelier side, cash out after 2 | 100,000 | 97.8166% | 98.0255% | 0.2770% | +0.75 |
+
+### 7.4 Implementation notes
+
+- `shared/src/games/hilo/rules.ts`: `winCount`, `wins`, `guessLabel`, `payMult` (the exact product,
+  floored), `guessAllowed` (the ceiling), `singleReturn`, `bestFirstGuess`.
+- `engine.ts`: actions `bet { amount }`, `guess { dir: 'hi' | 'lo' }`, `skip`, `cashout`. The trail
+  of the round's cards is in the view; the next card is drawn inside the guess.
+
+---
+
+## 8. Crash
+
+### 8.1 Rules
+
+1. A Crash table runs its own rounds from its first seat, one player or twelve, with no leader and
+   no Start (`GameInfo.autoStart`): a **betting window** of 7 seconds (it closes 1 second after
+   every connected player has a bet in), the **flight**, the **crash**, 3 seconds of wreckage, the
+   next window. With nobody seated it rests.
+2. Bet in the window, with or without an **auto cash-out** from 1.01× to 9,999.99×. A bet can be
+   cancelled until the window closes. A bet pressed during a flight waits for the next window.
+3. At launch the multiplier starts at 1.00× and climbs as m(t) = e^(0.00006·t), t in ms since the
+   launch (the usual crash curve, [zizobet-crash]), shown floored to the cent. Every screen draws
+   the same curve from the server's launch time on the server's clock.
+
+| Multiplier | 1.01× | 1.50× | 2.00× | 3.00× | 5.00× | 10.00× | 100.00× | 1,000.00× | 10,000.00× |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Reached at | 0.166 s | 6.758 s | 11.553 s | 18.311 s | 26.824 s | 38.377 s | 76.753 s | 115.130 s | 153.506 s |
+
+4. The **crash point** C is drawn by the server at launch, after the last bet is in, and is kept in
+   its state only: no view, event or timer a player sees carries it until the crash. The rocket
+   crashes the moment the multiplier reaches C.
+5. A bet is paid only below the crash point: an auto cash-out at x pays x times the bet if x < C; a
+   **Cash out** press is judged when it reaches the server, at its clock, and pays the multiplier
+   at that moment, floored to the cent, if the crash moment hasn't passed (it is then always below
+   C). A press that arrives after the crash moment loses, even if the crash hasn't been sent yet.
+   Whole-dollar bets times two-decimal multipliers are whole cents: no rounding.
+6. Everyone at the table sees every bet, cash-out and crash as it happens: the table beside the
+   graph lists name, bet, where each player got out and their profit. Auto targets stay private
+   until they pay.
+7. Standing up mid-flight cashes the bet out at the multiplier on the server's clock, like a press.
+   Dropping (a lost connection) leaves the bet in the air: it is settled by its auto cash-out or by
+   the crash, and after two minutes away the seat is cashed out with whatever it holds. Standing up
+   in the window hands the bet back.
+
+### 8.2 The crash point, and why every cash-out returns 99%
+
+In hundredths, the crash point C runs from 100 (1.00×) to 1,000,000 (10,000×), with
+
+    P(C > k) = 99/k   for every k from 100 up to 999,999.
+
+So one round in a hundred crashes at 1.00× the moment it launches (P(C = 100) = 1 − 99/100), and
+P(C = k) = 99/(k(k − 1)) for 100 < k < 1,000,000, with the rest, 99/999,999, at the cap.
+
+This is Bustabit's distribution ⌊99/(1 − U)⌋ ([crashgamesplay-algorithm]) moved up one hundredth.
+The brief asked for P(C ≥ x) = 0.99/x and payment only below the crash point; taken together
+literally those would return 0.99·x/(x + 0.01) at x. Here "the multiplier gets past x" (C > x) has
+probability 0.99/x, which gives exactly 1% at 1.00× and exactly 99% on every cash-out:
+
+**Claim.** A cash-out at any x from 1.01× to 9,999.99× returns exactly 99%, whether it is an auto
+target or a press at any moment.
+
+**Proof.** An auto cash-out at k hundredths pays k/100 when C > k, which has probability 99/k: the
+return is (k/100)(99/k) = 0.99. A press at time t pays multAt(t), the largest k with timeTo(k) ≤ t,
+when t < timeTo(C). Since timeTo never decreases, t < timeTo(C) exactly when multAt(t) < C: a
+press at a moment fixed in advance is an auto cash-out at multAt(t), and returns 0.99. Any way of
+deciding when to press uses only the time (the crash point is hidden until the crash), so it is a
+mixture of such moments and returns 0.99 too. ∎
+
+**The draw, with no rounding.** `drawCrash` first flips a 1-in-100 coin for the 1.00× rounds, then
+finds C in (100, 1,000,000] by bisection. At a node (lo, hi], known to hold C, it goes to (mid, hi]
+with probability (S(mid) − S(hi)) / (S(lo) − S(hi)), where S(x) = 99/x below the cap and 0 at it:
+lo(hi − mid) / (mid(hi − lo)), or lo/mid when hi is the cap. Each coin is an exact integer fraction
+below 2^53, flipped with an exact uniform integer draw (`randBelow`: 53 bits from two words, with
+rejection). By induction every node is reached with probability S(lo) − S(hi) (the root with
+S(100) − S(cap) = 99/100), so each leaf (k − 1, k] is reached with S(k − 1) − S(k) = P(C = k). The
+math script and the unit tests check that coin identity in integers at all 999,899 nodes of the
+production tree, and walk the whole tree in exact fractions for small caps (10.00×, 12.34× and
+20.00×), leaf by leaf.
+
+| Cash out at | Wins | Return | SD per bet |
+|---:|---:|---:|---:|
+| 1.01× | 98.02% | 99% | 0.141 |
+| 1.50× | 66.00% | 99% | 0.711 |
+| 2.00× | 49.50% | 99% | 1.000 |
+| 5.00× | 19.80% | 99% | 1.992 |
+| 10.00× | 9.900% | 99% | 2.987 |
+| 100.00× | 0.9900% | 99% | 9.900 |
+| 1,000.00× | 0.09900% | 99% | 31.45 |
+| 9,999.99× | 0.009900% | 99% | 99.49 |
+
+### 8.3 Monte Carlo
+
+Ten million crash points from the engine's `drawCrash`, each settled against five auto targets
+(the tallies share their draws); the same draws count the 1.00× rounds. Then 60,000 rounds through
+the whole engine at a two-seat table: one seat presses Cash out at a moment picked before each
+flight (0 to 20 s after launch) and judged on the table's clock, the other rides an auto cash-out
+at 1.80×.
+
+| Bet | N | Published | Measured | SE | z |
+|---|---:|---:|---:|---:|---:|
+| auto 1.01× | 10,000,000 | 99.0000% | 99.0070% | 0.0044% | +1.58 |
+| auto 1.50× | 10,000,000 | 99.0000% | 98.9817% | 0.0225% | -0.81 |
+| auto 2.00× | 10,000,000 | 99.0000% | 98.9675% | 0.0316% | -1.03 |
+| auto 10.00× | 10,000,000 | 99.0000% | 98.9440% | 0.0944% | -0.59 |
+| auto 100.00× | 10,000,000 | 99.0000% | 98.7950% | 0.3128% | -0.66 |
+| rounds over at 1.00× | 10,000,000 | 1.0000% | 0.9942% | 0.0031% | -1.86 |
+| engine, press 0 to 20 s after launch | 60,000 | 99.0000% | 99.1522% | 0.3939% | +0.39 |
+| engine, auto 1.80× | 60,000 | 99.0000% | 99.0060% | 0.3656% | +0.02 |
+
+### 8.4 The table and its money
+
+- **Deadlines.** The engine's deadline is the next moment the server must act: the window's close,
+  the next auto target the flight will reach before C, the crash, the next window. The table's
+  alarm runs `tick` then, so auto cash-outs are paid at their exact multiplier however late the
+  alarm fires, in the order the curve reached them, before the crash if both are due.
+- **After a restart** (`shiftDeadlines`) the window and the pause after a crash wait for players
+  to reconnect; a flight is never moved, because rewinding the curve would let someone cash out
+  below a multiplier the table had already passed.
+- **Live bets.** A bet counts as live (`liveBets`) from the moment it is placed until it is paid or
+  the crash takes it, so the table never cashes out a seat with a bet in the air. `seatLeaving`
+  settles what is due first, then pays a riding bet at the multiplier on the clock; the bet is
+  then marked paid, and the crash settles only bets still riding, so no bet is ever settled twice.
+- The worker tests play all of this in the real Durable Object: two players, one paid on an auto
+  cash-out and one taken by the crash, with D1 moving by exactly those amounts; a press judged on
+  the server's clock and a press that arrives too late; a player who drops mid-flight, paid by
+  their auto cash-out while away and cashed out when the grace period ends; and a player who
+  stands up mid-flight.
+
+### 8.5 Implementation notes
+
+- `shared/src/games/crash/rules.ts`: `RATE`, `timeTo`, `multAt`, `randBelow`, `splitOdds`,
+  `drawCrash`, the cap.
+- `engine.ts`: actions `bet { amount, auto }`, `cancel`, `cashout`; events `betting`, `bet`,
+  `closing`, `cancel`, `launch`, `cashout`, `crash`, `idle`. The page draws the curve with
+  `multAt(serverNow() − launchAt)`, the same function the server pays with.
+
+---
+
+## Tips and celebrations (§5-8)
+
+With Tips on, each page says what the numbers above say:
+
+- **Tower:** before a climb, which difficulties return exactly 99% on every row (Hard is ringed if
+  the chosen one doesn't). Mid-climb, the row with the best exact return from here, which is
+  usually cashing out now (the Cash out button is ringed), and that no tile is likelier than another.
+- **Mines:** before a board, the stop with the best exact return for this many mines. Mid-board,
+  whether any later stop returns more than cashing out now (ringed when none does).
+- **Hi-Lo:** after a right guess, cash out (ringed): every further guess keeps another 1% of what
+  rides. Before one, on an ace, 3, 5, 9, jack or king, the guess that returns exactly 99% (ringed);
+  on any other card, skip (ringed).
+- **Crash:** every cash-out point returns exactly 99%; a lower target only wins more often, and
+  watching the curve can't tell when it will crash.
+
+A win is celebrated only when it pays at least ten times the bet (the site's shared threshold, as
+for §1-4); anything less shows on the page alone.
+
+## Sources for §5-8
+
+- [casino-guide-tower]: casino.guide, Dragon Tower: the five difficulties, tiles and eggs per row,
+  and Stake's multiplier table: https://casino.guide/dragon-tower/
+- [americancasinos-tower]: AmericanCasinos, Stake.us Dragon Tower guide:
+  https://www.americancasinos.com/en/sweepstakes-casino/stake-us-dragon-tower-guide-20230606-0001/
+- [stake-analyzer-mines]: Stake Analyzer, Mines payout table and formula:
+  https://stakeanalyzer.live/payouts/mines
+- [stakearchive-mines]: StakeArchive, Mines guide (first-tile multipliers by mine count):
+  https://stakearchive.app/guides/mines
+- [americancasinos-hilo]: AmericanCasinos, Stake.us Hilo guide (the chance of each button by card,
+  with Higher and Same on an ace, Same and Lower on a king):
+  https://www.americancasinos.com/en/sweepstakes-casino/stake-us-hilo-game-20230420-0008/
+- [ballislife-hilo]: Ballislife, Stake HiLo guide (unlimited decks, the ace and king buttons, 52
+  skips): https://ballislife.com/betting/reviews/stake-us/hilo/
+- [zizobet-crash]: Zizobet, The Maths Behind Crash Games (the curve e^(0.00006 t)):
+  https://blog.zizobet.com/post/maths-behind-crash-games-multiplier-curves
+- [crashgamesplay-algorithm]: CrashGamesPlay, Crash Game Algorithm (Bustabit's
+  max(1, ⌊99/(1 − X)⌋/100)): https://crashgamesplay.com/guides/crash-game-algorithm/
+
+[casino-guide-tower]: https://casino.guide/dragon-tower/
+[americancasinos-tower]: https://www.americancasinos.com/en/sweepstakes-casino/stake-us-dragon-tower-guide-20230606-0001/
+[stake-analyzer-mines]: https://stakeanalyzer.live/payouts/mines
+[stakearchive-mines]: https://stakearchive.app/guides/mines
+[americancasinos-hilo]: https://www.americancasinos.com/en/sweepstakes-casino/stake-us-hilo-game-20230420-0008/
+[ballislife-hilo]: https://ballislife.com/betting/reviews/stake-us/hilo/
+[zizobet-crash]: https://blog.zizobet.com/post/maths-behind-crash-games-multiplier-curves
+[crashgamesplay-algorithm]: https://crashgamesplay.com/guides/crash-game-algorithm/

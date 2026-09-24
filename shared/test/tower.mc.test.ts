@@ -11,7 +11,7 @@ declare const console: { log(...args: unknown[]): void };
 // placed uniformly, so which tile is picked makes no difference) and cashed out at each row in
 // the plan below, all from the same tower. The towers come from drawTower, the engine's own
 // builder, and each cash-out pays multiplier(), the engine's own table. Published: the exact
-// return of each cash-out row (docs/rules/online-games-b.md §1.3).
+// return of each cash-out row (docs/rules/online-games.md §5.3).
 
 const PLAN: Record<Difficulty, number[]> = { easy: [3, 9], medium: [2, 5], hard: [1, 4], expert: [1, 3], master: [1, 2] };
 

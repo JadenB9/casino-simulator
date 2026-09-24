@@ -1,5 +1,5 @@
 // Hi-Lo: guess whether the next card is higher or lower, as far as you dare
-// (docs/rules/online-games-b.md §3).
+// (docs/rules/online-games.md §7).
 //
 // A card is always face up. Between rounds it can be skipped for free; Bet starts a round on it.
 // Each guess draws the next card from a fresh 52-card deck (with replacement) at the moment it is
