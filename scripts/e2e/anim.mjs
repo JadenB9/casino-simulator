@@ -85,6 +85,7 @@ async function playRound(page, spec) {
         orig(m);
         if (m.t === 'ev') {
           events.push(...m.events);
+          s.__lastView = m.view;
           if (m.events.some((e) => e.type === end)) done = true;
         }
         if (m.t === 'err') events.push({ type: 'err', msg: m.msg });
@@ -104,7 +105,7 @@ async function playRound(page, spec) {
       } finally {
         s.onMessage = orig;
       }
-      return { done, events: events.filter((e) => ['spin', 'roll', 'reels', 'settle', 'result', 'err'].includes(e.type)) };
+      return { done, events: events.filter((e) => ['spin', 'roll', 'reels', 'settle', 'result', 'err'].includes(e.type)), finalStops: s.__lastView?.stops ?? null };
     },
     { bet: spec.bet, go: spec.go, end: spec.end },
   );
@@ -177,11 +178,14 @@ for (const part of only.length ? only : Object.keys(PARTS)) {
     } else if (spec.game === 'slots') {
       const reels = res.events.filter((x) => x.type === 'reels');
       const last = reels.at(-1);
-      want = last.stops.join(',');
+      // where the server says the reels rest once it's all over: a machine with free games ends
+      // on the last one (Neon Nights) or back on the paid spin (Gold Rush), as its engine decides
+      const rest = res.finalStops ?? last.stops;
+      want = rest.join(',');
       const strips = Array.isArray(seen.strip) ? seen.strip : seen.offsets.map(() => seen.strip);
       const rowOff = { sevens: 0, wild: 0, diamonds: 0, neon: 1, cherries: 1, goldrush: 1.5 }[spec.variant];
       // (a bank's shader has room for five reels; a three-reel machine leaves the last two at 0)
-      got = seen.offsets.slice(0, last.stops.length).map((o, i) => ((o - rowOff) % strips[i] + strips[i]) % strips[i]).map((x) => +x.toFixed(3)).join(',');
+      got = seen.offsets.slice(0, rest.length).map((o, i) => ((o - rowOff) % strips[i] + strips[i]) % strips[i]).map((x) => +x.toFixed(3)).join(',');
       good = got === want;
       got += ` (strips ${strips.join('/')}, free games ${reels.length - 1})`;
     }
