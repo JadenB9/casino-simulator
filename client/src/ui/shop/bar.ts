@@ -12,7 +12,6 @@ import type { BarOrder, OrderResponse } from '../../../../shared/src/items.ts';
 import type { Held, Look } from '../../../../shared/src/look.ts';
 import type { SessionLike } from '../menu/deps.ts';
 import { serverNow } from '../../net/clock.ts';
-import * as shopApi from './api.ts';
 
 export interface BarDeps {
   session: SessionLike;
@@ -41,8 +40,8 @@ export class Bar {
   private readonly orderFns = new Set<(o: BarOrder) => void>();
   private readonly changeFns = new Set<() => void>();
   private waiters: ((o: BarOrder) => void) | null = null;
-  private readonly timers = new Set<number>();
-  private expiry = 0;
+  private readonly timers = new Set<ReturnType<typeof setTimeout>>();
+  private expiry: ReturnType<typeof setTimeout> | undefined;
   private readonly offs: (() => void)[];
   /** Look changes go out one at a time, in order. */
   private chain: Promise<void> = Promise.resolve();
@@ -66,7 +65,7 @@ export class Bar {
 
   /** Order one item: paid now from your balance, brought to you after. */
   async order(item: string): Promise<BarOrder> {
-    const r = await this.deps.api.order(item, shopApi.newOp());
+    const r = await this.deps.api.order(item, crypto.randomUUID());
     applyMoney(this.deps.session, r);
     this.queue.push(r.order);
     for (const fn of this.orderFns) fn(r.order);
@@ -157,11 +156,11 @@ export class Bar {
       void this.drop();
       return;
     }
-    this.expiry = window.setTimeout(() => void this.drop(), Math.min(2 ** 31 - 1, left + 250));
+    this.expiry = setTimeout(() => void this.drop(), Math.min(2 ** 31 - 1, left + 250));
   }
 
   private later(fn: () => void, ms: number): void {
-    const t = window.setTimeout(() => {
+    const t = setTimeout(() => {
       this.timers.delete(t);
       if (!this.disposed) fn();
     }, ms);
