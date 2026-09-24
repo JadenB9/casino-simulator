@@ -3,6 +3,10 @@
 // floor, out of every other view, and the camera is borrowed while the editor is open and put
 // back when it closes. The controls sit in a panel on the right; the character stays centred in
 // the space left over, and turns when you drag it, press Q/E, or use the buttons under it.
+//
+// Guided (a new player's first visit): the same room and controls, a few at a time. "Pick your
+// look" walks through body and outfit, then skin and hair, then clothes, starting from a look of
+// their own; Surprise me deals another, and the last step saves it and goes in.
 
 import './editor.css';
 import * as THREE from 'three';
@@ -14,7 +18,7 @@ import { icon } from '../menu/icons.ts';
 import { keycap, problemText, segmented } from '../menu/parts.ts';
 import { GLOBAL_KEYS, closeButton, focusFirst, holdKeyboard } from '../menu/sheet.ts';
 import { mannequins } from './mannequin.ts';
-import { BODY_CHOICES, BOTTOMS, HAIR, SHOES, SKINS, TOPS, outfitFor, outfitName, type Swatch } from './palettes.ts';
+import { BODY_CHOICES, BOTTOMS, HAIR, SHOES, SKINS, TOPS, outfitFor, outfitName, startingLook, type Swatch } from './palettes.ts';
 
 export interface EditorDeps {
   root: HTMLElement;
@@ -28,7 +32,22 @@ export interface EditorDeps {
   /** Called once, with the saved look or null if nothing was saved. */
   onClose?(saved: Look | null): void;
   sfx?: Pick<SfxLike, 'play'>;
+  /**
+   * A new player's walk-through: the fields a step at a time, no Cancel, and the last step saves
+   * (even an unchanged look: the account still has the default one) and closes with it.
+   */
+  guided?: boolean;
+  /** The look to start from, instead of the saved one (a new player's own starting look). */
+  start?: Look;
 }
+
+/** The guided walk-through's steps: a title and the fields on it. */
+const STEPS = [
+  { title: 'Body and outfit', fields: ['body', 'outfit'] },
+  { title: 'Skin and hair', fields: ['skin', 'hair'] },
+  { title: 'Clothes', fields: ['top', 'bottom', 'shoes'] },
+] as const;
+type FieldId = (typeof STEPS)[number]['fields'][number];
 
 const PODIUM_TOP = 0.07;
 /** Character height plus some air above and below, for framing. */
@@ -206,9 +225,11 @@ function field(label: string, value: string, control: HTMLElement): { root: HTML
 export function openEditor(deps: EditorDeps): Closable {
   const profile = deps.session.profile;
   const saved: Look = profile?.look ?? DEFAULT_LOOK;
-  let look: Look = { ...saved };
+  const guided = !!deps.guided;
+  let look: Look = { ...(deps.start ?? saved) };
   let busy = false;
   let confirmDiscard = false;
+  let step = 0;
 
   // ---- 3D
   const { engine } = deps;
@@ -247,16 +268,24 @@ export function openEditor(deps: EditorDeps): Closable {
   turn.append(left, turnHint, right);
   stage.append(turn);
 
-  const panel = el('aside', 'editor-panel');
+  const panel = el('aside', guided ? 'editor-panel guided' : 'editor-panel');
   panel.setAttribute('role', 'dialog');
   panel.setAttribute('aria-modal', 'true');
   panel.setAttribute('aria-labelledby', 'editor-title');
   const head = el('header', 'sheet-head');
   const titles = el('div', 'sheet-titles');
-  const title = el('h2', 'sheet-title', 'Character');
+  const title = el('h2', 'sheet-title', guided ? 'Pick your look' : 'Character');
   title.id = 'editor-title';
-  titles.append(title, el('p', 'sheet-sub', 'How everyone on the floor sees you.'));
-  head.append(titles, closeButton(() => requestClose(), 'Cancel'));
+  titles.append(title, el('p', 'sheet-sub', guided ? 'Everyone on the floor sees you like this. You can change it any time from Character in the menu.' : 'How everyone on the floor sees you.'));
+  head.append(titles);
+  if (!guided) head.append(closeButton(() => requestClose(), 'Cancel'));
+  // the walk-through's progress: which step, as a row of rules and its name
+  const progress = el('div', 'ed-steps');
+  const stepName = el('span', 'ed-step-name');
+  const ticks = STEPS.map(() => el('i', 'ed-tick'));
+  const tickRow = el('span', 'ed-ticks');
+  tickRow.append(...ticks);
+  progress.append(tickRow, stepName);
 
   const scroll = el('div', 'ed-scroll');
   const outfitBox = el('div');
@@ -269,22 +298,38 @@ export function openEditor(deps: EditorDeps): Closable {
   cancelBtn.type = 'button';
   const resetBtn = el('button', 'btn ghost ed-reset', 'Reset');
   resetBtn.type = 'button';
+  // the walk-through's own buttons
+  const surpriseBtn = el('button', 'btn ghost ed-reset', 'Surprise me');
+  surpriseBtn.type = 'button';
+  const backBtn = el('button', 'btn ghost', 'Back');
+  backBtn.type = 'button';
+  const nextBtn = el('button', 'btn primary', 'Next');
+  nextBtn.type = 'button';
   const foot = el('footer', 'ed-foot');
   const buttons = el('div', 'ed-buttons');
-  buttons.append(resetBtn, cancelBtn, saveBtn);
+  if (guided) buttons.append(surpriseBtn, backBtn, nextBtn);
+  else buttons.append(resetBtn, cancelBtn, saveBtn);
   foot.append(status, buttons);
-  panel.append(head, scroll, foot);
+  if (guided) panel.append(head, progress, scroll, foot);
+  else panel.append(head, scroll, foot);
   root.append(stage, panel);
   deps.root.append(root);
 
-  const dirty = () => JSON.stringify(look) !== JSON.stringify(saved);
+  // a new player's look is saved whatever it is: the account still has the default one
+  const dirty = () => guided || JSON.stringify(look) !== JSON.stringify(saved);
+  const last = () => step === STEPS.length - 1;
   const paintState = (msg?: string, kind = '') => {
     const d = dirty();
     saveBtn.disabled = busy || !d;
     resetBtn.disabled = busy || !d;
     cancelBtn.disabled = busy;
+    backBtn.hidden = step === 0;
+    backBtn.disabled = busy;
+    surpriseBtn.disabled = busy;
+    nextBtn.disabled = busy;
+    nextBtn.textContent = busy ? 'Saving' : last() ? 'Enter the casino' : 'Next';
     status.className = `ed-status ${kind}`.trim();
-    status.textContent = msg ?? (d ? 'Unsaved changes.' : '');
+    status.textContent = msg ?? (guided ? '' : d ? 'Unsaved changes.' : '');
   };
 
   const update = (next: Partial<Look>) => {
@@ -320,15 +365,30 @@ export function openEditor(deps: EditorDeps): Closable {
     }, 'ed-seg');
     body.root.replaceChild(bodySeg.root, body.root.lastChild!);
     renderOutfits();
-    scroll.replaceChildren(
-      body.root,
-      outfitBox,
-      swatchField('Skin', SKINS, SKIN_TONES[look.skin] ?? SKIN_TONES[2], (hex) => update({ skin: Math.max(0, SKIN_TONES.indexOf(hex as (typeof SKIN_TONES)[number])) })),
-      swatchField('Hair', HAIR, look.hair, (hex) => update({ hair: hex })),
-      swatchField('Top', TOPS, look.top, (hex) => update({ top: hex })),
-      swatchField('Bottom', BOTTOMS, look.bottom, (hex) => update({ bottom: hex })),
-      swatchField('Shoes', SHOES, look.shoes, (hex) => update({ shoes: hex })),
-    );
+    const fields: Record<FieldId, HTMLElement> = {
+      body: body.root,
+      outfit: outfitBox,
+      skin: swatchField('Skin', SKINS, SKIN_TONES[look.skin] ?? SKIN_TONES[2], (hex) => update({ skin: Math.max(0, SKIN_TONES.indexOf(hex as (typeof SKIN_TONES)[number])) })),
+      hair: swatchField('Hair', HAIR, look.hair, (hex) => update({ hair: hex })),
+      top: swatchField('Top', TOPS, look.top, (hex) => update({ top: hex })),
+      bottom: swatchField('Bottom', BOTTOMS, look.bottom, (hex) => update({ bottom: hex })),
+      shoes: swatchField('Shoes', SHOES, look.shoes, (hex) => update({ shoes: hex })),
+    };
+    if (!guided) {
+      scroll.replaceChildren(...STEPS.flatMap((s) => s.fields.map((f) => fields[f])));
+      return;
+    }
+    const current = STEPS[step]!;
+    stepName.textContent = `${step + 1} of ${STEPS.length} · ${current.title}`;
+    ticks.forEach((t, i) => t.classList.toggle('on', i <= step));
+    scroll.replaceChildren(...current.fields.map((f) => fields[f]));
+  };
+  const goTo = (i: number) => {
+    step = Math.max(0, Math.min(STEPS.length - 1, i));
+    renderFields();
+    paintState();
+    deps.sfx?.play('ui-switch', { volume: 0.25 });
+    queueMicrotask(() => focusFirst(scroll));
   };
   renderFields();
   paintState();
@@ -415,6 +475,11 @@ export function openEditor(deps: EditorDeps): Closable {
   };
   const requestClose = () => {
     if (busy) return;
+    // the walk-through has no Cancel: Esc steps back
+    if (guided) {
+      if (step > 0) goTo(step - 1);
+      return;
+    }
     if (dirty() && !confirmDiscard) {
       confirmDiscard = true;
       paintState('Unsaved changes. Press Esc again to discard them, or Save.', 'warn');
@@ -432,7 +497,7 @@ export function openEditor(deps: EditorDeps): Closable {
     renderFields();
     paintState();
   });
-  saveBtn.addEventListener('click', async () => {
+  const save = async () => {
     const clean = parseLook(look);
     if (!clean || busy) return;
     busy = true;
@@ -450,6 +515,18 @@ export function openEditor(deps: EditorDeps): Closable {
       saveBtn.textContent = 'Save';
       paintState(problemText(err), 'err');
     }
+  };
+  saveBtn.addEventListener('click', () => void save());
+  nextBtn.addEventListener('click', () => (last() ? void save() : goTo(step + 1)));
+  backBtn.addEventListener('click', () => goTo(step - 1));
+  let deals = 0;
+  surpriseBtn.addEventListener('click', () => {
+    // another whole look, dealt from the same palettes
+    look = startingLook((Date.now() + ++deals * 7919) & 0x7fffffff);
+    character.setLook(look);
+    renderFields();
+    paintState();
+    deps.sfx?.play('ui-switch', { volume: 0.3 });
   });
 
   queueMicrotask(() => focusFirst(panel));

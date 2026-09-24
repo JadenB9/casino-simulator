@@ -14,6 +14,11 @@
 // Everything is shared with the live model (materials, canvas textures), so a sign repainted up
 // close is repainted far away too. The swap has a little hysteresis so it doesn't flicker at the
 // boundary, and the station you're sitting at always shows the real thing.
+//
+// Distance alone isn't enough in the pit, where a dozen tables stand within a few metres of each
+// other: the real models in view also share a draw-call budget. Nearest first, a station in view
+// keeps its real model while what it costs over its stand-in still fits; the rest show their
+// stand-ins until the camera comes closer.
 
 import * as THREE from 'three';
 import type { Quality } from '../render/engine3d.ts';
@@ -31,6 +36,13 @@ const MACHINE_NEAR_M = 7;
 const TINY_M = 0.035;
 /** Textured parts smaller than this (bounding sphere, metres) are drawn in their average colour. */
 const SMALL_M = 0.3;
+/**
+ * Draw calls the real models in view may cost over their stand-ins. With it the busiest views of
+ * the floor stay near 220 calls on High, leaving room under 250 for signs and dealers.
+ */
+export const STATION_BUDGET = 96;
+/** A station already showing its real model counts as this much nearer, so the budget's edge doesn't flicker. */
+const KEEP = 0.8;
 
 type Piece = {
   geo: THREE.BufferGeometry;
@@ -54,6 +66,13 @@ interface Entry {
   /** Squared distances: swap to the stand-in past far2, back to the model inside near2. */
   far2: number;
   near2: number;
+  /** World-space bounds, for what's in view. */
+  sphere: THREE.Sphere;
+  /** Draw calls the real model costs over the stand-in. */
+  extra: number;
+  /** Per frame: squared distance, and whether the real model is wanted. */
+  d2: number;
+  real: boolean;
 }
 
 export class StationLod {
@@ -61,6 +80,11 @@ export class StationLod {
   private readonly solid: THREE.Material;
   private readonly glow: THREE.MeshBasicMaterial;
   private readonly cam = new THREE.Vector3();
+  private readonly frustum = new THREE.Frustum();
+  private readonly viewProj = new THREE.Matrix4();
+  private readonly order: Entry[] = [];
+  /** Draw calls the real models in view may cost over their stand-ins (see STATION_BUDGET). */
+  budget = STATION_BUDGET;
 
   private readonly high: boolean;
 
@@ -78,20 +102,37 @@ export class StationLod {
       const machine = s.zone === 'slots' || s.zone === 'bar';
       const far = machine ? MACHINE_FAR_M : FAR_M;
       const near = machine ? MACHINE_NEAR_M : NEAR_M;
-      this.entries.push({ station: s, copy, x: at.x, z: at.z, far2: far * far, near2: near * near });
+      const sphere = new THREE.Box3().setFromObject(s.model).getBoundingSphere(new THREE.Sphere());
+      const extra = Math.max(0, meshes(s.model) - meshes(copy));
+      this.entries.push({ station: s, copy, x: at.x, z: at.z, far2: far * far, near2: near * near, sphere, extra, d2: 0, real: true });
     }
   }
 
-  /** Show the real model near the camera and the stand-in further away. */
+  /** Show the real model near the camera and the stand-in further away, within the budget. */
   update(camera: THREE.Camera, seated: WorldStation | null): void {
+    camera.updateMatrixWorld();
     camera.getWorldPosition(this.cam);
-    for (const { station, copy, x, z, far2, near2 } of this.entries) {
-      const d2 = (x - this.cam.x) ** 2 + (z - this.cam.z) ** 2;
-      const was = copy.visible;
-      const far = station !== seated && (was ? d2 > near2 : d2 > far2);
-      if (far === was) continue;
-      station.model.visible = !far;
-      copy.visible = far;
+    this.frustum.setFromProjectionMatrix(this.viewProj.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
+    const order = this.order;
+    order.length = 0;
+    for (const e of this.entries) {
+      e.d2 = (e.x - this.cam.x) ** 2 + (e.z - this.cam.z) ** 2;
+      const was = !e.copy.visible;
+      // near enough by distance (with hysteresis), and in view: it competes for the budget
+      e.real = e.station === seated || (was ? e.d2 <= e.far2 : e.d2 <= e.near2);
+      if (e.real && e.station !== seated && this.frustum.intersectsSphere(e.sphere)) order.push(e);
+    }
+    // nearest first (the ones already real a little nearer still), each while it fits
+    order.sort((a, b) => rank(a) - rank(b));
+    let spent = 0;
+    for (const e of order) {
+      spent += e.extra;
+      if (spent > this.budget) e.real = false;
+    }
+    for (const e of this.entries) {
+      if (e.real === !e.copy.visible) continue;
+      e.station.model.visible = e.real;
+      e.copy.visible = !e.real;
     }
   }
 
@@ -216,6 +257,20 @@ export class StationLod {
     }
     return out;
   }
+}
+
+/** Where an entry stands in the budget's queue: its distance, less for one already real. */
+function rank(e: Entry): number {
+  return e.copy.visible ? e.d2 : e.d2 * KEEP * KEEP;
+}
+
+/** How many meshes (draw calls, at most) an object draws. */
+function meshes(o: THREE.Object3D): number {
+  let n = 0;
+  o.traverse((m) => {
+    if ((m as THREE.Mesh).isMesh && m.visible) n++;
+  });
+  return n;
 }
 
 /**

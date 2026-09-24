@@ -73,6 +73,8 @@ export interface FloorWorld extends World {
   readonly focus: WorldStation | null;
   /** Draw calls and triangles of the last frame (renderer.info, counted across the bloom passes). */
   stats(): { calls: number; triangles: number; programs: number; pixelRatio: number };
+  /** The far stand-ins and their draw-call budget (for the dev floor and the headless checks). */
+  readonly lod: StationLod;
   /** Place the player (dev views, respawn). */
   teleport(x: number, z: number, heading: number): void;
   quality: Quality;
@@ -181,6 +183,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
     characterFactory: characters,
     plan,
     quality,
+    lod,
     player: {
       character,
       position: player.position,
