@@ -202,6 +202,9 @@ export const PODIUM = { w: 1.4, d: 0.64, h: 1.49 };
 /** The bar counter's height (the video poker bar-top units stand on it). */
 export const BAR_TOP = 1.08;
 
+/** Room for a dealer standing beside a station (npcs.ts's bodies are 0.28 m posts). */
+const DEALER_ROOM = 0.7;
+
 /** How tall each kind of station stands, for checking what hangs or leans over it. */
 export const STATION_H: Record<Zone, number> = { pit: 1.45, poker: 1.45, slots: 2.45, bar: 1.8, feature: 3.05, cashier: 1.2 };
 
@@ -642,11 +645,12 @@ function placePlants(plan: FloorPlan): void {
   const inset = (r: number) => r + TRIM + 0.02;
   type Spot = { kind: PlantKind; at: (r: number) => [number, number] };
   const spots: Spot[] = [
-    // the west wall beside the Big Six: north of it (toward the cashier's queue), or south
+    // the west wall either side of the Big Six; its dealer stands at the wheel's left (the
+    // station's local +x, npcs.ts), so that side keeps a body's room clear
     ...(wheel
       ? ([
-          { kind: 'plant-b', at: (r) => [R.x0 + inset(r), wheel.z - wheel.fp.width / 2 - r - 0.08] },
-          { kind: 'plant-b', at: (r) => [R.x0 + inset(r), wheel.z + wheel.fp.width / 2 + r + 0.08] },
+          { kind: 'plant-b', at: (r) => [R.x0 + inset(r), wheel.z - wheel.fp.width / 2 - (Math.sin(wheel.yaw) > 0 ? DEALER_ROOM : 0) - r - 0.08] },
+          { kind: 'plant-b', at: (r) => [R.x0 + inset(r), wheel.z + wheel.fp.width / 2 + (Math.sin(wheel.yaw) < 0 ? DEALER_ROOM : 0) + r + 0.08] },
         ] as Spot[])
       : []),
     // beside the cashier's cage, in the north-west corner of the pit's aisle
