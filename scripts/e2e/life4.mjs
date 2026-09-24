@@ -4,7 +4,7 @@
 // then against the local worker with two players: one sits and the other sees it, an order walked
 // over by a waiter and handed across, the banker's greeting with the bank's sheet beside them.
 //
-// Usage: node scripts/e2e/life4.mjs [port] [outDir] [checks...]   (checks: dev floor; default both)
+// Usage: node scripts/e2e/life4.mjs [port] [outDir] [checks...]   (checks: dev floor calls; default dev floor)
 //   --sw   SwiftShader instead of the machine's GPU
 // The floor checks log in as fixed names (life_e2e_a, life_e2e_b) with the dev password.
 
@@ -210,6 +210,45 @@ if (checks.includes('dev')) {
   console.log('draw calls (overview)', calls);
   if (calls > 250) fail(`draw calls ${calls} > 250`);
   if (errors.length) fail(`dev errors: ${errors.slice(0, 5).join(' | ')}`);
+  await p.close();
+}
+
+// --- draw calls: every room, four ways, with the floor's life in it ---------------------------------
+
+if (checks.includes('calls')) {
+  const p = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
+  const errors = watch(p);
+  await p.goto(`http://localhost:${port}/casino/src/world/dev-floor.html?quality=high`, { timeout: 180000 });
+  await p.waitForFunction(() => document.getElementById('boot')?.classList.contains('done'), null, { timeout: 300000 });
+  await hold(p);
+  const poses = await p.evaluate(() => {
+    const plan = window.casino.world.plan;
+    const out = [];
+    for (const r of plan.rooms ?? [{ id: 'floor', inner: plan.room }]) {
+      const b = r.inner;
+      const cx = (b.x0 + b.x1) / 2;
+      const cz = (b.z0 + b.z1) / 2;
+      // from the middle and from two corners, looking each way
+      for (const [x, z] of [[cx, cz], [b.x0 + 1.2, b.z0 + 1.2], [b.x1 - 1.2, b.z1 - 1.2]]) {
+        for (let k = 0; k < 4; k++) {
+          const a = (k * Math.PI) / 2 + 0.4;
+          out.push({ name: `${r.id}-${out.length % 12}`, pos: [x, 1.7, z], at: [x + Math.sin(a) * 5, 1.1, z + Math.cos(a) * 5] });
+        }
+      }
+    }
+    return out;
+  });
+  let worst = { name: '', calls: 0 };
+  for (const pose of poses) {
+    await aim(p, pose.pos, pose.at);
+    await p.waitForTimeout(350);
+    await frames(p, 4);
+    const calls = await p.evaluate(() => window.casino.world.stats().calls);
+    if (calls > worst.calls) worst = { name: pose.name, calls };
+  }
+  console.log('draw calls', JSON.stringify({ poses: poses.length, worst }));
+  if (worst.calls > 250) fail(`draw calls ${worst.calls} > 250 at ${worst.name}`);
+  if (errors.length) fail(`calls errors: ${errors.slice(0, 5).join(' | ')}`);
   await p.close();
 }
 
