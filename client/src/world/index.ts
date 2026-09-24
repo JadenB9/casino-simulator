@@ -114,7 +114,7 @@ export interface FloorWorld extends World {
  * (roughness) for some. The metals keep the bright studio light (brass reads as brass by it).
  */
 const REFLECTIVE: [string, number, number?][] = [
-  ['marble-floor', 0.9, 0.15],
+  ['marble-floor', 0.55, 0.15],
   ['marble-black', 0.8],
   ['mirror', 1.0],
   ['lacquer', 0.8],

@@ -43,9 +43,9 @@ export interface EditorDeps {
 
 /** The guided walk-through's steps: a title and the fields on it. */
 const STEPS = [
-  { title: 'Body and outfit', fields: ['body', 'outfit'] },
-  { title: 'Skin and hair', fields: ['skin', 'hair'] },
-  { title: 'Clothes', fields: ['top', 'bottom', 'shoes'] },
+  { title: 'Body and outfit', note: 'A body and an outfit first; the colours come next.', fields: ['body', 'outfit'] },
+  { title: 'Skin and hair', note: 'Your skin tone and your hair colour.', fields: ['skin', 'hair'] },
+  { title: 'Clothes', note: 'What you wear. Surprise me deals a whole new look.', fields: ['top', 'bottom', 'shoes'] },
 ] as const;
 type FieldId = (typeof STEPS)[number]['fields'][number];
 
@@ -238,7 +238,8 @@ export function openEditor(deps: EditorDeps): Closable {
   const room = dressingRoom(deps.at ?? new THREE.Vector3(0, -60, 0));
   engine.scene.add(room.group);
   const character: Character = (deps.characters ?? mannequins).create(look, profile?.name ?? '');
-  character.setName(profile?.name ?? '');
+  // no name tag here: the framing is for the character, and the tag would sit above the view
+  character.setName('');
   character.setMotion(0);
   room.pivot.add(character.root);
   let yaw = -0.35;
@@ -381,7 +382,7 @@ export function openEditor(deps: EditorDeps): Closable {
     const current = STEPS[step]!;
     stepName.textContent = `${step + 1} of ${STEPS.length} · ${current.title}`;
     ticks.forEach((t, i) => t.classList.toggle('on', i <= step));
-    scroll.replaceChildren(...current.fields.map((f) => fields[f]));
+    scroll.replaceChildren(el('p', 'ed-step-note', current.note), ...current.fields.map((f) => fields[f]));
   };
   const goTo = (i: number) => {
     step = Math.max(0, Math.min(STEPS.length - 1, i));

@@ -703,27 +703,43 @@ if (checks.includes('bloom')) {
   }, station);
   await page.waitForSelector('.lobby-choice', { timeout: 20000 });
   await page.keyboard.press('s');
-  await page.waitForSelector('.modal input[type=number]', { timeout: 30000 });
-  await page.fill('.modal input[type=number]', '1000');
-  await page.click('.modal .btn.primary');
+  // a seat left from an earlier run comes back as it was; otherwise buy in
+  await page.waitForFunction(() => window.casino.app.table?.seated === true || !!document.querySelector('.modal input[type=number]'), null, { timeout: 60000 });
+  if (await page.$('.modal input[type=number]')) {
+    await page.fill('.modal input[type=number]', '1000');
+    await page.click('.modal .btn.primary');
+  }
   await page.waitForFunction(() => window.casino.app.table?.seated === true, null, { timeout: 30000 });
+  await page.waitForTimeout(1500);
   await page.evaluate(() => {
     const s = window.casino.app.table.session;
     s.__done = false;
+    s.__log = [];
     const orig = s.onMessage.bind(s);
     s.onMessage = (m) => {
       orig(m);
-      if (m.t === 'ev' && m.events.some((e) => ['result', 'settle', 'done'].includes(e.type))) s.__done = true;
+      if (m.t === 'ev') s.__log.push(...m.events.map((e) => e.type));
+      if (m.t === 'ev' && m.events.some((e) => ['result', 'outcome'].includes(e.type))) s.__done = true;
     };
-    setTimeout(() => s.link.act({ type: 'bet', banker: 2500 }), 300);
-    setTimeout(() => s.link.act({ type: 'deal' }), 1000);
+    // the view's own buttons, as a player would: a chip on Banker, then Deal
+    s.link.act({ type: 'clear' });
+    setTimeout(() => s.link.act({ type: 'bet', banker: 2500 }), 600);
+    setTimeout(() => s.link.act({ type: 'deal' }), 1800);
   });
   const t0 = Date.now();
   while (Date.now() - t0 < 120000 && !(await page.evaluate(() => window.casino.app.table?.session.__done))) await page.waitForTimeout(1000);
-  await page.waitForTimeout(6000);
+  // the cards play out on the view's own clock (slow on a software renderer): wait for the
+  // session's queue of event animations to drain
+  await page.evaluate(async () => {
+    const s = window.casino.app.table?.session;
+    for (let i = 0; i < 3 && s; i++) await Promise.race([s.queue, new Promise((r) => setTimeout(r, 90000))]);
+  });
+  await page.waitForTimeout(4000);
   const file = `${out}/world3-bloom-${station}.png`;
   await page.screenshot({ path: file });
-  console.log(JSON.stringify({ check: 'bloom', station, file, errors: errors.slice(0, 3) }));
+  const events = await page.evaluate(() => window.casino.app.table?.session.__log ?? []);
+  console.log(JSON.stringify({ check: 'bloom', station, file, dealt: events.includes('card'), events: events.slice(0, 30), errors: errors.slice(0, 3) }));
+  if (!events.includes('card')) fail('bloom: no cards were dealt');
   if (errors.length) fail(`bloom: ${errors[0]}`);
   await ctx.close();
 }

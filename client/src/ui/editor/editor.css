@@ -44,6 +44,7 @@
 .ed-tick.on { background: var(--brass-hi); }
 .ed-step-name { font-size: 14px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-2); }
 .editor-panel.guided .ed-scroll { padding-top: 10px; }
+.ed-step-note { margin: 4px 0 6px; font-size: 15px; line-height: 1.45; color: var(--ink-3); }
 .editor-panel.guided .ed-buttons .btn[hidden] { display: none; }
 
 @media (max-width: 760px) {
