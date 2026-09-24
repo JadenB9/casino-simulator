@@ -6,6 +6,8 @@ import * as THREE from 'three';
 import { engine } from '../../../../shared/src/games/sicbo/engine.ts';
 import { spotByKey, paysLabel } from '../../../../shared/src/games/sicbo/rules.ts';
 import { formatMoney } from '../../../../shared/src/money.ts';
+import type { TableConfig } from '../../../../shared/src/engine.ts';
+import { repaintable } from '../../table/limit-sign.ts';
 import type { Quality } from '../../render/engine3d.ts';
 import { Felt } from '../../table/felt.ts';
 import { areas, LW, X0, ZA, ZE, type Area } from './layout.ts';
@@ -183,13 +185,10 @@ function roundedShape(w: number, d: number, r: number): THREE.Shape {
   return s;
 }
 
-/** The limits sign: every class of bet with its minimum and maximum, from the engine's config. */
-function limitSign(): THREE.Mesh {
-  const lim = engine.config('', 'multi').limits;
-  const c = document.createElement('canvas');
-  c.width = 640;
-  c.height = 440;
-  const g = c.getContext('2d')!;
+/** The limits sign's face: every class of bet with its minimum and maximum at a table of these limits. */
+function paintSign(g: CanvasRenderingContext2D, cfg: TableConfig): void {
+  const c = g.canvas;
+  const lim = cfg.limits;
   g.fillStyle = '#0d0b09';
   g.fillRect(0, 0, c.width, c.height);
   g.strokeStyle = '#d8b06a';
@@ -220,12 +219,22 @@ function limitSign(): THREE.Mesh {
   g.fillStyle = '#c9c0ad';
   g.font = '600 27px "Barlow Condensed", sans-serif';
   g.fillText(`TABLE MAXIMUM ${formatMoney(lim.default.max)} A ROLL`, c.width / 2, 400);
+}
+
+/** The limits sign, painted for the Standard table (and for yours while you sit at it). */
+function limitSign(): THREE.Mesh {
+  const c = document.createElement('canvas');
+  c.width = 640;
+  c.height = 440;
+  paintSign(c.getContext('2d')!, engine.config('', 'multi'));
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
   const face = new THREE.MeshStandardMaterial({ map: tex, emissive: '#ffffff', emissiveMap: tex, emissiveIntensity: 0.55, roughness: 0.5 });
   const edge = new THREE.MeshStandardMaterial({ color: '#1a1512', roughness: 0.4, metalness: 0.4 });
-  return new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.1375, 0.008), [edge, edge, edge, edge, face, edge]);
+  const sign = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.1375, 0.008), [edge, edge, edge, edge, face, edge]);
+  repaintable(sign, face, { width: 640, height: 440, paint: paintSign });
+  return sign;
 }
 
 /** The table, centred at the origin, players on the +z side, the shaker toward -z. */

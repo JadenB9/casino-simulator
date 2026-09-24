@@ -6,6 +6,7 @@ import { Socket } from '../net/socket.ts';
 import { socketUrl } from '../net/api.ts';
 import { observeServerTime } from '../net/clock.ts';
 import { finishAll } from '../table/tween.ts';
+import { showLimits } from '../table/limit-sign.ts';
 import type { GameClientModule, SeatMsg, TableLink, TableView, TableSnapshot } from '../games/contract.ts';
 import type { TableStage } from '../table/stage.ts';
 import { UiKit, toast } from '../ui/kit.ts';
@@ -122,6 +123,7 @@ export class TableSession {
     this.offFrame();
     this.view?.dispose();
     this.view = null;
+    showLimits(this.stage.anchor, null);
     this.stage.dispose();
   }
 
@@ -158,6 +160,8 @@ export class TableSession {
         if (m.meta.pin) this.pin = m.meta.pin;
         if (!this.snapshot) this.checkLimits(m);
         this.snapshot = m;
+        // the table's sign shows this table's limits while you are at it
+        showLimits(this.stage.anchor, m.meta.config);
         const view = this.mountIfNeeded();
         view.onTable(m);
         this.hooks.onTable?.(m);
