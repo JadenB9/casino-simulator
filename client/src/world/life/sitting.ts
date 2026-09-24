@@ -96,8 +96,14 @@ export class Seating {
       if (m.t === 'hello') {
         this.book.clear();
         for (const p of m.players) if (p.seat) this.book.set(p.id, p.seat);
-        // back after a dropped connection: the floor let our seat go, so ask for it again
-        if (this.mine) this.claim(this.mine);
+        // Back after a dropped connection or from away: the floor let our seat go, and a new
+        // connection doesn't know where we are yet (it would say "Walk up to it first"), so put
+        // us on the seat first, then ask for it again.
+        const s = this.mine;
+        if (s) {
+          link.send({ t: 'st', x: Math.round(s.x * 100), z: Math.round(s.z * 100), r: yawToByte(s.yaw) });
+          this.claim(s);
+        }
       } else if (m.t === 'player' && m.seat !== undefined && m.id !== link.you?.id) {
         this.book.set(m.id, m.seat);
       } else if (m.t === 'leave') {

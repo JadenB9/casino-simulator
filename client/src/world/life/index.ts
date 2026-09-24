@@ -45,6 +45,8 @@ const WAITERS = 4;
 /** What the bar's orders need (ui/shop/bar.ts's Bar fits). */
 export interface OrderDesk {
   deliverWith(fn: ((o: BarOrder) => void) | null): void;
+  /** Orders paid for and not in your hand yet. */
+  readonly pending?: readonly BarOrder[];
 }
 
 export interface LifeDeps {
@@ -139,6 +141,9 @@ export class FloorLife {
     this.desk?.deliverWith(null);
     this.desk = desk;
     desk?.deliverWith((o) => this.bartender.take(o));
+    // Back on the floor (from away): what was paid for and never reached you is made and brought
+    // now, unless a waiter still has it.
+    for (const o of desk?.pending ?? []) if (!this.waiters.carrying(o.id)) this.bartender.retake(o);
   }
 
   /** Something happened in the bank's sheet: the banker at your window answers it. */

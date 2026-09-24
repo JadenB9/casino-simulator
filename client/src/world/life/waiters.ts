@@ -110,6 +110,11 @@ export class Waiters {
    * Bring `order` over: the waiter who took it, else the free one nearest the bar. `ready` says
    * when the bartender has it, `taken` hears it go onto the tray. False when every waiter is busy.
    */
+  /** A waiter is on the way with this order (or waiting at the bar for it). */
+  carrying(id: string): boolean {
+    return this.list.some((w) => w.job?.kind === 'deliver' && w.job.order.id === id && w.job.phase !== 'back');
+  }
+
   deliver(order: BarOrder, ready: () => boolean, taken?: () => void): boolean {
     const pickup = this.ctx.points.bar.pickup;
     let w = this.attending();

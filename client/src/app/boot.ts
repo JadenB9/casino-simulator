@@ -291,7 +291,8 @@ class App {
       this.menu?.setOnline(n);
     });
     link.on('state', (_s, code) => void this.endsSession(code));
-    this.bar = new Bar({
+    // Kept through away and back, with whatever is paid for and on its way.
+    this.bar ??= new Bar({
       session,
       api: { order: shopApi.order, saveLook: api.saveLook },
       seated: () => this.table !== null || this.world.seated !== null,
@@ -311,14 +312,20 @@ class App {
     });
   }
 
-  private disconnectFloor(): void {
+  /**
+   * Off the floor. Going away keeps the bar (`keepBar`): drinks paid for are still owed, and a
+   * bar menu left open behind the away screen still orders from it after Come back.
+   */
+  private disconnectFloor(keepBar = false): void {
     this.idle.stop();
     this.world.life.useApp(null);
     this.world.life.useBar(null);
     this.world.life.useLink(null);
     this.world.useBar(null);
-    this.bar?.dispose();
-    this.bar = null;
+    if (!keepBar) {
+      this.bar?.dispose();
+      this.bar = null;
+    }
     this.lifeOff?.();
     this.lifeOff = null;
     this.chat?.dispose();
@@ -646,7 +653,7 @@ class App {
     // Walking about (nothing open over the floor), or at a table: standing up puts us on the floor.
     this.awayWalking = atTable || (this.hud !== null && this.world.seated === null && overlayCount() === 0);
     this.away = showAway({ root: this.ui, atTable, onBack: () => this.comeBack() });
-    this.disconnectFloor();
+    this.disconnectFloor(true);
     this.world.player.setEnabled(false);
     if (atTable) {
       await this.leaveTable();
