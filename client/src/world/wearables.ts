@@ -896,19 +896,28 @@ function buildPendant(fit: Fit, kind: 'dice' | 'ace', path: Path, out: Out, ches
     if (Number.isFinite(s)) c.copy(c.clone().addScaledVector(face, -0.08).addScaledVector(face, s + 0.004));
     const m = frame(c, face.clone().cross(V(0, 1, 0)).negate(), V(0, 1, 0), face);
     // the medallion: a thick disc with a raised rim, the spade in black enamel, diamonds round it
-    const disc = new THREE.CylinderGeometry(r, r, 0.0034, 40).rotateX(Math.PI / 2);
+    const disc = new THREE.LatheGeometry(
+      [
+        [0.0001, -0.0017],
+        [r, -0.0017],
+        [r, 0.0008],
+        [r * 0.72, 0.0022],
+        [0.0001, 0.0028],
+      ].map(([x, yy]) => new THREE.Vector2(x!, yy!)),
+      40,
+    ).rotateX(Math.PI / 2);
     out.metal.add(disc, m, GOLD, chest);
     out.metal.add(new THREE.TorusGeometry(r - 0.0012, 0.0016, 8, 48), m.clone().multiply(new THREE.Matrix4().makeTranslation(0, 0, 0.0017)), GOLD, chest);
     out.gem.add(new THREE.TorusGeometry(r - 0.0042, 0.0013, 6, 48), m.clone().multiply(new THREE.Matrix4().makeTranslation(0, 0, 0.0019)), null, chest);
     const spade = new THREE.ExtrudeGeometry(spadeShape(0.0135), { depth: 0.0007, bevelEnabled: false, curveSegments: 10 });
-    out.metal.add(spade, m.clone().multiply(new THREE.Matrix4().makeTranslation(0, -0.001, 0.0017)), ENAMEL, chest);
+    out.metal.add(spade, m.clone().multiply(new THREE.Matrix4().makeTranslation(0, -0.001, 0.0026)), ENAMEL, chest);
     return;
   }
   // two dice side by side, paved in diamonds, with black pips, hanging at easy angles
-  const size = 0.0165;
+  const size = 0.021;
   for (const [dx, spin, tilt] of [
-    [-0.0095, 0.35, 0.18],
-    [0.0095, -0.5, -0.12],
+    [-0.0122, 0.35, 0.18],
+    [0.0122, -0.5, -0.12],
   ] as const) {
     const c = bail.clone().addScaledVector(down, size * 0.9 + 0.004).addScaledVector(face.clone().cross(V(0, 1, 0)).negate(), dx);
     const s = support(fit.torso, c.clone().addScaledVector(face, -0.08), face, 0.02);
@@ -1137,7 +1146,8 @@ function buildShades(fit: Fit, out: Out, headBone: number): void {
 // --- hats ----------------------------------------------------------------------------------------
 
 function buildHat(fit: Fit, straw: boolean, out: Out, headBone: number): void {
-  // Find the height where the head (with its hair) is as wide as the hat's band, from the top down.
+  // The hat sits on the skull, not the hair (a crest or a fringe gives): find the height where the
+  // skull, from its crown down, is as wide as the band less the hair under it.
   const band = fit.female ? 0.104 : 0.1;
   let x0 = 0;
   let z0 = 0;
@@ -1146,21 +1156,21 @@ function buildHat(fit: Fit, straw: boolean, out: Out, headBone: number): void {
   for (let i = 0; i < fit.headSkin.length; i += 3) {
     x0 += fit.headSkin[i]!;
     z0 += fit.headSkin[i + 2]!;
+    top = Math.max(top, fit.headSkin[i + 1]!);
     k++;
   }
   x0 /= k;
   z0 /= k;
-  for (let i = 1; i < fit.head.length; i += 3) top = Math.max(top, fit.head[i]!);
   let y = top;
   for (; y > top - 0.2; y -= 0.004) {
     let r = 0;
-    for (let i = 0; i < fit.head.length; i += 3) {
-      if (Math.abs(fit.head[i + 1]! - y) > 0.004) continue;
-      r = Math.max(r, Math.hypot(fit.head[i]! - x0, (fit.head[i + 2]! - z0) * 0.88));
+    for (let i = 0; i < fit.headSkin.length; i += 3) {
+      if (Math.abs(fit.headSkin[i + 1]! - y) > 0.005) continue;
+      r = Math.max(r, Math.hypot(fit.headSkin[i]! - x0, (fit.headSkin[i + 2]! - z0) * 0.88));
     }
-    if (r >= band * 0.97) break;
+    if (r >= band - 0.018) break;
   }
-  const seat = Math.min(y, top - 0.05);
+  const seat = y + 0.012;
   const felt = straw ? STRAW : FELT;
   // tipped a touch forward and to one side, the way a hat is worn
   const m = new THREE.Matrix4()

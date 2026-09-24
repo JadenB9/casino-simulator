@@ -90,6 +90,9 @@ const WEAR = [
   ['held-sliders', { ...M, held: held('sliders') }, 'hand', null],
   ['held-lobster', { ...M, held: held('lobster') }, 'hand', null],
   ['held-full', { ...M, held: held('champagne') }, 'full', 0.6],
+  ['hat-punk', { ...M, outfit: 'punk', hat: 'panama-hat' }, 'head', 0.5],
+  ['grill-f-punk', { ...F, outfit: 'punk', grill: 'diamond-set' }, 'face', 0.15],
+  ['chain-iced-hoodie', { ...M, outfit: 'hoodie', top: '#2c2f38', chain: 'iced-cuban' }, 'chest', 0],
   ['all-in', { ...M, chain: 'iced-cuban', grill: 'diamond-set', watch: 'iced-watch', shades: 'gold-aviators', hat: 'black-fedora', clothes: 'white-tuxedo', held: held('champagne') }, 'full', -0.3],
 ];
 
