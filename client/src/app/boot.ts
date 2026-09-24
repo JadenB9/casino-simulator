@@ -41,6 +41,7 @@ export async function boot(): Promise<void> {
   const [world] = await Promise.all([
     createWorld(engine, {
       ui,
+      sfx,
       onProgress: (k) => {
         if (fill) fill.style.width = `${Math.round(k * 100)}%`;
       },

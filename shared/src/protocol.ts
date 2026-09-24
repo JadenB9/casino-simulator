@@ -239,8 +239,11 @@ export interface LeaderboardResponse {
 // ---------------------------------------------------------------------------------------------
 // Floor socket
 
-/** Quick emotes: a gesture over your character that everyone on the floor sees. No free text. */
-export const EMOTES = ['wave', 'cheer', 'clap', 'thumbs', 'shrug'] as const;
+/**
+ * Quick emotes: a gesture over your character that everyone on the floor sees. No free text. New
+ * ones go on the end, so each keeps its number on the wheel (1-6).
+ */
+export const EMOTES = ['wave', 'cheer', 'clap', 'thumbs', 'shrug', 'sixseven'] as const;
 export type EmoteId = (typeof EMOTES)[number];
 
 /**

@@ -37,7 +37,12 @@ describe('floor emotes', () => {
     expect(await b.c.next((m) => m.t === 'emote')).toEqual({ t: 'emote', id: a.id, e: 'wave' });
     expect(await a.c.next((m) => m.t === 'emote')).toEqual({ t: 'emote', id: a.id, e: 'wave' });
 
+    // The newest, 67, goes round like the rest.
+    a.c.send({ t: 'emote', e: 'sixseven' });
+    expect(await b.c.next((m) => m.t === 'emote' && m.e === 'sixseven')).toEqual({ t: 'emote', id: a.id, e: 'sixseven' });
+
     a.c.send({ t: 'emote', e: 'dance' });
+    a.c.send({ t: 'emote', e: '67' });
     a.c.send({ t: 'emote' });
     await wait(150);
     expect(emotesFrom(b.c, a.id)).toEqual([]);

@@ -1,7 +1,9 @@
-// The emote wheel: five gestures around a hub, opened with G or a HUD button. Pick one by its
-// number, with the arrow keys and Enter, or with a click; it goes out on the floor socket and the
-// wheel closes. While it's open it holds the keyboard like any panel, so a number picks a gesture
-// rather than a chip and W doesn't walk. Esc, G again or a click outside put it away.
+// The emote wheel: six gestures around a hub, opened with G or a HUD button, on the floor or at a
+// table (where everyone else sees your seated character do it). Pick one by its number, with the
+// arrow keys and Enter, or with a click or a tap; it goes out on the floor socket and the wheel
+// closes. While it's open it holds the keyboard like any panel, so a number picks a gesture rather
+// than a chip and W doesn't walk; it lets go the moment it closes. Esc, G again or a click or tap
+// outside put it away.
 //
 // The floor lets three gestures through in a burst, then one every two seconds
 // (server/src/floor/index.ts). The wheel keeps the same count, a little slower, so it never
@@ -35,7 +37,19 @@ const BURST = 3;
 const REFILL_PER_S = 0.45;
 /** Distance from the hub to each button's centre, px. */
 const RADIUS = 84;
-const HINT = '1-5 · Esc';
+const HINT = `1-${EMOTES.length} · Esc`;
+
+/** The emote a number key picks on the wheel (1 is the first), or null. */
+export function emoteForKey(key: string): EmoteId | null {
+  const n = /^[1-9]$/.test(key) ? Number(key) : 0;
+  return EMOTES[n - 1] ?? null;
+}
+
+/** Where the `i`-th of `n` buttons sits from the hub: clockwise from the top, `r` px out. */
+export function wheelSpot(i: number, n: number, r = RADIUS): { x: number; y: number } {
+  const a = -Math.PI / 2 + (i * 2 * Math.PI) / n;
+  return { x: Math.cos(a) * r, y: Math.sin(a) * r };
+}
 
 export function mountEmotes(deps: EmoteDeps): EmoteWheel {
   let tokens = BURST;
@@ -93,10 +107,9 @@ export function mountEmotes(deps: EmoteDeps): EmoteWheel {
       b.type = 'button';
       b.dataset.emote = e;
       b.setAttribute('aria-label', `${EMOTE_LABELS[e]} (${i + 1})`);
-      // Clockwise from the top.
-      const a = -Math.PI / 2 + (i * 2 * Math.PI) / EMOTES.length;
-      b.style.setProperty('--x', `${(Math.cos(a) * RADIUS).toFixed(1)}px`);
-      b.style.setProperty('--y', `${(Math.sin(a) * RADIUS).toFixed(1)}px`);
+      const at = wheelSpot(i, EMOTES.length);
+      b.style.setProperty('--x', `${at.x.toFixed(1)}px`);
+      b.style.setProperty('--y', `${at.y.toFixed(1)}px`);
       b.append(emoteGlyph(e), el('span', 'emo-key', String(i + 1)));
       b.addEventListener('click', () => pick(e));
       b.addEventListener('pointerenter', () => label(e));
@@ -108,10 +121,10 @@ export function mountEmotes(deps: EmoteDeps): EmoteWheel {
     });
 
     wheel.addEventListener('keydown', (e) => {
-      const n = Number(e.key);
-      if (Number.isInteger(n) && n >= 1 && n <= EMOTES.length && !e.repeat) {
+      const picked = emoteForKey(e.key);
+      if (picked && !e.repeat) {
         e.preventDefault();
-        pick(EMOTES[n - 1]!);
+        pick(picked);
       } else if (e.code === 'KeyG' && !e.ctrlKey && !e.metaKey && !e.altKey) {
         e.preventDefault();
         close();
@@ -125,7 +138,9 @@ export function mountEmotes(deps: EmoteDeps): EmoteWheel {
       // Nothing typed in the wheel reaches the floor or a table behind it.
       if (!GLOBAL_KEYS.has(e.key)) e.stopPropagation();
     });
-    scrim.addEventListener('pointerdown', (e) => {
+    // On the click, not the press: closing on the press would hand the rest of that click to
+    // whatever is under it, and the HUD's emotes button would open the wheel straight back up.
+    scrim.addEventListener('click', (e) => {
       if (e.target === scrim) close();
     });
 

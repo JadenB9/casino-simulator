@@ -27,6 +27,7 @@ import type { MouseSettings } from './mouse.ts';
 import { Emotes, OWN_BUBBLE_Y, BUBBLE_Y, type CharacterSource } from './emotes.ts';
 import { Staff, measureSeats, type StaffGesture } from './npcs.ts';
 import type { EmoteId } from '../../../shared/src/protocol.ts';
+import type { Sfx } from '../audio/sfx.ts';
 import { el } from '../ui/kit.ts';
 import './world.css';
 
@@ -59,6 +60,8 @@ export interface WorldOptions {
   canCapture?: () => boolean;
   /** One slot island per variant; defaults to every slots variant in the catalogue (dev previews). */
   slotVariants?: string[];
+  /** The game's sounds, for the ones the floor makes itself (a clap's claps); none: silent. */
+  sfx?: Sfx;
 }
 
 export interface FloorWorld extends World {
@@ -95,7 +98,8 @@ export interface FloorWorld extends World {
   releaseMouse(): void;
   /**
    * Show an emote over a player: 'me' for your own character, or a floor id, found through the
-   * source given to useRemotes(). False when that player has no character drawn.
+   * source given to useRemotes(). False when that player has no character drawn. Your own, while
+   * you sit at a table, shows at the foot of the view (your character is out of sight there).
    */
   showEmote(who: number | 'me', e: EmoteId): boolean;
   /** Where showEmote finds other players' characters (the app's RemotePlayers); null to forget. */
@@ -255,7 +259,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
   reflect();
   progress(1);
 
-  const emotes = new Emotes();
+  const emotes = new Emotes({ ui, sfx: opts.sfx, ears: () => engine.camera.position });
   let remotes: CharacterSource | null = null;
   let bar: Parameters<FloorWorld['useBar']>[0] = null;
 
@@ -344,9 +348,10 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
     },
     releaseMouse: () => player.release(),
     showEmote(who, e) {
-      const ch = who === 'me' ? character : remotes?.character(who);
+      const own = who === 'me';
+      const ch = own ? character : remotes?.character(who);
       if (!ch) return false;
-      emotes.show(ch, e, who === 'me' ? OWN_BUBBLE_Y : BUBBLE_Y);
+      emotes.show(ch, e, own ? OWN_BUBBLE_Y : BUBBLE_Y, { own, screen: own && interact.seated !== null });
       return true;
     },
     useRemotes(source) {
