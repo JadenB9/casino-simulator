@@ -66,8 +66,8 @@ interface Drawn {
   placed: boolean;
   /** Drawn this frame: placed, in view and among the nearest MAX_DRAWN. */
   shown: boolean;
-  /** Squared distance to the camera, less a little for one already drawn (for the nearest first). */
-  d2: number;
+  /** How far from the camera (m), less KEEP_M for one already drawn: the crowd's nearest go first. */
+  rank: number;
 }
 
 /** A drawn step longer than this (m) in one frame is a snap, not a walk. */
@@ -134,12 +134,11 @@ export class RemotePlayers {
       if (!d.placed) continue;
       const at = d.ch.root.position;
       if (this.opts.inView && !this.opts.inView(at.x, at.z)) continue;
-      const dist = eye ? Math.hypot(at.x - eye.x, at.z - eye.z) : 0;
-      d.d2 = Math.max(0, dist - (d.shown ? KEEP_M : 0)) ** 2;
+      d.rank = (eye ? Math.hypot(at.x - eye.x, at.z - eye.z) : 0) - (d.shown ? KEEP_M : 0);
       seen.push(d);
     }
     if (seen.length > MAX_DRAWN) {
-      seen.sort((a, b) => a.d2 - b.d2);
+      seen.sort((a, b) => a.rank - b.rank);
       seen.length = MAX_DRAWN;
     }
     for (const d of this.drawn.values()) d.shown = false;
@@ -250,7 +249,7 @@ export class RemotePlayers {
     const ch = this.factory.create(p.info.look, p.info.name);
     ch.root.visible = false; // until its first update places it
     this.group.add(ch.root);
-    this.drawn.set(p.info.id, { ch, x: 0, z: 0, speed: 0, onFloor: false, placed: false, shown: false, d2: 0 });
+    this.drawn.set(p.info.id, { ch, x: 0, z: 0, speed: 0, onFloor: false, placed: false, shown: false, rank: 0 });
     this.order = [...this.drawn.keys()].sort((a, b) => a - b);
   }
 
