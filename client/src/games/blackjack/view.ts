@@ -496,7 +496,7 @@ export class BlackjackTable implements TableView {
     const n = this.mode === 'solo' ? Math.max(1, this.mine.length) : 1;
     setSpotsInPlay('blackjack', n);
     if (this.framed !== null && this.framed !== n && !this.disposed) {
-      void glideTo(this.ctx.stage, n > 1 ? L.spotsPose(this.mine) : L.seatPose(this.seat ?? 0));
+      void glideTo(this.ctx.stage, n > 1 ? L.spotsPose(this.mine, this.ctx.stage.engine.camera.aspect) : L.seatPose(this.seat ?? 0));
     }
     this.framed = n;
   }

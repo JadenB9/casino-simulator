@@ -12,6 +12,7 @@ import * as THREE from 'three';
 import { Felt, type Region } from '../../table/felt.ts';
 import { CARD_H, CARD_W } from '../../table/cards.ts';
 import type { WarRules } from '../../../../shared/src/games/war/rules.ts';
+import { fitWidth } from '../multihand/frame.ts';
 
 export const TOP_Y = 0.76;
 /** Centre of the players' arc, behind the dealer's edge. */
@@ -126,14 +127,16 @@ export function cameraPose(seat: number): { position: [number, number, number]; 
  * positions, further back and a little higher the wider they spread, so every spot's cards and
  * boxes and the dealer's cards are in view. One spot is its seat's pose.
  */
-export function spotsPose(spots: readonly number[]): { position: [number, number, number]; target: [number, number, number] } {
+export function spotsPose(spots: readonly number[], aspect?: number): { position: [number, number, number]; target: [number, number, number] } {
   if (spots.length <= 1) return cameraPose(spots[0] ?? 0);
   const angles = spots.map(seatAngle);
   const a = angles.reduce((x, y) => x + y, 0) / angles.length;
   const spread = Math.max(...angles) - Math.min(...angles);
   const [cx, cz] = along(a, 1.45 + 0.1 * spread);
   const [tx, tz] = along(a, 0.53);
-  return { position: [cx, 1.36 + 0.14 * spread, cz], target: [tx, TOP_Y, tz] };
+  // wide enough for the outer spots' War boxes, on any screen
+  const half = SPOT_R.war * Math.sin(spread / 2) + 0.14;
+  return fitWidth({ position: [cx, 1.36 + 0.14 * spread, cz], target: [tx, TOP_Y, tz] }, half, aspect);
 }
 
 // ---------------------------------------------------------------------------------------------

@@ -10,6 +10,7 @@
 import * as THREE from 'three';
 import { spotOf } from '../../../../shared/src/games/blackjack/rules.ts';
 import { CARD_W } from '../../table/cards.ts';
+import { fitWidth } from '../multihand/frame.ts';
 
 export const TOP_Y = 0.78;
 /** The straight dealer edge of the felt; every arc is centred on the middle of it. */
@@ -154,7 +155,7 @@ export function seatPose(seat: number): { position: [number, number, number]; ta
  * high enough that every circle, its cards and its split hands are in view with the dealer's cards
  * across the top, like one player's seat pose widened to the row. One circle is its seat pose.
  */
-export function spotsPose(spots: readonly number[]): { position: [number, number, number]; target: [number, number, number] } {
+export function spotsPose(spots: readonly number[], aspect?: number): { position: [number, number, number]; target: [number, number, number] } {
   if (spots.length <= 1) return seatPose(spots[0] ?? 0);
   const pts = spots.map((s) => spotAt(s));
   const xs = pts.map((p) => p.x);
@@ -163,5 +164,6 @@ export function spotsPose(spots: readonly number[]): { position: [number, number
   // The arc's own middle is further from the dealer than the circles either side of it.
   const eye = new THREE.Vector3(mid.x, TOP_Y + 0.62 + 0.3 * span, mid.z + 0.4 + 0.3 * span);
   const target = mid.clone().lerp(DEALER_HAND, 0.47);
-  return { position: [eye.x, eye.y, eye.z], target: [target.x, target.y, target.z] };
+  // wide enough for the outer circles and the split hands beside them, on any screen
+  return fitWidth({ position: [eye.x, eye.y, eye.z], target: [target.x, target.y, target.z] }, span / 2 + 0.16, aspect);
 }

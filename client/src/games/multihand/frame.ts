@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import type { GameId } from '../../../../shared/src/engine.ts';
 import type { Pose, TableStage } from '../../table/stage.ts';
 import { tween, ease } from '../../table/tween.ts';
+import { fovFor } from '../../render/engine3d.ts';
 
 const soloSpots = new Map<GameId, number>();
 
@@ -35,4 +36,20 @@ export function glideTo(stage: TableStage, pose: Pose, ms = 800): Promise<void> 
     camera.position.lerpVectors(p0, to.position, k);
     camera.quaternion.slerpQuaternions(q0, quat, k);
   }, ease.inOut);
+}
+
+/**
+ * Back the camera off along its line of sight until `halfWidth` metres either side of the target
+ * fit across the screen. A landscape screen already takes in a row of spots; a phone held upright
+ * sees about half as wide (its view opens up and down, not across), so there it pulls back.
+ */
+export function fitWidth(pose: Pose, halfWidth: number, aspect = innerWidth / innerHeight): Pose {
+  const tanAcross = Math.tan(THREE.MathUtils.degToRad(fovFor(aspect)) / 2) * aspect;
+  const eye = new THREE.Vector3(...pose.position);
+  const target = new THREE.Vector3(...pose.target);
+  const d = eye.distanceTo(target);
+  const need = halfWidth / tanAcross;
+  if (!(tanAcross > 0) || d >= need) return pose;
+  eye.sub(target).multiplyScalar(need / d).add(target);
+  return { position: [eye.x, eye.y, eye.z], target: pose.target };
 }

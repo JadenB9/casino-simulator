@@ -525,7 +525,7 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
   const frame = (): void => {
     const n = mode === 'solo' ? Math.max(1, spots.length) : 1;
     setSpotsInPlay('threecard', n);
-    if (framed !== null && framed !== n && !disposed) void glideTo(ctx.stage, n > 1 ? spotsPose(spots) : cameraPose(me ?? 0));
+    if (framed !== null && framed !== n && !disposed) void glideTo(ctx.stage, n > 1 ? spotsPose(spots, ctx.stage.engine.camera.aspect) : cameraPose(me ?? 0));
     framed = n;
   };
 
