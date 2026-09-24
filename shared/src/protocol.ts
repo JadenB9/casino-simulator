@@ -256,7 +256,8 @@ export type FloorClientMsg =
 
 export type FloorServerMsg =
   | { t: 'hello'; v: number; you: PlayerInfo; players: PlayerInfo[]; online: number; now: number }
-  | { t: 's'; ts: number; p: [id: number, x: number, z: number, r: number, moving: 0 | 1][] }
+  /** Walkers who moved: `age` is ms since that position reached the server (it lands at ts - age). */
+  | { t: 's'; ts: number; p: [id: number, x: number, z: number, r: number, moving: 0 | 1, age?: number][] }
   | { t: 'join'; player: PlayerInfo }
   | { t: 'leave'; id: number }
   | { t: 'player'; id: number; look?: Look; at?: { station: string } | null }
