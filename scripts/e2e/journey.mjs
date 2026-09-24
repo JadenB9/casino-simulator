@@ -17,6 +17,7 @@
 import { chromium } from 'playwright';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
+import { READ_MODEL } from './read-model.mjs';
 
 const [port = '6110', out = '/tmp/casino-journey', ...only] = process.argv.slice(2);
 mkdirSync(out, { recursive: true });
@@ -24,6 +25,7 @@ const QUALITY = process.env.QUALITY ?? 'low';
 const ROUNDS = Number(process.env.ROUNDS ?? 3);
 const NAME = process.env.NAME ?? `qa_jr_${QUALITY}`;
 const gpu = process.env.GPU === '1';
+const ROOT = process.cwd();
 const args = gpu ? ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'];
 const browser = await chromium.launch({ channel: 'chromium', args });
 const log = (s) => console.log(new Date().toISOString().slice(11, 19), s);
@@ -73,20 +75,30 @@ async function login() {
   page.on('console', (m) => m.type() === 'error' && !/404|Failed to load resource/.test(m.text()) && errors.push(m.text()));
   page.on('pageerror', (e) => errors.push(String(e)));
   await page.goto(`http://localhost:${port}/casino/`, { timeout: 300_000 });
-  await page.waitForSelector('.name-input, .menu-item', { timeout: 600_000 });
-  if (await page.$('.name-input')) {
+  await onFloor(page);
+  return { ctx, page, errors };
+}
+
+/**
+ * Onto the floor: log in, past the look editor or the menu. Also after the page has reloaded
+ * under a run (the dev server's live-reload socket can drop under load, and its client reloads).
+ */
+async function onFloor(page) {
+  if (await page.evaluate(() => !!window.casino?.app && !!document.querySelector('.hud')).catch(() => false)) return;
+  await page.waitForSelector('.front:not(.closing) .name-input, .menu-item, .editor-panel.guided, .hud', { timeout: 600_000 });
+  if (await page.$('.front:not(.closing) .name-input')) {
     await page.fill('.name-input', NAME);
     await page.fill('.pass-input', 'casino-dev');
     await page.click('.enter-btn');
+    await page.waitForSelector('.menu-item, .editor-panel.guided', { timeout: 60_000 });
   }
-  await page.waitForSelector('.menu-item, .editor-panel.guided', { timeout: 60_000 });
   if (await page.$('.editor-panel.guided')) {
     for (let i = 0; i < 3; i++) await page.click('.editor-panel .ed-buttons .btn.primary');
-  } else {
+  } else if (!(await page.$('.hud'))) {
     await page.click('.menu-item >> nth=0');
   }
   await page.waitForSelector('.hud', { timeout: 120_000 });
-  return { ctx, page, errors };
+  await page.evaluate(async () => window.casino.session.set(await (await import('/casino/src/net/api.ts')).me()));
 }
 
 /** Everything the table said, kept on the session for the checks to read. */
@@ -163,6 +175,37 @@ const settle = (page, ms = 800) =>
     await new Promise((r) => setTimeout(r, ms));
   }, ms);
 
+/**
+ * A seat held from an earlier run that stopped part way comes back as it was, chips and bets and
+ * all: stand up from it first (its chips go home), so every station starts from a fresh buy-in.
+ */
+async function standUpIfHeld(page, id) {
+  await page.evaluate((id) => {
+    const w = window.casino.world;
+    w.enter(w.stations.find((s) => s.id === id));
+  }, id);
+  await page.waitForSelector('.lim-opt, .modal input[type=number]', { timeout: 30_000 }).catch(() => {});
+  if (await page.$('.lim-opt')) await page.keyboard.press('s');
+  const held = await page
+    .waitForFunction(() => (window.casino.app.table?.seated === true ? 'held' : document.querySelector('.modal input[type=number]') ? 'fresh' : null), null, { timeout: 60_000 })
+    .then((h) => h.jsonValue())
+    .catch(() => 'fresh');
+  if (held === 'held') log(`${id}: a seat from an earlier run was still held; standing up from it first`);
+  await page.evaluate(() => window.casino.app.escape());
+  const leave = await page.waitForSelector('.modal .btn.primary', { timeout: 4000 }).catch(() => null);
+  if (leave && held === 'held') await leave.click();
+  else await page.keyboard.press('Escape');
+  await page.waitForFunction(() => window.casino.world.seated === null, null, { timeout: 30_000 }).catch(() => {});
+  // the chips come home: wait for the profile to say so
+  for (let i = 0; i < 20; i++) {
+    const p = await page.evaluate(async () => window.casino.session.set(await (await import('/casino/src/net/api.ts')).me()) ?? window.casino.session.profile);
+    if (held !== 'held' || p) break;
+    await page.waitForTimeout(1000);
+  }
+  await page.waitForTimeout(held === 'held' ? 3000 : 500);
+  await page.evaluate(async () => window.casino.session.set(await (await import('/casino/src/net/api.ts')).me()));
+}
+
 async function playStation(page, id) {
   const game = STATIONS[id];
   const spec = GAMES[game];
@@ -207,6 +250,14 @@ async function playStation(page, id) {
   check(stack0 === buyIn, `${id}: bought in for ${buyIn / 100} (${note.trim()}; picks ${picks.join(', ')}), stack ${stack0 / 100}`);
   const cfg = await page.evaluate(() => window.casino.app.table.session.snapshot.meta.config);
   const seat = await page.evaluate(() => window.casino.app.table.session.snapshot.you.seat);
+  // the model's own reading of each result (the ball's pocket, the dice, the clapper), as anim.mjs
+  await page.evaluate(`window.__qa = (${READ_MODEL.toString()})()`);
+  const order = await page.evaluate(async ([root, game]) => {
+    const variant = window.casino.app.table.session.snapshot.meta.variant;
+    if (game === 'roulette') return (await import(`/casino/@fs${root}/shared/src/games/roulette/rules.ts`)).WHEEL[variant];
+    if (game === 'bigsix') return (await import(`/casino/@fs${root}/shared/src/games/bigsix/rules.ts`)).WHEEL;
+    return null;
+  }, [ROOT, game]);
 
   // --- the dealer is at the table
   const dealer = await page.evaluate((id) => {
@@ -249,6 +300,9 @@ async function playStation(page, id) {
       const room = limitFor(game, cfg, s0);
       check(placed > 0 && placed === room, `${id}: Max put down ${placed / 100} (the most that spot takes or all the chips: ${room / 100})`);
       await shot(page, `${tag}-3-max`);
+    } else if (r === ROUNDS - 1 && game !== 'craps') {
+      // the last round puts nothing down: Space alone repeats the last round's bets and goes
+      placed = -1;
     } else {
       // as a player would: the smallest chip on show, on the same spot (a chip under the spot's
       // minimum puts the minimum down)
@@ -263,6 +317,11 @@ async function playStation(page, id) {
     const tipsNow = r < ROUNDS - 1;
     if (!tipsNow) await page.evaluate(() => localStorage.getItem('casino.tips') === '1' && document.querySelector('.hud [aria-label="Tips at the tables"], .hud [title="Tips at the tables"]')?.click());
     await page.keyboard.press('Space');
+    if (placed === -1) {
+      await page.waitForTimeout(1200);
+      placed = s0 - (await stackOf(page));
+      check(placed > 0 || (await page.evaluate(() => window.casino.app.table.session.__events.some((e) => e.type === 'bet' || e.type === 'bets'))), `${id} round ${r}: Space with nothing down put the last bets back and went (${placed / 100} down)`);
+    }
     const t0 = Date.now();
     let tipLines = 0;
     let tipPicks = 0;
@@ -271,7 +330,7 @@ async function playStation(page, id) {
       const st = await page.evaluate((end) => {
         const s = window.casino.app.table.session;
         const tip = document.querySelector('.tip-line:not([hidden])');
-        const pick = [...document.querySelectorAll('.tip-pick')].find((e) => e.offsetParent !== null && !e.disabled);
+        const pick = [...document.querySelectorAll('button.tip-pick')].find((e) => e.offsetParent !== null && !e.disabled);
         return {
           ended: s.__events.some((e) => end.includes(e.type)),
           tip: tip?.textContent ?? null,
@@ -291,7 +350,7 @@ async function playStation(page, id) {
       }
       if (st.ended) break;
       if (st.pick && tipsNow) {
-        await page.click('.tip-pick:not([disabled])').catch(() => {});
+        await page.click('button.tip-pick:not([disabled])', { timeout: 2000 }).catch(() => {});
       } else {
         for (const k of Object.values(spec.keys)) await page.keyboard.press(k);
       }
@@ -317,6 +376,26 @@ async function playStation(page, id) {
     });
     const s1 = await stackOf(page);
     if (!res.types.split(',').some((t) => spec.end.includes(t))) undealt += placed;
+    if (['roulette', 'craps', 'sicbo', 'bigsix'].includes(game)) {
+      const m = await page.evaluate(([game, order]) => {
+        const qa = window.__qa;
+        const ev = window.casino.app.table.session.__events.find((e) => e.type === 'spin' || e.type === 'roll');
+        if (!ev) return null;
+        if (game === 'roulette') {
+          const r = qa.roulette(order);
+          return { drew: ev.pocket, shows: r.floor, also: r.ring, ok: r.floor === ev.pocket && r.ring === ev.pocket };
+        }
+        if (game === 'bigsix') {
+          const r = qa.wheel('bigsix-rotor', 'bigsix-flap', order.length);
+          return { drew: ev.stop, shows: r.index, ok: r.index === ev.stop };
+        }
+        const d = qa.dice();
+        const shows = d.map((x) => x.face).sort().join('');
+        const drew = [...ev.dice].sort().join('');
+        return { drew, shows, ok: shows === drew && d.every((x) => x.up > 0.995) };
+      }, [game, order]);
+      if (m) check(m.ok, `${id} round ${r}: the model shows what was drawn (${JSON.stringify(m.drew)}, the model ${JSON.stringify(m.shows)})`);
+    }
     // what came back to the stack for what was staked this round (a decision can add to the stake)
     const net = s1 - s0;
     check(res.cam.d < 0.02 && res.cam.a < 0.02, `${id} round ${r}: the camera is back at the seat (${res.cam.d} m, ${res.cam.a} rad)`);
@@ -394,6 +473,14 @@ async function playStation(page, id) {
 
   // --- leave: Esc, Leave; the balance comes home
   const stackEnd = await stackOf(page);
+  // craps: a winning bet stays up on the layout (only the win is paid over), so it comes home too
+  if (game === 'craps') {
+    undealt += await page.evaluate(() => {
+      const s = window.casino.app.table.session;
+      const mine = s.__view?.bets?.[s.snapshot.you.seat] ?? {};
+      return Object.values(mine).reduce((a, b) => a + (b?.amount ?? 0) + (b?.odds ?? 0), 0);
+    });
+  }
   await page.evaluate(() => window.casino.app.escape());
   const leave = await page.waitForSelector('.modal .btn.primary', { timeout: 5000 }).catch(() => null);
   if (leave) await leave.click();
@@ -407,7 +494,12 @@ async function playStation(page, id) {
   }
   const want = balance0 - buyIn + stackEnd + undealt;
   check(prof?.balance === want && prof?.inPlay === inPlay0, `${id}: cashed out, balance ${prof?.balance / 100} = ${balance0 / 100} - ${buyIn / 100} + the stack ${stackEnd / 100}${undealt ? ` + ${undealt / 100} undealt` : ''} (in play ${prof?.inPlay / 100}, was ${inPlay0 / 100})`);
-  const hud = await page.evaluate(() => window.casino.session.profile?.balance);
+  // the app asks for the profile a moment after leaving (the cash-out lands after the socket closes)
+  let hud = null;
+  for (let i = 0; i < 20 && hud !== prof?.balance; i++) {
+    hud = await page.evaluate(() => window.casino.session.profile?.balance);
+    if (hud !== prof?.balance) await page.waitForTimeout(1000);
+  }
   check(hud === prof?.balance, `${id}: the HUD shows the balance the server has (${hud / 100})`);
 }
 
@@ -471,7 +563,7 @@ async function playHoldem(page, id) {
       const v = s.__view;
       const me = s.snapshot?.you?.seat;
       const wins = s.__events.filter((e) => e.type === 'win').length;
-      const pick = [...document.querySelectorAll('.tip-pick')].find((e) => e.offsetParent !== null && !e.disabled);
+      const pick = [...document.querySelectorAll('button.tip-pick')].find((e) => e.offsetParent !== null && !e.disabled);
       return { mine: v?.turn?.seat === me, wins, tip: !!document.querySelector('.tip-line:not([hidden])'), pick: !!pick, stack: s.snapshot?.you?.stack ?? 0 };
     });
     hands = st.wins;
@@ -483,7 +575,7 @@ async function playHoldem(page, id) {
         await page.waitForTimeout(250);
         await page.keyboard.press('a');
         await shot(page, `${id}-${QUALITY}-3-allin`);
-      } else if (st.pick) await page.click('.tip-pick:not([disabled])').catch(() => {});
+      } else if (st.pick) await page.click('button.tip-pick:not([disabled])', { timeout: 2000 }).catch(() => {});
       else await page.keyboard.press('c');
       await page.waitForTimeout(900);
     } else await page.waitForTimeout(400);
@@ -521,16 +613,20 @@ async function playMachine(page, id, game) {
   await shot(page, `${id}-${QUALITY}-2-seated`);
   if (game === 'videopoker') await page.click('.hud [aria-label="Tips at the tables"], .hud [title="Tips at the tables"]').catch(() => {});
   const s0 = await stackOf(page);
-  await page.keyboard.press('a');
-  await page.waitForTimeout(600);
-  for (let r = 0; r < ROUNDS; r++) {
-    await page.evaluate(() => {
+  const reset = () =>
+    page.evaluate(() => {
       const s = window.casino.app.table.session;
       s.__events = [];
       s.__celebrations = 0;
     });
-    const before = await stackOf(page);
-    await page.keyboard.press('Space');
+  await reset();
+  // Max: the most coins (video poker's Bet Max deals at once, as the machine's button does)
+  await page.keyboard.press('a');
+  await page.waitForTimeout(600);
+  for (let r = 0; r < ROUNDS; r++) {
+    const before = r === 0 ? s0 : await stackOf(page);
+    if (r > 0 || game !== 'videopoker') await reset();
+    if (r > 0 || game !== 'videopoker') await page.keyboard.press('Space');
     if (game === 'videopoker') {
       await page.waitForFunction(() => window.casino.app.table.session.__events.some((e) => e.type === 'deal'), null, { timeout: 30_000 });
       await settle(page, 600);
@@ -550,7 +646,7 @@ async function playMachine(page, id, game) {
       return { bet: r?.bet ?? 0, win: (r?.win ?? 0) + (r?.freeWin ?? 0), coins: go?.coins ?? 0, most: s.snapshot.meta.config.options?.maxCoins, cel: s.__celebrations, errs: s.__errs };
     });
     const after = await stackOf(page);
-    if (r === 0) check(res.coins === res.most && before === s0, `${id}: Max (A) set the most coins (${res.coins} of ${res.most}, ${res.bet / 100} a ${game === 'videopoker' ? 'hand' : 'spin'})`);
+    if (r === 0) check(res.coins === res.most, `${id}: Max (A) set the most coins (${res.coins} of ${res.most}, ${res.bet / 100} a ${game === 'videopoker' ? 'hand' : 'spin'})`);
     check(after - before === res.win - res.bet, `${id} round ${r}: the stack moved by what the machine paid (${(after - before) / 100} = ${res.win / 100} - ${res.bet / 100})`);
     check(res.cel === 0 || res.win > res.bet, `${id} round ${r}: a celebration (${res.cel}) only for a win (${res.win / 100} on ${res.bet / 100})`);
     check(res.errs.length === 0, `${id} round ${r}: nothing refused (${res.errs.join(' | ')})`);
@@ -590,12 +686,27 @@ const { ctx, page, errors } = await login();
 sql(`UPDATE casino_accounts SET balance = 1000000000 WHERE name = '${NAME}' AND in_play = 0`);
 // the rich player's balance, as the server has it now
 await page.evaluate(async () => window.casino.session.set(await (await import('/casino/src/net/api.ts')).me()));
+const reloaded = (err) => /Execution context was destroyed|reading 'app'|reading 'session'|reading 'world'/.test(String(err?.message ?? err));
 for (const id of only.length ? only : Object.keys(STATIONS)) {
-  try {
-    const game = STATIONS[id];
+  const game = STATIONS[id];
+  const play = async () => {
+    await onFloor(page);
+    await standUpIfHeld(page, id);
     if (game === 'holdem') await playHoldem(page, id);
     else if (game === 'videopoker' || game === 'slots') await playMachine(page, id, game);
     else await playStation(page, id);
+  };
+  try {
+    const mark = problems.length;
+    try {
+      await play();
+    } catch (err) {
+      if (!reloaded(err)) throw err;
+      // the page reloaded under this station (not the game's doing): forget what it half checked
+      log(`${id}: the page reloaded mid-station; again from the floor`);
+      problems.splice(mark);
+      await play();
+    }
   } catch (err) {
     check(false, `${id}: ${String(err?.message ?? err).split('\n')[0]}`);
     await shot(page, `${id}-${QUALITY}-error`).catch(() => {});

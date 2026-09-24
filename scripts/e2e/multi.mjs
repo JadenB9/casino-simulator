@@ -26,7 +26,10 @@ const log = (s) => {
   console.log(new Date().toISOString().slice(11, 19), s);
 };
 
-const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+// GPU=1 draws on the machine's GPU (Chrome's new headless mode), far quicker than SwiftShader
+const browser = process.env.GPU === '1'
+  ? await chromium.launch({ channel: 'chromium', args: ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'] })
+  : await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 
 async function player(name) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
