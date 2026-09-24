@@ -801,9 +801,10 @@ if (wanted('money')) {
     // a top-up that fits, then Cash out while it's still on its way
     const stackNow = await whale.page.evaluate(() => window.casino.app.table.session.snapshot.you.stack);
     const add = Math.min(1_000_000_00, 10_000_000_00 - stackNow);
+    // (a stack won past the top has no room left: then the cash-out goes alone)
     await whale.page.evaluate((a) => {
       const l = window.casino.app.table.session.link;
-      l.topUp(a);
+      if (a >= 100) l.topUp(a);
       l.cashOut();
     }, add);
     await whale.page.waitForTimeout(2500);
