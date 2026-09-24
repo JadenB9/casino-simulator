@@ -10,7 +10,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { env, exports } from 'cloudflare:workers';
 import { evictDurableObject, runDurableObjectAlarm, runInDurableObject } from 'cloudflare:test';
-import { ORIGIN, connect, type Client } from './helpers.ts';
+import { ORIGIN, TEST_PASSWORD, connect, type Client } from './helpers.ts';
 import type { CasinoFloor } from '../src/floor/index.ts';
 import { GRACE_MS, RESTART_SHIFT_MS, type CasinoTable } from '../src/table/host.ts';
 import { BETTING_MS, SOLO_BETTING_MS, SPIN_MS, SETTLE_MS } from '../../shared/src/games/banditwheel/engine.ts';
@@ -36,7 +36,7 @@ async function player(tag: string): Promise<Player> {
     new Request('http://casino.test/casino/api/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Origin: ORIGIN, 'CF-Connecting-IP': nextIp() },
-      body: JSON.stringify({ name: `bw${tag}${++seq}` }),
+      body: JSON.stringify({ name: `bw${tag}${++seq}`, password: TEST_PASSWORD }),
     }),
   );
   expect(res.status).toBe(200);

@@ -4,7 +4,14 @@
 //
 // The station fits a 4.0 m × 3.0 m box centred on the origin, stools included.
 
-import type { Pose } from '../../table/stage.ts';
+/**
+ * A camera pose (the same shape as table/stage.ts's Pose, declared here so this file and the spin
+ * maths stay free of three.js and the DOM: the shared tests import them).
+ */
+export interface Pose {
+  position: [number, number, number];
+  target: [number, number, number];
+}
 
 // ---------------------------------------------------------------------------------------------
 // The wheel
