@@ -25,7 +25,6 @@
 
   /* Finger-sized targets: 44 px at the least (panels size their own controls). */
   .btn { min-height: 44px; }
-  .chip-btn { min-width: 44px; min-height: 44px; }
   .modal input[type='number'], .modal input[type='text'] { height: 44px; }
 }
 
@@ -40,9 +39,10 @@
 /* A phone upright: chips on one row, the tray's buttons on the next. */
 @media (max-width: 560px) {
   :root { --tip-bottom: 180px; }
-  .tray { flex-wrap: wrap; justify-content: center; gap: 8px; width: calc(100vw - 20px); max-width: 440px; padding: 8px 10px 10px; }
-  .tray .chips { flex: 1 0 100%; justify-content: center; gap: 4px; }
-  .tray .chip-btn { width: 44px; height: 44px; }
+  .tray { flex-wrap: wrap; justify-content: center; gap: 8px; width: calc(100vw - 12px); max-width: 440px; padding: 8px 6px 10px; }
+  /* Up to eight chips on one row: 44 px each on a 390 px phone, a touch less on the narrowest. */
+  .tray .chips { flex: 1 0 100%; justify-content: center; gap: 2px; }
+  .tray .chip-btn { flex: 0 1 44px; width: auto; height: auto; min-width: 38px; aspect-ratio: 1; }
   .tray .sep { display: none; }
   .tray .acts { gap: 6px; }
   .tray .btn { padding: 0 11px; }

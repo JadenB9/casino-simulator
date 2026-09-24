@@ -54,6 +54,10 @@
   .editor-stage { min-height: 36dvh; }
   .editor-panel { max-height: 60dvh; }
 }
+/* Narrow screens: the editor's buttons start clear of the back chip in the bottom-left corner. */
+@media (max-width: 760px) {
+  .ed-foot { padding-left: 58px; }
+}
 /* A phone on its side: the panel a little narrower, the foot slimmer. */
 @media (max-height: 480px) and (min-width: 761px) {
   .editor-panel { width: 380px; }
