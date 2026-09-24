@@ -201,6 +201,34 @@ export function staffPosts(stations: WorldStation[], plan: FloorPlan): StaffPost
   return posts;
 }
 
+// --- where players sit -------------------------------------------------------------------------
+
+/** A chair or stool top counts between these heights (a table top or the floor doesn't). */
+const SEAT_MIN = 0.3;
+const SEAT_MAX = 0.95;
+
+/**
+ * For every seat of every station, the top of the chair or stool that stands there: a ray straight
+ * down at the seat against the station's model and `extra` (the floor's props, for bar stools).
+ * No seat there (most tables are played standing) leaves null, and the player stands.
+ */
+export function measureSeats(stations: WorldStation[], seatsOf: (s: WorldStation) => { position: [number, number, number] }[], extra: THREE.Object3D[] = []): void {
+  const ray = new THREE.Raycaster();
+  const down = new THREE.Vector3(0, -1, 0);
+  const from = new THREE.Vector3();
+  for (const s of stations) {
+    s.anchor.updateWorldMatrix(true, true);
+    s.seatTops = seatsOf(s).map((seat) => {
+      const p = s.anchor.localToWorld(new THREE.Vector3(...seat.position));
+      ray.set(from.set(p.x, p.y + 1.3, p.z), down);
+      ray.far = 1.3;
+      const hit = ray.intersectObjects([s.model, ...extra], true).find((h) => !(h.object as THREE.SkinnedMesh).isSkinnedMesh);
+      const top = hit ? hit.point.y - p.y : null;
+      return top !== null && top >= SEAT_MIN && top <= SEAT_MAX ? top : null;
+    });
+  }
+}
+
 // --- who they are -------------------------------------------------------------------------------
 
 const HAIR_LIGHT = ['#2b1d14', '#4a3020', '#1b1512', '#6b4226', '#8f6a3e', '#7a3b22', '#b89660', '#8c8a86', '#0e0c0b'];

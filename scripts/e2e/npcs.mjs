@@ -84,7 +84,8 @@ if (checks.includes('tables')) {
 }
 
 if (checks.includes('seated')) {
-  const { page, errors } = await open(`quality=${quality}&view=overview`);
+  // no fixed view: the dev floor's own camera would pin itself over the fly-in every frame
+  const { page, errors } = await open(`quality=${quality}`);
   const seats = { 'bj-1': [0, 3, 6], 'rl-us': [null], 'cr-1': [0, 5], 'bc-1': [0, 6], 'tc-1': [0, 5], 'wr-1': [2], 'sb-1': [null], 'b6-1': [null], 'he-1': [null] };
   for (const [id, list] of Object.entries(seats)) {
     for (const seat of list) {

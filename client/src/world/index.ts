@@ -24,7 +24,7 @@ import { StationLod } from './lod.ts';
 import { Bloom, PixelRatio } from './bloom.ts';
 import type { MouseSettings } from './mouse.ts';
 import { Emotes, OWN_BUBBLE_Y, BUBBLE_Y, type CharacterSource } from './emotes.ts';
-import { Staff, type StaffGesture } from './npcs.ts';
+import { Staff, measureSeats, type StaffGesture } from './npcs.ts';
 import type { EmoteId } from '../../../shared/src/protocol.ts';
 import './world.css';
 
@@ -145,6 +145,8 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
     characters.load(look).catch((err) => console.warn('character failed to load', err)),
     staff.load().catch((err) => console.warn('staff failed to load', err)),
   ]);
+  // which seats have a chair or stool (other players sit on them; everywhere else they stand)
+  measureSeats(stations, (s) => GAMES[s.game].seats(s.variant), [props.group]);
   progress(0.85);
 
   const character = characters.create(look, opts.name ?? '');
