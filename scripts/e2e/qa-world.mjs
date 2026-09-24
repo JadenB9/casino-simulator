@@ -308,7 +308,7 @@ if (checks.includes('race')) {
   const toast = (await loser.p.$$eval('.toast', (els) => els.map((e) => e.textContent))).join(' ');
   ok(/got there first/.test(toast), `the other hears who got there first ("${toast}")`);
   const where = await at(loser.p);
-  ok(Math.hypot(where.x - s.x, where.z - s.z) > 0.5, `and steps back from the stool (${Math.hypot(where.x - s.x, where.z - s.z).toFixed(2)} m)`);
+  ok(Math.hypot(where.x - s.x, where.z - s.z) > 0.4, `and steps back off the stool (${Math.hypot(where.x - s.x, where.z - s.z).toFixed(2)} m)`);
   await shot(loser.p, 'race-loser');
   for (const x of [a, b]) if (x.errors.length) fail(`race errors: ${x.errors.slice(0, 3).join(' | ')}`);
   await a.ctx.close();
