@@ -334,7 +334,8 @@ function wheelMaterials(q: Quality): WheelMaterials {
     side: THREE.DoubleSide,
   });
 
-  const chrome = new THREE.MeshStandardMaterial({ color: '#dde0e4', metalness: 1, roughness: 0.1, side: THREE.DoubleSide });
+  // polished, but not a perfect mirror: the floor's spotlights make small glints, not bloom halos
+  const chrome = new THREE.MeshStandardMaterial({ color: '#dde0e4', metalness: 1, roughness: 0.14, side: THREE.DoubleSide });
   buildOnFirstDraw(chrome);
   const ball = Physical({ color: '#efe8d8', roughness: 0.16, sheen: 0.5, sheenColor: new THREE.Color('#fff4e2'), sheenRoughness: 0.45 });
   const m = { rim, track, veneer: veneerMat, chrome, ball };
