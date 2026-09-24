@@ -40,6 +40,19 @@ export interface RemotePlayersOptions {
   seatFor?: (id: number) => SeatPose | null;
   /** Ground speed in m/s that reads as a full walk; slower motion blends toward idle. */
   walkSpeed?: number;
+  /**
+   * Whether someone standing at (x, z) could be seen from the camera now (their room is drawn and
+   * they're in view). Anyone who can't be isn't drawn or animated until they can; none: everyone is.
+   */
+  inView?: (x: number, z: number) => boolean;
+  /** Where the camera is: with more than MAX_DRAWN people in view, the nearest are drawn. */
+  eye?: () => { x: number; z: number };
+  /**
+   * Everyone's shadow drawn as one instanced mesh of this shape and material (each character's
+   * own, Person.shadow in world/characters.ts, is hidden): one draw call for the whole crowd, as
+   * the staff's are.
+   */
+  shadow?: { geometry: THREE.BufferGeometry; material: THREE.Material };
 }
 
 interface Drawn {
@@ -49,19 +62,37 @@ interface Drawn {
   speed: number;
   /** x/z hold last frame's drawn position (false after a seat or a hide). */
   onFloor: boolean;
+  /** Placed this frame: standing, walking or sitting somewhere they can be drawn. */
+  placed: boolean;
+  /** Drawn this frame: placed, in view and among the nearest MAX_DRAWN. */
+  shown: boolean;
+  /** How far from the camera (m), less KEEP_M for one already drawn: the crowd's nearest go first. */
+  rank: number;
 }
 
 /** A drawn step longer than this (m) in one frame is a snap, not a walk. */
 const SNAP_M = 3;
 /** How near their seat a floor sitter's drawn walk must come before they're drawn sitting on it. */
 const ARRIVED_M = 0.9;
+/**
+ * The most other players drawn at once: a crowd bigger than this in view (a rush through the
+ * doors) shows its nearest, so the frame's cost has a ceiling however many people come.
+ */
+export const MAX_DRAWN = 40;
+/** Someone already drawn counts as this much nearer, so the crowd's edge doesn't flicker. */
+const KEEP_M = 1;
 
 export class RemotePlayers {
   readonly group = new THREE.Group();
   private readonly drawn = new Map<number, Drawn>();
+  /** Player ids in order (seat slots at a station count up in it). */
+  private order: number[] = [];
   private readonly factory: CharacterFactory;
   private readonly walkSpeed: number;
   private readonly offs: (() => void)[];
+  private readonly slots = new Map<string, number>();
+  private readonly seen: Drawn[] = [];
+  private shadows: THREE.InstancedMesh | null = null;
 
   constructor(
     private readonly link: FloorLink,
@@ -93,69 +124,123 @@ export class RemotePlayers {
   /** Call every frame with the frame's dt in seconds. */
   update(dt: number): void {
     const now = serverNow();
-    const slots = new Map<string, number>();
-    for (const id of [...this.drawn.keys()].sort((a, b) => a - b)) {
+    this.slots.clear();
+    const seen = this.seen;
+    seen.length = 0;
+    const eye = this.opts.eye?.();
+    for (const id of this.order) {
       const d = this.drawn.get(id)!;
-      const p = this.link.players.get(id);
-      const pose = p?.track.at(now) ?? null;
-      const root = d.ch.root;
-      const station = p?.info.at?.station;
-      const floorSeat = station ? null : (this.opts.seatFor?.(id) ?? null);
-      if (floorSeat && (!pose || Math.hypot(pose.x / 100 - floorSeat.x, pose.z / 100 - floorSeat.z) < ARRIVED_M)) {
-        root.visible = true;
-        d.onFloor = false;
-        d.speed = 0;
-        root.position.set(floorSeat.x, floorSeat.y ?? 0, floorSeat.z);
-        root.rotation.y = floorSeat.yaw;
-        d.ch.setMotion(0);
-        d.ch.sit?.(floorSeat.sit ?? null);
-        d.ch.update(dt);
-        continue;
-      }
-      // Someone the snapshots show walking has stood up, even if the table hasn't said so yet.
-      if (station && !pose?.moving) {
-        const slot = slots.get(station) ?? 0;
-        slots.set(station, slot + 1);
-        const seat = this.opts.seatOf?.(station, slot) ?? null;
-        root.visible = seat !== null;
-        d.onFloor = false;
-        d.speed = 0;
-        if (seat) {
-          root.position.set(seat.x, seat.y ?? 0, seat.z);
-          root.rotation.y = seat.yaw;
-          d.ch.setMotion(0);
-          d.ch.sit?.(seat.sit ?? null);
-          d.ch.update(dt);
-        }
-        continue;
-      }
-      d.ch.sit?.(null);
-      if (!pose) {
-        root.visible = false;
-        d.onFloor = false;
-        continue;
-      }
-      const x = pose.x / 100;
-      const z = pose.z / 100;
-      // Speed from the drawn motion itself, eased so one late snapshot doesn't stutter the walk.
-      const step = d.onFloor ? Math.hypot(x - d.x, z - d.z) : 0;
-      const v = dt > 0 && step < SNAP_M ? step / dt : 0;
-      d.speed += (v - d.speed) * Math.min(1, dt * 8);
-      d.x = x;
-      d.z = z;
-      d.onFloor = true;
-      root.visible = true;
-      root.position.set(x, 0, z);
-      root.rotation.y = byteToYaw(pose.r);
-      // Past a walking pace the blend leans toward the run cycle, as it does for your own character.
-      d.ch.setMotion(Math.min(2, d.speed / this.walkSpeed));
-      d.ch.update(dt);
+      d.placed = this.place(d, id, now, dt);
+      if (!d.placed) continue;
+      const at = d.ch.root.position;
+      if (this.opts.inView && !this.opts.inView(at.x, at.z)) continue;
+      d.rank = (eye ? Math.hypot(at.x - eye.x, at.z - eye.z) : 0) - (d.shown ? KEEP_M : 0);
+      seen.push(d);
     }
+    if (seen.length > MAX_DRAWN) {
+      seen.sort((a, b) => a.rank - b.rank);
+      seen.length = MAX_DRAWN;
+    }
+    for (const d of this.drawn.values()) d.shown = false;
+    for (const d of seen) d.shown = true;
+    let n = 0;
+    for (const d of this.drawn.values()) {
+      const root = d.ch.root;
+      root.visible = d.shown;
+      // not drawn but there (another room, behind the camera, past the crowd's nearest): the
+      // floor's staff and waiters still look at and step round them
+      root.userData.offscreen = d.placed && !d.shown;
+      if (!d.shown) continue;
+      d.ch.update(dt);
+      n = this.shade(d, n);
+    }
+    if (this.shadows) {
+      this.shadows.count = n;
+      this.shadows.visible = n > 0;
+      this.shadows.instanceMatrix.needsUpdate = true;
+    }
+  }
+
+  /** Put a player where they are drawn this frame; false when they aren't drawn anywhere. */
+  private place(d: Drawn, id: number, now: number, dt: number): boolean {
+    const p = this.link.players.get(id);
+    const pose = p?.track.at(now) ?? null;
+    const root = d.ch.root;
+    const station = p?.info.at?.station;
+    const floorSeat = station ? null : (this.opts.seatFor?.(id) ?? null);
+    if (floorSeat && (!pose || Math.hypot(pose.x / 100 - floorSeat.x, pose.z / 100 - floorSeat.z) < ARRIVED_M)) {
+      d.onFloor = false;
+      d.speed = 0;
+      root.position.set(floorSeat.x, floorSeat.y ?? 0, floorSeat.z);
+      root.rotation.y = floorSeat.yaw;
+      d.ch.setMotion(0);
+      d.ch.sit?.(floorSeat.sit ?? null);
+      return true;
+    }
+    // Someone the snapshots show walking has stood up, even if the table hasn't said so yet.
+    if (station && !pose?.moving) {
+      const slot = this.slots.get(station) ?? 0;
+      this.slots.set(station, slot + 1);
+      const seat = this.opts.seatOf?.(station, slot) ?? null;
+      d.onFloor = false;
+      d.speed = 0;
+      if (!seat) return false;
+      root.position.set(seat.x, seat.y ?? 0, seat.z);
+      root.rotation.y = seat.yaw;
+      d.ch.setMotion(0);
+      d.ch.sit?.(seat.sit ?? null);
+      return true;
+    }
+    d.ch.sit?.(null);
+    if (!pose) {
+      d.onFloor = false;
+      return false;
+    }
+    const x = pose.x / 100;
+    const z = pose.z / 100;
+    // Speed from the drawn motion itself, eased so one late snapshot doesn't stutter the walk.
+    const step = d.onFloor ? Math.hypot(x - d.x, z - d.z) : 0;
+    const v = dt > 0 && step < SNAP_M ? step / dt : 0;
+    d.speed += (v - d.speed) * Math.min(1, dt * 8);
+    d.x = x;
+    d.z = z;
+    d.onFloor = true;
+    root.position.set(x, 0, z);
+    root.rotation.y = byteToYaw(pose.r);
+    // Past a walking pace the blend leans toward the run cycle, as it does for your own character.
+    d.ch.setMotion(Math.min(2, d.speed / this.walkSpeed));
+    return true;
+  }
+
+  /** Write a drawn player's shadow into the shared instances (its own is hidden); the next free slot. */
+  private shade(d: Drawn, n: number): number {
+    const s = this.opts.shadow;
+    const own = (d.ch as { shadow?: THREE.Object3D | null }).shadow;
+    if (!s || !own) return n;
+    own.visible = false;
+    if (!this.shadows || n >= this.shadows.instanceMatrix.count) {
+      // room for twice as many, keeping this frame's shadows so far
+      const was = this.shadows;
+      const next = new THREE.InstancedMesh(s.geometry, s.material, Math.max(16, (n + 1) * 2));
+      if (was) next.instanceMatrix.array.set(was.instanceMatrix.array.subarray(0, n * 16));
+      next.name = 'remote-shadows';
+      next.frustumCulled = false;
+      next.renderOrder = 1;
+      was?.removeFromParent();
+      was?.dispose();
+      this.group.add(next);
+      this.shadows = next;
+    }
+    // the shadow stays on the floor under someone sitting (Person moves it for the drop)
+    own.updateWorldMatrix(true, false);
+    this.shadows.setMatrixAt(n, own.matrixWorld);
+    return n + 1;
   }
 
   dispose(): void {
     for (const off of this.offs) off();
     for (const id of [...this.drawn.keys()]) this.remove(id);
+    this.shadows?.dispose();
     this.group.removeFromParent();
   }
 
@@ -164,7 +249,8 @@ export class RemotePlayers {
     const ch = this.factory.create(p.info.look, p.info.name);
     ch.root.visible = false; // until its first update places it
     this.group.add(ch.root);
-    this.drawn.set(p.info.id, { ch, x: 0, z: 0, speed: 0, onFloor: false });
+    this.drawn.set(p.info.id, { ch, x: 0, z: 0, speed: 0, onFloor: false, placed: false, shown: false, rank: 0 });
+    this.order = [...this.drawn.keys()].sort((a, b) => a - b);
   }
 
   private remove(id: number): void {
@@ -173,6 +259,7 @@ export class RemotePlayers {
     d.ch.root.removeFromParent();
     d.ch.dispose();
     this.drawn.delete(id);
+    this.order = [...this.drawn.keys()].sort((a, b) => a - b);
   }
 }
 

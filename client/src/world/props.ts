@@ -11,6 +11,7 @@ import type { PropKind, PropPlace } from './decor.ts';
 import type { Chandelier } from './room.ts';
 import { hdr } from './materials.ts';
 import { MODEL_BASE } from './characters.ts';
+import { modelBytes } from '../render/model-bytes.ts';
 
 const FILES: Record<Exclude<PropKind, 'chandelier'>, { file: string; fit: 'height' | 'length' }> = {
   stool: { file: 'stool.glb', fit: 'height' },
@@ -239,7 +240,7 @@ export class Props {
   private load(file: string): Promise<{ parts: Part[]; size: THREE.Vector3; min: THREE.Vector3 }> {
     let p = this.cache.get(file);
     if (!p) {
-      p = this.loader.loadAsync(MODEL_BASE + file).then((gltf) => {
+      p = modelBytes(MODEL_BASE + file).then((bytes) => this.loader.parseAsync(bytes, MODEL_BASE)).then((gltf) => {
         const parts: Part[] = [];
         gltf.scene.updateMatrixWorld(true);
         gltf.scene.traverse((o) => {

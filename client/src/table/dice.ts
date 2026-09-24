@@ -48,7 +48,12 @@ function topFor(n: number): THREE.Quaternion {
 
 export class Die extends THREE.Mesh {
   constructor() {
-    mats ??= FACE_ORDER.map((n) => new THREE.MeshPhysicalMaterial({ map: faceTex(n), roughness: 0.25, clearcoat: 0.6 }));
+    mats ??= FACE_ORDER.map((n) => {
+      const m = new THREE.MeshPhysicalMaterial({ map: faceTex(n), roughness: 0.25, clearcoat: 0.6 });
+      m.userData.shared = true;
+      m.map!.userData.shared = true;
+      return m;
+    });
     super(new THREE.BoxGeometry(SIZE, SIZE, SIZE), mats);
   }
 }

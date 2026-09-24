@@ -25,9 +25,11 @@ const PING_MS = 25_000;
 const PONG_TIMEOUT_MS = 10_000;
 /**
  * Close codes that mean "don't come back" (another tab took over, the table is gone, reload, or
- * away too long: the app offers Come back instead).
+ * away too long: the app offers Come back instead). A normal close (1000) from the other end is
+ * final too: the server only says it after being asked to (a table's "left the table"), and coming
+ * back would open a socket with a fresh ticket just for the page to throw it away.
  */
-const FINAL = new Set<number>([CLOSE.REPLACED, CLOSE.NOT_FOUND, CLOSE.FORBIDDEN, CLOSE.UNAUTHORIZED, CLOSE.VERSION, CLOSE.IDLE]);
+const FINAL = new Set<number>([1000, CLOSE.REPLACED, CLOSE.NOT_FOUND, CLOSE.FORBIDDEN, CLOSE.UNAUTHORIZED, CLOSE.VERSION, CLOSE.IDLE]);
 
 export class Socket {
   private ws: WebSocket | null = null;
@@ -61,7 +63,12 @@ export class Socket {
     this.clearTimers();
     const ws = this.ws;
     this.ws = null;
-    ws?.close(1000, 'bye');
+    // one still connecting is closed once it opens: closing it mid-handshake makes the browser
+    // log a warning ("closed before the connection is established"), and the server hangs up anyway
+    if (ws?.readyState === WebSocket.CONNECTING) {
+      ws.onopen = () => ws.close(1000, 'bye');
+      ws.onerror = () => {};
+    } else ws?.close(1000, 'bye');
     this.setState('closed');
   }
 
