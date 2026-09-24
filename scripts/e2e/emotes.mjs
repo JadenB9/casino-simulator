@@ -263,8 +263,16 @@ if (checks.includes('live')) {
     await page.fill('.name-input', who);
     if (await page.$('.pass-input')) await page.fill('.pass-input', 'casino-dev');
     await page.click('.enter-btn');
-    await page.waitForSelector('.menu-item');
-    await page.click('.menu-item >> nth=0');
+    // A first visit picks a look (three steps) and walks in; a later one enters from the menu.
+    await page.waitForSelector('.menu-item, .editor-panel.guided', { timeout: 60000 });
+    if (await page.$('.editor-panel.guided')) {
+      for (let i = 0; i < 3; i++) {
+        await page.click('.editor-panel .ed-buttons .btn.primary');
+        await page.waitForTimeout(500);
+      }
+    } else {
+      await page.click('.menu-item >> nth=0');
+    }
     await page.waitForSelector('.hud');
     await page.evaluate(async () => {
       const c = window.casino;
