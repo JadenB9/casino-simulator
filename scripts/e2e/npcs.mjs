@@ -123,9 +123,10 @@ if (checks.includes('staff')) {
   await place(page, [plan.cashier.x + 1.2, 1.62, plan.cashier.z + 1.4], [plan.cashier.x + 1.0, 1.35, plan.cashier.counter.z1 - 0.9]);
   await settle(page, 1200);
   await page.screenshot({ path: `${out}/staff-cashier.png` });
-  // the whole pit from above its south row: dealers back to back in the staff area
+  // down the pit's staff area from its east end: the two rows' dealers back to back
   const staff = await page.evaluate(() => window.casino.world.plan.staff);
-  await place(page, [(staff.x0 + staff.x1) / 2 + 2, 4.2, staff.z1 + 5.5], [(staff.x0 + staff.x1) / 2, 0.8, (staff.z0 + staff.z1) / 2]);
+  const mid = (staff.z0 + staff.z1) / 2;
+  await place(page, [staff.x1 + 1.2, 2.2, mid + 0.4], [staff.x1 - 6, 1.0, mid]);
   await settle(page, 1200);
   await page.screenshot({ path: `${out}/staff-pit.png` });
   const looks = await page.evaluate(() => window.casino.world.staff.posts.length);
