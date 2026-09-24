@@ -32,8 +32,12 @@ export interface BloomLook {
   radius: number;
 }
 
-/** Walking the floor: neon, LED strips, bulbs and the machines' glass glow. */
-export const FLOOR_BLOOM: BloomLook = { threshold: 1.0, knee: 0.35, strength: 0.62, radius: 0.18 };
+/**
+ * Walking the floor: past the brightest lit surface (white printing and chips under the pit's
+ * spots peak near 1.5, lighting.ts), so only light sources glow: neon, LED strips, bulbs, the
+ * machines' lamps, a specular glint on chrome.
+ */
+export const FLOOR_BLOOM: BloomLook = { threshold: 1.65, knee: 0.3, strength: 0.72, radius: 0.2 };
 /**
  * Seated at a table, a metre from felt, cards and chips under the pit's spots: lit white printing
  * reaches three or so, so nothing on the table glows at all; only the strongest light sources do.
@@ -104,10 +108,23 @@ export class Bloom {
     if (on && this.mode === 'off') this.mode = 'probe';
   }
 
+  private muted = false;
+  private strength = 0;
+
+  /**
+   * Hold the glow at nothing (or give it back) without changing how the frame is drawn: the same
+   * HDR target and tone mapping, so a frame with and without it differ only by the glow itself.
+   */
+  mute(on: boolean): void {
+    this.muted = on;
+    this.pass.strength = on ? 0 : this.strength;
+  }
+
   /** How the glow looks: FLOOR_BLOOM on the floor, TABLE_BLOOM or MACHINE_BLOOM seated. */
   setLook(l: BloomLook): void {
     this.pass.threshold = l.threshold;
-    this.pass.strength = l.strength;
+    this.strength = l.strength;
+    this.pass.strength = this.muted ? 0 : l.strength;
     this.pass.radius = l.radius;
     (this.pass.highPassUniforms as { smoothWidth: { value: number } }).smoothWidth.value = l.knee;
   }

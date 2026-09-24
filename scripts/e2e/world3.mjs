@@ -15,7 +15,7 @@ import { mkdirSync } from 'node:fs';
 
 const [port = '5930', out = '/tmp/world3', ...wanted] = process.argv.slice(2);
 mkdirSync(out, { recursive: true });
-const all = ['shots', 'calls', 'layout', 'lod', 'lock', 'onboard', 'bloom'];
+const all = ['shots', 'calls', 'layout', 'lod', 'lock', 'onboard', 'bloom', 'read'];
 const checks = wanted.length ? wanted : all;
 const gpu = process.env.GPU === '1';
 const args = gpu ? ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'];
@@ -475,9 +475,9 @@ function sql(command) {
   execFileSync('node_modules/.bin/wrangler', ['d1', 'execute', 'DB', '--local', '-c', 'server/wrangler.toml', '--command', command], { env: { ...process.env, CI: '1' }, stdio: 'ignore' });
 }
 
-async function openGame(name, init = () => {}) {
+async function openGame(name, init = () => {}, arg) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
-  await ctx.addInitScript(init);
+  await ctx.addInitScript(init, arg);
   const page = await ctx.newPage();
   const errors = watch(page);
   await page.goto(gameUrl, { timeout: 300000 });
@@ -758,6 +758,437 @@ if (checks.includes('bloom')) {
   if (!events.includes('card')) fail('bloom: no cards were dealt');
   if (errors.length) fail(`bloom: ${errors[0]}`);
   await ctx.close();
+  }
+}
+
+// --- readability: every table's cards and printing with the glow on and off -----------------------
+// The glow (High's bloom) may only come from light sources. For each table and machine, seated
+// and from the floor (6-10 m), idle and with a celebration's light at its peak, the same frame is
+// drawn with the glow on and off and the pixels of the cards, the layout's printing and the
+// table as a whole compared: `lift` is how much the glow brightened them (mean, and the 95th
+// percentile pixel, 0-255). On Low (no glow) the cards' own contrast is checked instead. The
+// measured frames are saved; a summary table closes the output.
+const READ_HELPERS = () => {
+  const { engine, world } = window.casino;
+  const r = engine.renderer;
+  const V = () => engine.camera.position.clone();
+  const c2 = document.createElement('canvas');
+  const g2 = c2.getContext('2d', { willReadFrequently: true });
+  const grab = () => {
+    r.render(engine.scene, engine.camera);
+    const W = r.domElement.width;
+    const H = r.domElement.height;
+    if (c2.width !== W || c2.height !== H) {
+      c2.width = W;
+      c2.height = H;
+    }
+    g2.drawImage(r.domElement, 0, 0);
+    return g2.getImageData(0, 0, W, H);
+  };
+  const clampRect = ([x0, y0, x1, y1], shrink) => {
+    const W = r.domElement.width;
+    const H = r.domElement.height;
+    const w = x1 - x0;
+    const h = y1 - y0;
+    const out = [x0 + w * shrink, y0 + h * shrink, x1 - w * shrink, y1 - h * shrink].map(Math.round);
+    return [Math.max(0, out[0]), Math.max(0, out[1]), Math.min(W, out[2]), Math.min(H, out[3])];
+  };
+  // the screen box of points (world space)
+  const rectOfPoints = (pts, shrink) => {
+    const W = r.domElement.width;
+    const H = r.domElement.height;
+    let x0 = Infinity;
+    let y0 = Infinity;
+    let x1 = -Infinity;
+    let y1 = -Infinity;
+    for (const p of pts) {
+      const v = p.clone().project(engine.camera);
+      if (v.z > 1) continue;
+      const sx = ((v.x + 1) / 2) * W;
+      const sy = ((1 - v.y) / 2) * H;
+      x0 = Math.min(x0, sx);
+      x1 = Math.max(x1, sx);
+      y0 = Math.min(y0, sy);
+      y1 = Math.max(y1, sy);
+    }
+    return x1 > x0 ? clampRect([x0, y0, x1, y1], shrink) : null;
+  };
+  // an object's meshes' boxes, in world space
+  const cornersOf = (obj) => {
+    const pts = [];
+    obj.updateWorldMatrix(true, true);
+    obj.traverse((m) => {
+      if (!m.isMesh || m.isInstancedMesh || !m.visible) return;
+      const g = m.geometry;
+      if (!g.boundingBox) g.computeBoundingBox();
+      const b = g.boundingBox;
+      for (const x of [b.min.x, b.max.x]) for (const y of [b.min.y, b.max.y]) for (const z of [b.min.z, b.max.z]) pts.push(V().set(x, y, z).applyMatrix4(m.matrixWorld));
+    });
+    return pts;
+  };
+  // a card's face: its top face's corners (tables3's way), shrunk to the face's middle
+  const cardFace = (m) => {
+    const g = m.geometry;
+    if (!g.boundingBox) g.computeBoundingBox();
+    const b = g.boundingBox;
+    const y = m.rotation.x > 1.5 ? b.min.y : b.max.y;
+    return rectOfPoints([[b.min.x, y, b.min.z], [b.max.x, y, b.min.z], [b.max.x, y, b.max.z], [b.min.x, y, b.max.z]].map(([x, yy, z]) => m.localToWorld(V().set(x, yy, z))), 0.07);
+  };
+  const lum = (d, i) => 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
+  const pct = (a, p) => {
+    if (!a.length) return 0;
+    const s = Float32Array.from(a).sort();
+    return s[Math.min(s.length - 1, Math.floor(s.length * p))];
+  };
+  const stats = (on, off, rect) => {
+    const [x0, y0, x1, y1] = rect;
+    const W = on.width;
+    const lifts = [];
+    const lums = [];
+    let sum = 0;
+    let clip = 0;
+    for (let y = y0; y < y1; y++) {
+      for (let x = x0; x < x1; x++) {
+        const i = (y * W + x) * 4;
+        const a = lum(on.data, i);
+        const lift = a - lum(off.data, i);
+        lifts.push(lift);
+        lums.push(a);
+        sum += lift;
+        if (Math.max(on.data[i], on.data[i + 1], on.data[i + 2]) >= 250) clip++;
+      }
+    }
+    const n = lifts.length;
+    if (n < 16) return null;
+    // contrast: the darkest marks (a card's rank and pips, the printing's letters) against the
+    // lightest ground, 5th to 95th percentile
+    return { n, lift: +(sum / n).toFixed(2), p95: +pct(lifts, 0.95).toFixed(1), clip: +(clip / n).toFixed(3), contrast: Math.round(pct(lums, 0.95) - pct(lums, 0.05)) };
+  };
+  const png = (img) => {
+    const c = document.createElement('canvas');
+    c.width = img.width;
+    c.height = img.height;
+    c.getContext('2d').putImageData(img, 0, 0);
+    return c.toDataURL('image/png');
+  };
+  return {
+    rectOf: (obj, shrink = 0.15) => rectOfPoints(cornersOf(obj), shrink),
+    cardFace,
+    screen: (fx0, fy0, fx1, fy1) => clampRect([fx0 * r.domElement.width, fy0 * r.domElement.height, fx1 * r.domElement.width, fy1 * r.domElement.height], 0),
+    /** Draw with the glow on and off; stats for each named rect (or list of rects, merged). */
+    measure(targets, keep) {
+      world.glow(true);
+      const on = grab();
+      world.glow(false);
+      const off = grab();
+      world.glow(true);
+      const out = {};
+      for (const [name, rects] of Object.entries(targets)) {
+        const list = (Array.isArray(rects[0]) ? rects : [rects]).filter(Boolean);
+        const parts = list.map((rc) => stats(on, off, rc)).filter(Boolean);
+        if (!parts.length) continue;
+        const n = parts.reduce((s, p) => s + p.n, 0);
+        out[name] = {
+          n,
+          lift: +(parts.reduce((s, p) => s + p.lift * p.n, 0) / n).toFixed(2),
+          p95: Math.max(...parts.map((p) => p.p95)),
+          clip: +(parts.reduce((s, p) => s + p.clip * p.n, 0) / n).toFixed(3),
+          // the typical card or region (a lone ace's face is mostly plain white card)
+          contrast: [...parts.map((p) => p.contrast)].sort((a, b) => a - b)[Math.floor(parts.length / 2)],
+        };
+      }
+      return keep ? { out, on: png(on), off: png(off) } : { out };
+    },
+  };
+};
+
+/** Wait until the renderer has drawn `n` more frames (polled: a frame can take seconds here). */
+async function frames(page, n = 3) {
+  await page.evaluate(async (n) => {
+    const r = window.casino.engine.renderer;
+    const f0 = r.info.render.frame;
+    const t0 = performance.now();
+    while (r.info.render.frame - f0 < n && performance.now() - t0 < 90000) await new Promise((res) => setTimeout(res, 100));
+  }, n);
+}
+
+const readRows = [];
+function readRow(where, quality, state, station, name, s, file) {
+  if (!s) return;
+  readRows.push({ where, quality, state, station, name, ...s, file });
+}
+/** Glow must not change cards or printing; on Low (and High) cards keep their contrast. */
+function readVerdicts() {
+  for (const r of readRows) {
+    const light = /^(slots|vp|b6|bandit)/.test(r.station);
+    const label = `${r.where} ${r.quality} ${r.state} ${r.station} ${r.name}`;
+    if (r.name === 'cards') {
+      if (r.lift > 2 || r.p95 > 6) fail(`read: glow over the cards (${label}: +${r.lift} mean, +${r.p95} p95)`);
+      if (r.n >= 400 && r.contrast < 35) fail(`read: cards washed out (${label}: contrast ${r.contrast})`);
+    } else if (!light) {
+      if (r.lift > 2.5 || r.p95 > 10) fail(`read: glow over the layout (${label}: +${r.lift} mean, +${r.p95} p95)`);
+    }
+  }
+}
+
+const saveFrame = async (dataUrl, file) => {
+  const { writeFileSync } = await import('node:fs');
+  writeFileSync(file, Buffer.from(dataUrl.split(',')[1], 'base64'));
+  return file;
+};
+
+const readParts = (process.env.READ_PARTS ?? 'floor,seated').split(',');
+if (checks.includes('read')) {
+  // (1) from the floor: tables and machines from 6-10 m, idle and with a celebration's light
+  const FLOOR = [
+    // the north row from across the pit (the owner's view), the south row from the cross aisle
+    { name: 'north-west', pos: [-3.2, 1.75, -4.0], at: [-5.2, 0.8, -10.8], ids: ['rl-us', 'cr-1'] },
+    { name: 'north-east', pos: [4.6, 1.75, -4.0], at: [3.6, 0.8, -10.8], ids: ['sb-1', 'rl-eu'] },
+    { name: 'south-west', pos: [-4.0, 1.75, -0.8], at: [-6.0, 0.8, -6.75], ids: ['bj-1', 'bc-1'] },
+    { name: 'south-east', pos: [2.6, 1.75, -0.8], at: [3.2, 0.8, -6.75], ids: ['wr-1', 'tc-1', 'bj-2'] },
+    { name: 'poker', pos: [12.4, 1.75, -3.6], at: [16.8, 0.7, -9.8], ids: ['he-2', 'he-1'] },
+    { name: 'bigsix', pos: [-11.4, 1.75, -3.9], at: [-18.4, 1.5, -7.4], ids: ['b6-1'] },
+    { name: 'slots', pos: [-3.6, 1.75, 3.2], at: [-9.0, 1.1, 0.3], ids: ['slots-neon-1', 'slots-neon-2', 'slots-sevens-1'] },
+    { name: 'videopoker', pos: [11.2, 1.75, -1.2], at: [16.7, 1.1, 2.4], ids: ['vp-1', 'vp-2', 'vp-3'] },
+    { name: 'bandit', pos: [-11.4, 1.75, -3.9], at: [-18.4, 1.3, -7.4], ids: ['bandit'] },
+  ];
+  for (const quality of readParts.includes('floor') ? ['high', 'low'] : []) {
+    const { page, errors } = await openFloor(`quality=${quality}&slots=sevens,neon,wild,diamonds,cherries,goldrush`, `http://localhost:${port}/casino/src/ui/feed/dev.html`);
+    await page.evaluate(`window.__read = (${READ_HELPERS.toString()})()`);
+    await page.evaluate(async () => {
+      const { world, engine } = window.casino;
+      world.player.setEnabled(false);
+      world.player.character.root.visible = false;
+      window.__stageMod = await import('/casino/src/table/stage.ts');
+      window.__kit = await import('/casino/src/table/celebrate.ts');
+      const G = await import('/casino/src/games/index.ts');
+      // The Bandit Wheel has no spot on the floor yet: stand one where the Big Six is, for its turn.
+      const b6 = world.stations.find((s) => s.id === 'b6-1');
+      const bandit = G.GAMES.banditwheel.createModel({ variant: '', quality: world.quality });
+      bandit.visible = false;
+      b6.anchor.add(bandit);
+      window.__bandit = { model: bandit, anchor: b6.anchor, b6 };
+      void engine;
+    });
+    for (const pose of FLOOR) {
+      const isBandit = pose.ids[0] === 'bandit';
+      await page.evaluate(([pos, at, isBandit]) => {
+        const { world, engine } = window.casino;
+        const b = window.__bandit;
+        world.lod.pin('b6-1', isBandit ? 'real' : null);
+        b.b6.model.visible = !isBandit;
+        b.model.visible = isBandit;
+        window.__cam?.();
+        window.__cam = engine.onFrame(() => {
+          engine.camera.position.set(...pos);
+          engine.camera.lookAt(...at);
+        });
+      }, [pose.pos, pose.at, isBandit]);
+      await frames(page, 4);
+      for (const state of ['idle', 'celebration']) {
+        const res = await page.evaluate(([ids, state, isBandit]) => {
+          const { world, engine } = window.casino;
+          const read = window.__read;
+          const objs = ids.map((id) => (id === 'bandit' ? { id, model: window.__bandit.model, anchor: window.__bandit.anchor } : world.stations.find((s) => s.id === id)));
+          const stops = [];
+          const stages = [];
+          if (state === 'celebration') {
+            // a win's light on each table as its view would ring a spot, at the light's peak
+            for (const s of objs) {
+              const stage = new window.__stageMod.TableStage(engine, s.anchor);
+              stages.push(stage);
+              const top = (() => {
+                let y = 0.8;
+                s.model.updateWorldMatrix(true, true);
+                const inv = s.anchor.matrixWorld.clone().invert();
+                s.model.traverse((m) => {
+                  if (!m.isMesh || m.isInstancedMesh) return;
+                  if (!m.geometry.boundingBox) m.geometry.computeBoundingBox();
+                  const c = m.geometry.boundingBox.max.clone().applyMatrix4(m.matrixWorld).applyMatrix4(inv);
+                  if (c.y < 1.3) y = Math.max(y, c.y);
+                });
+                return y;
+              })();
+              stops.push(window.__kit.celebrate({ stage, ui: document.getElementById('ui'), sfx: { play() {}, audio: { state: 'suspended' } } }, { title: 'Big win', tier: 'big', spots: [{ x: 0, y: top + 0.002, z: 0.2, w: 0.5, d: 0.32 }] }));
+              for (const o of stage.root.children) if (o.isMesh && o.material?.blending === 2) o.material.opacity = 0.34;
+            }
+          }
+          const targets = {};
+          for (const s of objs) targets[s.id] = read.rectOf(s.model, 0.12);
+          const res = read.measure(targets, true);
+          for (const stop of stops) stop();
+          for (const st of stages) st.dispose();
+          document.querySelectorAll('.celebrate').forEach((e) => e.remove());
+          return res;
+        }, [pose.ids, state, isBandit]);
+        const file = await saveFrame(res.on, `${out}/world3-read-floor-${pose.name}-${quality}-${state}.png`);
+        if (quality === 'high' && state === 'idle') await saveFrame(res.off, `${out}/world3-read-floor-${pose.name}-${quality}-${state}-noglow.png`);
+        for (const [id, s] of Object.entries(res.out)) readRow('floor', quality, state, id, 'table', s, file);
+      }
+    }
+    console.log(JSON.stringify({ check: 'read-floor', quality, rows: readRows.filter((r) => r.where === 'floor' && r.quality === quality).length, errors: errors.slice(0, 3) }));
+    if (errors.length) fail(`read floor ${quality}: ${errors[0]}`);
+    await page.close();
+  }
+
+  // (2) seated, in the game proper: a round at each table and machine, then a celebration's light
+  const SEATED = [
+    ['bj-1', 'blackjack'], ['bc-1', 'baccarat'], ['tc-1', 'threecard'], ['wr-1', 'war'], ['he-1', 'holdem'],
+    ['rl-us', 'roulette'], ['cr-1', 'craps'], ['sb-1', 'sicbo'], ['b6-1', 'bigsix'], ['slots-sevens-1', 'slots'], ['vp-1', 'videopoker'],
+  ].filter(([id]) => !process.env.READ_ONLY || process.env.READ_ONLY.split(',').includes(id));
+  const FIRST = {
+    blackjack: [{ type: 'bet', amount: 2500 }, { type: 'deal' }],
+    baccarat: [{ type: 'bet', banker: 2500 }, { type: 'deal' }],
+    threecard: [{ type: 'bet', ante: 1000, pairPlus: 0 }, { type: 'deal' }],
+    war: [{ type: 'bet', bet: 1000, tie: 0 }, { type: 'deal' }],
+    holdem: [],
+    roulette: [{ type: 'bet', bets: [{ kind: 'red', amount: 500 }] }, { type: 'spin' }],
+    craps: [{ type: 'bet', bets: [{ kind: 'field', amount: 1000 }] }, { type: 'roll' }],
+    sicbo: [{ type: 'bet', bets: [{ spot: 'small', amount: 500 }] }, { type: 'roll' }],
+    bigsix: [{ type: 'bet', bets: [{ spot: 'one', amount: 500 }] }, { type: 'spin' }],
+    slots: [{ type: 'spin', coins: 1, denom: 100 }],
+    videopoker: [{ type: 'deal', coins: 5, denom: 100 }],
+  };
+  for (const quality of readParts.includes('seated') ? ['high', 'low'] : []) {
+    const { ctx, page, errors } = await openGame('world3_read', (q) => localStorage.setItem('casino.quality', q), quality);
+    // onto the floor, and again if the page ever reloads under us (a new build, a lost socket)
+    const onFloor = async () => {
+      if (await page.evaluate(() => !!window.casino?.app && !!document.querySelector('.hud') && !!window.__read).catch(() => false)) return;
+      await page.waitForSelector('.front:not(.closing) .name-input, .menu-item, .editor-panel.guided, .hud', { timeout: 600000 });
+      // (a login that is closing still has its field for a moment: only a live one wants filling)
+      if (await page.$('.front:not(.closing) .name-input')) {
+        await page.fill('.name-input', 'world3_read');
+        await page.fill('.pass-input', PASSWORD);
+        await page.click('.enter-btn');
+        await page.waitForSelector('.menu-item, .editor-panel.guided', { timeout: 60000 });
+      }
+      if (await page.$('.editor-panel.guided')) {
+        for (let i = 0; i < 3; i++) await page.click('.editor-panel .ed-buttons .btn.primary');
+      } else if (!(await page.$('.hud'))) {
+        await page.click('.menu-item >> nth=0');
+      }
+      await page.waitForSelector('.hud', { timeout: 60000 });
+      await page.evaluate(`window.__read = (${READ_HELPERS.toString()})()`);
+      await page.evaluate(async () => {
+        window.__kit = await import('/casino/src/table/celebrate.ts');
+      });
+    };
+    for (const [id, game] of SEATED) {
+      try {
+        await onFloor();
+        await page.evaluate((id) => {
+          const w = window.casino.world;
+          w.enter(w.stations.find((s) => s.id === id));
+        }, id);
+        if (!/^(slots|vp)-/.test(id)) {
+          await page.waitForSelector('.lobby-choice', { timeout: 30000 });
+          await page.keyboard.press('s');
+        }
+        await page.waitForFunction(() => window.casino.app.table?.seated === true || !!document.querySelector('.modal input[type=number]'), null, { timeout: 90000 });
+        if (await page.$('.modal input[type=number]')) {
+          await page.fill('.modal input[type=number]', '1000');
+          await page.click('.modal .btn.primary');
+        }
+        await page.waitForFunction(() => window.casino.app.table?.seated === true, null, { timeout: 60000 });
+        await page.waitForTimeout(1500);
+        // one round, acting as a player would
+        await page.evaluate(([game, first]) => {
+          const s = window.casino.app.table.session;
+          const act = (a) => s.link.act(a);
+          s.__done = false;
+          const seat = () => s.snapshot?.you?.seat;
+          const orig = s.onMessage.bind(s);
+          s.onMessage = (m) => {
+            orig(m);
+            if (m.t !== 'ev') return;
+            for (const e of m.events) {
+              if (['result', 'settle', 'win', 'done', 'outcome'].includes(e.type) && (e.seat === undefined || e.seat === seat())) s.__done = true;
+              if (game === 'blackjack' && e.type === 'turn' && e.seat === seat()) act({ type: 'stand' });
+              if (game === 'blackjack' && e.type === 'insurance') act({ type: 'insurance', take: false });
+              if (game === 'threecard' && e.type === 'decide') act({ type: 'play' });
+              if (game === 'holdem' && m.view?.turn?.seat === seat()) {
+                act({ type: 'check' });
+                setTimeout(() => act({ type: 'call' }), 700);
+              }
+              if (game === 'videopoker' && e.type === 'deal') setTimeout(() => act({ type: 'draw', hold: [true, true, false, false, false] }), 400);
+              if (game === 'war' && e.type === 'decide' && e.seats?.includes(seat())) act({ type: 'war' });
+              if (game === 'slots' && e.type === 'spin') s.__done = true;
+              if (game === 'videopoker' && (e.type === 'result' || e.type === 'draw')) s.__done = true;
+              if (game === 'craps' && e.type === 'roll') s.__done = true;
+            }
+          };
+          first.forEach((a, i) => setTimeout(() => act(a), 300 + i * 900));
+        }, [game, FIRST[game]]);
+        const t0 = Date.now();
+        while (Date.now() - t0 < 150000 && !(await page.evaluate(() => window.casino.app.table?.session.__done))) await page.waitForTimeout(1000);
+        await page.evaluate(async () => {
+          const s = window.casino.app.table?.session;
+          for (let i = 0; i < 3 && s; i++) await Promise.race([s.queue, new Promise((r) => setTimeout(r, 90000))]);
+        });
+        await page.waitForTimeout(3000);
+        for (const state of ['idle', 'celebration']) {
+          const res = await page.evaluate(([state, id]) => {
+            const session = window.casino.app.table.session;
+            const stage = session.stage;
+            const read = window.__read;
+            const cards = [];
+            stage.root.traverse((o) => 'card' in o && o.card && o.visible && Math.abs(o.rotation.x) < 1.2 && cards.push(o));
+            let stop = null;
+            if (state === 'celebration') {
+              const spot = /^(slots|vp)-/.test(id) ? [] : [{ x: 0, y: 0.8, z: 0.25, w: 0.5, d: 0.32 }];
+              stop = window.__kit.celebrate({ stage, ui: session.ui, sfx: { play() {}, audio: { state: 'suspended' } } }, { title: 'Big win', tier: 'big', glow: cards.length ? [cards] : [], spots: cards.length ? [] : spot });
+              for (const o of stage.root.children) if (o.isMesh && o.material?.blending === 2) o.material.opacity = 0.34;
+            }
+            const targets = { layout: read.screen(0.18, 0.22, 0.82, 0.8) };
+            if (cards.length) targets.cards = cards.map((c) => read.cardFace(c)).filter(Boolean);
+            const res = read.measure(targets, true);
+            stop?.();
+            document.querySelectorAll('.celebrate').forEach((e) => e.remove());
+            return { ...res, cards: cards.length };
+          }, [state, id]);
+          const file = await saveFrame(res.on, `${out}/world3-read-seated-${id}-${quality}-${state}.png`);
+          if (quality === 'high' && state === 'idle') await saveFrame(res.off, `${out}/world3-read-seated-${id}-${quality}-${state}-noglow.png`);
+          for (const [name, s] of Object.entries(res.out)) readRow('seated', quality, state, id, name, s, file);
+        }
+      } catch (err) {
+        fail(`read seated ${quality} ${id}: ${String(err).split('\n')[0]}`);
+      }
+      // stand up (after a word if chips are down); a reloaded page is already standing
+      try {
+        if (await page.evaluate(() => !!window.casino?.world?.seated)) {
+          await page.evaluate(() => window.casino.app.escape());
+          const leave = await page.waitForSelector('.modal .btn.primary', { timeout: 4000 }).catch(() => null);
+          if (leave) await leave.click();
+          await page.waitForFunction(() => window.casino.world.seated === null, null, { timeout: 30000 }).catch(() => {});
+        }
+      } catch (err) {
+        console.log(JSON.stringify({ check: 'read', note: `standing up at ${id}: ${String(err).split('\n')[0]}` }));
+      }
+      await page.waitForTimeout(800);
+    }
+    console.log(JSON.stringify({ check: 'read-seated', quality, rows: readRows.filter((r) => r.where === 'seated' && r.quality === quality).length, errors: errors.slice(0, 3) }));
+    if (errors.length) fail(`read seated ${quality}: ${errors[0]}`);
+    await ctx.close();
+  }
+  readVerdicts();
+  // the table: where, quality, state, station, what, mean and p95 lift, clipped share, contrast
+  console.log('READ where | quality | state | station | what | lift mean | lift p95 | clipped | contrast');
+  for (const r of readRows) console.log(`READ ${r.where} | ${r.quality} | ${r.state} | ${r.station} | ${r.name} | ${r.lift} | ${r.p95} | ${r.clip} | ${r.contrast}`);
+}
+
+// --- the big-win sign and the day's meter (features' floor life) on High and Low -----------------
+if (checks.includes('signs')) {
+  for (const quality of ['high', 'low']) {
+    for (const view of ['front', 'marquee', 'tally']) {
+      const { page, errors } = await openFloor(`quality=${quality}&view=${view}&win=1`, `http://localhost:${port}/casino/src/ui/feed/dev.html`);
+      await frames(page, 6);
+      await page.waitForTimeout(2500);
+      const file = `${out}/world3-signs-${view}-${quality}.png`;
+      await page.screenshot({ path: file });
+      console.log(JSON.stringify({ check: 'signs', view, quality, file, errors: errors.slice(0, 3) }));
+      if (errors.length) fail(`signs ${view} ${quality}: ${errors[0]}`);
+      await page.close();
+    }
   }
 }
 
