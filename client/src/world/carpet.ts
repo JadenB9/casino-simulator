@@ -42,6 +42,42 @@ export const PALETTES = {
     spark: '#2f7f79',
     cream: '#dcc796',
   },
+  /** The slots hall: deep plum with gold and a teal accent. */
+  slots: {
+    ground: '#2a0f2e',
+    groundDark: '#1a0820',
+    groundLight: '#37143c',
+    gold: '#c9973c',
+    goldDark: '#86602a',
+    accent: '#1c6a74',
+    accentDark: '#0f3c44',
+    spark: '#c0406e',
+    cream: '#e6cf9c',
+  },
+  /** The high limit salon: emerald with gold. */
+  salon: {
+    ground: '#0d2a1e',
+    groundDark: '#071a12',
+    groundLight: '#123828',
+    gold: '#d0a54a',
+    goldDark: '#8a6a2c',
+    accent: '#3a0f1a',
+    accentDark: '#240810',
+    spark: '#e0c27a',
+    cream: '#efe0b4',
+  },
+  /** The lounge: tobacco brown with amber and rust. */
+  lounge: {
+    ground: '#2e1a10',
+    groundDark: '#1e100a',
+    groundLight: '#3a2214',
+    gold: '#c08a40',
+    goldDark: '#7c5426',
+    accent: '#6e2a18',
+    accentDark: '#43180e',
+    spark: '#d4a050',
+    cream: '#e2c898',
+  },
 } satisfies Record<string, CarpetPalette>;
 
 /** Small, fast, seeded PRNG (mulberry32): the same carpet on every visit. */

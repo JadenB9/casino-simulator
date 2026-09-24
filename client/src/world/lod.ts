@@ -44,6 +44,12 @@ const SMALL_M = 0.3;
 export const STATION_BUDGET = 80;
 /** A station already showing its real model counts as this much nearer, so the budget's edge doesn't flicker. */
 const KEEP = 0.8;
+/**
+ * Past this a stand-in drops its own textured parts (felts, signs, bulbs) and is only its batched
+ * shape: tables from 18 m, the machines (a slots hall holds four dozen) from 12 m.
+ */
+const DISTANT_M = 18;
+const MACHINE_DISTANT_M = 12;
 
 type Piece = {
   geo: THREE.BufferGeometry;
@@ -80,6 +86,15 @@ interface Entry {
   /** Per frame: squared distance, and whether the real model is wanted. */
   d2: number;
   real: boolean;
+  /** In a room nobody can see from here: neither model nor stand-in is drawn. */
+  off: boolean;
+  /** What's showing, and whether it's far enough to leave the stand-in's own parts out. */
+  state: 'real' | 'far' | 'off';
+  distant: boolean;
+  /** World-space box, for the doorway test. */
+  box: THREE.Box3;
+  /** Squared distance past which the stand-in is only its batched shape. */
+  distant2: number;
 }
 
 export class StationLod {
@@ -134,7 +149,7 @@ export class StationLod {
       copy.updateWorldMatrix(true, false);
       place.multiplyMatrices(toParent, copy.matrixWorld);
       s.anchor.getWorldPosition(at);
-      const machine = s.zone === 'slots' || s.zone === 'bar';
+      const machine = s.zone === 'slots' || s.zone === 'bar' || s.zone === 'online';
       const far = machine ? MACHINE_FAR_M : FAR_M;
       const near = machine ? MACHINE_NEAR_M : NEAR_M;
       const sphere = new THREE.Box3().setFromObject(s.model).getBoundingSphere(new THREE.Sphere());
@@ -153,6 +168,11 @@ export class StationLod {
         extra,
         d2: 0,
         real: true,
+        off: false,
+        state: 'real',
+        distant: false,
+        box: new THREE.Box3().setFromObject(s.model),
+        distant2: (machine ? MACHINE_DISTANT_M : DISTANT_M) ** 2,
       });
     });
   }
@@ -165,23 +185,33 @@ export class StationLod {
     const e = this.entries.find((x) => x.station.id === stationId);
     if (!e) return;
     e.pin = mode;
-    if (mode) this.show(e, mode === 'real');
+    // a pinned stand-in shows all of itself, however far the camera was a moment ago
+    e.distant = false;
+    if (mode) this.set(e, mode);
   }
 
-  /** Show the real model near the camera and the stand-in further away, within the budget. */
-  update(camera: THREE.Camera, seated: WorldStation | null): void {
+  /**
+   * Show the real model near the camera and the stand-in further away, within the budget. In a
+   * room that can't be seen (`rooms`, from visibility.ts), or outside the doorway it's seen
+   * through (`sees`), neither.
+   */
+  update(camera: THREE.Camera, seated: WorldStation | null, rooms: Set<string> | null = null, sees: ((room: string, box: THREE.Box3) => boolean) | null = null): void {
     camera.updateMatrixWorld();
     camera.getWorldPosition(this.cam);
     this.frustum.setFromProjectionMatrix(this.viewProj.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
     const order = this.order;
     order.length = 0;
     for (const e of this.entries) {
+      const free = e.station !== seated && !e.pin;
+      e.off = free && !!rooms && (!rooms.has(e.station.room) || (!!sees && !sees(e.station.room, e.box)));
+      if (e.off) continue;
       e.d2 = (e.x - this.cam.x) ** 2 + (e.z - this.cam.z) ** 2;
-      const was = !e.copy.visible;
       // near enough by distance (with hysteresis), and in view: it competes for the budget
-      e.real = e.station === seated || (was ? e.d2 <= e.far2 : e.d2 <= e.near2);
+      e.real = e.station === seated || (e.state === 'real' ? e.d2 <= e.far2 : e.d2 <= e.near2);
       if (e.pin) e.real = e.pin === 'real';
       else if (e.real && e.station !== seated && this.frustum.intersectsSphere(e.sphere)) order.push(e);
+      // far off, the stand-in's own textured parts go too (its shape and colours stay in the batches)
+      e.distant = !e.pin && (e.distant ? e.d2 > e.distant2 - 2 * Math.sqrt(e.distant2) + 1 : e.d2 > e.distant2);
     }
     // nearest first (the ones already real a little nearer still), each while it fits; the table
     // you're sitting at is paid for first
@@ -191,14 +221,21 @@ export class StationLod {
       spent += e.extra;
       if (spent > this.budget) e.real = false;
     }
-    for (const e of this.entries) if (e.real !== !e.copy.visible) this.show(e, e.real);
+    for (const e of this.entries) this.set(e, e.off ? 'off' : e.real ? 'real' : 'far');
   }
 
-  private show(e: Entry, real: boolean): void {
-    e.station.model.visible = real;
-    e.copy.visible = !real;
-    if (e.solidId >= 0) this.solidBatch!.setVisibleAt(e.solidId, !real);
-    if (e.glowId >= 0) this.glowBatch!.setVisibleAt(e.glowId, !real);
+  /** Real model, stand-in (with its own parts unless distant) or nothing. */
+  private set(e: Entry, state: 'real' | 'far' | 'off'): void {
+    const own = state === 'far' && !e.distant;
+    if (e.state === state && e.copy.visible === own) return;
+    const was = e.state;
+    e.state = state;
+    e.station.model.visible = state === 'real';
+    e.copy.visible = own;
+    if (was === state) return;
+    const far = state === 'far';
+    if (e.solidId >= 0) this.solidBatch!.setVisibleAt(e.solidId, far);
+    if (e.glowId >= 0) this.glowBatch!.setVisibleAt(e.glowId, far);
   }
 
   dispose(): void {
@@ -340,7 +377,7 @@ function batch(geos: (THREE.BufferGeometry | null)[], material: THREE.Material, 
 
 /** Where an entry stands in the budget's queue: its distance, less for one already real. */
 function rank(e: Entry): number {
-  return e.copy.visible ? e.d2 : e.d2 * KEEP * KEEP;
+  return e.state === 'real' ? e.d2 * KEEP * KEEP : e.d2;
 }
 
 /**

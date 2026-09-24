@@ -42,8 +42,9 @@ engine.onFrame((dt) => world.update(dt));
 | `staff` | The floor's staff (npcs.ts): `posts` (`{ role, station, x, z, yaw }` for every dealer, the stickman, the bartender and the cashier), `at(stationId)` (that station's dealer character), `gesture(stationId, g)` (what `dealerGesture` calls). |
 | `plan`, `focus`, `teleport`, `dispose` | The floor plan (layout.ts), the station the player is at, respawn, teardown. |
 
-`SPAWN` (exported) is where a new player appears: `(0, 12.8)`, yaw `Math.PI`, on the marble inside
-the doors, facing into the casino.
+`SPAWN` (exported) is where a new player appears: `(0, 12.8)`, yaw `Math.PI`, on the lobby's marble
+inside the doors, facing into the casino. The server clamps positions to `FLOOR_BOUNDS`
+(shared/src/protocol.ts), the building's outer walls, and spawns at the same point.
 
 ### Mouse look
 On the floor the mouse is held (Pointer Lock): moving it turns the camera, walking or not, with
@@ -89,34 +90,100 @@ it from a handful of lines (`dressed(look)` in setLook, `wear.dress(...)` after 
 `wear.body(m)` on a quality change, `wear.dispose()`).
 
 ## The floor
-40 m x 30 m (x east, z south, the entrance on the south wall). Friedman-low 3.4 m ceilings over
-slots, the bar and the aisles; a 6.6 m coffered ceiling with a warm cove over the table pit.
+The building is 62 m x 46 m (x east, z south, the street doors on the south wall), eleven rooms
+laid out in `rooms.ts`, each with its own floor, walls, ceiling, light and sign over every door:
 
-| Zone | Stations |
-|---|---|
-| Table pit, two rows facing out round the staff area and podium | north row `rl-us`, `cr-1`, `sb-1`, `rl-eu`; south row `bj-1`, `bc-1`, `wr-1`, `tc-1`, `bj-2` |
-| Feature spot (west wall, between the cashier queue and the cross aisle, facing the pit) | `b6-1`, the Big Six wheel (zone `feature`; about 3 m tall under the 3.4 m ceiling) |
-| Poker room (north-east, navy carpet) | `he-1`, `he-2` (side on, or one behind the other when the room is short) |
-| Slot islands (south-west), one per slots variant in `CATALOG`, 2+2 machines each, LED underglow and toppers | `slots-<variant>-1..4` for sevens, neon, wild, diamonds, cherries, goldrush; the grid re-flows for any count |
-| Bar (east wall) with video poker set into the counter | `vp-1..4`; bar-top units (model under 0.9 m tall) sit on the counter, taller cabinets stand in gaps in it |
-| Cashier cage (north-west) | `cashier` |
-| Lounge, entrance palms, wayfinding | |
+| Room | Walls (x, z) | Size | What's in it |
+|---|---|---|---|
+| Lobby | -7..7, 3..15 | 14 x 12 m | the street doors, marble, a compass rose, the directory board, palms, benches; the grand opening north to the pit |
+| The Pit | -13..13, -19..3 | 26 x 22 m | table games in two rows round the staff area and podium under a 6.6 m coffered ceiling (north: `rl-us`, `cr-1`, `sb-1`, `rl-eu`; south: `bj-1`, `bc-1`, `wr-1`, `tc-1`, `bj-2`), the Big Six `b6-1` on the west wall, a round banquette round a palm |
+| Slots Hall | -31..-13, -19..3 | 18 x 22 m | twelve islands, every slots variant twice (`slots-<variant>-1..8`), a main aisle from the pit's arch, the win meter |
+| Bar | 13..31, -19..3 | 18 x 22 m | the counter along the east wall with video poker `vp-1..4` set into it, bar stools, six high-tops with three stools each, board floor |
+| Lounge | 17..31, 3..15 | 14 x 12 m | two sofa groups, armchairs, a fireplace |
+| Poker Room | 9..31, -31..-19 | 22 x 12 m | four Hold'em tables `he-1..4` with lamps hung low over each, a host stand, armchairs |
+| High Limit Salon | -9..9, -31..-19 | 18 x 12 m | `vip-bj-1`, `vip-bc-1`, `vip-rl-1` in plush chairs under chandeliers, opening at the High limit tier; tub chairs |
+| Online Lounge | -31..-9, -31..-19 | 22 x 12 m | sixteen desks, two for each House Original (`pk-1..2`, `tw`, `mn`, `dc`, `lb`, `kn`, `hl`, `cs`), in two islands, gaming-cafe light, HOUSE ORIGINALS in neon |
+| Bandit Camp | -31..-17, 3..15 | 14 x 12 m | the Bandit Wheel `bw-1` in a yard of concrete, rusted sheet, steel trusses, scrap, crates, barrels and a burning drum under a string of bulbs |
+| Cashier & Bank | -17..-7, 3..15 | 10 x 12 m | the cage along the north wall with three teller windows and the vault behind them, benches |
+| Boutique | 7..17, 3..15 | 10 x 12 m | a shop front on the lobby with windows, two display cases, four mannequins wearing the shop's pieces, the counter and its lit shelves |
 
-Spacing comes from each module's `footprint`, so real models re-flow the floor. There are no rope
-barriers: only real things block the way (walls, tables, machines, the bar, columns, plants,
-counters and the lounge's furniture). Everything solid that isn't a station is in `plan.solids`
-(footprint, height, what it may hold), and the plants, palms, stools, signs and couches are placed
-from the plan so they fit round everything else. `checkLayout(plan)` reports overlaps, stations in
-aisles or against walls, blocked player sides, and any solid passing through another, a station,
-a wall or a ceiling; `client/test/world-layout.test.ts` runs it for today's and bigger footprints,
-bar-top video poker and six slot islands, and `node scripts/e2e/world3.mjs <port> <dir> layout`
-checks the real models' geometry against the plan (every prop inside its solids, every station
-inside its footprint). The dev floor logs any problem. `node scripts/e2e/world2.mjs <port> <dir>`
-checks the layout with three and six slot islands, the views and their draw calls, mouse look,
-the recentring rules and emotes.
+Doors (≥1.4 m wide, `DOORS` in rooms.ts): the street doors, the lobby's grand opening to the pit,
+portals to the bank and the boutique, arches from the pit to the slots and the bar and from the
+bar to the lounge, portals from the pit to the salon, the online lounge and the poker room, from
+the slots to the online lounge and (steel-framed) to the yard, and from the bar to the poker room.
 
-Anything else that stands on the floor adds its own collision through `world.collider` (the
-Collider built in `createWorld`), as the staff do with a post each.
+Spacing comes from each module's `footprint` and `seats`: a row of tables is spaced by each
+table's real reach (the table and the chairs round it), so real models re-flow the floor. There are
+no rope barriers: only real things block the way. Everything solid that isn't a station is in
+`plan.solids` (footprint, height, what it may hold); collision (`collide.ts`) is built from the same
+list and the walls. `checkLayout(plan)` reports overlaps, stations in aisles or against walls,
+blocked player sides, doors too narrow or too tall, and any solid passing through another, a
+station, a wall or a ceiling. `client/test/world-layout.test.ts` runs it on the real footprints and
+walks the floor (reach.ts) from `SPAWN` to every station, door and room;
+`client/test/life-points.test.ts` walks to every seat, teller window, counter, case and waiter
+loop. `node scripts/e2e/world4.mjs <port> <dir>` checks the real models against the plan (every
+prop and piece of furniture inside its solids, every seat's top where the plan says), the rooms'
+screenshots, the map and the draw calls; world3.mjs and world2.mjs still run their checks on it.
+
+### Seats at every table
+Every table game shows its seats: a chair or stool at each `seats()` position (furniture-spec.ts
+`SEATING`: chairs at blackjack, baccarat, Three Card and War, stools at roulette, Sic Bo, the Big
+Six and the slots; craps is played standing at its rail). The salon's tables get plush chairs.
+Hold'em's chairs, the Bandit Wheel's stools and the desks' gaming chairs are the modules' own. The
+seat tops sit a fifth of a metre under each table's rail, inside what npcs' downward ray counts
+(0.3-0.95 m), so other players sit on them. The chair you're sitting in is left out while you play.
+
+### How to add a station
+Everything is in `rooms.ts`; nothing else needs touching.
+- A table on its own: add `{ kind: 'station', id: 'bj-3', game: 'blackjack', x, z, yaw }` to a
+  room's `stations` (room-local metres from the room's middle; `yaw` 0 puts its players south).
+- A table in a row: add `{ id, game }` to that row's `items`; the row re-spaces itself round the
+  real footprints and chairs.
+- A slot machine: add a variant to the slots list (`slotIslands()` in layout.ts) and a cell to the
+  hall's `islands` grid (`cols` x `rows`).
+- An online game: add it to the lounge's `desks.games` (two desks each, `per` desks a row).
+- Something to sit on: add `{ kind: 'armchair', x, z, yaw }` (or sofa, tub, bench, banquette,
+  hightop, crate, plank-bench) to `furniture`; its seats join the life points by themselves.
+Then run `npx vitest run --project unit client/test/world-layout.test.ts client/test/life-points.test.ts`:
+it names anything that overlaps, blocks players, can't be reached or pokes through a wall.
+Station ids are sent to the server: `[a-z0-9-]{1,24}`, and keep an id once it's live.
+
+### How to add a room
+1. Give it bounds in `ROOMS` that share a wall with a room it opens off (rooms tile; the walls
+   are the rooms' edges, so no wall is drawn by hand), a `name`, the `sign` over its doors, an
+   `about` line, and a `style` (floor, walls, wainscot, ceiling height and kind, downlights, cove
+   colour, and the ambient light while you're in it).
+2. Add a `DoorSpec` to `DOORS` (the two rooms, where along their shared wall, width ≥ 1.4 m,
+   height under both ceilings less a lintel).
+3. Fill its `stations`, `furniture`, `fixtures`, `aisles` (kept clear) and `plants` (corners).
+4. If it's bigger than the building, grow `FLOOR_BOUNDS` in shared/src/protocol.ts (the unit test
+   says so). Add its colour to `TINT` in wayfinding.ts and its door sign style to `DOOR_SIGNS` in
+   signs.ts; the map, the directory board, room visibility and collision pick it up by themselves.
+
+### Life points (life-points.ts)
+`lifePoints(plan)` is the floor's registry for the people who walk it (sitting anywhere, waiters,
+bankers, the shopkeeper), all in metres with yaw as `Object3D.rotation.y`:
+
+- `seats`: every place to sit that isn't a table's own seat (`{ id, x, z, yaw, top, room, kind,
+  station? }`): bar and high-top stools, sofa places, armchairs, tub chairs, benches, the
+  banquette, the yard's crates and plank bench, and each online desk's chair (`station` is its PC,
+  free only while nobody plays it). `x, z` is the sitter's hip point on the floor, `top` the seat's
+  height (`SEAT_TOPS` and furniture-spec.ts). Ids are stable and go over the wire.
+- `bar`: `tender` (the strip behind the counter), `front` (the customers' strip), `pickup` (where a
+  waiter collects an order) and the counter's `top`.
+- `bank.windows`: each teller window's `banker` and `customer` stand points (three).
+- `boutique`: the `keeper` and `customer` at the counter, where to stand at each display case
+  (with its top) and each mannequin (with the `item` the shop opens at).
+- `routes`: closed waiter loops through clear floor (`pause` seconds at a stop): the bar and
+  lounge, the pit, the salon, the poker room, the slots hall (`ROUTES` in rooms.ts).
+
+### Wayfinding
+The lobby's directory board draws the plan with every room and a "You are here". The Map (the
+HUD's map button, or N on the floor; never at a table, where N is blackjack's "no insurance")
+draws the rooms, walls, doors, windows, tables and machines and you with the way you face; a click
+on a room lights it and lists what's there. Over every doorway, on both sides, is the name of the
+room it leads to.
+
 ## Staff
 `npcs.ts` puts a dealer behind every table (a stickman across the craps table from its players,
 the Big Six dealer beside the wheel, the roulette dealer between the wheel and the zero), a
@@ -155,7 +222,17 @@ The players' seated cameras look over the table at the dealer, who frames it fro
   the dev views stay under 250 draw calls.
 
 ## Rendering
-- Static architecture is merged per material (batch.ts); the floor's glowing strips and discs (LED
+- Rooms you can't see aren't drawn (visibility.ts): from the camera's room through every doorway
+  in view, three rooms deep, each room seen through the screen rectangle of the doorways on the way
+  to it; a station or a dealer in another room outside that rectangle isn't drawn either. Walls and
+  ceilings, furniture, props, mannequins, stations and staff all follow it. The worst view in the
+  building (looking into the slots hall from the online lounge's door) is under 200 draw calls on
+  High.
+- The light rig follows you (lighting.ts): three spots light the room you're in (the pit's two
+  rows, the poker room, the salon), and the hemisphere takes that room's colours.
+- Static architecture is merged per material (batch.ts), kept per room: one BatchedMesh per
+  material, one instance per room, so hiding a room costs nothing and showing six costs one draw
+  call per material; procedural furniture (furniture.ts) is instanced per kind and part; the floor's glowing strips and discs (LED
   underglow, the cove, downlights, shelf lights) are one vertex-coloured mesh (`GlowMerge`); props
   are instanced; all signs are one atlas mesh.
 - Stations swap to baked stand-ins past 11 m (machines past 8 m): small textured parts and reel

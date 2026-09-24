@@ -1,7 +1,7 @@
 // The day's big wins on a meter, the way progressive meters hang over real slot floors: "PAID TO
 // WINNERS TODAY" over the total in red seven-segment digits (the unlit segments showing through),
-// and how many wins made it below. Hung over the cross aisle where it meets the slot floor, one face
-// toward the doors and the slots, one toward the pit. It counts up when a new win lands.
+// and how many wins made it below. Hung over the slots hall's main aisle just inside the arch from
+// the pit, one face toward the arch, one down the hall. It counts up when a new win lands.
 //
 // One mesh and one material (signbox.ts): one draw call. The face is a canvas texture, painted
 // once and then again only while the number moves. The shader brightens only the red of the
@@ -27,11 +27,9 @@ const COUNT_S = 2.4;
 
 const FONTS = ['700 100px "DSEG7"', '600 40px "Cinzel"', '600 30px "Barlow Condensed"'];
 
-export function tallyPlacement(plan: FloorPlan): { x: number; z: number } {
-  const cross = plan.aisles[0]!;
-  // over the aisle where the slot floor begins, clear of the pit's corner column and the islands
-  const x = Math.min(plan.slotsZone.x1 - 3.6, (plan.slotsZone.x1 + plan.pit.x0) / 2);
-  return { x, z: (cross.z0 + cross.z1) / 2 };
+/** Where the meter hangs (the plan's spot over the slots hall's aisle) and its turn: faces east and west. */
+export function tallyPlacement(plan: FloorPlan): { x: number; z: number; ry: number } {
+  return { ...plan.tallyAt, ry: Math.PI / 2 };
 }
 
 export class Tally {
@@ -64,8 +62,11 @@ export class Tally {
       vertexColors: true,
       toneMapped: false,
     });
-    this.mesh = new THREE.Mesh(buildGeometry(plan), material);
+    const at = tallyPlacement(plan);
+    this.mesh = new THREE.Mesh(buildGeometry(), material);
     this.mesh.name = 'tally';
+    this.mesh.position.set(at.x, 0, at.z);
+    this.mesh.rotation.y = at.ry;
     this.paint();
     // the canvas may have been painted in a fallback face; paint again once the fonts are in
     void Promise.all(FONTS.map((f) => document.fonts?.load(f).catch(() => null))).then(() => this.paint());
@@ -210,8 +211,10 @@ function gainFor(q: Quality): number {
   return q === 'high' ? 2.3 : 1.4;
 }
 
-function buildGeometry(plan: FloorPlan): THREE.BufferGeometry {
-  const { x, z } = tallyPlacement(plan);
+/** The meter round its own middle (the mesh stands it in place). */
+function buildGeometry(): THREE.BufferGeometry {
+  const x = 0;
+  const z = 0;
   const out = new Merge();
   const H = FACE_H + 2 * BEZEL;
   const cy = BOTTOM + H / 2;

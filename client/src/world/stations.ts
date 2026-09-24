@@ -7,12 +7,12 @@ import type { GameId } from '../../../shared/src/engine.ts';
 import { CATALOG } from '../../../shared/src/games/catalog.ts';
 import { ENGINES } from '../../../shared/src/games/index.ts';
 import { formatMoney } from '../../../shared/src/money.ts';
-import { limitsSpan } from '../../../shared/src/limits.ts';
+import { limitSpec, limitsSpan } from '../../../shared/src/limits.ts';
 import { GAMES } from '../games/index.ts';
 import type { Quality } from '../render/engine3d.ts';
 import type { Station } from './contract.ts';
 import type { Collider } from './collision.ts';
-import { BAR_TOP, type Footprint, type FloorPlan, type Placement, type VpMode, type Zone } from './layout.ts';
+import { BAR_TOP, type Footprint, type FloorPlan, type Placement, type RoomId, type VpMode, type Zone } from './layout.ts';
 
 export interface WorldStation extends Station {
   footprint: Footprint;
@@ -26,6 +26,10 @@ export interface WorldStation extends Station {
   yaw: number;
   /** Per seat, the top of the chair or stool there (metres above the floor), or null to stand (npcs.ts measures them). */
   seatTops?: (number | null)[];
+  /** The room it stands in. */
+  room: RoomId;
+  /** A high-limit table (the salon's): it opens at the higher limits by default. */
+  tier?: 'high';
 }
 
 export { BAR_TOP, type VpMode };
@@ -35,6 +39,15 @@ export function stationName(game: GameId, variant: string): string {
   const v = info.variants.find((x) => x.id === variant);
   if (!v) return info.name;
   return game === 'slots' ? v.name : `${v.name} ${info.name}`;
+}
+
+/** The tier a high-limit table (the salon's) opens at by default. */
+export const HIGH_TIER = 'High limit';
+
+/** A high-limit table's default limits ("$500–$50,000"), or null for a game without that tier. */
+export function highLimitsText(game: GameId): string | null {
+  const t = limitSpec(game)?.tiers.find((x) => x.name === HIGH_TIER);
+  return t ? `${formatMoney(t.min)}–${formatMoney(t.max)}` : null;
 }
 
 /** The limits a table here can be opened at ("$5–$50,000"), or a machine's bets. */
@@ -69,10 +82,12 @@ export function buildStations(plan: FloorPlan, parent: THREE.Object3D, quality: 
       anchor,
       footprint: p.fp,
       zone: p.zone,
-      name: stationName(p.game, p.variant),
-      limits: limitsText(p.game, p.variant),
+      name: p.tier === 'high' ? `High Limit ${stationName(p.game, p.variant)}` : stationName(p.game, p.variant),
+      limits: (p.tier === 'high' ? highLimitsText(p.game) : null) ?? limitsText(p.game, p.variant),
       model,
       yaw: p.yaw,
+      room: p.room,
+      tier: p.tier,
     };
   };
   for (const p of plan.stations) {

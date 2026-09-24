@@ -15,7 +15,7 @@ import * as THREE from 'three';
 import { isTyping, onOverlayChange, overlayCount } from '../ui/keyboard.ts';
 import type { Character } from './contract.ts';
 import type { Collider } from './collision.ts';
-import { CEILING, PIT_CEILING, inRect, type Rect } from './layout.ts';
+
 import { loadMouse, onMouseChange, setMouseSettings, type MouseSettings } from './mouse.ts';
 
 const RADIUS = 0.3;
@@ -72,7 +72,8 @@ export class Player {
     readonly character: Character,
     private readonly camera: THREE.PerspectiveCamera,
     private readonly col: Collider,
-    private readonly pit: Rect,
+    /** The ceiling's height over a point (rooms differ; the pit's coffers stand higher). */
+    private readonly ceilingAt: (x: number, z: number) => number,
     private readonly canvas: HTMLElement,
     /** Extra say on whether the mouse may be held (the app's panels over the floor). */
     private readonly mayCapture: () => boolean = () => true,
@@ -305,7 +306,7 @@ export class Player {
     const hit = this.col.raycast(this.target, this.dir, this.camDist + 0.3) - 0.3;
     const allowed = Math.max(0.45, Math.min(this.camDist, hit));
     this.want.copy(this.target).addScaledVector(this.dir, allowed);
-    const ceiling = inRect(this.pit, this.want.x, this.want.z, -0.3) ? PIT_CEILING : CEILING;
+    const ceiling = Math.min(this.ceilingAt(this.want.x, this.want.z), this.ceilingAt(this.target.x, this.target.z));
     this.want.y = Math.max(CAM_FLOOR, Math.min(this.want.y, ceiling - 0.2));
     this.lastAllowed = allowed;
   }

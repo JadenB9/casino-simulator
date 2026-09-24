@@ -7,10 +7,15 @@ import type { Engine3D, Quality } from '../render/engine3d.ts';
 import { DEFAULT_LOOK, type Look } from '../../../shared/src/look.ts';
 import { GAMES } from '../games/index.ts';
 import type { CashierPoint, Station, World } from './contract.ts';
-import { planFloor, setVpMode, slotVariants, type FloorPlan } from './layout.ts';
+import { SPAWN, ceilingAt, planFloor, setVpMode, type FloorPlan } from './layout.ts';
 import { Mats, loadTextures } from './materials.ts';
 import { Batch } from './batch.ts';
 import { Collider } from './collision.ts';
+import { collide } from './collide.ts';
+import { Furniture } from './furniture.ts';
+import { Mannequins } from './mannequins.ts';
+import { RoomVisibility } from './visibility.ts';
+import { MapOverlay, buildDirectories } from './wayfinding.ts';
 import { buildRoom } from './room.ts';
 import { buildStations, type WorldStation } from './stations.ts';
 import { buildDecor } from './decor.ts';
@@ -27,14 +32,15 @@ import type { MouseSettings } from './mouse.ts';
 import { Emotes, OWN_BUBBLE_Y, BUBBLE_Y, type CharacterSource } from './emotes.ts';
 import { Staff, measureSeats, type StaffGesture } from './npcs.ts';
 import type { EmoteId } from '../../../shared/src/protocol.ts';
+import type { GameId } from '../../../shared/src/engine.ts';
 import type { Sfx } from '../audio/sfx.ts';
 import { el } from '../ui/kit.ts';
 import './world.css';
 
 export type { WorldStation } from './stations.ts';
 
-/** Where a player first appears: inside the doors on the marble, facing into the casino (-z). */
-export const SPAWN = { x: 0, z: 12.8, yaw: Math.PI };
+export { SPAWN };
+export { lifePoints, type LifePoints, type Seatable, type Stand } from './life-points.ts';
 export type { World } from './contract.ts';
 
 export interface WorldOptions {
@@ -58,7 +64,7 @@ export interface WorldOptions {
    * keyboard (overlayCount), and lets go when any of those starts.
    */
   canCapture?: () => boolean;
-  /** One slot island per variant; defaults to every slots variant in the catalogue (dev previews). */
+  /** The slot islands, one variant each (dev previews); defaults to every slots variant twice. */
   slotVariants?: string[];
   /** The game's sounds, for the ones the floor makes itself (a clap's claps); none: silent. */
   sfx?: Sfx;
@@ -120,6 +126,15 @@ export interface FloorWorld extends World {
   dropHeld(): void;
   /** Where holdItem and dropHeld go (the app's bar, ui/shop/bar.ts); null to forget. */
   useBar(bar: { hold(id: string): unknown; drop(): unknown } | null): void;
+  /**
+   * The room the camera is in, and the rooms being drawn (the rest can't be seen from here).
+   * `showAll(true)` draws every room until `showAll(false)` (the headless checks, captures).
+   */
+  readonly rooms: { readonly current: string; readonly visible: ReadonlySet<string>; showAll(on: boolean): void };
+  /** The casino map (the HUD's map button, or N). */
+  readonly map: MapOverlay;
+  /** The procedural furniture: every table's chairs and stools, the lounges' chairs, and the rest. */
+  readonly furniture: Furniture;
 }
 
 /**
@@ -149,27 +164,32 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
   const root = new THREE.Group();
   root.name = 'floor';
   scene.add(root);
-  const plan = planFloor((g) => GAMES[g].footprint, opts.slotVariants ?? slotVariants());
+  const seatsOf = (g: GameId, v: string) => GAMES[g].seats(v);
+  const plan = planFloor((g) => GAMES[g].footprint, opts.slotVariants, { seats: seatsOf });
   const mats = new Mats(quality, tex, aniso);
   const col = new Collider();
   const batch = new Batch();
 
   const glow = new GlowMerge();
-  const { chandeliers, downlights } = buildRoom(plan, batch, mats, col, glow);
+  const { chandeliers, downlights } = buildRoom(plan, batch, mats, glow);
   const stationRoot = new THREE.Group();
   stationRoot.name = 'stations';
   root.add(stationRoot);
   const { stations, vpMode } = buildStations(plan, stationRoot, quality, col);
   // bar-top video poker changes the bar's counter, its stools and what fits round them
   if (vpMode !== plan.vpMode) setVpMode(plan, vpMode);
+  // walls and everything solid block the walker and the camera, as the plan was checked
+  collide(plan, col);
   const lod = new StationLod(stations, quality);
-  const decor = buildDecor(plan, stations, batch, mats, col, glow);
+  const decor = buildDecor(plan, stations, batch, mats, glow);
   buildPools(decor.pools, downlights, plan, batch, mats);
   const signSpecs = [...floorSigns(plan, batch, mats), ...decor.signs];
   const staticMeshes = batch.build(root, 'floor');
-  const glowMesh = glow.build(root);
-  if (glowMesh) staticMeshes.push(glowMesh);
+  const glowMeshes = glow.build(root);
   const signs = buildSigns(signSpecs, root, quality, aniso);
+  const furniture = new Furniture(plan, mats);
+  root.add(furniture.group);
+  const directories = buildDirectories(plan, root, aniso);
   progress(0.55);
 
   const props = new Props(quality);
@@ -181,20 +201,23 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
   const look = opts.look ?? DEFAULT_LOOK;
   const staff = new Staff(characters, stations, plan, col);
   root.add(staff.group);
+  const mannequins = new Mannequins(characters, plan);
+  root.add(mannequins.group);
   await Promise.all([
     props.build(decor.props, chandeliers),
     characters.load(look).catch((err) => console.warn('character failed to load', err)),
     staff.load().catch((err) => console.warn('staff failed to load', err)),
+    mannequins.load().catch((err) => console.warn('mannequins failed to load', err)),
   ]);
   // which seats have a chair or stool (other players sit on them; everywhere else they stand)
-  measureSeats(stations, (s) => GAMES[s.game].seats(s.variant), [props.group]);
+  measureSeats(stations, (s) => GAMES[s.game].seats(s.variant), [props.group, furniture.group]);
   progress(0.85);
 
   const character = characters.create(look, opts.name ?? '');
   character.setName('');
   root.add(character.root);
   const canvas = renderer.domElement;
-  const player = new Player(character, engine.camera, col, plan.pit, canvas, () => opts.canCapture?.() ?? true);
+  const player = new Player(character, engine.camera, col, (x, z) => ceilingAt(plan, x, z, 0.3), canvas, () => opts.canCapture?.() ?? true);
   player.spawn(SPAWN.x, SPAWN.z, SPAWN.yaw);
 
   const cashierAnchor = new THREE.Object3D();
@@ -204,6 +227,24 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
   const cashier: CashierPoint = { id: 'cashier', anchor: cashierAnchor, position: new THREE.Vector3(plan.cashier.x, 0, plan.cashier.z) };
   const ui = opts.ui ?? document.getElementById('ui') ?? document.body;
   const interact = new Interact(stations, cashier, player, engine.camera, ui, opts.onEscape);
+  // Rooms nobody can see from where the camera is aren't drawn: their walls and ceilings, their
+  // furniture and props, their stations and staff.
+  const visibility = new RoomVisibility(plan);
+  const applyRooms = () => {
+    const vis = visibility.visible;
+    for (const r of plan.rooms) {
+      staticMeshes.setRoom(r.id, vis.has(r.id));
+      glowMeshes.setRoom(r.id, vis.has(r.id));
+    }
+    furniture.setRooms(vis);
+    props.setRooms(vis);
+    mannequins.setRooms(vis);
+    for (const d of directories.meshes) d.visible = vis.has(d.userData.room as string);
+  };
+  const sees = (room: string, box: THREE.Box3) => visibility.sees(room, box);
+  let everything = false;
+  // the map opens on the floor, not at a table (blackjack's N is "no insurance")
+  const map = new MapOverlay({ plan, ui, you: () => ({ x: player.position.x, z: player.position.z, heading: player.heading }), canOpen: () => !interact.seated && player.isEnabled });
   // On the floor with the mouse free (after Esc, or before the first click on the dev floor): how
   // to get looking around back. Only where there's a mouse to hold (the player knows).
   const hint = el('div', 'world-hint');
@@ -285,12 +326,25 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
     },
     onEnter: (cb) => interact.onEnter(cb),
     onCashier: (cb) => interact.onCashier(cb),
-    exitTable: () => interact.exit(),
+    exitTable: () => {
+      furniture.showChairs();
+      return interact.exit();
+    },
     enter: (s, seat = null) => {
       const ws = stations.find((x) => x.id === s.id);
-      if (ws) interact.enter(ws, seat);
+      if (!ws) return;
+      interact.enter(ws, seat);
+      if (seat !== null) furniture.hideChair(ws.id, seat, true);
     },
-    aim: (seat) => interact.aim(seat),
+    aim: (seat) => {
+      // the chair you sit in is under the camera: leave it out while you're there
+      const at = interact.seated;
+      if (at) {
+        furniture.showChairs();
+        furniture.hideChair(at.id, seat, true);
+      }
+      interact.aim(seat);
+    },
     get seated() {
       return interact.seated;
     },
@@ -302,6 +356,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
       quality = q;
       world.quality = q;
       mats.swap(root, q);
+      mannequins.refresh();
       if (signs) (signs.mesh.material as THREE.MeshBasicMaterial).color.setScalar(q === 'high' ? 2.4 : 1.6);
       lighting.setQuality(q);
       characters.setQuality(q);
@@ -317,9 +372,12 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
       const idle = player.awaitingClick && !interact.seated;
       if (hint.hidden === idle) hint.hidden = !idle;
       touch.update();
-      lod.update(engine.camera, interact.seated);
+      if (!everything && visibility.update(engine.camera)) applyRooms();
+      lighting.setRoom(visibility.room);
+      lod.update(engine.camera, interact.seated, everything ? null : visibility.visible, everything ? null : sees);
       character.update(dt);
-      staff.update(dt, engine.camera, interact.seated);
+      staff.update(dt, engine.camera, interact.seated, everything ? null : visibility.visible, everything ? null : sees);
+      map.update(dt);
       emotes.update(dt);
       const f = world.focus;
       lighting.setFocus(f && f.zone !== 'slots' && f.game !== 'videopoker' ? focusAt.copy(f.anchor.position) : null);
@@ -364,7 +422,27 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
     useBar(b) {
       bar = b;
     },
+    rooms: {
+      get current() {
+        return visibility.room;
+      },
+      get visible() {
+        return visibility.visible;
+      },
+      showAll(on) {
+        everything = on;
+        if (on) visibility.all();
+        applyRooms();
+        if (!on) visibility.update(engine.camera) && applyRooms();
+      },
+    },
+    map,
+    furniture,
     dispose() {
+      map.dispose();
+      directories.dispose();
+      mannequins.dispose();
+      furniture.dispose();
       hint.remove();
       touch.dispose();
       emotes.dispose();
@@ -377,7 +455,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
       reflections?.dispose();
       renderer.info.autoReset = true;
       signs?.texture.dispose();
-      for (const m of staticMeshes) m.geometry.dispose();
+      for (const m of [...staticMeshes.meshes, ...glowMeshes.meshes]) m.dispose();
       mats.dispose();
       root.removeFromParent();
     },

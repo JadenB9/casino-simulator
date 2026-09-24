@@ -1,0 +1,29 @@
+/* The casino map (wayfinding.ts): the floor's plan over the game, in the sheets' dress. */
+
+.map-sheet { width: min(900px, 100%); }
+.map-sheet .sheet-body { padding-top: 14px; }
+
+.map-svg { display: block; width: 100%; height: auto; background: #0c0a08; border: 1px solid var(--line); border-radius: 4px; }
+.map-room { stroke: rgba(0, 0, 0, 0.35); stroke-width: 0.1; opacity: 0.62; cursor: pointer; transition: opacity 0.15s; }
+.map-room:hover { opacity: 0.8; }
+.map-room.here { opacity: 0.78; }
+.map-room.on { opacity: 1; stroke: var(--brass-hi); stroke-width: 0.25; }
+.map-stations rect { fill: rgba(255, 240, 210, 0.26); pointer-events: none; }
+.map-walls line { stroke: var(--brass); stroke-width: 0.34; stroke-linecap: square; pointer-events: none; }
+.map-glass line { stroke: #9fd8e8; stroke-width: 0.2; stroke-dasharray: 0.5 0.3; pointer-events: none; }
+.map-labels text { font-family: var(--serif); font-weight: 600; letter-spacing: 0.06em; fill: #fff4dc; paint-order: stroke; stroke: rgba(0, 0, 0, 0.7); stroke-width: 0.12; pointer-events: none; }
+.map-entry path { fill: var(--brass-hi); }
+.map-you circle { fill: #fff4dc; stroke: #ff4b3e; stroke-width: 0.18; }
+.map-you path { fill: #ff4b3e; }
+.map-you .map-you-halo { fill: rgba(255, 75, 62, 0.25); stroke: none; transform-origin: 0 0; animation: map-pulse 1.6s ease-out infinite; }
+@keyframes map-pulse { from { transform: scale(0.6); opacity: 1; } to { transform: scale(1.8); opacity: 0; } }
+
+.map-caption { min-height: 72px; padding: 12px 2px 0; }
+.map-name { margin: 0; font-family: var(--serif); font-size: 18px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--brass-hi); }
+.map-about { margin: 4px 0 0; font-size: 16px; color: var(--ink-2); }
+.map-games { margin: 4px 0 0; font-size: 15px; letter-spacing: 0.02em; color: var(--ink-3); }
+.map-hint { margin: 0; color: var(--ink-3); }
+
+@media (prefers-reduced-motion: reduce) {
+  .map-you .map-you-halo { animation: none; }
+}

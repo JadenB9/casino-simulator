@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import type { Quality } from '../render/engine3d.ts';
 import type { PropKind, PropPlace } from './decor.ts';
+import type { Chandelier } from './room.ts';
 import { hdr } from './materials.ts';
 import { MODEL_BASE } from './characters.ts';
 
@@ -37,6 +38,14 @@ interface Part {
   matrix: THREE.Matrix4;
 }
 
+/** One kind's instanced meshes (a mesh per part), where each piece stands and in which room. */
+interface Set {
+  meshes: THREE.InstancedMesh[];
+  parts: Part[];
+  at: THREE.Matrix4[];
+  rooms: string[];
+}
+
 export class Props {
   readonly group = new THREE.Group();
   private loader = new GLTFLoader();
@@ -47,13 +56,15 @@ export class Props {
   private lambert = new Map<THREE.Material, THREE.Material>();
   private standard = new Map<THREE.Material, THREE.Material>();
   private quality: Quality;
+  private readonly sets: Set[] = [];
+  private visible: globalThis.Set<string> | null = null;
 
   constructor(quality: Quality) {
     this.group.name = 'props';
     this.quality = quality;
   }
 
-  async build(places: PropPlace[], chandeliers: THREE.Vector3[]): Promise<void> {
+  async build(places: PropPlace[], chandeliers: Chandelier[]): Promise<void> {
     const byKind = new Map<PropKind, PropPlace[]>();
     for (const p of places) byKind.set(p.kind, [...(byKind.get(p.kind) ?? []), p]);
     await Promise.all(
@@ -68,7 +79,7 @@ export class Props {
             // stand the model on its base, centred on the spot
             return new THREE.Matrix4().compose(new THREE.Vector3(p.x, p.y, p.z), new THREE.Quaternion().setFromAxisAngle(_up, p.ry), new THREE.Vector3(s, s, s)).multiply(new THREE.Matrix4().makeTranslation(-(min.x + size.x / 2), -min.y, -(min.z + size.z / 2)));
           });
-          this.group.add(this.instance(kind, parts, mats));
+          this.group.add(this.instance(kind, parts, mats, list.map((p) => p.room)));
         } catch (err) {
           console.warn(`prop ${kind} failed to load`, err);
         }
@@ -78,27 +89,29 @@ export class Props {
     await this.chandeliers(this.quality);
   }
 
-  private chandelierSpots: THREE.Vector3[] = [];
+  private chandelierSpots: Chandelier[] = [];
 
   /** Hang chandeliers (top at each spot) for this quality, loading the High piece on first use. */
   private async chandeliers(q: Quality): Promise<void> {
     const spots = this.chandelierSpots;
     if (spots.length === 0) return;
-    const make = async (file: string, height: number) => {
+    const make = async (file: string, scale: number) => {
       const { parts, size, min } = await this.load(file);
-      const s = height / size.y;
-      const mats = spots.map((p) => new THREE.Matrix4().compose(p, new THREE.Quaternion(), new THREE.Vector3(s, s, s)).multiply(new THREE.Matrix4().makeTranslation(-(min.x + size.x / 2), -(min.y + size.y), -(min.z + size.z / 2))));
-      return this.instance(`chandelier:${file}`, parts, mats);
+      const mats = spots.map((p) => {
+        const s = (p.size * scale) / size.y;
+        return new THREE.Matrix4().compose(new THREE.Vector3(p.x, p.y, p.z), new THREE.Quaternion(), new THREE.Vector3(s, s, s)).multiply(new THREE.Matrix4().makeTranslation(-(min.x + size.x / 2), -(min.y + size.y), -(min.z + size.z / 2)));
+      });
+      return this.instance(`chandelier:${file}`, parts, mats, spots.map((p) => p.room));
     };
     try {
       if (q === 'high' && !this.highChandeliers) {
-        this.highChandeliers = await make('chandelier-high.glb', 1.5);
+        this.highChandeliers = await make('chandelier-high.glb', 1);
         this.group.add(this.highChandeliers);
         this.sparkle = this.glints(this.highChandeliers);
         if (this.sparkle) this.group.add(this.sparkle);
       }
       if (q === 'low' && !this.lowChandeliers) {
-        this.lowChandeliers = await make('chandelier-low.glb', 0.95);
+        this.lowChandeliers = await make('chandelier-low.glb', 0.95 / 1.5);
         this.group.add(this.lowChandeliers);
       }
     } catch (err) {
@@ -182,19 +195,43 @@ export class Props {
     await this.chandeliers(q);
   }
 
-  private instance(name: string, parts: Part[], at: THREE.Matrix4[]): THREE.Group {
+  private instance(name: string, parts: Part[], at: THREE.Matrix4[], rooms: string[]): THREE.Group {
     const g = new THREE.Group();
     g.name = `prop:${name}`;
-    const m = new THREE.Matrix4();
+    const meshes: THREE.InstancedMesh[] = [];
     for (const part of parts) {
       const mesh = new THREE.InstancedMesh(part.geometry, this.materialFor(part.material, this.quality), at.length);
       mesh.userData.source = part.material;
-      at.forEach((a, i) => mesh.setMatrixAt(i, m.multiplyMatrices(a, part.matrix)));
+      g.add(mesh);
+      meshes.push(mesh);
+    }
+    const set: Set = { meshes, parts, at, rooms };
+    this.sets.push(set);
+    this.fill(set);
+    return g;
+  }
+
+  /** Draw only the props standing in these rooms (null: all of them). */
+  setRooms(rooms: globalThis.Set<string> | null): void {
+    this.visible = rooms;
+    for (const set of this.sets) this.fill(set);
+  }
+
+  /** Write the instances of the rooms on show, packed at the front. */
+  private fill(set: Set): void {
+    const m = new THREE.Matrix4();
+    set.meshes.forEach((mesh, k) => {
+      const part = set.parts[k]!;
+      let n = 0;
+      set.at.forEach((a, i) => {
+        if (this.visible && !this.visible.has(set.rooms[i]!)) return;
+        mesh.setMatrixAt(n++, m.multiplyMatrices(a, part.matrix));
+      });
+      mesh.count = n;
+      mesh.visible = n > 0;
       mesh.instanceMatrix.needsUpdate = true;
       mesh.computeBoundingSphere();
-      g.add(mesh);
-    }
-    return g;
+    });
   }
 
   private cache = new Map<string, Promise<{ parts: Part[]; size: THREE.Vector3; min: THREE.Vector3 }>>();

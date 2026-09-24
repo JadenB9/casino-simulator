@@ -12,7 +12,7 @@ import { loadCards } from '../table/cards.ts';
 import { TableStage, type Pose } from '../table/stage.ts';
 import { Sfx } from '../audio/sfx.ts';
 import { createWorld, type FloorWorld, type WorldStation } from '../world/index.ts';
-import { seatWorld } from '../world/stations.ts';
+import { HIGH_TIER, seatWorld } from '../world/stations.ts';
 import { RemotePlayers, type SeatPose } from '../world/remote-players.ts';
 import { FloorLink, byteToYaw } from '../net/presence.ts';
 import { GAMES } from '../games/index.ts';
@@ -411,6 +411,8 @@ class App {
       variant: station.variant,
       floor: this.link,
       root: this.ui,
+      // the high limit salon's tables open at high limits
+      prefer: station.tier === 'high' ? HIGH_TIER : undefined,
     });
     if (!choice) {
       await this.world.exitTable();

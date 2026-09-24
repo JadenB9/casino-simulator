@@ -25,7 +25,7 @@ import type { GameId } from '../../../shared/src/engine.ts';
 import { SKIN_TONES, type Body, type Look } from '../../../shared/src/look.ts';
 import { uniformOutfit, type Characters, type Person, type StaffGesture, type UniformId } from './characters.ts';
 import type { Collider, Post as CollisionPost } from './collision.ts';
-import type { FloorPlan } from './layout.ts';
+import { roomAt, type FloorPlan } from './layout.ts';
 import type { WorldStation } from './stations.ts';
 
 export type { StaffGesture } from './characters.ts';
@@ -39,6 +39,8 @@ export interface StaffPost {
   x: number;
   z: number;
   yaw: number;
+  /** The room they work in (hidden with it). */
+  room: string;
 }
 
 /** Hidden past this (metres from the camera), shown again inside CULL_M - 1. */
@@ -192,17 +194,19 @@ export function staffPosts(stations: WorldStation[], plan: FloorPlan): StaffPost
     const spot = dealerSpot(s, modelPoints(s));
     s.anchor.updateWorldMatrix(true, false);
     s.anchor.localToWorld(at.set(spot.x, 0, spot.z));
-    posts.push({ role: s.game === 'craps' ? 'stickman' : 'dealer', station: s.id, x: at.x, z: at.z, yaw: s.yaw + spot.turn });
+    posts.push({ role: s.game === 'craps' ? 'stickman' : 'dealer', station: s.id, x: at.x, z: at.z, yaw: s.yaw + spot.turn, room: s.room });
   }
   // behind the bar, a little way back from the counter, facing the stools (-x)
   const bar = plan.bar;
   const stools = bar.stools.length ? bar.stools : [(bar.z0 + bar.z1) / 2];
   const mid = stools[Math.floor(stools.length / 2)]!;
-  posts.push({ role: 'bartender', station: null, x: bar.front + bar.depth + 0.42, z: mid, yaw: -Math.PI / 2 });
-  // in the cage behind the counter, at the teller window nearer the floor (decor.ts cuts the
-  // windows a metre either side of where players stand)
+  const room = (x: number, z: number) => roomAt(plan, x, z)?.id ?? 'pit';
+  const bx = bar.front + bar.depth + 0.42;
+  posts.push({ role: 'bartender', station: null, x: bx, z: mid, yaw: -Math.PI / 2, room: room(bx, mid) });
+  // in the cage behind the counter, at its middle teller window
   const c = plan.cashier;
-  posts.push({ role: 'cashier', station: null, x: c.x + 1.0, z: c.counter.z1 - 0.64 - 0.3, yaw: 0 });
+  const cz = c.counter.z1 - 0.64 - 0.3;
+  posts.push({ role: 'cashier', station: null, x: c.x, z: cz, yaw: 0, room: room(c.x, cz) });
   return posts;
 }
 
@@ -325,6 +329,7 @@ export class Staff {
   private readonly frustum = new THREE.Frustum();
   private readonly viewProj = new THREE.Matrix4();
   private readonly sphere = new THREE.Sphere(new THREE.Vector3(), 1.1);
+  private readonly box = new THREE.Box3();
   private readonly cam = new THREE.Vector3();
   private readonly people: THREE.Vector3[] = [];
   private readonly pool: THREE.Vector3[] = [];
@@ -408,8 +413,11 @@ export class Staff {
     return true;
   }
 
-  /** Every frame: show who's near and in view, and give them their life; `seated` is the table you sit at. */
-  update(dt: number, camera: THREE.Camera, seated: WorldStation | null): void {
+  /**
+   * Every frame: show who's near and in view, and give them their life; `seated` is the table you
+   * sit at, `rooms` the rooms that can be seen (visibility.ts): anyone elsewhere isn't drawn.
+   */
+  update(dt: number, camera: THREE.Camera, seated: WorldStation | null, rooms: Set<string> | null = null, sees: ((room: string, box: THREE.Box3) => boolean) | null = null): void {
     this.clock += dt;
     camera.updateMatrixWorld();
     camera.getWorldPosition(this.cam);
@@ -423,9 +431,12 @@ export class Staff {
       const d = Math.hypot(root.position.x - this.cam.x, root.position.z - this.cam.z);
       const near = m.shown ? d < CULL_M : d < CULL_M - 1;
       this.sphere.center.set(root.position.x, 0.95, root.position.z);
-      const show = mine || (near && this.frustum.intersectsSphere(this.sphere));
-      // past CULL_M (not merely out of view) the still copy stands in
-      const farShow = !show && !near;
+      this.box.min.set(root.position.x - 0.4, 0, root.position.z - 0.4);
+      this.box.max.set(root.position.x + 0.4, 1.9, root.position.z + 0.4);
+      const seen = mine || !rooms || (rooms.has(m.post.room) && (!sees || sees(m.post.room, this.box)));
+      const show = mine || (seen && near && this.frustum.intersectsSphere(this.sphere));
+      // past CULL_M (not merely out of view) the still copy stands in, if its room can be seen
+      const farShow = !show && !near && seen;
       if (m.far && farShow !== m.farShown) {
         m.farShown = farShow;
         m.far.dirty = true;

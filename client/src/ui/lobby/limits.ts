@@ -67,12 +67,16 @@ export class LimitsPicker {
   constructor(
     private readonly game: GameId,
     private readonly variant: string,
+    /** `prefer`: the tier this table opens at (a high-limit room's), unless your last pick was higher still. */
+    opts: { prefer?: string } = {},
   ) {
     this.spec = limitSpec(game)!;
     const blinds = this.spec.kind === 'blinds';
     const saved = remembered(game);
     const tiers = this.spec.tiers;
-    const at = saved ? tiers.findIndex((t) => sameLimits(t, saved)) : this.spec.standard;
+    let at = saved ? tiers.findIndex((t) => sameLimits(t, saved)) : this.spec.standard;
+    const preferred = opts.prefer ? tiers.findIndex((t) => t.name === opts.prefer) : -1;
+    if (preferred >= 0 && (!saved || saved.max < tiers[preferred]!.max)) at = preferred;
     this.pick = at >= 0 ? at : tiers.length;
     this.customLimits = saved ?? standardLimits(game)!;
 
