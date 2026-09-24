@@ -202,3 +202,35 @@
 .os-pop { pointer-events: none; z-index: 5; min-width: 180px; box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45); }
 .os-pop .os-result-mult { font-size: 48px; line-height: 1; font-weight: 600; font-variant-numeric: tabular-nums; }
 .os-pop .os-result-paid { font-size: 17px; font-weight: 600; }
+
+/* Hi-Lo's trail of cards, newest on the right */
+.os-trail { overflow: hidden; }
+.os-trail-list { display: flex; justify-content: flex-end; gap: 10px; }
+.os-trail-item { flex: none; display: grid; justify-items: center; gap: 6px; width: 64px; }
+.os-trail-card { width: 64px; height: 90px; border-radius: 5px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35); }
+.os-trail-cap {
+  min-width: 56px; padding: 3px 6px; border-radius: 4px; text-align: center; white-space: nowrap;
+  font-family: var(--os-num); font-size: 15px; font-variant-numeric: tabular-nums; background: var(--os-card); color: var(--os-ink-2);
+}
+.os-trail-item.win .os-trail-cap { background: rgba(31, 214, 95, 0.16); color: var(--os-win); }
+.os-trail-item.lose .os-trail-cap { background: rgba(255, 90, 95, 0.16); color: var(--os-lose); }
+.os-trail-item.lose .os-trail-card { outline: 2px solid var(--os-lose); outline-offset: 1px; }
+.os-trail-item.fresh { animation: os-trail-in 0.3s var(--ease, ease-out); }
+@keyframes os-trail-in { from { opacity: 0; translate: 26px 0; } }
+
+/* Crash's table of everyone's bets */
+.os-players { display: grid; grid-template-rows: auto auto 1fr; min-height: 0; background: var(--os-field); border-radius: 6px; overflow: hidden; }
+.os-players-head { display: flex; justify-content: space-between; align-items: baseline; padding: 9px 12px 6px; }
+.os-players-count { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--os-ink-3); }
+.os-players-total { font-family: var(--os-num); font-size: 17px; color: var(--os-ink); font-variant-numeric: tabular-nums; }
+.os-players-list { display: grid; align-content: start; overflow: hidden; }
+.os-players-row { display: grid; grid-template-columns: 1fr 64px 64px 66px; align-items: center; gap: 6px; padding: 0 12px; height: 30px; font-size: 14px; }
+.os-players-cols { height: 24px; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--os-ink-3); border-bottom: 1px solid var(--os-panel); }
+.os-players-cols span:not(:first-child), .os-players-row span:not(.os-players-name) { text-align: right; }
+.os-players-row:nth-child(even):not(.os-players-cols) { background: rgba(33, 55, 67, 0.45); }
+.os-players-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--os-ink); }
+.os-players-bet, .os-players-at, .os-players-profit { font-family: var(--os-num); font-size: 15px; font-variant-numeric: tabular-nums; color: var(--os-ink-2); }
+.os-players-row.you .os-players-name { color: var(--os-cash); font-weight: 700; }
+.os-players-row.win .os-players-at, .os-players-row.win .os-players-profit { color: var(--os-win); }
+.os-players-row.lose .os-players-at, .os-players-row.lose .os-players-profit { color: var(--os-lose); }
+.os-players-empty { padding: 10px 12px; font-size: 13px; color: var(--os-ink-3); }
