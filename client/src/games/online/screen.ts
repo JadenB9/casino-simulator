@@ -553,3 +553,131 @@ export function drawAttractPanel(g: CanvasRenderingContext2D, top: number, h: nu
   g.textAlign = 'left';
   return w;
 }
+
+// ---------------------------------------------------------------------------------------------
+// Added with Tower, Mines, Hi-Lo and Crash (additions only; nothing above changes): the multiplier
+// and percent text those four print, the pop over their boards when a round ends in a payout,
+// Hi-Lo's trail of cards, and Crash's table of everyone's bets.
+
+const multFormat = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/** "2.34×", "1,013.76×" from hundredths. */
+export function multText(hundredths: number): string {
+  return `${multFormat.format(hundredths / 100)}×`;
+}
+
+/** "75.00%" from a probability. */
+export function pctText(p: number, digits = 2): string {
+  return `${(p * 100).toFixed(digits)}%`;
+}
+
+/**
+ * The multiplier and what it paid, popped over the board in the site's result box. Green only
+ * when the return beats the stake; a return of the stake itself (a 1.00× crash cash-out) is plain.
+ */
+export class OutcomePop {
+  private box: HTMLElement | null = null;
+  private timer = 0;
+
+  constructor(private readonly parent: HTMLElement) {}
+
+  /** Pop the result for `ms` (0 keeps it up until hide()). */
+  show(mult: number, payout: Cents, bet: Cents, ms = 0): void {
+    this.hide();
+    const win = payout > bet;
+    const box = el('div', `os-result os-pop${win ? '' : ' lose'}`);
+    box.append(el('div', 'os-result-mult', multText(mult)), el('div', 'os-result-paid', `${win ? 'Won' : 'Paid'} ${formatMoney(payout)}`));
+    this.parent.append(box);
+    this.box = box;
+    if (ms > 0) this.timer = window.setTimeout(() => this.hide(), ms);
+  }
+
+  hide(): void {
+    clearTimeout(this.timer);
+    this.box?.remove();
+    this.box = null;
+  }
+}
+
+export interface TrailEntry {
+  /** A card code ("Ks"): its art is the casino's own card faces. */
+  card: string;
+  caption: string;
+  tone: 'win' | 'lose' | 'plain';
+}
+
+/**
+ * A row of small cards with a caption under each (Start, Skip, ▲ 1.07×), newest on the right;
+ * the oldest slide off the left edge.
+ */
+export class CardTrail {
+  readonly root = el('div', 'os-trail');
+  private readonly list = el('div', 'os-trail-list');
+
+  constructor(private readonly size = 12) {
+    this.root.append(this.list);
+  }
+
+  push(e: TrailEntry, fresh = true): void {
+    const item = el('div', `os-trail-item ${e.tone}${fresh ? ' fresh' : ''}`);
+    const img = el('img', 'os-trail-card');
+    img.alt = e.card;
+    img.draggable = false;
+    img.src = `${import.meta.env.BASE_URL}assets/cards/${e.card}.svg`;
+    item.append(img, el('span', 'os-trail-cap', e.caption));
+    this.list.append(item);
+    while (this.list.childElementCount > this.size) this.list.firstElementChild!.remove();
+  }
+
+  clear(): void {
+    this.list.replaceChildren();
+  }
+}
+
+export interface PlayerRow {
+  name: string;
+  bet: Cents;
+  /** Hundredths cashed out at, or null while riding (or lost). */
+  cashed: number | null;
+  payout: Cents;
+  busted: boolean;
+  you: boolean;
+}
+
+/** Everyone's bets this round, biggest first: who, how much, and where they got out (or didn't). */
+export class PlayersTable {
+  readonly root = el('div', 'os-players');
+  private readonly count = el('span', 'os-players-count');
+  private readonly total = el('span', 'os-players-total');
+  private readonly list = el('div', 'os-players-list');
+
+  constructor() {
+    const head = el('div', 'os-players-head');
+    head.append(this.count, this.total);
+    const cols = el('div', 'os-players-row os-players-cols');
+    cols.append(el('span', '', 'Player'), el('span', '', 'Bet'), el('span', '', 'Cashed'), el('span', '', 'Profit'));
+    this.root.append(head, cols, this.list);
+    this.set([]);
+  }
+
+  set(rows: PlayerRow[]): void {
+    const sorted = [...rows].sort((a, b) => Number(b.you) - Number(a.you) || b.bet - a.bet || a.name.localeCompare(b.name));
+    this.count.textContent = `${rows.length} ${rows.length === 1 ? 'player' : 'players'}`;
+    this.total.textContent = formatMoney(rows.reduce((n, r) => n + r.bet, 0));
+    this.list.replaceChildren(
+      ...sorted.map((r) => {
+        const tone = r.cashed !== null ? 'win' : r.busted ? 'lose' : 'live';
+        const row = el('div', `os-players-row ${tone}${r.you ? ' you' : ''}`);
+        const profit = r.cashed !== null ? formatMoney(r.payout - r.bet, { sign: true }) : r.busted ? formatMoney(-r.bet) : '';
+        row.append(
+          el('span', 'os-players-name', r.name),
+          el('span', 'os-players-bet', formatMoney(r.bet)),
+          el('span', 'os-players-at', r.cashed !== null ? multText(r.cashed) : r.busted ? 'Crashed' : '—'),
+          el('span', 'os-players-profit', profit),
+        );
+        return row;
+      }),
+    );
+    if (rows.length === 0) this.list.append(el('div', 'os-players-empty', 'No bets yet this round'));
+  }
+}
