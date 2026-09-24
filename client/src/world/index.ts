@@ -7,7 +7,7 @@ import type { Engine3D, Quality } from '../render/engine3d.ts';
 import { DEFAULT_LOOK, type Look } from '../../../shared/src/look.ts';
 import { GAMES } from '../games/index.ts';
 import type { CashierPoint, Station, World } from './contract.ts';
-import { planFloor, slotVariants, type FloorPlan } from './layout.ts';
+import { planFloor, setVpMode, slotVariants, type FloorPlan } from './layout.ts';
 import { Mats, loadTextures } from './materials.ts';
 import { Batch } from './batch.ts';
 import { Collider } from './collision.ts';
@@ -15,18 +15,19 @@ import { buildRoom } from './room.ts';
 import { buildStations, type WorldStation } from './stations.ts';
 import { buildDecor } from './decor.ts';
 import { buildSigns, floorSigns, loadSignFonts } from './signs.ts';
-import { Lighting, buildPools } from './lighting.ts';
+import { GlowMerge, Lighting, buildPools } from './lighting.ts';
 import { Props } from './props.ts';
 import { Characters } from './characters.ts';
 import { Player } from './player.ts';
 import { Interact } from './interact.ts';
 import { TouchControls } from './touch.ts';
 import { StationLod } from './lod.ts';
-import { Bloom, PixelRatio } from './bloom.ts';
+import { Bloom, FLOOR_BLOOM, MACHINE_BLOOM, PixelRatio, TABLE_BLOOM, type BloomLook } from './bloom.ts';
 import type { MouseSettings } from './mouse.ts';
 import { Emotes, OWN_BUBBLE_Y, BUBBLE_Y, type CharacterSource } from './emotes.ts';
 import { Staff, measureSeats, type StaffGesture } from './npcs.ts';
 import type { EmoteId } from '../../../shared/src/protocol.ts';
+import { el } from '../ui/kit.ts';
 import './world.css';
 
 export type { WorldStation } from './stations.ts';
@@ -75,6 +76,13 @@ export interface FloorWorld extends World {
   readonly focus: WorldStation | null;
   /** Draw calls and triangles of the last frame (renderer.info, counted across the bloom passes). */
   stats(): { calls: number; triangles: number; programs: number; pixelRatio: number };
+  /** The far stand-ins and their draw-call budget (for the dev floor and the headless checks). */
+  readonly lod: StationLod;
+  /**
+   * What the walker and the camera bump into. Something standing on the floor adds itself here, as
+   * dealers in the open staff area do: `collider.post(x, z, 0.28, 1.9, { cam: false })`.
+   */
+  readonly collider: Collider;
   /** Place the player (dev views, respawn). */
   teleport(x: number, z: number, heading: number): void;
   quality: Quality;
@@ -110,6 +118,20 @@ export interface FloorWorld extends World {
   useBar(bar: { hold(id: string): unknown; drop(): unknown } | null): void;
 }
 
+/**
+ * Glossy floor materials that mirror the casino on High: reflection strength, and a polish
+ * (roughness) for some. The metals keep the bright studio light (brass reads as brass by it).
+ */
+const REFLECTIVE: [string, number, number?][] = [
+  ['marble-floor', 0.55, 0.15],
+  ['marble-black', 0.8],
+  ['mirror', 1.0],
+  ['lacquer', 0.8],
+  ['lacquer-red', 0.6],
+  ['wood', 0.45],
+  ['wainscot', 0.35],
+];
+
 export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Promise<FloorWorld> {
   let quality: Quality = opts.quality ?? engine.quality;
   const renderer = engine.renderer;
@@ -128,16 +150,21 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
   const col = new Collider();
   const batch = new Batch();
 
-  const { chandeliers } = buildRoom(plan, batch, mats, col);
+  const glow = new GlowMerge();
+  const { chandeliers, downlights } = buildRoom(plan, batch, mats, col, glow);
   const stationRoot = new THREE.Group();
   stationRoot.name = 'stations';
   root.add(stationRoot);
   const { stations, vpMode } = buildStations(plan, stationRoot, quality, col);
+  // bar-top video poker changes the bar's counter, its stools and what fits round them
+  if (vpMode !== plan.vpMode) setVpMode(plan, vpMode);
   const lod = new StationLod(stations, quality);
-  const decor = buildDecor(plan, stations, vpMode, batch, mats, col);
-  buildPools(decor.pools, batch, mats);
+  const decor = buildDecor(plan, stations, batch, mats, col, glow);
+  buildPools(decor.pools, downlights, plan, batch, mats);
   const signSpecs = [...floorSigns(plan, batch, mats), ...decor.signs];
   const staticMeshes = batch.build(root, 'floor');
+  const glowMesh = glow.build(root);
+  if (glowMesh) staticMeshes.push(glowMesh);
   const signs = buildSigns(signSpecs, root, quality, aniso);
   progress(0.55);
 
@@ -173,6 +200,12 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
   const cashier: CashierPoint = { id: 'cashier', anchor: cashierAnchor, position: new THREE.Vector3(plan.cashier.x, 0, plan.cashier.z) };
   const ui = opts.ui ?? document.getElementById('ui') ?? document.body;
   const interact = new Interact(stations, cashier, player, engine.camera, ui, opts.onEscape);
+  // On the floor with the mouse free (after Esc, or before the first click on the dev floor): how
+  // to get looking around back. Only where there's a mouse to hold (the player knows).
+  const hint = el('div', 'world-hint');
+  hint.append(el('span', 'world-key', 'Click'), 'to look around');
+  hint.hidden = true;
+  ui.append(hint);
   // Phones and tablets: the thumb stick, drag-to-look, the action button and Leave at a table.
   const touch = new TouchControls({ player, ui, seated: () => interact.seated, focus: () => interact.focus, sensitivity: () => player.mouseSettings.sensitivity });
 
@@ -192,12 +225,41 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
   } catch {
     /* compiled lazily instead */
   }
+  // The floor's own reflections (High): the casino captured from inside the doors and
+  // prefiltered, for the polished marble, lacquer and wood, so they mirror its warm lights and
+  // signs instead of a studio.
+  let reflections: THREE.WebGLRenderTarget | null = null;
+  const reflect = () => {
+    if (reflections || quality !== 'high') return;
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    // the floor as it stands: not the player, not the chandeliers' passing glints
+    props.glinting = false;
+    const shown = character.root.visible;
+    character.root.visible = false;
+    // from the main aisle just inside the vestibule: the pit, its lights and the signs ahead, the doors behind
+    reflections = pmrem.fromScene(scene, 0, 0.1, 60, { size: 256, position: new THREE.Vector3(0, 1.6, plan.entrance.z0 - 1.5) });
+    character.root.visible = shown;
+    props.glinting = true;
+    pmrem.dispose();
+    for (const [name, k, rough] of REFLECTIVE) {
+      const m = mats.get(name) as THREE.MeshStandardMaterial;
+      if (!m.isMeshStandardMaterial) continue;
+      m.envMap = reflections.texture;
+      m.envMapIntensity = k;
+      if (rough !== undefined) m.roughness = rough;
+      m.needsUpdate = true;
+    }
+  };
+
+  // with the shaders compiled, the capture is only the drawing
+  reflect();
   progress(1);
 
   const emotes = new Emotes();
   let remotes: CharacterSource | null = null;
   let bar: Parameters<FloorWorld['useBar']>[0] = null;
 
+  let bloomLook: BloomLook = FLOOR_BLOOM;
   let lastCalls = 0;
   let lastTris = 0;
   const focusAt = new THREE.Vector3();
@@ -208,6 +270,8 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
     characterFactory: characters,
     plan,
     quality,
+    lod,
+    collider: col,
     player: {
       character,
       position: player.position,
@@ -237,7 +301,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
       if (signs) (signs.mesh.material as THREE.MeshBasicMaterial).color.setScalar(q === 'high' ? 2.4 : 1.6);
       lighting.setQuality(q);
       characters.setQuality(q);
-      void props.setQuality(q);
+      void props.setQuality(q).then(() => reflect());
       applyQuality(q);
     },
     update(dt) {
@@ -246,6 +310,8 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
       renderer.info.reset();
       player.update(dt);
       interact.update(dt);
+      const idle = player.awaitingClick && !interact.seated;
+      if (hint.hidden === idle) hint.hidden = !idle;
       touch.update();
       lod.update(engine.camera, interact.seated);
       character.update(dt);
@@ -254,11 +320,15 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
       const f = world.focus;
       lighting.setFocus(f && f.zone !== 'slots' && f.game !== 'videopoker' ? focusAt.copy(f.anchor.position) : null);
       lighting.update(dt);
-      // Seated, the camera is a metre from lit felt and brass: only real light sources (neon,
-      // bulbs, the machines' glass) should bloom there, not the printing on the table.
-      const close = interact.seated !== null;
-      bloom.pass.threshold = close ? 2.4 : 1.05;
-      bloom.pass.strength = close ? 0.3 : 0.42;
+      // Seated, the camera is a metre from lit felt, cards and brass: nothing on a table glows
+      // there; at a machine its own lights do, a little.
+      const seat = interact.seated;
+      const want = !seat ? FLOOR_BLOOM : seat.zone === 'slots' || seat.game === 'videopoker' ? MACHINE_BLOOM : TABLE_BLOOM;
+      if (want !== bloomLook) {
+        bloomLook = want;
+        bloom.setLook(want);
+      }
+      props.update(dt);
       characters.updateLabels(engine.camera);
       bloom.update(dt);
       pr.update(dt);
@@ -290,6 +360,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
       bar = b;
     },
     dispose() {
+      hint.remove();
       touch.dispose();
       emotes.dispose();
       staff.dispose();
@@ -298,6 +369,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
       player.dispose();
       character.dispose();
       bloom.dispose();
+      reflections?.dispose();
       renderer.info.autoReset = true;
       signs?.texture.dispose();
       for (const m of staticMeshes) m.geometry.dispose();

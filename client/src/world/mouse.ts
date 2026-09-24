@@ -1,6 +1,8 @@
 // Mouse look settings, kept for next time: how fast the camera turns per pixel of mouse travel
-// (1 is the default) and whether a click on the floor captures the mouse at all. Anyone who'd
-// rather keep the cursor turns capture off and still has drag-to-look.
+// (1 is the default) and whether the floor holds the mouse (Pointer Lock) so moving it always
+// looks around. Anyone who'd rather keep the cursor turns that off and looks by dragging.
+// Settings (the sheet) and the floor's controller both go through setMouseSettings(), so a change
+// in the sheet reaches the walking player at once.
 
 const SENS_KEY = 'casino.mouse.sensitivity';
 const CAPTURE_KEY = 'casino.mouse.capture';
@@ -11,7 +13,7 @@ export const SENS_MAX = 3;
 export interface MouseSettings {
   /** Multiplier on the default turn rate, SENS_MIN..SENS_MAX. */
   sensitivity: number;
-  /** A click on the floor view captures the mouse (Pointer Lock). */
+  /** The floor holds the mouse (Pointer Lock): moving it looks around, Esc frees the cursor. */
   capture: boolean;
 }
 
@@ -35,12 +37,33 @@ export function clampSensitivity(k: number): number {
   return Number.isFinite(k) ? Math.max(SENS_MIN, Math.min(SENS_MAX, k)) : 1;
 }
 
+let current: MouseSettings | null = null;
+const listeners = new Set<(m: MouseSettings) => void>();
+
 export function loadMouse(): MouseSettings {
-  const s = read(SENS_KEY);
-  return { sensitivity: s === null ? 1 : clampSensitivity(Number(s)), capture: read(CAPTURE_KEY) !== '0' };
+  if (!current) {
+    const s = read(SENS_KEY);
+    current = { sensitivity: s === null ? 1 : clampSensitivity(Number(s)), capture: read(CAPTURE_KEY) !== '0' };
+  }
+  return { ...current };
 }
 
 export function saveMouse(m: MouseSettings): void {
   write(SENS_KEY, String(m.sensitivity));
   write(CAPTURE_KEY, m.capture ? '1' : '0');
+}
+
+/** Change the settings, save them and tell whoever listens (the floor's controller). */
+export function setMouseSettings(o: Partial<MouseSettings>): MouseSettings {
+  const was = loadMouse();
+  const next: MouseSettings = { sensitivity: clampSensitivity(o.sensitivity ?? was.sensitivity), capture: o.capture ?? was.capture };
+  current = next;
+  saveMouse(next);
+  for (const fn of listeners) fn({ ...next });
+  return { ...next };
+}
+
+export function onMouseChange(fn: (m: MouseSettings) => void): () => void {
+  listeners.add(fn);
+  return () => listeners.delete(fn);
 }
