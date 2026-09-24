@@ -668,7 +668,8 @@ async function playMachine(page, id, game) {
       const r = s.__events.find((e) => e.type === 'result');
       const go = s.__events.find((e) => e.type === 'spin' || e.type === 'deal');
       // (video poker's bet is on its deal; the slots' on the result)
-      return { bet: r?.bet ?? go?.bet ?? 0, win: (r?.win ?? 0) + (r?.freeWin ?? 0), coins: go?.coins ?? 0, most: s.snapshot.meta.config.options?.maxCoins, cel: s.__celebrations, errs: s.__errs };
+      // (a result's win is everything the spin paid, its free games included)
+      return { bet: r?.bet ?? go?.bet ?? 0, win: r?.win ?? 0, coins: go?.coins ?? 0, most: s.snapshot.meta.config.options?.maxCoins, cel: s.__celebrations, errs: s.__errs };
     });
     const after = await stackOf(page);
     if (r === 0) check(res.coins === res.most, `${id}: Max (A) set the most coins (${res.coins} of ${res.most}, ${res.bet / 100} a ${game === 'videopoker' ? 'hand' : 'spin'})`);
