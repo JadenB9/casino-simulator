@@ -11,7 +11,7 @@ import { DIFFICULTIES, SPECS, LEVELS, eggs, multiplier, returnAt, bestStop, type
 import type { TowerView } from '../../../../shared/src/games/tower/engine.ts';
 import { celebrate } from '../../table/celebrate.ts';
 import { attractTexture, pcModel, pcPose, pcScreenCorners, PC_FOOTPRINT, PC_SEAT } from '../online/pc.ts';
-import { OnlineScreen, BetBox, actionButton, SegChoice, InfoList, SessionTally, OutcomePop, commitTyping, labelled, winTier, siteTone, drawSiteBar, drawAttractPanel, multText, pctText } from '../online/screen.ts';
+import { OnlineScreen, AddChips, BetBox, actionButton, SegChoice, InfoList, SessionTally, OutcomePop, commitTyping, labelled, winTier, siteTone, drawSiteBar, drawAttractPanel, multText, pctText } from '../online/screen.ts';
 import { TowerBoard } from './board.ts';
 
 /** The chair's trim on the floor: Tower's ember orange. */
@@ -86,6 +86,7 @@ export const tower: GameClientModule = {
   mount(ctx): TableView {
     const screen = new OnlineScreen('Tower');
     ctx.ui.append(screen.root);
+    const cashier = new AddChips(screen, ctx);
     const corners = pcScreenCorners();
 
     let difficulty: Difficulty = 'easy';
@@ -265,6 +266,7 @@ export const tower: GameClientModule = {
 
     return {
       onTable(snap) {
+        cashier.table(snap);
         stack = snap.you.stack;
         busy = false;
         animating = false;
@@ -320,12 +322,14 @@ export const tower: GameClientModule = {
       },
 
       onSeat(msg) {
+        cashier.seat(msg);
         stack = msg.stack;
         bet?.setMax(stack);
         sync();
       },
 
       onError() {
+        cashier.refused();
         busy = false;
         sync();
       },

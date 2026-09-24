@@ -18,6 +18,7 @@ import { el } from '../kit.ts';
 import { LobbyWatch, isFull, type LobbyFloor } from './watch.ts';
 import { back, crown, lock, unlock } from './icons.ts';
 import { LimitsPicker } from './limits.ts';
+import { soloNote } from './notes.ts';
 import './lobby.css';
 
 export interface TableFlowOpts {
@@ -41,13 +42,6 @@ export function openTableFlow(opts: TableFlowOpts): Promise<TableChoice | null> 
   if (!CATALOG[opts.game].multiplayer && !hasLimitChoice(opts.game)) return Promise.resolve({ kind: 'solo' });
   return new Promise((resolve) => new TableFlow(opts, resolve));
 }
-
-/** How the single-player table runs, in the player's words. */
-const SOLO_NOTE: Partial<Record<GameId, string>> = {
-  roulette: 'You and the croupier. Spin when you are ready.',
-  craps: 'You and the stickman. Roll when you are ready.',
-  holdem: 'You against bots, each one marked as a bot.',
-};
 
 const ERRORS: Record<string, string> = {
   BAD_PIN: 'No table has that PIN.',
@@ -133,7 +127,7 @@ class TableFlow {
     const online = !this.info.multiplayer;
     const solo = online
       ? this.choice('S', 'Play', 'At this computer, on your own.', () => this.sitSolo())
-      : this.choice('S', 'Single player', SOLO_NOTE[this.opts.game] ?? 'You and the dealer. Deal when you are ready.', () => this.sitSolo());
+      : this.choice('S', 'Single player', soloNote(this.opts.game), () => this.sitSolo());
     this.soloBtn = solo;
     this.soloAside = this.picker ? el('span', 'lobby-choice-aside lobby-choice-limits') : null;
     if (this.soloAside) solo.append(this.soloAside);

@@ -253,3 +253,11 @@
 .os-players-row.win .os-players-at, .os-players-row.win .os-players-profit { color: var(--os-win); }
 .os-players-row.lose .os-players-at, .os-players-row.lose .os-players-profit { color: var(--os-lose); }
 .os-players-empty { padding: 10px 12px; font-size: 13px; color: var(--os-ink-3); }
+
+/* The cashier beside the chips (AddChips) */
+.os-add {
+  height: 30px; padding: 0 12px; margin-left: 4px; border: 0; border-radius: 4px;
+  background: var(--os-card); color: var(--os-ink); font-size: 13px; font-weight: 700; cursor: pointer;
+}
+.os-add:hover:not(:disabled) { background: #2f4553; }
+.os-add:disabled { opacity: 0.45; cursor: default; }

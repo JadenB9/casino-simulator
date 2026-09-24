@@ -15,7 +15,8 @@ import type { GameEvent } from '../../../../shared/src/engine.ts';
 import type { Member } from '../../../../shared/src/protocol.ts';
 import type { BanditView, SeatSettle, Bets } from '../../../../shared/src/games/banditwheel/protocol.ts';
 import { NUMBERS, SPOTS, SLOTS, type WheelNumber, spotOf, paysLabel, callFor, edgePercent } from '../../../../shared/src/games/banditwheel/rules.ts';
-import { formatMoney, type Cents } from '../../../../shared/src/money.ts';
+import { formatMoney, type BetLimits, type Cents } from '../../../../shared/src/money.ts';
+import { chipOn } from '../../table/max.ts';
 import { tween, ease } from '../../table/tween.ts';
 import { celebrate } from '../../table/celebrate.ts';
 import { serverNow } from '../../net/clock.ts';
@@ -97,6 +98,7 @@ function mountBanditWheel(ctx: TableViewCtx): TableView {
   let stack: Cents = 0;
   let pendingStack: Cents | null = null;
   let limitMax: Cents = 0;
+  let limits: BetLimits | null = null;
   let animating = false;
   let disposed = false;
   /** Bumped by every full snapshot: a spin or payout started before it stops where it is. */
@@ -269,7 +271,8 @@ function mountBanditWheel(ctx: TableViewCtx): TableView {
   function place(n: WheelNumber): void {
     if (!canBet()) return;
     if (panel.pick.kind === 'max') ctx.link.act({ type: 'max', spot: n });
-    else ctx.link.act({ type: 'bet', bets: [{ spot: n, amount: panel.pick.spec.value }] });
+    // a chip short of the number's minimum puts the minimum down, as at every other table
+    else ctx.link.act({ type: 'bet', bets: [{ spot: n, amount: limits ? chipOn(panel.pick.spec.value, myBets()[n] ?? 0, limits) : panel.pick.spec.value }] });
     ctx.sfx.play('chip-lay', { volume: 0.7 });
   }
 
@@ -706,6 +709,7 @@ function mountBanditWheel(ctx: TableViewCtx): TableView {
       stack = snap.you.stack;
       pendingStack = null;
       members = snap.members;
+      limits = snap.meta.config.limits.default ?? limits;
       limitMax = snap.meta.config.limits.default?.max ?? limitMax;
       panel.setLimits(limitMax);
       const v = snap.view as BanditView;

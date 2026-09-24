@@ -72,7 +72,15 @@ export class TableSession {
       url: () => socketUrl(path, this.pin ? { ...params, pin: this.pin } : params),
       onMessage: (m) => this.onMessage(m),
       onState: (s, code) => {
-        if (s === 'reconnecting') this.kit.say('Reconnecting…', 4000);
+        if (s === 'reconnecting') {
+          this.kit.say('Reconnecting…', 4000);
+          this.lost = true;
+        }
+        // back: say so, rather than leave "Reconnecting…" up over a table that is live again
+        if (s === 'open' && this.lost) {
+          this.lost = false;
+          this.kit.say('Back at the table', 1400);
+        }
         if (s === 'open' && this.leavePending) this.sendLeave();
         // A close this session asked for (leaving, closing) isn't news to the app.
         if (s === 'closed' && !this.ended) this.onClosed(code);
@@ -89,6 +97,18 @@ export class TableSession {
     ready: (on) => this.send({ t: 'ready', on }),
     leave: () => (this.hooks.onLeave ? this.hooks.onLeave() : this.leave()),
   };
+
+  /**
+   * Run `fn` once the events received so far have been shown, the view's own animations
+   * included: what the HUD says about the stack follows the table, never ahead of it.
+   */
+  afterShown(fn: () => void): void {
+    void this.queue
+      .then(() => this.view?.settled?.())
+      .then(() => {
+        if (!this.ended) fn();
+      });
+  }
 
   send(msg: unknown): void {
     if (!this.socket.send(msg)) toast('Not connected to the table yet.', 'err');
@@ -217,6 +237,8 @@ export class TableSession {
   /** The lobby's PIN as last heard (members are told it), for reconnecting. */
   private pin: string | null = null;
   private leavePending = false;
+  /** The socket dropped and hasn't come back yet ("Reconnecting…" is showing). */
+  private lost = false;
   /** Bumped by each full snapshot; event batches queued before it are skipped. */
   private gen = 0;
   /** Left or closed: nothing more is reported to the app. */

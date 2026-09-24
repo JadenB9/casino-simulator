@@ -28,8 +28,12 @@ export interface BarDeps {
 /** How long an order takes to reach you when there are no waiters yet. */
 export const DELIVERY_MS = 4000;
 
-/** Take on money numbers a purchase answered with, if they're the newest (rev) the session has seen. */
-export function applyMoney(session: SessionLike, m: { balance: Cents; inPlay: Cents; rev: number }): void {
+/**
+ * Take on money numbers a purchase answered with, if they're the newest (rev) the session has seen,
+ * and count what it cost as spending (the HUD's session net leaves purchases out).
+ */
+export function applyMoney(session: SessionLike, m: { balance: Cents; inPlay: Cents; rev: number }, price = 0): void {
+  session.spend?.(price);
   const p = session.profile;
   if (!p || m.rev < p.rev) return;
   session.set({ ...p, balance: m.balance, inPlay: m.inPlay, rev: m.rev });
@@ -67,7 +71,7 @@ export class Bar {
   /** Order one item: paid now from your balance, brought to you after. */
   async order(item: string): Promise<BarOrder> {
     const r = await this.deps.api.order(item, crypto.randomUUID());
-    applyMoney(this.deps.session, r);
+    applyMoney(this.deps.session, r, r.order.price);
     this.queue.push(r.order);
     for (const fn of this.orderFns) fn(r.order);
     this.changed();
