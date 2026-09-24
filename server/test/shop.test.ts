@@ -43,13 +43,20 @@ async function count(sql: string, ...args: unknown[]): Promise<number> {
   return (await env.DB.prepare(sql).bind(...args).first<{ n: number }>())!.n;
 }
 
-/** Every cent accounted for: the ledger, less what the shop and the bar took, is what the account has. */
+/**
+ * Every cent accounted for: the ledger, less what the shop and the bar took, is the balance. (A
+ * buy-in's ledger row is negative, so chips on a table are outside that sum; with none out, as
+ * after a cash-out, it is the whole of balance + in_play.)
+ */
 async function expectBalanced(id: number): Promise<void> {
   const ledger = await count(`SELECT COALESCE(SUM(amount), 0) AS n FROM casino_ledger WHERE account_id = ?1`, id);
   const items = await count(`SELECT COALESCE(SUM(price), 0) AS n FROM casino_items WHERE account_id = ?1`, id);
   const orders = await count(`SELECT COALESCE(SUM(price), 0) AS n FROM casino_orders WHERE account_id = ?1`, id);
   const m = await money(id);
-  expect(ledger - items - orders).toBe(m.balance + m.in_play);
+  expect(ledger - items - orders).toBe(m.balance);
+  const escrow = await count(`SELECT COALESCE(SUM(amount), 0) AS n FROM casino_escrow WHERE account_id = ?1`, id);
+  expect(m.in_play).toBe(escrow);
+  if (m.in_play === 0) expect(ledger - items - orders).toBe(m.balance + m.in_play);
 }
 
 const buy = (token: string, item: unknown, opId: unknown = op()) => api('shop/buy', token, { method: 'POST', body: JSON.stringify({ item, op: opId }) });
@@ -185,7 +192,9 @@ describe('POST /shop/buy', () => {
       expect(res.status, String(item)).toBe(404);
       expect((await res.json<any>()).error).toBe('NOT_FOUND');
     }
-    for (const bad of [undefined, 'x', 'has space in it', 'a'.repeat(41)]) {
+    const noOp = await api('shop/buy', a.token, { method: 'POST', body: JSON.stringify({ item: ROPE.id }) });
+    expect(noOp.status).toBe(400);
+    for (const bad of [null, 12345678, 'x', 'has space in it', 'a'.repeat(41)]) {
       const res = await buy(a.token, ROPE.id, bad);
       expect(res.status, String(bad)).toBe(400);
     }
@@ -387,6 +396,41 @@ describe('holding an order', () => {
 });
 
 describe('the audit', () => {
+  it('balances through a real table: buy in, order while seated from the balance, play, cash out, shop', async () => {
+    const a = await account('audit_table');
+    await win(a.id, 250_000 * DOLLAR);
+    const { client } = await connect('solo/highcard', a.token);
+    const c = client!;
+    await c.next((m) => m.t === 'table');
+    c.send({ t: 'buyin', aid: 'b1', amount: 10_000 * DOLLAR });
+    await c.next((m) => m.t === 'seat' && m.status === 'seated', 5000);
+    expect(await money(a.id)).toMatchObject({ balance: 290_000 * DOLLAR, in_play: 10_000 * DOLLAR });
+    await expectBalanced(a.id);
+
+    // Seated with chips out: the bar and the shop take from the balance, and the table's chips
+    // are left alone (the Rope Chain costs $250,000 and the balance still has it).
+    expect((await order(a.token, 'whiskey')).status).toBe(200);
+    expect((await buy(a.token, ROPE.id)).status).toBe(200);
+    expect(await money(a.id)).toMatchObject({ balance: 290_000 * DOLLAR - 22 * DOLLAR - ROPE.price, in_play: 10_000 * DOLLAR });
+    await expectBalanced(a.id);
+
+    let stack = 10_000 * DOLLAR;
+    for (let i = 0; i < 3; i++) {
+      c.send({ t: 'act', aid: `bet${i}`, a: { type: 'bet', amount: 100 * DOLLAR } });
+      await c.next((m) => m.t === 'ev' && m.events.some((e: any) => e.type === 'bet'));
+      c.send({ t: 'act', aid: `deal${i}`, a: { type: 'deal' } });
+      const ev = await c.next<any>((m) => m.t === 'ev' && m.events.some((e: any) => e.type === 'result'));
+      stack += ev.view.results['0'].payout - 100 * DOLLAR;
+    }
+    c.send({ t: 'cashout', aid: 'c1' });
+    const bal = await c.next<any>((m) => m.t === 'balance' && m.inPlay === 0, 5000);
+    // The cash-out adds to the balance the purchases left, and its revision is newer than theirs.
+    expect(bal.balance).toBe(290_000 * DOLLAR - 22 * DOLLAR - ROPE.price + stack);
+    expect(await money(a.id)).toMatchObject({ balance: bal.balance, in_play: 0 });
+    await expectBalanced(a.id);
+    c.ws.close();
+  });
+
   it('balances after a mix of wins, purchases, orders and refusals', async () => {
     const a = await account('audit_mix');
     await win(a.id, 3_000_000 * DOLLAR);
