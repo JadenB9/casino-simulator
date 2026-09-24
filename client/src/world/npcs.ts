@@ -339,9 +339,11 @@ export class Staff {
     stations: WorldStation[],
     plan: FloorPlan,
     col: Collider | null,
+    /** Roles someone else puts on the floor (the floor's life brings its own bartender and bankers). */
+    opts: { skip?: StaffRole[] } = {},
   ) {
     this.group.name = 'staff';
-    this.posts = staffPosts(stations, plan);
+    this.posts = staffPosts(stations, plan).filter((p) => !opts.skip?.includes(p.role));
     const looks = staffLooks(this.posts);
     const stools = plan.bar.stools;
     this.bar = stools.length ? { z0: stools[0]!, z1: stools[stools.length - 1]! } : { z0: plan.bar.z0 + 1, z1: plan.bar.z1 - 1 };

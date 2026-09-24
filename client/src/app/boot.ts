@@ -235,6 +235,8 @@ class App {
     this.remotes = new RemotePlayers(link, this.engine.scene, {
       factory: this.world.characterFactory,
       seatOf: (station, slot) => this.seatOf(station, slot),
+      // a stool, a sofa: sitting anywhere (world/life/)
+      seatFor: (id) => this.world.life.seatFor(id),
     });
     // Gestures show over whoever made them, you included (the server echoes yours back).
     this.world.useRemotes(this.remotes);
@@ -266,9 +268,23 @@ class App {
       onSit: (fn) => this.world.onEnter(() => fn()),
     });
     this.world.useBar(this.bar);
+    // The floor's life: seats arbitrated on this socket, orders made by the bartender and brought
+    // by the waiters, and the staff's greetings by name.
+    this.world.life.useLink(link);
+    this.world.life.useBar(this.bar);
+    this.world.life.useApp({
+      name: () => session.profile?.name ?? null,
+      openBarMenu: () => this.openBarMenu(),
+      openShop: (item) => this.openShop(item),
+      holdItem: (id) => this.world.holdItem(id),
+      atTable: () => this.table !== null || this.world.seated !== null,
+    });
   }
 
   private disconnectFloor(): void {
+    this.world.life.useApp(null);
+    this.world.life.useBar(null);
+    this.world.life.useLink(null);
     this.world.useBar(null);
     this.bar?.dispose();
     this.bar = null;
@@ -369,7 +385,29 @@ class App {
 
   private openCashier(): void {
     this.world.player.setEnabled(false);
-    openBank({ root: this.ui, api, session, sfx: this.sfx, onClose: () => this.world.player.setEnabled(true) });
+    // the banker at the window answers what the bank does: a top-up counted out, a refusal
+    const life = this.world.life;
+    const takeLoan = () =>
+      api.takeLoan().then(
+        (r) => {
+          life.bank({ kind: 'loan', amount: r.loan.amount });
+          return r;
+        },
+        (err: unknown) => {
+          life.bank({ kind: 'refused' });
+          throw err;
+        },
+      );
+    openBank({
+      root: this.ui,
+      api: { me: api.me, takeLoan },
+      session,
+      sfx: this.sfx,
+      onClose: () => {
+        this.world.player.setEnabled(true);
+        life.leftBank();
+      },
+    });
   }
 
   // --- tables ---------------------------------------------------------------------------------
