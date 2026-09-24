@@ -8,7 +8,7 @@ import { env, exports } from 'cloudflare:workers';
 import { DEFAULT_LOOK } from '../../shared/src/look.ts';
 import { DOLLAR, STARTING_BALANCE } from '../../shared/src/money.ts';
 import { HOLD_MS, SHOP_ITEMS, barItem, shopItem } from '../../shared/src/items.ts';
-import { ORIGIN, api, connect } from './helpers.ts';
+import { ORIGIN, TEST_PASSWORD, api, connect } from './helpers.ts';
 
 let ipSeq = 0;
 let opSeq = 0;
@@ -19,7 +19,7 @@ async function account(name: string): Promise<{ token: string; id: number }> {
     new Request('http://casino.test/casino/api/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Origin: ORIGIN, 'CF-Connecting-IP': `203.0.113.${++ipSeq}` },
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({ name, password: TEST_PASSWORD }),
     }),
   );
   expect(res.status).toBe(200);
