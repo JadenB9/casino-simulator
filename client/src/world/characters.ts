@@ -23,6 +23,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+import { skipWhileHidden } from '../render/matrices.ts';
 import { DEFAULT_LOOK, OUTFITS, SKIN_TONES, type Body, type Look } from '../../../shared/src/look.ts';
 import type { Quality } from '../render/engine3d.ts';
 import type { Character, CharacterFactory } from './contract.ts';
@@ -271,6 +272,8 @@ export class Person implements Character {
     this.look = look;
     this.staff = opts.staff ?? false;
     this.root.name = 'character';
+    // a hidden character's seventy-odd bones aren't worth a matrix update every frame
+    skipWhileHidden(this.root);
     const el = document.createElement('div');
     el.className = 'world-tag';
     this.tag = new CSS2DObject(el);

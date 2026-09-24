@@ -2,8 +2,9 @@
 // the dev harness add to this scene; nothing creates a second WebGL context.
 
 import * as THREE from 'three';
-import { CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { Labels } from './labels.ts';
+import { framePass } from './matrices.ts';
 
 export type Quality = 'high' | 'low';
 
@@ -57,7 +58,7 @@ export function fovFor(aspect: number): number {
 
 export class Engine3D {
   readonly renderer: THREE.WebGLRenderer;
-  readonly labels: CSS2DRenderer;
+  readonly labels: Labels;
   readonly scene = new THREE.Scene();
   readonly camera = new THREE.PerspectiveCamera(FOV, 1, 0.05, 200);
   readonly timer = new THREE.Timer();
@@ -85,7 +86,7 @@ export class Engine3D {
     pmrem.dispose();
     this.scene.background = new THREE.Color('#0b0908');
 
-    this.labels = new CSS2DRenderer({ element: labelRoot });
+    this.labels = new Labels({ element: labelRoot });
     this.timer.connect(document);
     addEventListener('resize', this.resize);
     this.resize();
@@ -109,9 +110,13 @@ export class Engine3D {
     this.frameTimes.push(dt * 1000);
     if (this.frameTimes.length > 120) this.frameTimes.shift();
     for (const fn of this.frames) fn(dt, t / 1000);
-    this.renderer.render(this.scene, this.camera);
+    // hidden characters and far-off tables' models sit out the frame's matrix update (matrices.ts);
+    // the labels go straight after, on the same matrices
+    framePass(this.draw);
     this.labels.render(this.scene, this.camera);
   }
+
+  private draw = (): void => this.renderer.render(this.scene, this.camera);
 
   private resize = (): void => {
     const w = innerWidth;
