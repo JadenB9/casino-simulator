@@ -13,6 +13,8 @@ export interface Box {
   yaw: number;
   /** Top of the box; the camera ray passes over anything lower than it is. */
   top: number;
+  /** Bottom of the box for the camera (a lintel over a door starts high); walking ignores it. */
+  bottom: number;
   /** Walk-through for the player but still stops the camera (hanging signs), or the reverse. */
   walk: boolean;
   cam: boolean;
@@ -31,8 +33,8 @@ export class Collider {
   readonly boxes: Box[] = [];
   readonly posts: Post[] = [];
 
-  box(cx: number, cz: number, width: number, depth: number, yaw = 0, top = 2, opts: { walk?: boolean; cam?: boolean } = {}): Box {
-    const b: Box = { cx, cz, hx: width / 2, hz: depth / 2, yaw, top, walk: opts.walk ?? true, cam: opts.cam ?? true };
+  box(cx: number, cz: number, width: number, depth: number, yaw = 0, top = 2, opts: { walk?: boolean; cam?: boolean; bottom?: number } = {}): Box {
+    const b: Box = { cx, cz, hx: width / 2, hz: depth / 2, yaw, top, bottom: opts.bottom ?? 0, walk: opts.walk ?? true, cam: opts.cam ?? true };
     this.boxes.push(b);
     return b;
   }
@@ -121,7 +123,7 @@ export class Collider {
       const loz = rx * s + rz * c;
       const ldx = dir.x * c - dir.z * s;
       const ldz = dir.x * s + dir.z * c;
-      const t = slab3(lox, o.y, loz, ldx, dir.y, ldz, -b.hx, 0, -b.hz, b.hx, b.top, b.hz);
+      const t = slab3(lox, o.y, loz, ldx, dir.y, ldz, -b.hx, b.bottom, -b.hz, b.hx, b.top, b.hz);
       if (t !== null && t < best) best = t;
     }
     for (const q of this.posts) {

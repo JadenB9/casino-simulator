@@ -80,6 +80,8 @@ interface Entry {
   /** Per frame: squared distance, and whether the real model is wanted. */
   d2: number;
   real: boolean;
+  /** In a room nobody can see from here: neither model nor stand-in is drawn. */
+  off: boolean;
 }
 
 export class StationLod {
@@ -134,7 +136,7 @@ export class StationLod {
       copy.updateWorldMatrix(true, false);
       place.multiplyMatrices(toParent, copy.matrixWorld);
       s.anchor.getWorldPosition(at);
-      const machine = s.zone === 'slots' || s.zone === 'bar';
+      const machine = s.zone === 'slots' || s.zone === 'bar' || s.zone === 'online';
       const far = machine ? MACHINE_FAR_M : FAR_M;
       const near = machine ? MACHINE_NEAR_M : NEAR_M;
       const sphere = new THREE.Box3().setFromObject(s.model).getBoundingSphere(new THREE.Sphere());
@@ -153,6 +155,7 @@ export class StationLod {
         extra,
         d2: 0,
         real: true,
+        off: false,
       });
     });
   }
@@ -168,14 +171,25 @@ export class StationLod {
     if (mode) this.show(e, mode === 'real');
   }
 
-  /** Show the real model near the camera and the stand-in further away, within the budget. */
-  update(camera: THREE.Camera, seated: WorldStation | null): void {
+  /**
+   * Show the real model near the camera and the stand-in further away, within the budget; in a
+   * room that can't be seen (`rooms`, from visibility.ts), neither.
+   */
+  update(camera: THREE.Camera, seated: WorldStation | null, rooms: Set<string> | null = null): void {
     camera.updateMatrixWorld();
     camera.getWorldPosition(this.cam);
     this.frustum.setFromProjectionMatrix(this.viewProj.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
     const order = this.order;
     order.length = 0;
     for (const e of this.entries) {
+      const off = !!rooms && !rooms.has(e.station.room) && e.station !== seated && !e.pin;
+      if (off !== e.off) {
+        e.off = off;
+        // back in view: from the stand-in, and the model below if it's near enough
+        if (off) this.hide(e);
+        else this.show(e, false);
+      }
+      if (off) continue;
       e.d2 = (e.x - this.cam.x) ** 2 + (e.z - this.cam.z) ** 2;
       const was = !e.copy.visible;
       // near enough by distance (with hysteresis), and in view: it competes for the budget
@@ -191,10 +205,19 @@ export class StationLod {
       spent += e.extra;
       if (spent > this.budget) e.real = false;
     }
-    for (const e of this.entries) if (e.real !== !e.copy.visible) this.show(e, e.real);
+    for (const e of this.entries) if (!e.off && e.real !== !e.copy.visible) this.show(e, e.real);
+  }
+
+  /** Neither the model nor its stand-in. */
+  private hide(e: Entry): void {
+    e.station.model.visible = false;
+    e.copy.visible = false;
+    if (e.solidId >= 0) this.solidBatch!.setVisibleAt(e.solidId, false);
+    if (e.glowId >= 0) this.glowBatch!.setVisibleAt(e.glowId, false);
   }
 
   private show(e: Entry, real: boolean): void {
+    if (e.off) return;
     e.station.model.visible = real;
     e.copy.visible = !real;
     if (e.solidId >= 0) this.solidBatch!.setVisibleAt(e.solidId, !real);

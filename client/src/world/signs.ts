@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import type { Batch } from './batch.ts';
 import type { Mats } from './materials.ts';
-import { CEILING, type FloorPlan, type Hanging } from './layout.ts';
+import { WALL, ceilingAt, type FloorPlan, type Hanging } from './layout.ts';
 
 export type Arrow = 'left' | 'right' | 'up' | 'down';
 
@@ -35,21 +35,43 @@ export async function loadSignFonts(): Promise<void> {
   }
 }
 
-/** The floor's own signs: zones, wayfinding and the casino's name. Where each hangs is the plan's. */
+/** How each room's name reads over its doors: a lit box in gold, or a neon of its own. */
+const DOOR_SIGNS: Record<string, { kind: 'lit' | 'neon'; color: string; font: SignSpec['font'] }> = {
+  lobby: { kind: 'lit', color: '#ffe0a0', font: 'Cinzel' },
+  pit: { kind: 'lit', color: '#ffe0a0', font: 'Cinzel' },
+  slots: { kind: 'neon', color: '#ff3fa4', font: 'Tilt Neon' },
+  bar: { kind: 'neon', color: '#3fe0d0', font: 'Limelight' },
+  lounge: { kind: 'lit', color: '#ffd09a', font: 'Cinzel' },
+  poker: { kind: 'neon', color: '#ff5a4a', font: 'Tilt Neon' },
+  salon: { kind: 'lit', color: '#f2cf7c', font: 'Cinzel' },
+  online: { kind: 'neon', color: '#1fe07e', font: 'Tilt Neon' },
+  yard: { kind: 'neon', color: '#ff8a2a', font: 'Tilt Neon' },
+  bank: { kind: 'lit', color: '#ffe2a8', font: 'Cinzel' },
+  boutique: { kind: 'lit', color: '#f6dca0', font: 'Limelight' },
+};
+
+/**
+ * The floor's own signs: over every doorway, on both sides, the name of the room it leads to;
+ * the hanging signs the rooms ask for (lit boxes and wayfinding with arrows); the rooms' wall
+ * neons; and the casino's name over the doors, seen on the way out.
+ */
 export function floorSigns(plan: FloorPlan, b: Batch, m: Mats): SignSpec[] {
   const out: SignSpec[] = [];
   const lacquer = m.get('lacquer');
   const brass = m.get('brass');
   const chrome = m.get('chrome');
-  const hang = ({ x, y, z, ry, w, h }: Hanging) => {
+  const byId = new Map(plan.rooms.map((r) => [r.id, r]));
+  const hang = ({ x, y, z, ry, w, h, room }: Hanging) => {
     // a sign box hung from the ceiling on two rods
+    b.room = room;
+    const top = ceilingAt(plan, x, z);
     b.box(lacquer, x, y, z, w + 0.16, h + 0.14, 0.14, undefined, ry);
     const c = Math.cos(ry);
     const s = Math.sin(ry);
     for (const e of [-1, 1]) {
       const dx = e * (w / 2 - 0.2) * c;
       const dz = -e * (w / 2 - 0.2) * s;
-      b.add(new THREE.CylinderGeometry(0.008, 0.008, CEILING - (y + h / 2), 6), chrome, { x: x + dx, y: (CEILING + y + h / 2) / 2, z: z + dz });
+      b.add(new THREE.CylinderGeometry(0.008, 0.008, top - (y + h / 2), 6), chrome, { x: x + dx, y: (top + y + h / 2) / 2, z: z + dz });
     }
     b.box(brass, x, y + h / 2 + 0.07, z, w + 0.2, 0.02, 0.17, undefined, ry);
     b.box(brass, x, y - h / 2 - 0.07, z, w + 0.2, 0.02, 0.17, undefined, ry);
@@ -63,40 +85,45 @@ export function floorSigns(plan: FloorPlan, b: Batch, m: Mats): SignSpec[] {
     }
   };
   for (const hs of plan.hanging) {
-    switch (hs.id) {
-      case 'table-games':
-        faces(hs, 0.2, 0.08, { kind: 'lit', text: 'TABLE GAMES', color: '#ffe0a0', font: 'Cinzel' });
-        break;
-      case 'slots':
-        faces(hs, 0.1, 0.04, { kind: 'neon', text: 'SLOTS', color: '#ff3fa4', font: 'Tilt Neon' });
-        break;
-      case 'poker':
-        faces(hs, 0.1, 0.04, { kind: 'neon', text: 'POKER', color: '#ff5a4a', font: 'Tilt Neon' });
-        break;
-      case 'entrance':
-        // overhead wayfinding just inside the entrance, and what it says on the way out
-        faces(
-          hs,
-          0.1,
-          0.06,
-          { kind: 'way', text: '', color: '#f4e6c8', font: 'Cinzel', segments: [{ text: 'SLOTS', arrow: 'left', before: true }, { text: 'TABLE GAMES', arrow: 'up' }, { text: 'BAR', arrow: 'right' }] },
-          { segments: [{ text: 'BAR', arrow: 'left', before: true }, { text: 'EXIT', arrow: 'up' }, { text: 'SLOTS', arrow: 'right' }] },
-        );
-        break;
-      case 'cashier':
-        // over the cross aisle, for anyone coming from the slots or the pit
-        faces(
-          hs,
-          0.1,
-          0.06,
-          { kind: 'way', text: '', color: '#f4e6c8', font: 'Cinzel', segments: [{ text: 'SLOTS', arrow: 'left', before: true }, { text: 'CASHIER', arrow: 'right' }] },
-          { segments: [{ text: 'CASHIER', arrow: 'left', before: true }, { text: 'BAR', arrow: 'right' }] },
-        );
-        break;
+    if (hs.kind === 'way') faces(hs, 0.1, 0.06, { kind: 'way', text: '', color: '#f4e6c8', font: 'Cinzel', segments: hs.front ?? [] }, { segments: hs.back ?? hs.front ?? [] });
+    else if (hs.kind === 'neon') faces(hs, 0.1, 0.04, { kind: 'neon', text: hs.text ?? '', color: hs.color ?? '#ff3fa4', font: 'Tilt Neon' });
+    else faces(hs, 0.2, 0.08, { kind: 'lit', text: hs.text ?? '', color: hs.color ?? '#ffe0a0', font: 'Cinzel' });
+  }
+
+  // over every doorway, on each side, the room beyond
+  for (const d of plan.doors) {
+    if (d.b === 'outside') continue;
+    for (const [here, there] of [
+      [d.a, d.b],
+      [d.b, d.a],
+    ] as const) {
+      const r = byId.get(here);
+      const beyond = byId.get(there);
+      if (!r || !beyond) continue;
+      const style = DOOR_SIGNS[there] ?? DOOR_SIGNS.pit!;
+      const text = there === 'lobby' && r.id === 'pit' ? 'LOBBY · EXIT' : beyond.sign;
+      // which way is into this room from the wall
+      const n = d.axis === 'x' ? (r.bounds.z1 === d.c ? -1 : 1) : r.bounds.x1 === d.c ? -1 : 1;
+      const h = style.kind === 'neon' ? 0.5 : 0.42;
+      const span = d.a1 - d.a0;
+      const w = Math.min(Math.max(span + 0.9, text.length * 0.2), d.kind === 'shopfront' ? 5.2 : span + 2.6, 6.5);
+      const y = Math.min(d.height + 0.36 + h / 2, r.style.ceiling - h / 2 - 0.12);
+      const off = WALL / 2 + (d.kind === 'grand' || d.kind === 'arch' ? 0.14 : 0.1);
+      const mid = (d.a0 + d.a1) / 2;
+      const at: [number, number, number] = d.axis === 'x' ? [mid, y, d.c + n * off] : [d.c + n * off, y, mid];
+      // facing into the room: +z is ry 0, -z is PI, +x is PI/2, -x is -PI/2
+      const ry = d.axis === 'x' ? (n > 0 ? 0 : Math.PI) : n > 0 ? Math.PI / 2 : -Math.PI / 2;
+      out.push({ kind: style.kind, text, color: style.color, font: style.font, at, ry, w, h });
     }
   }
+
+  // the rooms' wall neons (HOUSE ORIGINALS, HIGH LIMIT)
+  for (const n of plan.neons) out.push({ kind: 'neon', text: n.text, color: n.color, font: n.font, at: [n.x, n.y, n.z], ry: n.ry, w: n.w, h: n.h });
+
   // the casino's name over the doors, seen on the way out
-  out.push({ kind: 'neon', text: 'Casino Simulator', color: '#ffc861', font: 'Limelight', at: [0, 3.08, plan.room.z1 - 0.04], ry: Math.PI, w: 4.6, h: 0.5 });
+  const lobby = byId.get('lobby');
+  const top = lobby ? lobby.style.ceiling : 3.4;
+  out.push({ kind: 'neon', text: 'Casino Simulator', color: '#ffc861', font: 'Limelight', at: [(plan.door.x0 + plan.door.x1) / 2, Math.min(plan.door.height + 0.7, top - 0.5), plan.door.z - WALL / 2 - 0.04], ry: Math.PI, w: 4.6, h: 0.56 });
   return out;
 }
 

@@ -9,6 +9,7 @@
 import * as THREE from 'three';
 import type { Quality } from '../render/engine3d.ts';
 import { canvasTexture, drawAisle, drawCarpet, PALETTES } from './carpet.ts';
+import { drawAcoustic, drawConcrete, drawCorrugated, drawPanels, drawPlanks, drawTiles } from './textures.ts';
 
 export type Tex = Partial<Record<'marbleTiles' | 'marbleBlack' | 'woodDark' | 'woodPanel' | 'velvet' | 'carpetNormal', THREE.Texture>>;
 
@@ -139,6 +140,55 @@ export class Mats {
     this.makers.set('carpet', carpet(floorTex));
     this.makers.set('carpet-poker', carpet(pokerTex));
     this.makers.set('carpet-aisle', carpet(aisleTex));
+    // the new rooms' carpets, drawn only when a room asks for one (a second size down: they cover less)
+    const lazy = (draw: () => HTMLCanvasElement) => {
+      let tex: THREE.Texture | null = null;
+      return () => (tex ??= this.canvasTex(draw()));
+    };
+    const small = size / 2;
+    const slotsTex = lazy(() => drawCarpet(small, PALETTES.slots, 13));
+    const salonTex = lazy(() => drawCarpet(small, PALETTES.salon, 17));
+    const loungeTex = lazy(() => drawCarpet(small, PALETTES.lounge, 19));
+    const tilesTex = lazy(() => drawTiles(512, 23));
+    this.makers.set('carpet-slots', (q) => carpet(slotsTex())(q));
+    this.makers.set('carpet-salon', (q) => carpet(salonTex())(q));
+    this.makers.set('carpet-lounge', (q) => carpet(loungeTex())(q));
+    this.makers.set('carpet-online', (q) => carpet(tilesTex())(q));
+    const concreteTex = lazy(() => drawConcrete(512, 29));
+    const rustTex = lazy(() => drawCorrugated(512, 512, 31));
+    const plankTex = lazy(() => drawPlanks(512, 37, false));
+    const roughTex = lazy(() => drawPlanks(512, 41, true));
+    const acousticTex = lazy(() => drawAcoustic(256, 43));
+    const panelTex = lazy(() => drawPanels(256, 47));
+    const navyTex = lazy(() => drawCarpet(512, NAVY_WALL, 53));
+    const emeraldTex = lazy(() => drawCarpet(512, EMERALD_WALL, 59));
+    const wineTex = lazy(() => drawCarpet(512, WINE_WALL, 61));
+    this.makers.set('concrete', (q) => (hi(q) ? std({ map: concreteTex(), roughness: 0.7, metalness: 0 }) : lambert({ map: concreteTex() })));
+    this.makers.set('corrugated', (q) => (hi(q) ? std({ map: rustTex(), roughness: 0.62, metalness: 0.35 }) : lambert({ map: rustTex() })));
+    this.makers.set('floor-wood', (q) => (hi(q) ? std({ map: plankTex(), roughness: 0.42 }) : lambert({ map: plankTex() })));
+    this.makers.set('planks', () => lambert({ map: roughTex() }));
+    this.makers.set('wall-dark', () => lambert({ map: acousticTex() }));
+    this.makers.set('wall-cream', () => lambert({ map: panelTex() }));
+    this.makers.set('wall-navy', () => lambert({ map: navyTex() }));
+    this.makers.set('wall-salon', () => lambert({ map: emeraldTex() }));
+    this.makers.set('wall-bar', () => lambert({ map: wineTex() }));
+    this.makers.set('marble-light', (q) =>
+      hi(q) ? std({ map: t.marbleTiles ?? null, color: '#e8e0d4', roughness: 0.2, metalness: 0 }) : lambert({ map: t.marbleTiles ?? null, color: '#e8e0d4' }),
+    );
+    this.makers.set('ceiling-dark', () => lambert({ color: '#0c0c10' }));
+    this.makers.set('ceiling-light', () => lambert({ color: '#d8ccb8', emissive: '#2a2218' }));
+    this.makers.set('steel', (q) => (hi(q) ? std({ color: '#3a3c40', metalness: 0.8, roughness: 0.45 }) : lambert({ color: '#34363a' })));
+    this.makers.set('rust', (q) => (hi(q) ? std({ map: rustTex(), color: '#b8a090', metalness: 0.4, roughness: 0.7 }) : lambert({ map: rustTex(), color: '#b8a090' })));
+    this.makers.set('glass', (q) =>
+      hi(q)
+        ? std({ color: '#b8c8c8', metalness: 0.1, roughness: 0.04, transparent: true, opacity: 0.16, depthWrite: false })
+        : new THREE.MeshBasicMaterial({ color: '#8a9a9a', transparent: true, opacity: 0.12, depthWrite: false }),
+    );
+    this.makers.set('upholstery', (q) => (hi(q) ? std({ map: t.velvet ?? null, color: t.velvet ? '#8a4048' : '#4a1018', roughness: 0.7 }) : lambert({ map: t.velvet ?? null, color: t.velvet ? '#8a4048' : '#4a1018' })));
+    this.makers.set('velvet-green', () => lambert({ map: t.velvet ?? null, color: t.velvet ? '#3c8a60' : '#0e3a24' }));
+    this.makers.set('fabric', () => lambert({ color: '#2a2622' }));
+    this.makers.set('case-light', () => new THREE.MeshBasicMaterial({ color: hdr('#fff2dc', 2.0) }));
+    this.makers.set('fire', () => new THREE.MeshBasicMaterial({ color: hdr('#ff8a2a', 3.0) }));
     this.makers.set('marble-floor', (q) =>
       hi(q) ? std({ map: t.marbleTiles ?? null, color: t.marbleTiles ? '#a89c8c' : '#a89c8c', roughness: 0.28, metalness: 0 }) : lambert({ map: t.marbleTiles ?? null, color: t.marbleTiles ? '#a89c8c' : '#a89c8c' }),
     );
@@ -175,6 +225,43 @@ export class Mats {
     this.makers.set('blob', () => new THREE.MeshBasicMaterial({ map: blobTex, transparent: true, depthWrite: false }));
   }
 }
+
+/** The poker room's walls: navy damask. */
+const NAVY_WALL = {
+  ground: '#121a30',
+  groundDark: '#0d1426',
+  groundLight: '#172038',
+  gold: '#24304c',
+  goldDark: '#1c2640',
+  accent: '#1f2a46',
+  accentDark: '#18223a',
+  spark: '#2c3856',
+  cream: '#34405e',
+};
+/** The salon's: emerald silk damask. */
+const EMERALD_WALL = {
+  ground: '#0e2a1e',
+  groundDark: '#0a2016',
+  groundLight: '#123224',
+  gold: '#1c4030',
+  goldDark: '#16362a',
+  accent: '#183a2c',
+  accentDark: '#123024',
+  spark: '#24483a',
+  cream: '#2c5242',
+};
+/** The bar's and the lounge's: deep wine. */
+const WINE_WALL = {
+  ground: '#2c0f14',
+  groundDark: '#220b10',
+  groundLight: '#341218',
+  gold: '#3e1a1e',
+  goldDark: '#36161a',
+  accent: '#3a161c',
+  accentDark: '#301216',
+  spark: '#462024',
+  cream: '#4e262a',
+};
 
 const WALL_PALETTE = {
   ground: '#3a1418',
