@@ -204,7 +204,10 @@ for (const game of games) {
   if (game === 'keno') {
     await page.fill('.os-bet-input', '4');
     await page.press('.os-bet-input', 'Enter');
+    // A kept seat brings back the last game's picks: clear them first.
+    if (await page.$('.kn-tile.picked')) await page.click('.os-pair .os-action >> nth=1');
     for (const n of [3, 7, 12, 18, 21, 26, 33]) await page.click(`.kn-tile >> nth=${n - 1}`);
+    check((await page.$$eval('.kn-tile.picked', (t) => t.map((x) => Number(x.dataset.n)))).join() === '3,7,12,18,21,26,33', 'the seven picks are on the board');
     await page.click('.os-side .os-seg button:has-text("High")');
     await page.waitForTimeout(150);
     await shot('1-picked');
