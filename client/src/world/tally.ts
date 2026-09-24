@@ -154,7 +154,7 @@ export class Tally {
     let x = (W - total) / 2;
     const y = H * 0.55;
     const lit = '#ff2d16';
-    const ghost = '#2a0a06';
+    const ghost = '#1c0604';
     c.textAlign = 'left';
     c.textBaseline = 'alphabetic';
     const base = y + size * 0.5;
