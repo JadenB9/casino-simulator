@@ -160,36 +160,14 @@ if (checks.includes('gestures')) {
 }
 
 if (checks.includes('sitting')) {
-  // Two other players at Hold'em, drawn by the real RemotePlayers from a stand-in floor link. The
-  // chairs are stand-ins too (tables3 builds the real ones at the same seats), added to the
-  // table's model before the seats are measured again, as createWorld measures them.
+  // Two other players at Hold'em, drawn by the real RemotePlayers from a stand-in floor link, in
+  // the table's own chairs (tables3's model): createWorld measured the seat tops at load.
   const { page, errors } = await open(`quality=${quality}`);
   const info = await page.evaluate(async () => {
     const c = window.casino;
-    const THREE = c.THREE;
-    const { GAMES } = await import('/casino/src/games/index.ts');
-    const { measureSeats } = await import('/casino/src/world/npcs.ts');
     const { seatWorld } = await import('/casino/src/world/stations.ts');
     const { RemotePlayers } = await import('/casino/src/world/remote-players.ts');
     const st = c.world.stations.find((x) => x.id === 'he-1');
-    const leather = new THREE.MeshStandardMaterial({ color: 0x3a1c14, roughness: 0.6 });
-    const chrome = new THREE.MeshStandardMaterial({ color: 0x8a8a8a, roughness: 0.3, metalness: 0.8 });
-    for (const seat of GAMES.holdem.seats('')) {
-      const chair = new THREE.Group();
-      const cushion = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.08, 0.44), leather);
-      cushion.position.y = 0.44;
-      const back = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.42, 0.07), leather);
-      back.position.set(0, 0.7, -0.22);
-      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.4, 10), chrome);
-      post.position.y = 0.2;
-      const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.24, 0.03, 20), chrome);
-      foot.position.y = 0.015;
-      chair.add(cushion, back, post, foot);
-      chair.position.set(...seat.position);
-      chair.rotation.y = seat.yaw;
-      st.model.add(chair);
-    }
-    measureSeats([st], (s) => GAMES[s.game].seats(s.variant));
     const look = (body, outfit, skin, hair, top, bottom) => ({ v: 1, body, outfit, skin, hair, top, bottom, shoes: '#1a1a1a' });
     const players = new Map([
       [101, { info: { id: 101, name: 'Marisol', look: look('f', 'dress', 3, '#2b1a12', '#7a1f3d', '#7a1f3d'), at: { station: 'he-1' } }, track: { at: () => ({ x: 0, z: 0, r: 0, moving: false }) }, last: null }],
