@@ -149,6 +149,7 @@ class TableFlow {
     if (this.picker) foot.append(el('span', 'lobby-foot-gap'), el('span', 'lb-key', '← →'), el('span', '', 'Limits'));
     const parts: HTMLElement[] = [];
     if (this.picker) {
+      this.picker.setTitle(limitSpec(this.opts.game)?.kind === 'blinds' ? 'Blinds' : 'Table limits');
       const block = el('div', 'lobby-limits');
       block.append(this.picker.root);
       parts.push(block);
@@ -204,9 +205,11 @@ class TableFlow {
     const pub = this.action('Public', unlock(), () => void this.create('public', pub));
     const priv = this.action('Private', lock(), () => void this.create('private', priv));
     actions.append(pub, priv);
-    create.append(el('div', 'label', 'Start a table'));
-    // the same picker as the first screen, with the same pick
-    if (this.picker) create.append(this.picker.root);
+    // the same picker as the first screen, with the same pick, heading the section
+    if (this.picker) {
+      this.picker.setTitle('Start a table');
+      create.append(this.picker.root);
+    } else create.append(el('div', 'label', 'Start a table'));
     create.append(actions, el('p', 'lobby-note', 'Public tables appear in this list. Private ones get a PIN to share.'));
 
     const join = el('div', 'lobby-section');

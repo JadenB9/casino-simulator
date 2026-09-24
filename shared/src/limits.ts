@@ -291,7 +291,7 @@ export function limitsDetail(cfg: TableConfig): string[] {
       out.push(`Numbers ${range(l.single)}`, `Triples ${range(l.triple)}`, `${formatMoney(l.default.max)} a roll`);
       break;
     case 'holdem':
-      out.push('No limit');
+      out.push('No limit', '20 to 100 big blinds to sit');
       break;
   }
   out.push(`Buy-in ${range({ ...cfg.buyIn, step: D })}`);

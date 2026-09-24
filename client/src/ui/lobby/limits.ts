@@ -50,6 +50,7 @@ function dollarsIn(input: HTMLInputElement): Cents {
 export class LimitsPicker {
   readonly root = el('div', 'lim');
   private readonly spec: LimitSpec;
+  private readonly title = el('span', 'label');
   private readonly grid = el('div', 'lim-grid');
   private readonly buyIn = el('span', 'lim-buyin');
   private readonly detail = el('p', 'lim-detail');
@@ -76,12 +77,14 @@ export class LimitsPicker {
     this.customLimits = saved ?? standardLimits(game)!;
 
     const head = el('div', 'lim-head');
-    head.append(el('span', 'label', blinds ? 'Blinds' : 'Table limits'), this.buyIn);
+    this.title.textContent = blinds ? 'Blinds' : 'Table limits';
+    head.append(this.title, this.buyIn);
     this.grid.setAttribute('role', 'radiogroup');
     this.grid.setAttribute('aria-label', blinds ? 'Blinds' : 'Table limits');
     this.grid.classList.toggle('wide', tiers.length + 1 > 6);
     tiers.forEach((t, i) => this.grid.append(this.option(i, t.name || limitsLabel(game, t), t.name ? limitsLabel(game, t, true) : '')));
-    this.grid.append(this.option(tiers.length, 'Custom', 'Your own'));
+    // Hold'em's options are the blinds themselves, one line each; Custom there is one line too.
+    this.grid.append(this.option(tiers.length, 'Custom', blinds ? '' : 'Your own'));
 
     // Custom: two amounts in whole dollars, and the rule they have to meet.
     for (const [input, label] of [
@@ -122,6 +125,11 @@ export class LimitsPicker {
     return v ? limitsLabel(this.game, v) : 'Check the limits';
   }
 
+  /** The line over the options: "Table limits" on its own, "Start a table" where it opens a lobby. */
+  setTitle(text: string): void {
+    this.title.textContent = text;
+  }
+
   onChange(fn: () => void): () => void {
     this.listeners.add(fn);
     return () => this.listeners.delete(fn);
@@ -133,10 +141,13 @@ export class LimitsPicker {
     if (v) remember(this.game, v);
   }
 
-  /** Arrow keys: the next or previous option, wrapping round. */
+  /**
+   * Arrow keys: the next or previous option, wrapping round. Focus stays where it is (on Single
+   * player, say), so Enter still sits down at what was just picked.
+   */
   step(dir: 1 | -1): void {
     const n = this.spec.tiers.length + 1;
-    this.select((this.pick + dir + n) % n, true);
+    this.select((this.pick + dir + n) % n, 'key');
   }
 
   private option(i: number, name: string, range: string): HTMLButtonElement {
@@ -145,17 +156,22 @@ export class LimitsPicker {
     b.setAttribute('role', 'radio');
     b.append(el('span', 'lim-opt-name', name));
     if (range) b.append(el('span', 'lim-opt-range', range));
-    b.addEventListener('click', () => this.select(i, false));
+    b.addEventListener('click', () => this.select(i, 'click'));
     this.buttons.push(b);
     return b;
   }
 
-  private select(i: number, focus: boolean): void {
+  /**
+   * A click on Custom goes on to its first field. An arrow key moves focus along the options
+   * only if it was on one; from anywhere else focus stays put.
+   */
+  private select(i: number, how: 'click' | 'key'): void {
     if (i === this.pick) return;
+    const inGrid = this.grid.contains(document.activeElement);
     this.pick = i;
     this.render();
-    if (focus) this.buttons[i]?.focus({ preventScroll: true });
-    if (i === this.spec.tiers.length && !focus) this.minInput.focus();
+    if (how === 'key' && inGrid) this.buttons[i]?.focus({ preventScroll: true });
+    else if (how === 'click' && i === this.spec.tiers.length) this.minInput.focus();
     this.changed();
   }
 
@@ -181,8 +197,10 @@ export class LimitsPicker {
       const problem = Number.isNaN(this.customLimits.min) || Number.isNaN(this.customLimits.max) ? 'Whole dollars only.' : limitsProblem(this.game, this.customLimits);
       this.rule.textContent = problem ?? this.ruleText();
       this.rule.classList.toggle('bad', !!problem);
-      const optRange = this.buttons[this.spec.tiers.length]!.querySelector('.lim-opt-range');
+      const opt = this.buttons[this.spec.tiers.length]!;
+      const optRange = opt.querySelector('.lim-opt-range');
       if (optRange) optRange.textContent = v ? limitsLabel(this.game, v, true) : 'Your own';
+      else opt.querySelector('.lim-opt-name')!.textContent = v ? limitsLabel(this.game, v) : 'Custom';
     }
     if (!v) {
       this.buyIn.textContent = '';
