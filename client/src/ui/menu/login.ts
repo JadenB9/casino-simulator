@@ -1,9 +1,13 @@
-// The login screen: a name and nothing else. The rule is checked as you type with the same
-// function the server uses, and whatever the server says back is shown under the field.
+// The login screen: a name and its password. Names are first come, first served: a new name
+// takes the password it arrives with, and so does a name from before passwords, the first time.
+// Both rules are checked as you type with the same functions the server uses, and whatever the
+// server says back is shown under the field it is about.
 
 import './menu.css';
+import './login.css';
 import type { Profile } from '../../../../shared/src/protocol.ts';
 import { nameProblem } from '../../../../shared/src/names.ts';
+import { PASSWORD_MAX, PASSWORD_MIN, passwordProblem } from '../../../../shared/src/password.ts';
 import { el } from '../kit.ts';
 import type { AccountApi, Closable, SessionLike, SfxLike } from './deps.ts';
 import { frontShell } from './front.ts';
@@ -21,6 +25,7 @@ export interface LoginDeps {
 }
 
 const RULE = '3 to 16 letters, numbers or underscores';
+const PASS_RULE = `${PASSWORD_MIN} to ${PASSWORD_MAX} characters`;
 
 export function mountLogin(deps: LoginDeps): Closable {
   const shell = frontShell(deps.root, 'front-login', deps.backdrop);
@@ -40,6 +45,7 @@ export function mountLogin(deps: LoginDeps): Closable {
   label.htmlFor = 'login-name';
   const input = el('input', 'name-input');
   input.id = 'login-name';
+  input.name = 'username';
   input.type = 'text';
   input.maxLength = 16;
   input.autocomplete = 'username';
@@ -53,15 +59,46 @@ export function mountLogin(deps: LoginDeps): Closable {
   rule.id = 'login-rule';
   rule.setAttribute('aria-live', 'polite');
 
+  const passLabel = el('label', 'field-label pass-label', 'Password');
+  passLabel.htmlFor = 'login-pass';
+  const pass = el('input', 'pass-input');
+  pass.id = 'login-pass';
+  pass.name = 'password';
+  pass.type = 'password';
+  pass.maxLength = PASSWORD_MAX;
+  pass.autocomplete = 'current-password';
+  pass.spellcheck = false;
+  pass.setAttribute('autocapitalize', 'off');
+  pass.setAttribute('aria-describedby', 'login-pass-rule');
+  const show = el('button', 'pass-show', 'Show');
+  show.type = 'button';
+  show.setAttribute('aria-controls', 'login-pass');
+  show.setAttribute('aria-pressed', 'false');
+  show.setAttribute('aria-label', 'Show password');
+  const passRow = el('div', 'name-row pass-row');
+  passRow.append(pass, show);
+  const passRule = el('p', 'name-rule pass-rule', PASS_RULE);
+  passRule.id = 'login-pass-rule';
+  passRule.setAttribute('aria-live', 'polite');
+
   const enter = el('button', 'btn enter-btn');
   enter.type = 'submit';
   enter.append(document.createTextNode('Enter'));
 
-  const note = el('p', 'login-note', "No password: typing a name opens that account. It's play money.");
-  form.append(cont, label, row, rule, enter, note);
+  const note = el('p', 'login-note');
+  note.append(
+    el('span', 'login-note-lead', 'New name? Pick a password and this name is yours.'),
+    document.createTextNode(' Played here before passwords? The first one you pick claims your name.'),
+  );
+  form.append(cont, label, row, rule, passLabel, passRow, passRule, enter, note);
   shell.col.append(form);
 
   let busy = false;
+  // A problem with the password shows from the first try to enter, not while it's being typed.
+  let passShown: string | null = null;
+
+  /** Whose password is being asked for: the typed name, else the remembered one. */
+  const target = (): string | null => input.value || last;
 
   const paint = () => {
     const v = input.value;
@@ -72,6 +109,7 @@ export function mountLogin(deps: LoginDeps): Closable {
     rule.classList.toggle('ok', !!v && !problem);
     rule.textContent = problem ?? RULE;
     rule.removeAttribute('role');
+    paintPass();
     // One primary action at a time: "Continue as" until a new name is typed.
     const typing = v.length > 0;
     cont.classList.toggle('primary', !typing);
@@ -79,23 +117,44 @@ export function mountLogin(deps: LoginDeps): Closable {
     enter.disabled = busy || (typing ? !!problem : !last);
     cont.disabled = busy;
     input.disabled = busy;
+    pass.disabled = busy;
+    show.disabled = busy;
   };
 
-  const showError = (msg: string) => {
-    rule.classList.remove('ok', 'bad');
-    rule.classList.add('err');
-    rule.setAttribute('role', 'alert');
-    rule.textContent = msg;
+  const paintPass = () => {
+    passRule.classList.remove('err', 'ok');
+    passRule.removeAttribute('role');
+    if (passShown) {
+      passRule.classList.add('bad');
+      passRule.textContent = passShown;
+      return;
+    }
+    passRule.classList.remove('bad');
+    // Continuing as the remembered name: say whose password this is.
+    passRule.textContent = !input.value && last ? `The password for ${last}` : PASS_RULE;
   };
 
-  const go = async (name: string) => {
+  const showError = (line: HTMLElement, msg: string) => {
+    line.classList.remove('ok', 'bad');
+    line.classList.add('err');
+    line.setAttribute('role', 'alert');
+    line.textContent = msg;
+  };
+
+  const shake = (r: HTMLElement) => {
+    r.classList.remove('shake');
+    void r.offsetWidth; // restart the animation
+    r.classList.add('shake');
+  };
+
+  const go = async (name: string, password: string) => {
     if (busy) return;
     busy = true;
     enter.firstChild!.textContent = 'Opening';
     shell.root.classList.add('busy');
     paint();
     try {
-      const profile = await deps.api.login(name);
+      const profile = await deps.api.login(name, password);
       deps.sfx?.play('ui-click', { volume: 0.45 });
       deps.session.set(profile);
       deps.onDone(profile);
@@ -104,34 +163,83 @@ export function mountLogin(deps: LoginDeps): Closable {
       enter.firstChild!.textContent = 'Enter';
       shell.root.classList.remove('busy');
       paint();
-      showError(problemText(err));
-      input.focus();
+      const code = (err as { body?: { error?: unknown } }).body?.error;
+      if (code === 'BAD_NAME') {
+        showError(rule, problemText(err));
+        input.focus();
+        return;
+      }
+      // A wrong password starts over with an empty field; a pause (too many tries, no network)
+      // keeps what was typed for the next attempt.
+      if (code === 'UNAUTHORIZED') pass.value = '';
+      showError(passRule, problemText(err));
+      pass.focus();
     }
+  };
+
+  const submit = () => {
+    const who = target();
+    if (!who) {
+      input.focus();
+      return;
+    }
+    if (input.value && nameProblem(input.value)) {
+      shake(row);
+      input.focus();
+      return;
+    }
+    passShown = passwordProblem(pass.value);
+    if (passShown) {
+      paintPass();
+      shake(passRow);
+      pass.focus();
+      return;
+    }
+    void go(who, pass.value);
   };
 
   form.addEventListener('submit', (e) => {
     e.preventDefault();
-    const v = input.value;
-    if (!v) {
-      if (last) void go(last);
-      else input.focus();
-      return;
-    }
-    const problem = nameProblem(v);
-    if (problem) {
-      row.classList.remove('shake');
-      void row.offsetWidth; // restart the animation
-      row.classList.add('shake');
-      input.focus();
-      return;
-    }
-    void go(v);
+    submit();
   });
-  cont.addEventListener('click', () => last && void go(last));
+  cont.addEventListener('click', () => {
+    if (!last) return;
+    // The remembered name, whatever was half-typed in the name field.
+    input.value = '';
+    paint();
+    if (!pass.value) {
+      pass.focus();
+      return;
+    }
+    submit();
+  });
+  // Enter in the name field moves on to the password until there is one.
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !pass.value && input.value && !nameProblem(input.value)) {
+      e.preventDefault();
+      pass.focus();
+    }
+  });
   input.addEventListener('input', paint);
+  pass.addEventListener('input', () => {
+    // Once the rule is met, the old complaint goes; a stale server error goes on the first key.
+    if (passShown && !passwordProblem(pass.value)) passShown = null;
+    paintPass();
+  });
+  show.addEventListener('click', () => {
+    const on = pass.type === 'password';
+    pass.type = on ? 'text' : 'password';
+    show.textContent = on ? 'Hide' : 'Show';
+    show.setAttribute('aria-pressed', String(on));
+    show.setAttribute('aria-label', on ? 'Hide password' : 'Show password');
+    pass.focus();
+    const end = pass.value.length;
+    pass.setSelectionRange(end, end);
+  });
 
   paint();
-  queueMicrotask(() => input.focus({ preventScroll: true }));
+  // Someone coming back only needs their password; someone new starts with a name.
+  queueMicrotask(() => (last ? pass : input).focus({ preventScroll: true }));
 
   return {
     root: shell.root,

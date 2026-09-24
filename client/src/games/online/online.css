@@ -1,0 +1,255 @@
+/* The online games' website, as it shows on the lounge's monitors: a dense dark page in the
+   manner of the big crypto-casino sites (bet panel down the left, the board filling the rest, a
+   bright green action button), not the casino floor's brass-and-felt look. Built at 1280 x 800
+   and mapped onto the monitor by screen.ts; everything here is sized in design pixels. */
+
+.os-screen {
+  --os-bg: #0f1e29;
+  --os-panel: #1a2c38;
+  --os-card: #213743;
+  --os-field: #0f1e29;
+  --os-line: #2f4553;
+  --os-ink: #eef3f8;
+  --os-ink-2: #a7b4c6;
+  --os-ink-3: #6f8196;
+  --os-go: #1fd65f;
+  --os-go-ink: #06210f;
+  --os-cash: #f5b93b;
+  --os-cash-ink: #2a1a00;
+  --os-win: #1fd65f;
+  --os-lose: #ff5a5f;
+  --os-font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --os-num: 'Barlow Condensed', 'Arial Narrow', system-ui, sans-serif;
+  position: absolute; left: 0; top: 0; width: 1280px; height: 800px;
+  transform-origin: 0 0;
+  display: grid; grid-template-rows: 64px 1fr 34px;
+  background: var(--os-bg); color: var(--os-ink);
+  font-family: var(--os-font); font-size: 16px; letter-spacing: 0;
+  overflow: hidden; user-select: none; -webkit-user-select: none;
+}
+.os-screen[hidden] { display: none; }
+.os-screen button { font-family: var(--os-font); }
+
+/* Top bar */
+.os-top {
+  display: grid; grid-template-columns: 220px 1fr auto; align-items: center; gap: 16px;
+  padding: 0 22px; background: var(--os-panel); border-bottom: 1px solid var(--os-line);
+}
+.os-brand { display: flex; align-items: baseline; gap: 6px; }
+.os-brand-mark { font-weight: 800; font-size: 20px; letter-spacing: 0.06em; }
+.os-brand-sub { font-weight: 600; font-size: 12px; letter-spacing: 0.16em; color: var(--os-ink-3); }
+.os-title { font-weight: 700; font-size: 18px; }
+.os-stack {
+  display: flex; align-items: center; gap: 10px; padding: 8px 14px;
+  background: var(--os-field); border: 1px solid var(--os-line); border-radius: 6px;
+}
+.os-stack-label { font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--os-ink-3); }
+.os-stack-value { font-family: var(--os-num); font-size: 22px; font-variant-numeric: tabular-nums; }
+
+/* Body: the bet panel and the board */
+.os-body { display: grid; grid-template-columns: 330px 1fr; min-height: 0; }
+.os-side {
+  display: flex; flex-direction: column; gap: 14px; padding: 18px;
+  background: var(--os-panel); border-right: 1px solid var(--os-line); overflow: hidden;
+}
+.os-main { position: relative; min-width: 0; min-height: 0; overflow: hidden; }
+.os-foot {
+  display: flex; align-items: center; padding: 0 22px; gap: 18px;
+  font-size: 13px; color: var(--os-ink-3); border-top: 1px solid var(--os-line); background: var(--os-panel);
+}
+
+/* Labels and fields shared by every panel control */
+.os-label { font-size: 13px; font-weight: 600; color: var(--os-ink-2); }
+.os-field {
+  display: flex; align-items: center; height: 44px; padding: 0 12px; gap: 8px;
+  background: var(--os-field); border: 2px solid var(--os-line); border-radius: 6px;
+}
+.os-field:focus-within { border-color: #557086; }
+
+/* The bet field */
+.os-bet { display: grid; gap: 6px; }
+.os-bet-head { display: flex; justify-content: space-between; align-items: baseline; }
+.os-bet-range { font-size: 12px; color: var(--os-ink-3); }
+.os-bet-row { display: grid; grid-template-columns: 1fr 48px 48px 58px; gap: 6px; }
+.os-bet-field {
+  display: flex; align-items: center; height: 44px; padding: 0 10px; gap: 4px;
+  background: var(--os-field); border: 2px solid var(--os-line); border-radius: 6px 0 0 6px;
+}
+.os-bet-field:focus-within { border-color: #557086; }
+.os-bet-sign { color: var(--os-ink-3); font-weight: 600; }
+.os-bet-input {
+  width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--os-ink);
+  font-family: var(--os-num); font-size: 22px; font-variant-numeric: tabular-nums;
+}
+.os-chip-btn {
+  height: 44px; border: 0; border-radius: 0; background: var(--os-card); color: var(--os-ink);
+  font-weight: 700; font-size: 15px; cursor: pointer;
+}
+.os-chip-btn:last-child { border-radius: 0 6px 6px 0; }
+.os-chip-btn:hover:not(:disabled) { background: var(--os-line); }
+.os-chip-btn:disabled { color: var(--os-ink-3); cursor: default; }
+
+/* Segmented choices: risk, difficulty, rows, over/under */
+.os-seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; padding: 4px; background: var(--os-field); border-radius: 8px; }
+.os-seg button {
+  height: 38px; border: 0; border-radius: 5px; background: transparent; color: var(--os-ink-2);
+  font-weight: 600; font-size: 14px; cursor: pointer;
+}
+.os-seg button.on { background: var(--os-card); color: var(--os-ink); }
+.os-seg button:disabled { cursor: default; opacity: 0.5; }
+
+/* The main action */
+.os-action {
+  height: 54px; border: 0; border-radius: 6px; font-weight: 800; font-size: 17px; letter-spacing: 0.02em;
+  cursor: pointer; transition: filter 0.12s, transform 0.08s;
+}
+.os-action.go { background: var(--os-go); color: var(--os-go-ink); }
+.os-action.cash { background: var(--os-cash); color: var(--os-cash-ink); }
+.os-action.plain { background: var(--os-card); color: var(--os-ink); }
+.os-action:hover:not(:disabled) { filter: brightness(1.08); }
+.os-action:active:not(:disabled) { transform: translateY(1px); }
+.os-action:disabled { filter: grayscale(0.6) brightness(0.7); cursor: default; }
+.os-action.tip-pick { outline: 3px solid var(--focus, #f1d59a); outline-offset: 2px; }
+
+/* Stat tiles under the board (profit on win, chance, multiplier) */
+.os-stats { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 10px; }
+.os-stat { display: grid; gap: 4px; padding: 10px 12px; background: var(--os-card); border-radius: 6px; }
+.os-stat-label { font-size: 12px; color: var(--os-ink-3); font-weight: 600; }
+.os-stat-value { font-family: var(--os-num); font-size: 22px; font-variant-numeric: tabular-nums; }
+
+/* A result that pops over the board: the multiplier and what it paid */
+.os-result {
+  position: absolute; left: 50%; top: 50%; translate: -50% -50%;
+  display: grid; justify-items: center; gap: 4px; padding: 18px 28px;
+  background: rgba(15, 30, 41, 0.92); border: 3px solid var(--os-win); border-radius: 10px;
+  animation: os-pop 0.22s var(--ease, ease-out);
+}
+.os-result.lose { border-color: var(--os-line); }
+.os-result-mult { font-family: var(--os-num); font-size: 44px; color: var(--os-win); }
+.os-result.lose .os-result-mult { color: var(--os-ink-2); }
+.os-result-paid { font-size: 16px; color: var(--os-ink-2); }
+@keyframes os-pop { from { opacity: 0; scale: 0.85; } }
+
+/* ---- Added with Plinko, Dice, Limbo and Keno (additions only) ---- */
+
+/* Segmented choices: hover, and the option the tips recommend */
+.os-seg button:hover:not(:disabled):not(.on) { color: var(--os-ink); background: rgba(47, 69, 83, 0.6); }
+.os-seg button.tip-pick { box-shadow: inset 0 0 0 2px var(--focus, #f1d59a); }
+.os-seg.dense button { font-size: 13px; padding: 0; font-variant-numeric: tabular-nums; }
+
+/* A labelled panel block: its label row above a control */
+.os-group { display: grid; gap: 6px; }
+.os-group-head { display: flex; justify-content: space-between; align-items: baseline; }
+.os-group-note { font-size: 12px; color: var(--os-ink-3); }
+
+/* Typed numbers: multiplier, win chance, target, profit on win */
+.os-num { display: grid; gap: 6px; min-width: 0; }
+.os-num-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.os-num-note { font-size: 12px; color: var(--os-ink-3); white-space: nowrap; }
+.os-num-note.win { color: var(--os-win); }
+.os-num-note.lose { color: var(--os-lose); }
+.os-num-input {
+  flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: transparent; color: var(--os-ink);
+  font-family: var(--os-num); font-size: 22px; font-variant-numeric: tabular-nums;
+}
+.os-num.readonly .os-field { background: var(--os-card); border-color: var(--os-card); }
+.os-num.readonly .os-num-input { color: var(--os-ink-2); cursor: default; }
+.os-num-suffix { color: var(--os-ink-3); font-weight: 700; font-size: 16px; }
+.os-num-btn {
+  width: 32px; height: 32px; margin-right: -6px; border: 0; border-radius: 5px; background: var(--os-card);
+  color: var(--os-ink); font-size: 16px; font-weight: 700; cursor: pointer;
+}
+.os-num-btn:hover:not(:disabled) { background: var(--os-line); }
+.os-num-btn:disabled { color: var(--os-ink-3); cursor: default; }
+
+/* A small caption over a panel block: THIS BOARD, THIS SESSION */
+.os-caption { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--os-ink-3); }
+
+/* Key-value rows under the bet panel */
+.os-infobox { display: grid; gap: 8px; }
+.os-info { display: grid; margin: 0; padding: 2px 12px; background: var(--os-field); border-radius: 6px; }
+.os-info-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--os-panel); }
+.os-info-row:last-child { border-bottom: 0; }
+.os-info dt { font-size: 13px; color: var(--os-ink-3); font-weight: 600; }
+.os-info dd { margin: 0; font-family: var(--os-num); font-size: 18px; font-variant-numeric: tabular-nums; color: var(--os-ink); text-align: right; }
+.os-info dd.win { color: var(--os-win); }
+.os-info dd.lose { color: var(--os-lose); }
+
+/* Recent results, newest on the right */
+.os-strip { display: flex; justify-content: flex-end; gap: 6px; height: 34px; overflow: hidden; }
+.os-strip-item {
+  flex: none; display: grid; place-items: center; min-width: 64px; padding: 0 12px; border-radius: 17px;
+  background: var(--os-card); color: var(--os-ink-2); font-family: var(--os-num); font-size: 16px; font-variant-numeric: tabular-nums;
+}
+.os-strip-item.win { background: var(--os-win); color: var(--os-go-ink); }
+.os-strip-item.fresh { animation: os-strip-in 0.28s var(--ease, ease-out); }
+@keyframes os-strip-in { from { opacity: 0; translate: 22px 0; scale: 0.8; } }
+
+/* The session tally at the foot of the bet panel */
+.os-tally { display: grid; gap: 8px; margin-top: auto; }
+.os-tally .os-stat { padding: 8px 10px; }
+.os-tally .os-stat-value { font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.os-stat-value.win { color: var(--os-win); }
+.os-stat-value.lose { color: var(--os-lose); }
+
+/* Two plain buttons side by side in the panel (Auto Pick, Clear) */
+.os-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.os-pair .os-action { height: 44px; font-size: 15px; font-weight: 700; }
+
+/* The last few bets in the panel, newest first */
+.os-log { display: grid; gap: 6px; }
+.os-log-row {
+  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; align-items: baseline; padding: 6px 10px;
+  font-family: var(--os-num); font-size: 16px; font-variant-numeric: tabular-nums; color: var(--os-ink-2);
+}
+.os-log-row > :last-child { text-align: right; }
+.os-log-body { display: grid; gap: 2px; }
+.os-log-body .os-log-row { background: var(--os-field); border-radius: 4px; }
+.os-log-row.fresh { animation: os-log-in 0.25s var(--ease, ease-out); }
+@keyframes os-log-in { from { opacity: 0; translate: 0 -6px; } }
+.os-log-head { padding-top: 0; padding-bottom: 0; font-family: var(--os-font); font-size: 12px; font-weight: 600; color: var(--os-ink-3); }
+.os-log-row .win { color: var(--os-win); }
+.os-log-row .lose { color: var(--os-ink-3); }
+
+/* Panel parts that keep their size when the panel runs out of room (the log gives way first) */
+.os-fixed { flex-shrink: 0; }
+.os-log { min-height: 0; overflow: hidden; }
+
+/* ---- Added with Tower, Mines, Hi-Lo and Crash (additions only) ---- */
+
+/* The end-of-round pop over a board: it never takes the board's clicks */
+.os-pop { pointer-events: none; z-index: 5; min-width: 180px; box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45); }
+.os-pop .os-result-mult { font-size: 48px; line-height: 1; font-weight: 600; font-variant-numeric: tabular-nums; }
+.os-pop .os-result-paid { font-size: 17px; font-weight: 600; }
+
+/* Hi-Lo's trail of cards, newest on the right */
+.os-trail { overflow: hidden; }
+.os-trail-list { display: flex; justify-content: flex-end; gap: 10px; }
+.os-trail-item { flex: none; display: grid; justify-items: center; gap: 6px; width: 64px; }
+.os-trail-card { width: 64px; height: 90px; border-radius: 5px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35); }
+.os-trail-cap {
+  min-width: 56px; padding: 3px 6px; border-radius: 4px; text-align: center; white-space: nowrap;
+  font-family: var(--os-num); font-size: 15px; font-variant-numeric: tabular-nums; background: var(--os-card); color: var(--os-ink-2);
+}
+.os-trail-item.win .os-trail-cap { background: rgba(31, 214, 95, 0.16); color: var(--os-win); }
+.os-trail-item.lose .os-trail-cap { background: rgba(255, 90, 95, 0.16); color: var(--os-lose); }
+.os-trail-item.lose .os-trail-card { outline: 2px solid var(--os-lose); outline-offset: 1px; }
+.os-trail-item.fresh { animation: os-trail-in 0.3s var(--ease, ease-out); }
+@keyframes os-trail-in { from { opacity: 0; translate: 26px 0; } }
+
+/* Crash's table of everyone's bets */
+.os-players { display: grid; grid-template-rows: auto auto 1fr; min-height: 0; background: var(--os-field); border-radius: 6px; overflow: hidden; }
+.os-players-head { display: flex; justify-content: space-between; align-items: baseline; padding: 9px 12px 6px; }
+.os-players-count { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--os-ink-3); }
+.os-players-total { font-family: var(--os-num); font-size: 17px; color: var(--os-ink); font-variant-numeric: tabular-nums; }
+.os-players-list { display: grid; align-content: start; overflow: hidden; }
+.os-players-row { display: grid; grid-template-columns: minmax(0, 1fr) 56px 58px 62px; align-items: center; gap: 6px; padding: 0 12px; height: 30px; font-size: 14px; }
+.os-players-cols { height: 24px; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--os-ink-3); border-bottom: 1px solid var(--os-panel); }
+.os-players-cols span:not(:first-child), .os-players-row span:not(.os-players-name) { text-align: right; }
+.os-players-row:nth-child(even):not(.os-players-cols) { background: rgba(33, 55, 67, 0.45); }
+.os-players-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--os-ink); }
+.os-players-bet, .os-players-at, .os-players-profit { font-family: var(--os-num); font-size: 15px; font-variant-numeric: tabular-nums; color: var(--os-ink-2); }
+.os-players-row.you .os-players-name { color: var(--os-cash); font-weight: 700; }
+.os-players-row.win .os-players-at, .os-players-row.win .os-players-profit { color: var(--os-win); }
+.os-players-row.lose .os-players-at, .os-players-row.lose .os-players-profit { color: var(--os-lose); }
+.os-players-empty { padding: 10px 12px; font-size: 13px; color: var(--os-ink-3); }

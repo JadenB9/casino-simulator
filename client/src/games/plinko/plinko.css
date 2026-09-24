@@ -1,0 +1,43 @@
+/* Plinko's board on the online site: the peg canvas fills the main area, the bins sit in a row
+   under the last pegs, and the last five results stack up on the right. Sizes are design pixels
+   of the 1280 x 800 page; the bins' positions and colours come from board.ts. */
+
+.pk-board { position: absolute; inset: 0; }
+.pk-canvas { position: absolute; left: 0; top: 0; width: 950px; height: 702px; }
+.pk-bins { position: absolute; inset: 0; pointer-events: none; }
+
+.pk-bin {
+  position: absolute; display: grid; place-items: center; border-radius: 5px;
+  font-family: var(--os-num); font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -0.01em;
+  color: rgba(28, 6, 2, 0.88); box-shadow: 0 4px 0 var(--pk-lip);
+  pointer-events: auto; cursor: default; transition: filter 0.12s;
+}
+.pk-bin:hover { filter: brightness(1.12); }
+.pk-bin.hit { animation: pk-hit 0.34s ease-out; }
+@keyframes pk-hit {
+  35% { translate: 0 5px; box-shadow: 0 0 0 var(--pk-lip); filter: brightness(1.35) saturate(1.1); }
+}
+
+/* The last five drops, newest on top */
+.pk-column {
+  position: absolute; right: 18px; top: 50%; translate: 0 -50%; width: 64px;
+  display: grid; gap: 6px; padding: 6px; border-radius: 8px; background: var(--os-panel);
+}
+.pk-column[hidden] { display: none; }
+.pk-result {
+  height: 40px; display: grid; place-items: center; border-radius: 5px; box-shadow: 0 3px 0 var(--pk-lip);
+  font-family: var(--os-num); font-size: 17px; font-weight: 600; color: rgba(28, 6, 2, 0.88);
+}
+.pk-result.fresh { animation: pk-in 0.3s var(--ease, ease-out); }
+@keyframes pk-in { from { opacity: 0; translate: 0 -14px; } }
+
+/* Hovering a bin: what it pays at the current bet, and how often */
+.pk-card {
+  position: absolute; margin: 0; translate: -50% -100%; z-index: 2;
+  display: grid; grid-template-columns: auto auto; gap: 6px 18px; align-items: baseline;
+  padding: 10px 14px; border-radius: 6px; background: var(--os-card); border: 1px solid var(--os-line);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4); pointer-events: none; white-space: nowrap;
+}
+.pk-card[hidden] { display: none; }
+.pk-card dt { font-size: 13px; font-weight: 600; color: var(--os-ink-3); }
+.pk-card dd { margin: 0; text-align: right; font-family: var(--os-num); font-size: 18px; font-variant-numeric: tabular-nums; }

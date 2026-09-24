@@ -11,7 +11,10 @@ import { mkdirSync } from 'node:fs';
 
 const [port = '5173', out = '/tmp/casino-multi', ...only] = process.argv.slice(2);
 mkdirSync(out, { recursive: true });
-const TABLES = { blackjack: 'bj-1', roulette: 'rl-us', craps: 'cr-1', baccarat: 'bc-1', threecard: 'tc-1', holdem: 'he-1' };
+const TABLES = {
+  blackjack: 'bj-1', roulette: 'rl-us', craps: 'cr-1', baccarat: 'bc-1', threecard: 'tc-1', holdem: 'he-1',
+  war: 'wr-1', bigsix: 'b6-1', sicbo: 'sb-1',
+};
 const games = only.length ? only : Object.keys(TABLES);
 // Fixed names by default so reruns log back in: the API allows only a few new accounts per hour
 // from one address.
@@ -41,6 +44,7 @@ async function player(name) {
   await page.goto(`${process.env.BASE ?? `http://localhost:${port}`}/casino/`);
   await page.waitForSelector('.name-input', { timeout: 180_000 });
   await page.fill('.name-input', name);
+  await page.fill('.pass-input', 'casino-dev'); // DEV_PASSWORD in client/src/net/api.ts
   await page.click('.enter-btn');
   await page.waitForSelector('.menu-item', { timeout: 20_000 });
   await page.click('.menu-item >> nth=0');
@@ -103,6 +107,20 @@ async function arm(p, game) {
             s.link.ready(true);
           }
           if (m.view?.shooter === me) setTimeout(() => act({ type: 'roll' }), 3200);
+        } else if (game === 'war') {
+          // The table's Ready closes the window; a tie asks each tied seat to go to war.
+          if (t === 'betting') {
+            act({ type: 'bet', bet: 1000, tie: 0 });
+            s.link.ready(true);
+          } else if (t === 'decide' && e.seats.includes(me)) act({ type: 'war' });
+        } else if (game === 'bigsix' || game === 'sicbo') {
+          // Ready is the game's own action at these two, as at roulette.
+          if (t === 'betting' && e.round !== betRound) {
+            betRound = e.round;
+            const bets = game === 'bigsix' ? [{ spot: 'two', amount: 500 }] : [{ spot: 'big', amount: 500 }];
+            act({ type: 'bet', bets });
+            act({ type: 'ready', on: true });
+          }
         } else if (game === 'holdem') {
           // Check when it's free, call when it isn't: a refused check is followed by a call.
           if (m.view?.turn?.seat === me && s.__turnAt !== m.view.turn.deadline) {

@@ -1,0 +1,297 @@
+/* Live chat: the dock and box in the bottom-right corner (panel.ts), and the speech bubbles over
+   players on the floor (bubbles.ts). Colours and faces come from theme.css. Solid glass, not
+   blurred: these sit over the running 3D canvas. The bottom-left corner stays the site's. */
+
+/* ---------------------------------------------------------------- the corner */
+
+/* Set from panel.ts: --chat-lift, how far to rise above a table's own panels in this corner
+   (measured from --chat-base), and --chat-kb, the height of a phone's on-screen keyboard. */
+.chat {
+  --chat-base: 18px;
+  position: fixed;
+  right: 16px;
+  bottom: calc(var(--chat-base) + var(--chat-lift, 0px) + var(--chat-kb, 0px));
+  z-index: 12;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  max-width: calc(100vw - 32px);
+  transition: bottom 0.25s var(--ease);
+}
+#ui .chat .chat-peeks { pointer-events: none; }
+
+.chat-ico { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+
+.chat-badge {
+  display: inline-block;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--brass);
+  color: #1d140a;
+  font: 600 12px/19px var(--ui);
+  letter-spacing: 0.02em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.chat-kc {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border: 1px solid rgba(241, 213, 154, 0.34);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  color: var(--ink-3);
+  font: 600 12px/1 var(--ui);
+  letter-spacing: 0;
+}
+
+/* ---------------------------------------------------------------- the dock (closed) */
+
+.chat-dock {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  height: 38px;
+  padding: 0 9px 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: rgba(14, 12, 10, 0.86);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+  color: var(--ink-2);
+  font: 600 14px var(--ui);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.chat-dock:hover { color: var(--ink); border-color: var(--line-strong); }
+.chat-dock:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.chat-dock .chat-badge { margin-left: -2px; }
+.chat.muted .chat-dock { color: var(--ink-3); }
+
+/* Previews of the newest lines while the box is closed, above the dock, newest lowest. */
+.chat-peeks { display: grid; justify-items: end; gap: 6px; max-width: min(360px, calc(100vw - 32px)); }
+.chat-peek {
+  max-width: 100%;
+  padding: 6px 11px 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: rgba(14, 12, 10, 0.86);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.32);
+  font-size: 15px;
+  line-height: 1.3;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  animation: chat-peek-in 0.25s var(--ease);
+  transition: opacity 0.3s, translate 0.3s;
+}
+.chat-peek.out { opacity: 0; translate: 0 -6px; }
+.chat-peek.chat-sys { color: var(--ink-2); }
+.chat-peek-room { margin-right: 7px; font-size: 11px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-3); }
+@keyframes chat-peek-in { from { opacity: 0; translate: 0 6px; } }
+
+/* ---------------------------------------------------------------- the box (open) */
+
+.chat-box {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(360px, calc(100vw - 32px));
+  background: rgba(14, 12, 10, 0.9);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(241, 213, 154, 0.06);
+  animation: chat-in 0.2s var(--ease);
+}
+/* The brass hairline the sheets wear along their top edge. */
+.chat-box::before {
+  content: '';
+  position: absolute;
+  left: 24px;
+  right: 24px;
+  top: -1px;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(241, 213, 154, 0), rgba(241, 213, 154, 0.7), rgba(241, 213, 154, 0));
+}
+.chat.typing .chat-box { border-color: rgba(226, 190, 118, 0.45); }
+@keyframes chat-in { from { opacity: 0; translate: 0 8px; } }
+
+.chat-head { display: flex; align-items: center; gap: 2px; height: 42px; padding: 0 6px 0 6px; border-bottom: 1px solid var(--line); }
+.chat-tabs { display: flex; flex: 1; gap: 2px; min-width: 0; }
+.chat-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 30px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--ink-3);
+  font: 600 13px var(--ui);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+.chat-tab:hover { color: var(--ink); }
+.chat-tab[aria-selected='true'] { color: var(--brass-hi); background: rgba(226, 190, 118, 0.1); }
+.chat-tab:focus-visible, .chat-icon:focus-visible, .chat-send:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+
+.chat-icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+.chat-icon:hover { color: var(--ink); background: rgba(255, 255, 255, 0.04); }
+.chat-mute[aria-pressed='true'] { color: var(--brass-hi); }
+
+.chat-log {
+  /* --chat-log-max (panel.ts) shortens it to fit under a table's panels higher up the corner. */
+  height: clamp(120px, 30vh, 232px);
+  max-height: var(--chat-log-max, none);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 8px 12px 8px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(214, 178, 110, 0.35) transparent;
+}
+.chat-list { display: grid; align-content: start; gap: 4px; }
+.chat-note { margin: 0 0 4px; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); }
+.chat-line { margin: 0; font-size: 16px; line-height: 1.3; color: var(--ink); overflow-wrap: anywhere; }
+.chat-line.chat-sys { font-size: 14px; color: var(--ink-3); }
+.chat-name { margin-right: 7px; font-weight: 600; letter-spacing: 0.02em; }
+.chat-text { letter-spacing: 0.015em; }
+
+/* Six quiet colours for names, the same on every screen (model.ts nameHue); yours in brass. */
+.chat-name.hue0 { color: #dca06a; }
+.chat-name.hue1 { color: #93c49b; }
+.chat-name.hue2 { color: #de9aa2; }
+.chat-name.hue3 { color: #8db7e3; }
+.chat-name.hue4 { color: #bba5e0; }
+.chat-name.hue5 { color: #7fc3c0; }
+.chat-name.me { color: var(--brass-hi); }
+
+.chat-line-in { display: flex; align-items: center; gap: 6px; padding: 8px; border-top: 1px solid var(--line); }
+.chat-input {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #120f0c;
+  color: var(--ink);
+  font: 16px var(--ui);
+  letter-spacing: 0.02em;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.chat-input::placeholder { color: var(--ink-3); }
+.chat-input:focus { outline: none; border-color: var(--line-strong); box-shadow: 0 0 0 1px rgba(241, 213, 154, 0.22); }
+.chat-input:disabled { opacity: 0.7; cursor: not-allowed; }
+.chat.silenced .chat-input::placeholder { color: var(--lose); }
+.chat-status { flex: none; font-size: 12px; letter-spacing: 0.04em; color: var(--ink-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.chat-status:empty { display: none; }
+.chat-status.full { color: var(--lose); }
+.chat-send {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  background: linear-gradient(#2b241c, #1c1712);
+  color: var(--brass-hi);
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.chat-send:hover { border-color: var(--brass-hi); }
+.chat.silenced .chat-send { opacity: 0.4; cursor: default; }
+
+/* Narrow screens: clear of the site's back chip along the bottom edge. */
+@media (max-width: 520px) {
+  .chat { --chat-base: 56px; }
+  .chat-kc { display: none; }
+}
+
+/* ---------------------------------------------------------------- speech bubbles */
+
+/* CSS2DRenderer centres the outer element on the anchor with `transform`; it has no size, so the
+   bubble stands on the anchor point, its tail pointing down at it. The anchor is the name tag
+   (bubbles.ts), so `bottom` clears the tag; .own is over your own head; .lifted is anchored on an
+   emote bubble (42 px round) and clears that. */
+.say { width: 0; height: 0; pointer-events: none; }
+.say-bubble {
+  position: absolute;
+  left: 0;
+  bottom: 20px;
+  translate: -50% 0;
+  width: max-content;
+  max-width: 230px;
+  padding: 5px 10px 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: rgba(14, 12, 10, 0.88);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.45);
+  color: var(--ink);
+  font: 15px/1.28 var(--ui);
+  letter-spacing: 0.015em;
+  text-align: center;
+  overflow-wrap: anywhere;
+  animation: say-in 0.28s var(--ease) both;
+}
+.say-text { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden; }
+.say-bubble::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -5px;
+  width: 8px;
+  height: 8px;
+  margin-left: -4px;
+  background: rgba(14, 12, 10, 0.88);
+  border-right: 1px solid var(--line-strong);
+  border-bottom: 1px solid var(--line-strong);
+  transform: rotate(45deg);
+}
+.say.own .say-bubble { bottom: 8px; }
+.say.lifted .say-bubble { bottom: 30px; }
+.say-bubble.leaving { animation: say-out 0.4s ease-in forwards; }
+@keyframes say-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.9); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes say-out { to { opacity: 0; transform: translateY(-10px); } }
+
+/* ---------------------------------------------------------------- touch screens */
+
+/* Every control a thumb's width, and no keyboard hints. */
+@media (pointer: coarse) {
+  .chat-dock { height: 44px; }
+  .chat-kc { display: none; }
+  .chat-head { height: 52px; }
+  .chat-tab { height: 44px; }
+  .chat-icon { width: 44px; height: 44px; }
+  .chat-input { height: 44px; }
+  .chat-send { width: 44px; height: 44px; }
+}

@@ -20,10 +20,12 @@ import { Props } from './props.ts';
 import { Characters } from './characters.ts';
 import { Player } from './player.ts';
 import { Interact } from './interact.ts';
+import { TouchControls } from './touch.ts';
 import { StationLod } from './lod.ts';
 import { Bloom, PixelRatio } from './bloom.ts';
 import type { MouseSettings } from './mouse.ts';
 import { Emotes, OWN_BUBBLE_Y, BUBBLE_Y, type CharacterSource } from './emotes.ts';
+import { Staff, measureSeats, type StaffGesture } from './npcs.ts';
 import type { EmoteId } from '../../../shared/src/protocol.ts';
 import './world.css';
 
@@ -90,6 +92,13 @@ export interface FloorWorld extends World {
   showEmote(who: number | 'me', e: EmoteId): boolean;
   /** Where showEmote finds other players' characters (the app's RemotePlayers); null to forget. */
   useRemotes(source: CharacterSource | null): void;
+  /** The dealers, bartender and cashier (npcs.ts). */
+  readonly staff: Staff;
+  /**
+   * A dealer's arm motion at a station ('deal' a card, 'sweep' the chips in, 'pay' a bet) for a
+   * table view to call as it animates; false when that station has no dealer.
+   */
+  dealerGesture(stationId: string, g: StaffGesture): boolean;
 }
 
 export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Promise<FloorWorld> {
@@ -130,7 +139,15 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
 
   const characters = new Characters(quality, mats.get('blob'));
   const look = opts.look ?? DEFAULT_LOOK;
-  await Promise.all([props.build(decor.props, chandeliers), characters.load(look).catch((err) => console.warn('character failed to load', err))]);
+  const staff = new Staff(characters, stations, plan, col);
+  root.add(staff.group);
+  await Promise.all([
+    props.build(decor.props, chandeliers),
+    characters.load(look).catch((err) => console.warn('character failed to load', err)),
+    staff.load().catch((err) => console.warn('staff failed to load', err)),
+  ]);
+  // which seats have a chair or stool (other players sit on them; everywhere else they stand)
+  measureSeats(stations, (s) => GAMES[s.game].seats(s.variant), [props.group]);
   progress(0.85);
 
   const character = characters.create(look, opts.name ?? '');
@@ -147,6 +164,8 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
   const cashier: CashierPoint = { id: 'cashier', anchor: cashierAnchor, position: new THREE.Vector3(plan.cashier.x, 0, plan.cashier.z) };
   const ui = opts.ui ?? document.getElementById('ui') ?? document.body;
   const interact = new Interact(stations, cashier, player, engine.camera, ui, opts.onEscape);
+  // Phones and tablets: the thumb stick, drag-to-look, the action button and Leave at a table.
+  const touch = new TouchControls({ player, ui, seated: () => interact.seated, focus: () => interact.focus, sensitivity: () => player.mouseSettings.sensitivity });
 
   const bloom = new Bloom(engine);
   const pr = new PixelRatio(renderer);
@@ -217,8 +236,10 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
       renderer.info.reset();
       player.update(dt);
       interact.update(dt);
+      touch.update();
       lod.update(engine.camera, interact.seated);
       character.update(dt);
+      staff.update(dt, engine.camera, interact.seated);
       emotes.update(dt);
       const f = world.focus;
       lighting.setFocus(f && f.zone !== 'slots' && f.game !== 'videopoker' ? focusAt.copy(f.anchor.position) : null);
@@ -251,8 +272,12 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
     useRemotes(source) {
       remotes = source;
     },
+    staff,
+    dealerGesture: (id, g) => staff.gesture(id, g),
     dispose() {
+      touch.dispose();
       emotes.dispose();
+      staff.dispose();
       lod.dispose();
       interact.dispose();
       player.dispose();

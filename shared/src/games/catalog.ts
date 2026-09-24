@@ -18,6 +18,13 @@ export interface GameInfo {
   variants: Variant[];
   /** Hidden from the floor and the lobby list (test fixture). */
   dev?: true;
+  /** Played on a computer in the online lounge rather than at a table or a machine. */
+  online?: true;
+  /**
+   * A multiplayer table that runs on its own clock from the first seat (the wheel spins, the
+   * rocket flies) instead of waiting for the leader to press Start.
+   */
+  autoStart?: true;
 }
 
 export const CATALOG: Record<GameId, GameInfo> = {
@@ -56,6 +63,15 @@ export const CATALOG: Record<GameId, GameInfo> = {
   war: { id: 'war', name: 'Casino War', prefix: 'wr', seats: { min: 1, max: 6 }, multiplayer: true, variants: [] },
   bigsix: { id: 'bigsix', name: 'Big Six Wheel', prefix: 'b6', seats: { min: 1, max: 8 }, multiplayer: true, variants: [] },
   sicbo: { id: 'sicbo', name: 'Sic Bo', prefix: 'sb', seats: { min: 1, max: 8 }, multiplayer: true, variants: [] },
+  plinko: { id: 'plinko', name: 'Plinko', prefix: 'pk', seats: { min: 1, max: 1 }, multiplayer: false, variants: [], online: true },
+  tower: { id: 'tower', name: 'Tower', prefix: 'tw', seats: { min: 1, max: 1 }, multiplayer: false, variants: [], online: true },
+  mines: { id: 'mines', name: 'Mines', prefix: 'mn', seats: { min: 1, max: 1 }, multiplayer: false, variants: [], online: true },
+  dice: { id: 'dice', name: 'Dice', prefix: 'dc', seats: { min: 1, max: 1 }, multiplayer: false, variants: [], online: true },
+  limbo: { id: 'limbo', name: 'Limbo', prefix: 'lb', seats: { min: 1, max: 1 }, multiplayer: false, variants: [], online: true },
+  keno: { id: 'keno', name: 'Keno', prefix: 'kn', seats: { min: 1, max: 1 }, multiplayer: false, variants: [], online: true },
+  hilo: { id: 'hilo', name: 'Hi-Lo', prefix: 'hl', seats: { min: 1, max: 1 }, multiplayer: false, variants: [], online: true },
+  crash: { id: 'crash', name: 'Crash', prefix: 'cs', seats: { min: 1, max: 12 }, multiplayer: true, variants: [], online: true, autoStart: true },
+  banditwheel: { id: 'banditwheel', name: 'Bandit Wheel', prefix: 'bw', seats: { min: 1, max: 10 }, multiplayer: true, variants: [], autoStart: true },
   highcard: { id: 'highcard', name: 'High Card', prefix: 'hc', seats: { min: 1, max: 6 }, multiplayer: true, variants: [], dev: true },
 };
 
@@ -75,7 +91,7 @@ export function variantOf(id: GameId, asked: unknown): string {
 }
 
 /** Lobby tables: game prefix + 10 base-36 characters (about 52 bits), so they can't be guessed. */
-export const TABLE_ID_RE = /^(bj|rl|cr|bc|sl|vp|tc|he|hc|wr|b6|sb)-[a-z0-9]{10}$/;
+export const TABLE_ID_RE = /^(bj|rl|cr|bc|sl|vp|tc|he|hc|wr|b6|sb|pk|tw|mn|dc|lb|kn|hl|cs|bw)-[a-z0-9]{10}$/;
 
 /** Solo sessions are named by the server from the player's token, never by the client. */
 export function soloTableName(game: GameId, variant: string, accountId: number): string {

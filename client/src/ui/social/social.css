@@ -67,3 +67,9 @@
   .emo-wheel { animation: none; }
   .emo-btn { transition: none; }
 }
+
+/* Touch screens: measured against the visible height (a phone browser's 100vh reaches behind its
+   toolbars). */
+@media (pointer: coarse) {
+  .lb-sheet { max-height: calc(100dvh - 48px - var(--lb-top)); }
+}
