@@ -165,7 +165,9 @@
 .chat-mute[aria-pressed='true'] { color: var(--brass-hi); }
 
 .chat-log {
+  /* --chat-log-max (panel.ts) shortens it to fit under a table's panels higher up the corner. */
   height: clamp(120px, 30vh, 232px);
+  max-height: var(--chat-log-max, none);
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 8px 12px 8px;
@@ -235,13 +237,14 @@
 /* ---------------------------------------------------------------- speech bubbles */
 
 /* CSS2DRenderer centres the outer element on the anchor with `transform`; it has no size, so the
-   bubble hangs from the anchor point, its tail pointing at it. .lifted clears an emote bubble
-   (42 px round, centred on the same anchor). */
+   bubble stands on the anchor point, its tail pointing down at it. The anchor is the name tag
+   (bubbles.ts), so `bottom` clears the tag; .own is over your own head; .lifted is anchored on an
+   emote bubble (42 px round) and clears that. */
 .say { width: 0; height: 0; pointer-events: none; }
 .say-bubble {
   position: absolute;
   left: 0;
-  bottom: 8px;
+  bottom: 20px;
   translate: -50% 0;
   width: max-content;
   max-width: 230px;
@@ -256,7 +259,6 @@
   text-align: center;
   overflow-wrap: anywhere;
   animation: say-in 0.28s var(--ease) both;
-  transition: bottom 0.2s var(--ease);
 }
 .say-text { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden; }
 .say-bubble::after {
@@ -272,7 +274,8 @@
   border-bottom: 1px solid var(--line-strong);
   transform: rotate(45deg);
 }
-.say.lifted .say-bubble { bottom: 34px; }
+.say.own .say-bubble { bottom: 8px; }
+.say.lifted .say-bubble { bottom: 30px; }
 .say-bubble.leaving { animation: say-out 0.4s ease-in forwards; }
 @keyframes say-in {
   from { opacity: 0; transform: translateY(8px) scale(0.9); }

@@ -1,9 +1,9 @@
 // Speech bubbles on the floor: a floor chat line floats over whoever said it for a few seconds
-// (sayFor: longer lines stay longer), at the height the world puts emotes (world/emotes.ts), and
-// rises clear of an emote bubble while one is up on the same player. A new line from the same
-// player replaces the one showing. Bubbles over players further than RANGE from the camera are
-// hidden: the chat panel has every line, and a crowd of far bubbles is noise. Text goes in with
-// textContent only.
+// (sayFor: longer lines stay longer), just above the name tag (or, for your own, just above your
+// head), and over the emote bubble instead while one is up on the same player (world/emotes.ts
+// puts those higher). A new line from the same player replaces the one showing. Bubbles over
+// players further than RANGE from the camera are hidden: the chat panel has every line, and a
+// crowd of far bubbles is noise. Text goes in with textContent only.
 
 import * as THREE from 'three';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
@@ -13,6 +13,10 @@ import { sayFor } from './model.ts';
 
 /** Metres from the camera beyond which a bubble is hidden. */
 export const RANGE = 16;
+/** Where a player's name tag floats (world/characters.ts NAME_Y); a bubble sits a few px above it. */
+const TAG_Y = 2.08;
+/** Just over your own head, which has no tag; the follow camera looks at it from close behind. */
+const OWN_Y = 1.9;
 /** The last seconds of a bubble, fading. */
 const FADE_S = 0.4;
 
@@ -20,6 +24,7 @@ interface Showing {
   tag: CSS2DObject;
   bubble: HTMLElement;
   left: number;
+  own: boolean;
 }
 
 const _cam = new THREE.Vector3();
@@ -43,7 +48,7 @@ export class SayBubbles {
   show(ch: Character, text: string, own: boolean): void {
     this.clear(ch);
     const outer = document.createElement('div');
-    outer.className = 'say';
+    outer.className = own ? 'say own' : 'say';
     const bubble = document.createElement('div');
     bubble.className = 'say-bubble';
     const span = document.createElement('span');
@@ -52,9 +57,8 @@ export class SayBubbles {
     bubble.append(span);
     outer.append(bubble);
     const tag = new CSS2DObject(outer);
-    tag.position.set(0, own ? OWN_BUBBLE_Y : BUBBLE_Y, 0);
     ch.root.add(tag);
-    this.showing.set(ch, { tag, bubble, left: sayFor(text) });
+    this.showing.set(ch, { tag, bubble, left: sayFor(text), own });
     this.place(ch);
   }
 
@@ -91,9 +95,13 @@ export class SayBubbles {
     this.emoteUntil.clear();
   }
 
+  /** Over the name tag (or head), or over the emote bubble while there is one. */
   private place(ch: Character): void {
     const s = this.showing.get(ch);
-    if (s) s.tag.element.classList.toggle('lifted', (this.emoteUntil.get(ch) ?? 0) > this.clock);
+    if (!s) return;
+    const lifted = (this.emoteUntil.get(ch) ?? 0) > this.clock;
+    s.tag.position.y = lifted ? (s.own ? OWN_BUBBLE_Y : BUBBLE_Y) : s.own ? OWN_Y : TAG_Y;
+    s.tag.element.classList.toggle('lifted', lifted);
   }
 
   private clear(ch: Character): void {

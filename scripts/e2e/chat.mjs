@@ -115,18 +115,22 @@ try {
   await wait(200);
   check(!(await a.page.$('.chat.typing')) && (await a.page.isHidden('.chat-box')), 'Esc stops typing and puts away a box a key opened');
   await a.page.evaluate(() => (document.querySelector('.chat-input').value = ''));
-  // A walk key held down as the chat opens must not walk on by itself afterwards.
+  // A walk key held down as the chat opens must not walk on by itself afterwards: the player
+  // glides to a stop (a few cm at walking pace) and stays there.
   await a.page.keyboard.down('KeyW');
   await wait(500);
   await a.page.keyboard.press('KeyT');
+  const pT = await pose(a);
   await a.page.keyboard.up('KeyW');
   await wait(100);
   await a.page.keyboard.press('Escape');
+  await wait(700);
   p0 = await pose(a);
-  await wait(900);
+  await wait(1000);
   p1 = await pose(a);
+  results.glideAfterChat = +moved(pT, p0).toFixed(3);
   results.driftAfterChat = +moved(p0, p1).toFixed(3);
-  check(results.driftAfterChat < 0.02, 'a walk key held as the chat opened does not keep walking');
+  check(results.glideAfterChat < 0.5 && results.driftAfterChat < 0.02, 'a walk key held as the chat opened does not keep walking');
   await a.page.evaluate(() => window.casino.world.teleport(0.5, 9.4, 0));
   await wait(800);
 

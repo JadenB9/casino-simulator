@@ -34,6 +34,9 @@ const PEEKS = 3;
 const PEEK_MS = 6000;
 /** The counter shows from this many characters on. */
 const COUNT_FROM = 150;
+/** Space kept between the chat and a table's panels, and the least log it will shrink to (px). */
+const GAP = 10;
+const MIN_LOG = 72;
 const MUTED_KEY = 'casino.chat.muted';
 const OPEN_KEY = 'casino.chat.open';
 
@@ -532,28 +535,40 @@ export class ChatPanel {
   }
 
   /**
-   * Rise above any panel a table keeps in the bottom-right corner (baccarat's meters, a wide
-   * action bar on a narrow screen), measured, since each game lays out its own.
+   * Share the corner with whatever the table keeps there, measured, since each game lays out its
+   * own: rise above the panels low in our column (baccarat's meters, a wide action bar on a narrow
+   * screen), and let the log give up height to stay under the ones higher up (a lobby's party
+   * panel). If rising would push the box into those, it stays down over the low ones instead: that
+   * hides a few numbers for a moment, never the party's buttons.
    */
   private place = (): void => {
     if (!this.visible) return;
-    // Where the dock or box sits unlifted, from the CSS's own base (not the live rect: `bottom`
-    // is transitioned, and a reading taken mid-way would be off).
     const shown = this.open ? this.box : this.dock;
     const r0 = shown.getBoundingClientRect();
     if (r0.width === 0) return;
+    // Unlifted, from the CSS's own base (not the live rect: `bottom` is transitioned, and a
+    // reading taken mid-way would be off), at the log's full height.
     const bottom = innerHeight - (parseFloat(getComputedStyle(this.root).getPropertyValue('--chat-base')) || 18);
-    const top = bottom - shown.offsetHeight;
+    const log = Math.min(232, Math.max(120, innerHeight * 0.3));
+    const height = this.open ? shown.offsetHeight - this.scroller.offsetHeight + log : shown.offsetHeight;
+    const top = bottom - height;
     let lift = 0;
+    let ceiling = 0;
     for (const p of this.deps.root.querySelectorAll<HTMLElement>('.panel')) {
       if (this.root.contains(p)) continue;
       const r = p.getBoundingClientRect();
-      if (r.width === 0 || r.height === 0) continue;
-      // Only what's low on the screen, in our column, and would be under us.
-      if (r.top < innerHeight * 0.5 || r.right <= r0.left || r.left >= r0.right || r.bottom <= top || r.top >= bottom) continue;
-      lift = Math.max(lift, bottom - r.top + 10);
+      if (r.width === 0 || r.height === 0 || r.right <= r0.left || r.left >= r0.right) continue;
+      if (r.top < innerHeight * 0.5) ceiling = Math.max(ceiling, r.bottom);
+      else if (r.bottom > top && r.top < bottom) lift = Math.max(lift, bottom - r.top + GAP);
+    }
+    let room = bottom - lift - ceiling - GAP;
+    const least = height - log + MIN_LOG;
+    if (lift && ceiling && room < least) {
+      lift = 0;
+      room = bottom - ceiling - GAP;
     }
     this.root.style.setProperty('--chat-lift', `${Math.round(lift)}px`);
+    this.root.style.setProperty('--chat-log-max', ceiling && room < height ? `${Math.round(Math.max(MIN_LOG, room - (height - log)))}px` : 'none');
   };
 }
 
