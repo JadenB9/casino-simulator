@@ -1,9 +1,12 @@
 // Snapshot interpolation for other players on the floor: each remote player is drawn DELAY_MS in
-// the past, between the two snapshots around that moment, so 10 Hz updates look like smooth
-// walking. If updates stop, we extrapolate briefly on the last velocity, then hold.
+// the past, between the two samples around that moment, so a few positions a second look like
+// smooth walking. DELAY_MS covers the longest gap the sender leaves (send-policy.ts: a steady
+// straight line is sent every 320 ms, and the floor's snapshots go out every 100 ms); past the last
+// sample we extrapolate on its velocity for a little while (that is the straight line the sender
+// didn't bother to send), then hold.
 
-export const DELAY_MS = 200;
-const EXTRAPOLATE_MS = 150;
+export const DELAY_MS = 300;
+const EXTRAPOLATE_MS = 200;
 const KEEP = 24;
 
 export interface Pose {

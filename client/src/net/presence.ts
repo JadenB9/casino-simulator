@@ -2,23 +2,26 @@
 // else's coming in as interpolation tracks.
 //
 // Out: `update()` is called every frame with the local player's pose. While the player moves it
-// sends `mv` at most every SEND_MS; the frame it comes to rest it sends one `st`. The first
-// frame after each (re)connect sends the pose unconditionally, because the server lets that
-// first position place the player: after a dropped connection we kept walking on our own.
+// sends `mv` when send-policy.ts says the others need it (a few times a second at most, less on a
+// steady straight line); the frame it comes to rest it sends one `st`. The first frame after each
+// (re)connect sends the pose unconditionally, because the server lets that first position place
+// the player: after a dropped connection we kept walking on our own.
 //
 // In: each remote player gets a Track of snapshots in wire units (integer cm, yaw byte) that
-// the renderer samples 200 ms in the past (net/interp.ts). Scene code converts with the helpers
-// below; one scene unit is one metre.
+// the renderer samples a few hundred ms in the past (net/interp.ts), each row placed at the time
+// its position reached the server (the snapshot's time less the row's age). Scene code converts
+// with the helpers below; one scene unit is one metre.
 
 import { Socket, type SocketState } from './socket.ts';
 import { socketUrl } from './api.ts';
 import { observeServerTime, serverNow } from './clock.ts';
 import { Track, type Pose } from './interp.ts';
+import { SEND_MS, shouldSend, type SentPose } from './send-policy.ts';
 import type { ChatClientMsg, ChatServerMsg, EmoteId, FloorClientMsg, FloorServerMsg, PlayerInfo } from '../../../shared/src/protocol.ts';
 import type { Look } from '../../../shared/src/look.ts';
 
-/** Shortest gap between two `mv` messages, in ms (the protocol's limit). */
-export const SEND_MS = 100;
+/** Shortest gap between two `mv` messages, in ms (send-policy.ts has the whole rule). */
+export { SEND_MS };
 /** A sample this far from the previous one (cm) is a jump, not a step: snap instead of gliding. */
 const SNAP_CM = 300;
 const TAU = Math.PI * 2;
@@ -76,7 +79,8 @@ export interface FloorTransport {
 }
 
 export interface FloorLinkOptions {
-  url?: () => string;
+  /** The floor socket's URL, asked for on every attempt (by default with a fresh ticket). */
+  url?: () => string | Promise<string>;
   /** Replace the socket (tests drive FloorLink without a network this way). */
   open?: (onMessage: (msg: unknown) => void, onState: (state: SocketState, code?: number) => void) => FloorTransport;
 }
@@ -91,9 +95,11 @@ export class FloorLink {
   private connected = false;
   private placed = false;
   private sent: { x: number; z: number; r: number } | null = null;
-  private sentAt = -Infinity;
   /** The server last heard `mv` from us, so it shows us walking until a `st`. */
   private walking = false;
+  /** The last two positions sent while walking, for send-policy.ts (the one before resets at a stop). */
+  private lastSent: SentPose | null = null;
+  private prevSent: SentPose | null = null;
   private frame: { x: number; z: number; r: number } | null = null;
 
   constructor(opts: FloorLinkOptions = {}) {
@@ -145,7 +151,7 @@ export class FloorLink {
     // Turning on the spot or being moved by the scene (sitting down) counts as moving too.
     const stirring = pose.moving || !prev || !same(prev, cur);
     if (stirring) {
-      if (!same(this.sent, cur) && now - this.sentAt >= SEND_MS) this.push('mv', cur, now);
+      if (!same(this.sent, cur) && shouldSend(cur, now, this.lastSent, this.prevSent)) this.push('mv', cur, now);
     } else if (this.walking || !same(this.sent, cur)) {
       this.push('st', cur, now);
     }
@@ -160,8 +166,10 @@ export class FloorLink {
   private push(t: 'mv' | 'st', p: { x: number; z: number; r: number }, now: number): void {
     if (!this.socket.send({ t, x: p.x, z: p.z, r: p.r })) return;
     this.placed = true;
+    // A straight line needs two positions from the same walk: a stop starts it again.
+    this.prevSent = t === 'mv' && this.walking ? this.lastSent : null;
+    this.lastSent = { ...p, at: now };
     this.sent = p;
-    this.sentAt = now;
     this.walking = t === 'mv';
   }
 
@@ -187,9 +195,10 @@ export class FloorLink {
       }
       case 's':
         observeServerTime(m.ts);
-        for (const [id, x, z, r, moving] of m.p) {
+        for (const [id, x, z, r, moving, age] of m.p) {
           const p = this.players.get(id);
-          if (p) this.sample(p, m.ts, { x, z, r, moving: moving === 1 });
+          // The row's age puts it at the moment the position reached the server, not the flush.
+          if (p) this.sample(p, m.ts - (age ?? 0), { x, z, r, moving: moving === 1 });
         }
         break;
       case 'join':

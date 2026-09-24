@@ -30,13 +30,13 @@ export interface Claims {
   exp: number;
 }
 
-function b64url(bytes: Uint8Array): string {
+export function b64url(bytes: Uint8Array): string {
   let s = '';
   for (const b of bytes) s += String.fromCharCode(b);
   return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-function unb64url(s: string): Uint8Array | null {
+export function unb64url(s: string): Uint8Array | null {
   try {
     const bin = atob(s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4));
     const out = new Uint8Array(bin.length);
@@ -49,7 +49,8 @@ function unb64url(s: string): Uint8Array | null {
 
 const keys = new Map<string, Promise<CryptoKey>>();
 
-function key(secret: string): Promise<CryptoKey> {
+/** The HMAC-SHA256 key for a secret (tokens and socket tickets both sign with it). */
+export function key(secret: string): Promise<CryptoKey> {
   let k = keys.get(secret);
   if (!k) {
     k = crypto.subtle.importKey('raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify']);

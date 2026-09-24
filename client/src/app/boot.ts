@@ -24,6 +24,8 @@ import { createChat, type Chat } from '../ui/chat/index.ts';
 import { mountFloorLife, type FloorLife } from '../ui/feed/index.ts';
 import { Bar, openBarMenu, openShop, shopApi, shopButton } from '../ui/shop/index.ts';
 import { button, modal, toast } from '../ui/kit.ts';
+import { showAway, showIdleWarning, type AwayHandle, type WarningHandle } from '../ui/away/away.ts';
+import { IdleWatch } from './idle.ts';
 import { ENGINES } from '../../../shared/src/games/index.ts';
 import { CLOSE, type Profile } from '../../../shared/src/protocol.ts';
 
@@ -81,6 +83,15 @@ class App {
   private passOff: (() => void) | null = null;
   private lookKey = '';
   private stopped = false;
+  /** netsec: idle. The page's own idle clock (app/idle.ts), running while the floor is connected. */
+  private readonly idle: IdleWatch;
+  private idleWarning: WarningHandle | null = null;
+  /** The away screen, while it's up. */
+  private away: AwayHandle | null = null;
+  /** Coming back from away: the floor keeps you where you stand rather than where it last saw you. */
+  private comingBack = false;
+  /** Walking when we went away (or at a table, which puts us back on the floor): walking again after. */
+  private awayWalking = false;
   /** Where each station's n-th seated player is drawn; stations never move. */
   private readonly seatCache = new Map<string, SeatPose | null>();
 
@@ -120,6 +131,20 @@ class App {
       true,
     );
     this.life = mountFloorLife({ engine, world, sfx, ui });
+    this.idle = new IdleWatch({
+      showWarning: (at) => {
+        this.idleWarning?.close();
+        this.idleWarning = showIdleWarning({ root: this.ui, at, atTable: this.table !== null });
+        if (!this.sfx.muted) this.sfx.play('ui-switch', { volume: 0.7 });
+      },
+      hideWarning: () => {
+        this.idleWarning?.close();
+        this.idleWarning = null;
+      },
+      idle: () => void this.goAway(),
+      // Straight to the sockets: a table session's own send() would toast while it reconnects.
+      here: () => (this.link?.send({ t: 'here' }) ?? true) && (this.table?.session.socket.send({ t: 'here' }) ?? true),
+    });
   }
 
   async start(saved: Promise<Profile | null>): Promise<void> {
@@ -230,6 +255,8 @@ class App {
 
   private connectFloor(): void {
     if (this.link) return;
+    // The idle clock runs while the floor is connected (started first: see app/idle.ts).
+    this.idle.start();
     const link = new FloorLink();
     this.link = link;
     this.remotes = new RemotePlayers(link, this.engine.scene, {
@@ -251,8 +278,10 @@ class App {
     this.lifeOff = this.life.connect(link, { onFloor: () => this.hud !== null && this.table === null && this.world.seated === null });
     link.on('emote', (id, e) => void this.world.showEmote(id === link.you?.id ? 'me' : id, e));
     link.on('hello', (you, first) => {
-      // A tab that takes over from another one carries on where that one stood.
-      if (first && !this.table) this.world.player.teleport(you.x / 100, you.z / 100, byteToYaw(you.r));
+      // A tab that takes over from another one carries on where that one stood. Coming back from
+      // away, the floor forgot us; the first position we send puts us back where we stand.
+      if (first && !this.table && !this.comingBack) this.world.player.teleport(you.x / 100, you.z / 100, byteToYaw(you.r));
+      this.comingBack = false;
     });
     link.on('online', (n) => {
       this.hud?.setOnline(n);
@@ -269,6 +298,7 @@ class App {
   }
 
   private disconnectFloor(): void {
+    this.idle.stop();
     this.world.useBar(null);
     this.bar?.dispose();
     this.bar = null;
@@ -540,6 +570,9 @@ class App {
     } else if (code === CLOSE.UNAUTHORIZED) {
       api.forgetToken();
       this.halt('Log in again', 'Your session ended.');
+    } else if (code === CLOSE.IDLE) {
+      // The floor or the table let us go first (a page that slept through its own clock).
+      void this.goAway();
     } else {
       return false;
     }
@@ -549,12 +582,46 @@ class App {
   private halt(title: string, text: string): void {
     if (this.stopped) return;
     this.stopped = true;
+    this.away?.close();
+    this.away = null;
     this.table?.session.close();
     this.emotes?.dispose();
     this.emotes = null;
     this.disconnectFloor();
     this.world.player.setEnabled(false);
     modal(title, [text], [button('Reload', () => location.reload(), { cls: 'primary' })]);
+  }
+
+  // --- away (netsec: idle) ---------------------------------------------------------------------
+
+  /**
+   * Away too long (app/idle.ts, or the floor or a table said so first): stand up from any table
+   * the normal way (bets in play settle, then the chips go home), leave the floor, and wait on the
+   * away screen. Nothing reconnects until Come back.
+   */
+  private async goAway(): Promise<void> {
+    if (this.away || this.stopped) return;
+    const atTable = this.table !== null;
+    // Walking about (nothing open over the floor), or at a table: standing up puts us on the floor.
+    this.awayWalking = atTable || (this.hud !== null && this.world.seated === null && overlayCount() === 0);
+    this.away = showAway({ root: this.ui, atTable, onBack: () => this.comeBack() });
+    this.disconnectFloor();
+    this.world.player.setEnabled(false);
+    if (atTable) {
+      await this.leaveTable();
+      // Standing up gave the controls back once the camera was behind the player again.
+      if (this.away) this.world.player.setEnabled(false);
+    }
+  }
+
+  /** Come back: the floor again, standing where we were. Runs inside the click, so the floor may take the mouse. */
+  private comeBack(): void {
+    this.away = null;
+    if (this.stopped) return;
+    this.comingBack = true;
+    this.connectFloor();
+    this.chat?.setVisible(this.hud !== null);
+    if (this.awayWalking && this.hud) this.world.player.setEnabled(true);
   }
 }
 
