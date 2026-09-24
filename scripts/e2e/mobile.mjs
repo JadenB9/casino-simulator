@@ -293,7 +293,8 @@ for (const key of list) {
         stood = true;
       }
       if (phase === 'results' || phase === 'idle') break;
-      if (await visible('.bj-insure')) await tap('.bj-insure .btn.ghost');
+      // the insurance offer can close on its own between the look and the tap
+      if (await visible('.bj-insure')) await page.locator('.bj-insure .btn.ghost').first().tap({ timeout: 3000 }).catch(() => {});
       await sleep(400);
     }
     await sleep(1800);
