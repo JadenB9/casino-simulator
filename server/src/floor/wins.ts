@@ -98,7 +98,7 @@ export function bigWinsIn(game: GameId, variant: string, step: Step<unknown>, wh
 /** After the ball or wheel comes to rest: time for the call and the pills. */
 const REST_BEAT_MS = 1_500;
 /** Otherwise, about how long each game takes to show a result it has just settled. */
-const SHOW_MS: Record<GameId, number> = {
+const SHOW_MS: Partial<Record<GameId, number>> = {
   blackjack: 3_000,
   roulette: 2_000,
   craps: 2_500,
@@ -123,7 +123,8 @@ export function revealAt(game: GameId, events: readonly GameEvent[], now: number
     if (typeof e.restAt === 'number' && Number.isFinite(e.restAt)) rest = Math.max(rest, e.restAt);
     if (e.type === 'reels' && typeof e.spin === 'number' && e.spin > 0) free++;
   }
-  const at = rest > 0 ? Math.max(rest, now) + REST_BEAT_MS : now + SHOW_MS[game] + free * FREE_GAME_MS;
+  // a game not in the table (a new one) gets a middling pause
+  const at = rest > 0 ? Math.max(rest, now) + REST_BEAT_MS : now + (SHOW_MS[game] ?? 2_500) + free * FREE_GAME_MS;
   return Math.min(at, now + REVEAL_MAX_MS);
 }
 
