@@ -7,8 +7,7 @@ import { isValidName } from '../../shared/src/names.ts';
 import { PASSWORD_MAX, PASSWORD_MIN, isValidPassword } from '../../shared/src/password.ts';
 import { parseLook, lookFromJson } from '../../shared/src/look.ts';
 import { CATALOG, isGameId, soloTableName, TABLE_ID_RE, variantOf } from '../../shared/src/games/catalog.ts';
-import { formatMoney } from '../../shared/src/money.ts';
-import { REFILL_BELOW } from '../../shared/src/bank.ts';
+import { notYet } from '../../shared/src/bank.ts';
 import { closeWith, corsHeaders, fail, json, originAllowed, readJson } from './http.ts';
 import { bearer, logIn, signToken, verifyToken, type Claims } from './auth.ts';
 import { bumpRate, escrowsOf, getAccount, loadProfile, setLook } from './db.ts';
@@ -115,9 +114,7 @@ async function handleApi(request: Request, env: Env, route: string, cors: Record
     if (!loan.granted) {
       // A buy-in or cash-out landed between the count and the loan: the count is stale.
       if (profile.inPlay !== counted.inPlay) return fail(409, 'BUSY', STILL_MOVING, cors);
-      const total = profile.balance + counted.chips;
-      const onTables = counted.chips > 0 ? `, ${formatMoney(counted.chips)} of it in chips on tables` : '';
-      return fail(409, 'NOT_ELIGIBLE', `You have ${formatMoney(total)} in all${onTables}. The bank tops you up when that is under ${formatMoney(REFILL_BELOW)}.`, cors, {
+      return fail(409, 'NOT_ELIGIBLE', notYet(profile.balance + counted.chips, counted.chips), cors, {
         balance: profile.balance,
         inPlay: profile.inPlay,
       });

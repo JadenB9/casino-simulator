@@ -6,7 +6,7 @@
 import './hud.css';
 import { tips } from '../../app/tips.ts';
 import { isTyping } from '../keyboard.ts';
-import { LOAN_AMOUNT, formatMoney, type Cents } from '../../../../shared/src/money.ts';
+import { formatMoney, type Cents } from '../../../../shared/src/money.ts';
 import type { Profile } from '../../../../shared/src/protocol.ts';
 import { el } from '../kit.ts';
 import type { Closable, SessionLike, SfxLike } from '../menu/deps.ts';
@@ -128,7 +128,9 @@ export function mountHud(deps: HudDeps): Hud {
   const rollTable = roller(table.value);
 
   // Session net = what you're worth now - what you had when the HUD came up - loans since.
-  // Chips at the current table count at their live stack, other tables at what went in.
+  // Chips at the current table count at their live stack, other tables at what went in. The bank
+  // tops up by whatever reaches $50,000, so each loan since counts at its own amount (the
+  // profile lists them newest first).
   const startedAt = Date.now();
   const p0 = deps.session.profile;
   const startWorth = p0 ? p0.balance + p0.inPlay : 0;
@@ -140,7 +142,8 @@ export function mountHud(deps: HudDeps): Hud {
     const p = deps.session.profile;
     if (!p) return;
     const worth = p.balance + p.inPlay + (seat ? seat.stack - seat.escrow : 0);
-    const net = worth - startWorth - (p.loansTaken - startLoans) * LOAN_AMOUNT;
+    const lent = p.loans.slice(0, Math.max(0, p.loansTaken - startLoans)).reduce((sum, l) => sum + l.amount, 0);
+    const net = worth - startWorth - lent;
     sessionTile.value.replaceChildren(
       el('span', net > 0 ? 'win' : net < 0 ? 'lose' : '', formatMoney(net, { sign: true })),
       el('span', 'hud-time', ` · ${formatDuration(Date.now() - startedAt)}`),

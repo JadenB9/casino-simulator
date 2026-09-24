@@ -173,9 +173,9 @@ const selected = (p) => p.getAttribute('.menu-item.sel', 'data-id');
   await p.keyboard.press('Escape');
   await p.waitForSelector('.sheet-scrim', { state: 'detached' });
   await p.keyboard.press('m');
-  check('M mutes', (await p.getAttribute('.hud-btn[aria-pressed]', 'aria-pressed')) === 'true');
+  check('M mutes', (await p.getAttribute('.hud-btn[aria-label="Mute (M)"]', 'aria-pressed')) === 'true');
   await p.keyboard.press('m');
-  check('M unmutes', (await p.getAttribute('.hud-btn[aria-pressed]', 'aria-pressed')) === 'false');
+  check('M unmutes', (await p.getAttribute('.hud-btn[aria-label="Mute (M)"]', 'aria-pressed')) === 'false');
   await p.context().close();
 }
 

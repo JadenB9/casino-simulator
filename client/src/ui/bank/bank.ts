@@ -1,9 +1,11 @@
 // The cashier's window: what you have, where it is, and the bank's one rule. No countdowns, no
-// offers, no "claim now": the loan is there when you have nothing left, and not before.
+// offers, no "claim now": under $10,000 in all, the bank tops you up to $50,000, as often as
+// that happens, and not before.
 
 import './bank.css';
 import type { Profile } from '../../../../shared/src/protocol.ts';
-import { LOAN_AMOUNT, formatMoney } from '../../../../shared/src/money.ts';
+import { formatMoney, type Cents } from '../../../../shared/src/money.ts';
+import { REFILL_BELOW, REFILL_TO, notYet, refillFor } from '../../../../shared/src/bank.ts';
 import { el } from '../kit.ts';
 import type { AccountApi, Closable, SessionLike, SfxLike } from '../menu/deps.ts';
 import { openSheet } from '../menu/sheet.ts';
@@ -19,17 +21,36 @@ export interface BankDeps {
 
 type Note = { text: string; kind: '' | 'ok' | 'err' };
 
-/** Where the player stands with the bank, from the numbers alone. */
-function standing(p: Profile): Note & { canAsk: boolean } {
-  if (p.balance > 0) {
-    return { text: `You have ${formatMoney(p.balance)} in your balance, so there is nothing to lend yet.`, kind: '', canAsk: false };
+/**
+ * Chips on tables as far as this client knows: a table's live stack where the server reported
+ * one, otherwise what went in. `sure` is false when any table is only known by what went in.
+ */
+function onTables(p: Profile): { chips: Cents; sure: boolean } {
+  let chips = 0;
+  let sure = true;
+  for (const t of p.tables) {
+    if (t.stack === undefined) sure = false;
+    chips += t.stack ?? t.escrow;
   }
-  if (p.inPlay > 0) {
-    // The bank asks those tables to settle first, so a stack that is really gone still qualifies.
-    return { text: `${formatMoney(p.inPlay)} is still on tables. The bank lends once those chips are cashed out or lost.`, kind: '', canAsk: true };
-  }
-  return { text: `You have nothing left. The bank will lend you ${formatMoney(LOAN_AMOUNT)}.`, kind: 'ok', canAsk: true };
+  return { chips, sure };
 }
+
+/** Where the player stands with the bank, from the numbers alone. The server has the last word. */
+function standing(p: Profile): Note & { canAsk: boolean } {
+  const { chips, sure } = onTables(p);
+  const total = p.balance + chips;
+  // Over the line on the balance alone: nothing on any table can change that.
+  if (p.balance >= REFILL_BELOW) return { text: notYet(total, chips), kind: '', canAsk: false };
+  if (!sure) {
+    // The bank asks each table what those chips are worth now, so let the player ask.
+    return { text: `${formatMoney(chips)} went onto tables. The bank counts those chips at what they are worth now when you ask.`, kind: '', canAsk: true };
+  }
+  const add = refillFor(total);
+  if (add === 0) return { text: notYet(total, chips), kind: '', canAsk: false };
+  return { text: `You have ${formatMoney(total)} in all. The bank will add ${formatMoney(add)}.`, kind: 'ok', canAsk: true };
+}
+
+const TAKE = `Top up to ${formatMoney(REFILL_TO)}`;
 
 export function openBank(deps: BankDeps): Closable {
   let off = () => {};
@@ -44,17 +65,19 @@ export function openBank(deps: BankDeps): Closable {
 
   const stats = el('div', 'stats bank-stats');
   const balance = statTile('Balance', '');
-  const onTables = statTile('Chips on tables', '');
+  const tables = statTile('Chips on tables', '');
   const loans = statTile('Loans taken', '');
-  stats.append(balance.tile, onTables.tile, loans.tile);
+  stats.append(balance.tile, tables.tile, loans.tile);
 
-  const rule = el('p', 'bank-rule', `The bank lends ${formatMoney(LOAN_AMOUNT)} when you have nothing left, tables included.`);
-  const terms = el('p', 'quiet bank-terms', 'Free, with nothing to repay. It is the only way to get more chips.');
+  // Two lines, like the sign over a cage window: the question, then the answer.
+  const rule = el('p', 'bank-rule');
+  rule.append(el('span', '', `Under ${formatMoney(REFILL_BELOW)} in all?`), document.createTextNode(' '), el('span', '', `The bank tops you up to ${formatMoney(REFILL_TO)}.`));
+  const terms = el('p', 'quiet bank-terms', 'Your balance and every chip on every table count. Free, with nothing to repay, as often as you need it.');
   const where = el('div', 'bank-where');
   const status = el('p', 'bank-status');
   status.setAttribute('aria-live', 'polite');
 
-  const take = el('button', 'btn primary bank-take', `Take ${formatMoney(LOAN_AMOUNT)} loan`);
+  const take = el('button', 'btn primary bank-take', TAKE);
   take.type = 'button';
   const done = el('button', 'btn ghost', 'Close');
   done.type = 'button';
@@ -64,12 +87,12 @@ export function openBank(deps: BankDeps): Closable {
   sheet.body.append(stats, rule, terms, where, status, foot);
 
   let busy = false;
-  let note: Note | null = null; // the outcome of the last request, shown until the numbers change
+  let note: Note | null = null; // the outcome of the last request, shown until the next one
 
   const render = (p: Profile | null) => {
     if (!p) return;
     balance.value.textContent = formatMoney(p.balance);
-    onTables.value.textContent = formatMoney(p.inPlay);
+    tables.value.textContent = formatMoney(onTables(p).chips);
     loans.value.textContent = String(p.loansTaken);
     where.replaceChildren();
     for (const t of p.tables) {
@@ -82,8 +105,16 @@ export function openBank(deps: BankDeps): Closable {
     status.textContent = show.text;
     status.className = `bank-status ${show.kind}`.trim();
     take.disabled = busy || !s.canAsk;
-    take.hidden = p.balance > 0 && note?.kind === 'ok'; // just paid out: nothing more to ask for
+    take.hidden = note?.kind === 'ok'; // just topped up: nothing more to ask for
   };
+
+  const refresh = () =>
+    deps.api
+      .me()
+      .then((p) => !sheet.closed && deps.session.set(p))
+      .catch(() => {
+        /* the cached numbers stay up; the next request reports its own problem */
+      });
 
   take.addEventListener('click', async () => {
     if (busy) return;
@@ -93,42 +124,26 @@ export function openBank(deps: BankDeps): Closable {
     render(deps.session.profile);
     try {
       const r = await deps.api.takeLoan();
-      note = { text: `Loan made: ${formatMoney(r.loan.amount)} is in your balance.`, kind: 'ok' };
+      note = { text: `Loan made: ${formatMoney(r.loan.amount)} is in your balance, which makes ${formatMoney(REFILL_TO)} in all.`, kind: 'ok' };
       deps.sfx?.play('chips-stack', { volume: 0.6 });
       busy = false;
-      take.textContent = `Take ${formatMoney(LOAN_AMOUNT)} loan`;
+      take.textContent = TAKE;
       deps.session.set(r.profile);
     } catch (err) {
       busy = false;
-      take.textContent = `Take ${formatMoney(LOAN_AMOUNT)} loan`;
-      const body = (err as { status?: number; body?: { error?: string; balance?: number; inPlay?: number } }).body;
-      if (body?.error === 'NOT_ELIGIBLE') {
-        const reason =
-          (body.inPlay ?? 0) > 0
-            ? `Not yet: ${formatMoney(body.inPlay!)} is still in chips on tables.`
-            : (body.balance ?? 0) > 0
-              ? `Not yet: you still have ${formatMoney(body.balance!)}.`
-              : problemText(err);
-        note = { text: reason, kind: 'err' };
-        // The refusal carries the server's numbers; show them rather than what we thought.
-        const p = deps.session.profile;
-        if (p && body.balance !== undefined && body.inPlay !== undefined) deps.session.set({ ...p, balance: body.balance, inPlay: body.inPlay });
-        else render(p);
-      } else {
-        note = { text: problemText(err), kind: 'err' };
-        render(deps.session.profile);
-      }
+      take.textContent = TAKE;
+      // The refusal says what the bank counted (or that chips were still moving); the fresh
+      // profile brings the numbers on the tiles up to date.
+      const code = (err as { body?: { error?: unknown } }).body?.error;
+      note = { text: problemText(err), kind: code === 'BUSY' ? '' : 'err' };
+      render(deps.session.profile);
+      void refresh();
     }
   });
 
   off = deps.session.on(render);
   render(deps.session.profile);
-  deps.api
-    .me()
-    .then((p) => !sheet.closed && deps.session.set(p))
-    .catch(() => {
-      /* the cached numbers stay up; a loan request reports its own problem */
-    });
+  void refresh();
 
   return { root: sheet.root, close: () => sheet.close() };
 }

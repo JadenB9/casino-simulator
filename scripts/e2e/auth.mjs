@@ -2,7 +2,8 @@
 // Headless check of logging in with a password, against the local worker: a name and password
 // (the rule, Show, a short password), the menu, log out, "Continue as" asking for the password,
 // a wrong password, an account from before passwords being claimed by its first password, the
-// real game's boot (a saved session skips the screen, a v1 token doesn't), and a narrow screen.
+// real game's boot (a saved session skips the screen, a v1 token doesn't), the cashier topping up
+// $9,999.99 to $50,000, and a narrow screen.
 // Screenshots of each. Usage: node scripts/e2e/auth.mjs [port] [outDir]
 //
 // The account from before passwords is written straight into the local D1 with wrangler, the
@@ -168,6 +169,42 @@ function sql(command) {
   await p.reload();
   await p.waitForSelector('.menu-item, .front-login', { timeout: 180_000 });
   check('game: a v1 token goes back to the login', !!(await p.$('.front-login')));
+  await p.context().close();
+}
+
+// ---- the cashier against the real worker: $9,999.99 is under the line, a top-up to $50,000
+{
+  const BANKER = 'auth_bank';
+  const bank = `${dev}?screen=bank&name=${BANKER}&dock=0`;
+  // The dev page logs in as BANKER (making it the first time), then the balance is set straight
+  // in D1: just under the line, with nothing on any table.
+  let p = await open(bank);
+  await p.waitForSelector('.bank-status:not(:empty)');
+  await p.context().close();
+  sql(`UPDATE casino_accounts SET balance = 999999 WHERE name = '${BANKER}' AND in_play = 0`);
+
+  p = await open(bank);
+  await p.waitForSelector('.bank-status.ok');
+  await p.waitForTimeout(600);
+  await shot(p, '08-bank-under-the-line');
+  check('cashier: says what the bank will add', (await text(p, '.bank-status')) === 'You have $9,999.99 in all. The bank will add $40,000.01.', await text(p, '.bank-status'));
+  check('cashier: the rule over the window', (await text(p, '.bank-rule')) === 'Under $10,000 in all? The bank tops you up to $50,000.', await text(p, '.bank-rule'));
+  const loansBefore = Number(await text(p, '.bank-stats .stat:nth-child(3) .stat-value'));
+  await p.click('.bank-take');
+  await p.waitForFunction(() => document.querySelector('.bank-status')?.textContent?.startsWith('Loan made'));
+  await p.waitForTimeout(500);
+  await shot(p, '09-bank-topped-up');
+  check('cashier: topped up by exactly the gap', (await text(p, '.bank-status')) === 'Loan made: $40,000.01 is in your balance, which makes $50,000 in all.', await text(p, '.bank-status'));
+  check('cashier: balance now $50,000', (await text(p, '.bank-stats .stat:nth-child(1) .stat-value')) === '$50,000');
+  check('cashier: the loan is counted', Number(await text(p, '.bank-stats .stat:nth-child(3) .stat-value')) === loansBefore + 1);
+  await p.context().close();
+
+  p = await open(bank);
+  await p.waitForSelector('.bank-status:not(:empty)');
+  await p.waitForTimeout(600);
+  await shot(p, '10-bank-over-the-line');
+  check('cashier: at $50,000 there is nothing to ask for', await p.isDisabled('.bank-take'));
+  check('cashier: says why', (await text(p, '.bank-status')) === 'You have $50,000 in all. The bank tops you up when that is under $10,000.', await text(p, '.bank-status'));
   await p.context().close();
 }
 
