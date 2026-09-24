@@ -23,8 +23,11 @@ export interface SocketOptions {
 
 const PING_MS = 25_000;
 const PONG_TIMEOUT_MS = 10_000;
-/** Close codes that mean "don't come back" (another tab took over, the table is gone, reload). */
-const FINAL = new Set<number>([CLOSE.REPLACED, CLOSE.NOT_FOUND, CLOSE.FORBIDDEN, CLOSE.UNAUTHORIZED, CLOSE.VERSION]);
+/**
+ * Close codes that mean "don't come back" (another tab took over, the table is gone, reload, or
+ * away too long: the app offers Come back instead).
+ */
+const FINAL = new Set<number>([CLOSE.REPLACED, CLOSE.NOT_FOUND, CLOSE.FORBIDDEN, CLOSE.UNAUTHORIZED, CLOSE.VERSION, CLOSE.IDLE]);
 
 export class Socket {
   private ws: WebSocket | null = null;

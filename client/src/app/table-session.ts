@@ -94,6 +94,12 @@ export class TableSession {
     // seat message says "watching, $0", which would otherwise offer a buy-in at the table just left).
     this.ended = true;
     this.kit.dispose();
+    // A socket the table closed for good (away too long, say) is never coming back: the table
+    // has already stood the seat up, so there's nothing to say.
+    if (this.socket.state === 'closed') {
+      this.close();
+      return;
+    }
     // A leave pressed while reconnecting goes out as soon as the socket is back (or the seat is
     // held for the grace period and its bets play on timeouts); give up after a while.
     if (!this.socket.send({ t: 'leave' })) {

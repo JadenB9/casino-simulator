@@ -29,11 +29,18 @@ const settle = () => sleep(80);
 describe('the floor', () => {
   it('closes a socket nothing real has come from for IDLE_MS; moving, turning, talking, waving, a lobby list and `here` all count', async () => {
     const t0 = Date.now();
-    const tags = ['idle', 'same', 'here', 'walk', 'turn', 'talk', 'wave', 'list'];
-    const ps = await Promise.all(tags.map((t) => player(`f${t}`)));
-    const on = [];
-    for (const p of ps) on.push(await onFloor(p));
-    const [idle, same, here, walk, turn, talk, wave, list] = on as [typeof on[0], ...typeof on];
+    const arrive = async (tag: string) => {
+      const p = await player(`f${tag}`);
+      return { p, ...(await onFloor(p)) };
+    };
+    const idle = await arrive('idle');
+    const same = await arrive('same');
+    const here = await arrive('here');
+    const walk = await arrive('walk');
+    const turn = await arrive('turn');
+    const talk = await arrive('talk');
+    const wave = await arrive('wave');
+    const list = await arrive('list');
 
     // A minute before the quarter hour is up...
     clockAt(t0 + IDLE_MS - 60_000);
@@ -54,8 +61,8 @@ describe('the floor', () => {
     expect(await closedWith(same.c)).toEqual(AWAY);
     for (const x of [here, walk, turn, talk, wave, list]) expect(x.c.closed).toBeNull();
     // Everyone still here sees them go.
-    await here.c.next((m) => m.t === 'leave' && m.id === ps[0]!.id);
-    await here.c.next((m) => m.t === 'leave' && m.id === ps[1]!.id);
+    await here.c.next((m) => m.t === 'leave' && m.id === idle.p.id);
+    await here.c.next((m) => m.t === 'leave' && m.id === same.p.id);
 
     // The next sweep is due when the first of the rest could be, not before.
     const next = await runInDurableObject(floor(), (_f, state) => state.storage.getAlarm());

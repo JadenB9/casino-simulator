@@ -166,8 +166,8 @@ describe('Socket', () => {
     expect(ws.sent).toEqual([]);
   });
 
-  it('stops on the codes that mean "not here any more", and reloads on a version change', () => {
-    for (const code of [4001, 4003, 4004, 4005]) {
+  it('stops on the codes that mean "not here any more" (away too long included), and reloads on a version change', () => {
+    for (const code of [4001, 4003, 4004, 4005, 4010]) {
       const { s, states } = make();
       const ws = FakeWS.all.at(-1)!;
       ws.accept();
