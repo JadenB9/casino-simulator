@@ -12,7 +12,7 @@ import { wait } from '../../table/tween.ts';
 import { celebrate } from '../../table/celebrate.ts';
 import { el } from '../../ui/kit.ts';
 import { attractTexture, pcModel, pcPose, pcScreenCorners, PC_FOOTPRINT, PC_SEAT } from '../online/pc.ts';
-import { OnlineScreen, BetBox, actionButton, SegChoice, InfoList, SessionTally, commitTyping, labelled, winTier, siteTone, drawSiteBar } from '../online/screen.ts';
+import { OnlineScreen, BetBox, actionButton, SegChoice, InfoList, SessionTally, commitTyping, labelled, winTier, siteTone, drawSiteBar, drawAttractPanel } from '../online/screen.ts';
 
 /** The chair's trim on the floor: Keno's violet. */
 const ACCENT = '#9b5cff';
@@ -27,32 +27,8 @@ const cents = (c: Cents) => `$${(c / 100).toLocaleString('en-US', { minimumFract
 /** The monitor on the floor: the site's bar, a bet panel, and a board mid-draw. */
 function drawAttract(g: CanvasRenderingContext2D, w: number, h: number): void {
   const top = drawSiteBar(g, w, 'Keno');
-  g.fillStyle = '#1a2c38';
-  g.fillRect(0, top, 132, h - top);
-  g.textBaseline = 'middle';
-  g.textAlign = 'left';
-  const field = (label: string, text: string, y: number) => {
-    g.fillStyle = '#a7b4c6';
-    g.font = '600 11px system-ui, sans-serif';
-    g.fillText(label, 12, y);
-    g.fillStyle = '#0f1e29';
-    g.beginPath();
-    g.roundRect(10, y + 8, 112, 28, 4);
-    g.fill();
-    g.fillStyle = '#eef3f8';
-    g.font = '600 15px system-ui, sans-serif';
-    g.fillText(text, 18, y + 23);
-  };
-  field('Bet', '$5.00', top + 18);
-  field('Risk', 'Classic', top + 70);
-  g.fillStyle = '#1fd65f';
-  g.beginPath();
-  g.roundRect(10, top + 124, 112, 36, 5);
-  g.fill();
-  g.fillStyle = '#06210f';
-  g.font = '800 16px system-ui, sans-serif';
+  drawAttractPanel(g, top, h, [['Bet', '$5.00'], ['Risk', 'Classic']], 'Bet');
   g.textAlign = 'center';
-  g.fillText('Bet', 66, top + 143);
 
   const picked = new Set([4, 9, 13, 22, 27, 31, 38]);
   const drawn = new Set([2, 9, 13, 17, 25, 27, 30, 33, 36, 40]);

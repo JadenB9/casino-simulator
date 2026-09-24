@@ -517,3 +517,39 @@ export class BetLog {
     this.body.replaceChildren();
   }
 }
+
+/**
+ * The bet panel on a desk's attract picture, down the left under drawSiteBar: labelled fields,
+ * then the green action button. Returns the panel's width, where the game's own picture starts.
+ */
+export function drawAttractPanel(g: CanvasRenderingContext2D, top: number, h: number, fields: readonly [string, string][], action: string): number {
+  const w = 132;
+  g.fillStyle = '#1a2c38';
+  g.fillRect(0, top, w, h - top);
+  g.textBaseline = 'middle';
+  g.textAlign = 'left';
+  let y = top + 18;
+  for (const [label, value] of fields) {
+    g.fillStyle = '#a7b4c6';
+    g.font = '600 11px system-ui, sans-serif';
+    g.fillText(label, 12, y);
+    g.fillStyle = '#0f1e29';
+    g.beginPath();
+    g.roundRect(10, y + 8, 112, 28, 4);
+    g.fill();
+    g.fillStyle = '#eef3f8';
+    g.font = '600 15px system-ui, sans-serif';
+    g.fillText(value, 18, y + 23);
+    y += 52;
+  }
+  g.fillStyle = '#1fd65f';
+  g.beginPath();
+  g.roundRect(10, y + 2, 112, 36, 5);
+  g.fill();
+  g.fillStyle = '#06210f';
+  g.font = '800 16px system-ui, sans-serif';
+  g.textAlign = 'center';
+  g.fillText(action, w / 2, y + 21);
+  g.textAlign = 'left';
+  return w;
+}

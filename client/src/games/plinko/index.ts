@@ -11,7 +11,7 @@ import { ROWS, RISKS, RISK_NAMES, MULTS, binChance, boardRtp, bestBoard, returnR
 import type { DropEvent, PlinkoView } from '../../../../shared/src/games/plinko/engine.ts';
 import { celebrate } from '../../table/celebrate.ts';
 import { attractTexture, pcModel, pcPose, pcScreenCorners, PC_FOOTPRINT, PC_SEAT } from '../online/pc.ts';
-import { OnlineScreen, BetBox, actionButton, SegChoice, InfoList, SessionTally, commitTyping, labelled, winTier, siteTone, drawSiteBar } from '../online/screen.ts';
+import { OnlineScreen, BetBox, actionButton, SegChoice, InfoList, SessionTally, commitTyping, labelled, winTier, siteTone, drawSiteBar, drawAttractPanel } from '../online/screen.ts';
 import { PlinkoBoard, binColor, multText } from './board.ts';
 
 /** The chair's trim on the floor: Plinko's pink. */
@@ -25,32 +25,8 @@ const chance = (p: number) => (p >= 0.001 ? pct(p) : `${(p * 100).toPrecision(2)
 /** The monitor on the floor: the site's bar, a bet panel, and a ten-row board with a ball on it. */
 function drawAttract(g: CanvasRenderingContext2D, w: number, h: number): void {
   const top = drawSiteBar(g, w, 'Plinko');
-  g.fillStyle = '#1a2c38';
-  g.fillRect(0, top, 132, h - top);
-  const field = (label: string, text: string, y: number) => {
-    g.fillStyle = '#a7b4c6';
-    g.font = '600 11px system-ui, sans-serif';
-    g.fillText(label, 12, y);
-    g.fillStyle = '#0f1e29';
-    g.beginPath();
-    g.roundRect(10, y + 8, 112, 28, 4);
-    g.fill();
-    g.fillStyle = '#eef3f8';
-    g.font = '600 15px system-ui, sans-serif';
-    g.fillText(text, 18, y + 23);
-  };
-  g.textBaseline = 'middle';
-  field('Bet', '$5.00', top + 18);
-  field('Risk', 'Medium', top + 70);
-  field('Rows', '10', top + 122);
-  g.fillStyle = '#1fd65f';
-  g.beginPath();
-  g.roundRect(10, top + 176, 112, 36, 5);
-  g.fill();
-  g.fillStyle = '#06210f';
-  g.font = '800 16px system-ui, sans-serif';
+  drawAttractPanel(g, top, h, [['Bet', '$5.00'], ['Risk', 'Medium'], ['Rows', '10']], 'Drop');
   g.textAlign = 'center';
-  g.fillText('Drop', 66, top + 195);
 
   const rows = 10;
   const s = 25;
