@@ -108,10 +108,23 @@ export class Bloom {
     if (on && this.mode === 'off') this.mode = 'probe';
   }
 
+  private muted = false;
+  private strength = 0;
+
+  /**
+   * Hold the glow at nothing (or give it back) without changing how the frame is drawn: the same
+   * HDR target and tone mapping, so a frame with and without it differ only by the glow itself.
+   */
+  mute(on: boolean): void {
+    this.muted = on;
+    this.pass.strength = on ? 0 : this.strength;
+  }
+
   /** How the glow looks: FLOOR_BLOOM on the floor, TABLE_BLOOM or MACHINE_BLOOM seated. */
   setLook(l: BloomLook): void {
     this.pass.threshold = l.threshold;
-    this.pass.strength = l.strength;
+    this.strength = l.strength;
+    this.pass.strength = this.muted ? 0 : l.strength;
     this.pass.radius = l.radius;
     (this.pass.highPassUniforms as { smoothWidth: { value: number } }).smoothWidth.value = l.knee;
   }

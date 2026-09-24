@@ -828,7 +828,7 @@ const READ_HELPERS = () => {
     if (!g.boundingBox) g.computeBoundingBox();
     const b = g.boundingBox;
     const y = m.rotation.x > 1.5 ? b.min.y : b.max.y;
-    return rectOfPoints([[b.min.x, y, b.min.z], [b.max.x, y, b.min.z], [b.max.x, y, b.max.z], [b.min.x, y, b.max.z]].map(([x, yy, z]) => m.localToWorld(V().set(x, yy, z))), 0.2);
+    return rectOfPoints([[b.min.x, y, b.min.z], [b.max.x, y, b.min.z], [b.max.x, y, b.max.z], [b.min.x, y, b.max.z]].map(([x, yy, z]) => m.localToWorld(V().set(x, yy, z))), 0.07);
   };
   const lum = (d, i) => 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
   const pct = (a, p) => {
@@ -856,7 +856,9 @@ const READ_HELPERS = () => {
     }
     const n = lifts.length;
     if (n < 16) return null;
-    return { n, lift: +(sum / n).toFixed(2), p95: +pct(lifts, 0.95).toFixed(1), clip: +(clip / n).toFixed(3), contrast: Math.round(pct(lums, 0.9) - pct(lums, 0.1)) };
+    // contrast: the darkest marks (a card's rank and pips, the printing's letters) against the
+    // lightest ground, 5th to 95th percentile
+    return { n, lift: +(sum / n).toFixed(2), p95: +pct(lifts, 0.95).toFixed(1), clip: +(clip / n).toFixed(3), contrast: Math.round(pct(lums, 0.95) - pct(lums, 0.05)) };
   };
   const png = (img) => {
     const c = document.createElement('canvas');
@@ -887,7 +889,8 @@ const READ_HELPERS = () => {
           lift: +(parts.reduce((s, p) => s + p.lift * p.n, 0) / n).toFixed(2),
           p95: Math.max(...parts.map((p) => p.p95)),
           clip: +(parts.reduce((s, p) => s + p.clip * p.n, 0) / n).toFixed(3),
-          contrast: Math.min(...parts.map((p) => p.contrast)),
+          // the typical card or region (a lone ace's face is mostly plain white card)
+          contrast: [...parts.map((p) => p.contrast)].sort((a, b) => a - b)[Math.floor(parts.length / 2)],
         };
       }
       return keep ? { out, on: png(on), off: png(off) } : { out };
@@ -930,6 +933,7 @@ const saveFrame = async (dataUrl, file) => {
   return file;
 };
 
+const readParts = (process.env.READ_PARTS ?? 'floor,seated').split(',');
 if (checks.includes('read')) {
   // (1) from the floor: tables and machines from 6-10 m, idle and with a celebration's light
   const FLOOR = [
@@ -944,7 +948,7 @@ if (checks.includes('read')) {
     { name: 'videopoker', pos: [11.2, 1.75, -1.2], at: [16.7, 1.1, 2.4], ids: ['vp-1', 'vp-2', 'vp-3'] },
     { name: 'bandit', pos: [-11.4, 1.75, -3.9], at: [-18.4, 1.3, -7.4], ids: ['bandit'] },
   ];
-  for (const quality of ['high', 'low']) {
+  for (const quality of readParts.includes('floor') ? ['high', 'low'] : []) {
     const { page, errors } = await openFloor(`quality=${quality}&slots=sevens,neon,wild,diamonds,cherries,goldrush`, `http://localhost:${port}/casino/src/ui/feed/dev.html`);
     await page.evaluate(`window.__read = (${READ_HELPERS.toString()})()`);
     await page.evaluate(async () => {
@@ -1041,7 +1045,7 @@ if (checks.includes('read')) {
     slots: [{ type: 'spin', coins: 1, denom: 100 }],
     videopoker: [{ type: 'deal', coins: 5, denom: 100 }],
   };
-  for (const quality of ['high', 'low']) {
+  for (const quality of readParts.includes('seated') ? ['high', 'low'] : []) {
     const { ctx, page, errors } = await openGame('world3_read', (q) => localStorage.setItem('casino.quality', q), quality);
     if (await page.$('.editor-panel.guided')) {
       for (let i = 0; i < 3; i++) await page.click('.editor-panel .ed-buttons .btn.primary');
