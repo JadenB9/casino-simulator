@@ -192,7 +192,10 @@ try {
     const station = TABLES[game];
     await openLobby(a, station);
     await a.page.click('.lobby-actions .btn:has-text("Private")');
-    await a.page.waitForSelector('.party-pin-digits', { timeout: 10_000 });
+    await a.page.waitForSelector('.party-pin-digits', { timeout: 10_000 }).catch(async (err) => {
+      await shot(a, `multi-${game}-private-failed`);
+      throw err;
+    });
     const pin = (await a.page.textContent('.party-pin-digits .lb-seg-lit')).trim();
     await openLobby(b, station);
     await b.page.fill('.lobby-pin-input', pin);
