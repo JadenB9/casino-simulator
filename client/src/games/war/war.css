@@ -6,6 +6,7 @@
 .wr-hand.dealer { font-size: 15px; }
 .wr-hand .muted { color: var(--ink-3); font-size: 0.86em; font-weight: 400; }
 .wr-hand .net { font-family: var(--ui); font-size: 1.05em; letter-spacing: 0.02em; color: var(--ink-2); }
+.wr-hand.stack { flex-direction: column; align-items: center; gap: 0; padding: 2px 9px 3px; line-height: 1.2; }
 .wr-hand .net.up { color: var(--win); }
 .wr-hand .net.down { color: var(--lose); }
 

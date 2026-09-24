@@ -26,7 +26,7 @@ import { CardMesh, CARD_H, dealCard, flipCard } from '../../table/cards.ts';
 import { ChipStack, slideStack } from '../../table/chips.ts';
 import { ease, tween, wait } from '../../table/tween.ts';
 import { ChipTray, button, el } from '../../ui/kit.ts';
-import { baccaratMax, maxRefusal } from '../../table/max.ts';
+import { baccaratMax, chipOn, maxRefusal } from '../../table/max.ts';
 import { serverNow } from '../../net/clock.ts';
 import { feltSpec, kidneyGeometry } from './felt.ts';
 import { setDiscardHeight } from './model.ts';
@@ -412,7 +412,8 @@ export class BaccaratTable implements TableView {
 
   private bet(spot: Spot): void {
     if (this.mySeat === null) return;
-    let amount = this.tray.selected.value;
+    // a chip that would leave the spot under its minimum puts the minimum down, as a dealer asks
+    let amount = chipOn(this.tray.selected.value, this.myBets[spot] ?? 0, limitsFor(this.config, spot));
     // Max picked: the most this spot takes, or every chip here if that is less
     if (this.tray.maxPicked) {
       const m = baccaratMax(this.config, spot, this.myBets, this.stack);
@@ -439,6 +440,11 @@ export class BaccaratTable implements TableView {
 
   private primary(): void {
     if (this.mode === 'solo') {
+      // nothing down: last coup's bets again, and deal (as blackjack does)
+      if (betTotal(this.myBets) === 0) {
+        if (!this.lastBets) return this.ctx.kit.say('Place a bet first', 1800);
+        this.rebet();
+      }
       this.act({ type: 'deal' });
       return;
     }
@@ -644,6 +650,7 @@ export class BaccaratTable implements TableView {
     this.root.add(m);
     this.cards[hand].push(m);
     this.ctx.sfx.play('card-deal');
+    this.ctx.stage.gesture('deal');
     // a hand's cards grow to their larger size on the way out of the shoe
     await this.play(faceUp ? 400 : 300, (ms) => Promise.all([dealCard(m, SHOE_MOUTH, slot.pos, { faceUp, ms, yaw: slot.sideways ? Math.PI / 2 : 0 }), this.scaleTo(m, HAND_CARD_SCALE, ms)]));
   }
@@ -833,6 +840,7 @@ export class BaccaratTable implements TableView {
     }
     if (losers.length) {
       this.ctx.sfx.play('chips-collide');
+      this.ctx.stage.gesture('sweep');
       await this.play(420, (ms) => Promise.all(losers.map((s) => slideStack(s, RACK_POINT, ms).then(() => s.set(0)))));
       for (const r of results) for (const spot of SPOTS) this.stackFor(r.seat, spot).position.copy(this.spotPos(r.seat, spot));
     }
@@ -846,6 +854,7 @@ export class BaccaratTable implements TableView {
       if (paying.length) {
         // no celebration unless the seat got back more than it staked
         this.ctx.sfx.play(r.seat === this.mySeat && r.returned > r.wagered ? 'chips-stack' : 'chips-handle', { volume: r.seat === this.mySeat ? 1 : 0.5 });
+        this.ctx.stage.gesture('pay');
         await this.play(440, (ms) => Promise.all(paying.map(({ pay, to }) => slideStack(pay, to, ms))));
       }
       if (r.commission > 0) this.commission(seatNumber(r.seat), r.commission);

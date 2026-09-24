@@ -9,6 +9,7 @@
 // decided ringed on the felt.
 
 import * as THREE from 'three';
+import type { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import type { TableView, TableViewCtx } from '../contract.ts';
 import type { Member } from '../../../../shared/src/protocol.ts';
 import type { TableConfig, GameEvent } from '../../../../shared/src/engine.ts';
@@ -31,7 +32,8 @@ import {
   score,
 } from '../../../../shared/src/games/threecard/rules.ts';
 import { playAdvice } from '../../../../shared/src/games/threecard/advice.ts';
-import { CardMesh, dealCard, flipCard } from '../../table/cards.ts';
+import { CardMesh, dealCard, flipCard, CARD_H } from '../../table/cards.ts';
+import { isChipKey } from '../../table/keys.ts';
 import { ChipStack, slideStack } from '../../table/chips.ts';
 import { celebrate } from '../../table/celebrate.ts';
 import type { Felt } from '../../table/felt.ts';
@@ -53,6 +55,7 @@ import {
   along,
   dealerSlot,
   handSlot,
+  HAND_R,
   makeFelt,
   payoutPoint,
   positionOf,
@@ -95,8 +98,9 @@ function besideSpot(seat: number, kind: SpotKind, offset: number): THREE.Vector3
   return p.add(new THREE.Vector3(Math.cos(a) * offset, 0, -Math.sin(a) * offset));
 }
 
+/** The near edge of a seat's cards: its hand's label hangs from here (see setLabel). */
 function handLabelPoint(seat: number): THREE.Vector3 {
-  const [x, z] = along(seatAngle(seat), 0.665);
+  const [x, z] = along(seatAngle(seat), HAND_R + CARD_H / 2 + 0.006);
   return new THREE.Vector3(x, TOP_Y + 0.01, z);
 }
 
@@ -206,9 +210,15 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
   let payouts: { seat: number; stack: ChipStack }[] = [];
   const hands = new Map<number, CardMesh[]>();
   let dealerCards: CardMesh[] = [];
-  const labels = new Map<string, { el: HTMLElement; obj: THREE.Object3D }>();
+  const labels = new Map<string, { el: HTMLElement; obj: CSS2DObject }>();
 
-  const setLabel = (key: string, at: THREE.Vector3, parts: { text: string; cls?: string }[], cls: string): void => {
+  /**
+   * A label pinned to the table. `hang` hangs it from `at` instead of centring it there: 'below' puts
+   * its top edge at the point, 'above' its bottom edge, so a label anchored at a card's edge never
+   * covers the card, however far back the camera is (the label's size is the screen's, the card's
+   * the table's).
+   */
+  const setLabel = (key: string, at: THREE.Vector3, parts: { text: string; cls?: string }[], cls: string, hang?: 'below' | 'above'): void => {
     let l = labels.get(key);
     if (!l) {
       const e = el('div', cls);
@@ -218,6 +228,7 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
     l.el.className = cls;
     l.el.replaceChildren(...parts.map((p) => el('span', p.cls ?? '', p.text)));
     l.obj.position.copy(at);
+    l.obj.center.set(0.5, hang === 'below' ? 0 : hang === 'above' ? 1 : 0.5);
   };
   const dropLabel = (key: string): void => {
     const l = labels.get(key);
@@ -420,10 +431,13 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
     });
   };
 
+  /** A hand's label: yours stand out, and several of yours side by side stack their words to fit. */
+  const handCls = (seat: number): string => `tc-hand${owns(seat) ? ' mine' : ''}${owns(seat) && spots.length > 1 ? ' stack' : ''}`;
+
   const handLabel = (seat: number, sv: SeatView): void => {
-    const cls = `tc-hand${owns(seat) ? ' mine' : ''}`;
+    const cls = handCls(seat);
     if (sv.decision === 'fold') {
-      setLabel(`hand:${seat}`, handLabelPoint(seat), [{ text: 'Folded', cls: 'muted' }], cls);
+      setLabel(`hand:${seat}`, handLabelPoint(seat), [{ text: 'Folded', cls: 'muted' }], cls, 'below');
       return;
     }
     const cards = sv.cards;
@@ -437,7 +451,7 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
       const net = r.returned - r.wagered;
       parts.push({ text: net === 0 ? 'Push' : signed(net), cls: net > 0 ? 'net up' : net < 0 ? 'net down' : 'net' });
     }
-    setLabel(`hand:${seat}`, handLabelPoint(seat), parts, cls);
+    setLabel(`hand:${seat}`, handLabelPoint(seat), parts, cls, 'below');
   };
 
   /** "Dealer · Jack high · does not qualify", in front of the dealer's cards. */
@@ -445,7 +459,7 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
     const s = score(cards);
     const parts: { text: string; cls?: string }[] = [{ text: 'Dealer', cls: 'tc-dealer-word' }, { text: handName(s), cls: 'tc-dealer-hand' }];
     if (!qualifies(s)) parts.push({ text: 'does not qualify', cls: 'muted' });
-    setLabel('dealer', DEALER_LABEL.clone(), parts, 'tc-hand tc-dealer');
+    setLabel('dealer', DEALER_LABEL.clone(), parts, 'tc-hand tc-dealer', 'below');
   };
 
   const scaleTo = (m: CardMesh, to: number, ms: number): Promise<void> => {
@@ -612,10 +626,16 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
   const primary = (): void => {
     if (!latest || me === null) return;
     if (mode === 'solo') {
-      if (latest.phase === 'betting' && total(wanted) > 0) {
-        lastAction = 'other';
-        ctx.link.act({ type: 'deal' });
+      // (a solo table between rounds takes bets in any phase but a decision's; the first opens betting)
+      if (!canBet()) return;
+      // nothing down: last round's bets again, and deal (as blackjack does)
+      if (total(wanted) === 0) rebet(1);
+      if (total(wanted) === 0) {
+        ctx.kit.say('Place a bet first', 1800);
+        return;
       }
+      lastAction = 'other';
+      ctx.link.act({ type: 'deal' });
       return;
     }
     if (latest.phase !== 'betting') return;
@@ -773,6 +793,7 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
         const to = target < 0 ? dealerSlot(round) : handSlot(target, round).pos;
         const yaw = target < 0 ? 0 : handSlot(target, round).yaw;
         ctx.sfx.play('card-deal', { delay: delay / 1000, volume: 0.8 });
+        ctx.stage.gesture('deal');
         // the dealer's own cards grow to their larger size on the way out
         jobs.push(wait(delay).then(() => Promise.all([dealCard(m, SHUFFLER, to, { faceUp: false, ms: 260, yaw }), target < 0 ? scaleTo(m, DEALER_CARD_SCALE, 260) : null]).then(() => {})));
       }
@@ -795,7 +816,7 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
   const showMine = async (spot: number, cards: Card[]): Promise<void> => {
     const ms = hands.get(spot);
     if (ms && ms.length === 3) await turnOver(ms, cards, 70);
-    setLabel(`hand:${spot}`, handLabelPoint(spot), [{ text: handName(score(cards)) }], 'tc-hand mine');
+    setLabel(`hand:${spot}`, handLabelPoint(spot), [{ text: handName(score(cards)) }], handCls(spot), 'below');
   };
 
   const placePlay = async (seat: number, amount: Cents): Promise<void> => {
@@ -813,6 +834,7 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
     const moving = kinds.map((k) => spotStack(seat, k)).filter((s) => s.amount > 0);
     if (moving.length === 0) return;
     ctx.sfx.play('chips-collide', { volume: 0.7 });
+    ctx.stage.gesture('sweep');
     await Promise.all(moving.map((s) => slideStack(s, RACK_POINT, 380)));
     for (const s of moving) s.set(0);
   };
@@ -865,7 +887,10 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
       jobs.push(payOut(seat, 'ante', r.bonus, -1));
       if (owns(seat)) pill(seat, 'ante', `BONUS ${signed(r.bonus)}`, 'win', 0.13);
     }
-    if (jobs.length > 0) ctx.sfx.play('chips-stack');
+    if (jobs.length > 0) {
+      ctx.sfx.play('chips-stack');
+      ctx.stage.gesture('pay');
+    }
     jobs.push(sweep(seat, lost));
     await Promise.all(jobs);
   };
@@ -982,7 +1007,7 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
           if (!owns(e.seat)) {
             if (ms && ms.length === 3) await turnOver(ms, e.cards, 50);
           } else if (ms && ms.some((m) => !m.faceUp)) await turnOver(ms, e.cards, 50);
-          setLabel(`hand:${e.seat}`, handLabelPoint(e.seat), [{ text: handName(score(e.cards)) }], `tc-hand${owns(e.seat) ? ' mine' : ''}`);
+          setLabel(`hand:${e.seat}`, handLabelPoint(e.seat), [{ text: handName(score(e.cards)) }], handCls(e.seat), 'below');
           break;
         }
         case 'result': {
@@ -1091,8 +1116,7 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
     keydown(e) {
       if (e.metaKey && e.key !== 'z') return false;
       if (e.repeat && !/^[1-8]$/.test(e.key)) return true;
-      const n = Number(e.key);
-      if (Number.isInteger(n) && n >= 1 && n <= BETTING_CHIPS.length) {
+      if (isChipKey(e.key)) {
         tray.key(e);
         return true;
       }

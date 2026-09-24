@@ -10,6 +10,7 @@
 // decided ringed on the felt; one war deal then settles every spot that went to war.
 
 import * as THREE from 'three';
+import type { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import type { TableView, TableViewCtx } from '../contract.ts';
 import type { Member } from '../../../../shared/src/protocol.ts';
 import type { TableConfig, GameEvent } from '../../../../shared/src/engine.ts';
@@ -19,6 +20,7 @@ import { BETTING_MS, DECISION_MS, MAX_SPOTS } from '../../../../shared/src/games
 import type { WarView, WarEvent, SeatView } from '../../../../shared/src/games/war/protocol.ts';
 import { DEFAULT_RULES, SHOE_CARDS, bestChoice, cardName, exactOdds, pluralName, type Settlement, type WarRules } from '../../../../shared/src/games/war/rules.ts';
 import { CardMesh, dealCard } from '../../table/cards.ts';
+import { isChipKey } from '../../table/keys.ts';
 import { ChipStack, slideStack } from '../../table/chips.ts';
 import { celebrate } from '../../table/celebrate.ts';
 import type { Felt } from '../../table/felt.ts';
@@ -37,6 +39,7 @@ import {
   besideSpot,
   cardSlot,
   dealerSlot,
+  DEALER_LABEL_Z,
   handLabelPoint,
   makeFelt,
   payoutPoint,
@@ -159,9 +162,15 @@ export function mountWar(ctx: TableViewCtx): TableView {
   const discard = discardStack();
   root.add(discard.mesh);
   let discardCount = 0;
-  const labels = new Map<string, { el: HTMLElement; obj: THREE.Object3D }>();
+  const labels = new Map<string, { el: HTMLElement; obj: CSS2DObject }>();
 
-  const setLabel = (key: string, at: THREE.Vector3, parts: { text: string; cls?: string }[], cls: string): void => {
+  /**
+   * A label pinned to the table. `hang` hangs it from `at` instead of centring it there: 'below' puts
+   * its top edge at the point, 'above' its bottom edge, so a label anchored at a card's edge never
+   * covers the card, however far back the camera is (the label's size is the screen's, the card's
+   * the table's).
+   */
+  const setLabel = (key: string, at: THREE.Vector3, parts: { text: string; cls?: string }[], cls: string, hang?: 'below' | 'above'): void => {
     let l = labels.get(key);
     if (!l) {
       const e = el('div', cls);
@@ -171,6 +180,7 @@ export function mountWar(ctx: TableViewCtx): TableView {
     l.el.className = cls;
     l.el.replaceChildren(...parts.map((p) => el('span', p.cls ?? '', p.text)));
     l.obj.position.copy(at);
+    l.obj.center.set(0.5, hang === 'below' ? 0 : hang === 'above' ? 1 : 0.5);
   };
   const dropLabel = (key: string): void => {
     const l = labels.get(key);
@@ -384,7 +394,8 @@ export function mountWar(ctx: TableViewCtx): TableView {
   };
 
   const handLabel = (seat: number, sv: SeatView): void => {
-    const cls = `wr-hand${owns(seat) ? ' mine' : ''}`;
+    // several of your spots side by side: the card over its result, narrow enough not to meet
+    const cls = `wr-hand${owns(seat) ? ' mine' : ''}${owns(seat) && spots.length > 1 ? ' stack' : ''}`;
     if (!sv.card) {
       dropLabel(`hand:${seat}`);
       return;
@@ -402,13 +413,13 @@ export function mountWar(ctx: TableViewCtx): TableView {
     } else if (sv.decision === 'war') {
       parts.push({ text: 'At war', cls: 'muted' });
     }
-    setLabel(`hand:${seat}`, handLabelPoint(seat), parts, cls);
+    setLabel(`hand:${seat}`, handLabelPoint(seat), parts, cls, 'below');
   };
 
   const dealerLabel = (card: Card, war: Card | null): void => {
     const parts: { text: string; cls?: string }[] = [{ text: `Dealer: ${cardName(card)}` }];
     if (war) parts.push({ text: `war ${cardName(war)}`, cls: 'muted' });
-    setLabel('dealer', new THREE.Vector3(0, TOP_Y + 0.01, dealerSlot(false).z - 0.09), parts, 'wr-hand dealer');
+    setLabel('dealer', new THREE.Vector3(0, TOP_Y + 0.01, DEALER_LABEL_Z), parts, 'wr-hand dealer', 'above');
   };
 
   const clearPayouts = (): void => {
@@ -603,10 +614,16 @@ export function mountWar(ctx: TableViewCtx): TableView {
   const primary = (): void => {
     if (!latest || me === null) return;
     if (mode === 'solo') {
-      if (latest.phase === 'betting' && spots.some((s) => betsOf(s).bet > 0)) {
-        lastAction = 'other';
-        ctx.link.act({ type: 'deal' });
+      // (a solo table between rounds takes bets in any phase but a decision's; the first opens betting)
+      if (!canBet()) return;
+      // nothing down: last round's bets again, and deal (as blackjack does)
+      if (!spots.some((s) => betsOf(s).bet > 0)) rebet(1);
+      if (!spots.some((s) => betsOf(s).bet > 0)) {
+        ctx.kit.say('Place a bet first', 1800);
+        return;
       }
+      lastAction = 'other';
+      ctx.link.act({ type: 'deal' });
       return;
     }
     if (latest.phase !== 'betting') return;
@@ -788,6 +805,7 @@ export function mountWar(ctx: TableViewCtx): TableView {
       const slot = cardSlot(seat, war);
       const delay = n++ * 90;
       ctx.sfx.play('card-deal', { delay: delay / 1000, volume: 0.8 });
+      ctx.stage.gesture('deal');
       jobs.push(wait(delay).then(() => dealCard(m, SHOE_MOUTH, slot.pos, { faceUp: true, ms: 300, yaw: slot.yaw })));
     }
     const d = newCard(dealer);
@@ -815,6 +833,7 @@ export function mountWar(ctx: TableViewCtx): TableView {
     const moving = kinds.map((k) => spotStack(seat, k)).filter((s) => s.amount > 0);
     if (moving.length === 0) return;
     ctx.sfx.play('chips-collide', { volume: 0.7 });
+    ctx.stage.gesture('sweep');
     await Promise.all(moving.map((s) => slideStack(s, RACK_POINT, 380)));
     // emptied where they stopped; draw() puts every stack back on its spot after the batch
     for (const s of moving) s.set(0);
@@ -850,6 +869,7 @@ export function mountWar(ctx: TableViewCtx): TableView {
   const settleTie = async (seat: number, tiePaid: Cents | null, stake: Cents): Promise<void> => {
     if (!tiePaid) return;
     ctx.sfx.play('chips-stack');
+    ctx.stage.gesture('pay');
     const paid = await payOut(seat, 'tie', tiePaid - stake);
     if (!owns(seat)) return;
     pill(seat, 'tie', `${signed(tiePaid - stake)} · ${rules.tiePays} TO 1`, 'win');
@@ -909,7 +929,10 @@ export function mountWar(ctx: TableViewCtx): TableView {
         }
         break;
     }
-    if (jobs.length > 0) ctx.sfx.play('chips-stack');
+    if (jobs.length > 0) {
+      ctx.sfx.play('chips-stack');
+      ctx.stage.gesture('pay');
+    }
     jobs.push(sweep(seat, lost));
     await Promise.all(jobs);
     if (mineSeat && (r.outcome === 'war-win' || r.outcome === 'war-tie')) {
@@ -1161,8 +1184,7 @@ export function mountWar(ctx: TableViewCtx): TableView {
     keydown(e) {
       if (e.metaKey && e.key !== 'z') return false;
       if (e.repeat && !/^[1-8]$/.test(e.key)) return true;
-      const n = Number(e.key);
-      if (Number.isInteger(n) && n >= 1 && n <= BETTING_CHIPS.length) {
+      if (isChipKey(e.key)) {
         tray.key(e);
         return true;
       }

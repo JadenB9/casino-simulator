@@ -26,7 +26,10 @@ const log = (s) => {
   console.log(new Date().toISOString().slice(11, 19), s);
 };
 
-const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+// GPU=1 draws on the machine's GPU (Chrome's new headless mode), far quicker than SwiftShader
+const browser = process.env.GPU === '1'
+  ? await chromium.launch({ channel: 'chromium', args: ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'] })
+  : await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 
 async function player(name) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
@@ -46,8 +49,13 @@ async function player(name) {
   await page.fill('.name-input', name);
   await page.fill('.pass-input', 'casino-dev'); // DEV_PASSWORD in client/src/net/api.ts
   await page.click('.enter-btn');
-  await page.waitForSelector('.menu-item', { timeout: 20_000 });
-  await page.click('.menu-item >> nth=0');
+  // a name's first visit walks through its look first; either way end on the floor
+  await page.waitForSelector('.menu-item, .editor-panel.guided', { timeout: 60_000 });
+  if (await page.$('.editor-panel.guided')) {
+    for (let i = 0; i < 3; i++) await page.click('.editor-panel .ed-buttons .btn.primary');
+  } else {
+    await page.click('.menu-item >> nth=0');
+  }
   await page.waitForSelector('.hud', { timeout: 20_000 });
   const id = await page.evaluate(() => window.casino.session.profile.id);
   return { page, name, id };
@@ -184,11 +192,17 @@ try {
     const station = TABLES[game];
     await openLobby(a, station);
     await a.page.click('.lobby-actions .btn:has-text("Private")');
-    await a.page.waitForSelector('.party-pin-digits', { timeout: 10_000 });
+    await a.page.waitForSelector('.party-pin-digits', { timeout: 10_000 }).catch(async (err) => {
+      await shot(a, `multi-${game}-private-failed`);
+      throw err;
+    });
     const pin = (await a.page.textContent('.party-pin-digits .lb-seg-lit')).trim();
     await openLobby(b, station);
     await b.page.fill('.lobby-pin-input', pin);
     await b.page.keyboard.press('Enter');
+    // the PIN shows its table first; join it
+    await b.page.waitForSelector('.lobby-go-btn', { timeout: 10_000 });
+    await b.page.click('.lobby-go-btn');
     await a.page.waitForFunction(() => document.querySelectorAll('.party-member').length === 2, null, { timeout: 15_000 });
     log(`${game}: private lobby PIN ${pin}, both in`);
     await sitDown(a);

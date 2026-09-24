@@ -425,7 +425,7 @@ export const videopoker: GameClientModule = {
           return true;
         }
         const k = e.key.toLowerCase();
-        if (k === 'b') betMax();
+        if (k === 'b' || k === 'a') betMax();
         else if (k === 'd') nextDenom();
         else if (k === 'h') {
           press('pays');

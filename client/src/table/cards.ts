@@ -61,11 +61,45 @@ const edge = new THREE.MeshStandardMaterial({ color: '#f3efe6', roughness: 0.7 }
 geometry.userData.shared = true;
 edge.userData.shared = true;
 
+/**
+ * The most light a card's white paper gives back. The tone mapping (Neutral) starts squeezing
+ * brightness at about 0.8; a spotlit table on High lifts white paper to 1.5, where the paper is
+ * squeezed while the ink keeps rising with the light, and the pips and indices fade to grey.
+ */
+export const PAPER_PEAK = 0.8;
+
+/**
+ * A card face keeps its contrast under any light: it is lit as white paper would be, that
+ * brightness is held at PAPER_PEAK, and the card's own colours go on after, so ink and paper keep
+ * their ratio whatever the lights (dimming a card through its colour still works). Under dim light
+ * nothing changes. One shader for every face.
+ */
+export function holdContrast(m: THREE.MeshStandardMaterial): void {
+  m.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <lights_physical_fragment>',
+        `#include <lights_physical_fragment>
+  vec3 cardInk = material.diffuseContribution;
+  material.diffuseContribution = vec3( 1.0 );`,
+      )
+      .replace(
+        'vec3 totalSpecular = reflectedLight.directSpecular + reflectedLight.indirectSpecular;',
+        `vec3 totalSpecular = reflectedLight.directSpecular + reflectedLight.indirectSpecular;
+  float cardHold = min( 1.0, ${PAPER_PEAK.toFixed(3)} / max( max( totalDiffuse.r, max( totalDiffuse.g, totalDiffuse.b ) ), 1e-4 ) );
+  totalDiffuse *= cardInk * cardHold;
+  totalSpecular *= cardHold;`,
+      );
+  };
+  m.customProgramCacheKey = () => 'card-face-hold';
+}
+
 /** A card mesh. Face up means the face points +Y (toward a camera above the table). */
 export class CardMesh extends THREE.Mesh {
   card: Card | null;
   constructor(card: Card | null) {
     const face = new THREE.MeshStandardMaterial({ map: card ? textures.get(card) ?? null : backTex, roughness: 0.55 });
+    holdContrast(face);
     const back = new THREE.MeshStandardMaterial({ map: backTex, roughness: 0.55 });
     // BoxGeometry groups: +x, -x, +y, -y, +z, -z. The face is on +y, so rotation.x = 0 is face
     // up and rotation.x = PI is face down.

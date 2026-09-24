@@ -98,10 +98,13 @@ export function dealerSlot(war: boolean): THREE.Vector3 {
   return new THREE.Vector3(war ? PAIR : -PAIR, TOP_Y + 0.001, DEALER_CARD_Z);
 }
 
-/** Between a seat's cards and its TIE spot, clear of the printing: where the call for that hand is pinned. */
+/** The near edge of a seat's cards: the call for that hand hangs from here, toward its TIE spot. */
 export function handLabelPoint(seat: number): THREE.Vector3 {
-  return onSeat(seat, (CARD_R + CARD_H / 2 + SPOT_R.tie - SPOT_SIZE.tie) / 2, 0, TOP_Y + 0.01);
+  return onSeat(seat, CARD_R + CARD_H / 2 + 0.006, 0, TOP_Y + 0.01);
 }
+
+/** The far edge of the dealer's card: the dealer's call stands on it, toward the rack. */
+export const DEALER_LABEL_Z = DEALER_CARD_Z - CARD_H / 2 - 0.006;
 
 /** Toward the player from their WAR box, where collected chips go. */
 export function railPoint(seat: number): THREE.Vector3 {

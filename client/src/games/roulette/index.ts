@@ -12,12 +12,13 @@ import * as THREE from 'three';
 import './roulette.css';
 import type { GameClientModule, TableView, TableViewCtx, TableSnapshot, MembersMsg } from '../contract.ts';
 import type { Pose } from '../../table/stage.ts';
+import { isChipKey } from '../../table/keys.ts';
 import type { GameEvent, TableConfig } from '../../../../shared/src/engine.ts';
 import type { Member } from '../../../../shared/src/protocol.ts';
 import type { RouletteView, SeatSettle } from '../../../../shared/src/games/roulette/protocol.ts';
 import { BETTING_MS, LAUNCH_LEAD_MS, LATE_SPIN_MS } from '../../../../shared/src/games/roulette/engine.ts';
 import { asVariant, spotByKey, spotName, paysLabel, describePocket, pocketLabel, type Spot } from '../../../../shared/src/games/roulette/rules.ts';
-import { BETTING_CHIPS, formatMoney, type Cents } from '../../../../shared/src/money.ts';
+import { formatMoney, type Cents } from '../../../../shared/src/money.ts';
 import { ChipTray, el } from '../../ui/kit.ts';
 import { chipOn, maxRefusal, rouletteMax, type MaxBet } from '../../table/max.ts';
 import { tween, wait, ease } from '../../table/tween.ts';
@@ -250,7 +251,13 @@ function mountRoulette(ctx: TableViewCtx): TableView {
       if (view?.phase === 'betting' && !animating) ctx.link.act({ type: 'ready', on: !amReady() });
       return;
     }
-    if (canBet() && view?.phase === 'betting' && myTotal() > 0) ctx.link.act({ type: 'spin' });
+    if (!canBet()) return;
+    // nothing down: last spin's bets again, and go (as blackjack deals)
+    if (myTotal() === 0) {
+      if (mySeat === null || !view?.canRebet.includes(mySeat)) return ctx.kit.say('Place a bet first', 1800);
+      ctx.link.act({ type: 'rebet', double: false });
+    }
+    ctx.link.act({ type: 'spin' });
   }
 
   /** With Max picked, what a click on this spot puts down: its maximum, or every chip here. */
@@ -585,7 +592,10 @@ function mountRoulette(ctx: TableViewCtx): TableView {
         sweeps.push(lift(pile, DEALER.clone(), 520 + Math.random() * 160));
       }
     }
-    if (sweeps.length) ctx.sfx.play('chips-collide', { volume: 0.7 });
+    if (sweeps.length) {
+      ctx.sfx.play('chips-collide', { volume: 0.7 });
+      ctx.stage.gesture('sweep');
+    }
     for (const key of new Set(winners.map((w) => w.key))) chips.restack(key);
     await Promise.all(sweeps);
     if (disposed) return;
@@ -611,7 +621,10 @@ function mountRoulette(ctx: TableViewCtx): TableView {
         ctx.kit.pill(stage, new THREE.Vector3(to.x, TOP_Y + 0.07, to.z), text, net > 0 ? 'win' : 'push', 3000);
       }
     }
-    if (pays.length) ctx.sfx.play(net > 0 ? 'chips-stack' : 'chips-handle', { volume: 0.8 });
+    if (pays.length) {
+      ctx.sfx.play(net > 0 ? 'chips-stack' : 'chips-handle', { volume: 0.8 });
+      ctx.stage.gesture('pay');
+    }
     await Promise.all(pays);
     // a straight-up (or split or street) hit that beat the whole stake: light the number and the bet
     const moment = mine && mySeat !== null ? rouletteMoment(variant, mine) : null;
@@ -751,8 +764,7 @@ function mountRoulette(ctx: TableViewCtx): TableView {
         return true;
       }
       if (e.metaKey || e.ctrlKey || e.altKey) return false;
-      const n = Number(e.key);
-      if (Number.isInteger(n) && n >= 1 && n <= BETTING_CHIPS.length) return tray.key(e);
+      if (isChipKey(e.key)) return tray.key(e);
       // Max, while a bet can go down
       if ((e.key === 'a' || e.key === 'A') && !e.shiftKey && canBet()) {
         tray.pickMax();

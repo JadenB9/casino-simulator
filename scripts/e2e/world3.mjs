@@ -814,7 +814,8 @@ const READ_HELPERS = () => {
     return x1 > x0 ? clampRect([x0, y0, x1, y1], shrink) : null;
   };
   // an object's meshes' boxes, in world space
-  const cornersOf = (obj) => {
+  // (`top`: only the meshes that end below that height, the table's top and not its chair backs)
+  const cornersOf = (obj, top = Infinity) => {
     const pts = [];
     obj.updateWorldMatrix(true, true);
     obj.traverse((m) => {
@@ -822,7 +823,9 @@ const READ_HELPERS = () => {
       const g = m.geometry;
       if (!g.boundingBox) g.computeBoundingBox();
       const b = g.boundingBox;
-      for (const x of [b.min.x, b.max.x]) for (const y of [b.min.y, b.max.y]) for (const z of [b.min.z, b.max.z]) pts.push(V().set(x, y, z).applyMatrix4(m.matrixWorld));
+      const box = [];
+      for (const x of [b.min.x, b.max.x]) for (const y of [b.min.y, b.max.y]) for (const z of [b.min.z, b.max.z]) box.push(V().set(x, y, z).applyMatrix4(m.matrixWorld));
+      if (Math.max(...box.map((p) => p.y)) <= top) pts.push(...box);
     });
     return pts;
   };
@@ -872,7 +875,7 @@ const READ_HELPERS = () => {
     return c.toDataURL('image/png');
   };
   return {
-    rectOf: (obj, shrink = 0.15) => rectOfPoints(cornersOf(obj), shrink),
+    rectOf: (obj, shrink = 0.15, top = Infinity) => rectOfPoints(cornersOf(obj, top), shrink),
     cardFace,
     screen: (fx0, fy0, fx1, fy1) => clampRect([fx0 * r.domElement.width, fy0 * r.domElement.height, fx1 * r.domElement.width, fy1 * r.domElement.height], 0),
     /** Draw with the glow on and off; stats for each named rect (or list of rects, merged). */
@@ -920,11 +923,13 @@ function readRow(where, quality, state, station, name, s, file) {
 /** Glow must not change cards or printing; on Low (and High) cards keep their contrast. */
 function readVerdicts() {
   for (const r of readRows) {
-    const light = /^(slots|vp|b6|bandit)/.test(r.station);
+    const light = /^(slots|vp|b6|bw)-/.test(r.station);
     const label = `${r.where} ${r.quality} ${r.state} ${r.station} ${r.name}`;
     if (r.name === 'cards') {
       if (r.lift > 2 || r.p95 > 6) fail(`read: glow over the cards (${label}: +${r.lift} mean, +${r.p95} p95)`);
       if (r.n >= 400 && r.contrast < 35) fail(`read: cards washed out (${label}: contrast ${r.contrast})`);
+      // white paper blown out to pure white (High's spots did that, fading the ink with it)
+      if (r.n >= 400 && r.clip > 0.1) fail(`read: cards blown out (${label}: ${Math.round(r.clip * 100)}% of the face clipped)`);
     } else if (!light) {
       if (r.lift > 2.5 || r.p95 > 10) fail(`read: glow over the layout (${label}: +${r.lift} mean, +${r.p95} p95)`);
     }
@@ -940,56 +945,53 @@ const saveFrame = async (dataUrl, file) => {
 const readParts = (process.env.READ_PARTS ?? 'floor,seated').split(',');
 if (checks.includes('read')) {
   // (1) from the floor: tables and machines from 6-10 m, idle and with a celebration's light
+  // (v5: the building's rooms, world coordinates; the pit's rows at z -14.6 and -10.55)
   const FLOOR = [
-    // the north row from across the pit (the owner's view), the south row from the cross aisle
-    { name: 'north-west', pos: [-3.2, 1.75, -4.0], at: [-5.2, 0.8, -10.8], ids: ['rl-us', 'cr-1'] },
-    { name: 'north-east', pos: [4.6, 1.75, -4.0], at: [3.6, 0.8, -10.8], ids: ['sb-1', 'rl-eu'] },
-    { name: 'south-west', pos: [-4.0, 1.75, -0.8], at: [-6.0, 0.8, -6.75], ids: ['bj-1', 'bc-1'] },
-    { name: 'south-east', pos: [2.6, 1.75, -0.8], at: [3.2, 0.8, -6.75], ids: ['wr-1', 'tc-1', 'bj-2'] },
-    { name: 'poker', pos: [12.4, 1.75, -3.6], at: [16.8, 0.7, -9.8], ids: ['he-2', 'he-1'] },
-    { name: 'bigsix', pos: [-11.4, 1.75, -3.9], at: [-18.4, 1.5, -7.4], ids: ['b6-1'] },
-    { name: 'slots', pos: [-3.6, 1.75, 3.2], at: [-9.0, 1.1, 0.3], ids: ['slots-neon-1', 'slots-neon-2', 'slots-sevens-1'] },
-    { name: 'videopoker', pos: [11.2, 1.75, -1.2], at: [16.7, 1.1, 2.4], ids: ['vp-1', 'vp-2', 'vp-3'] },
-    { name: 'bandit', pos: [-11.4, 1.75, -3.9], at: [-18.4, 1.3, -7.4], ids: ['bandit'] },
+    // the pit's north row from across the pit (the owner's view), its south row from the cross aisle;
+    // each table against a plain stretch of wall, not the lit doorways (the Online Lounge's neon, the
+    // salon's sign), whose halos are light sources' own
+    { name: 'north-west', pos: [-7.0, 1.75, -7.8], at: [-7.04, 0.8, -14.6], ids: ['rl-us'] },
+    { name: 'north-dice', pos: [0.3, 1.75, -7.8], at: [0.3, 0.8, -14.6], ids: ['cr-1', 'sb-1'] },
+    { name: 'north-east', pos: [7.5, 1.75, -7.8], at: [7.55, 0.8, -14.6], ids: ['rl-eu'] },
+    { name: 'south-west', pos: [-4.2, 1.75, -4.6], at: [-6.2, 0.8, -10.55], ids: ['bj-1', 'bc-1'] },
+    { name: 'south-east', pos: [3.6, 1.75, -4.6], at: [4.2, 0.8, -10.55], ids: ['wr-1', 'tc-1', 'bj-2'] },
+    // the high limit salon from its door, the poker room from the pit's door
+    { name: 'salon', pos: [0, 1.75, -20.2], at: [0, 0.8, -27.3], ids: ['vip-bj-1', 'vip-bc-1', 'vip-rl-1'] },
+    // (each poker table within 10 m: its lamp hangs over it, and from further its halo covers it)
+    { name: 'poker', pos: [10.2, 1.75, -19.8], at: [16, 0.7, -24.5], ids: ['he-3', 'he-1'] },
+    { name: 'poker-east', pos: [30.0, 1.75, -19.8], at: [23, 0.7, -25], ids: ['he-4', 'he-2'] },
+    { name: 'bigsix', pos: [-5.05, 1.75, -0.8], at: [-11.55, 1.5, -1.8], ids: ['b6-1'] },
+    // (the page stands one island of each machine: the south pair of islands, then the lane north)
+    { name: 'slots', pos: [-24.0, 1.75, -3.6], at: [-26.2, 1.1, -9.55], ids: ['slots-cherries-1', 'slots-cherries-2', 'slots-goldrush-1', 'slots-goldrush-2'] },
+    { name: 'slots-mid', pos: [-22.4, 1.75, -8.4], at: [-22.4, 1.1, -14.75], ids: ['slots-neon-1', 'slots-neon-2', 'slots-wild-1', 'slots-wild-2'] },
+    { name: 'videopoker', pos: [21.5, 1.75, -10.5], at: [27.83, 1.1, -14.0], ids: ['vp-1', 'vp-2', 'vp-3', 'vp-4'] },
+    { name: 'bandit', pos: [-23.4, 1.75, 6.3], at: [-23.4, 1.5, 12.85], ids: ['bw-1'] },
   ];
   for (const quality of readParts.includes('floor') ? ['high', 'low'] : []) {
     const { page, errors } = await openFloor(`quality=${quality}&slots=sevens,neon,wild,diamonds,cherries,goldrush`, `http://localhost:${port}/casino/src/ui/feed/dev.html`);
     await page.evaluate(`window.__read = (${READ_HELPERS.toString()})()`);
     await page.evaluate(async () => {
-      const { world, engine } = window.casino;
+      const { world } = window.casino;
       world.player.setEnabled(false);
       world.player.character.root.visible = false;
       window.__stageMod = await import('/casino/src/table/stage.ts');
       window.__kit = await import('/casino/src/table/celebrate.ts');
-      const G = await import('/casino/src/games/index.ts');
-      // The Bandit Wheel has no spot on the floor yet: stand one where the Big Six is, for its turn.
-      const b6 = world.stations.find((s) => s.id === 'b6-1');
-      const bandit = G.GAMES.banditwheel.createModel({ variant: '', quality: world.quality });
-      bandit.visible = false;
-      b6.anchor.add(bandit);
-      window.__bandit = { model: bandit, anchor: b6.anchor, b6 };
-      void engine;
     });
     for (const pose of FLOOR) {
-      const isBandit = pose.ids[0] === 'bandit';
-      await page.evaluate(([pos, at, isBandit]) => {
-        const { world, engine } = window.casino;
-        const b = window.__bandit;
-        world.lod.pin('b6-1', isBandit ? 'real' : null);
-        b.b6.model.visible = !isBandit;
-        b.model.visible = isBandit;
+      await page.evaluate(([pos, at]) => {
+        const { engine } = window.casino;
         window.__cam?.();
         window.__cam = engine.onFrame(() => {
           engine.camera.position.set(...pos);
           engine.camera.lookAt(...at);
         });
-      }, [pose.pos, pose.at, isBandit]);
+      }, [pose.pos, pose.at]);
       await frames(page, 4);
       for (const state of ['idle', 'celebration']) {
-        const res = await page.evaluate(([ids, state, isBandit]) => {
+        const res = await page.evaluate(([ids, state]) => {
           const { world, engine } = window.casino;
           const read = window.__read;
-          const objs = ids.map((id) => (id === 'bandit' ? { id, model: window.__bandit.model, anchor: window.__bandit.anchor } : world.stations.find((s) => s.id === id)));
+          const objs = ids.map((id) => world.stations.find((s) => s.id === id));
           const stops = [];
           const stages = [];
           if (state === 'celebration') {
@@ -1014,13 +1016,15 @@ if (checks.includes('read')) {
             }
           }
           const targets = {};
-          for (const s of objs) targets[s.id] = read.rectOf(s.model, 0.12);
+          // a table's playing surface (its layout): what lies behind its chairs' backs and dealer
+          // (a lit sign, a lamp) is not the table; a machine or a wheel is all of itself
+          for (const s of objs) targets[s.id] = read.rectOf(s.model, 0.12, /^(slots|vp|b6|bw)-/.test(s.id) ? Infinity : 1.05);
           const res = read.measure(targets, true);
           for (const stop of stops) stop();
           for (const st of stages) st.dispose();
           document.querySelectorAll('.celebrate').forEach((e) => e.remove());
           return res;
-        }, [pose.ids, state, isBandit]);
+        }, [pose.ids, state]);
         const file = await saveFrame(res.on, `${out}/world3-read-floor-${pose.name}-${quality}-${state}.png`);
         if (quality === 'high' && state === 'idle') await saveFrame(res.off, `${out}/world3-read-floor-${pose.name}-${quality}-${state}-noglow.png`);
         for (const [id, s] of Object.entries(res.out)) readRow('floor', quality, state, id, 'table', s, file);
@@ -1032,10 +1036,17 @@ if (checks.includes('read')) {
   }
 
   // (2) seated, in the game proper: a round at each table and machine, then a celebration's light
+  // every table of the building (the pit, both wheels, the salon at its high limits, the poker
+  // room, the Bandit Camp) and one of each machine
   const SEATED = [
     ['bj-1', 'blackjack'], ['bc-1', 'baccarat'], ['tc-1', 'threecard'], ['wr-1', 'war'], ['he-1', 'holdem'],
-    ['rl-us', 'roulette'], ['cr-1', 'craps'], ['sb-1', 'sicbo'], ['b6-1', 'bigsix'], ['slots-sevens-1', 'slots'], ['vp-1', 'videopoker'],
+    ['rl-us', 'roulette'], ['rl-eu', 'roulette'], ['cr-1', 'craps'], ['sb-1', 'sicbo'], ['b6-1', 'bigsix'],
+    ['vip-bj-1', 'blackjack'], ['vip-bc-1', 'baccarat'], ['vip-rl-1', 'roulette'], ['bw-1', 'banditwheel'],
+    ['slots-sevens-1', 'slots'], ['slots-neon-1', 'slots'], ['slots-wild-1', 'slots'], ['slots-diamonds-1', 'slots'], ['slots-cherries-1', 'slots'], ['slots-goldrush-1', 'slots'],
+    ['vp-1', 'videopoker'],
   ].filter(([id]) => !process.env.READ_ONLY || process.env.READ_ONLY.split(',').includes(id));
+  // Bets are raised to the table's minimum where it is higher (the salon's tables open at High
+  // limit); 'space' is the view's own primary key (a machine spins at its own coin value).
   const FIRST = {
     blackjack: [{ type: 'bet', amount: 2500 }, { type: 'deal' }],
     baccarat: [{ type: 'bet', banker: 2500 }, { type: 'deal' }],
@@ -1046,7 +1057,8 @@ if (checks.includes('read')) {
     craps: [{ type: 'bet', bets: [{ kind: 'field', amount: 1000 }] }, { type: 'roll' }],
     sicbo: [{ type: 'bet', bets: [{ spot: 'small', amount: 500 }] }, { type: 'roll' }],
     bigsix: [{ type: 'bet', bets: [{ spot: 'one', amount: 500 }] }, { type: 'spin' }],
-    slots: [{ type: 'spin', coins: 1, denom: 100 }],
+    banditwheel: [{ type: 'bet', bets: [{ spot: 1, amount: 500 }] }, { type: 'spin' }],
+    slots: ['space'],
     videopoker: [{ type: 'deal', coins: 5, denom: 100 }],
   };
   for (const quality of readParts.includes('seated') ? ['high', 'low'] : []) {
@@ -1086,7 +1098,9 @@ if (checks.includes('read')) {
         }
         await page.waitForFunction(() => window.casino.app.table?.seated === true || !!document.querySelector('.modal input[type=number]'), null, { timeout: 90000 });
         if (await page.$('.modal input[type=number]')) {
-          await page.fill('.modal input[type=number]', '1000');
+          // $1,000, or the table's minimum buy-in where that is more (the salon's)
+          const least = await page.evaluate(() => (window.casino.app.table?.session.snapshot?.meta.config.buyIn.min ?? 0) / 100);
+          await page.fill('.modal input[type=number]', String(Math.max(1000, least)));
           await page.click('.modal .btn.primary');
         }
         await page.waitForFunction(() => window.casino.app.table?.seated === true, null, { timeout: 60000 });
@@ -1117,7 +1131,13 @@ if (checks.includes('read')) {
               if (game === 'craps' && e.type === 'roll') s.__done = true;
             }
           };
-          first.forEach((a, i) => setTimeout(() => act(a), 300 + i * 900));
+          // every amount at least the table's minimum
+          const lim = s.snapshot.meta.config.limits;
+          const least = Math.max(lim.default.min, lim.outside?.min ?? 0);
+          const raise = (a) =>
+            Array.isArray(a) ? a.map(raise) : a && typeof a === 'object' ? Object.fromEntries(Object.entries(a).map(([k, v]) => [k, ['amount', 'banker', 'ante', 'bet'].includes(k) && v > 0 ? Math.max(v, least) : raise(v)])) : a;
+          const space = () => s.view.keydown?.(new KeyboardEvent('keydown', { code: 'Space', key: ' ' }));
+          first.forEach((a, i) => setTimeout(() => (a === 'space' ? space() : act(raise(a))), 300 + i * 900));
         }, [game, FIRST[game]]);
         const t0 = Date.now();
         while (Date.now() - t0 < 150000 && !(await page.evaluate(() => window.casino.app.table?.session.__done))) await page.waitForTimeout(1000);

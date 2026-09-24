@@ -539,6 +539,7 @@ export class CrapsTable implements TableView {
     }
     if (collect.length) {
       this.ctx.sfx.play('chips-collide', { volume: 0.6 });
+      this.ctx.stage.gesture('sweep');
       await Promise.all(collect);
       await wait(120);
     }
@@ -565,6 +566,7 @@ export class CrapsTable implements TableView {
     }
     if (pay.length) {
       this.ctx.sfx.play('chips-stack');
+      this.ctx.stage.gesture('pay');
       await Promise.all(pay);
       const moment = decided && this.celebrateRoll(results, faces[0] + faces[1], net);
       await wait(moment ? 1100 : 260);

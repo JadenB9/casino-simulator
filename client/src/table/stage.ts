@@ -12,6 +12,11 @@ export interface Pose {
   target: [number, number, number];
 }
 
+/** A dealer's motion at the table (world/npcs.ts): dealing a card, sweeping losing bets, paying. */
+export type DealerGesture = 'deal' | 'sweep' | 'pay';
+/** How long each motion runs (world/characters.ts), so the next one waits for it. */
+const GESTURE_MS: Record<DealerGesture, number> = { deal: 1000, sweep: 1350, pay: 1100 };
+
 export class TableStage {
   /** Everything a game view adds goes in here, in table-local coordinates (metres, +y up, player side +z). */
   readonly root = new THREE.Group();
@@ -20,6 +25,14 @@ export class TableStage {
   /** What the view had on the table when it was last noted (hold()), given back on dispose(). */
   private held = new Set<Resource>();
   private rest: { position: THREE.Vector3; quaternion: THREE.Quaternion } | null = null;
+  /**
+   * The table's dealer, when the station has one (the app hooks it up; a dev page's table has
+   * none): views call gesture() as they deal, sweep and pay.
+   */
+  dealer: ((g: DealerGesture) => void) | null = null;
+  private gestureEnds = 0;
+  private gestureNext: DealerGesture | null = null;
+  private gestureTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(readonly engine: Engine3D, readonly anchor: THREE.Object3D) {
     this.root.name = 'stage';
@@ -75,6 +88,28 @@ export class TableStage {
     return this.rest ? { pos: this.rest.position.clone(), quat: this.rest.quaternion.clone() } : { pos: camera.position.clone(), quat: camera.quaternion.clone() };
   }
 
+  /**
+   * The dealer deals, sweeps or pays. Each motion runs about a second and starts from the arm at
+   * rest, so one asked for while another is under way waits for it to end (a run of cards is one
+   * dealing motion after another, the pay follows the sweep); only the latest waits.
+   */
+  gesture(g: DealerGesture): void {
+    if (!this.dealer) return;
+    const now = performance.now();
+    if (now < this.gestureEnds) {
+      this.gestureNext = g;
+      return;
+    }
+    this.gestureEnds = now + GESTURE_MS[g];
+    this.dealer(g);
+    clearTimeout(this.gestureTimer);
+    this.gestureTimer = setTimeout(() => {
+      const next = this.gestureNext;
+      this.gestureNext = null;
+      if (next) this.gesture(next);
+    }, GESTURE_MS[g]);
+  }
+
   /** Local -> world, for flying the camera. */
   worldPose(p: Pose): { position: THREE.Vector3; target: THREE.Vector3 } {
     this.root.updateWorldMatrix(true, false);
@@ -93,6 +128,8 @@ export class TableStage {
   }
 
   dispose(): void {
+    clearTimeout(this.gestureTimer);
+    this.dealer = null;
     this.root.traverse((o) => {
       if (o instanceof CSS2DObject) o.element.remove();
     });

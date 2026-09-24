@@ -20,12 +20,13 @@ import { handTotal, cardValue, MAX_SPOTS, type Move, type Outcome } from '../../
 import { BETTING_MS, INSURANCE_MS, TURN_MS } from '../../../../shared/src/games/blackjack/engine.ts';
 import { advise, insuranceAdvice } from '../../../../shared/src/games/blackjack/advice.ts';
 import { CardMesh, dealCard, flipCard } from '../../table/cards.ts';
+import { isChipKey } from '../../table/keys.ts';
 import { ChipStack, slideStack } from '../../table/chips.ts';
 import { celebrate } from '../../table/celebrate.ts';
 import { roundMoment } from './moments.ts';
 import { tween, wait, ease } from '../../table/tween.ts';
 import { ChipTray, button, el } from '../../ui/kit.ts';
-import { blackjackMax, maxRefusal } from '../../table/max.ts';
+import { blackjackMax, chipOn, maxRefusal } from '../../table/max.ts';
 import { serverNow } from '../../net/clock.ts';
 import { playFelt } from './felt.ts';
 import { discardStack } from './model.ts';
@@ -296,7 +297,11 @@ export class BlackjackTable implements TableView {
     let aimed: object = a;
     if (a.type === 'insurance') {
       const sp = this.asked();
-      if (sp) aimed = { ...a, spot: sp.seat };
+      // One answer a question: the prompt goes at once, and a second press before the table has
+      // moved on (it asks your next circle, or deals on) is let go, not sent to be refused.
+      if (!sp || this.acted) return;
+      aimed = { ...a, spot: sp.seat };
+      this.insure.hidden = true;
     } else if (v?.turn && this.owns(v.turn.seat)) {
       aimed = { ...a, spot: v.turn.seat, hand: v.turn.hand };
     }
@@ -339,11 +344,12 @@ export class BlackjackTable implements TableView {
   }
 
   /**
-   * What a click on one of your circles puts down: the picked chip, or with Max picked the most
-   * that circle takes (the limits are per circle) or every chip you have left, whichever is less.
+   * What a click on one of your circles puts down: the picked chip (the table minimum when the
+   * chip alone would leave the circle under it, as a dealer asks), or with Max picked the most that
+   * circle takes (the limits are per circle) or every chip you have left, whichever is less.
    */
   private chipFor(spot: number): Cents | null {
-    if (!this.tray.maxPicked) return this.tray.selected.value;
+    if (!this.tray.maxPicked) return chipOn(this.tray.selected.value, this.betOn(spot), this.limits);
     const m = blackjackMax(this.limits, this.betOn(spot), this.stack);
     if ('none' in m) {
       this.ctx.kit.toast(maxRefusal(m, this.limits));
@@ -391,8 +397,7 @@ export class BlackjackTable implements TableView {
       }
     }
     if (this.canBet()) {
-      const n = Number(e.key);
-      if (Number.isInteger(n) && n >= 1 && n <= BETTING_CHIPS.length) {
+      if (isChipKey(e.key)) {
         this.tray.key(e);
         return true;
       }
@@ -615,7 +620,7 @@ export class BlackjackTable implements TableView {
         if (text) put(`t:${sp.seat}:${hi}`, cls, text, anchor.clone().addScaledVector(out, 0.07));
         if (h.outcome) {
           const p = pillFor(h.outcome, h.bet, h.payout);
-          put(`p:${sp.seat}:${hi}`, `pill ${p.kind}`, p.text, anchor.clone().setY(L.TOP_Y + 0.03));
+          put(`p:${sp.seat}:${hi}`, `pill ${p.kind}`, p.text, L.handChips(sp.seat, hi, sp.hands.length).setY(L.TOP_Y + 0.03));
         }
       });
       if (sp.hands.length > 1 && v.turn?.seat === sp.seat) {
@@ -675,7 +680,8 @@ export class BlackjackTable implements TableView {
 
     // Each of your spots is asked on its own, in the order they play; its circle is lit meanwhile.
     const spot = this.asked();
-    this.insure.hidden = !spot;
+    // (answered and waiting for the table: the question stays down)
+    this.insure.hidden = !spot || this.acted;
     if (spot) {
       const even = isNatural(spot.hands[0]!);
       this.insureLabel.textContent = even ? 'Even money?' : 'Insurance?';
@@ -797,6 +803,7 @@ export class BlackjackTable implements TableView {
     this.root.add(m);
     this.cards.set(key, m);
     this.ctx.sfx.play('card-deal');
+    this.ctx.stage.gesture('deal');
     // The dealer's own cards grow to their larger size on the way out of the shoe.
     const grow = key.startsWith('d:') ? this.scaleTo(m, L.DEALER_CARD_SCALE, ms) : null;
     await dealCard(m, L.SHOE_MOUTH.clone(), to.pos, { faceUp: false, ms, yaw: to.yaw });
@@ -1054,6 +1061,7 @@ export class BlackjackTable implements TableView {
         const sp = this.spots.find((s) => s.seat === e.seat);
         if (e.payout > 0) {
           this.ctx.sfx.play('chips-stack');
+          this.ctx.stage.gesture('pay');
           await this.slideIn(`iw:${e.seat}`, e.payout - e.bet, L.RACK, this.insuranceWinPos(e.seat));
         } else await this.slideAway(`i:${e.seat}`, L.RACK);
         if (sp) sp.insured = e.bet;
@@ -1085,6 +1093,7 @@ export class BlackjackTable implements TableView {
     const n = sp.hands.length;
     const keys = [`h:${e.seat}:${e.hand}`, `x:${e.seat}:${e.hand}`];
     if (e.outcome === 'lose' || e.outcome === 'bust' || e.outcome === 'surrender') {
+      this.ctx.stage.gesture('sweep');
       await Promise.all(keys.map((k) => this.slideAway(k, L.RACK)));
       h.cards.forEach((_, ci) => {
         const m = this.cards.get(`c:${e.seat}:${e.hand}:${ci}`);
@@ -1092,11 +1101,12 @@ export class BlackjackTable implements TableView {
       });
     } else if (e.payout > e.bet) {
       this.ctx.sfx.play('chips-stack');
+      this.ctx.stage.gesture('pay');
       await this.slideIn(`w:${e.seat}:${e.hand}`, e.payout - e.bet, L.RACK, L.winChips(e.seat, e.hand, n));
     }
     const p = pillFor(e.outcome, e.bet, e.payout);
-    const anchor = L.handAnchor(e.seat, e.hand, n);
-    this.label(`p:${e.seat}:${e.hand}`, `pill ${p.kind}`, p.text, anchor.setY(L.TOP_Y + 0.03));
+    // on the bet, clear of the cards (on the first card it hid the indices fanned over it)
+    this.label(`p:${e.seat}:${e.hand}`, `pill ${p.kind}`, p.text, L.handChips(e.seat, e.hand, n).setY(L.TOP_Y + 0.03));
     this.renderLiveTotals();
     await wait(e.outcome === 'bust' ? 350 : 260);
   }

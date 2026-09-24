@@ -180,7 +180,7 @@ export function mountSkinned(ctx: TableViewCtx): TableView {
   const downBtn = button('−', () => setCoins(coins - 1), { key: '↓', title: stepper ? 'One coin less' : 'Fewer credits per line' });
   const betLabel = el('div', 'slots-bet');
   const upBtn = button('+', () => setCoins(coins + 1), { key: '↑', title: stepper ? 'One coin more' : 'More credits per line' });
-  const maxBtn = button('Max bet', () => setCoins(m.maxCoins));
+  const maxBtn = button('Max bet', () => setCoins(m.maxCoins), { key: 'A' });
   const insertBtn = button('Insert', () => void insert(), { cls: 'ghost', title: 'Add money to this machine' });
   const spinBtn = button('Spin', () => spin(), { cls: 'primary', key: 'Space' });
   const sep = () => el('div', 'sep');
@@ -724,6 +724,11 @@ export function mountSkinned(ctx: TableViewCtx): TableView {
       }
       if (e.key === 'ArrowDown') {
         setCoins(coins - 1);
+        return true;
+      }
+      // Max, as at every table
+      if ((e.key === 'a' || e.key === 'A') && !e.shiftKey) {
+        setCoins(m.maxCoins);
         return true;
       }
       if (e.key === 'i' || e.key === 'I') {
