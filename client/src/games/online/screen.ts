@@ -742,7 +742,7 @@ export class AddChips {
     const seated = this.status === 'seated';
     this.button.textContent = seated || this.status === 'buying_in' ? 'Add chips' : 'Buy in';
     this.button.disabled = this.asking || this.sent || (this.status !== 'seated' && this.status !== 'watching') || (seated && this.room() < DOLLAR);
-    this.button.title = seated && this.room() < DOLLAR ? `You have the ${formatMoney(this.buyIn.max)} this table takes at most` : 'Add chips from your balance';
+    this.button.title = seated && this.room() < DOLLAR ? `This table takes ${formatMoney(this.buyIn.max)} at most` : 'Add chips from your balance';
   }
 
   private async ask(): Promise<void> {

@@ -38,6 +38,6 @@ describe('buy-in and top-up refusals', () => {
     await c.next((m) => m.t === 'seat' && m.stack === 10_000_000);
     await pace();
     c.send({ t: 'topup', aid: 'more', amount: 100 });
-    expect((await c.next((m) => m.t === 'err' && m.ref === 'more')).msg).toBe('You have the $100,000 this table takes at most.');
+    expect((await c.next((m) => m.t === 'err' && m.ref === 'more')).msg).toBe('This table takes $100,000 at most, and you have $100,000 here.');
   });
 });

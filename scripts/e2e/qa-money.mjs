@@ -796,7 +796,8 @@ if (wanted('money')) {
     await whale.page.evaluate(() => window.casino.app.table.session.link.topUp(500_000_000));
     await whale.page.waitForTimeout(1200);
     const topErr = tableFrames(whale).filter((m) => m.t === 'err').slice(errBefore).at(-1);
-    check(topErr?.code === 'LIMIT' && /^This table takes \$10,000,000 at most: you can add up to \$[0-9,]+\.$/.test(topErr.msg), `a top-up past the buy-in maximum says how much more fits: "${topErr?.msg}"`);
+    // how much more fits, or (a stack won up to the top) that it's there already
+    check(topErr?.code === 'LIMIT' && /^This table takes \$10,000,000 at most(: you can add up to \$[0-9,]+|, and you have \$[0-9,]+ here)\.$/.test(topErr.msg), `a top-up past the buy-in maximum says how much more fits: "${topErr?.msg}"`);
     // a top-up that fits, then Cash out while it's still on its way
     const stackNow = await whale.page.evaluate(() => window.casino.app.table.session.snapshot.you.stack);
     const add = Math.min(1_000_000_00, 10_000_000_00 - stackNow);

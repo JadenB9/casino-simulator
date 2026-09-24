@@ -881,7 +881,7 @@ export class CasinoTable extends DurableObject<Env> {
         'LIMIT',
         room >= 100
           ? `This table takes ${formatMoney(cfg.buyIn.max)} at most: you can add up to ${formatMoney(room - (room % 100))}.`
-          : `You have the ${formatMoney(cfg.buyIn.max)} this table takes at most.`,
+          : `This table takes ${formatMoney(cfg.buyIn.max)} at most, and you have ${formatMoney(mem.stack)} here.`,
         aid,
       );
     }
