@@ -1,0 +1,61 @@
+/* Hi-Lo on the lounge site: the card face up in the middle of a dark table with the deck beside
+   it, the K and A marks at either end, what each guess would pay under it, and the round's trail
+   of cards along the bottom. Sized in the site's design pixels. */
+
+.hl-board { position: absolute; inset: 0; display: grid; grid-template-rows: 1fr auto auto; gap: 18px; padding: 26px 30px 22px; }
+
+.hl-stage {
+  position: relative; display: grid; grid-template-columns: 150px 158px 214px 150px; justify-content: center; align-items: center; gap: 30px;
+  min-height: 0; border-radius: 12px; background: radial-gradient(120% 90% at 50% 45%, #183241 0%, #112431 55%, #0d1c26 100%);
+  border: 1px solid #1f3644;
+}
+
+/* K and A at either end */
+.hl-edge { display: grid; justify-items: center; gap: 8px; padding: 18px 10px; border-radius: 10px; background: rgba(15, 30, 41, 0.6); border: 1px solid #1f3442; }
+.hl-edge-letter { font-family: Georgia, 'Times New Roman', serif; font-size: 44px; font-weight: 700; line-height: 1; color: var(--os-ink); }
+.hl-edge-text { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--os-ink-3); text-align: center; }
+.hl-edge.k .hl-edge-letter { color: #1fd65f; }
+.hl-edge.a .hl-edge-letter { color: #ff5a5f; }
+
+/* The deck: three backs, offset */
+.hl-deck { position: relative; width: 150px; height: 210px; justify-self: end; }
+.hl-back { position: absolute; width: 150px; height: 210px; border-radius: 10px; box-shadow: 0 8px 18px rgba(0, 0, 0, 0.4); }
+.hl-back:nth-child(1) { left: 0; top: 6px; }
+.hl-back:nth-child(2) { left: 3px; top: 3px; }
+.hl-back:nth-child(3) { left: 6px; top: 0; }
+
+/* The card */
+.hl-card-box { position: relative; width: 214px; height: 300px; border-radius: 13px; transition: box-shadow 0.25s; }
+.hl-card { display: block; width: 214px; height: 300px; border-radius: 13px; box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5); transition: transform 0.14s ease-in; }
+.hl-card.turn { transform: scaleX(0.02); }
+.hl-card-box.deal .hl-card { animation: hl-deal 0.26s cubic-bezier(0.22, 1, 0.36, 1); }
+@keyframes hl-deal { from { transform: scaleX(0.02) translateY(-6px); } }
+.hl-card-box.win { box-shadow: 0 0 0 3px var(--os-win), 0 0 34px rgba(31, 214, 95, 0.35); }
+.hl-card-box.lose { box-shadow: 0 0 0 3px var(--os-lose), 0 0 34px rgba(255, 90, 95, 0.4); }
+.hl-card-box .os-pop { left: 50%; top: 50%; }
+
+.hl-stats .os-stat-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.hl-trail { padding: 12px 14px; border-radius: 10px; background: var(--os-field); }
+.hl-trail .os-trail-list { justify-content: flex-start; min-height: 118px; }
+
+/* The guess buttons, one above the other */
+.hl-guesses { display: grid; gap: 8px; }
+.hl-guess {
+  display: grid; grid-template-columns: 22px 1fr; align-items: center; gap: 10px; height: 52px; padding: 0 14px;
+  border: 0; border-radius: 6px; background: var(--os-card); color: var(--os-ink); text-align: left; cursor: pointer;
+  transition: background 0.12s, transform 0.08s;
+}
+.hl-guess:hover:not(:disabled) { background: var(--os-line); }
+.hl-guess:active:not(:disabled) { transform: translateY(1px); }
+.hl-guess:disabled { cursor: default; opacity: 0.45; }
+.hl-guess.capped .hl-guess-odds { text-decoration: line-through; }
+.hl-guess.tip-pick { outline: 3px solid var(--focus, #f1d59a); outline-offset: 2px; }
+.hl-arrow { width: 20px; height: 20px; }
+.hl-guess.hi .hl-arrow { fill: #1fd65f; }
+.hl-guess.lo .hl-arrow { fill: #ff5a5f; }
+.hl-guess-text { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; min-width: 0; }
+.hl-guess-label { font-size: 15px; font-weight: 700; white-space: nowrap; }
+.hl-guess-odds { font-family: var(--os-num); font-size: 17px; color: var(--os-ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.os-action.hl-skip { height: 44px; font-size: 15px; font-weight: 700; }

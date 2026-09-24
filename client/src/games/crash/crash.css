@@ -1,0 +1,36 @@
+/* Crash on the lounge site: the recent crash points along the top, the flight on a dark graph,
+   and everyone's bets in a table beside it. Sized in the site's design pixels. */
+
+.cs-board { position: absolute; inset: 0; display: grid; grid-template-rows: 34px 1fr; gap: 14px; padding: 20px 22px 22px; }
+.cs-head { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 16px; min-width: 0; }
+.cs-round { font-size: 13px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--os-ink-3); white-space: nowrap; }
+.cs-history { min-width: 0; }
+.cs-history .os-strip-item { min-width: 70px; }
+
+.cs-body { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 16px; min-height: 0; }
+
+.cs-graph {
+  position: relative; min-width: 0; min-height: 0; overflow: hidden; border-radius: 12px;
+  background: radial-gradient(110% 90% at 30% 85%, #16303f 0%, #102230 55%, #0c1a24 100%); border: 1px solid #1f3644;
+}
+.cs-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+.cs-overlay { position: absolute; left: 0; right: 0; top: 16%; display: grid; justify-items: center; gap: 6px; pointer-events: none; }
+.cs-mult {
+  font-family: var(--os-num); font-size: 96px; line-height: 1; color: var(--os-ink); font-variant-numeric: tabular-nums;
+  text-shadow: 0 4px 28px rgba(0, 0, 0, 0.5);
+}
+.cs-sub { font-size: 15px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--os-ink-3); min-height: 20px; }
+.cs-overlay.betting .cs-mult { font-size: 72px; color: var(--os-ink-2); }
+.cs-overlay.betting { top: 20%; }
+.cs-overlay.crashed .cs-mult { color: var(--os-lose); }
+.cs-overlay.crashed .cs-sub { color: var(--os-lose); }
+.cs-overlay.idle .cs-mult { color: var(--os-ink-3); }
+.cs-bar { width: 260px; height: 6px; margin-top: 8px; border-radius: 3px; background: rgba(47, 69, 83, 0.7); overflow: hidden; }
+.cs-bar-fill { height: 100%; width: 0; border-radius: 3px; background: var(--os-cash); }
+.cs-graph .os-pop { top: auto; bottom: 26px; translate: -50% 0; }
+
+.cs-players { min-height: 0; }
+
+/* Auto cash-out off: the field waits dimmed */
+.os-num.cs-off .os-field { opacity: 0.45; }
