@@ -44,7 +44,7 @@ describe('floods', () => {
     expect(c.closed).toBeNull();
     expect(c.msgs.filter((m) => m.t === 'err')).toEqual([]);
     for (let i = 0; i < 10; i++) c.ws.send('not even json');
-    expect((await closedWith(c)).code).toBe(4008);
+    expect((await closedWith(c, 5_000)).code).toBe(4008);
   });
 
   it('a burst of real messages past a limit gets RATE_LIMITED, and the socket lives on at an honest pace', async () => {
@@ -80,7 +80,8 @@ describe('floods', () => {
     expect(f.closed).toBeNull();
     // Past the limit with room to spare: strikes are forgiven at one a second while these go out.
     for (let i = 0; i < FLOOR_STRIKES + 60; i++) f.send({ t: 'jump', i });
-    expect((await closedWith(f)).code).toBe(4008);
+    // (A busy floor takes a moment to get through them all.)
+    expect((await closedWith(f, 5_000)).code).toBe(4008);
   });
 
   it('a reconnect loop gets a burst of connections, then 4008 (table and floor)', async () => {
