@@ -132,6 +132,27 @@ describe('what the floor says about a win, and when', () => {
     expect(describeWin('threecard', '', [{ type: 'hand', to: 0, seat: 0, cards: ['9h', 'Th', 'Jh'] }, { type: 'result', seat: 0, result: { pairPlus: 41_000, bonus: 0 } }], 0, 1_000, 41_000)).toBe('Beat the dealer');
   });
 
+  it('the online games and the Bandit Wheel name what paid, to the hundredth of the multiplier', () => {
+    expect(describeWin('plinko', '', [{ type: 'drop', seat: 0, rows: 16, risk: 'high', bet: 500, bin: 0, mult: 100_000, payout: 500_000 }], 0, 500, 500_000)).toBe('16 rows High, 1,000x');
+    expect(describeWin('limbo', '', [{ type: 'result', seat: 0, bet: 1_000, target: 4_567, result: 5_000, win: true, payout: 45_670 }], 0, 1_000, 45_670)).toBe('Target 45.67x');
+    expect(describeWin('dice', '', [{ type: 'roll', seat: 0, bet: 1_000, target: 200, over: false, chance: 200, roll: 123, win: true, payout: 49_500 }], 0, 1_000, 49_500)).toBe('Rolled 1.23 under 2.00');
+    expect(describeWin('keno', '', [{ type: 'draw', seat: 0, bet: 1_000, risk: 'high', picks: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], hits: 8, mult: 50_000, payout: 500_000 }], 0, 1_000, 500_000)).toBe('8 of 10 picks hit, 500x');
+    expect(describeWin('tower', '', [{ type: 'over', outcome: 'cashout', level: 5, mult: 101_376, payout: 1_013_760, bet: 1_000 }], 0, 1_000, 1_013_760)).toBe('Row 5, 1,013.76x');
+    expect(describeWin('mines', '', [{ type: 'over', outcome: 'cashout', gems: 8, mult: 850, payout: 85_000, bet: 10_000, field: [1, 2, 3, 4, 5] }], 0, 10_000, 85_000)).toBe('5 mines, 8 gems, 8.50x');
+    expect(describeWin('hilo', '', [{ type: 'over', outcome: 'cashout', guesses: 7, mult: 4_512, payout: 451_200, bet: 10_000 }], 0, 10_000, 451_200)).toBe('7 right guesses, 45.12x');
+    expect(describeWin('crash', '', [{ type: 'cashout', seat: 3, at: 2_735, amount: 1_000, payout: 27_350, how: 'manual' }, { type: 'cashout', seat: 1, at: 150, amount: 1_000, payout: 1_500 }], 3, 1_000, 27_350)).toBe('Cashed out at 27.35x');
+    expect(describeWin('banditwheel', '', [{ type: 'settle', seats: { 0: { bets: [[1, 1_000, 0], [20, 1_000, 21_000]] } } }], 0, 2_000, 21_000)).toBe('20 to 1');
+    // the words fit the sign, and only its characters get through
+    for (const w of ['16 rows High, 1,000x', '7 right guesses, 45.12x', 'Rolled 1.23 under 2.00']) expect(w.length).toBeLessThanOrEqual(40);
+  });
+
+  it('the online games announce a win only once the page has shown it', () => {
+    // a Plinko ball takes about 2.5 s to fall sixteen rows; Keno turns its numbers over in 1.3 s
+    expect(revealAt('plinko', [{ type: 'drop', seat: 0 }], 10_000)).toBeGreaterThanOrEqual(10_000 + 2_600);
+    expect(revealAt('keno', [{ type: 'draw', seat: 0 }], 10_000)).toBeGreaterThanOrEqual(10_000 + 1_400);
+    expect(revealAt('limbo', [{ type: 'result', seat: 0 }], 10_000)).toBeGreaterThanOrEqual(10_000 + 1_000);
+  });
+
   it("Hold'em names only a hand that was shown down", () => {
     const shown: GameEvent[] = [{ type: 'win', pot: 0, amount: 900_000, winners: [{ seat: 3, amount: 900_000 }], hand: 'Full house', best: [] }];
     const folded: GameEvent[] = [{ type: 'win', pot: 0, amount: 900_000, winners: [{ seat: 3, amount: 900_000 }], hand: null, best: null }];
