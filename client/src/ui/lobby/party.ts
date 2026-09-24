@@ -292,6 +292,7 @@ export function withParty(module: GameClientModule, party: PartyPanel): GameClie
         view.onError?.(code, msg);
       };
       if (view.keydown) wrapped.keydown = (e) => view.keydown!(e);
+      if (view.settled) wrapped.settled = () => view.settled!();
       // a view's hooks for the headless checks (the Bandit Wheel's state) reach through the party too
       if ('debug' in view) (wrapped as TableView & { debug?: unknown }).debug = (view as TableView & { debug?: unknown }).debug;
       return wrapped;

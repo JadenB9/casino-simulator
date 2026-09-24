@@ -90,6 +90,18 @@ export class TableSession {
     leave: () => (this.hooks.onLeave ? this.hooks.onLeave() : this.leave()),
   };
 
+  /**
+   * Run `fn` once the events received so far have been shown, the view's own animations
+   * included: what the HUD says about the stack follows the table, never ahead of it.
+   */
+  afterShown(fn: () => void): void {
+    void this.queue
+      .then(() => this.view?.settled?.())
+      .then(() => {
+        if (!this.ended) fn();
+      });
+  }
+
   send(msg: unknown): void {
     if (!this.socket.send(msg)) toast('Not connected to the table yet.', 'err');
   }

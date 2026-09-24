@@ -614,10 +614,17 @@ if (wanted('wheel')) {
     st = await wheelState(a);
     const round = st.round;
     check(st.bets[20] === 100_000 && st.bets[1] === 100_000, `a $1 chip on a $1,000-minimum number puts the minimum down: ${JSON.stringify(st.bets)}`);
+    const hudChips = (p) => p.page.textContent('.hud-table .stat-value');
+    await a.page.waitForTimeout(1000); // the HUD rolls to the stack the chips left
+    const hudBefore = await hudChips(a);
     await a.page.keyboard.press('Space');
     await a.page.waitForTimeout(2500);
     await shoot(a.page, 'wheel-3-solo-spinning');
+    const hudSpinning = await hudChips(a);
     const r1 = await wheelResult(a, since, round);
+    check(hudSpinning === hudBefore, `while the wheel turns the HUD keeps the chips it had (${hudBefore}, then ${hudSpinning}): the result isn't told early`);
+    await a.page.waitForTimeout(1200);
+    check((await hudChips(a)) === money(r1.state.stack), `once it rests the HUD shows the stack it left: ${await hudChips(a)}`);
     await shoot(a.page, 'wheel-4-solo-rest');
     const mine = r1.settle.seats[String(r1.state.mySeat)];
     const n = r1.settle.number;
@@ -1067,8 +1074,13 @@ async function playOne(p, game, since) {
   const { page } = p;
   const settle = (ms = 900) => page.waitForTimeout(ms);
   if (game === 'plinko') {
+    const hud = () => page.textContent('.hud-table .stat-value');
+    const before = await hud();
     await page.click('.os-action.go');
-    await settle(4500);
+    await settle(700);
+    const falling = await hud();
+    check(falling === before, `plinko: while the ball falls the HUD keeps ${before} (${falling})`);
+    await settle(3800);
   } else if (game === 'dice' || game === 'limbo') {
     await page.click('.os-action.go');
     await settle(2500);
