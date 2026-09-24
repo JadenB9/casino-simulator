@@ -900,6 +900,108 @@ if (wanted('bigwin')) {
   }
 }
 
+// ------------------------------------------------------------------------------------------------------
+// Part: security around money: socket tickets, a private lobby's PIN, a second tab at a seat with chips
+
+/** Open a raw socket to `path` with this ticket; resolves with the first message or the close code. */
+function rawSocket(path, ticket) {
+  return new Promise((resolve) => {
+    const ws = new WebSocket(`ws://127.0.0.1:${Number(port) + 1}/casino/ws/${path}?v=1${ticket ? `&ticket=${encodeURIComponent(ticket)}` : ''}`, { headers: { Origin: base } });
+    const done = (v) => {
+      try {
+        ws.close();
+      } catch {}
+      resolve(v);
+    };
+    ws.onmessage = (e) => done({ msg: JSON.parse(e.data) });
+    ws.onclose = (e) => done({ code: e.code });
+    setTimeout(() => done({ code: 'timeout' }), 8000);
+  });
+}
+
+if (wanted('security')) {
+  const names = ['qm_sec_a', 'qm_sec_b'];
+  try {
+    await clearRate();
+    // tickets: one socket each, for one path, never without
+    const la = await loginApi('qm_sec_a');
+    const tok = la.body.token;
+    const t1 = (await api('ticket', { method: 'POST', token: tok, body: { target: 'solo/limbo' } })).body.ticket;
+    const first = await rawSocket('solo/limbo', t1);
+    check(first.msg?.t === 'table', `a fresh ticket opens its socket (${first.msg?.t ?? first.code})`);
+    const reused = await rawSocket('solo/limbo', t1);
+    check(reused.code === 4006, `the same ticket again is refused with 4006 (${reused.code})`);
+    const t2 = (await api('ticket', { method: 'POST', token: tok, body: { target: 'solo/limbo' } })).body.ticket;
+    const elsewhere = await rawSocket('solo/dice', t2);
+    check(elsewhere.code === 4006, `a ticket for Limbo doesn't open Dice (${elsewhere.code})`);
+    const none = await rawSocket('solo/limbo', null);
+    check(none.code === 4003, `no ticket: 4003 (${none.code})`);
+    const bogus = await api('ticket', { method: 'POST', token: tok, body: { target: 'solo/limbo/../dice' } });
+    check(bogus.status === 400, `a ticket for a made-up path is refused (${bogus.status})`);
+
+    // a private Crash table: its PIN shows the table first, a wrong PIN doesn't
+    const a = await player('qm_sec_a');
+    const b = await player('qm_sec_b');
+    pages.push(a, b);
+    await settled(a, 180_000);
+    await settled(b, 180_000);
+    await walkUp(a, 'cs-1');
+    await a.page.waitForSelector('.lim-opt', { timeout: 20_000 });
+    await a.page.keyboard.press('m');
+    await a.page.waitForSelector('.lobby-actions .btn', { timeout: 10_000 });
+    await a.page.click('.lobby-actions .btn:has-text("Private")');
+    await a.page.waitForFunction(() => window.casino.app.table?.session.snapshot?.meta.pin, null, { timeout: 20_000 });
+    const pin = await a.page.evaluate(() => window.casino.app.table.session.snapshot.meta.pin);
+    check(/^\d{4}$/.test(pin), `the private table has a PIN (${pin})`);
+    const wrong = String((Number(pin) + 1) % 10000).padStart(4, '0');
+    const bad = await api('tables/join', { method: 'POST', token: await token(b), body: { pin: wrong } });
+    check(bad.status === 404 && bad.body.error === 'BAD_PIN', `a wrong PIN finds nothing (${bad.status} ${bad.body?.error})`);
+    await walkUp(b, 'cs-2');
+    await b.page.waitForSelector('.lobby-choice', { timeout: 20_000 });
+    await b.page.keyboard.press('m');
+    await b.page.waitForSelector('.lobby-pin-input', { timeout: 10_000 });
+    await b.page.fill('.lobby-pin-input', pin);
+    await b.page.click('.lobby-pin .btn.primary');
+    await b.page.waitForSelector('.lobby-found', { timeout: 10_000 });
+    const found = await b.page.textContent('.lobby-found');
+    check(/qm_sec_a's table/.test(found) && /\$1–\$1,000/.test(found), `the PIN shows whose table and its limits before joining: "${found.slice(0, 120)}"`);
+    await shoot(b.page, 'security-1-pin-table');
+    await b.page.click('.lobby-go-btn');
+    await b.page.waitForSelector('.modal input[type=number]', { timeout: 20_000 });
+    await b.page.fill('.modal input[type=number]', '100');
+    await b.page.click('.modal .btn.primary');
+    await b.page.waitForFunction(() => window.casino.app.table?.seated === true, null, { timeout: 30_000 });
+    check(true, 'B joined the private table with its PIN and sat down');
+    await leave(b);
+    if (await a.page.evaluate(() => !!window.casino.app.table)) await leave(a);
+
+    // a second tab: the seat and its chips follow the account, never doubled
+    await sitSolo(a, 'lb-1', { buyin: '1000' });
+    await a.page.waitForSelector('.os-screen:not([hidden])');
+    const tab = await newPage('qm_sec_a');
+    pages.push(tab);
+    // the same browser keeps the name, a new tab needs the password again
+    await login(tab);
+    await tab.page.waitForTimeout(1500);
+    const halted = await a.page.evaluate(() => document.body.textContent.includes('Opened in another tab'));
+    check(halted, 'the first tab says the casino opened in another tab');
+    await shoot(a.page, 'security-2-first-tab');
+    await walkUp(tab, 'lb-1');
+    await tab.page.waitForSelector('.lim-opt', { timeout: 20_000 });
+    await tab.page.keyboard.press('s');
+    await tab.page.waitForFunction(() => !!document.querySelector('.modal input[type=number]') || window.casino.app.table?.seated === true, null, { timeout: 30_000 });
+    const back = await tab.page.evaluate(() => window.casino.app.table?.session.snapshot?.you);
+    check(back?.status === 'seated' && back.stack === 100_000, `the second tab sits back down at the chips already there: ${JSON.stringify(back && { status: back.status, stack: back.stack })}`);
+    await tab.page.waitForTimeout(600);
+    await leave(tab);
+    const end = await settled(tab);
+    check(end.inPlay === 0, 'standing up in the second tab cashes out the one seat');
+    await audit(names, 'security');
+  } catch (err) {
+    failed('security', err);
+  }
+}
+
 /** One round of each game through the page's own controls. */
 async function playOne(p, game, since) {
   const { page } = p;
