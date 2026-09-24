@@ -18,6 +18,12 @@ export interface Player {
 
 let seq = 0;
 
+/**
+ * The password test accounts use (the one the server's login tests use too). Logins that send a
+ * name alone are refused once names have passwords; before that, the field is ignored.
+ */
+export const PASSWORD = 'test-pass';
+
 /** A fresh address per call (from a range no other test file uses), so no limit is shared by accident. */
 export function nextIp(): string {
   seq++;
@@ -29,7 +35,7 @@ export async function player(tag: string, ip = nextIp()): Promise<Player> {
     new Request('http://casino.test/casino/api/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Origin: ORIGIN, 'CF-Connecting-IP': ip },
-      body: JSON.stringify({ name: `${tag}${++seq}`.slice(0, 16) }),
+      body: JSON.stringify({ name: `${tag}${++seq}`.slice(0, 16), password: PASSWORD }),
     }),
   );
   expect(res.status).toBe(200);

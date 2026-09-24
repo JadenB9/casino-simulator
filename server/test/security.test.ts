@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { env, exports } from 'cloudflare:workers';
 import { evictDurableObject, runDurableObjectAlarm } from 'cloudflare:test';
 import { ORIGIN, api, connect, type Client } from './helpers.ts';
-import { aid, buyIn, clockAt, closedWith, deadlines, enter, escrow, find, inTable, makeLobby, money, player, sleep, table } from './party.ts';
+import { PASSWORD, aid, buyIn, clockAt, closedWith, deadlines, enter, escrow, find, inTable, makeLobby, money, player, sleep, table } from './party.ts';
 import { signToken } from '../src/auth.ts';
 import { applyTransfer, buyInStatements } from '../src/transfer.ts';
 import { CONNECT_BURST, GRACE_MS, LEADER_HANDOFF_MS, PIN_TABLE_MISSES, STRIKES } from '../src/table/host.ts';
@@ -155,7 +155,7 @@ describe('PIN guessing and sign-ups', () => {
         new Request('http://casino.test/casino/api/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Origin: ORIGIN, 'CF-Connecting-IP': ip },
-          body: JSON.stringify({ name }),
+          body: JSON.stringify({ name, password: PASSWORD }),
         }),
       );
     for (let i = 1; i <= 10; i++) expect((await signUp(`v6_signup_${i}`, `2001:db8:bb:1::${i.toString(16)}`)).status).toBe(200);

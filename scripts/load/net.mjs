@@ -79,8 +79,9 @@ export class Server {
     return { status: res.status, body: json, text };
   }
 
-  async login(name, ip) {
-    const r = await this.api('login', { method: 'POST', body: { name }, ip });
+  /** Log in (a new name is created with this password; the field is ignored before names had them). */
+  async login(name, ip, password = 'load-pass') {
+    const r = await this.api('login', { method: 'POST', body: { name, password }, ip });
     if (r.status !== 200) throw new Error(`login ${name}: ${r.status} ${r.text}`);
     return { id: r.body.profile.id, name: r.body.profile.name, token: r.body.token, ip };
   }
