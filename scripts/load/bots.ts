@@ -24,7 +24,7 @@ export const BUY_IN: Record<LobbyGame, number> = {
   craps: 200_000,
   baccarat: 200_000,
   threecard: 200_000,
-  holdem: 100_000,
+  holdem: 50_000,
   war: 200_000,
   sicbo: 100_000,
   bigsix: 100_000,
