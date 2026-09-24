@@ -11,12 +11,13 @@ import * as THREE from 'three';
 import './bigsix.css';
 import type { GameClientModule, TableView, TableViewCtx, TableSnapshot, MembersMsg } from '../contract.ts';
 import type { Pose } from '../../table/stage.ts';
+import { isChipKey } from '../../table/keys.ts';
 import type { GameEvent, TableConfig } from '../../../../shared/src/engine.ts';
 import type { Member } from '../../../../shared/src/protocol.ts';
 import type { BigSixView, SeatSettle } from '../../../../shared/src/games/bigsix/protocol.ts';
 import { BETTING_MS } from '../../../../shared/src/games/bigsix/engine.ts';
 import { SPOTS, type SymbolId, spotOf, paysLabel, callFor, edgePercent } from '../../../../shared/src/games/bigsix/rules.ts';
-import { BETTING_CHIPS, formatMoney, type Cents } from '../../../../shared/src/money.ts';
+import { formatMoney, type Cents } from '../../../../shared/src/money.ts';
 import { ChipTray, el } from '../../ui/kit.ts';
 import { bigSixMax, chipOn, maxRefusal, type MaxBet } from '../../table/max.ts';
 import { tween, wait, ease } from '../../table/tween.ts';
@@ -258,7 +259,13 @@ function mountBigSix(ctx: TableViewCtx): TableView {
       if (view?.phase === 'betting' && !animating) ctx.link.act({ type: 'ready', on: !amReady() });
       return;
     }
-    if (canBet() && view?.phase === 'betting' && myTotal() > 0) ctx.link.act({ type: 'spin' });
+    if (!canBet()) return;
+    // nothing down: last spin's bets again, and go (as blackjack deals)
+    if (myTotal() === 0) {
+      if (mySeat === null || !view?.canRebet.includes(mySeat)) return ctx.kit.say('Place a bet first', 1800);
+      ctx.link.act({ type: 'rebet', double: false });
+    }
+    ctx.link.act({ type: 'spin' });
   }
 
   /** With Max picked, what a click on this spot puts down: its maximum, or every chip here. */
@@ -759,8 +766,7 @@ function mountBigSix(ctx: TableViewCtx): TableView {
         return true;
       }
       if (e.metaKey || e.ctrlKey || e.altKey) return false;
-      const n = Number(e.key);
-      if (Number.isInteger(n) && n >= 1 && n <= BETTING_CHIPS.length) return tray.key(e);
+      if (isChipKey(e.key)) return tray.key(e);
       // Max, while a bet can go down
       if ((e.key === 'a' || e.key === 'A') && !e.shiftKey && canBet()) {
         tray.pickMax();

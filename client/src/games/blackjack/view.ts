@@ -20,6 +20,7 @@ import { handTotal, cardValue, MAX_SPOTS, type Move, type Outcome } from '../../
 import { BETTING_MS, INSURANCE_MS, TURN_MS } from '../../../../shared/src/games/blackjack/engine.ts';
 import { advise, insuranceAdvice } from '../../../../shared/src/games/blackjack/advice.ts';
 import { CardMesh, dealCard, flipCard } from '../../table/cards.ts';
+import { isChipKey } from '../../table/keys.ts';
 import { ChipStack, slideStack } from '../../table/chips.ts';
 import { celebrate } from '../../table/celebrate.ts';
 import { roundMoment } from './moments.ts';
@@ -392,8 +393,7 @@ export class BlackjackTable implements TableView {
       }
     }
     if (this.canBet()) {
-      const n = Number(e.key);
-      if (Number.isInteger(n) && n >= 1 && n <= BETTING_CHIPS.length) {
+      if (isChipKey(e.key)) {
         this.tray.key(e);
         return true;
       }

@@ -33,6 +33,7 @@ import {
 } from '../../../../shared/src/games/threecard/rules.ts';
 import { playAdvice } from '../../../../shared/src/games/threecard/advice.ts';
 import { CardMesh, dealCard, flipCard, CARD_H } from '../../table/cards.ts';
+import { isChipKey } from '../../table/keys.ts';
 import { ChipStack, slideStack } from '../../table/chips.ts';
 import { celebrate } from '../../table/celebrate.ts';
 import type { Felt } from '../../table/felt.ts';
@@ -625,10 +626,16 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
   const primary = (): void => {
     if (!latest || me === null) return;
     if (mode === 'solo') {
-      if (latest.phase === 'betting' && total(wanted) > 0) {
-        lastAction = 'other';
-        ctx.link.act({ type: 'deal' });
+      // (a solo table between rounds takes bets in any phase but a decision's; the first opens betting)
+      if (!canBet()) return;
+      // nothing down: last round's bets again, and deal (as blackjack does)
+      if (total(wanted) === 0) rebet(1);
+      if (total(wanted) === 0) {
+        ctx.kit.say('Place a bet first', 1800);
+        return;
       }
+      lastAction = 'other';
+      ctx.link.act({ type: 'deal' });
       return;
     }
     if (latest.phase !== 'betting') return;
@@ -1109,8 +1116,7 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
     keydown(e) {
       if (e.metaKey && e.key !== 'z') return false;
       if (e.repeat && !/^[1-8]$/.test(e.key)) return true;
-      const n = Number(e.key);
-      if (Number.isInteger(n) && n >= 1 && n <= BETTING_CHIPS.length) {
+      if (isChipKey(e.key)) {
         tray.key(e);
         return true;
       }

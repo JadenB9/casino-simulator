@@ -440,6 +440,11 @@ export class BaccaratTable implements TableView {
 
   private primary(): void {
     if (this.mode === 'solo') {
+      // nothing down: last coup's bets again, and deal (as blackjack does)
+      if (betTotal(this.myBets) === 0) {
+        if (!this.lastBets) return this.ctx.kit.say('Place a bet first', 1800);
+        this.rebet();
+      }
       this.act({ type: 'deal' });
       return;
     }
