@@ -158,7 +158,7 @@ export class ChatPanel {
     send.append(icon('send'));
     send.addEventListener('click', () => this.send());
     keepTyping(send);
-    this.status.setAttribute('aria-live', 'polite');
+    // Not live: past 150 characters it changes on every key. Refusals reach the log, which is.
     line.append(this.input, this.status, send);
     this.box.append(head, this.scroller, line);
     this.box.hidden = true;
