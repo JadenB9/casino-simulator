@@ -106,7 +106,8 @@ export function floorSigns(plan: FloorPlan, b: Batch, m: Mats): SignSpec[] {
       const n = d.axis === 'x' ? (r.bounds.z1 === d.c ? -1 : 1) : r.bounds.x1 === d.c ? -1 : 1;
       const h = style.kind === 'neon' ? 0.5 : 0.42;
       const span = d.a1 - d.a0;
-      const w = Math.min(Math.max(span + 0.9, text.length * 0.2), d.kind === 'shopfront' ? 5.2 : span + 2.6, 6.5);
+      // as wide as its words want, a little over the doorway at least, never wider than the wall allows
+      const w = Math.min(Math.max(text.length * (style.kind === 'neon' ? 0.3 : 0.26) + 0.7, Math.min(span + 0.6, 2.4)), d.kind === 'shopfront' ? 5.2 : span + 2.6, 6.2);
       const y = Math.min(d.height + 0.36 + h / 2, r.style.ceiling - h / 2 - 0.12);
       const off = WALL / 2 + (d.kind === 'grand' || d.kind === 'arch' ? 0.14 : 0.1);
       const mid = (d.a0 + d.a1) / 2;

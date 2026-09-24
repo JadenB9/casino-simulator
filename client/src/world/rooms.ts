@@ -234,30 +234,13 @@ export const ROOMS: RoomSpec[] = [
       { kind: 'palm', x: 3.6, z: 4.8, yaw: 0 },
     ],
     fixtures: [],
-    hanging: [
-      {
-        id: 'lobby-way',
-        x: 0,
-        y: 3.55,
-        z: -0.6,
-        ry: 0,
-        w: 5.6,
-        h: 0.52,
-        kind: 'way',
-        front: [
-          { text: 'CASHIER', arrow: 'left', before: true },
-          { text: 'TABLE GAMES', arrow: 'up' },
-          { text: 'BOUTIQUE', arrow: 'right' },
-        ],
-        back: [
-          { text: 'BOUTIQUE', arrow: 'left', before: true },
-          { text: 'EXIT', arrow: 'up' },
-          { text: 'CASHIER', arrow: 'right' },
-        ],
-      },
-    ],
+    hanging: [],
     spots: [],
-    aisles: [{ x0: -2.2, z0: -5.85, x1: 2.2, z1: 5.85 }],
+    // the runner from the doors to the compass rose, and on from it to the pit
+    aisles: [
+      { x0: -2.2, z0: -5.85, x1: 2.2, z1: -1.7 },
+      { x0: -2.2, z0: 1.7, x1: 2.2, z1: 5.85 },
+    ],
     plants: [
       [-6.4, 5.4],
       [6.4, 5.4],

@@ -251,7 +251,8 @@ export function buildDecor(plan: FloorPlan, stations: WorldStation[], b: Batch, 
     // fascia above the cage carries the sign; warm light inside it, seen through the bars
     b.box(m.get('lacquer-red'), cx, (2.66 + top) / 2, zf, width, top - 2.66, 0.2);
     b.box(brass, cx, 2.66, zf + 0.11, width, 0.04, 0.03);
-    glow.box(GLOW.shelf, cx, 2.5, c.z0 + 0.1, width, 0.03, 0.03);
+    // warm light inside the cage over each window, seen through the bars
+    for (const w of cage.windows) glow.box(GLOW.soft, w, 2.5, c.z0 + 0.12, 1.6, 0.025, 0.03);
     out.signs.push({ kind: 'lit', text: 'CASHIER', color: '#ffe2a8', font: 'Cinzel', at: [cx, (2.66 + top) / 2, zf + 0.105], ry: 0, w: Math.min(width - 0.6, 3.6), h: 0.5 });
   }
   for (const v of plan.vaults) {
@@ -365,6 +366,29 @@ export function buildDecor(plan: FloorPlan, stations: WorldStation[], b: Batch, 
     b.box(brass, l.x, 2.12, l.z, 1.82, 0.02, 0.52, undefined, l.yaw);
     glow.box(GLOW.soft, l.x, 2.115, l.z, 1.7, 0.012, 0.42, l.yaw);
     out.pools.push({ x: l.x, z: l.z, r: 2.1, room: l.room });
+  }
+
+  // --- the online lounge: gaming-cafe light round the desks ------------------------------------
+  // a low divider between the back-to-back monitors with a strip of light along its top, a glow on
+  // the floor under each pair of desks in its game's colour, and two lines of light overhead
+  const accents = ['#ff3d7f', '#35a8ff', '#1fe07e', '#b46bff', '#ffb02e', '#3dd6ff', '#ff5a4a', '#e4ff3d'];
+  for (const isl of plan.deskIslands) {
+    into(isl.room);
+    const top = ceilingAt(plan, isl.x, isl.z);
+    b.box(lacquer, isl.x, 1.0, isl.z, isl.w - 0.1, 0.52, 0.05);
+    glow.box(hdr('#35d8ff', 2.4), isl.x, 1.265, isl.z, isl.w - 0.1, 0.012, 0.03);
+    // the north row holds the first two games (two desks each), the south row the next two
+    isl.games.forEach((g, i) => {
+      const color = hdr(accents[Object.keys(CATALOG).indexOf(g) % accents.length]!, 2.6);
+      const side = i < 2 ? -1 : 1;
+      const x = isl.x - isl.w / 2 + ((i % 2) + 0.5) * (isl.w / 2);
+      glow.box(color, x, 0.015, isl.z + side * 0.7, isl.w / 2 - 0.25, 0.012, 0.04);
+    });
+    for (const [side, c] of [
+      [-1, '#35d8ff'],
+      [1, '#ff3fd0'],
+    ] as const) glow.box(hdr(c, 2.2), isl.x, top - 0.03, isl.z + side * 1.25, isl.w + 1.2, 0.02, 0.05);
+    out.pools.push({ x: isl.x, z: isl.z, r: 3.0, room: isl.room });
   }
 
   // --- the yard's string of bulbs --------------------------------------------------------------

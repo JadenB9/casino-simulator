@@ -295,6 +295,8 @@ export interface FloorPlan {
   neons: { text: string; color: string; font: 'Tilt Neon' | 'Limelight' | 'Cinzel'; x: number; y: number; z: number; ry: number; w: number; h: number; room: RoomId }[];
   /** Lamps hanging low over the poker tables. */
   tableLamps: { x: number; z: number; yaw: number; room: RoomId }[];
+  /** The online lounge's islands of desks (their middle, their length, the games along them). */
+  deskIslands: { x: number; z: number; w: number; room: RoomId; games: GameId[] }[];
   /** Strings of bulbs (the yard's). */
   festoons: { x0: number; z0: number; x1: number; z1: number; y: number; room: RoomId }[];
   columns: (Column & { room: RoomId })[];
@@ -480,6 +482,7 @@ export function planFloor(footprint: (game: GameId) => Footprint, slots: readonl
   };
 
   const rows: { room: RoomId; z: number; yaw: number; ids: string[]; x0: number; x1: number; depth: number; seatDepth: number }[] = [];
+  const deskIslands: FloorPlan['deskIslands'] = [];
   let slotList = [...slots];
   for (const spec of ROOMS) {
     const r = room(spec.id);
@@ -528,6 +531,7 @@ export function planFloor(footprint: (game: GameId) => Footprint, slots: readonl
         const f = fp(item.games[0]!);
         let g = 0;
         item.islands.forEach((isl) => {
+          deskIslands.push({ x: r.cx + isl.x, z: r.cz + isl.z, w: item.per * item.pitch, room: r.id, games: item.games.slice(g / 2, g / 2 + item.per) });
           for (const [rowYaw, dir] of [
             [Math.PI, -1],
             [0, 1],
@@ -729,6 +733,7 @@ export function planFloor(footprint: (game: GameId) => Footprint, slots: readonl
     neons,
     tableLamps,
     festoons,
+    deskIslands,
     columns,
     plants: [],
     palms: [],

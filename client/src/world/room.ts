@@ -113,7 +113,7 @@ export function buildRoom(plan: FloorPlan, b: Batch, m: Mats, glow: GlowMerge): 
         if (x1 > x0 && z1 > z0) b.box(brass, (x0 + x1) / 2, 0.006, (z0 + z1) / 2, x1 - x0, 0.006, z1 - z0);
       }
     }
-    if (r.id === 'lobby') compass((r.inner.x0 + r.inner.x1) / 2, (r.inner.z0 + r.inner.z1) / 2 - 1.2);
+    if (r.id === 'lobby') compass(r.cx, r.cz);
     if (r.id === 'bar') {
       // the bartenders' side of the bar is dark boards, the customers' a rug of the floor's carpet
       const bar = plan.bar;

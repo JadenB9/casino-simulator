@@ -164,8 +164,8 @@ export class Mats {
     const emeraldTex = lazy(() => drawCarpet(512, EMERALD_WALL, 59));
     const wineTex = lazy(() => drawCarpet(512, WINE_WALL, 61));
     this.makers.set('concrete', (q) => (hi(q) ? std({ map: concreteTex(), roughness: 0.7, metalness: 0 }) : lambert({ map: concreteTex() })));
-    this.makers.set('corrugated', (q) => (hi(q) ? std({ map: rustTex(), roughness: 0.62, metalness: 0.35 }) : lambert({ map: rustTex() })));
-    this.makers.set('floor-wood', (q) => (hi(q) ? std({ map: plankTex(), roughness: 0.42 }) : lambert({ map: plankTex() })));
+    this.makers.set('corrugated', (q) => (hi(q) ? std({ map: rustTex(), color: '#9a8a7c', roughness: 0.78, metalness: 0.2 }) : lambert({ map: rustTex(), color: '#9a8a7c' })));
+    this.makers.set('floor-wood', (q) => (hi(q) ? std({ map: plankTex(), color: '#b08a70', roughness: 0.62 }) : lambert({ map: plankTex(), color: '#b08a70' })));
     this.makers.set('planks', () => lambert({ map: roughTex() }));
     this.makers.set('wall-dark', () => lambert({ map: acousticTex() }));
     this.makers.set('wall-cream', () => lambert({ map: panelTex() }));
@@ -176,7 +176,7 @@ export class Mats {
       hi(q) ? std({ map: t.marbleTiles ?? null, color: '#e8e0d4', roughness: 0.2, metalness: 0 }) : lambert({ map: t.marbleTiles ?? null, color: '#e8e0d4' }),
     );
     this.makers.set('ceiling-dark', () => lambert({ color: '#0c0c10' }));
-    this.makers.set('ceiling-light', () => lambert({ color: '#d8ccb8', emissive: '#2a2218' }));
+    this.makers.set('ceiling-light', () => lambert({ color: '#c8b69a', emissive: '#1e1710' }));
     this.makers.set('steel', (q) => (hi(q) ? std({ color: '#3a3c40', metalness: 0.8, roughness: 0.45 }) : lambert({ color: '#34363a' })));
     this.makers.set('rust', (q) => (hi(q) ? std({ map: rustTex(), color: '#b8a090', metalness: 0.4, roughness: 0.7 }) : lambert({ map: rustTex(), color: '#b8a090' })));
     this.makers.set('glass', (q) =>
@@ -185,7 +185,7 @@ export class Mats {
         : new THREE.MeshBasicMaterial({ color: '#8a9a9a', transparent: true, opacity: 0.12, depthWrite: false }),
     );
     this.makers.set('upholstery', (q) => (hi(q) ? std({ map: t.velvet ?? null, color: t.velvet ? '#8a4048' : '#4a1018', roughness: 0.7 }) : lambert({ map: t.velvet ?? null, color: t.velvet ? '#8a4048' : '#4a1018' })));
-    this.makers.set('velvet-green', () => lambert({ map: t.velvet ?? null, color: t.velvet ? '#3c8a60' : '#0e3a24' }));
+    this.makers.set('velvet-green', () => lambert({ color: '#1f5a3d' }));
     this.makers.set('fabric', () => lambert({ color: '#2a2622' }));
     this.makers.set('case-light', () => new THREE.MeshBasicMaterial({ color: hdr('#fff2dc', 2.0) }));
     this.makers.set('fire', () => new THREE.MeshBasicMaterial({ color: hdr('#ff8a2a', 3.0) }));
@@ -210,7 +210,7 @@ export class Mats {
     );
     this.makers.set('lacquer', (q) => (hi(q) ? std({ color: '#0d0b0b', roughness: 0.14 }) : lambert({ color: '#100d0c' })));
     this.makers.set('lacquer-red', (q) => (hi(q) ? std({ color: '#5a0d16', roughness: 0.2 }) : lambert({ color: '#4a0c13' })));
-    this.makers.set('leather', (q) => (hi(q) ? std({ color: '#241010', roughness: 0.5 }) : lambert({ color: '#241010' })));
+    this.makers.set('leather', (q) => (hi(q) ? std({ color: '#2c1410', roughness: 0.62 }) : lambert({ color: '#2c1410' })));
     this.makers.set('velvet', () => lambert({ map: t.velvet ?? null, color: t.velvet ? '#d04050' : '#7a1020' }));
     this.makers.set('mirror', (q) => (hi(q) ? std({ color: '#40383a', metalness: 1, roughness: 0.06 }) : new THREE.MeshBasicMaterial({ color: '#2a2224' })));
     this.makers.set('cage', (q) => (hi(q) ? std({ color: '#b38b3c', metalness: 1, roughness: 0.35 }) : lambert({ color: '#8c6a2c', emissive: '#1e1405' })));
