@@ -108,6 +108,12 @@ export interface Solid {
   holds?: string[];
   /** Standing on the floor in someone's way (planters, stools, furniture): kept out of the aisles. */
   floor?: boolean;
+  /**
+   * How near a walker's centre may come to its centre, when that isn't its drawn size: walkers
+   * brush through a plant's leaf tips, and keep a palm's arc of fronds clear (decor.ts gives the
+   * collider the same). Round solids only.
+   */
+  walk?: number;
 }
 
 /** Bar-top video poker sits on the counter; a taller cabinet stands on the floor in a gap in the bar. */
@@ -163,9 +169,17 @@ export interface FloorPlan {
   hanging: Hanging[];
   /** Everything solid besides the stations: see Solid. */
   solids: Solid[];
+  /** Walls as boxes on the floor (reach.ts); without them the room's own edges are the walls. */
+  walls?: Rect[];
+  /** The rooms' walkable insides; without them the whole `room` is one. */
+  rooms?: { id: string; inner: Rect }[];
+  /** Openings through walls between rooms (reach.ts walks through them). */
+  doorways?: Rect[];
 }
 
 export const ROOM: Rect = { x0: -20, z0: -15, x1: 20, z1: 15 };
+/** Where a player first appears: inside the doors on the marble, facing into the casino (-z). */
+export const SPAWN = { x: 0, z: 12.8, yaw: Math.PI };
 /** Friedman-low ceiling over slots, the bar and the aisles. */
 export const CEILING = 3.4;
 /** The grand coffered ceiling over the table pit. */
@@ -189,6 +203,12 @@ export const LEAVES: Record<PlantKind | 'palm', { base: number; r: number; from:
 };
 /** A palm's trunk leans off the pot's centre (the model is centred on its fronds): its reach, per metre. */
 const PALM_TRUNK = 0.23;
+/** Walkers keep this far from a palm's centre (under the low fronds). */
+export const PALM_WALK = 1.0;
+/** How near a walker comes to a plant's centre: through the leaf tips, never the pot. */
+export function plantWalk(kind: PlantKind, size: number): number {
+  return Math.max(planterRadius(kind, size), LEAVES[kind].r * size - 0.25);
+}
 
 /** The planter a plant stands in: wide enough for the model's own pot to sit inside it. */
 export function planterRadius(kind: PlantKind | 'palm', size: number): number {
@@ -558,10 +578,13 @@ function baseSolids(plan: FloorPlan): Solid[] {
   bar.pendants.forEach((z, i) => round(`bar-pendant-${i + 1}`, 'bar', bar.front + bar.depth / 2 - 0.1, z, 0.21, 2.15, CEILING));
   bar.stools.forEach((z, i) => round(`stool-${i + 1}`, `stool-${i + 1}`, bar.stoolX, z, STOOL.r, 0, STOOL.h, { floor: true }));
 
-  // the cashier's cage: counter, bars, fascia and its side wall, wall to wall in the corner
+  // the cashier's cage, wall to wall in the corner: the counter, the bars and fascia over it, and
+  // the side wall closing it; behind the counter is open floor, where the tellers stand
   {
     const c = plan.cashier.counter;
-    box('cashier-cage', 'cashier', c.x0, c.x1 + 0.22, plan.room.z0, c.z1 + 0.06, 0, CEILING, { wall: true, floor: true });
+    box('cashier-counter', 'cashier', c.x0, c.x1, c.z1 - 0.66, c.z1 + 0.06, 0, 1.15, { wall: true, floor: true });
+    box('cashier-screen', 'cashier', c.x0, c.x1, c.z1 - 0.43, c.z1 - 0.21, 1.15, CEILING, { wall: true });
+    box('cashier-side', 'cashier', c.x1, c.x1 + 0.22, plan.room.z0, c.z1 + 0.06, 0, CEILING, { wall: true, floor: true });
   }
 
   // the pit podium, with its lamp
@@ -594,7 +617,7 @@ function palmSolids(p: Palm, i: number): Solid[] {
   const g = `palm-${i + 1}`;
   const r = LEAVES.palm.r * p.size;
   return [
-    { id: `${g}-planter`, group: g, x: p.x, z: p.z, w: 2 * planterRadius('palm', p.size), d: 2 * planterRadius('palm', p.size), yaw: 0, y0: 0, y1: PALM_PLANTER.h, round: true, floor: true },
+    { id: `${g}-planter`, group: g, x: p.x, z: p.z, w: 2 * planterRadius('palm', p.size), d: 2 * planterRadius('palm', p.size), yaw: 0, y0: 0, y1: PALM_PLANTER.h, round: true, floor: true, walk: Math.max(planterRadius('palm', p.size), PALM_WALK) },
     { id: `${g}-trunk`, group: g, x: p.x, z: p.z, w: 2 * PALM_TRUNK * p.size, d: 2 * PALM_TRUNK * p.size, yaw: 0, y0: PALM_PLANTER.seat, y1: PALM_PLANTER.seat + p.size, round: true },
     { id: `${g}-fronds`, group: g, x: p.x, z: p.z, w: 2 * r, d: 2 * r, yaw: 0, y0: PALM_PLANTER.seat + LEAVES.palm.from * p.size, y1: PALM_PLANTER.seat + p.size, round: true },
   ];
@@ -629,7 +652,7 @@ function plantSolids(p: Plant, i: number): Solid[] {
   const leaves = LEAVES[p.kind];
   return [
     { id: `${g}-planter`, group: g, x: p.x, z: p.z, w: 2 * planterRadius(p.kind, p.size), d: 2 * planterRadius(p.kind, p.size), yaw: 0, y0: 0, y1: PLANTER.h, round: true, floor: true },
-    { id: `${g}-leaves`, group: g, x: p.x, z: p.z, w: 2 * leaves.r * p.size, d: 2 * leaves.r * p.size, yaw: 0, y0: PLANTER.seat + leaves.from * p.size, y1: PLANTER.seat + p.size, round: true },
+    { id: `${g}-leaves`, group: g, x: p.x, z: p.z, w: 2 * leaves.r * p.size, d: 2 * leaves.r * p.size, yaw: 0, y0: PLANTER.seat + leaves.from * p.size, y1: PLANTER.seat + p.size, round: true, walk: plantWalk(p.kind, p.size) },
   ];
 }
 

@@ -45,6 +45,26 @@ engine.onFrame((dt) => world.update(dt));
 `SPAWN` (exported) is where a new player appears: `(0, 12.8)`, yaw `Math.PI`, on the marble inside
 the doors, facing into the casino.
 
+### Life points (life-points.ts)
+`lifePoints(plan)` is the floor's registry for the people who walk it (sitting anywhere, waiters,
+bankers, the shopkeeper), all in metres with yaw as `Object3D.rotation.y`:
+
+- `seats`: every place to sit that isn't a table's own seat (`{ id, x, z, yaw, top, room, kind,
+  station? }`): bar stools, sofa places, benches, lounge chairs, and an online desk's chair
+  (`station` is its PC, free only while nobody plays it). `x, z` is the sitter's hip point on the
+  floor, `top` the seat's height (`SEAT_TOPS`, measured from the models). Ids are stable and go
+  over the wire.
+- `bar`: `tender` (the strip behind the counter), `front` (the customers' strip), `pickup` (where a
+  waiter collects an order) and the counter's `top`.
+- `bank.windows`: each teller window's `banker` and `customer` stand points.
+- `boutique`: the `keeper` and `customer` at the counter, the display `cases` (with their tops) and
+  the `mannequins`, or null.
+- `routes`: closed waiter loops through clear floor (`pause` seconds at a stop).
+
+`client/test/life-points.test.ts` walks the plan's own grid (reach.ts) from `SPAWN` to every seat,
+customer point and route point, keeps every route leg clear, and checks the staff points stand
+clear of everything.
+
 ### Mouse look
 On the floor the mouse is held (Pointer Lock): moving it turns the camera, walking or not, with
 pitch clamped, and W walks where the camera faces. The player takes it on becoming enabled, so
