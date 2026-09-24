@@ -1,13 +1,16 @@
-// Where the floor's walking staff can go: a grid over the room built from the collision map (the
-// same walls, tables, counters, stools, couches and posts the player bumps into), each cell open
-// only if a body of `radius` fits there. Paths are A* over the grid (eight ways, never cutting a
-// corner past a blocked cell), then pulled tight: every waypoint that a straight, clear line can
-// skip is dropped, so a waiter walks straight across open floor and turns only at corners.
+// Where the floor's walking staff can go: a grid over the room, each cell open only if a body of
+// `radius` fits there. On the floor it comes from the plan's own walk grid (reach.ts: the rooms,
+// their doorways, the stations and every solid standing on the floor, the same things the player
+// bumps into); tests can build one from a collision map. Paths are A* over the grid (eight ways,
+// never cutting a corner past a blocked cell), then pulled tight: every waypoint that a straight,
+// clear line can skip is dropped, so a waiter walks straight across open floor and turns only at
+// corners.
 //
-// Built once when the floor loads, from shapes that don't move, so every client builds the same
+// Built once when the floor loads, from things that don't move, so every client builds the same
 // grid and finds the same paths (the waiters' rounds depend on that).
 
 import type { Box, Post } from '../collision.ts';
+import type { Grid } from '../reach.ts';
 
 export interface Pt {
   x: number;
@@ -37,10 +40,18 @@ export class NavGrid {
   constructor(
     readonly bounds: NavBounds,
     readonly cell = NAV_CELL,
+    size?: { cols: number; rows: number },
   ) {
-    this.cols = Math.max(1, Math.ceil((bounds.x1 - bounds.x0) / cell));
-    this.rows = Math.max(1, Math.ceil((bounds.z1 - bounds.z0) / cell));
+    this.cols = size?.cols ?? Math.max(1, Math.ceil((bounds.x1 - bounds.x0) / cell - 1e-9));
+    this.rows = size?.rows ?? Math.max(1, Math.ceil((bounds.z1 - bounds.z0) / cell - 1e-9));
     this.blocked = new Uint8Array(this.cols * this.rows);
+  }
+
+  /** The grid of a plan's walk grid (reach.ts walkGrid): open where it is free. */
+  static fromWalk(g: Grid): NavGrid {
+    const n = new NavGrid({ x0: g.x0, z0: g.z0, x1: g.x0 + g.nx * g.cell, z1: g.z0 + g.nz * g.cell }, g.cell, { cols: g.nx, rows: g.nz });
+    for (let i = 0; i < n.blocked.length; i++) n.blocked[i] = g.free[i] ? 0 : 1;
+    return n;
   }
 
   /**
@@ -104,15 +115,45 @@ export class NavGrid {
     return best && bestD <= reach ? best : null;
   }
 
-  /** True when a body can walk the straight line from a to b (sampled every half cell). */
+  /** True when a body can walk the straight line from a to b: every cell the line crosses is open. */
   lineClear(a: Pt, b: Pt): boolean {
-    const d = Math.hypot(b.x - a.x, b.z - a.z);
-    const n = Math.max(1, Math.ceil(d / (this.cell * 0.5)));
-    for (let i = 0; i <= n; i++) {
-      const t = i / n;
-      if (!this.isClear(a.x + (b.x - a.x) * t, a.z + (b.z - a.z) * t)) return false;
+    // walk the cells along the line, one crossing at a time (Amanatides and Woo)
+    const x = (a.x - this.bounds.x0) / this.cell;
+    const z = (a.z - this.bounds.z0) / this.cell;
+    const dx = (b.x - this.bounds.x0) / this.cell - x;
+    const dz = (b.z - this.bounds.z0) / this.cell - z;
+    let c = Math.floor(x);
+    let r = Math.floor(z);
+    const ec = Math.floor(x + dx);
+    const er = Math.floor(z + dz);
+    const open = (cc: number, rr: number) => cc >= 0 && rr >= 0 && cc < this.cols && rr < this.rows && this.blocked[rr * this.cols + cc] === 0;
+    if (!open(c, r)) return false;
+    const sc = Math.sign(dx);
+    const sr = Math.sign(dz);
+    const stepC = dx !== 0 ? Math.abs(1 / dx) : Infinity;
+    const stepR = dz !== 0 ? Math.abs(1 / dz) : Infinity;
+    let nextC = dx > 0 ? (c + 1 - x) * stepC : dx < 0 ? (x - c) * stepC : Infinity;
+    let nextR = dz > 0 ? (r + 1 - z) * stepR : dz < 0 ? (z - r) * stepR : Infinity;
+    for (let guard = this.cols + this.rows + 4; (c !== ec || r !== er) && guard > 0; guard--) {
+      if (Math.abs(nextC - nextR) < 1e-12) {
+        // through a corner exactly: both cells beside it must be open too
+        if (!open(c + sc, r) || !open(c, r + sr)) return false;
+        c += sc;
+        r += sr;
+        nextC += stepC;
+        nextR += stepR;
+      } else if (nextC < nextR) {
+        c += sc;
+        nextC += stepC;
+      } else {
+        r += sr;
+        nextR += stepR;
+      }
+      if (!open(c, r)) return false;
+      // no crossing left within the line (rounding kept us off the end cell): stop here
+      if (nextC > 1 + 1e-9 && nextR > 1 + 1e-9) break;
     }
-    return true;
+    return open(ec, er);
   }
 
   /**

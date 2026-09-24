@@ -180,23 +180,33 @@ export class Round {
 }
 
 /**
- * A round through `stops` (the first should be the pickup), each walk found on `grid`. Stops the
- * grid can't reach are left out; null when fewer than two remain.
+ * A round through `stops` (the first should be the pickup), each walk found on `grid`, by way of
+ * `via[i]` (points to pass on the way from stop i to the next, if any). Stops the grid can't
+ * reach are left out (with their ways); null when fewer than two remain or a way is shut.
  */
-export function buildRound(grid: NavGrid, stops: Stop[], seed = 0): Round | null {
-  const kept = stops.filter((s) => grid.nearestClear(s.x, s.z, 0.6));
+export function buildRound(grid: NavGrid, stops: Stop[], seed = 0, via: Pt[][] = []): Round | null {
+  const kept: Stop[] = [];
+  const ways: Pt[][] = [];
+  stops.forEach((s, i) => {
+    const at = grid.nearestClear(s.x, s.z, 0.6);
+    if (!at) return;
+    // stand exactly where the grid can take them
+    kept.push({ ...s, x: at.x, z: at.z });
+    ways.push(via[i] ?? []);
+  });
   if (kept.length < 2) return null;
-  // stand exactly where the grid can take them
-  const placed = kept.map((s) => ({ ...s, ...grid.nearestClear(s.x, s.z, 0.6)! }));
   const paths: Pt[][] = [];
-  for (let i = 0; i < placed.length; i++) {
-    const a = placed[i]!;
-    const b = placed[(i + 1) % placed.length]!;
-    const path = grid.path(a, b);
-    if (!path) return null;
+  for (let i = 0; i < kept.length; i++) {
+    const pts: Pt[] = [kept[i]!, ...ways[i]!, kept[(i + 1) % kept.length]!];
+    const path: Pt[] = [];
+    for (let k = 1; k < pts.length; k++) {
+      const leg = grid.path(pts[k - 1]!, pts[k]!);
+      if (!leg) return null;
+      path.push(...(path.length ? leg.slice(1) : leg));
+    }
     paths.push(path);
   }
-  return new Round(placed, paths, seed);
+  return new Round(kept, paths, seed);
 }
 
 // --- walking a path -----------------------------------------------------------------------------
