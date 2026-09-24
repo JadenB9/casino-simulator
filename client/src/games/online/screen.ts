@@ -493,3 +493,47 @@ export function labelled(label: string, control: HTMLElement, note?: HTMLElement
   g.append(head, control);
   return g;
 }
+
+// ---------------------------------------------------------------------------------------------
+// Added with Tower, Mines, Hi-Lo and Crash (additions only; nothing above changes): the multiplier
+// and percent text those four print, and the pop over their boards when a round ends in a payout.
+
+const multFormat = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/** "2.34×", "1,013.76×" from hundredths. */
+export function multText(hundredths: number): string {
+  return `${multFormat.format(hundredths / 100)}×`;
+}
+
+/** "75.00%" from a probability. */
+export function pctText(p: number, digits = 2): string {
+  return `${(p * 100).toFixed(digits)}%`;
+}
+
+/**
+ * The multiplier and what it paid, popped over the board in the site's result box. Green only
+ * when the return beats the stake; a return of the stake itself (a 1.00× crash cash-out) is plain.
+ */
+export class OutcomePop {
+  private box: HTMLElement | null = null;
+  private timer = 0;
+
+  constructor(private readonly parent: HTMLElement) {}
+
+  /** Pop the result for `ms` (0 keeps it up until hide()). */
+  show(mult: number, payout: Cents, bet: Cents, ms = 0): void {
+    this.hide();
+    const win = payout > bet;
+    const box = el('div', `os-result os-pop${win ? '' : ' lose'}`);
+    box.append(el('div', 'os-result-mult', multText(mult)), el('div', 'os-result-paid', `${win ? 'Won' : 'Paid'} ${formatMoney(payout)}`));
+    this.parent.append(box);
+    this.box = box;
+    if (ms > 0) this.timer = window.setTimeout(() => this.hide(), ms);
+  }
+
+  hide(): void {
+    clearTimeout(this.timer);
+    this.box?.remove();
+    this.box = null;
+  }
+}

@@ -195,3 +195,10 @@
 /* Two plain buttons side by side in the panel (Auto Pick, Clear) */
 .os-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .os-pair .os-action { height: 44px; font-size: 15px; font-weight: 700; }
+
+/* ---- Added with Tower, Mines, Hi-Lo and Crash (additions only) ---- */
+
+/* The end-of-round pop over a board: it never takes the board's clicks */
+.os-pop { pointer-events: none; z-index: 5; min-width: 180px; box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45); }
+.os-pop .os-result-mult { font-size: 48px; line-height: 1; font-weight: 600; font-variant-numeric: tabular-nums; }
+.os-pop .os-result-paid { font-size: 17px; font-weight: 600; }
