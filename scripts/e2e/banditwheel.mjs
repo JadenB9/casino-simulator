@@ -6,7 +6,8 @@
 // the far copy baked by the floor's own LOD code (--lod), and (--multi) two players through the
 // real table host with no Start and no Spin.
 //
-// Usage: node scripts/e2e/banditwheel.mjs [port] [outDir] [--quick] [--low] [--tips] [--lod] [--multi]
+// Usage: node scripts/e2e/banditwheel.mjs [port] [outDir] [--quick] [--low] [--tips] [--lod] [--extras] [--multi]
+// --extras: the camera from the end terminals of the arc, and the panel at phone width.
 // Players have fixed names so repeated runs don't use up the new-account limit; BW_SOLO, BW_A,
 // BW_B and BW_VIEW pick others.
 
@@ -87,6 +88,7 @@ await shot('0-floor');
 await look([-1.2, 2.3, 0.6], [0.1, 2.35, -0.9]);
 await shot('0-flapper-close');
 if (flag('--lod')) await farCopy();
+if (flag('--extras')) await extras();
 await page.evaluate(({ p, q }) => {
   window.casino.engine.camera.position.fromArray(p);
   window.casino.engine.camera.quaternion.fromArray(q);
@@ -181,6 +183,25 @@ console.log(JSON.stringify({ twentyShows, errors: errors.slice(0, 10) }, null, 1
 await browser.close();
 // Fail on a flapper off the drawn slot (the live spin, or the Twenty at slot 0), a wrong Max, or page errors.
 if (!ok || twentyShows !== 0 || !maxOk || errors.length) process.exit(1);
+
+/** The view from the ends of the arc (seats 8 and 9), and the panel on a phone. */
+async function extras() {
+  for (const seat of [8, 9]) {
+    await page.evaluate((st) => {
+      const t = window.casino.table;
+      const w = t.stage.worldPose(t.module.playPose('', st));
+      window.casino.engine.camera.position.copy(w.position);
+      window.casino.engine.camera.lookAt(w.target);
+    }, seat);
+    await page.waitForTimeout(400);
+    await shot(`0-seat${seat}`);
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(800);
+  await shot('0-phone');
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.waitForTimeout(500);
+}
 
 /** The far copy the floor swaps in past 11 m, baked by world/lod.ts from this model. */
 async function farCopy() {

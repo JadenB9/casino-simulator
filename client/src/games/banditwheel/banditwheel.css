@@ -116,8 +116,36 @@
 @media (max-height: 820px) {
   .bw-info, .bw-win-note { display: none; }
 }
+/* phones: the panel across the bottom, only what betting needs, the wheel above it */
 @media (max-width: 760px) {
-  .bw-panel { left: 16px; right: 16px; width: auto; }
-  .bw-history { max-width: calc(100vw - 32px); }
+  .bw-panel { left: 8px; right: 8px; bottom: 8px; width: auto; gap: 3px; }
+  .bw-title { font-size: 20px; }
+  .bw-seat { font-size: 13px; }
+  .bw-box { padding: 6px 9px; }
+  .bw-info, .bw-win-note, .bw-hint { display: none; }
+  .bw-row { grid-template-columns: 1fr 70px; gap: 3px; }
+  .bw-time-label { font-size: 17px; }
+  .bw-time-note { font-size: 13px; }
+  .bw-secs { padding: 3px; }
+  .bw-secs svg { width: 52px; height: 52px; }
+  .bw-secs-num { font-size: 24px; }
+  .bw-slot-row { gap: 6px; }
+  .bw-slot-mine { min-height: 15px; font-size: 13px; }
+  .bw-slot-all { min-height: 13px; font-size: 11px; }
+  .bw-chip { width: 34px; height: 34px; }
+  .bw-max { min-width: 48px; padding: 0 8px; font-size: 14px; }
+  .bw-acts .btn { height: 32px; font-size: 13px; padding: 0 4px; }
+  .bw-win-label { font-size: 15px; }
+  .bw-win-value { font-size: 19px; }
+  .bw-meters { gap: 2px; }
+  .bw-meter-value { font-size: 15px; }
+  .bw-history { left: 8px; padding: 6px 8px; }
+  .bw-history-label { display: none; }
+  .bw-history-row { grid-template-columns: 36px repeat(8, 18px); grid-auto-rows: 18px; }
+  .bw-hist { width: 18px; height: 18px; }
+  .bw-hist.latest { width: 36px; height: 36px; }
+  .bw-hist:nth-child(n + 18) { display: none; }
   .bw-players { display: none; }
+  /* the tip line sits over the panel, not under it */
+  :root:has(.bw-panel) { --tip-bottom: 372px; }
 }
