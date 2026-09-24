@@ -210,7 +210,7 @@ async function standUpIfHeld(page, id) {
   const leave = await page.waitForSelector('.modal .btn.primary', { timeout: 4000 }).catch(() => null);
   if (leave && held === 'held') await leave.click();
   else await page.keyboard.press('Escape');
-  await page.waitForFunction(() => window.casino.world.seated === null, null, { timeout: 30_000 }).catch(() => {});
+  await page.waitForFunction(() => window.casino?.world?.seated === null, null, { timeout: 30_000 }).catch(() => {});
   // the chips come home: wait for the profile to say so
   for (let i = 0; i < 20; i++) {
     const p = await page.evaluate(async () => window.casino.session.set(await (await import('/casino/src/net/api.ts')).me()) ?? window.casino.session.profile);
@@ -500,7 +500,7 @@ async function playStation(page, id) {
   await page.evaluate(() => window.casino.app.escape());
   const leave = await page.waitForSelector('.modal .btn.primary', { timeout: 5000 }).catch(() => null);
   if (leave) await leave.click();
-  await page.waitForFunction(() => window.casino.world.seated === null, null, { timeout: 30_000 });
+  await page.waitForFunction(() => window.casino?.world?.seated === null, null, { timeout: 30_000 });
   const t0 = Date.now();
   let prof = null;
   while (Date.now() - t0 < 30_000) {
@@ -525,7 +525,7 @@ async function leaveAndReconcile(page, id, balance0, inPlay0, buyIn, extra = 0) 
   await page.evaluate(() => window.casino.app.escape());
   const leave = await page.waitForSelector('.modal .btn.primary', { timeout: 5000 }).catch(() => null);
   if (leave) await leave.click();
-  await page.waitForFunction(() => window.casino.world.seated === null, null, { timeout: 30_000 });
+  await page.waitForFunction(() => window.casino?.world?.seated === null, null, { timeout: 30_000 });
   const t0 = Date.now();
   let prof = null;
   while (Date.now() - t0 < 30_000) {
@@ -730,9 +730,9 @@ for (const id of only.length ? only : Object.keys(STATIONS)) {
     check(false, `${id}: ${String(err?.message ?? err).split('\n')[0]}`);
     await shot(page, `${id}-${QUALITY}-error`).catch(() => {});
     // stand up if still seated, for the next station
-    await page.evaluate(() => window.casino.world.seated && window.casino.app.escape()).catch(() => {});
+    await page.evaluate(() => window.casino?.world?.seated && window.casino.app.escape()).catch(() => {});
     await page.click('.modal .btn.primary', { timeout: 3000 }).catch(() => {});
-    await page.waitForFunction(() => window.casino.world.seated === null, null, { timeout: 30_000 }).catch(() => {});
+    await page.waitForFunction(() => window.casino?.world?.seated === null, null, { timeout: 30_000 }).catch(() => {});
   }
   await page.waitForTimeout(1000);
 }
