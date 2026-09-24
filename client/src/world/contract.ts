@@ -26,6 +26,8 @@ export interface Character {
   dispose(): void;
   /** Act out an emote for a moment (a wave, a hop), if the character can. */
   gesture?(e: EmoteId): void;
+  /** Sit on a seat this high above the feet (metres), or stand again with null, if the character can. */
+  sit?(seatTop: number | null): void;
 }
 
 export interface CharacterFactory {
