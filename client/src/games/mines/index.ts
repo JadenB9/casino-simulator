@@ -11,7 +11,7 @@ import { TILES, MIN_MINES, MAX_MINES, gemsOf, multiplier, returnAt, bestStop } f
 import type { MinesView } from '../../../../shared/src/games/mines/engine.ts';
 import { celebrate } from '../../table/celebrate.ts';
 import { attractTexture, pcModel, pcPose, pcScreenCorners, PC_FOOTPRINT, PC_SEAT } from '../online/pc.ts';
-import { OnlineScreen, BetBox, NumberField, actionButton, InfoList, SessionTally, OutcomePop, commitTyping, winTier, siteTone, drawSiteBar, multText, pctText } from '../online/screen.ts';
+import { OnlineScreen, BetBox, NumberField, actionButton, InfoList, SessionTally, OutcomePop, commitTyping, winTier, siteTone, drawSiteBar, drawAttractPanel, multText, pctText } from '../online/screen.ts';
 import { MinesBoard } from './board.ts';
 
 /** The chair's trim on the floor: Mines' mint. */
@@ -25,36 +25,12 @@ const ret = (m: number, k: number) => {
 /** The monitor on the floor: the site's bar, a bet panel, and a board with gems turned. */
 function drawAttract(g: CanvasRenderingContext2D, w: number, h: number): void {
   const top = drawSiteBar(g, w, 'Mines');
-  g.fillStyle = '#1a2c38';
-  g.fillRect(0, top, 132, h - top);
-  g.textBaseline = 'middle';
-  const field = (label: string, text: string, y: number) => {
-    g.fillStyle = '#a7b4c6';
-    g.font = '600 11px system-ui, sans-serif';
-    g.fillText(label, 12, y);
-    g.fillStyle = '#0f1e29';
-    g.beginPath();
-    g.roundRect(10, y + 8, 112, 28, 4);
-    g.fill();
-    g.fillStyle = '#eef3f8';
-    g.font = '600 15px system-ui, sans-serif';
-    g.fillText(text, 18, y + 23);
-  };
-  field('Bet', '$5.00', top + 18);
-  field('Mines', '3', top + 70);
-  g.fillStyle = '#f5b93b';
-  g.beginPath();
-  g.roundRect(10, top + 124, 112, 36, 5);
-  g.fill();
-  g.fillStyle = '#2a1a00';
-  g.font = '800 15px system-ui, sans-serif';
-  g.textAlign = 'center';
-  g.fillText('Cash out', 66, top + 143);
+  const left = drawAttractPanel(g, top, h, [['Bet', '$5.00'], ['Mines', '3']], 'Bet');
 
   const s = 42;
   const gap = 8;
   const size = 5 * s + 4 * gap;
-  const x0 = 132 + (w - 132 - size) / 2;
+  const x0 = left + (w - left - size) / 2;
   const y0 = top + (h - top - size) / 2;
   const gems = new Set([6, 7, 12, 13, 17]);
   for (let i = 0; i < TILES; i++) {

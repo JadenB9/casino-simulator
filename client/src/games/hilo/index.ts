@@ -14,7 +14,7 @@ import { celebrate } from '../../table/celebrate.ts';
 import { wait } from '../../table/tween.ts';
 import { el } from '../../ui/kit.ts';
 import { attractTexture, pcModel, pcPose, pcScreenCorners, PC_FOOTPRINT, PC_SEAT } from '../online/pc.ts';
-import { OnlineScreen, BetBox, actionButton, InfoList, SessionTally, OutcomePop, CardTrail, commitTyping, winTier, siteTone, drawSiteBar, multText, pctText, type TrailEntry } from '../online/screen.ts';
+import { OnlineScreen, BetBox, actionButton, InfoList, SessionTally, OutcomePop, CardTrail, commitTyping, winTier, siteTone, drawSiteBar, drawAttractPanel, multText, pctText, type TrailEntry } from '../online/screen.ts';
 
 /** The chair's trim on the floor: Hi-Lo's violet. */
 const ACCENT = '#8b5cff';
@@ -49,19 +49,8 @@ function trailEntry(s: HiloStep): TrailEntry {
 /** The monitor on the floor: the site's bar, the guess buttons, and a card with the trail under it. */
 function drawAttract(g: CanvasRenderingContext2D, w: number, h: number): void {
   const top = drawSiteBar(g, w, 'Hi-Lo');
-  g.fillStyle = '#1a2c38';
-  g.fillRect(0, top, 132, h - top);
+  const left = drawAttractPanel(g, top, h, [['Bet', '$5.00']], 'Bet');
   g.textBaseline = 'middle';
-  g.fillStyle = '#a7b4c6';
-  g.font = '600 11px system-ui, sans-serif';
-  g.fillText('Bet', 12, top + 18);
-  g.fillStyle = '#0f1e29';
-  g.beginPath();
-  g.roundRect(10, top + 26, 112, 28, 4);
-  g.fill();
-  g.fillStyle = '#eef3f8';
-  g.font = '600 15px system-ui, sans-serif';
-  g.fillText('$5.00', 18, top + 41);
   const btn = (y: number, label: string, odds: string, up: boolean) => {
     g.fillStyle = '#2f4553';
     g.beginPath();
@@ -80,17 +69,17 @@ function drawAttract(g: CanvasRenderingContext2D, w: number, h: number): void {
     }
     g.fill();
     g.fillStyle = '#eef3f8';
-    g.font = '700 12px system-ui, sans-serif';
-    g.fillText(label, 38, y + 15);
+    g.font = '700 11px system-ui, sans-serif';
+    g.fillText(label, 36, y + 15);
     g.fillStyle = '#a7b4c6';
     g.font = '600 11px system-ui, sans-serif';
-    g.fillText(odds, 38, y + 31);
+    g.fillText(odds, 36, y + 31);
   };
-  btn(top + 66, 'Higher or same', '38.46% · 2.57×', true);
-  btn(top + 118, 'Lower or same', '69.23% · 1.43×', false);
+  btn(top + 122, 'Higher or same', '38.46% · 2.57×', true);
+  btn(top + 174, 'Lower or same', '69.23% · 1.43×', false);
 
   // The card: a 9 of hearts, drawn plainly.
-  const cx = 132 + (w - 132) / 2;
+  const cx = left + (w - left) / 2;
   const cw = 92;
   const ch = 128;
   const cy = top + 22;

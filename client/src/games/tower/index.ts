@@ -11,7 +11,7 @@ import { DIFFICULTIES, SPECS, LEVELS, eggs, multiplier, returnAt, bestStop, type
 import type { TowerView } from '../../../../shared/src/games/tower/engine.ts';
 import { celebrate } from '../../table/celebrate.ts';
 import { attractTexture, pcModel, pcPose, pcScreenCorners, PC_FOOTPRINT, PC_SEAT } from '../online/pc.ts';
-import { OnlineScreen, BetBox, actionButton, SegChoice, InfoList, SessionTally, OutcomePop, commitTyping, labelled, winTier, siteTone, drawSiteBar, multText, pctText } from '../online/screen.ts';
+import { OnlineScreen, BetBox, actionButton, SegChoice, InfoList, SessionTally, OutcomePop, commitTyping, labelled, winTier, siteTone, drawSiteBar, drawAttractPanel, multText, pctText } from '../online/screen.ts';
 import { TowerBoard } from './board.ts';
 
 /** The chair's trim on the floor: Tower's ember orange. */
@@ -32,31 +32,7 @@ const EXACT = DIFFICULTIES.filter((d) => range(d).lo === 0.99);
 /** The monitor on the floor: the site's bar, a bet panel, and a tower half climbed. */
 function drawAttract(g: CanvasRenderingContext2D, w: number, h: number): void {
   const top = drawSiteBar(g, w, 'Tower');
-  g.fillStyle = '#1a2c38';
-  g.fillRect(0, top, 132, h - top);
-  g.textBaseline = 'middle';
-  const field = (label: string, text: string, y: number) => {
-    g.fillStyle = '#a7b4c6';
-    g.font = '600 11px system-ui, sans-serif';
-    g.fillText(label, 12, y);
-    g.fillStyle = '#0f1e29';
-    g.beginPath();
-    g.roundRect(10, y + 8, 112, 28, 4);
-    g.fill();
-    g.fillStyle = '#eef3f8';
-    g.font = '600 15px system-ui, sans-serif';
-    g.fillText(text, 18, y + 23);
-  };
-  field('Bet', '$10.00', top + 18);
-  field('Difficulty', 'Medium', top + 70);
-  g.fillStyle = '#f5b93b';
-  g.beginPath();
-  g.roundRect(10, top + 124, 112, 36, 5);
-  g.fill();
-  g.fillStyle = '#2a1a00';
-  g.font = '800 15px system-ui, sans-serif';
-  g.textAlign = 'center';
-  g.fillText('Cash out', 66, top + 143);
+  const left = drawAttractPanel(g, top, h, [['Bet', '$10.00'], ['Difficulty', 'Medium']], 'Bet');
 
   // The tower: nine rows of three, the bottom four climbed.
   const cols = 3;
@@ -65,7 +41,7 @@ function drawAttract(g: CanvasRenderingContext2D, w: number, h: number): void {
   const th = 21;
   const gap = 5;
   const width = cols * tw + (cols - 1) * gap;
-  const x0 = 132 + (w - 132 - width) / 2 + 22;
+  const x0 = left + (w - left - width) / 2 + 22;
   const y0 = h - 16;
   g.fillStyle = '#13242f';
   g.beginPath();

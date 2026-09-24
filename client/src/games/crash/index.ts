@@ -17,7 +17,7 @@ import { el } from '../../ui/kit.ts';
 import { attractTexture, pcModel, pcPose, pcScreenCorners, PC_FOOTPRINT, PC_SEAT } from '../online/pc.ts';
 import {
   OnlineScreen, BetBox, NumberField, SegChoice, actionButton, InfoList, SessionTally, ResultStrip, PlayersTable, OutcomePop,
-  commitTyping, labelled, winTier, siteTone, drawSiteBar, multText, pctText,
+  commitTyping, labelled, winTier, siteTone, drawSiteBar, drawAttractPanel, multText, pctText,
 } from '../online/screen.ts';
 import { CrashGraph } from './graph.ts';
 
@@ -27,36 +27,11 @@ const ACCENT = '#39a0ff';
 /** The monitor on the floor: the site's bar, a curve with its rocket, and the multiplier. */
 function drawAttract(g: CanvasRenderingContext2D, w: number, h: number): void {
   const top = drawSiteBar(g, w, 'Crash');
-  g.fillStyle = '#1a2c38';
-  g.fillRect(0, top, 132, h - top);
-  g.textBaseline = 'middle';
-  g.fillStyle = '#a7b4c6';
-  g.font = '600 11px system-ui, sans-serif';
-  g.fillText('Bet', 12, top + 18);
-  g.fillText('Auto cash-out', 12, top + 70);
-  for (const [y, text] of [
-    [top + 26, '$10.00'],
-    [top + 78, '2.00×'],
-  ] as const) {
-    g.fillStyle = '#0f1e29';
-    g.beginPath();
-    g.roundRect(10, y, 112, 28, 4);
-    g.fill();
-    g.fillStyle = '#eef3f8';
-    g.font = '600 15px system-ui, sans-serif';
-    g.fillText(text, 18, y + 15);
-  }
-  g.fillStyle = '#f5b93b';
-  g.beginPath();
-  g.roundRect(10, top + 124, 112, 36, 5);
-  g.fill();
-  g.fillStyle = '#2a1a00';
-  g.font = '800 15px system-ui, sans-serif';
-  g.textAlign = 'center';
-  g.fillText('Cash out', 66, top + 143);
+  const left = drawAttractPanel(g, top, h, [['Bet', '$10.00'], ['Cash out at', '2.00×']], 'Bet');
 
   // The graph: axes, the curve with its glow, the rocket, the multiplier.
-  const x0 = 162;
+  g.textAlign = 'center';
+  const x0 = left + 30;
   const y0 = h - 26;
   const x1 = w - 24;
   const y1 = top + 26;
