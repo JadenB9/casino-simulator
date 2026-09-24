@@ -88,7 +88,7 @@ export class Characters implements CharacterFactory {
 
   /** Resolves when the model for `look` is ready to show (create() never waits). */
   async load(look: Look): Promise<void> {
-    await this.template(look.body, look.outfit);
+    await this.template(look.body, dressed(look).outfit);
   }
 
   create(look: Look, name: string): Character {
