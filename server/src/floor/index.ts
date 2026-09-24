@@ -131,6 +131,8 @@ export class CasinoFloor extends DurableObject<Env> {
       return;
     }
     if (msg.t === 'watch') this.directory.watch(ws, msg.game);
+    else if (msg.t === 'sit') this.presence.sit(ws, msg);
+    else if (msg.t === 'stand') this.presence.stand(ws);
     else this.presence.onMessage(ws, msg);
   }
 

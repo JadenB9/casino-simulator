@@ -9,10 +9,16 @@
 // holds that player's identity and last resting pose (the roster is rebuilt from them on wake),
 // and the station each account sits at is a row in SQLite, because tables report it by account
 // whether or not that account has a floor socket open at that moment.
+//
+// Floor seats (chairs, stools, sofa places: shared/src/seats.ts) are arbitrated here: first come,
+// one per player. A seat is held only while its sitter's socket is open, so it lives in that
+// socket's attachment, and the book of who sits where is rebuilt from them on wake. Standing up,
+// walking off (a position more than SEAT_KEEP_CM from the seat) and leaving the floor free it.
 
 import type { FloorClientMsg, FloorServerMsg, PlayerInfo } from '../../../shared/src/protocol.ts';
 import { FLOOR_BOUNDS, PROTOCOL_VERSION } from '../../../shared/src/protocol.ts';
 import type { Look } from '../../../shared/src/look.ts';
+import { SEAT_KEEP_CM, SEAT_REACH_CM, SeatBook } from '../../../shared/src/seats.ts';
 
 export const FLUSH_MS = 66;
 /** Fastest anyone may move, in cm/s: well above a character's walk, so honest jitter never trips it. */
@@ -39,6 +45,8 @@ export interface FloorAtt {
   t: number;
   /** No position has arrived on this connection yet; the first one places the player. */
   fresh?: boolean;
+  /** The floor seat this player sits on, and where it is (cm). */
+  seat?: { id: string; x: number; z: number } | null;
 }
 
 type Broadcast = (msg: FloorServerMsg, except?: WebSocket) => void;
@@ -58,6 +66,8 @@ export class Presence {
   private readonly closed = new WeakSet<WebSocket>();
   /** Accounts whose socket closed during this turn; a newer tab can still claim them. */
   private readonly leaving = new Map<number, FloorAtt>();
+  /** Who sits on which floor seat (the attachments hold the truth; this is their index). */
+  private readonly seats = new SeatBook();
   private lastFlush = 0;
   private lastTs = 0;
 
@@ -70,7 +80,10 @@ export class Presence {
     // After hibernation memory starts empty, but the sockets and their attachments are still there.
     for (const ws of ctx.getWebSockets()) {
       const att = ws.deserializeAttachment() as FloorAtt | null;
-      if (att && ws.readyState === WebSocket.OPEN) this.live.set(ws, { att, moving: false, bank: MAX_BANK });
+      if (!att || ws.readyState !== WebSocket.OPEN) continue;
+      this.live.set(ws, { att, moving: false, bank: MAX_BANK });
+      // (two sockets can't hold one seat; if they somehow did, the first keeps it)
+      if (att.seat && !this.seats.take(att.seat.id, att.accountId).ok) att.seat = null;
     }
   }
 
@@ -103,13 +116,15 @@ export class Presence {
     }
   }
 
-  onMessage(ws: WebSocket, msg: Exclude<FloorClientMsg, { t: 'watch' } | { t: 'emote' }>): void {
+  onMessage(ws: WebSocket, msg: Extract<FloorClientMsg, { t: 'mv' | 'st' }>): void {
     const w = this.live.get(ws);
     if (!w) return;
     const a = w.att;
     const now = Date.now();
     let x = clamp(msg.x, FLOOR_BOUNDS.minX, FLOOR_BOUNDS.maxX);
     let z = clamp(msg.z, FLOOR_BOUNDS.minZ, FLOOR_BOUNDS.maxZ);
+    // Walking off a seat gets you up from it, even if the stand itself went missing.
+    if (a.seat && Math.hypot(x - a.seat.x, z - a.seat.z) > SEAT_KEEP_CM) this.unseat(ws, a);
     const placing = a.fresh === true;
     if (placing) {
       // The first position on a connection places the player. After a dropped connection the
@@ -147,6 +162,12 @@ export class Presence {
     this.live.delete(ws);
     this.dirty.delete(ws);
     if (!att) return;
+    // A seat is held only while its sitter is here (a newer tab starts standing, too).
+    if (att.seat) {
+      this.seats.free(att.accountId);
+      att.seat = null;
+      this.broadcast({ t: 'player', id: att.accountId, seat: null }, ws);
+    }
     // The leave is settled after this turn. When a newer tab takes over, index.ts closes the old
     // socket and accepts the new one synchronously, so onConnect gets to claim the departure
     // first: a tab switch is then invisible to everyone else instead of a leave and a rejoin.
@@ -165,6 +186,47 @@ export class Presence {
 
   setLook(accountId: number, look: Look): void {
     if (this.update(accountId, (a) => (a.look = look))) this.broadcast({ t: 'player', id: accountId, look });
+  }
+
+  /**
+   * Sit down on a floor seat: `x`, `z` and `r` are where it is and the way it faces. First come:
+   * while someone else sits there the answer is a friendly no, and so it is for a seat out of
+   * reach of where the floor last saw you. Sitting moves you onto the seat through the same
+   * checks as any stop, and everyone hears who sits where.
+   */
+  sit(ws: WebSocket, msg: { seat: string; x: number; z: number; r: number }): void {
+    const w = this.live.get(ws);
+    if (!w) return;
+    const a = w.att;
+    const x = clamp(msg.x, FLOOR_BOUNDS.minX, FLOOR_BOUNDS.maxX);
+    const z = clamp(msg.z, FLOOR_BOUNDS.minZ, FLOOR_BOUNDS.maxZ);
+    if (Math.hypot(x - a.x, z - a.z) > SEAT_REACH_CM) {
+      this.send(ws, { t: 'seat.no', seat: msg.seat, msg: 'Walk up to it first.' });
+      return;
+    }
+    const took = this.seats.take(msg.seat, a.accountId);
+    if (!took.ok) {
+      const name = this.walkerOf(took.holder)?.att.name;
+      this.send(ws, { t: 'seat.no', seat: msg.seat, msg: name ? `${name} got there first.` : 'Someone got there first.' });
+      return;
+    }
+    a.seat = { id: msg.seat, x, z };
+    this.save(ws, a);
+    this.broadcast({ t: 'player', id: a.accountId, seat: msg.seat });
+    this.onMessage(ws, { t: 'st', x, z, r: msg.r });
+  }
+
+  /** Get up from a floor seat (nothing happens if you aren't sitting). */
+  stand(ws: WebSocket): void {
+    const w = this.live.get(ws);
+    if (w?.att.seat) this.unseat(ws, w.att);
+  }
+
+  private unseat(ws: WebSocket, a: FloorAtt): void {
+    this.seats.free(a.accountId);
+    a.seat = null;
+    this.save(ws, a);
+    this.broadcast({ t: 'player', id: a.accountId, seat: null });
   }
 
   /** Accounts with an open floor connection. */
@@ -246,7 +308,7 @@ export class Presence {
 }
 
 function info(a: FloorAtt): PlayerInfo {
-  return { id: a.accountId, name: a.name, look: a.look, x: a.x, z: a.z, r: a.r, at: a.at };
+  return { id: a.accountId, name: a.name, look: a.look, x: a.x, z: a.z, r: a.r, at: a.at, seat: a.seat?.id ?? null };
 }
 
 function clamp(v: number, lo: number, hi: number): number {
