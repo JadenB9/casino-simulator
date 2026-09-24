@@ -94,3 +94,9 @@
   .bar-cols { grid-template-columns: 1fr; }
   .bar-section + .bar-section { margin-top: 18px; }
 }
+
+/* A phone: the HUD's rows would sit on the showroom's figure and its caption (the boutique shows
+   your balance itself), so it steps aside while the boutique is open. */
+@media (max-width: 560px), (max-height: 480px) {
+  body:has(.boutique) .hud { display: none; }
+}
