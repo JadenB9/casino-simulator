@@ -95,7 +95,7 @@ export function buildPools(pools: { x: number; z: number; r: number }[], downlig
   m.define1('pool-warm', () => {
     const tex = canvasTexture(poolCanvas(128), 1);
     tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
-    return new THREE.MeshBasicMaterial({ map: tex, color: new THREE.Color('#ff9f4a').multiplyScalar(0.19), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+    return new THREE.MeshBasicMaterial({ map: tex, color: new THREE.Color('#ff9f4a').multiplyScalar(0.15), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
   });
   const mat = m.get('pool-warm');
   const flat = (x: number, z: number, r: number, y: number) => {

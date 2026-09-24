@@ -95,15 +95,15 @@ export interface FloorWorld extends World {
   useRemotes(source: CharacterSource | null): void;
 }
 
-/** Floor materials that mirror the casino on High: reflection strength, and a polish (roughness) for some. */
+/**
+ * Glossy floor materials that mirror the casino on High: reflection strength, and a polish
+ * (roughness) for some. The metals keep the bright studio light (brass reads as brass by it).
+ */
 const REFLECTIVE: [string, number, number?][] = [
-  ['marble-floor', 1.0, 0.13],
+  ['marble-floor', 0.9, 0.15],
   ['marble-black', 0.8],
-  ['brass', 0.85],
-  ['chrome', 0.9],
-  ['cage', 0.8],
   ['mirror', 1.0],
-  ['lacquer', 0.7],
+  ['lacquer', 0.8],
   ['lacquer-red', 0.6],
   ['wood', 0.45],
   ['wainscot', 0.35],
@@ -150,14 +150,16 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
   const lighting = new Lighting(plan, quality);
   root.add(lighting.group);
 
-  // The floor's own reflections (High): the casino captured from the vestibule and prefiltered,
-  // for the polished marble and the metals, so they mirror warm lights and signs, not a studio.
+  // The floor's own reflections (High): the casino captured from inside the doors and
+  // prefiltered, for the polished marble, lacquer and wood, so they mirror its warm lights and
+  // signs instead of a studio.
   let reflections: THREE.WebGLRenderTarget | null = null;
   const reflect = () => {
     if (reflections || quality !== 'high') return;
     const pmrem = new THREE.PMREMGenerator(renderer);
     props.glinting = false;
-    reflections = pmrem.fromScene(scene, 0, 0.1, 60, { size: 256, position: new THREE.Vector3(0, 1.4, plan.entrance.z0 + 1.2) });
+    // from the main aisle just inside the vestibule: the pit, its lights and the signs ahead, the doors behind
+    reflections = pmrem.fromScene(scene, 0, 0.1, 60, { size: 256, position: new THREE.Vector3(0, 1.6, plan.entrance.z0 - 1.5) });
     props.glinting = true;
     pmrem.dispose();
     for (const [name, k, rough] of REFLECTIVE) {
