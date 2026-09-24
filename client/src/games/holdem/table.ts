@@ -179,8 +179,11 @@ function paintFelt(g: CanvasRenderingContext2D, px: (m: number) => number, rules
   g.fillText(rules ?? 'NO LIMIT', 0, px(-0.162));
 }
 
-/** Oval felt geometry with UVs laid over the full painted rectangle, so painted coordinates line up. */
-function feltGeometry(r = RR): THREE.ShapeGeometry {
+/**
+ * Oval felt geometry (in its own xy plane, like the painter's) with UVs laid over the full painted
+ * rectangle, so painted coordinates line up whatever the radius.
+ */
+export function feltGeometry(r = RR): THREE.ShapeGeometry {
   const geo = new THREE.ShapeGeometry(ovalShape(r), 64);
   const pos = geo.attributes.position!;
   const uv = new Float32Array(pos.count * 2);

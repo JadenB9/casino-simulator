@@ -14,7 +14,7 @@ import { CHIPS } from '../../../../shared/src/money.ts';
 import { CHIP_R, CHIP_H } from '../../table/chips.ts';
 import { CARD_W, CARD_H } from '../../table/cards.ts';
 import type { Quality } from '../../render/engine3d.ts';
-import { oval, SL, RR, TOP_Y, TRIM, RAIL_IN, RAIL_W, RAIL_OUT, DEALER_GAP, CHAIR_R, chairSpots, nearestOnOval, floorFelt } from './table.ts';
+import { oval, SL, RR, TOP_Y, TRIM, RAIL_IN, RAIL_W, RAIL_OUT, DEALER_GAP, CHAIR_R, chairSpots, nearestOnOval, feltGeometry, floorFelt } from './table.ts';
 import { pokerMaterials, type PokerMaterials, type RailSeams } from './art.ts';
 
 /** The rail's cross-section: a padded pillow, flatter on top (so the cup holders sit in it). */
@@ -192,7 +192,8 @@ export function tableModel(quality: Quality): THREE.Group {
 
   // The felt: green speed cloth with the house's printing, a hair under where the view lays its
   // own felt, so from the floor it's the table's top (and seated the view's covers it).
-  const felt = new THREE.Mesh(feltGeometry(), floorFelt(high));
+  const feltGeo = feltGeometry(RR + 0.004).rotateX(-Math.PI / 2).translate(0, TOP_Y - 0.0002, 0);
+  const felt = new THREE.Mesh(feltGeo, floorFelt(high));
   felt.name = 'holdem-felt';
   g.add(felt);
 
@@ -223,25 +224,6 @@ function plain(geo: THREE.BufferGeometry, flat = false): THREE.BufferGeometry {
   const g = flat && geo.index ? geo.toNonIndexed() : geo;
   for (const name of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(name)) g.deleteAttribute(name);
   return g;
-}
-
-function feltGeometry(): THREE.BufferGeometry {
-  const r = RR + 0.004;
-  const pts = path(r, 0, 1, 0.02).slice(0, -1).map((p) => new THREE.Vector2(p.x, -p.z));
-  const geo = new THREE.ShapeGeometry(new THREE.Shape(pts), 1);
-  // UVs over the painted rectangle (the felt's full width and depth), as the view's felt does
-  const W = 2 * (SL + RR);
-  const D = 2 * RR;
-  const pos = geo.attributes.position!;
-  const uv = new Float32Array(pos.count * 2);
-  for (let i = 0; i < pos.count; i++) {
-    uv[2 * i] = (pos.getX(i) + W / 2) / W;
-    uv[2 * i + 1] = (pos.getY(i) + D / 2) / D;
-  }
-  geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
-  geo.rotateX(-Math.PI / 2);
-  geo.translate(0, TOP_Y - 0.0002, 0);
-  return geo;
 }
 
 /** The padded rail from one side of the dealer's gap round to the other. */
