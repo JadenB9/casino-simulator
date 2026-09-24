@@ -14,6 +14,7 @@ import { session } from './session.ts';
 import { tips } from './tips.ts';
 import type { GameEvent } from '../../../shared/src/engine.ts';
 import type { ChatServerMsg } from '../../../shared/src/protocol.ts';
+import { limitsLabel, limitsOf, limitsParam, sameLimits, type TableLimits } from '../../../shared/src/limits.ts';
 
 export interface TableTarget {
   kind: 'solo' | 'lobby';
@@ -23,6 +24,8 @@ export interface TableTarget {
   /** A private lobby's PIN; the table asks for it from anyone who isn't a member yet. */
   pin?: string;
   station?: string;
+  /** A solo table's limits for this sitting (a lobby's were set when it was made). */
+  limits?: TableLimits;
 }
 
 /** What the app around the table wants to hear besides the view (the HUD, the camera). */
@@ -59,6 +62,7 @@ export class TableSession {
     const path = target.kind === 'solo' ? `solo/${target.game}` : `table/${target.tableId}`;
     const params: Record<string, string> = {};
     if (target.kind === 'solo' && target.variant) params.variant = target.variant;
+    if (target.kind === 'solo' && target.limits) params.limits = limitsParam(target.limits);
     if (target.station) params.station = target.station;
     this.pin = target.pin ?? null;
     this.socket = new Socket({
@@ -152,6 +156,7 @@ export class TableSession {
         // A fresh snapshot supersedes whatever was still queued from before it (a reconnect).
         this.gen++;
         if (m.meta.pin) this.pin = m.meta.pin;
+        if (!this.snapshot) this.checkLimits(m);
         this.snapshot = m;
         const view = this.mountIfNeeded();
         view.onTable(m);
@@ -206,6 +211,19 @@ export class TableSession {
   private gen = 0;
   /** Left or closed: nothing more is reported to the app. */
   private ended = false;
+
+  /**
+   * A solo table that still had your chips on it keeps the limits they were bought in at (the
+   * server won't change them under chips); say so, rather than let other limits look ignored.
+   */
+  private checkLimits(snap: TableSnapshot): void {
+    const asked = this.target.kind === 'solo' ? this.target.limits : undefined;
+    if (!asked) return;
+    const got = limitsOf(snap.meta.config);
+    if (sameLimits(asked, got)) return;
+    const game = this.target.game;
+    this.kit.toast(`Your chips are still on this table, so it keeps its ${limitsLabel(game, got)} limits until you cash out.`, 'info', 7000);
+  }
 
   async promptBuyIn(): Promise<void> {
     const snap = this.snapshot;

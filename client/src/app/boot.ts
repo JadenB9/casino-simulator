@@ -319,7 +319,6 @@ class App {
       game: station.game,
       variant: station.variant,
       floor: this.link,
-      limits: ENGINES[station.game].config(station.variant, 'solo').limits.default,
       root: this.ui,
     });
     if (!choice) {

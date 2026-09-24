@@ -14,6 +14,7 @@ import { CATALOG, isGameId, variantOf } from '../../../../shared/src/games/catal
 import type { FloorServerMsg, TableClientMsg } from '../../../../shared/src/protocol.ts';
 import type { TableSnapshot } from '../../games/contract.ts';
 import { formatMoney } from '../../../../shared/src/money.ts';
+import { limitsLabel } from '../../../../shared/src/limits.ts';
 import { askBuyIn, el, toast } from '../kit.ts';
 import { PartyPanel, openTableFlow, type LobbyFloor } from './index.ts';
 
@@ -57,10 +58,11 @@ async function main(): Promise<void> {
 
 /** The "Press E" moment, then the flow. */
 async function approach(floor: LobbyFloor): Promise<void> {
-  const choice = await openTableFlow({ game, variant, floor, limits: { min: 100, max: 100_000 } });
+  const choice = await openTableFlow({ game, variant, floor });
   if (!choice) return pressE(floor);
   if (choice.kind === 'solo') {
-    toast('The solo table opens here in the game.');
+    const at = choice.limits ? ` at ${limitsLabel(game, choice.limits)}` : '';
+    toast(`The solo table opens here in the game${at}.`);
     return pressE(floor);
   }
   sit(choice.tableId!, floor);
