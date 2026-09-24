@@ -324,11 +324,12 @@ async function playStation(page, id) {
         await page.keyboard.press('x');
         await page.waitForTimeout(700);
       }
+      const before = await stackOf(page);
       await page.keyboard.press('1');
       const at = await screenOf(page, spec.max(seat));
       if (at) await page.mouse.click(at.x, at.y);
       await page.waitForTimeout(1200);
-      placed = s0 - (await stackOf(page));
+      placed = before - (await stackOf(page));
       check(placed > 0, `${id} round ${r}: a chip went down (${placed / 100})`);
     }
     // --- the round: Space, then the decisions (the highlighted control while Tips are on)
