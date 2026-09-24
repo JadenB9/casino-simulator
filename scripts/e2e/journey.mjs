@@ -39,23 +39,25 @@ function sql(command) {
   return execFileSync('npx', ['wrangler', 'd1', 'execute', 'DB', '--local', '--json', '--command', command, '-c', 'server/wrangler.toml'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
 }
 
-/** How each table is played: Max's spot, a small follow-up bet, the round's decisions, its end. */
+/** How each table is played: Max's spot (and the later rounds' chip), the round's decisions, its end. */
 const GAMES = {
-  blackjack: { max: (seat) => ({ felt: `spot:${seat}` }), small: (min) => ({ type: 'bet', amount: min }), keys: { turn: 's', insurance: 'n' }, end: ['done'] },
+  blackjack: { max: (seat) => ({ felt: `spot:${seat}` }), keys: { turn: 's', insurance: 'n' }, end: ['done'] },
   // (baccarat's seats are numbered from the middle out: the first player sits at 4)
-  baccarat: { max: (seat) => ({ felt: `s${[4, 3, 5, 2, 6, 1, 7][seat]}:banker` }), small: (min) => ({ type: 'bet', banker: min }), keys: {}, end: ['result', 'outcome'] },
-  threecard: { max: (seat) => ({ felt: `ante:${seat}` }), small: (min) => ({ type: 'bet', ante: min, pairPlus: 0 }), keys: { decide: 'p' }, end: ['result'] },
-  war: { max: (seat) => ({ felt: `bet:${seat}` }), small: (min) => ({ type: 'bet', bet: min, tie: 0 }), keys: { decide: 'w' }, end: ['result'] },
-  roulette: { max: () => ({ screen: 'red' }), small: (min) => ({ type: 'bet', bets: [{ kind: 'red', amount: min }] }), keys: {}, end: ['settle'] },
-  craps: { max: () => ({ felt: 'R|field', alt: 'L|field' }), small: (min) => ({ type: 'bet', bets: [{ kind: 'field', amount: min }] }), keys: {}, end: ['roll'] },
-  sicbo: { max: () => ({ screen: 'small' }), small: (min) => ({ type: 'bet', bets: [{ spot: 'small', amount: min }] }), keys: {}, end: ['settle'] },
-  bigsix: { max: () => ({ screen: 'one' }), small: (min) => ({ type: 'bet', bets: [{ spot: 'one', amount: min }] }), keys: {}, end: ['settle'] },
+  baccarat: { max: (seat) => ({ felt: `s${[4, 3, 5, 2, 6, 1, 7][seat]}:banker` }), keys: {}, end: ['result', 'outcome'] },
+  threecard: { max: (seat) => ({ felt: `ante:${seat}` }), keys: { decide: 'p' }, end: ['result'] },
+  war: { max: (seat) => ({ felt: `bet:${seat}` }), keys: { decide: 'w' }, end: ['result'] },
+  roulette: { max: () => ({ screen: 'red' }), keys: {}, end: ['settle'] },
+  craps: { max: () => ({ felt: 'R|field', alt: 'L|field' }), keys: {}, end: ['roll'] },
+  sicbo: { max: () => ({ screen: 'small' }), keys: {}, end: ['settle'] },
+  bigsix: { max: () => ({ screen: 'one' }), keys: {}, end: ['settle'] },
 };
 
 const STATIONS = {
   'bj-1': 'blackjack', 'bj-2': 'blackjack', 'bc-1': 'baccarat', 'tc-1': 'threecard', 'wr-1': 'war',
   'rl-us': 'roulette', 'rl-eu': 'roulette', 'cr-1': 'craps', 'sb-1': 'sicbo', 'b6-1': 'bigsix',
   'vip-bj-1': 'blackjack', 'vip-bc-1': 'baccarat', 'vip-rl-1': 'roulette',
+  'he-1': 'holdem', 'vp-1': 'videopoker',
+  'slots-sevens-1': 'slots', 'slots-neon-1': 'slots', 'slots-wild-1': 'slots', 'slots-diamonds-1': 'slots', 'slots-cherries-1': 'slots', 'slots-goldrush-1': 'slots',
 };
 
 async function login() {
@@ -167,6 +169,10 @@ async function playStation(page, id) {
   const tag = `${id}-${QUALITY}`;
   const profile0 = await page.evaluate(() => window.casino.app && window.casino.session?.profile);
   const balance0 = profile0?.balance ?? 0;
+  // (chips still parked at other tables from an earlier run stay in play)
+  const inPlay0 = profile0?.inPlay ?? 0;
+  // a bet that went down in a round that never dealt comes back when you leave
+  let undealt = 0;
   await page.evaluate((id) => {
     const w = window.casino.world;
     w.enter(w.stations.find((s) => s.id === id));
@@ -244,9 +250,14 @@ async function playStation(page, id) {
       check(placed > 0 && placed === room, `${id}: Max put down ${placed / 100} (the most that spot takes or all the chips: ${room / 100})`);
       await shot(page, `${tag}-3-max`);
     } else {
-      await page.evaluate((a) => window.casino.app.table.session.link.act(a), spec.small(Math.max(cfg.limits.default.min, cfg.limits.outside?.min ?? 0, cfg.limits.line?.min ?? 0, cfg.limits.even?.min ?? 0, cfg.limits.spot?.min ?? 0, cfg.limits.ante?.min ?? 0, cfg.limits.bet?.min ?? 0)));
-      await page.waitForTimeout(900);
+      // as a player would: the smallest chip on show, on the same spot (a chip under the spot's
+      // minimum puts the minimum down)
+      await page.keyboard.press('1');
+      const at = await screenOf(page, spec.max(seat));
+      if (at) await page.mouse.click(at.x, at.y);
+      await page.waitForTimeout(1200);
       placed = s0 - (await stackOf(page));
+      check(placed > 0, `${id} round ${r}: a chip went down (${placed / 100})`);
     }
     // --- the round: Space, then the decisions (the highlighted control while Tips are on)
     const tipsNow = r < ROUNDS - 1;
@@ -305,6 +316,7 @@ async function playStation(page, id) {
       };
     });
     const s1 = await stackOf(page);
+    if (!res.types.split(',').some((t) => spec.end.includes(t))) undealt += placed;
     // what came back to the stack for what was staked this round (a decision can add to the stake)
     const net = s1 - s0;
     check(res.cam.d < 0.02 && res.cam.a < 0.02, `${id} round ${r}: the camera is back at the seat (${res.cam.d} m, ${res.cam.a} rad)`);
@@ -316,9 +328,72 @@ async function playStation(page, id) {
     await shot(page, `${tag}-5-after${r}`);
   }
 
+  // --- several hands at once (blackjack's five spots, Three Card's and War's three)
+  if (['blackjack', 'threecard', 'war'].includes(game)) {
+    const most = await page.$$eval('.mh-picker .mh-n', (bs) => bs.length);
+    if (check(most > 1, `${id}: the Hands picker offers ${most}`)) {
+      await page.click(`.mh-picker .mh-n >> nth=${most - 1}`);
+      await page.waitForFunction((n) => (window.casino.app.table.session.__view?.mine?.length ?? 0) === n, most, { timeout: 15_000 }).catch(() => {});
+      await page.waitForTimeout(1200);
+      const s0 = await stackOf(page);
+      const mine = await page.evaluate(() => window.casino.app.table.session.__view?.mine ?? []);
+      await page.evaluate(() => {
+        const s = window.casino.app.table.session;
+        s.__events = [];
+        s.__errs = [];
+      });
+      await page.keyboard.press('1');
+      for (const m of mine) {
+        const at = await screenOf(page, spec.max(m));
+        if (at) await page.mouse.click(at.x, at.y);
+        await page.waitForTimeout(500);
+      }
+      const staked = s0 - (await stackOf(page));
+      check(staked > 0, `${id}: ${mine.length} hands bet (${staked / 100} down)`);
+      await page.keyboard.press('Space');
+      const t0 = Date.now();
+      let px = null;
+      while (Date.now() - t0 < 120_000) {
+        const st = await page.evaluate((end) => {
+          const s = window.casino.app.table.session;
+          const { engine } = window.casino;
+          // how wide the smallest face-up card is on screen, in pixels
+          let min = Infinity;
+          s.stage.root.traverse((o) => {
+            if (!('card' in o) || !o.card || !o.visible || Math.abs(o.rotation.x) > 1.2) return;
+            const g = o.geometry;
+            if (!g.boundingBox) g.computeBoundingBox();
+            const b = g.boundingBox;
+            const a = o.localToWorld(engine.camera.position.clone().set(b.min.x, b.max.y, 0)).project(engine.camera);
+            const c = o.localToWorld(engine.camera.position.clone().set(b.max.x, b.max.y, 0)).project(engine.camera);
+            min = Math.min(min, (Math.hypot(a.x - c.x, (a.y - c.y) * innerHeight / innerWidth) / 2) * innerWidth);
+          });
+          return { ended: s.__events.some((e) => end.includes(e.type)), min: Number.isFinite(min) ? Math.round(min) : null, pick: !!document.querySelector('.tip-pick') };
+        }, spec.end);
+        if (st.min !== null) px = px === null ? st.min : Math.min(px, st.min);
+        if (st.ended) break;
+        for (const k of Object.values(spec.keys)) await page.keyboard.press(k);
+        await page.waitForTimeout(700);
+      }
+      await settle(page, 1500);
+      await shot(page, `${tag}-6-hands${mine.length}`);
+      const res = await page.evaluate(() => {
+        const s = window.casino.app.table.session;
+        const { engine } = window.casino;
+        const rest = s.stage.restPose(engine.camera);
+        return { d: +engine.camera.position.distanceTo(rest.pos).toFixed(3), errs: s.__errs, types: [...new Set(s.__events.map((e) => e.type))].join(',') };
+      });
+      const net = (await stackOf(page)) - s0;
+      if (!res.types.split(',').some((t) => spec.end.includes(t))) undealt += staked;
+      log(`${id}: ${mine.length} hands, net ${net / 100}, smallest card ${px} px wide, events ${res.types}`);
+      check(res.d < 0.02, `${id}: with ${mine.length} hands the camera is back at the seat (${res.d} m)`);
+      check(res.errs.length === 0, `${id}: with ${mine.length} hands nothing refused (${res.errs.join(' | ')})`);
+      check(px === null || px >= 34, `${id}: with ${mine.length} hands the cards stay readable (${px} px wide at 1280x800)`);
+    }
+  }
+
   // --- leave: Esc, Leave; the balance comes home
   const stackEnd = await stackOf(page);
-  const escrowEnd = (await page.evaluate(() => window.casino.app.table.session.__escrow)) ?? stackEnd;
   await page.evaluate(() => window.casino.app.escape());
   const leave = await page.waitForSelector('.modal .btn.primary', { timeout: 5000 }).catch(() => null);
   if (leave) await leave.click();
@@ -327,13 +402,162 @@ async function playStation(page, id) {
   let prof = null;
   while (Date.now() - t0 < 30_000) {
     prof = await page.evaluate(async () => (await import('/casino/src/net/api.ts')).me());
-    if (prof?.inPlay === 0) break;
+    if (prof?.inPlay === inPlay0) break;
     await page.waitForTimeout(1000);
   }
-  const want = balance0 - buyIn + escrowEnd;
-  check(prof?.balance === want && prof?.inPlay === 0, `${id}: cashed out, balance ${prof?.balance / 100} = ${balance0 / 100} - ${buyIn / 100} + ${escrowEnd / 100} (the stack ${stackEnd / 100} and any bets down; in play ${prof?.inPlay})`);
+  const want = balance0 - buyIn + stackEnd + undealt;
+  check(prof?.balance === want && prof?.inPlay === inPlay0, `${id}: cashed out, balance ${prof?.balance / 100} = ${balance0 / 100} - ${buyIn / 100} + the stack ${stackEnd / 100}${undealt ? ` + ${undealt / 100} undealt` : ''} (in play ${prof?.inPlay / 100}, was ${inPlay0 / 100})`);
   const hud = await page.evaluate(() => window.casino.session.profile?.balance);
   check(hud === prof?.balance, `${id}: the HUD shows the balance the server has (${hud / 100})`);
+}
+
+/** Leave the table (Esc, Leave) and check the balance comes home. */
+async function leaveAndReconcile(page, id, balance0, inPlay0, buyIn, extra = 0) {
+  const stackEnd = await stackOf(page);
+  await page.evaluate(() => window.casino.app.escape());
+  const leave = await page.waitForSelector('.modal .btn.primary', { timeout: 5000 }).catch(() => null);
+  if (leave) await leave.click();
+  await page.waitForFunction(() => window.casino.world.seated === null, null, { timeout: 30_000 });
+  const t0 = Date.now();
+  let prof = null;
+  while (Date.now() - t0 < 30_000) {
+    prof = await page.evaluate(async () => (await import('/casino/src/net/api.ts')).me());
+    if (prof?.inPlay === inPlay0) break;
+    await page.waitForTimeout(1000);
+  }
+  const want = balance0 - buyIn + stackEnd + extra;
+  check(prof?.balance === want && prof?.inPlay === inPlay0, `${id}: cashed out, balance ${prof?.balance / 100} = ${balance0 / 100} - ${buyIn / 100} + the stack ${stackEnd / 100} (in play ${prof?.inPlay / 100}, was ${inPlay0 / 100})`);
+}
+
+/** Sit down alone: the limits (when the game has them), then the biggest quick buy-in. */
+async function sitAlone(page, id, tier) {
+  await page.evaluate((id) => {
+    const w = window.casino.world;
+    w.enter(w.stations.find((s) => s.id === id));
+  }, id);
+  await page.waitForSelector('.lim-opt, .modal input[type=number]', { timeout: 30_000 });
+  if (await page.$('.lim-opt')) {
+    if (tier !== null) await page.click(`.lim-opt >> nth=${tier}`);
+    await shot(page, `${id}-${QUALITY}-0-limits`);
+    await page.keyboard.press('s');
+    await page.waitForSelector('.modal input[type=number]', { timeout: 60_000 });
+  }
+  await page.click('.modal .row:first-of-type .btn >> nth=-1');
+  const buyIn = Math.round(Number(await page.inputValue('.modal input[type=number]')) * 100);
+  await page.click('.modal .btn.primary');
+  await page.waitForFunction(() => window.casino.app.table?.seated === true, null, { timeout: 60_000 });
+  await trackSession(page);
+  const stack0 = await stackOf(page);
+  check(stack0 === buyIn, `${id}: bought in for ${buyIn / 100}, stack ${stack0 / 100}`);
+  return buyIn;
+}
+
+/** Hold'em against the bots: hands played by the Tips (then C), and All-in (A, A) once. */
+async function playHoldem(page, id) {
+  const prof0 = await page.evaluate(() => window.casino.session.profile);
+  const buyIn = await sitAlone(page, id, 2);
+  const dealer = await page.evaluate((id) => !!window.casino.world.staff?.at?.(id), id);
+  check(dealer, `${id}: a dealer stands at the table`);
+  await page.waitForTimeout(1500);
+  await shot(page, `${id}-${QUALITY}-2-seated`);
+  await page.click('.hud [aria-label="Tips at the tables"], .hud [title="Tips at the tables"]').catch(() => {});
+  let hands = 0;
+  let allin = false;
+  let tipSeen = 0;
+  const t0 = Date.now();
+  while (hands < ROUNDS && Date.now() - t0 < 240_000) {
+    const st = await page.evaluate(() => {
+      const s = window.casino.app.table.session;
+      const v = s.__view;
+      const me = s.snapshot?.you?.seat;
+      const wins = s.__events.filter((e) => e.type === 'win').length;
+      const pick = [...document.querySelectorAll('.tip-pick')].find((e) => e.offsetParent !== null && !e.disabled);
+      return { mine: v?.turn?.seat === me, wins, tip: !!document.querySelector('.tip-line:not([hidden])'), pick: !!pick, stack: s.snapshot?.you?.stack ?? 0 };
+    });
+    hands = st.wins;
+    if (st.tip) tipSeen++;
+    if (st.mine) {
+      if (!allin && hands === ROUNDS - 1) {
+        allin = true;
+        await page.keyboard.press('a');
+        await page.waitForTimeout(250);
+        await page.keyboard.press('a');
+        await shot(page, `${id}-${QUALITY}-3-allin`);
+      } else if (st.pick) await page.click('.tip-pick:not([disabled])').catch(() => {});
+      else await page.keyboard.press('c');
+      await page.waitForTimeout(900);
+    } else await page.waitForTimeout(400);
+    if (hands === 1 && tipSeen < 1000) {
+      await shot(page, `${id}-${QUALITY}-4-hand`);
+      tipSeen += 1000;
+    }
+  }
+  check(hands >= ROUNDS, `${id}: ${hands} hands played against the bots`);
+  check(tipSeen % 1000 > 0, `${id}: the Tips spoke on a decision`);
+  await settle(page, 2000);
+  const res = await page.evaluate(() => {
+    const s = window.casino.app.table.session;
+    const { engine } = window.casino;
+    const rest = s.stage.restPose(engine.camera);
+    return { d: engine.camera.position.distanceTo(rest.pos), errs: s.__errs, gestures: [...new Set(s.__gestures)] };
+  });
+  check(res.d < 0.02, `${id}: the camera is at the seat (${res.d.toFixed(3)} m)`);
+  check(res.errs.length === 0, `${id}: the table refused nothing (${res.errs.join(' | ')})`);
+  log(`${id}: dealer gestures ${res.gestures.join(',') || 'none'}`);
+  await shot(page, `${id}-${QUALITY}-5-after`);
+  // a hand in progress is folded on the way out; wait for the one being played to finish
+  await page.waitForFunction(() => {
+    const s = window.casino.app.table.session;
+    return !s.__view?.turn || s.__view.phase === 'waiting' || s.__view.phase === 'results';
+  }, null, { timeout: 60_000 }).catch(() => {});
+  await leaveAndReconcile(page, id, prof0.balance, prof0.inPlay ?? 0, buyIn);
+}
+
+/** A machine: Max (A) for the most coins, spins or hands with Space, then cash out. */
+async function playMachine(page, id, game) {
+  const prof0 = await page.evaluate(() => window.casino.session.profile);
+  const buyIn = await sitAlone(page, id, null);
+  await page.waitForTimeout(1200);
+  await shot(page, `${id}-${QUALITY}-2-seated`);
+  if (game === 'videopoker') await page.click('.hud [aria-label="Tips at the tables"], .hud [title="Tips at the tables"]').catch(() => {});
+  const s0 = await stackOf(page);
+  await page.keyboard.press('a');
+  await page.waitForTimeout(600);
+  for (let r = 0; r < ROUNDS; r++) {
+    await page.evaluate(() => {
+      const s = window.casino.app.table.session;
+      s.__events = [];
+      s.__celebrations = 0;
+    });
+    const before = await stackOf(page);
+    await page.keyboard.press('Space');
+    if (game === 'videopoker') {
+      await page.waitForFunction(() => window.casino.app.table.session.__events.some((e) => e.type === 'deal'), null, { timeout: 30_000 });
+      await settle(page, 600);
+      // hold what the Tips ring, then draw
+      const held = await page.$$eval('.tip-pick', (els) => els.length);
+      await page.keyboard.press('Space');
+      await page.waitForFunction(() => window.casino.app.table.session.__events.some((e) => e.type === 'result'), null, { timeout: 30_000 });
+      log(`${id} hand ${r}: the Tips ringed ${held} control(s)`);
+    } else {
+      await page.waitForFunction(() => window.casino.app.table.session.__events.some((e) => e.type === 'result'), null, { timeout: 30_000 });
+    }
+    await settle(page, 1200);
+    const res = await page.evaluate(() => {
+      const s = window.casino.app.table.session;
+      const r = s.__events.find((e) => e.type === 'result');
+      const go = s.__events.find((e) => e.type === 'spin' || e.type === 'deal');
+      return { bet: r?.bet ?? 0, win: (r?.win ?? 0) + (r?.freeWin ?? 0), coins: go?.coins ?? 0, most: s.snapshot.meta.config.options?.maxCoins, cel: s.__celebrations, errs: s.__errs };
+    });
+    const after = await stackOf(page);
+    if (r === 0) check(res.coins === res.most && before === s0, `${id}: Max (A) set the most coins (${res.coins} of ${res.most}, ${res.bet / 100} a ${game === 'videopoker' ? 'hand' : 'spin'})`);
+    check(after - before === res.win - res.bet, `${id} round ${r}: the stack moved by what the machine paid (${(after - before) / 100} = ${res.win / 100} - ${res.bet / 100})`);
+    check(res.cel === 0 || res.win > res.bet, `${id} round ${r}: a celebration (${res.cel}) only for a win (${res.win / 100} on ${res.bet / 100})`);
+    check(res.errs.length === 0, `${id} round ${r}: nothing refused (${res.errs.join(' | ')})`);
+    await shot(page, `${id}-${QUALITY}-5-after${r}`);
+  }
+  if (game === 'videopoker') await page.click('.hud [aria-label="Tips at the tables"], .hud [title="Tips at the tables"]').catch(() => {});
+  await leaveAndReconcile(page, id, prof0.balance, prof0.inPlay ?? 0, buyIn);
 }
 
 /** The most Max may put on the tested spot: the game's rule for that spot, or all the chips. */
@@ -368,7 +592,10 @@ sql(`UPDATE casino_accounts SET balance = 1000000000 WHERE name = '${NAME}' AND 
 await page.evaluate(async () => window.casino.session.set(await (await import('/casino/src/net/api.ts')).me()));
 for (const id of only.length ? only : Object.keys(STATIONS)) {
   try {
-    await playStation(page, id);
+    const game = STATIONS[id];
+    if (game === 'holdem') await playHoldem(page, id);
+    else if (game === 'videopoker' || game === 'slots') await playMachine(page, id, game);
+    else await playStation(page, id);
   } catch (err) {
     check(false, `${id}: ${String(err?.message ?? err).split('\n')[0]}`);
     await shot(page, `${id}-${QUALITY}-error`).catch(() => {});
