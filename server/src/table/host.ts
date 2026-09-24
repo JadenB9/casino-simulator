@@ -16,6 +16,7 @@ import { gameInfo, isGameId, variantOf } from '../../../shared/src/games/catalog
 import { cryptoRng, type Rng } from '../../../shared/src/rng.ts';
 import { lookFromJson } from '../../../shared/src/look.ts';
 import type { Cents } from '../../../shared/src/money.ts';
+import { applyLimits, clampLimits, hasLimitChoice, limitsOf, parseLimitsParam, sameLimits, type TableLimits } from '../../../shared/src/limits.ts';
 import {
   CLOSE,
   MAX_TABLE_FRAME,
@@ -115,6 +116,15 @@ export interface InitParams {
   mode: TableMode;
   visibility: 'public' | 'private';
   pin: string | null;
+  /** The table's limits as chosen (clamped again here); Standard when left out. */
+  limits?: TableLimits | null;
+}
+
+/** A game's Standard config, at the given limits when there are any to choose. */
+function configAt(engine: Engine, p: { game: GameId; variant: string; mode: TableMode; limits?: TableLimits | null }): TableConfig {
+  const cfg = engine.config(p.variant, p.mode);
+  const l = p.limits ? clampLimits(p.game, p.limits) : null;
+  return l ? applyLimits(cfg, l) : cfg;
 }
 
 export class CasinoTable extends DurableObject<Env> {
@@ -227,7 +237,7 @@ export class CasinoTable extends DurableObject<Env> {
 
   private create(p: InitParams, now: number): void {
     const engine = engineFor(p.game) as Engine;
-    const config = engine.config(p.variant, p.mode);
+    const config = configAt(engine, p);
     const meta: Meta = {
       name: p.name,
       game: p.game,
@@ -260,6 +270,28 @@ export class CasinoTable extends DurableObject<Env> {
     this.scheduleAlarm();
   }
 
+  /**
+   * A solo table takes the limits it is opened with. Chips still on it (a seat held through a
+   * dropped connection, a buy-in or cash-out on its way, bets out) keep the limits they were
+   * bought in at until they are cashed out: the player sees the table's real limits in the
+   * snapshot, and the client says why they differ. A new game state starts at the new limits.
+   */
+  private relimit(asked: TableLimits | null, now: number): void {
+    const m = this.meta!;
+    const engine = this.engine!;
+    const want = asked ? clampLimits(m.game, asked) : null;
+    if (!want || sameLimits(want, limitsOf(m.config))) return;
+    for (const mem of this.members.values()) if (mem.status !== 'watching' || mem.stack > 0 || mem.live > 0) return;
+    if (this.sql.exec<{ n: number }>(`SELECT count(*) AS n FROM outbox WHERE state = 'pending'`).one().n > 0) return;
+    const config = applyLimits(engine.config(m.variant, m.mode), want);
+    this.ctx.storage.transactionSync(() => {
+      m.config = config;
+      this.state = engine.create(config, this.engineCtx(now));
+      this.putMeta('config', config);
+      this.sql.exec(`INSERT OR REPLACE INTO state (id, json) VALUES (1, ?1)`, JSON.stringify(this.state));
+    });
+  }
+
   /** What the lobby list shows. */
   summary(): LobbySummary | null {
     const m = this.meta;
@@ -273,6 +305,7 @@ export class CasinoTable extends DurableObject<Env> {
       players: this.members.size,
       max: m.config.maxSeats,
       started: m.started,
+      ...(hasLimitChoice(m.game) ? { limits: limitsOf(m.config) } : {}),
     };
   }
 
@@ -322,11 +355,13 @@ export class CasinoTable extends DurableObject<Env> {
     if (!this.meta && solo) {
       const [game, variant] = solo.split('|');
       if (!isGameId(game)) return new Response('bad game', { status: 400 });
-      this.create({ name: tableName, game, variant: variantOf(game, variant), mode: 'solo', visibility: 'private', pin: null }, now);
+      this.create({ name: tableName, game, variant: variantOf(game, variant), mode: 'solo', visibility: 'private', pin: null, limits: parseLimitsParam(request.headers.get('x-casino-limits')) }, now);
     }
     const m = this.meta;
     if (!m || m.closed) return closeWith(CLOSE.NOT_FOUND, 'no such table');
     if (m.mode === 'solo' && !tableName.endsWith(`:${accountId}`)) return closeWith(CLOSE.FORBIDDEN, 'not your table');
+    // Each sitting at a solo table brings its own limits (kept while chips are still on it).
+    if (m.mode === 'solo' && solo) this.relimit(parseLimitsParam(request.headers.get('x-casino-limits')), now);
     let mem = this.members.get(accountId);
     if (!mem) {
       if (this.members.size >= m.config.maxSeats) return closeWith(CLOSE.FORBIDDEN, 'table full');

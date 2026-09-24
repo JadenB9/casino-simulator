@@ -7,6 +7,7 @@ import { isValidName } from '../../shared/src/names.ts';
 import { PASSWORD_MAX, PASSWORD_MIN, isValidPassword } from '../../shared/src/password.ts';
 import { parseLook, lookFromJson } from '../../shared/src/look.ts';
 import { CATALOG, isGameId, soloTableName, TABLE_ID_RE, variantOf } from '../../shared/src/games/catalog.ts';
+import { clampLimits, limitsParam, parseLimits, parseLimitsParam } from '../../shared/src/limits.ts';
 import { notYet } from '../../shared/src/bank.ts';
 import { closeWith, corsHeaders, fail, json, originAllowed, readJson } from './http.ts';
 import { bearer, logIn, signToken, verifyToken, type Claims } from './auth.ts';
@@ -123,14 +124,19 @@ async function handleApi(request: Request, env: Env, route: string, cors: Record
   }
 
   if (route === 'tables' && request.method === 'POST') {
-    const body = (await readJson(request)) as { game?: unknown; variant?: unknown; visibility?: unknown } | null;
+    const body = (await readJson(request)) as { game?: unknown; variant?: unknown; visibility?: unknown; limits?: unknown } | null;
     const game = body?.game;
     const visibility = body?.visibility === 'private' ? 'private' : 'public';
     if (!isGameId(game) || !CATALOG[game].multiplayer || CATALOG[game].dev) return fail(400, 'BAD_REQUEST', 'That game has no multiplayer tables.', cors);
     const variant = variantOf(game, body?.variant);
+    // Limits that aren't two amounts are refused; amounts outside the game's rules move to the
+    // nearest table it allows (shared/src/limits.ts), and the table's snapshot shows what it got.
+    const asked = body?.limits === undefined ? null : parseLimits(body.limits);
+    if (body?.limits !== undefined && !asked) return fail(400, 'BAD_REQUEST', 'Limits are a minimum and a maximum in cents.', cors);
+    const limits = asked ? clampLimits(game, asked) : null;
     const made = await floor(env).createLobby({ game, visibility, accountId: claims.a, ip });
     if ('error' in made) return fail(429, 'RATE_LIMITED', 'Slow down a little.', cors);
-    await table(env, made.tableId).init({ name: made.tableId, game, variant, mode: 'multi', visibility, pin: made.pin });
+    await table(env, made.tableId).init({ name: made.tableId, game, variant, mode: 'multi', visibility, pin: made.pin, limits });
     return json({ tableId: made.tableId, ...(made.pin ? { pin: made.pin } : {}) } satisfies CreateTableResponse, 201, cors);
   }
 
@@ -143,7 +149,14 @@ async function handleApi(request: Request, env: Env, route: string, cors: Record
         ? fail(429, 'RATE_LIMITED', 'Too many tries. Wait a minute.', cors)
         : fail(404, 'BAD_PIN', 'No lobby has that PIN.', cors);
     }
-    return json({ tableId: found.tableId, game: found.game } satisfies JoinByPinResponse, 200, cors);
+    // What the table is, so the join can show its limits before sitting down.
+    let lobby = null;
+    try {
+      lobby = await table(env, found.tableId).summary();
+    } catch (err) {
+      console.error('table summary failed', found.tableId, err);
+    }
+    return json({ tableId: found.tableId, game: found.game, ...(lobby ? { lobby } : {}) } satisfies JoinByPinResponse, 200, cors);
   }
 
   return fail(404, 'NOT_FOUND', 'Not here.', cors);
@@ -251,6 +264,10 @@ async function handleSocket(request: Request, env: Env, url: URL, route: string,
     const name = soloTableName(game, variant, claims.a);
     headers.set('x-casino-table', name);
     headers.set('x-casino-solo', `${game}|${variant}`);
+    // This sitting's limits, moved to the nearest the game allows (none for the machines).
+    const asked = parseLimitsParam(url.searchParams.get('limits'));
+    const limits = asked ? clampLimits(game, asked) : null;
+    if (limits) headers.set('x-casino-limits', limitsParam(limits));
     return tableStub(env, name).fetch(forward(request, headers));
   }
   return closeWith(CLOSE.NOT_FOUND, 'no such place');

@@ -10,6 +10,7 @@
 import type { Cents } from './money.ts';
 import type { GameId, TableMode, TableConfig } from './engine.ts';
 import type { Look } from './look.ts';
+import type { TableLimits } from './limits.ts';
 
 export const PROTOCOL_VERSION = 1;
 
@@ -72,6 +73,8 @@ export interface LobbySummary {
   players: number;
   max: number;
   started: boolean;
+  /** The table's minimum and maximum bet (Hold'em: its blinds), chosen when it was created. */
+  limits?: TableLimits;
 }
 
 export interface Member {
@@ -147,6 +150,8 @@ export interface CreateTableRequest {
   game: GameId;
   variant?: string;
   visibility: 'public' | 'private';
+  /** The table's limits (shared/src/limits.ts); the server moves them to the nearest allowed. Standard if left out. */
+  limits?: TableLimits;
 }
 export interface CreateTableResponse {
   tableId: string;
@@ -158,6 +163,8 @@ export interface JoinByPinRequest {
 export interface JoinByPinResponse {
   tableId: string;
   game: GameId;
+  /** The table as its list row would show it (leader, seats, limits), so the join can say what it is first. */
+  lobby?: LobbySummary;
 }
 export interface HttpError {
   error: ErrorCode;
