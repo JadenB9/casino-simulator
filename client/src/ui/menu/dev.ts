@@ -1,6 +1,7 @@
 // Dev page for the account screens, served by Vite in development only:
-//   /casino/src/ui/menu/dev.html?screen=<flow|login|menu|profile|editor|hud|bank|settings|shortcuts>
+//   /casino/src/ui/menu/dev.html?screen=<flow|login|menu|profile|editor|onboard|hud|bank|settings|shortcuts>
 // Options: fixture=1 (canned player instead of the local worker), broke=1 (that player at $0),
+// new=1 (a brand-new player: the flow walks them through picking a look first),
 // name=<n> (log in as n), backdrop=3d (a slow orbit of the room behind login and menu),
 // online=<n>, seated=0, dock=0 (hide the screen links, for screenshots).
 // It is also a worked example of the wiring app/boot.ts needs; see README.md.
@@ -13,8 +14,8 @@ import { GAMES } from '../../games/index.ts';
 import * as realApi from '../../net/api.ts';
 import { session } from '../../app/session.ts';
 import { el } from '../kit.ts';
-import { broke, fixtureApi, regular } from './fixtures.ts';
-import { mountHud, mountLogin, mountMenu, openBank, openEditor, openProfile, openSettings, openShortcuts, type AccountApi, type Hud } from './index.ts';
+import { broke, fixtureApi, newcomer, regular } from './fixtures.ts';
+import { isNewPlayer, mountHud, mountLogin, mountMenu, openBank, openEditor, openOnboarding, openProfile, openSettings, openShortcuts, type AccountApi, type Hud } from './index.ts';
 
 const q = new URLSearchParams(location.search);
 const screen = q.get('screen') ?? 'flow';
@@ -55,7 +56,9 @@ const orbit = () => {
 const backdrop = q.get('backdrop') === '3d' ? orbit : undefined;
 
 const fixture = q.get('fixture') === '1';
-const api: AccountApi = fixture ? fixtureApi(q.get('broke') === '1' ? broke() : regular(), { lastName: q.has('last') ? q.get('last') || null : undefined }) : realApi;
+const api: AccountApi = fixture
+  ? fixtureApi(q.get('new') === '1' ? newcomer() : q.get('broke') === '1' ? broke() : regular(), { lastName: q.has('last') ? q.get('last') || null : undefined })
+  : realApi;
 const online = q.has('online') ? Number(q.get('online')) : 14;
 
 async function ensureSession(): Promise<void> {
@@ -74,11 +77,16 @@ function showLogin(): void {
     session,
     sfx,
     backdrop,
-    onDone: () => {
-      showMenu();
+    onDone: (p) => {
+      if (isNewPlayer(p)) onboard();
+      else showMenu();
       login.close();
     },
   });
+}
+
+function onboard(): void {
+  openOnboarding({ root: ui, api, session, engine, sfx, onDone: () => enterFloor() });
 }
 
 function showMenu(): void {
@@ -126,7 +134,7 @@ function enterFloor(): void {
 function dock(): void {
   if (q.get('dock') === '0') return;
   const nav = el('nav', 'dev-dock');
-  for (const s of ['flow', 'login', 'menu', 'profile', 'editor', 'hud', 'bank', 'settings', 'shortcuts']) {
+  for (const s of ['flow', 'login', 'menu', 'profile', 'editor', 'onboard', 'hud', 'bank', 'settings', 'shortcuts']) {
     const a = el('a', s === screen ? 'on' : '', s);
     const p = new URLSearchParams(q);
     p.set('screen', s);
@@ -160,6 +168,10 @@ async function start(): Promise<void> {
     case 'editor':
       await ensureSession();
       openEditor({ root: ui, api, session, engine, sfx, onClose: rest });
+      break;
+    case 'onboard':
+      await ensureSession();
+      openOnboarding({ root: ui, api, session, engine, sfx, onDone: rest });
       break;
     case 'hud':
       await ensureSession();

@@ -55,6 +55,24 @@ export function regular(now = Date.now()): Profile {
   };
 }
 
+/** Someone who has just made an account: the starting grant, nothing played, the default look. */
+export function newcomer(now = Date.now()): Profile {
+  const empty = { rounds: 0, wagered: 0, net: 0, biggestWin: 0 };
+  return {
+    id: 412,
+    name: 'Lucky_Lou',
+    look: { v: 1, body: 'm', outfit: 'suit', skin: 2, hair: '#2b1d14', top: '#1f2430', bottom: '#1f2430', shoes: '#111111' },
+    createdAt: now - 20_000,
+    balance: 5_000_000,
+    inPlay: 0,
+    rev: 1,
+    tables: [],
+    loansTaken: 0,
+    loans: [],
+    stats: { total: empty, games: {} },
+  };
+}
+
 /** The same player down to $3,250, nothing on any table: under the bank's line. */
 export function broke(now = Date.now()): Profile {
   return { ...regular(now), balance: 325_000, inPlay: 0, tables: [], rev: 97 };

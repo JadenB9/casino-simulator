@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import type { Batch } from './batch.ts';
 import type { Mats } from './materials.ts';
-import { CEILING, type FloorPlan } from './layout.ts';
+import { CEILING, type FloorPlan, type Hanging } from './layout.ts';
 
 export type Arrow = 'left' | 'right' | 'up' | 'down';
 
@@ -35,13 +35,13 @@ export async function loadSignFonts(): Promise<void> {
   }
 }
 
-/** The floor's own signs: zones, wayfinding and the casino's name. */
+/** The floor's own signs: zones, wayfinding and the casino's name. Where each hangs is the plan's. */
 export function floorSigns(plan: FloorPlan, b: Batch, m: Mats): SignSpec[] {
   const out: SignSpec[] = [];
   const lacquer = m.get('lacquer');
   const brass = m.get('brass');
   const chrome = m.get('chrome');
-  const hang = (x: number, y: number, z: number, ry: number, w: number, h: number) => {
+  const hang = ({ x, y, z, ry, w, h }: Hanging) => {
     // a sign box hung from the ceiling on two rods
     b.box(lacquer, x, y, z, w + 0.16, h + 0.14, 0.14, undefined, ry);
     const c = Math.cos(ry);
@@ -54,77 +54,46 @@ export function floorSigns(plan: FloorPlan, b: Batch, m: Mats): SignSpec[] {
     b.box(brass, x, y + h / 2 + 0.07, z, w + 0.2, 0.02, 0.17, undefined, ry);
     b.box(brass, x, y - h / 2 - 0.07, z, w + 0.2, 0.02, 0.17, undefined, ry);
   };
-  const face = (x: number, y: number, z: number, ry: number, off: number): [number, number, number] => [x + Math.sin(ry) * off, y, z + Math.cos(ry) * off];
-
-  // TABLE GAMES, hung under the pit's south cove, both faces
-  {
-    const x = 0;
-    const z = plan.pit.z1 + 0.2;
-    const y = 2.96;
-    hang(x, y, z, 0, 4.6, 0.6);
-    out.push({ kind: 'lit', text: 'TABLE GAMES', color: '#ffe0a0', font: 'Cinzel', at: face(x, y, z, 0, 0.075), ry: 0, w: 4.4, h: 0.52 });
-    out.push({ kind: 'lit', text: 'TABLE GAMES', color: '#ffe0a0', font: 'Cinzel', at: face(x, y, z, Math.PI, 0.075), ry: Math.PI, w: 4.4, h: 0.52 });
-  }
-  // SLOTS, neon over the south-west islands, facing the main aisle and the entrance
-  {
-    const x = plan.slotsZone.x1 - 0.35;
-    const z = plan.slotsZone.z0 + 3.2;
-    const y = 2.98;
-    hang(x, y, z, Math.PI / 2, 2.4, 0.66);
-    out.push({ kind: 'neon', text: 'SLOTS', color: '#ff3fa4', font: 'Tilt Neon', at: face(x, y, z, Math.PI / 2, 0.075), ry: Math.PI / 2, w: 2.3, h: 0.62 });
-    out.push({ kind: 'neon', text: 'SLOTS', color: '#ff3fa4', font: 'Tilt Neon', at: face(x, y, z, -Math.PI / 2, 0.075), ry: -Math.PI / 2, w: 2.3, h: 0.62 });
-  }
-  // POKER at the poker room's opening
-  {
-    const x = plan.pokerRoom.x0 - 0.05;
-    const z = (plan.pokerRoom.z0 + plan.pokerRoom.z1) / 2;
-    const y = 2.98;
-    hang(x, y, z, -Math.PI / 2, 2.2, 0.6);
-    out.push({ kind: 'neon', text: 'POKER', color: '#ff5a4a', font: 'Tilt Neon', at: face(x, y, z, -Math.PI / 2, 0.075), ry: -Math.PI / 2, w: 2.1, h: 0.56 });
-    out.push({ kind: 'neon', text: 'POKER', color: '#ff5a4a', font: 'Tilt Neon', at: face(x, y, z, Math.PI / 2, 0.075), ry: Math.PI / 2, w: 2.1, h: 0.56 });
-  }
-  // overhead wayfinding just inside the entrance
-  {
-    const z = plan.entrance.z0 - 0.9;
-    const y = 3.0;
-    hang(0, y, z, 0, 5.2, 0.5);
-    out.push({
-      kind: 'way', text: '', color: '#f4e6c8', font: 'Cinzel', at: face(0, y, z, 0, 0.075), ry: 0, w: 5.1, h: 0.44,
-      segments: [
-        { text: 'SLOTS', arrow: 'left', before: true },
-        { text: 'TABLE GAMES', arrow: 'up' },
-        { text: 'BAR', arrow: 'right' },
-      ],
-    });
-    out.push({
-      kind: 'way', text: '', color: '#f4e6c8', font: 'Cinzel', at: face(0, y, z, Math.PI, 0.075), ry: Math.PI, w: 5.1, h: 0.44,
-      segments: [
-        { text: 'BAR', arrow: 'left', before: true },
-        { text: 'EXIT', arrow: 'up' },
-        { text: 'SLOTS', arrow: 'right' },
-      ],
-    });
-  }
-  // cashier wayfinding over the cross aisle, for anyone coming from the slots or the pit
-  {
-    const x = plan.pit.x0 - 1.2;
-    const z = (plan.aisles[0]!.z0 + plan.aisles[0]!.z1) / 2;
-    const y = 3.02;
-    hang(x, y, z, Math.PI / 2, 3.2, 0.44);
-    out.push({
-      kind: 'way', text: '', color: '#f4e6c8', font: 'Cinzel', at: face(x, y, z, Math.PI / 2, 0.075), ry: Math.PI / 2, w: 3.1, h: 0.38,
-      segments: [
-        { text: 'SLOTS', arrow: 'left', before: true },
-        { text: 'CASHIER', arrow: 'right' },
-      ],
-    });
-    out.push({
-      kind: 'way', text: '', color: '#f4e6c8', font: 'Cinzel', at: face(x, y, z, -Math.PI / 2, 0.075), ry: -Math.PI / 2, w: 3.1, h: 0.38,
-      segments: [
-        { text: 'CASHIER', arrow: 'left', before: true },
-        { text: 'BAR', arrow: 'right' },
-      ],
-    });
+  // both faces of a hanging sign, inset (dw, dh) from the box; `back` is what the second face says when it differs
+  const faces = (hs: Hanging, dw: number, dh: number, face: Omit<SignSpec, 'at' | 'ry' | 'w' | 'h'>, back: Partial<SignSpec> = {}) => {
+    hang(hs);
+    for (const [k, ry] of [hs.ry, hs.ry + Math.PI].entries()) {
+      const at: [number, number, number] = [hs.x + Math.sin(ry) * 0.075, hs.y, hs.z + Math.cos(ry) * 0.075];
+      out.push({ ...face, ...(k === 1 ? back : {}), at, ry, w: hs.w - dw, h: hs.h - dh });
+    }
+  };
+  for (const hs of plan.hanging) {
+    switch (hs.id) {
+      case 'table-games':
+        faces(hs, 0.2, 0.08, { kind: 'lit', text: 'TABLE GAMES', color: '#ffe0a0', font: 'Cinzel' });
+        break;
+      case 'slots':
+        faces(hs, 0.1, 0.04, { kind: 'neon', text: 'SLOTS', color: '#ff3fa4', font: 'Tilt Neon' });
+        break;
+      case 'poker':
+        faces(hs, 0.1, 0.04, { kind: 'neon', text: 'POKER', color: '#ff5a4a', font: 'Tilt Neon' });
+        break;
+      case 'entrance':
+        // overhead wayfinding just inside the entrance, and what it says on the way out
+        faces(
+          hs,
+          0.1,
+          0.06,
+          { kind: 'way', text: '', color: '#f4e6c8', font: 'Cinzel', segments: [{ text: 'SLOTS', arrow: 'left', before: true }, { text: 'TABLE GAMES', arrow: 'up' }, { text: 'BAR', arrow: 'right' }] },
+          { segments: [{ text: 'BAR', arrow: 'left', before: true }, { text: 'EXIT', arrow: 'up' }, { text: 'SLOTS', arrow: 'right' }] },
+        );
+        break;
+      case 'cashier':
+        // over the cross aisle, for anyone coming from the slots or the pit
+        faces(
+          hs,
+          0.1,
+          0.06,
+          { kind: 'way', text: '', color: '#f4e6c8', font: 'Cinzel', segments: [{ text: 'SLOTS', arrow: 'left', before: true }, { text: 'CASHIER', arrow: 'right' }] },
+          { segments: [{ text: 'CASHIER', arrow: 'left', before: true }, { text: 'BAR', arrow: 'right' }] },
+        );
+        break;
+    }
   }
   // the casino's name over the doors, seen on the way out
   out.push({ kind: 'neon', text: 'Casino Simulator', color: '#ffc861', font: 'Limelight', at: [0, 3.08, plan.room.z1 - 0.04], ry: Math.PI, w: 4.6, h: 0.5 });

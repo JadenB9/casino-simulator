@@ -5,6 +5,7 @@ export { mountLogin, type LoginDeps } from './login.ts';
 export { mountMenu, type MenuDeps, type MenuHandle } from './menu.ts';
 export { openProfile, type ProfileDeps } from '../profile/profile.ts';
 export { openEditor, type EditorDeps } from '../editor/editor.ts';
+export { openOnboarding, isNewPlayer, ensureOwnLook, type OnboardingDeps } from './onboarding.ts';
 export { mannequins, Mannequin } from '../editor/mannequin.ts';
 export { mountHud, type Hud, type HudDeps } from '../hud/hud.ts';
 export { openSettings, type SettingsDeps } from '../hud/settings.ts';

@@ -1,7 +1,8 @@
 // Loose props from GLB files (palms, plants, stools, couches, bottles, glasses, lamps, doors,
 // chandeliers), scaled to a real size and drawn instanced: one draw call per mesh part of each
 // prop, however many stand on the floor. Chandeliers are the Quaternius piece on Low and a Poly
-// Haven hero chandelier on High (loaded only when High is on).
+// Haven hero chandelier on High (loaded only when High is on), where their crystal and brass
+// catch the light now and then: brief glints, all of them one point cloud and one draw call.
 
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -40,6 +41,8 @@ export class Props {
   readonly group = new THREE.Group();
   private loader = new GLTFLoader();
   private highChandeliers: THREE.Object3D | null = null;
+  private sparkle: THREE.Points | null = null;
+  private readonly sparkleUniforms = { uTime: { value: 0 }, uScale: { value: 400 }, uColor: { value: hdr('#fff1d6', 3.4) } };
   private lowChandeliers: THREE.Object3D | null = null;
   private lambert = new Map<THREE.Material, THREE.Material>();
   private standard = new Map<THREE.Material, THREE.Material>();
@@ -91,6 +94,8 @@ export class Props {
       if (q === 'high' && !this.highChandeliers) {
         this.highChandeliers = await make('chandelier-high.glb', 1.5);
         this.group.add(this.highChandeliers);
+        this.sparkle = this.glints(this.highChandeliers);
+        if (this.sparkle) this.group.add(this.sparkle);
       }
       if (q === 'low' && !this.lowChandeliers) {
         this.lowChandeliers = await make('chandelier-low.glb', 0.95);
@@ -100,7 +105,70 @@ export class Props {
       console.warn('chandelier failed to load', err);
     }
     if (this.highChandeliers) this.highChandeliers.visible = q === 'high';
+    if (this.sparkle) this.sparkle.visible = q === 'high';
     if (this.lowChandeliers) this.lowChandeliers.visible = q === 'low' || !this.highChandeliers;
+  }
+
+  /** Per frame: the glints' clock. */
+  update(dt: number): void {
+    this.sparkleUniforms.uTime.value += dt;
+  }
+
+  /** Hide or show the glints (they'd be stray dots in the floor's reflection capture). */
+  set glinting(on: boolean) {
+    if (this.sparkle) this.sparkle.visible = on && this.quality === 'high';
+  }
+
+  /**
+   * Glints on the chandeliers: points scattered over each one's arms and drops (a seeded pick of
+   * its own vertices), each flashing briefly at its own moment and rate. Additive and past the
+   * bloom threshold at their peak, so a flash blooms a little and is gone.
+   */
+  private glints(chandeliers: THREE.Object3D): THREE.Points | null {
+    const bodies = chandeliers.children.filter((c): c is THREE.InstancedMesh => (c as THREE.InstancedMesh).isInstancedMesh && !(c.userData.source as THREE.Material | undefined)?.name?.endsWith('bulb'));
+    const body = bodies[0];
+    if (!body) return null;
+    const pos = body.geometry.attributes.position!;
+    const PER = 40;
+    let seed = 20260923;
+    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    const points: number[] = [];
+    const phase: number[] = [];
+    const speed: number[] = [];
+    const m = new THREE.Matrix4();
+    const v = new THREE.Vector3();
+    for (let i = 0; i < body.count; i++) {
+      body.getMatrixAt(i, m);
+      for (let k = 0; k < PER; k++) {
+        v.fromBufferAttribute(pos, Math.floor(rnd() * pos.count)).applyMatrix4(m);
+        points.push(v.x, v.y, v.z);
+        phase.push(rnd() * Math.PI * 2);
+        speed.push(0.7 + rnd() * 1.6);
+      }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(points, 3));
+    g.setAttribute('aPhase', new THREE.Float32BufferAttribute(phase, 1));
+    g.setAttribute('aSpeed', new THREE.Float32BufferAttribute(speed, 1));
+    const material = new THREE.ShaderMaterial({
+      uniforms: this.sparkleUniforms,
+      vertexShader: GLINT_VERTEX,
+      fragmentShader: GLINT_FRAGMENT,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    const cloud = new THREE.Points(g, material);
+    cloud.name = 'chandelier-glints';
+    cloud.frustumCulled = false;
+    // points are sized in pixels: the viewport's height over the view's height at one metre
+    const size = new THREE.Vector2();
+    cloud.onBeforeRender = (renderer, _scene, camera) => {
+      renderer.getDrawingBufferSize(size);
+      const fov = (camera as THREE.PerspectiveCamera).fov ?? 55;
+      this.sparkleUniforms.uScale.value = size.y / (2 * Math.tan(THREE.MathUtils.degToRad(fov) / 2));
+    };
+    return cloud;
   }
 
   async setQuality(q: Quality): Promise<void> {
@@ -181,3 +249,32 @@ export class Props {
 }
 
 const _up = new THREE.Vector3(0, 1, 0);
+
+const GLINT_VERTEX = /* glsl */ `
+uniform float uTime;
+uniform float uScale;
+attribute float aPhase;
+attribute float aSpeed;
+varying float vGlint;
+void main() {
+  vec4 mv = modelViewMatrix * vec4(position, 1.0);
+  // mostly dark, now and then a sharp flash
+  vGlint = pow(max(sin(uTime * aSpeed + aPhase), 0.0), 28.0);
+  gl_PointSize = max(1.0, 0.075 * uScale / -mv.z) * (0.35 + 0.65 * vGlint);
+  gl_Position = projectionMatrix * mv;
+}`;
+
+const GLINT_FRAGMENT = /* glsl */ `
+uniform vec3 uColor;
+varying float vGlint;
+void main() {
+  vec2 p = gl_PointCoord - 0.5;
+  float core = smoothstep(0.5, 0.0, length(p));
+  // a four-pointed star: two thin crossed streaks through a soft core
+  float star = max(0.0, 1.0 - abs(p.x) * 10.0) * max(0.0, 1.0 - abs(p.y) * 2.1) + max(0.0, 1.0 - abs(p.y) * 10.0) * max(0.0, 1.0 - abs(p.x) * 2.1);
+  float a = (core * core * 0.8 + star * 0.7) * vGlint;
+  if (a < 0.004) discard;
+  gl_FragColor = vec4(uColor * a, 1.0);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
+}`;
