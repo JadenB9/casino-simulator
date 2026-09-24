@@ -1,6 +1,7 @@
 // Everyone else on the floor, drawn from FloorLink's tracks: one Character per remote player,
 // placed 200 ms in the past and walking or idling by how fast that drawn position moves. A player
-// sitting at a station is drawn at the seat the scene hands back, or hidden if there is none.
+// sitting at a station is drawn at the seat the scene hands back, or hidden if there is none; one
+// sitting on a floor seat (a stool, a sofa) is drawn sitting on it.
 //
 // CapsuleFactory is a plain stand-in (a figure in the player's colours with a name tag) for as
 // long as no real CharacterFactory is passed in.
@@ -32,6 +33,11 @@ export interface RemotePlayersOptions {
    * all, hides seated players.
    */
   seatOf?: (station: string, slot: number) => SeatPose | null;
+  /**
+   * The floor seat (a bar stool, a sofa place) a player sits on, if any: they are drawn sitting on
+   * it once their walk there has reached it.
+   */
+  seatFor?: (id: number) => SeatPose | null;
   /** Ground speed in m/s that reads as a full walk; slower motion blends toward idle. */
   walkSpeed?: number;
 }
@@ -47,6 +53,8 @@ interface Drawn {
 
 /** A drawn step longer than this (m) in one frame is a snap, not a walk. */
 const SNAP_M = 3;
+/** How near their seat a floor sitter's drawn walk must come before they're drawn sitting on it. */
+const ARRIVED_M = 0.9;
 
 export class RemotePlayers {
   readonly group = new THREE.Group();
@@ -92,6 +100,18 @@ export class RemotePlayers {
       const pose = p?.track.at(now) ?? null;
       const root = d.ch.root;
       const station = p?.info.at?.station;
+      const floorSeat = station ? null : (this.opts.seatFor?.(id) ?? null);
+      if (floorSeat && (!pose || Math.hypot(pose.x / 100 - floorSeat.x, pose.z / 100 - floorSeat.z) < ARRIVED_M)) {
+        root.visible = true;
+        d.onFloor = false;
+        d.speed = 0;
+        root.position.set(floorSeat.x, floorSeat.y ?? 0, floorSeat.z);
+        root.rotation.y = floorSeat.yaw;
+        d.ch.setMotion(0);
+        d.ch.sit?.(floorSeat.sit ?? null);
+        d.ch.update(dt);
+        continue;
+      }
       // Someone the snapshots show walking has stood up, even if the table hasn't said so yet.
       if (station && !pose?.moving) {
         const slot = slots.get(station) ?? 0;

@@ -10,6 +10,7 @@
 import type { Cents } from './money.ts';
 import type { GameId, TableMode, TableConfig } from './engine.ts';
 import type { Look } from './look.ts';
+import { isSeatId } from './seats.ts';
 import type { TableLimits } from './limits.ts';
 
 export const PROTOCOL_VERSION = 1;
@@ -81,6 +82,8 @@ export interface PlayerInfo {
   r: number;
   /** Which floor station the player is sitting at (never a private table's id). */
   at: { station: string } | null;
+  /** The chair, stool, sofa place or bench the player sits on (seats.ts), if any. */
+  seat?: string | null;
 }
 
 export interface LobbySummary {
@@ -279,6 +282,9 @@ export type FloorClientMsg =
   | { t: 'st'; x: number; z: number; r: number }
   | { t: 'watch'; game: GameId | null }
   | { t: 'emote'; e: EmoteId }
+  // sitting down on a floor seat (seats.ts): where it is, which way it faces; and getting up
+  | { t: 'sit'; seat: string; x: number; z: number; r: number }
+  | { t: 'stand' }
   /** The player is at the keyboard (see HERE_MS); keeps the socket from going idle. */
   | { t: 'here' };
 
@@ -288,7 +294,9 @@ export type FloorServerMsg =
   | { t: 's'; ts: number; p: [id: number, x: number, z: number, r: number, moving: 0 | 1, age?: number][] }
   | { t: 'join'; player: PlayerInfo }
   | { t: 'leave'; id: number }
-  | { t: 'player'; id: number; look?: Look; at?: { station: string } | null }
+  | { t: 'player'; id: number; look?: Look; at?: { station: string } | null; seat?: string | null }
+  // a seat you asked for and didn't get (someone got there first, or it's out of reach)
+  | { t: 'seat.no'; seat: string; msg: string }
   | { t: 'online'; n: number }
   | { t: 'lobbies'; game: GameId; list: LobbySummary[] }
   | { t: 'lobby'; game: GameId; lobby: LobbySummary }
@@ -320,6 +328,11 @@ export function parseFloorMsg(raw: unknown, isGame: (g: unknown) => g is GameId)
     case 'emote':
       if (!isOneOf(raw.e, EMOTES)) return null;
       return { t: 'emote', e: raw.e };
+    case 'sit':
+      if (!isSeatId(raw.seat) || !isInt(raw.x) || !isInt(raw.z) || !isInt(raw.r) || raw.r < 0 || raw.r > 255) return null;
+      return { t: 'sit', seat: raw.seat, x: raw.x, z: raw.z, r: raw.r };
+    case 'stand':
+      return { t: 'stand' };
     case 'here':
       return { t: 'here' };
     default:

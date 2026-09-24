@@ -31,6 +31,8 @@ import { Bloom, FLOOR_BLOOM, MACHINE_BLOOM, PixelRatio, TABLE_BLOOM, type BloomL
 import type { MouseSettings } from './mouse.ts';
 import { Emotes, OWN_BUBBLE_Y, BUBBLE_Y, type CharacterSource } from './emotes.ts';
 import { Staff, measureSeats, type StaffGesture } from './npcs.ts';
+import { lifePoints } from './life-points.ts';
+import { FloorLife } from './life/index.ts';
 import type { EmoteId } from '../../../shared/src/protocol.ts';
 import type { GameId } from '../../../shared/src/engine.ts';
 import type { Sfx } from '../audio/sfx.ts';
@@ -112,6 +114,8 @@ export interface FloorWorld extends World {
   useRemotes(source: CharacterSource | null): void;
   /** The dealers, bartender and cashier (npcs.ts). */
   readonly staff: Staff;
+  /** The floor's life (world/life/): sitting anywhere, waiters, the bartender, bankers, the shopkeeper. */
+  readonly life: FloorLife;
   /**
    * A dealer's arm motion at a station ('deal' a card, 'sweep' the chips in, 'pay' a bet) for a
    * table view to call as it animates; false when that station has no dealer.
@@ -199,7 +203,8 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
 
   const characters = new Characters(quality, mats.get('blob'));
   const look = opts.look ?? DEFAULT_LOOK;
-  const staff = new Staff(characters, stations, plan, col);
+  // the bartender and the cage's tellers come with the floor's life (world/life/)
+  const staff = new Staff(characters, stations, plan, col, { skip: ['bartender', 'cashier'] });
   root.add(staff.group);
   const mannequins = new Mannequins(characters, plan);
   root.add(mannequins.group);
@@ -252,7 +257,9 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
   hint.hidden = true;
   ui.append(hint);
   // Phones and tablets: the thumb stick, drag-to-look, the action button and Leave at a table.
-  const touch = new TouchControls({ player, ui, seated: () => interact.seated, focus: () => interact.focus, sensitivity: () => player.mouseSettings.sensitivity });
+  const touch = new TouchControls({ player, ui, seated: () => interact.seated, focus: () => interact.focus, spot: () => interact.spot, sensitivity: () => player.mouseSettings.sensitivity });
+  const life = new FloorLife({ root, camera: engine.camera, characters, plan, points: lifePoints(plan), player, interact, collider: col, staff: staff.posts });
+  await life.load();
 
   const bloom = new Bloom(engine);
   const pr = new PixelRatio(renderer);
@@ -367,6 +374,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
       lastCalls = renderer.info.render.calls;
       lastTris = renderer.info.render.triangles;
       renderer.info.reset();
+      life.early(dt);
       player.update(dt);
       interact.update(dt);
       const idle = player.awaitingClick && !interact.seated;
@@ -378,6 +386,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
       character.update(dt);
       staff.update(dt, engine.camera, interact.seated, everything ? null : visibility.visible, everything ? null : sees);
       map.update(dt);
+      life.update(dt, visibility.visible, sees);
       emotes.update(dt);
       const f = world.focus;
       lighting.setFocus(f && f.zone !== 'slots' && f.game !== 'videopoker' ? focusAt.copy(f.anchor.position) : null);
@@ -394,6 +403,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
       characters.updateLabels(engine.camera);
       bloom.update(dt);
       pr.update(dt);
+      life.late(dt);
     },
     stats: () => ({ calls: lastCalls, triangles: lastTris, programs: renderer.info.programs?.length ?? 0, pixelRatio: renderer.getPixelRatio() }),
     teleport: (x, z, heading) => player.spawn(x, z, heading),
@@ -416,6 +426,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
       remotes = source;
     },
     staff,
+    life,
     dealerGesture: (id, g) => staff.gesture(id, g),
     holdItem: (id) => void bar?.hold(id),
     dropHeld: () => void bar?.drop(),
@@ -446,6 +457,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
       hint.remove();
       touch.dispose();
       emotes.dispose();
+      life.dispose();
       staff.dispose();
       lod.dispose();
       interact.dispose();

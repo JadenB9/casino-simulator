@@ -244,6 +244,8 @@ Client to server:
 | `st` | `x, z, r` | once when you stop |
 | `watch` | `game: GameId \| null` | subscribe to one game's lobby list |
 | `emote` | `e: "wave" \| "cheer" \| "clap" \| "thumbs" \| "shrug" \| "sixseven"` (`EMOTES`, in the wheel's order: new ones go on the end) | 3 in a burst, then one every 2 s; extras are dropped without a reply |
+| `sit` | `seat` (a floor seat id, `SEAT_ID_RE`), `x, z` (cm, where the seat is), `r` (the way it faces) | with `watch`: 10 in a burst, then 4 a second |
+| `stand` | | same |
 | `here` | | the player is at the keyboard ([Idle](#idle)); at most once a minute, no reply |
 
 Movement rules. The first `mv` or `st` on a connection places you anywhere inside the floor
@@ -258,6 +260,16 @@ sender didn't need to send.
 A second tab for the same account takes the first one's place quietly: the old socket closes
 with 4001, and nobody else sees a leave and a join.
 
+Floor seats (`shared/src/seats.ts`): every chair, stool, sofa place and bench on the floor has an id,
+and anyone can sit on a free one (table seats are the tables' own business). The floor arbitrates:
+the first `sit` for a seat gets it and everyone hears `player { id, seat }`; a second gets
+`seat.no` saying who got there first ("Mia got there first."), and so does a seat more than 2.5 m
+from where the floor last saw you ("Walk up to it first."). Sitting moves you onto the seat (the
+position goes through the usual checks). One seat per player: sitting elsewhere gives up the
+first. `stand`, a position more than 60 cm from the seat (`SEAT_KEEP_CM`: walking off), closing
+the socket and a second tab taking over all free it, with `player { id, seat: null }`. The seat
+lives in the socket's attachment, so the floor sleeping loses nothing.
+
 Server to client:
 
 | t | fields |
@@ -266,7 +278,8 @@ Server to client:
 | `s` | `ts, p: [id, x, z, r, moving, age][]` (players who moved since the last snapshot; `age` in ms) |
 | `join` | `player: PlayerInfo` |
 | `leave` | `id` |
-| `player` | `id, look?, at?: { station: string } \| null` (who is sitting at which table) |
+| `player` | `id, look?, at?: { station: string } \| null` (who is sitting at which table), `seat?: string \| null` (on which floor seat) |
+| `seat.no` | `seat, msg` (to the one asking: the seat went to someone else, or is out of reach) |
 | `online` | `n` |
 | `lobbies` | `game, list: LobbySummary[]` (the answer to `watch`) |
 | `lobby` | `game, lobby: LobbySummary` (upsert, to watchers) |
@@ -277,7 +290,8 @@ Server to client:
 
 ```ts
 type PlayerInfo = { id: number; name: string; look: Look; x: number; z: number; r: number;
-                    at: { station: string } | null };   // never a private table's id
+                    at: { station: string } | null;     // never a private table's id
+                    seat?: string | null };             // the floor seat they sit on
 type LobbySummary = { tableId: string; game: GameId; variant?: string; leader: string;
                       players: number; max: number; started: boolean;   // public lobbies only
                       limits?: { min: number; max: number } };           // cents; Hold'em: the blinds

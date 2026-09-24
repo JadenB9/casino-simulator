@@ -59,6 +59,8 @@ export interface TouchDeps {
   seated(): WorldStation | null;
   /** The station within reach, if any (the cashier shows only through the floor's prompt). */
   focus(): WorldStation | null;
+  /** What E would do at some other spot in reach ("Sit", "Bank"), if that's what the prompt offers. */
+  spot?(): string | null;
   /** The mouse-look sensitivity setting (1 = default); drags follow it too. */
   sensitivity?(): number;
 }
@@ -225,11 +227,19 @@ export class TouchControls {
   private paintTarget(): void {
     const prompt = this.prompt?.isConnected ? this.prompt : (this.prompt = this.deps.ui.querySelector<HTMLElement>('.world-prompt'));
     const station = this.deps.focus();
-    const key = !prompt || prompt.hidden ? '' : (station?.id ?? 'cashier');
+    const spot = station ? null : (this.deps.spot?.() ?? null);
+    const key = !prompt || prompt.hidden ? '' : (station?.id ?? (spot ? `spot:${spot}` : 'cashier'));
     if (key === this.target) return;
     this.target = key;
     this.act.hidden = this.caption.hidden = !key;
     if (!key) return;
+    if (spot) {
+      // "Order a drink" is the whole caption; the button says its first word
+      this.actLabel.textContent = spot.split(' ')[0]!;
+      this.act.setAttribute('aria-label', spot);
+      this.caption.textContent = spot;
+      return;
+    }
     this.actLabel.textContent = station ? 'Play' : 'Visit';
     this.act.setAttribute('aria-label', station ? `Play ${station.name}` : 'Open the cashier');
     this.caption.textContent = station ? [station.name, station.limits].filter(Boolean).join(' · ') : 'Cashier';

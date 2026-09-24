@@ -2,6 +2,8 @@
 // ("Press E · Blackjack · $5–$5,000"); E sits down there: the camera flies to the game's play pose
 // and onEnter fires. Leaving (Esc, or exitTable() from the app) flies back behind the player.
 // The cashier works the same way but only fires onCashier; the app opens the bank over the floor.
+// Other things to walk up to (a seat, a waiter, a teller window) come from spot providers (the
+// floor's life, world/life/): the nearest of everything gets the prompt, and E uses it.
 
 import * as THREE from 'three';
 import { el } from '../ui/kit.ts';
@@ -16,13 +18,33 @@ const FLY_IN = 0.9;
 const FLY_OUT = 0.75;
 const AIM = 0.6;
 
-type Target = { kind: 'station'; station: WorldStation; d: number } | { kind: 'cashier'; d: number };
+/** Something else to walk up to, offered by a spot provider. */
+export interface Spot {
+  /** The same while it's the same thing (the prompt isn't redrawn while it stays). */
+  key: string;
+  /** Its point nearest the player, and how far the player is from it. */
+  x: number;
+  z: number;
+  d: number;
+  /** What E does there, for the prompt ("Sit", "Bank", "Order a drink"). */
+  label: string;
+  /** Offered whichever way the player faces (the seat they're sitting on). */
+  any?: boolean;
+  use(): void;
+}
+
+export type SpotProvider = (player: THREE.Vector3, heading: number) => Iterable<Spot>;
+
+type Target = { kind: 'station'; station: WorldStation; d: number } | { kind: 'cashier'; d: number } | { kind: 'spot'; spot: Spot; d: number };
 
 export class Interact {
   private prompt = el('div', 'world-prompt');
   private enterCbs = new Set<(s: WorldStation) => void>();
   private cashierCbs = new Set<() => void>();
   private current: Target | null = null;
+  private readonly providers = new Set<SpotProvider>();
+  /** The cage's own prompt; off while tellers at its windows take the customers (world/life/). */
+  cashierPrompt = true;
   seated: WorldStation | null = null;
   private fly: { from: THREE.Vector3; fromT: THREE.Vector3; to: THREE.Vector3; toT: THREE.Vector3; t: number; dur: number; done: () => void } | null = null;
   private readonly look = new THREE.Vector3();
@@ -54,6 +76,22 @@ export class Interact {
   /** The station the player would enter with E right now (null when none). */
   get focus(): WorldStation | null {
     return this.current?.kind === 'station' ? this.current.station : null;
+  }
+
+  /** What E would do at a provider's spot right now ("Sit"), or null. */
+  get spot(): string | null {
+    return this.current?.kind === 'spot' ? this.current.spot.label : null;
+  }
+
+  /** Offer more things to walk up to; the returned function takes them back. */
+  spots(fn: SpotProvider): () => void {
+    this.providers.add(fn);
+    return () => this.providers.delete(fn);
+  }
+
+  /** What E at the cashier does (a teller window's own E comes through here). */
+  useCashier(): void {
+    for (const cb of this.cashierCbs) cb();
   }
 
   update(dt: number): void {
@@ -133,13 +171,13 @@ export class Interact {
     const fx = Math.sin(this.player.heading);
     const fz = Math.cos(this.player.heading);
     let best: Target | null = null;
-    const consider = (qx: number, qz: number, d: number, t: Target) => {
+    const consider = (qx: number, qz: number, d: number, t: Target, any = false) => {
       if (d > REACH) return;
       const dx = qx - p.x;
       const dz = qz - p.z;
       const len = Math.hypot(dx, dz);
       // in front: within about 75 degrees of where the player faces (or practically touching)
-      if (len > 0.35 && (dx * fx + dz * fz) / len < 0.26) return;
+      if (!any && len > 0.35 && (dx * fx + dz * fz) / len < 0.26) return;
       if (!best || d < best.d) best = t;
     };
     for (const s of this.stations) {
@@ -160,13 +198,23 @@ export class Interact {
       const wz = a.z - qx * sn + qz * c;
       consider(wx, wz, d, { kind: 'station', station: s, d });
     }
-    const cd = Math.max(0, Math.hypot(p.x - this.cashier.position.x, p.z - this.cashier.position.z) - 0.6);
-    consider(this.cashier.position.x, this.cashier.position.z - 0.6, cd, { kind: 'cashier', d: cd });
+    if (this.cashierPrompt) {
+      const cd = Math.max(0, Math.hypot(p.x - this.cashier.position.x, p.z - this.cashier.position.z) - 0.6);
+      consider(this.cashier.position.x, this.cashier.position.z - 0.6, cd, { kind: 'cashier', d: cd });
+    }
+    for (const provide of this.providers) {
+      for (const spot of provide(p, this.player.heading)) consider(spot.x, spot.z, spot.d, { kind: 'spot', spot, d: spot.d }, spot.any);
+    }
     return best;
   }
 
   private show(t: Target | null): void {
-    const same = t && this.current && t.kind === this.current.kind && (t.kind === 'cashier' || (this.current.kind === 'station' && t.station === this.current.station));
+    const cur = this.current;
+    const same =
+      t &&
+      cur &&
+      t.kind === cur.kind &&
+      (t.kind === 'cashier' || (t.kind === 'station' && cur.kind === 'station' && t.station === cur.station) || (t.kind === 'spot' && cur.kind === 'spot' && t.spot.key === cur.spot.key && t.spot.label === cur.spot.label));
     this.current = t;
     if (same) return;
     this.prompt.replaceChildren();
@@ -174,7 +222,7 @@ export class Interact {
       this.prompt.hidden = true;
       return;
     }
-    const parts = t.kind === 'cashier' ? ['Cashier'] : [t.station.name, t.station.limits].filter(Boolean);
+    const parts = t.kind === 'cashier' ? ['Cashier'] : t.kind === 'spot' ? [t.spot.label] : [t.station.name, t.station.limits].filter(Boolean);
     this.prompt.append('Press ', el('span', 'world-key', 'E'), ...parts.map((x) => ` · ${x}`));
     this.prompt.hidden = false;
   }
@@ -183,8 +231,10 @@ export class Interact {
     if (isTyping(e)) return;
     if (e.code === 'KeyE' && !e.repeat && !this.seated && !this.fly && this.player.isEnabled && this.current) {
       e.preventDefault();
-      if (this.current.kind === 'station') this.enter(this.current.station);
-      else for (const cb of this.cashierCbs) cb();
+      const t = this.current;
+      if (t.kind === 'station') this.enter(t.station);
+      else if (t.kind === 'spot') t.spot.use();
+      else this.useCashier();
       return;
     }
     if (e.code === 'Escape' && this.seated && !this.fly) {

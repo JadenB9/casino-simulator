@@ -153,6 +153,13 @@ export class CasinoFloor extends DurableObject<Env> {
       this.presence.touch(ws, Date.now());
     } else if (msg.t === 'here') {
       this.presence.touch(ws, Date.now());
+    } else if (msg.t === 'sit') {
+      // sitting down or getting up is someone at the keyboard too
+      this.presence.sit(ws, msg);
+      this.presence.touch(ws, Date.now());
+    } else if (msg.t === 'stand') {
+      this.presence.stand(ws);
+      this.presence.touch(ws, Date.now());
     } else {
       this.presence.onMessage(ws, msg);
     }
