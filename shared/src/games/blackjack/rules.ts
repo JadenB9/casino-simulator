@@ -23,8 +23,14 @@ export const MAX_HANDS = 4;
  * Which betting circle each seat sits at, counting circles from first base (the dealer's left)
  * to third base. The first player to sit down (and every solo player) gets the middle circle;
  * later players fill outward. Cards are dealt and hands played by circle, first base first.
+ *
+ * A round's spots are numbered the same way: spot s is the circle seat s would take. A solo
+ * player who plays n spots plays spots 0 to n - 1, the middle circles outward.
  */
 export const SPOT_OF_SEAT: readonly number[] = [3, 2, 4, 1, 5, 0, 6];
+
+/** How many circles one solo player may play at once. */
+export const MAX_SPOTS = 5;
 
 export function spotOf(seat: number): number {
   return SPOT_OF_SEAT[seat] ?? seat;
@@ -95,6 +101,7 @@ export type InsuranceState = 'none' | 'offered' | 'taken' | 'declined';
 
 /** One betting circle in the round. */
 export interface Spot {
+  /** The spot, numbered like the seats (a solo player's extra circles go on from their own). */
   seat: number;
   /** The opening bet. */
   base: Cents;

@@ -87,7 +87,8 @@ export function bigWinsIn(game: GameId, variant: string, step: Step<unknown>, wh
       game,
       wagered: r.wagered,
       amount: r.returned - r.wagered,
-      what: describeWin(game, variant, step.events, r.seat, r.wagered, r.returned),
+      // A solo player's extra spots are named in the events by their spot, not the seat.
+      what: describeWin(game, variant, step.events, r.spot ?? r.seat, r.wagered, r.returned),
       at: revealAt(game, step.events, now),
       station: w.station,
     });

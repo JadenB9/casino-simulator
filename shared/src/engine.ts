@@ -77,6 +77,12 @@ export interface RoundResult {
   seat: number;
   wagered: Cents;
   returned: Cents;
+  /**
+   * Where the hand was played, when that isn't the seat's own place: one of the extra spots of a
+   * solo player playing several hands at once (the game's events name it as their `seat`). Each
+   * spot's hand is a round of its own.
+   */
+  spot?: number;
 }
 
 /**
