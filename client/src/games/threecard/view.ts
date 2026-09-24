@@ -36,7 +36,6 @@ import { ChipStack, slideStack } from '../../table/chips.ts';
 import { celebrate } from '../../table/celebrate.ts';
 import type { Felt } from '../../table/felt.ts';
 import { ease, tween, wait } from '../../table/tween.ts';
-import { dropGlow, handGlow, raiseBanner } from '../blackjack/celebration.ts';
 import { handMoment } from './moments.ts';
 import { ChipTray, button, el } from '../../ui/kit.ts';
 import { serverNow } from '../../net/clock.ts';
@@ -383,7 +382,6 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
     ctx.kit.tip(a ? a.text : null);
   };
   const offTips = ctx.tips.subscribe(() => renderTip());
-  const lowerBanner = raiseBanner(ctx.ui);
 
   /**
    * A hand's moment, if it was one, with the light under its cards. Several hands' moments take
@@ -394,9 +392,7 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
     if (!m) return;
     const show = () => {
       if (disposed) return;
-      const stand = handGlow(hands.get(spot) ?? [], TOP_Y + 0.0009);
-      celebrate(ctx, { ...m, at: handSlot(spot, 1).pos, glow: stand ? [stand] : [] });
-      dropGlow(stand);
+      celebrate(ctx, { ...m, at: handSlot(spot, 1).pos, glow: [hands.get(spot) ?? []] });
     };
     const now = performance.now();
     const at = Math.max(now, celebrateAt);
@@ -1127,7 +1123,6 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
       for (const x of [ringMat, litMat, ringGeo, litGeo]) x.dispose();
       picker.root.remove();
       offTips();
-      lowerBanner();
       ctx.kit.tip(null);
       removeEventListener('pointerdown', onDown);
       removeEventListener('pointermove', onMove);

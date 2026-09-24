@@ -22,7 +22,6 @@ import { advise, insuranceAdvice } from '../../../../shared/src/games/blackjack/
 import { CardMesh, dealCard, flipCard } from '../../table/cards.ts';
 import { ChipStack, slideStack } from '../../table/chips.ts';
 import { celebrate } from '../../table/celebrate.ts';
-import { dropGlow, handGlow, raiseBanner } from './celebration.ts';
 import { roundMoment } from './moments.ts';
 import { tween, wait, ease } from '../../table/tween.ts';
 import { ChipTray, button, el } from '../../ui/kit.ts';
@@ -162,7 +161,6 @@ export class BlackjackTable implements TableView {
   private timerObj: CSS2DObject | null = null;
   private readonly onPointer: (e: PointerEvent) => void;
   private readonly offTips: () => void;
-  private readonly lowerBanner: () => void;
   /** A decision is on its way to the server: its tip stays down until the next view arrives. */
   private acted = false;
 
@@ -229,7 +227,6 @@ export class BlackjackTable implements TableView {
     };
     addEventListener('pointerdown', this.onPointer);
     this.offTips = ctx.tips.subscribe(() => this.renderTip());
-    this.lowerBanner = raiseBanner(ctx.ui);
   }
 
   // ------------------------------------------------------------------------------------------
@@ -1113,9 +1110,7 @@ export class BlackjackTable implements TableView {
       const show = () => {
         if (this.disposed || !found) return;
         const cards = found.hands.flatMap((hi) => (sp.hands[hi]?.cards ?? []).map((_, ci) => this.cards.get(`c:${sp.seat}:${hi}:${ci}`)).filter((m): m is CardMesh => !!m));
-        const stand = handGlow(cards, L.TOP_Y + 0.0013);
-        celebrate(this.ctx, { ...found.m, glow: stand ? [stand] : [] });
-        dropGlow(stand);
+        celebrate(this.ctx, { ...found.m, glow: [cards] });
       };
       if (i === 0) show();
       else setTimeout(show, i * CELEBRATION_GAP_MS);
@@ -1134,7 +1129,6 @@ export class BlackjackTable implements TableView {
     for (const g of [this.ringGeo, this.litGeo, this.ringMat, this.litMat]) g.dispose();
     removeEventListener('pointerdown', this.onPointer);
     this.offTips();
-    this.lowerBanner();
     this.ctx.kit.tip(null);
     this.tray.root.remove();
     this.picker.root.remove();

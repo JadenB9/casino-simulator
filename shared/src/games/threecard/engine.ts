@@ -404,8 +404,21 @@ export const engine: GameEngine<ThreeCardState, ThreeCardAction, ThreeCardView> 
     return { ...state, deadline: state.deadline + ms };
   },
 
-  seatJoined(state) {
-    return { state, events: [] };
+  seatJoined(state, seat) {
+    // Chips only land on a seat with nothing live, so whatever this round still keeps under the
+    // number (a folded hand, its result) is the last occupant's, and view() shows a seat its own
+    // cards: clear it, so the newcomer never sees a hand nobody else was shown. At a solo table
+    // that's every spot (all of them the last session's).
+    const keys = [...Object.keys(state.hands), ...Object.keys(state.bets), ...Object.keys(state.results)].map(Number);
+    const left = [...new Set(keys)].filter((spot) => owns(state, seat, spot));
+    if (left.length === 0) return { state, events: [] };
+    const s = structuredClone(state);
+    for (const spot of left) {
+      delete s.hands[spot];
+      delete s.bets[spot];
+      delete s.results[spot];
+    }
+    return { state: s, events: [] };
   },
 
   seatLeaving(state, seat, ctx) {

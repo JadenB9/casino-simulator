@@ -184,7 +184,7 @@ function wrapUp(s: BlackjackState, ctx: EngineCtx, events: GameEvent[], before: 
   const multi = ctx.mode === 'multi';
   let rounds: RoundResult[] | undefined;
   if (r.stage === 'done') {
-    rounds = r.spots.filter((sp) => seated.has(S.owner(ctx, sp.seat))).map((sp) => S.roundOf(ctx, sp.seat, sp.wagered, sp.returned));
+    rounds = r.spots.filter((sp) => seated.has(S.owner(ctx, sp.seat)) && !sp.reported).map((sp) => S.roundOf(ctx, sp.seat, sp.wagered, sp.returned));
     s.phase = 'results';
     s.deadline = multi ? ctx.now + RESULTS_MS : null;
     events.push({ type: 'done', round: s.round });
@@ -496,7 +496,18 @@ export const engine: GameEngine<BlackjackState, BlackjackAction, BlackjackView> 
       const d = dealing(s, ctx, events);
       for (const sp of state.deal.spots) if (owns(state, seat, sp.seat)) standSeat(s.deal!, sp.seat, d);
       s.shoe = d.shoe;
-      return wrapUp(s, ctx, events, before, state.phase);
+      const step = wrapUp(s, ctx, events, before, state.phase);
+      // Nothing of this seat left on the layout (a natural paid, a bust, a surrender): the host
+      // cashes it out now, before the dealer finishes, and the round's end only reports seats
+      // still at the table. Report each of its spots' rounds here, or they never reach the stats.
+      if (s.deal!.stage !== 'done') {
+        for (const sp of s.deal!.spots) {
+          if (!owns(state, seat, sp.seat) || sp.reported || sp.live !== 0) continue;
+          sp.reported = true;
+          step.rounds = [...(step.rounds ?? []), S.roundOf(ctx, sp.seat, sp.wagered, sp.returned)];
+        }
+      }
+      return step;
     }
     return { state, events: [] };
   },

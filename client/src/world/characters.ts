@@ -25,6 +25,7 @@ import { DEFAULT_LOOK, OUTFITS, SKIN_TONES, type Body, type Look } from '../../.
 import type { Quality } from '../render/engine3d.ts';
 import type { Character, CharacterFactory } from './contract.ts';
 import type { EmoteId } from '../../../shared/src/protocol.ts';
+import { Wearables, dressed } from './wearables.ts';
 
 export const MODEL_BASE = `${import.meta.env.BASE_URL}assets/models/`;
 
@@ -91,7 +92,7 @@ export class Characters implements CharacterFactory {
 
   /** Resolves when the model for `look` is ready to show (create() never waits). */
   async load(look: Look): Promise<void> {
-    await this.template(look.body, look.outfit);
+    await this.template(look.body, dressed(look).outfit);
   }
 
   create(look: Look, name: string, opts: PersonOptions = {}): Person {
@@ -231,6 +232,8 @@ export class Person implements Character {
   private shownKey = '';
   private disposed = false;
   private tagOn = true;
+  /** The boutique's pieces and a held bar order (wearables.ts). */
+  private readonly wear = new Wearables();
   private bones: Partial<Record<BoneKey, THREE.Object3D>> = {};
   /** Bones this frame's gesture turned, and the mixer's pose for them (put back next frame). */
   private readonly posed = new Map<THREE.Object3D, THREE.Quaternion>();
@@ -280,7 +283,7 @@ export class Person implements Character {
   }
 
   setLook(look: Look): void {
-    this.look = look;
+    this.look = look = dressed(look);
     const key = `${look.body}/${look.outfit}`;
     if (key === this.shownKey) {
       this.paint();
@@ -318,7 +321,7 @@ export class Person implements Character {
   }
 
   useMaterial(m: THREE.Material): void {
-    if (this.mesh) this.mesh.material = m;
+    if (this.mesh) this.mesh.material = this.wear.body(m);
   }
 
   /** The Look this character is drawn from. */
@@ -574,6 +577,7 @@ export class Person implements Character {
     this.mixer?.stopAllAction();
     if (this.model) this.mixer?.uncacheRoot(this.model);
     this.mesh?.geometry.dispose();
+    this.wear.dispose();
     this.tag.element.remove();
     this.root.removeFromParent();
     this.factory.forget(this);
@@ -660,6 +664,7 @@ export class Person implements Character {
       arr[i * 3 + 2] = Math.round(Math.min(1, c.b) * 65535);
     }
     attr.needsUpdate = true;
+    this.wear.dress(this.look, tpl, this.model!, this.mesh!, this.mixer);
   }
 }
 
