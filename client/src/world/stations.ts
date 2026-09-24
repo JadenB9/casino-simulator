@@ -7,6 +7,7 @@ import type { GameId } from '../../../shared/src/engine.ts';
 import { CATALOG } from '../../../shared/src/games/catalog.ts';
 import { ENGINES } from '../../../shared/src/games/index.ts';
 import { formatMoney } from '../../../shared/src/money.ts';
+import { limitsSpan } from '../../../shared/src/limits.ts';
 import { GAMES } from '../games/index.ts';
 import type { Quality } from '../render/engine3d.ts';
 import type { Station } from './contract.ts';
@@ -18,7 +19,7 @@ export interface WorldStation extends Station {
   zone: Zone;
   /** What the prompt calls it ("Blackjack", "American Roulette", "Neon Nights"). */
   name: string;
-  /** "$5–$5,000", from the engine's solo table limits. */
+  /** "$5–$50,000": the limits a table here can be opened at (a machine's bets). */
   limits: string;
   /** The game module's model (a child of the anchor). */
   model: THREE.Object3D;
@@ -40,8 +41,11 @@ export function stationName(game: GameId, variant: string): string {
   return game === 'slots' ? v.name : `${v.name} ${info.name}`;
 }
 
+/** The limits a table here can be opened at ("$5–$50,000"), or a machine's bets. */
 export function limitsText(game: GameId, variant: string): string {
   try {
+    const span = limitsSpan(game);
+    if (span) return span;
     const l = ENGINES[game].config(variant, 'solo').limits.default;
     return `${formatMoney(l.min)}–${formatMoney(l.max)}`;
   } catch {

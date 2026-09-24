@@ -16,7 +16,8 @@ enumerates the game exactly. Where both exist, they agree to the digits shown.
 
 - **Money.** Balances and payouts are integer cents. Table bets are whole dollars. Video poker and slots
   bet whole coins (or credits) of a fixed denomination such as $0.25, $1 or $5, and every paytable entry is
-  a whole number of coins, so every payout is exact.
+  a whole number of coins, so every payout is exact. Each machine's coin values (high-limit ones included)
+  and every table's choosable limits are in [limits.md](limits.md); a table's limits never change a payout.
 - **House edge** is the expected loss divided by the initial wager (for Three Card Poker, the Ante).
   **Return to player (RTP)** is 1 minus the house edge. **Element of risk** is the expected loss divided by
   the average total amount wagered in a round (it counts the Play bet too).
@@ -206,13 +207,37 @@ Ante Bonus.
   divided by drop, the cash and markers exchanged for chips at the table, not the house edge. Do not
   compare the two.
 
+### 1.9 Several hands (solo tables)
+
+At a solo table a player can play one to three hands at once, from the one stack, at the player's
+own position and the ones the next players would take. Each hand has its own Ante and Pair Plus
+inside the table's limits, and every Ante is taken only with its Play bet still in the stack, so
+each hand can be played whatever the cards. All the hands come from the round's one deck (three
+cards to each hand, then the dealer's three). Each hand is played or folded on its own, one at a
+time from first base, and each settles on its own, a round of its own in the stats. At a shared
+table every player keeps one hand.
+
+**Odds.** The deal is a uniformly random pick of cards, so each hand's three cards and the
+dealer's three are a uniformly random six cards whatever the other hands hold, and the Q-6-4 rule
+looks only at the hand's own cards: the other hands are cards nobody looks at. The edge per hand
+is therefore exactly the one-hand edge, 3.373% of the Ante (Q-6-4) and 7.276% for Pair Plus. The
+hands share the dealer's cards, so the Monte Carlo takes its standard error from each round's
+average over its hands (shared/test/threecard-spots.mc.test.ts):
+
+| Bet | Published | Measured per hand | SE | z | N |
+|---|---|---|---|---|---|
+| Ante and Play, Q-6-4 | 3.3730% | 3.3801% | 0.0352% | +0.20 | 10M rounds, 30M hands |
+| Pair Plus | 7.2760% | 7.3423% | 0.0520% | +1.27 | the same deals |
+| All three bets through the table engine, one stack (per Ante) | 10.6490% | 11.1878% | 0.5757% | +0.94 | 166,667 rounds |
+
 ---
 
 ## 2. Video poker: Jacks or Better 9/6
 
 ### 2.1 Rules
 
-- One 52-card deck, freshly shuffled for every hand. The player bets 1 to 5 coins and is dealt five cards.
+- One 52-card deck, freshly shuffled for every hand. The player bets 1 to 5 coins of $1, $5, $25 or $100 and
+  is dealt five cards.
 - The player holds any subset of the five (none to all) and the rest are replaced from the same shuffled
   deck. In code: shuffle all 52 once, deal positions 0-4, and fill discards from positions 5, 6, 7 and so
   on. Every unseen card is then equally likely, which is what Nevada requires of a machine that represents
@@ -851,7 +876,7 @@ Top award (three 5X): 1 in 93312 spins
 ### 3.7 Machine D: "Diamond Line" (3 reels, 1 line, doubling diamond wild)
 
 - **Format:** 3 reels, 22 physical stops (11 symbols alternating with 11 blanks), **64 virtual stops per
-  reel**, one center payline, 1-3 coins at $1, $2 or $5. Pays are per coin and linear, so one RTP covers
+  reel**, one center payline, 1-3 coins at $1, $2, $5, $25 or $100. Pays are per coin and linear, so one RTP covers
   every bet. Cycle: 64^3 = 262,144.
 - **Diamond wild:** the DIAMOND substitutes for every symbol, cherries included, and each DIAMOND in a win
   doubles it: one pays x2, two pay x4. Three DIAMONDs pay the top award.
@@ -1317,8 +1342,9 @@ tournaments; where cash games differ, Robert's Rules governs.
 
 ### 4.1 Table and stakes
 
-- 2 to 9 seats. One 52-card deck, shuffled for every hand. Two blinds, small (SB) and big (BB), for
-  example $1/$2 or $5/$10. No antes, no straddles, no rake.
+- 2 to 9 seats. One 52-card deck, shuffled for every hand. Two blinds, small (SB) and big (BB), chosen when
+  the table is started: $1/$2 to $1,000/$2,000, or custom ([limits.md](limits.md)); $5/$10 at Standard. No
+  antes, no straddles, no rake.
 - **Table stakes:** only chips on the table when the hand starts can be bet, and chips cannot be added or
   removed during a hand ([Wikipedia][wikibet]). Buy-in: 20 to 100 big blinds, a common convention ("in a $1/2
   No Limit cash game, the minimum stake is often set at $40 while maximum stake is often set at $200"

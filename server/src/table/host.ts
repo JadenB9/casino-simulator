@@ -16,8 +16,10 @@ import { gameInfo, isGameId, variantOf } from '../../../shared/src/games/catalog
 import { cryptoRng, type Rng } from '../../../shared/src/rng.ts';
 import { lookFromJson } from '../../../shared/src/look.ts';
 import type { Cents } from '../../../shared/src/money.ts';
+import { applyLimits, clampLimits, hasLimitChoice, limitsOf, parseLimitsParam, sameLimits, type TableLimits } from '../../../shared/src/limits.ts';
 import {
   CLOSE,
+  IDLE_MS,
   MAX_TABLE_FRAME,
   PROTOCOL_VERSION,
   parseTableMsg,
@@ -34,6 +36,7 @@ import { applyTransfer, buyInStatements, cashOutStatements, refundStatements, mo
 import { Bucket, KeyedBuckets } from '../ratelimit.ts';
 import { closeWith } from '../http.ts';
 import { ipKey } from '../floor/directory.ts';
+import { spendTicket } from '../tickets.ts';
 import type { CasinoFloor } from '../floor/index.ts';
 import { ChatRoom } from '../floor/chat.ts';
 import { bigWinsIn, type BigWinReport } from '../floor/wins.ts'; // features: big wins
@@ -72,6 +75,11 @@ export const STRIKES = 40;
 const STRIKE_FORGIVE_PER_SEC = 0.2;
 /** Longest the alarm waits before retrying an engine deadline that tick() couldn't clear. */
 const OVERDUE_MAX_MS = 5_000;
+/**
+ * A member's idle deadline (IDLE_MS after their last real message) is written with this much to
+ * spare, so it is written at most once a minute however busy they are, and never falls due early.
+ */
+const IDLE_SLACK_MS = 60_000;
 
 type MemberRow = {
   account_id: number;
@@ -166,6 +174,15 @@ export interface InitParams {
   mode: TableMode;
   visibility: 'public' | 'private';
   pin: string | null;
+  /** The table's limits as chosen (clamped again here); Standard when left out. */
+  limits?: TableLimits | null;
+}
+
+/** A game's Standard config, at the given limits when there are any to choose. */
+function configAt(engine: Engine, p: { game: GameId; variant: string; mode: TableMode; limits?: TableLimits | null }): TableConfig {
+  const cfg = engine.config(p.variant, p.mode);
+  const l = p.limits ? clampLimits(p.game, p.limits) : null;
+  return l ? applyLimits(cfg, l) : cfg;
 }
 
 export class CasinoTable extends DurableObject<Env> {
@@ -181,6 +198,8 @@ export class CasinoTable extends DurableObject<Env> {
   private connects = new KeyedBuckets(CONNECT_BURST, CONNECT_PER_SEC);
   /** Alarms in a row that found the engine's deadline still due after running it. */
   private overdue = 0;
+  /** Each member's `idle:` deadline as last written (a cache: a restart just writes it again). */
+  private idleDue = new Map<number, number>();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -289,7 +308,7 @@ export class CasinoTable extends DurableObject<Env> {
 
   private create(p: InitParams, now: number): void {
     const engine = engineFor(p.game) as Engine;
-    const config = engine.config(p.variant, p.mode);
+    const config = configAt(engine, p);
     const meta: Meta = {
       name: p.name,
       game: p.game,
@@ -322,6 +341,33 @@ export class CasinoTable extends DurableObject<Env> {
     this.scheduleAlarm();
   }
 
+  /**
+   * A solo table takes the limits it is opened with. Chips still on it (a seat held through a
+   * dropped connection, a buy-in or cash-out on its way, bets out) keep the limits they were
+   * bought in at until they are cashed out: the player sees the table's real limits in the
+   * snapshot, and the client says why they differ. A new game state starts at the new limits.
+   */
+  private relimit(asked: TableLimits | null, now: number): void {
+    const m = this.meta!;
+    const engine = this.engine!;
+    const want = asked ? clampLimits(m.game, asked) : null;
+    if (!want || sameLimits(want, limitsOf(m.config))) return;
+    for (const mem of this.members.values()) if (mem.status !== 'watching' || mem.stack > 0 || mem.live > 0) return;
+    if (this.sql.exec<{ n: number }>(`SELECT count(*) AS n FROM outbox WHERE state = 'pending'`).one().n > 0) return;
+    const config = applyLimits(engine.config(m.variant, m.mode), want);
+    this.ctx.storage.transactionSync(() => {
+      m.config = config;
+      this.state = engine.create(config, this.engineCtx(now));
+      this.putMeta('config', config);
+      this.sql.exec(`INSERT OR REPLACE INTO state (id, json) VALUES (1, ?1)`, JSON.stringify(this.state));
+      // A fresh state remembers nobody's round.
+      if (m.held?.length) {
+        m.held = [];
+        this.putMeta('held', m.held);
+      }
+    });
+  }
+
   /** What the lobby list shows. */
   summary(): LobbySummary | null {
     const m = this.meta;
@@ -335,6 +381,7 @@ export class CasinoTable extends DurableObject<Env> {
       players: this.members.size,
       max: m.config.maxSeats,
       started: m.started,
+      ...(hasLimitChoice(m.game) ? { limits: limitsOf(m.config) } : {}),
     };
   }
 
@@ -387,11 +434,18 @@ export class CasinoTable extends DurableObject<Env> {
     if (!this.meta && solo) {
       const [game, variant] = solo.split('|');
       if (!isGameId(game)) return new Response('bad game', { status: 400 });
-      this.create({ name: tableName, game, variant: variantOf(game, variant), mode: 'solo', visibility: 'private', pin: null }, now);
+      this.create({ name: tableName, game, variant: variantOf(game, variant), mode: 'solo', visibility: 'private', pin: null, limits: parseLimitsParam(request.headers.get('x-casino-limits')) }, now);
     }
     const m = this.meta;
     if (!m || m.closed) return closeWith(CLOSE.NOT_FOUND, 'no such table');
     if (m.mode === 'solo' && !tableName.endsWith(`:${accountId}`)) return closeWith(CLOSE.FORBIDDEN, 'not your table');
+    // The ticket that let this socket through the Worker opens it once (tickets.ts). Spent only
+    // once the table is known to exist, so probing a made-up id still writes nothing.
+    if (!spendTicket(this.sql, request.headers.get('x-casino-ticket'), Number(request.headers.get('x-casino-ticket-exp')), now)) {
+      return closeWith(CLOSE.TICKET, 'ticket used');
+    }
+    // Each sitting at a solo table brings its own limits (kept while chips are still on it).
+    if (m.mode === 'solo' && solo) this.relimit(parseLimitsParam(request.headers.get('x-casino-limits')), now);
     let mem = this.members.get(accountId);
     if (!mem) {
       if (this.members.size >= m.config.maxSeats) return closeWith(CLOSE.FORBIDDEN, 'table full');
@@ -403,6 +457,7 @@ export class CasinoTable extends DurableObject<Env> {
         if (refused) return closeWith(CLOSE.FORBIDDEN, refused === 'locked' ? 'too many tries' : 'wrong pin');
       }
       mem = this.addMember(accountId, name, look, station, now);
+      this.markActive(accountId, now);
     } else if (mem.leaving) {
       // Still settling the bets left behind when they stood up (a craps point, say): the seat is
       // on its way out and can't be reopened until that's done and it has cashed out.
@@ -418,6 +473,9 @@ export class CasinoTable extends DurableObject<Env> {
       );
       this.clearDeadline(`grace:${accountId}`);
       if (m.leader === accountId) this.clearDeadline('leader');
+      // Coming back isn't activity (a flaky network reconnects on its own), but a player whose
+      // idle deadline passed while they were away gets a whole new one.
+      if (!this.hasDeadline(`idle:${accountId}`)) this.markActive(accountId, now);
     }
     // Newest connection wins: an older socket for this account is told why it's being closed.
     for (const old of this.ctx.getWebSockets(`a:${accountId}`)) {
@@ -479,7 +537,12 @@ export class CasinoTable extends DurableObject<Env> {
     }
     // Chat keeps its own limits and mutes (floor/chat.ts) on top of the frame count.
     const say = parseSay(data);
-    if (say) return this.chatSay(ws, att.accountId, say.text);
+    if (say) {
+      if (this.members.has(att.accountId)) this.markActive(att.accountId, Date.now());
+      this.chatSay(ws, att.accountId, say.text);
+      this.scheduleAlarm();
+      return;
+    }
     const msg = parseTableMsg(data);
     if (!msg) {
       this.strike(ws, b);
@@ -493,6 +556,8 @@ export class CasinoTable extends DurableObject<Env> {
     const mem = this.members.get(att.accountId);
     if (!mem) return;
     const now = Date.now();
+    // Anything the player asked for is activity, `here` included; `sync` is the client's own.
+    if (msg.t !== 'sync') this.markActive(mem.account_id, now);
     try {
       switch (msg.t) {
         case 'act':
@@ -525,6 +590,8 @@ export class CasinoTable extends DurableObject<Env> {
           break;
         case 'sync':
           this.send(ws, this.snapshotFor(mem.account_id, now));
+          break;
+        case 'here':
           break;
       }
     } catch (err) {
@@ -590,6 +657,12 @@ export class CasinoTable extends DurableObject<Env> {
           if (this.members.size === 0) await this.closeTable();
         } else if (d.name === 'leader') {
           this.handOffLead();
+        } else if (d.name.startsWith('idle:')) {
+          const id = Number(d.name.slice(5));
+          this.idleDue.delete(id);
+          const mem = this.members.get(id);
+          // Someone who dropped is the grace period's business; they get a new deadline if they return.
+          if (mem && this.isConnected(id)) this.idleOut(mem, now);
         }
       }
       this.runTicks(now);
@@ -610,6 +683,33 @@ export class CasinoTable extends DurableObject<Env> {
     }
     this.alarmAt = null;
     this.scheduleAlarm();
+  }
+
+  // ------------------------------------------------------------------------------------------
+  // Idle members
+
+  /** The member did something: their idle deadline stays at least IDLE_MS away. */
+  private markActive(accountId: number, now: number): void {
+    if ((this.idleDue.get(accountId) ?? 0) >= now + IDLE_MS) return;
+    const at = now + IDLE_MS + IDLE_SLACK_MS;
+    this.idleDue.set(accountId, at);
+    this.setDeadline(`idle:${accountId}`, at);
+  }
+
+  /**
+   * Nothing from a connected member for IDLE_MS: they're told why and stood up the way Leave does
+   * it (live bets settle first, then the seat cashes out). The close goes first, so what the
+   * leave says and does on its way (a watcher is removed at once) doesn't replace the reason.
+   */
+  private idleOut(mem: MemberRow, now: number): void {
+    for (const ws of this.ctx.getWebSockets(`a:${mem.account_id}`)) {
+      try {
+        ws.close(CLOSE.IDLE, 'away');
+      } catch {
+        /* already closing */
+      }
+    }
+    this.beginLeave(mem, now);
   }
 
   // ------------------------------------------------------------------------------------------
@@ -678,6 +778,8 @@ export class CasinoTable extends DurableObject<Env> {
       this.sql.exec(`DELETE FROM members WHERE account_id = ?1`, mem.account_id);
       this.members.delete(mem.account_id);
       this.clearDeadline(`grace:${mem.account_id}`);
+      this.clearDeadline(`idle:${mem.account_id}`);
+      this.idleDue.delete(mem.account_id);
       if (m.leader === mem.account_id) {
         const next = this.nextLeader(mem.account_id);
         m.leader = next ? next.account_id : null;

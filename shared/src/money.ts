@@ -43,6 +43,9 @@ export const CHIPS: readonly ChipSpec[] = [
   { value: 100_000, label: '1000', body: '#f0b92a', spots: '#1d1d20', ink: '#1d1d20' },
   { value: 500_000, label: '5000', body: '#8f9196', spots: '#c7262e', ink: '#1d1d20' },
   { value: 2_500_000, label: '25K', body: '#c9a24b', spots: '#1d1d20', ink: '#1d1d20' },
+  // the high-limit rooms' chips
+  { value: 10_000_000, label: '100K', body: '#7a1f2b', spots: '#f2d24a', ink: '#f7f2ea' },
+  { value: 100_000_000, label: '1M', body: '#0e3a4a', spots: '#e8c46a', ink: '#f7f2ea' },
 ];
 
 /** The chips a player can pick from the tray (payout-only chips excluded). */

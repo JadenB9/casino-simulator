@@ -214,15 +214,17 @@ async function run(): Promise<void> {
       }),
     walkTo: (x: number, z: number) => new Promise<void>((done) => (target = { x, z, done })),
     setLook: (look: Look) => saveLook(look),
-    sit: (station: string) =>
-      new Promise<void>((resolve, reject) => {
-        const ws = new WebSocket(socketUrl('solo/highcard', { station }));
+    sit: async (station: string) => {
+      const url = await socketUrl('solo/highcard', { station });
+      return new Promise<void>((resolve, reject) => {
+        const ws = new WebSocket(url);
         table = ws;
         ws.addEventListener('message', (e) => {
           if (typeof e.data === 'string' && e.data !== 'pong' && JSON.parse(e.data).t === 'table') resolve();
         });
         ws.addEventListener('close', (e) => reject(new Error(`table closed ${e.code}`)));
-      }),
+      });
+    },
     stand: () => {
       table?.send(JSON.stringify({ t: 'leave' }));
       const ws = table;

@@ -1,5 +1,6 @@
-// Dev harness: /casino/?dev=table&game=<id>[&variant=<v>][&name=<n>] opens a solo table of one game
-// in a bare room, logged in as a throwaway name. Every game agent develops against this.
+// Dev harness: /casino/?dev=table&game=<id>[&variant=<v>][&name=<n>][&limits=<min>-<max>] opens a
+// solo table of one game in a bare room, logged in as a throwaway name, at those limits (in cents;
+// the table's Standard ones without). Every game agent develops against this.
 
 import { Engine3D, savedQuality } from '../render/engine3d.ts';
 import { GAMES } from '../games/index.ts';
@@ -14,6 +15,7 @@ import { loadCards } from '../table/cards.ts';
 import { Sfx } from '../audio/sfx.ts';
 import { el, toast } from '../ui/kit.ts';
 import { formatMoney } from '../../../shared/src/money.ts';
+import { parseLimitsParam } from '../../../shared/src/limits.ts';
 
 export async function runHarness(params: URLSearchParams): Promise<void> {
   const game = params.get('game');
@@ -41,7 +43,22 @@ export async function runHarness(params: URLSearchParams): Promise<void> {
   session.on(renderHud);
   renderHud();
 
-  const table = new TableSession({ kind: 'solo', game, variant, station: station.id }, module, stage, ui, sfx, (fn) => engine.onFrame(fn), (code) => toast(`Table closed (${code ?? ''})`, 'err'));
+  // The play pose can depend on the table (a solo player on several spots is framed wider), so
+  // take it again once the view has seen the table, as the app does when you sit down.
+  let posed = JSON.stringify(module.playPose(variant, 0));
+  const repose = (seat: number | null) => {
+    const next = module.playPose(variant, seat ?? 0);
+    if (JSON.stringify(next) === posed) return;
+    posed = JSON.stringify(next);
+    const at = stage.worldPose(next);
+    engine.camera.position.copy(at.position);
+    engine.camera.lookAt(at.target);
+    stage.setRest(next);
+  };
+  const limits = parseLimitsParam(params.get('limits')) ?? undefined;
+  const table = new TableSession({ kind: 'solo', game, variant, station: station.id, limits }, module, stage, ui, sfx, (fn) => engine.onFrame(fn), (code) => toast(`Table closed (${code ?? ''})`, 'err'), {
+    onTable: (snap) => repose(snap.you.seat),
+  });
   addEventListener('keydown', (e) => {
     if (e.target instanceof HTMLInputElement) return;
     if (table.view?.keydown?.(e)) e.preventDefault();

@@ -7,6 +7,8 @@ import * as THREE from 'three';
 import { CHIPS, formatMoney, type ChipSpec } from '../../../../shared/src/money.ts';
 import { chipFaceCanvas, CHIP_R } from '../../table/chips.ts';
 import { engine } from '../../../../shared/src/games/blackjack/engine.ts';
+import type { TableConfig } from '../../../../shared/src/engine.ts';
+import { repaintable } from '../../table/limit-sign.ts';
 import { DECKS } from '../../../../shared/src/games/blackjack/rules.ts';
 import { BODY_RX, BODY_RZ, DEALER_Z, DISCARD, RACK, RAIL_RX, RAIL_RZ, SHOE, TOP_Y } from './layout.ts';
 import { feltGeometry, floorFeltMaterial } from './felt.ts';
@@ -254,29 +256,30 @@ function discardHolder(m: ReturnType<typeof materials>): THREE.Object3D {
 
 let signTexture: THREE.CanvasTexture | null = null;
 
+/** The sign's face for a table at these limits (the floor's shows the Standard table's). */
+function paintSign(g: CanvasRenderingContext2D, cfg: TableConfig): void {
+  const lim = cfg.limits.default;
+  g.fillStyle = '#0d0a08';
+  g.fillRect(0, 0, 512, 320);
+  g.strokeStyle = 'rgba(216,176,106,0.8)';
+  g.lineWidth = 4;
+  g.strokeRect(10, 10, 492, 300);
+  g.textAlign = 'center';
+  g.fillStyle = '#f1d59a';
+  g.font = '600 46px Cinzel, Georgia, serif';
+  g.fillText('BLACKJACK', 256, 76);
+  g.fillStyle = '#fff4dc';
+  g.font = '600 74px "Barlow Condensed", "Arial Narrow", sans-serif';
+  g.fillText(`${formatMoney(lim.min)} – ${formatMoney(lim.max)}`, 256, 162);
+  g.fillStyle = '#d8b06a';
+  g.font = '600 25px "Barlow Condensed", "Arial Narrow", sans-serif';
+  g.fillText(`${DECKS} DECKS · DOUBLE AFTER SPLIT · SPLIT TO 4 HANDS`, 256, 218);
+  g.fillText('LATE SURRENDER · DEALER STANDS ON ALL 17s', 256, 252);
+  g.fillText('BLACKJACK PAYS 3 TO 2', 256, 286);
+}
+
 function limitSign(m: ReturnType<typeof materials>): THREE.Object3D {
-  const lim = engine.config('', 'multi').limits.default;
-  if (!signTexture) {
-    signTexture = canvasTexture(512, 320, (g) => {
-      g.fillStyle = '#0d0a08';
-      g.fillRect(0, 0, 512, 320);
-      g.strokeStyle = 'rgba(216,176,106,0.8)';
-      g.lineWidth = 4;
-      g.strokeRect(10, 10, 492, 300);
-      g.textAlign = 'center';
-      g.fillStyle = '#f1d59a';
-      g.font = '600 46px Cinzel, Georgia, serif';
-      g.fillText('BLACKJACK', 256, 76);
-      g.fillStyle = '#fff4dc';
-      g.font = '600 74px "Barlow Condensed", "Arial Narrow", sans-serif';
-      g.fillText(`${formatMoney(lim.min)} – ${formatMoney(lim.max)}`, 256, 162);
-      g.fillStyle = '#d8b06a';
-      g.font = '600 25px "Barlow Condensed", "Arial Narrow", sans-serif';
-      g.fillText(`${DECKS} DECKS · DOUBLE AFTER SPLIT · SPLIT TO 4 HANDS`, 256, 218);
-      g.fillText('LATE SURRENDER · DEALER STANDS ON ALL 17s', 256, 252);
-      g.fillText('BLACKJACK PAYS 3 TO 2', 256, 286);
-    });
-  }
+  if (!signTexture) signTexture = canvasTexture(512, 320, (g) => paintSign(g, engine.config('', 'multi')));
   const g = new THREE.Group();
   const post = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.2, 12), m.brass);
   post.position.y = 0.1;
@@ -287,6 +290,7 @@ function limitSign(m: ReturnType<typeof materials>): THREE.Object3D {
   g.add(post, panel);
   g.position.set(-0.84, TOP_Y, DEALER_Z - 0.035);
   g.rotation.y = 0.42;
+  repaintable(g, face, { width: 512, height: 320, paint: paintSign });
   return g;
 }
 

@@ -368,10 +368,11 @@ describe('video poker engine', () => {
     expect(engine.shiftDeadlines(sim.state, 5_000)).toBe(sim.state);
   });
 
-  it('config: one seat, $1 to $125 a hand in whole dollars', () => {
+  it('config: one seat, $1 to $500 a hand in whole dollars (five of the high-limit $100 coins)', () => {
     const cfg = engine.config('', 'solo');
     expect(cfg.maxSeats).toBe(1);
-    expect(cfg.limits.default).toEqual({ min: 100, max: 12_500, step: 100 });
+    expect(cfg.limits.default).toEqual({ min: 100, max: 50_000, step: 100 });
+    expect(cfg.buyIn).toEqual({ min: 2_000, max: 50_000_000 });
     expect(engine.seats.multiplayer).toBe(false);
   });
 });

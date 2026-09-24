@@ -63,6 +63,14 @@ export function modal(title: string, body: (HTMLElement | string)[], actions: HT
   return { close, root: box };
 }
 
+/** A round amount at or under `x`: 1, 2 or 5 times a power of ten dollars ($1 at the least). */
+function roundDown(x: Cents): Cents {
+  const d = Math.floor(x / 100);
+  if (d < 1) return 100;
+  const p = 10 ** (String(d).length - 1);
+  return (d / p >= 5 ? 5 : d / p >= 2 ? 2 : 1) * p * 100;
+}
+
 /** Ask how much to bring to the table. Resolves with cents, or null if cancelled. */
 export function askBuyIn(opts: { min: Cents; max: Cents; balance: Cents; suggested?: Cents; verb?: string }, signal?: AbortSignal): Promise<Cents | null> {
   return new Promise((resolve) => {
@@ -84,7 +92,11 @@ export function askBuyIn(opts: { min: Cents; max: Cents; balance: Cents; suggest
       m = modal('Not enough to sit down', [note, loan], [button('Close', dismiss)], dismiss);
       return;
     }
-    const picks = [opts.min, opts.min * 5, opts.min * 20, max].filter((v, i, a) => v >= opts.min && v <= max && a.indexOf(v) === i);
+    // the minimum, round amounts up the range (a hundredth, a tenth, half), and the most you can
+    const picks = [opts.min, roundDown(max / 100), roundDown(max / 10), roundDown(max / 2), max]
+      .filter((v) => v >= opts.min && v <= max)
+      .sort((a, b) => a - b)
+      .filter((v, i, a) => a.indexOf(v) === i);
     const input = el('input');
     input.type = 'number';
     input.min = String(opts.min / 100);
@@ -92,7 +104,9 @@ export function askBuyIn(opts: { min: Cents; max: Cents; balance: Cents; suggest
     input.step = '1';
     input.value = String(Math.min(max, opts.suggested ?? picks[1] ?? opts.min) / 100);
     const quick = el('div', 'row');
-    for (const v of picks) quick.append(button(formatMoney(v), () => (input.value = String(v / 100)), { cls: 'ghost' }));
+    // the last pick is everything you have when the table would take more
+    const all = max < opts.max;
+    for (const v of picks) quick.append(button(all && v === max ? `All ${formatMoney(v)}` : formatMoney(v), () => (input.value = String(v / 100)), { cls: 'ghost' }));
     const ok = button(opts.verb ?? 'Buy in', () => {
       const v = Math.round(Number(input.value)) * 100;
       if (!Number.isFinite(v) || v < opts.min || v > max) {
@@ -108,14 +122,45 @@ export function askBuyIn(opts: { min: Cents; max: Cents; balance: Cents; suggest
   });
 }
 
-/** The chip tray: pick a denomination (keys 1-7), plus Undo / Clear / Rebet / x2 and a primary action. */
+/**
+ * The tray's Max. 'bet': at a table with one main bet (blackjack, war), a press puts the most
+ * that bet takes, or all your chips, down at once. 'pick': at a layout of many spots, Max is
+ * picked like a chip and every spot clicked while it is gets the most it takes.
+ */
+export type TrayMax = { mode: 'bet'; run: () => void } | { mode: 'pick' };
+
+/**
+ * The Max button every table shares: gold, with its A key ("all in", as at Hold'em; M stays the
+ * casino's mute). A tray builds its own; a game with its own bet panel can use this for the same look.
+ */
+export function maxButton(onClick: () => void, title = 'Max: the most this bet takes, or all your chips if that is less (A)'): HTMLButtonElement {
+  const b = el('button', 'btn max-btn');
+  b.type = 'button';
+  b.title = title;
+  b.append(document.createTextNode('Max'), el('span', 'key', 'A'));
+  b.addEventListener('click', onClick);
+  return b;
+}
+
+/** The chip tray: pick a denomination (keys 1-9 and 0), plus Undo / Clear / Rebet / x2, Max and a primary action. */
 export class ChipTray {
   readonly root = el('div', 'tray panel');
   private buttons = new Map<number, HTMLButtonElement>();
   selected: ChipSpec = BETTING_CHIPS[1]!;
   private primaryBtn: HTMLButtonElement;
+  /** The Max button, when the table has one. */
+  readonly maxBtn: HTMLButtonElement | null = null;
+  private readonly maxMode: TrayMax | null;
+  private maxOn = false;
 
-  constructor(handlers: { undo?: () => void; clear?: () => void; rebet?: () => void; double?: () => void; primary?: { label: string; key?: string; run: () => void } }) {
+  constructor(handlers: {
+    undo?: () => void;
+    clear?: () => void;
+    rebet?: () => void;
+    double?: () => void;
+    primary?: { label: string; key?: string; run: () => void };
+    max?: TrayMax;
+  }) {
     const chips = el('div', 'chips');
     chipTrayCanvases().forEach(({ spec, canvas }, i) => {
       const b = el('button', 'chip-btn');
@@ -127,6 +172,14 @@ export class ChipTray {
       this.buttons.set(spec.value, b);
       chips.append(b);
     });
+    this.maxMode = handlers.max ?? null;
+    if (this.maxMode) {
+      const mode = this.maxMode;
+      this.maxBtn = mode.mode === 'bet'
+        ? maxButton(() => mode.run())
+        : maxButton(() => this.pickMax(), 'Max: pick it, then click a spot to bet the most it takes, or all your chips if that is less (A)');
+      chips.append(this.maxBtn);
+    }
     const acts = el('div', 'acts');
     if (handlers.undo) acts.append(button('Undo', handlers.undo, { key: '⌫' }));
     if (handlers.clear) acts.append(button('Clear', handlers.clear, { key: 'X' }));
@@ -140,7 +193,39 @@ export class ChipTray {
 
   select(spec: ChipSpec): void {
     this.selected = spec;
+    this.maxOn = false;
     for (const [v, b] of this.buttons) b.setAttribute('aria-pressed', String(v === spec.value));
+    if (this.maxMode?.mode === 'pick') this.maxBtn!.setAttribute('aria-pressed', 'false');
+  }
+
+  /** A 'pick' Max is the current choice: a click on a spot bets the most it takes. */
+  get maxPicked(): boolean {
+    return this.maxOn;
+  }
+
+  /** Pick Max (in 'pick' mode) in place of a chip. */
+  pickMax(): void {
+    if (this.maxMode?.mode !== 'pick') return;
+    this.maxOn = true;
+    for (const b of this.buttons.values()) b.setAttribute('aria-pressed', 'false');
+    this.maxBtn!.setAttribute('aria-pressed', 'true');
+  }
+
+  /**
+   * The table's largest bet and its smallest: chips above the largest go back in the rack, and so
+   * do chips under a twentieth of the smallest (nobody stacks $1 chips at a $5,000 table), though
+   * one chip always stays. A picked chip that went moves to the first one left that covers the
+   * minimum.
+   */
+  setChipMax(max: Cents, min = 0): void {
+    const shown = BETTING_CHIPS.filter((c) => c.value <= max && c.value * 20 >= min);
+    if (shown.length === 0) shown.push(BETTING_CHIPS.filter((c) => c.value <= max).at(-1) ?? BETTING_CHIPS[0]!);
+    for (const spec of BETTING_CHIPS) this.buttons.get(spec.value)!.hidden = !shown.includes(spec);
+    if (!shown.includes(this.selected)) {
+      const keepMax = this.maxOn;
+      this.select(shown.find((c) => c.value >= min) ?? shown.at(-1)!);
+      if (keepMax) this.pickMax();
+    }
   }
 
   setPrimary(label: string, enabled: boolean): void {
@@ -148,11 +233,20 @@ export class ChipTray {
     this.primaryBtn.disabled = !enabled;
   }
 
-  /** Number keys pick chips; returns true if the key was one of them. */
+  /**
+   * Number keys pick the chips on show, left to right (1-9, and 0 for a tenth), and A is Max;
+   * returns true if the key was one of them.
+   */
   key(e: KeyboardEvent): boolean {
-    const n = Number(e.key);
+    const n = e.key === '0' ? 10 : Number(e.key);
     if (Number.isInteger(n) && n >= 1 && n <= BETTING_CHIPS.length) {
-      this.select(BETTING_CHIPS[n - 1]!);
+      const spec = BETTING_CHIPS.filter((c) => !this.buttons.get(c.value)!.hidden)[n - 1];
+      if (spec) this.select(spec);
+      return true;
+    }
+    if (this.maxMode && (e.key === 'a' || e.key === 'A') && !e.shiftKey) {
+      if (this.maxMode.mode === 'bet') this.maxMode.run();
+      else this.pickMax();
       return true;
     }
     return false;

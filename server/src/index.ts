@@ -2,14 +2,17 @@
 // verifies tokens, answers the account HTTP API, and forwards WebSocket upgrades to the right
 // Durable Object with headers only it can set.
 
-import { CLOSE, PROTOCOL_VERSION, type CreateTableResponse, type JoinByPinResponse, type LoanResponse, type LoginResponse, type MeResponse } from '../../shared/src/protocol.ts';
+import { CLOSE, PROTOCOL_VERSION, type CreateTableResponse, type JoinByPinResponse, type LoanResponse, type LoginResponse, type MeResponse, type TicketResponse } from '../../shared/src/protocol.ts';
 import { isValidName } from '../../shared/src/names.ts';
 import { PASSWORD_MAX, PASSWORD_MIN, isValidPassword } from '../../shared/src/password.ts';
 import { parseLook, lookFromJson } from '../../shared/src/look.ts';
 import { CATALOG, isGameId, soloTableName, TABLE_ID_RE, variantOf } from '../../shared/src/games/catalog.ts';
+import { clampLimits, limitsParam, parseLimits, parseLimitsParam } from '../../shared/src/limits.ts';
 import { notYet } from '../../shared/src/bank.ts';
 import { closeWith, corsHeaders, fail, json, originAllowed, readJson } from './http.ts';
-import { bearer, logIn, signToken, verifyToken, type Claims } from './auth.ts';
+import { bearer, logIn, signToken, verifyToken } from './auth.ts';
+import { signTicket, ticketTarget, verifyTicket } from './tickets.ts';
+import { KeyedBuckets } from './ratelimit.ts';
 import { bumpRate, escrowsOf, getAccount, loadProfile, setLook } from './db.ts';
 import { takeLoan } from './transfer.ts';
 import { shopApi } from './shop.ts';
@@ -25,6 +28,11 @@ const PREFIX = '/casino';
 /** An escrow older than this gets its table asked to reconcile before a profile (the bank asks every table). */
 const STALE_ESCROW_MS = 120_000;
 const STATION_RE = /^[a-z0-9-]{1,24}$/;
+/**
+ * Socket tickets per account: plenty for reconnecting everything a page has open, never a flood.
+ * Kept per isolate: a burst from one client lands on one, and the objects limit connects anyway.
+ */
+const ticketLimits = new KeyedBuckets(30, 1);
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -141,14 +149,19 @@ async function handleApi(request: Request, env: Env, route: string, cors: Record
   }
 
   if (route === 'tables' && request.method === 'POST') {
-    const body = (await readJson(request)) as { game?: unknown; variant?: unknown; visibility?: unknown } | null;
+    const body = (await readJson(request)) as { game?: unknown; variant?: unknown; visibility?: unknown; limits?: unknown } | null;
     const game = body?.game;
     const visibility = body?.visibility === 'private' ? 'private' : 'public';
     if (!isGameId(game) || !CATALOG[game].multiplayer || CATALOG[game].dev) return fail(400, 'BAD_REQUEST', 'That game has no multiplayer tables.', cors);
     const variant = variantOf(game, body?.variant);
+    // Limits that aren't two amounts are refused; amounts outside the game's rules move to the
+    // nearest table it allows (shared/src/limits.ts), and the table's snapshot shows what it got.
+    const asked = body?.limits === undefined ? null : parseLimits(body.limits);
+    if (body?.limits !== undefined && !asked) return fail(400, 'BAD_REQUEST', 'Limits are a minimum and a maximum in cents.', cors);
+    const limits = asked ? clampLimits(game, asked) : null;
     const made = await floor(env).createLobby({ game, visibility, accountId: claims.a, ip });
     if ('error' in made) return fail(429, 'RATE_LIMITED', 'Slow down a little.', cors);
-    await table(env, made.tableId).init({ name: made.tableId, game, variant, mode: 'multi', visibility, pin: made.pin });
+    await table(env, made.tableId).init({ name: made.tableId, game, variant, mode: 'multi', visibility, pin: made.pin, limits });
     return json({ tableId: made.tableId, ...(made.pin ? { pin: made.pin } : {}) } satisfies CreateTableResponse, 201, cors);
   }
 
@@ -161,7 +174,22 @@ async function handleApi(request: Request, env: Env, route: string, cors: Record
         ? fail(429, 'RATE_LIMITED', 'Too many tries. Wait a minute.', cors)
         : fail(404, 'BAD_PIN', 'No lobby has that PIN.', cors);
     }
-    return json({ tableId: found.tableId, game: found.game } satisfies JoinByPinResponse, 200, cors);
+    // What the table is, so the join can show its limits before sitting down.
+    let lobby = null;
+    try {
+      lobby = await table(env, found.tableId).summary();
+    } catch (err) {
+      console.error('table summary failed', found.tableId, err);
+    }
+    return json({ tableId: found.tableId, game: found.game, ...(lobby ? { lobby } : {}) } satisfies JoinByPinResponse, 200, cors);
+  }
+
+  // A single-use ticket for one socket (tickets.ts): sockets never carry the token itself.
+  if (route === 'ticket' && request.method === 'POST') {
+    const target = ticketTarget(((await readJson(request, 256)) as { target?: unknown } | null)?.target);
+    if (!target) return fail(400, 'BAD_REQUEST', "That isn't a place a socket goes.", cors);
+    if (!ticketLimits.take(`a${claims.a}`)) return fail(429, 'RATE_LIMITED', 'Slow down a little.', cors);
+    return json((await signTicket(env.CASINO_TOKEN_SECRET, claims.a, target, now)) satisfies TicketResponse, 200, cors);
   }
 
   // The boutique and the bar (shop.ts): paid from the balance, never from chips on tables.
@@ -242,13 +270,20 @@ async function handleSocket(request: Request, env: Env, url: URL, route: string,
   if (!originAllowed(origin, env.ALLOWED_ORIGINS)) return new Response('forbidden origin', { status: 403 });
   if (Number(url.searchParams.get('v')) !== PROTOCOL_VERSION) return closeWith(CLOSE.VERSION, 'please reload');
   const now = Date.now();
-  const claims = await verifyToken(env.CASINO_TOKEN_SECRET, url.searchParams.get('t'), now);
-  if (!claims) return closeWith(CLOSE.UNAUTHORIZED, 'log in again');
-  const account = await getAccount(env.DB, claims.a);
+  // A socket opens with a ticket for exactly this path (tickets.ts), never with the token. A page
+  // from before tickets still puts its token here: it needs the new code, so it reloads.
+  const raw = url.searchParams.get('ticket');
+  if (!raw) return url.searchParams.has('t') ? closeWith(CLOSE.VERSION, 'please reload') : closeWith(CLOSE.UNAUTHORIZED, 'log in again');
+  const ticket = await verifyTicket(env.CASINO_TOKEN_SECRET, raw, route, now);
+  if (!ticket) return closeWith(CLOSE.TICKET, 'get a new ticket');
+  const account = await getAccount(env.DB, ticket.a);
   if (!account) return closeWith(CLOSE.UNAUTHORIZED, 'account not found');
 
   const station = url.searchParams.get('station');
-  const headers = trustedHeaders(request, claims, account.name, account.look, station && STATION_RE.test(station) ? station : null);
+  const headers = trustedHeaders(request, ticket.a, account.name, account.look, station && STATION_RE.test(station) ? station : null);
+  // The object behind this path spends the ticket, so it opens this one socket, once.
+  headers.set('x-casino-ticket', ticket.j);
+  headers.set('x-casino-ticket-exp', String(ticket.exp));
 
   if (route === 'floor') return floorStub(env).fetch(forward(request, headers));
 
@@ -268,23 +303,27 @@ async function handleSocket(request: Request, env: Env, url: URL, route: string,
     const game = solo[1];
     if (!isGameId(game)) return closeWith(CLOSE.NOT_FOUND, 'no such game');
     const variant = variantOf(game, url.searchParams.get('variant'));
-    // The name comes from the token, so nobody can open another player's solo table.
-    const name = soloTableName(game, variant, claims.a);
+    // The name comes from the ticket's account, so nobody can open another player's solo table.
+    const name = soloTableName(game, variant, ticket.a);
     headers.set('x-casino-table', name);
     headers.set('x-casino-solo', `${game}|${variant}`);
+    // This sitting's limits, moved to the nearest the game allows (none for the machines).
+    const asked = parseLimitsParam(url.searchParams.get('limits'));
+    const limits = asked ? clampLimits(game, asked) : null;
+    if (limits) headers.set('x-casino-limits', limitsParam(limits));
     return tableStub(env, name).fetch(forward(request, headers));
   }
   return closeWith(CLOSE.NOT_FOUND, 'no such place');
 }
 
-function trustedHeaders(request: Request, claims: Claims, name: string, look: string, station: string | null): Headers {
+function trustedHeaders(request: Request, accountId: number, name: string, look: string, station: string | null): Headers {
   const h = new Headers();
   h.set('Upgrade', 'websocket');
   for (const k of ['Sec-WebSocket-Key', 'Sec-WebSocket-Version', 'Sec-WebSocket-Extensions']) {
     const v = request.headers.get(k);
     if (v) h.set(k, v);
   }
-  h.set('x-casino-account', String(claims.a));
+  h.set('x-casino-account', String(accountId));
   h.set('x-casino-name', name);
   h.set('x-casino-look', JSON.stringify(lookFromJson(look)));
   h.set('x-casino-ip', request.headers.get('CF-Connecting-IP') ?? '');

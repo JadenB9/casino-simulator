@@ -11,6 +11,7 @@ import { Felt, type Region } from '../../table/felt.ts';
 import { CARD_H, CARD_W } from '../../table/cards.ts';
 import type { Paytable } from '../../../../shared/src/games/threecard/rules.ts';
 import { CATEGORY_NAMES } from '../../../../shared/src/games/threecard/rules.ts';
+import { fitWidth } from '../multihand/frame.ts';
 
 export const TOP_Y = 0.76;
 /** Centre of the players' arc, behind the dealer's edge. */
@@ -118,6 +119,24 @@ export function cameraPose(seat: number): { position: [number, number, number]; 
   const [hx, hz] = along(a, HAND_R);
   const k = -0.045 + 0.225 * t;
   return { position: [cx, 1.78, cz], target: [hx + (0 - hx) * k, TOP_Y, hz + (DEALER_CARDS_Z - hz) * k] };
+}
+
+/**
+ * The camera for a solo player on several hands (spots numbered like seats): over the middle of
+ * their positions and further back and up the wider they spread, so every hand's cards and spots
+ * and the dealer's cards are in view. One hand is its seat's pose.
+ */
+export function spotsPose(spots: readonly number[], aspect?: number): { position: [number, number, number]; target: [number, number, number] } {
+  if (spots.length <= 1) return cameraPose(spots[0] ?? 0);
+  const angles = spots.map(seatAngle);
+  const a = angles.reduce((x, y) => x + y, 0) / angles.length;
+  const spread = Math.max(...angles) - Math.min(...angles);
+  const [cx, cz] = along(a, 1.2 + 0.42 * spread);
+  const [hx, hz] = along(a, HAND_R);
+  const k = 0.08 + 0.05 * spread;
+  // wide enough for the outer hands' spots, on any screen
+  const half = SPOT_R.play * Math.sin(spread / 2) + 0.14;
+  return fitWidth({ position: [cx, 1.8 + 0.22 * spread, cz], target: [hx + (0 - hx) * k, TOP_Y, hz + (DEALER_CARDS_Z - hz) * k] }, half, aspect);
 }
 
 // ---------------------------------------------------------------------------------------------

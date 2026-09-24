@@ -54,7 +54,8 @@ function config(_variant: string, mode: TableMode): TableConfig {
     variant: '',
     mode,
     maxSeats: mode === 'solo' ? 1 : 10,
-    buyIn: { min: 10 * DOLLAR, max: 10_000 * DOLLAR },
+    // up to a hundred times the table maximum (shared/src/limits.ts scales it with the table)
+    buyIn: { min: 10 * DOLLAR, max: 100_000 * DOLLAR },
     // each of the five numbers, per spin: the terminal's slot takes $1 to $1,000
     limits: { default: { min: DOLLAR, max: 1_000 * DOLLAR, step: DOLLAR } },
     options: {},

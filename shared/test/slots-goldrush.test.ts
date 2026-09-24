@@ -291,10 +291,10 @@ describe('Gold Rush draws', () => {
 describe('Gold Rush on the engine', () => {
   const sim = (stack: number, rng: Rng) => new TableSim(engine, rng, 'solo', [{ seat: 0, stack }], engine.config('goldrush', 'solo'));
 
-  it('config: 40 lines, 1-5 credits a line at 1, 5 or 10 cents', () => {
+  it('config: 40 lines, 1-5 credits a line at 1, 5 or 10 cents, or the high-limit 25 cents and $1', () => {
     const cfg = engine.config('goldrush', 'solo');
-    expect(cfg.limits.default).toEqual({ min: 40, max: 2000, step: 40 });
-    expect(cfg.options).toEqual({ machine: 'goldrush', denoms: [1, 5, 10], maxCoins: 5, lines: 40 });
+    expect(cfg.limits.default).toEqual({ min: 40, max: 20_000, step: 40 });
+    expect(cfg.options).toEqual({ machine: 'goldrush', denoms: [1, 5, 10, 25, 100], maxCoins: 5, lines: 40 });
   });
 
   it('a feature pays with the paid spin: one reels event per free game, the held cells growing, the base window back after', () => {

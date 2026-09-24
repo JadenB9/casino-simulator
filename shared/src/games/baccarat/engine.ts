@@ -59,7 +59,8 @@ function config(_variant: string, mode: TableMode): TableConfig {
     variant: '',
     mode,
     maxSeats: mode === 'solo' ? 1 : 7,
-    buyIn: { min: 100 * DOLLAR, max: 25_000 * DOLLAR },
+    // up to a hundred times the table maximum (shared/src/limits.ts scales it with the table)
+    buyIn: { min: 100 * DOLLAR, max: 500_000 * DOLLAR },
     // `default` is the Player and Banker limit. A Tie max of $1,000 caps its payout at $8,000.
     limits: {
       default: { min: 10 * DOLLAR, max: 5_000 * DOLLAR, step: DOLLAR },

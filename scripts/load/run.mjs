@@ -8,6 +8,7 @@
 //   node scripts/load/run.mjs tables storm          # some of: tables storm leader money floor
 //   PORT_BASE=5970 node scripts/load/run.mjs        # the worker listens on PORT_BASE + 1
 //   node scripts/load/run.mjs --rounds 4 --walkers 50 --seconds 30 --json out.json
+//   node scripts/load/run.mjs floor --walkers 150 --policy old --pattern zigzag   # before/after, worst case
 //
 // Scenarios:
 //   tables   8 players in one lobby at each multiplayer game, all nine at once; money audited
@@ -116,7 +117,7 @@ for (const [i, name] of scenarios.entries()) {
     else if (name === 'storm') result = await tables(ctx, { rounds: Number(flag('rounds', 6)), storm: true, dropRate: Number(flag('drop-rate', 0.03)) });
     else if (name === 'leader') result = await leader(ctx);
     else if (name === 'money') result = await money(ctx);
-    else if (name === 'floor') result = await floor(ctx, { walkers: Number(flag('walkers', 50)), seconds: Number(flag('seconds', 30)) });
+    else if (name === 'floor') result = await floor(ctx, { walkers: Number(flag('walkers', 50)), seconds: Number(flag('seconds', 30)), policy: flag('policy', 'new'), pattern: flag('pattern', 'waypoints') });
   } catch (err) {
     result = { failed: String(err?.stack ?? err) };
   }

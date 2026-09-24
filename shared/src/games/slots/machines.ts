@@ -53,7 +53,8 @@ export const SEVENS: StepperMachine<SevensSymbol, SevensCombo> = {
   kind: 'stepper',
   id: 'sevens',
   name: 'Classic Sevens',
-  denoms: [25, 100, 500],
+  // 25¢, $1, $5, and the high-limit $25 and $100
+  denoms: [25, 100, 500, 2500, 10_000],
   maxCoins: 3,
   lines: 1,
   virtualStops: 64,
@@ -101,7 +102,8 @@ export const WILD: StepperMachine<WildSymbol, WildCombo> = {
   kind: 'stepper',
   id: 'wild',
   name: '5x Wild',
-  denoms: [100, 500, 2500],
+  // $1, $5, $25, and the high-limit $100
+  denoms: [100, 500, 2500, 10_000],
   maxCoins: 3,
   lines: 1,
   virtualStops: 72,
@@ -155,7 +157,8 @@ export const NEON: VideoMachine = {
   kind: 'video',
   id: 'neon',
   name: 'Neon Nights',
-  denoms: [5, 25, 100],
+  // 5¢, 25¢, $1, and the high-limit $5
+  denoms: [5, 25, 100, 500],
   maxCoins: 5,
   lines: 20,
   rows: 3,
