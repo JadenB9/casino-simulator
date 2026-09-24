@@ -43,25 +43,25 @@ async function openFloor(query, url = floorUrl) {
   return { page, errors };
 }
 
-/** Draw calls over a second or two of frames (the most seen), and the average frame time. */
+/**
+ * Draw calls over a few frames (the most seen) and the engine's frame time. Polled on a timer, not
+ * on animation frames: under a heavy software renderer a frame can take seconds.
+ */
 async function stats(page) {
-  return page.evaluate(async () => {
+  const run = page.evaluate(async () => {
     const c = window.casino;
-    const t0 = performance.now();
-    let frames = 0;
+    const first = c.engine.renderer.info.render.frame;
     let calls = 0;
-    await new Promise((r) => {
-      const tick = () => {
-        frames++;
-        calls = Math.max(calls, c.world.stats().calls);
-        if (performance.now() - t0 < 1500) requestAnimationFrame(tick);
-        else r();
-      };
-      requestAnimationFrame(tick);
-    });
+    const t0 = performance.now();
+    while (performance.now() - t0 < 60000) {
+      await new Promise((r) => setTimeout(r, 250));
+      calls = Math.max(calls, c.world.stats().calls);
+      if (c.engine.renderer.info.render.frame - first >= 3 && performance.now() - t0 >= 1500) break;
+    }
     const s = c.world.stats();
-    return { calls: s.calls, maxCalls: calls, triangles: s.triangles, frameMs: +((performance.now() - t0) / frames).toFixed(1) };
+    return { calls: s.calls, maxCalls: calls, triangles: s.triangles, frameMs: +c.engine.frameMs().toFixed(1) };
   });
+  return Promise.race([run, new Promise((r) => setTimeout(() => r({ calls: -1, maxCalls: -1, triangles: 0, frameMs: -1, timeout: true }), 180000))]);
 }
 
 /** Hold the camera at a pose (the player stands aside). */
