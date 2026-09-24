@@ -82,7 +82,7 @@ function banner(ui: HTMLElement, m: Moment): void {
 
 /** An outline to ring, table-local: a (rounded) rectangle in the plane through `centre`. */
 export interface Footprint {
-  /** Things lying on the felt (lit under as well as round them), or a printed spot (outline only). */
+  /** Solid things (lit under as well as round them), or a printed spot or flat plane (outline only). */
   solid: boolean;
   centre: THREE.Vector3;
   /** Across (u) and along (v) the rectangle, and out of its plane toward the camera side (n). */
@@ -197,7 +197,9 @@ export function footprintOf(root: THREE.Object3D, camera: THREE.Camera, objects:
     .addScaledVector(u, (u0 + u1) / 2)
     .addScaledVector(v, (v0 + v1) / 2)
     .addScaledVector(n, depth);
-  return { solid: true, centre, u, v, n, a: Math.max((u1 - u0) / 2, 0.004), b: Math.max((v1 - v0) / 2, 0.004), round };
+  // Only something with thickness hides a fill beneath it; a flat thing (a highlight square, a
+  // stand-in) gets the outline, like a printed spot, so no light is added through it.
+  return { solid: thick >= 0.0002, centre, u, v, n, a: Math.max((u1 - u0) / 2, 0.004), b: Math.max((v1 - v0) / 2, 0.004), round };
 }
 
 /** A mesh's box in its own space (an instanced mesh's across all its instances). */

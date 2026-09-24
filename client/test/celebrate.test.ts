@@ -120,6 +120,8 @@ describe('celebration rings', () => {
     root.add(sector);
     const f = footprintOf(root, camera, [sector])!;
     close(Math.abs(f.n.z), 1);
+    // nothing to hide a fill: an outline only, so no light goes on through it
+    expect(f.solid).toBe(false);
     // on the wheel side of it, away from the camera
     expect(f.centre.z).toBeLessThan(0.3);
     expect(f.centre.z).toBeGreaterThan(0.299);
