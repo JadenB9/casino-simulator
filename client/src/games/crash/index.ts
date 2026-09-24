@@ -359,17 +359,25 @@ export const crash: GameClientModule = {
     return {
       onTable(snap) {
         cashier.table(snap);
+        // Back after a drop: a bet the table settled meanwhile (its auto cash-out, or the crash)
+        // counts in this session's tally like one seen live. Still on show, it says what it paid;
+        // rounds later, what the stack gained while we were away is what it paid.
+        const back = snap.view as CrashView;
+        const was = view;
+        const left = was && mySeat !== null && (was.phase === 'betting' || was.phase === 'running') ? was.bets.find((b) => b.seat === mySeat && b.cashed === null) : undefined;
+        if (was && left && snap.you.status === 'seated' && tallied !== was.round) {
+          const shown = back.round === was.round ? back.bets.find((b) => b.seat === mySeat) : undefined;
+          if (shown && (shown.cashed !== null || shown.busted)) {
+            tally.add(shown.amount, shown.payout);
+            tallied = was.round;
+          } else if (back.round > was.round) {
+            tally.add(left.amount, Math.max(0, snap.you.stack - stack));
+            tallied = was.round;
+          }
+        }
         stack = snap.you.stack;
         mySeat = snap.you.status === 'watching' ? null : snap.you.seat;
         busy = false;
-        // Back after a drop: a bet the table settled meanwhile (an auto cash-out, the crash) counts
-        // in this session's tally like one seen live.
-        const back = snap.view as CrashView;
-        const settledMine = view && mySeat !== null ? back.bets.find((b) => b.seat === mySeat && (b.cashed !== null || b.busted)) : undefined;
-        if (settledMine && tallied !== back.round) {
-          tally.add(settledMine.amount, settledMine.payout);
-          tallied = back.round;
-        }
         const lim = snap.meta.config.limits.default;
         if (!bet || !limits || lim.min !== limits.min || lim.max !== limits.max || lim.step !== limits.step) {
           bet?.root.remove();

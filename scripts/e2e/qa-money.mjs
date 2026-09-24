@@ -120,6 +120,11 @@ async function newPage(name, { quality = 'high', viewport = { width: 1280, heigh
     if (m.type() === 'error' && !/404|Failed to load resource|WebSocket connection/.test(m.text())) errors.push(`${name}: ${m.text()}`);
   });
   page.on('pageerror', (e) => errors.push(`${name}: ${e}`));
+  // a page that loads again on its own (a crash, the dev server's reload) would lose its table: say so
+  let loads = 0;
+  page.on('load', () => {
+    if (++loads > 1) log(`${name}: the page loaded again (${page.url()})`);
+  });
   page.on('websocket', (ws) => {
     const table = /\/ws\/(table|solo)\//.test(ws.url());
     ws.on('framereceived', (f) => {
@@ -488,16 +493,19 @@ if (wanted('crash2')) {
     await b.page.waitForTimeout(3200); // about 1.2x
     if (await b.page.$('.os-action.cash')) await b.page.click('.os-action.cash');
     await shoot(b.page, 'crash2-2-b-cashed');
-    // A drops mid-flight (the network goes), and comes back once the round is over
-    await a.ctx.setOffline(true);
-    // going offline doesn't break a socket that is already open: drop it the way a lost network would
+    // A drops mid-flight and stays away until the round is over: the table socket goes, and the
+    // reconnects can't get a ticket. (Chromium's offline mode would do it too, but a long spell of
+    // it upsets the dev server's own proxy, which then reloads every page; production has none.)
+    await a.page.route('**/casino/api/ticket', (route) => route.abort('internetdisconnected'));
     await a.page.evaluate(() => window.casino.app.table.session.socket.ws?.close(4000, 'network'));
     log('qm_crash_a is offline mid-flight');
     let crashEv = null;
     for (const stop = Date.now() + 200_000; Date.now() < stop && !crashEv; await sleep(200)) crashEv = eventsOf(b, 'crash', t0).find((e) => e.round === round) ?? null;
     check(!!crashEv, `round ${round} crashed (at ${crashEv ? crashEv.crash / 100 : '?'}x)`);
-    await a.ctx.setOffline(false);
-    await a.page.waitForFunction(() => window.casino.app.table?.session.socket.state === 'open', null, { timeout: 30_000 }).catch(() => null);
+    // A stays away into the next round, so the round it missed is no longer on show when it's back
+    for (const stop = Date.now() + 30_000; Date.now() < stop && !eventsOf(b, 'betting', t0).some((e) => e.round === round + 1); ) await sleep(200);
+    await a.page.unroute('**/casino/api/ticket');
+    await a.page.waitForFunction(() => window.casino.app.table?.session.socket.state === 'open', null, { timeout: 60_000 }).catch(() => null);
     await a.page.waitForTimeout(2500);
     await shoot(a.page, 'crash2-3-a-back');
     await shoot(b.page, 'crash2-3-b-after');
