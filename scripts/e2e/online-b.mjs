@@ -38,11 +38,14 @@ async function open(game, name) {
   );
   await page.goto(`http://localhost:${port}/casino/?dev=table&game=${game}&name=${name}`);
   if (await page.waitForSelector('.pass-input', { timeout: 2500 }).catch(() => null)) await page.fill('.pass-input', 'casino-dev');
-  await page.waitForSelector('.modal input[type=number]', { timeout: 30000 });
-  await page.fill('.modal input[type=number]', '2000');
-  await page.click('.modal .btn.primary');
-  await page.waitForSelector('.os-screen:not([hidden])', { timeout: 10000 });
-  await page.waitForTimeout(1200);
+  await page.waitForSelector('.os-screen:not([hidden])', { timeout: 30000 });
+  // A seat still held from an earlier run (within the table's grace period) needs no buy-in.
+  if (await page.waitForSelector('.modal input[type=number]', { timeout: 6000 }).catch(() => null)) {
+    await page.fill('.modal input[type=number]', '2000');
+    await page.click('.modal .btn.primary');
+  }
+  await page.waitForFunction(() => document.querySelector('.os-stack-value')?.textContent !== '$0', null, { timeout: 15000 });
+  await page.waitForTimeout(800);
   return { page, errors, frames };
 }
 
@@ -164,8 +167,55 @@ for (const game of games) {
     out.notes.push(`chips shown ${await text('.os-stack-value')}; boards ${events('over').length}`);
   }
 
+  if (game === 'hilo') {
+    await page.fill('.os-bet-input', '10');
+    await page.press('.os-bet-input', 'Enter');
+    // A free skip before betting, then a round: the likelier side until two right guesses.
+    await page.keyboard.press('s');
+    await settle(700);
+    await page.click('.os-action.go');
+    await settle(700);
+    await shot('1-bet');
+    for (let i = 0; i < 2; i++) {
+      const v = views().at(-1);
+      const dir = v.hi.count >= v.lo.count ? 'hi' : 'lo';
+      await page.click(`.hl-guess.${dir}`);
+      await settle(900);
+      if (!events('guess').at(-1)?.win) break;
+    }
+    await page.keyboard.press('s');
+    await settle(800);
+    await shot('2-guessing');
+    const g = events('guess');
+    out.notes.push(`guesses: ${g.map((e) => `${e.dir} ${e.count}/13 -> ${e.card} ${e.win ? 'right ' + e.mult / 100 + 'x' : 'WRONG'}`).join(', ')}`);
+    // No view or event ever carried a card ahead of the one face up.
+    check(frames.filter((m) => m.t === 'ev').every((m) => m.events.every((e) => e.type !== 'guess' || e.card === m.view.card || m.events.at(-1) !== e)), 'events carry only cards already face up');
+    check(g.every((e) => typeof e.card === 'string'), 'each guess comes with its card');
+    if (views().at(-1).phase === 'playing' && views().at(-1).mult > 0) {
+      await page.click('.os-action.cash');
+      await settle(1200);
+      await shot('3-cashed-out');
+    } else await shot('3-lost');
+    const over = events('over').at(-1);
+    check(!!over, 'the round ended');
+    out.notes.push(`over: ${over?.outcome} after ${over?.guesses} at ${over?.mult / 100}x paid ${money(over?.payout ?? 0)}; trail ${await page.$$eval('.os-trail-item', (t) => t.length)} cards`);
+    // A long round on the likelier side to fill the trail.
+    await page.click('.os-action.go');
+    await settle(600);
+    for (let i = 0; i < 8 && views().at(-1).phase === 'playing'; i++) {
+      const v = views().at(-1);
+      await page.keyboard.press(v.hi.count >= v.lo.count ? 'ArrowUp' : 'ArrowDown');
+      await settle(800);
+    }
+    await shot('4-long-round');
+    out.notes.push(`chips shown ${await text('.os-stack-value')}`);
+  }
+
   out.notes.push(`frames: ${frames.length}`);
   report.push(out);
+  // Stand up, so the chips go home and the next run starts with a buy-in.
+  await page.evaluate(() => window.casino.table.leave());
+  await page.waitForTimeout(1500);
   await page.close();
 }
 
