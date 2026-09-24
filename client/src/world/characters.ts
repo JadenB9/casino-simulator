@@ -23,6 +23,8 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+import { skipWhileHidden } from '../render/matrices.ts';
+import { modelBytes } from '../render/model-bytes.ts';
 import { DEFAULT_LOOK, OUTFITS, SKIN_TONES, type Body, type Look } from '../../../shared/src/look.ts';
 import type { Quality } from '../render/engine3d.ts';
 import type { Character, CharacterFactory } from './contract.ts';
@@ -67,6 +69,11 @@ export class Characters implements CharacterFactory {
   private templates = new Map<string, Promise<Template>>();
   private loaded = new Map<string, Template>();
   private loader = new GLTFLoader();
+  /**
+   * Each model file's bytes, fetched once: the staff's uniforms are cut from the suit and smart
+   * outfits, so those files are built into two templates each (a build rearranges its own parse).
+   */
+  private files = new Map<string, Promise<ArrayBuffer>>();
   private mats: Partial<Record<Quality, THREE.Material>> = {};
   private readonly live = new Set<Person>();
   readonly blobGeometry = new THREE.PlaneGeometry(0.95, 0.95).rotateX(-Math.PI / 2);
@@ -153,7 +160,13 @@ export class Characters implements CharacterFactory {
     const man = await this.manifest;
     const uniform = uniformFor(outfit);
     const entry = (body === 'f' ? man.f : man.m)[uniform ? uniform.base[body === 'f' ? 'f' : 'm'] : outfit] ?? man.m.suit!;
-    const gltf = await this.loader.loadAsync(MODEL_BASE + entry.file);
+    let bytes = this.files.get(entry.file);
+    if (!bytes) {
+      bytes = modelBytes(MODEL_BASE + entry.file);
+      this.files.set(entry.file, bytes);
+      bytes.catch(() => this.files.delete(entry.file));
+    }
+    const gltf = await this.loader.parseAsync(await bytes, MODEL_BASE);
     const parts: THREE.SkinnedMesh[] = [];
     gltf.scene.traverse((o) => {
       if ((o as THREE.SkinnedMesh).isSkinnedMesh) parts.push(o as THREE.SkinnedMesh);
@@ -271,6 +284,8 @@ export class Person implements Character {
     this.look = look;
     this.staff = opts.staff ?? false;
     this.root.name = 'character';
+    // a hidden character's seventy-odd bones aren't worth a matrix update every frame
+    skipWhileHidden(this.root);
     const el = document.createElement('div');
     el.className = 'world-tag';
     this.tag = new CSS2DObject(el);
@@ -316,6 +331,14 @@ export class Person implements Character {
   setName(name: string): void {
     this.tag.element.textContent = name;
     this.tag.visible = this.tagOn && name !== '';
+  }
+
+  /**
+   * The soft shadow under the feet (none for staff, who share one instanced set). RemotePlayers
+   * hides it and draws everyone's from its world matrix in one instanced mesh.
+   */
+  get shadow(): THREE.Mesh | null {
+    return this.blobMesh;
   }
 
   /** Called by the factory's label culling. */

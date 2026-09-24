@@ -114,6 +114,11 @@ export interface FloorWorld extends World {
   showEmote(who: number | 'me', e: EmoteId): boolean;
   /** Where showEmote finds other players' characters (the app's RemotePlayers); null to forget. */
   useRemotes(source: CharacterSource | null): void;
+  /**
+   * Whether someone standing at (x, z) could be seen from the camera this frame: in a room being
+   * drawn and in view (RemotePlayers' `inView`: nobody else is drawn or animated).
+   */
+  canSee(x: number, z: number): boolean;
   /** The dealers, bartender and cashier (npcs.ts). */
   readonly staff: Staff;
   /** The floor's life (world/life/): sitting anywhere, waiters, the bartender, bankers, the shopkeeper. */
@@ -273,11 +278,21 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
   };
   applyQuality(quality);
 
-  // compile every shader now, behind the loading screen, so the first frames and "Press E" don't stall
+  // compile every shader now, behind the loading screen, so the first frames and "Press E" don't
+  // stall: what's hidden too (far stand-ins, the staff's still copies, characters out of view),
+  // shown for the compile only, or it compiles on the spot the first time it comes into view
+  const hidden: THREE.Object3D[] = [];
+  scene.traverse((o) => {
+    if (o.visible) return;
+    hidden.push(o);
+    o.visible = true;
+  });
   try {
     await renderer.compileAsync(scene, engine.camera);
   } catch {
     /* compiled lazily instead */
+  } finally {
+    for (const o of hidden) o.visible = false;
   }
   // The floor's own reflections (High): the casino captured from inside the doors and
   // prefiltered, for the polished marble, lacquer and wood, so they mirror its warm lights and
@@ -428,6 +443,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
     useRemotes(source) {
       remotes = source;
     },
+    canSee: (x, z) => everything || visibility.seesPerson(x, z),
     staff,
     life,
     dealerGesture: (id, g) => staff.gesture(id, g),

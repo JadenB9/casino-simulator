@@ -46,7 +46,19 @@ export class Sfx {
     return this.master!;
   }
 
-  async load(): Promise<void> {
+  private loading: Promise<void> | null = null;
+
+  /** Fetch and decode every sound, once: a second call waits on the first. */
+  load(): Promise<void> {
+    return (this.loading ??= this.fetchAll());
+  }
+
+  /** A sound's decoded variants, once load() has them (the ambience plays the chips' on this context too). */
+  variants(name: string): readonly AudioBuffer[] {
+    return this.buffers.get(name) ?? [];
+  }
+
+  private async fetchAll(): Promise<void> {
     const base = `${import.meta.env.BASE_URL}assets/sfx/`;
     const manifest = (await (await fetch(base + 'sfx.json')).json()) as Record<string, string[]>;
     const ctx = this.ensure();

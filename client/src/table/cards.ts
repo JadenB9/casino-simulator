@@ -28,11 +28,22 @@ async function raster(url: string): Promise<THREE.Texture> {
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 8;
+  // every table's cards draw from these: a table leaving (TableStage.dispose) keeps them
+  tex.userData.shared = true;
   return tex;
 }
 
-/** Rasterize all 52 faces and the back. Call once behind the loading screen. */
-export async function loadCards(): Promise<void> {
+let loading: Promise<void> | null = null;
+
+/** Rasterize all 52 faces and the back, once: a second call waits on the first (after a failure, tries again). */
+export function loadCards(): Promise<void> {
+  return (loading ??= rasterAll().catch((err: unknown) => {
+    loading = null;
+    throw err;
+  }));
+}
+
+async function rasterAll(): Promise<void> {
   const ranks = 'A23456789TJQK';
   const jobs: Promise<void>[] = [];
   for (const s of 'shdc') {
@@ -47,6 +58,8 @@ export async function loadCards(): Promise<void> {
 
 const geometry = new THREE.BoxGeometry(CARD_W, THICK, CARD_H);
 const edge = new THREE.MeshStandardMaterial({ color: '#f3efe6', roughness: 0.7 });
+geometry.userData.shared = true;
+edge.userData.shared = true;
 
 /**
  * The most light a card's white paper gives back. The tone mapping (Neutral) starts squeezing

@@ -34,6 +34,7 @@ export class RoomVisibility {
   private readonly rects = new Map<string, [number, number, number, number]>();
   private key = '';
   private readonly corner = new THREE.Vector4();
+  private readonly body = new THREE.Box3();
 
   constructor(private readonly plan: FloorPlan) {
     for (const d of plan.doors) {
@@ -103,6 +104,20 @@ export class RoomVisibility {
     if (!through) return !this.visible.has(room) ? false : true;
     const r = this.onScreen(box);
     return !!clip(r, through);
+  }
+
+  /**
+   * Whether someone standing at (x, z) can be seen (a box a person's size, with the name tag and a
+   * bubble over the head): in the camera's view, in a room that's drawn, and inside the part of the
+   * screen that room is seen through. In a doorway, between rooms, the view alone decides.
+   */
+  seesPerson(x: number, z: number): boolean {
+    const b = this.body;
+    b.min.set(x - 0.45, 0, z - 0.45);
+    b.max.set(x + 0.45, 2.7, z + 0.45);
+    if (!this.frustum.intersectsBox(b)) return false;
+    const room = roomAt(this.plan, x, z);
+    return !room || (this.visible.has(room.id) && this.sees(room.id, b));
   }
 
   /** A box's extent on the screen (NDC), or the whole screen when part of it is behind the camera. */

@@ -16,7 +16,8 @@
 //            table dropping at once; every return checked (same seat, bets kept)
 //   leader   leader handoff with several drops, in real time
 //   money    concurrent buy-ins, top-ups and cash-outs, replays, two tabs
-//   floor    50 walkers with emotes on the one floor
+//   floor    50 walkers on the one floor: emotes, floor seats (sit, stand, refused), bar orders
+//            held in the hand (--sit and --order: the share of walkers who do them)
 // After each: the D1 audit (ledger = balance, in_play = escrows, balance = grants + every round's
 // net), message and byte rates, workerd CPU seconds, and the server's error lines.
 
@@ -107,7 +108,7 @@ const tag = `l${Date.now().toString(36).slice(-4)}`;
 let failed = false;
 for (const [i, name] of scenarios.entries()) {
   const meter = new Meter();
-  const ctx = { server, meter, rand: rng(1_000 + i), tag: `${tag}${i}`, log };
+  const ctx = { server, meter, rand: rng(1_000 + i), tag: `${tag}${i}`, log, cpu: () => workerdCpu(dev.pid) };
   const cpu0 = await workerdCpu(dev.pid);
   const t0 = Date.now();
   log(`${name}: start`);
@@ -117,7 +118,7 @@ for (const [i, name] of scenarios.entries()) {
     else if (name === 'storm') result = await tables(ctx, { rounds: Number(flag('rounds', 6)), storm: true, dropRate: Number(flag('drop-rate', 0.03)) });
     else if (name === 'leader') result = await leader(ctx);
     else if (name === 'money') result = await money(ctx);
-    else if (name === 'floor') result = await floor(ctx, { walkers: Number(flag('walkers', 50)), seconds: Number(flag('seconds', 30)), policy: flag('policy', 'new'), pattern: flag('pattern', 'waypoints') });
+    else if (name === 'floor') result = await floor(ctx, { walkers: Number(flag('walkers', 50)), seconds: Number(flag('seconds', 30)), policy: flag('policy', 'new'), pattern: flag('pattern', 'waypoints'), sit: Number(flag('sit', 0.3)), order: Number(flag('order', 0.15)) });
   } catch (err) {
     result = { failed: String(err?.stack ?? err) };
   }
