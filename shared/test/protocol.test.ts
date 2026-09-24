@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseFloorMsg, parseTableMsg } from '../src/protocol.ts';
+import { EMOTES, parseFloorMsg, parseTableMsg } from '../src/protocol.ts';
 import { isGameId, variantOf, TABLE_ID_RE, soloTableName } from '../src/games/catalog.ts';
 import { isValidName, nameProblem } from '../src/names.ts';
 import { parseLook, DEFAULT_LOOK, lookFromJson } from '../src/look.ts';
@@ -13,6 +13,17 @@ describe('floor messages', () => {
     expect(parseFloorMsg({ t: 'watch', game: 'poker' }, isGameId)).toBeNull();
     expect(parseFloorMsg({ t: 'nope' }, isGameId)).toBeNull();
     expect(parseFloorMsg([1, 2], isGameId)).toBeNull();
+  });
+
+  it('takes every emote by its id, in the wheel order (new ones on the end), and nothing else', () => {
+    expect(EMOTES).toEqual(['wave', 'cheer', 'clap', 'thumbs', 'shrug', 'sixseven']);
+    for (const e of EMOTES) expect(parseFloorMsg({ t: 'emote', e }, isGameId)).toEqual({ t: 'emote', e });
+    // the sender is whoever's socket it is: a client can't name one
+    expect(parseFloorMsg({ t: 'emote', e: 'sixseven', id: 7 }, isGameId)).toEqual({ t: 'emote', e: 'sixseven' });
+    for (const e of ['67', 67, 'six-seven', 'SIXSEVEN', 'dance', '', null, undefined, ['wave'], { e: 'wave' }]) {
+      expect(parseFloorMsg({ t: 'emote', e }, isGameId)).toBeNull();
+    }
+    expect(parseFloorMsg({ t: 'emote' }, isGameId)).toBeNull();
   });
 });
 
