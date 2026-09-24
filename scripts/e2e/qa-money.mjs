@@ -325,6 +325,53 @@ if (wanted('desks')) {
       for (const r of rounds) check(r.expected === null || r.expected === r.returned, `${game}: ${r.what} paid ${money(r.returned)}${r.expected !== null ? `, expected ${money(r.expected)}` : ''}`);
       check(after.inPlay === 0, `${game}: nothing left on the table`);
     }
+    // Custom limits at a desk: the rule said as they're typed, the page and the server at the pick
+    {
+      const since = Date.now();
+      await walkUp(p, 'kn-1');
+      await page.waitForSelector('.lim-opt', { timeout: 20_000 });
+      await page.click('.lim-opt:has-text("Custom")');
+      await page.fill('.lim-input >> nth=0', '20000');
+      await page.fill('.lim-input >> nth=1', '100000');
+      const tooHigh = await page.textContent('.lim-rule');
+      check(/\$10,000/.test(tooHigh) && (await page.isDisabled('.lobby-choice >> nth=0')), `Custom: a $20,000 minimum at an online game is refused in words: "${tooHigh}"`);
+      await page.fill('.lim-input >> nth=0', '3');
+      await page.fill('.lim-input >> nth=1', '2500');
+      await page.waitForTimeout(200);
+      await shoot(page, 'desk-keno-custom-picker');
+      await page.keyboard.press('Tab');
+      await page.click('.lobby-choice >> nth=0');
+      await page.waitForSelector('.modal input[type=number]', { timeout: 30_000 });
+      const line = await page.textContent('.modal p');
+      check(/takes \$30 to \$250,000/.test(line), `Custom $3 to $2,500: the buy-in scales with it: "${line}"`);
+      await page.fill('.modal input[type=number]', '300');
+      await page.click('.modal .btn.primary');
+      await page.waitForFunction(() => window.casino.app.table?.seated === true, null, { timeout: 30_000 });
+      await page.waitForSelector('.os-screen:not([hidden])');
+      await page.waitForTimeout(700);
+      const range = await page.textContent('.os-bet-range');
+      const cfg = await page.evaluate(() => window.casino.app.table.session.snapshot.meta.config.limits.default);
+      check(range === '$3 to $2,500' && cfg.min === 300 && cfg.max === 250_000, `the page and the table are at $3 to $2,500 ("${range}", server ${cfg.min}-${cfg.max})`);
+      const refused = await page.evaluate(
+        () =>
+          new Promise((resolve) => {
+            const s = window.casino.app.table.session;
+            const orig = s.onMessage.bind(s);
+            s.onMessage = (m) => {
+              orig(m);
+              if (m.t === 'err') resolve(m.msg);
+              if (m.t === 'ev') resolve(null);
+            };
+            s.link.act({ type: 'bet', bet: 200, risk: 'classic', picks: [1, 2, 3] });
+            setTimeout(() => resolve('no answer'), 5000);
+          }),
+      );
+      check(refused !== null && /\$3/.test(refused), `a $2 bet under the $3 minimum is refused: "${refused}"`);
+      await shoot(page, 'desk-keno-custom-seated');
+      await leave(p);
+      await settled(p);
+      void since;
+    }
     await audit(['qm_desks'], 'desks');
   } catch (err) {
     failed('desks', err);
