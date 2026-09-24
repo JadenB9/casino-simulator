@@ -186,7 +186,8 @@ export class Crew {
       waits.push(this.characters.load(look));
     }
     await Promise.all(waits.map((w) => w.catch((err) => console.warn('crew uniform failed to load', err))));
-    this.blobs = new THREE.InstancedMesh(this.characters.blobGeometry, this.characters.blob, Math.max(1, this.members.length));
+    // (room for a few more: a shopkeeper can arrive with a boutique later)
+    this.blobs = new THREE.InstancedMesh(this.characters.blobGeometry, this.characters.blob, this.members.length + 4);
     this.blobs.name = 'crew-shadows';
     this.blobs.renderOrder = 1;
     this.blobs.frustumCulled = false;
@@ -248,7 +249,7 @@ export class Crew {
         if (m.act.t >= m.act.m.dur) m.act = null;
       }
       if (!show) continue;
-      if (this.blobs) {
+      if (this.blobs && blobs < this.blobs.instanceMatrix.count) {
         _mat.makeScale(m.scale, 1, m.scale).setPosition(m.x, 0.012, m.z);
         this.blobs.setMatrixAt(blobs++, _mat);
       }

@@ -108,6 +108,7 @@ export class Bankers {
     this.serving = null;
     if (t) this.ctx.speech.say(t.m.ch.root, bankerBye(this.n++), 'Banker', 2.02, 2.4);
     if (this.fly || this.flown) {
+      this.ctx.player.character.root.visible = true;
       const cam = this.ctx.camera;
       const from = cam.position.clone();
       const fromAt = from.clone().add(cam.getWorldDirection(new THREE.Vector3()).multiplyScalar(2));
@@ -191,6 +192,8 @@ export class Bankers {
     const fromAt = from.clone().add(cam.getWorldDirection(new THREE.Vector3()).multiplyScalar(2));
     this.fly = { from, fromAt, to, toAt, t: 0, dur: FLY_IN, back: false };
     this.flown = true;
+    // your own avatar would stand in the middle of that view (as at a table, it steps out of it)
+    this.ctx.player.character.root.visible = false;
   }
 
   private nearest(): Teller | null {

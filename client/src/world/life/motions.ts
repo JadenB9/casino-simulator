@@ -86,12 +86,13 @@ export const MOTIONS = {
       const k = hold(t, 0.05, 0.35, 2.0, 2.35);
       const flick = t > 0.35 && t < 2.0 ? Math.abs(Math.sin((t - 0.35) * Math.PI * 2.4)) : 0;
       return {
-        torso: [0.12 * k, 0, 0],
-        head: [0.3 * k, 0, 0],
-        upperL: scale([-0.4, 0, 0.24], k),
-        lowerL: scale([-0.9, -0.5, 0], k),
-        upperR: scale([-0.78 - 0.14 * flick, 0.12, 0.24], k),
-        lowerR: scale([-0.25 + 0.3 * flick, 0.35, 0], k),
+        torso: [0.14 * k, 0, 0],
+        head: [0.32 * k, 0, 0],
+        // both hands over the counter top: the stack in the left, the right laying notes down
+        upperL: scale([-0.95, 0, 0.2], k),
+        lowerL: scale([-0.85, -0.45, 0], k),
+        upperR: scale([-1.05 - 0.12 * flick, 0.12, 0.2], k),
+        lowerR: scale([-0.62 + 0.28 * flick, 0.35, 0], k),
       };
     },
   },
