@@ -146,6 +146,7 @@ export const plinko: GameClientModule = {
     rowsSeg.root.classList.add('dense');
     const dropBtn = actionButton('Drop', () => drop());
     dropBtn.title = 'Drop a ball (Space)';
+    dropBtn.classList.add('os-fixed');
     const info = new InfoList('This board');
     const tally = new SessionTally();
     screen.side.append(labelled('Risk', riskSeg.root), labelled('Rows', rowsSeg.root), dropBtn, info.root, tally.root);

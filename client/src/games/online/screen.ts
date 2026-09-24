@@ -493,3 +493,27 @@ export function labelled(label: string, control: HTMLElement, note?: HTMLElement
   g.append(head, control);
   return g;
 }
+
+/** The last few bets at this computer, newest first: a pocket version of the site's My Bets table. */
+export class BetLog {
+  readonly root = el('div', 'os-log');
+  private readonly body = el('div', 'os-log-body');
+
+  constructor(caption: string, columns: readonly string[], private readonly size = 5) {
+    const head = el('div', 'os-log-row os-log-head');
+    for (const c of columns) head.append(el('span', '', c));
+    this.root.append(el('div', 'os-caption', caption), head, this.body);
+  }
+
+  /** One bet; the last cell (what came back) is coloured by `win`. */
+  push(cells: readonly string[], win: boolean, fresh = true): void {
+    const row = el('div', `os-log-row${fresh ? ' fresh' : ''}`);
+    cells.forEach((c, i) => row.append(el('span', i === cells.length - 1 ? (win ? 'win' : 'lose') : '', c)));
+    this.body.prepend(row);
+    while (this.body.childElementCount > this.size) this.body.lastElementChild!.remove();
+  }
+
+  clear(): void {
+    this.body.replaceChildren();
+  }
+}

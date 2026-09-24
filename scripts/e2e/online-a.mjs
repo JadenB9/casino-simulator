@@ -37,9 +37,12 @@ for (const game of games) {
   );
   await page.goto(`http://localhost:${port}/casino/?dev=table&game=${game}&name=oa_${game}`);
   if (await page.waitForSelector('.pass-input', { timeout: 2500 }).catch(() => null)) await page.fill('.pass-input', 'casino-dev');
-  await page.waitForSelector('.modal input[type=number]', { timeout: 30000 });
-  await page.fill('.modal input[type=number]', '2000');
-  await page.click('.modal .btn.primary');
+  // A seat kept from an earlier run (the page closed without leaving) comes back seated, with no
+  // buy-in to answer.
+  if (await page.waitForSelector('.modal input[type=number]', { timeout: 10000 }).catch(() => null)) {
+    await page.fill('.modal input[type=number]', '2000');
+    await page.click('.modal .btn.primary');
+  }
   await page.waitForTimeout(1500);
   const shots = [];
   const shot = async (name) => {
@@ -192,6 +195,9 @@ for (const game of games) {
 
   out.hud = await text('.dev-hud');
   out.foot = await text('.os-foot');
+  // Stand up, so the next run starts with a buy-in.
+  await page.evaluate(() => window.casino.table.leave());
+  await page.waitForTimeout(400);
   out.errors = errors.slice(0, 10);
   if (errors.length) failed = true;
   report.push(out);
