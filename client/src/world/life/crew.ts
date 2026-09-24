@@ -342,6 +342,9 @@ export class Crew {
   private buildFar(): void {
     const groups = new Map<string, Member[]>();
     for (const m of this.members) {
+      // the cage's tellers and the boutique's keeper stand in corners behind bars and counters:
+      // from across the floor they simply aren't drawn (a still copy each would cost a draw call)
+      if (m.role === 'banker' || m.role === 'shopkeeper') continue;
       const l = m.ch.currentLook;
       const key = `${l.body}|${l.outfit}|${l.top}`;
       groups.set(key, [...(groups.get(key) ?? []), m]);

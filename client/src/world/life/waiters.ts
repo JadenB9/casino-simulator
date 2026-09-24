@@ -148,8 +148,11 @@ export class Waiters {
   /** After the crew has posed them: each tray onto its waiter's hand, level, with its load. */
   place(): void {
     const hand = new THREE.Vector3();
+    const cam = this.ctx.camera.getWorldPosition(new THREE.Vector3());
     for (const w of this.list) {
-      const shown = w.m.shown && w.m.poser.where('handL', hand) !== null;
+      // a tray further off than this is a few pixels: not worth its draw call
+      const near = Math.hypot(w.m.x - cam.x, w.m.z - cam.z) < TRAY_M;
+      const shown = near && w.m.shown && w.m.poser.where('handL', hand) !== null;
       w.tray.visible = shown;
       if (!shown) continue;
       const fx = Math.sin(w.m.yaw);
@@ -431,6 +434,8 @@ export class Waiters {
   }
 }
 
+/** Trays are drawn out to here from the camera (m). */
+const TRAY_M = 12;
 /** Where the tray sits from the wrist bone: ahead along the hand, out from it, and up on the palm. */
 const TRAY_AHEAD = 0.07;
 const TRAY_OUT = 0.0;
