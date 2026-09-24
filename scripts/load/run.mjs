@@ -137,7 +137,7 @@ for (const [i, name] of scenarios.entries()) {
     result?.ok === false ||
     money_.problems.length > 0 ||
     entry.audit.openEscrows > 0 ||
-    (Array.isArray(result) && result.some((r) => r.failed || r.notRestored?.length || r.betsLost?.length || r.leftCleanly !== r.players));
+    (Array.isArray(result) && result.some((r) => r.failed || r.notRestored?.length || r.betsLost?.length || r.dealtOut?.length || r.leftCleanly !== r.players));
   if (bad) failed = true;
   log(`${name}: ${bad ? 'PROBLEMS' : 'ok'} in ${entry.seconds}s`);
   console.log(JSON.stringify(entry, null, 2));

@@ -66,6 +66,10 @@ class Table {
   turnovers = 0;
   /** Checks that a newcomer's view held no card of anyone else's (the leak this file guards). */
   newcomerChecks = 0;
+  /** Each seat's current occupant: their stack when they sat down and their rounds' net since. */
+  private readonly occupant = new Map<number, { start: number; net: number }>();
+  /** Occupants whose chips and recorded rounds were compared as they left. */
+  statChecks = 0;
 
   constructor(
     readonly game: string,
@@ -75,13 +79,21 @@ class Table {
     this.engine = engineFor(game as never) as Engine;
     this.sim = new TableSim(this.engine, seededRng(seed), 'multi', Array.from({ length: seats }, (_, seat) => ({ seat, stack: BUY_IN[game as keyof typeof BUY_IN] })));
     this.sim.started = true;
-    for (const seat of this.sim.seats.keys()) this.run(this.engine.seatJoined(this.sim.state, seat, this.sim.ctx()));
+    for (const [seat, s] of this.sim.seats) {
+      this.occupant.set(seat, { start: s.stack, net: 0 });
+      this.run(this.engine.seatJoined(this.sim.state, seat, this.sim.ctx()));
+    }
   }
 
   /** Apply a step the way the host does and check every view after it. */
   run(step: Step<unknown>): void {
     this.sim.apply(step as Step<any>);
     this.steps++;
+    // The host credits a round to whoever holds the seat now, as the profile's stats.
+    for (const r of step.rounds ?? []) {
+      const who = this.sim.seats.has(r.seat) ? this.occupant.get(r.seat) : undefined;
+      if (who) who.net += r.returned - r.wagered;
+    }
     if (step.rounds?.length) for (const s of this.sim.seats.values()) s.ready = false;
     this.check(step.events);
   }
@@ -146,6 +158,12 @@ class Table {
     for (const seat of [...this.leaving]) {
       if (this.engine.liveBets(this.sim.state, seat) > 0) continue;
       this.leaving.delete(seat);
+      // Cashing out: every chip won or lost since sitting down must be in the rounds reported for
+      // the seat, or the player's stats (and the leaderboards) miss what really happened.
+      const who = this.occupant.get(seat)!;
+      const moved = this.sim.seats.get(seat)!.stack - who.start;
+      this.statChecks++;
+      if (moved !== who.net) this.problems.push(`${this.game}: seat ${seat} leaves ${moved} up but its reported rounds come to ${who.net}`);
       this.sim.seats.delete(seat);
       this.join(seat);
     }
@@ -154,7 +172,9 @@ class Table {
   /** Someone new takes the seat straight away (the engine must not show them the last occupant's round). */
   join(seat: number): void {
     const id = this.nextAccount++;
-    this.sim.seats.set(seat, { seat, accountId: id, name: `N${id}`, stack: BUY_IN[this.game as keyof typeof BUY_IN], connected: true, ready: false });
+    const stack = BUY_IN[this.game as keyof typeof BUY_IN];
+    this.occupant.set(seat, { start: stack, net: 0 });
+    this.sim.seats.set(seat, { seat, accountId: id, name: `N${id}`, stack, connected: true, ready: false });
     this.run(this.engine.seatJoined(this.sim.state, seat, this.sim.ctx()));
     this.turnovers++;
     this.newcomerChecks++;
@@ -291,6 +311,46 @@ describe("Hold'em: folded hole cards stay with their owner", () => {
     t.leave(seat);
     for (const c of hole) expect(cardsIn(t.sim.view(seat))).not.toContain(c);
     expect(t.problems).toEqual([]);
+  });
+});
+
+describe('Blackjack: a seat that leaves with its hand settled keeps the round in its stats', () => {
+  it('first base busts and leaves while the table plays on: its round is reported once, as it leaves', () => {
+    let done = false;
+    for (let seed = 1; seed < 400 && !done; seed++) {
+      const t = new Table('blackjack', seed, 2);
+      t.tick(); // the window opens
+      for (const seat of [0, 1]) expect(t.act(seat, { type: 'bet', amount: 2_500 })).toBe(true);
+      t.sim.now += 16_000;
+      t.tick();
+      const v = t.sim.view(null);
+      if (v.phase !== 'play' || !v.turn) continue;
+      // First base (whoever acts first) hits until it busts; deals where it can't are skipped.
+      const first = v.turn.seat as number;
+      const second = 1 - first;
+      while (t.sim.view(first).turn?.seat === first && t.sim.view(first).moves.includes('hit')) t.act(first, { type: 'hit' });
+      const spot = t.sim.view(null).spots.find((s: any) => s.seat === first);
+      if (spot.hands[0].outcome !== 'bust' || t.sim.view(null).phase !== 'play') continue;
+      // Busted, nothing live, and the other seat still to play: it leaves now.
+      expect(t.engine.liveBets(t.sim.state, first)).toBe(0);
+      const step = t.engine.seatLeaving(t.sim.state, first, t.sim.ctx());
+      expect(step.rounds).toEqual([{ seat: first, wagered: 2_500, returned: 0 }]);
+      t.run(step);
+      t.sim.seats.delete(first);
+      // The round ends without the leaver in it again.
+      const ends: { seat: number }[] = [];
+      for (let i = 0; i < 10 && t.sim.view(null).phase === 'play'; i++) {
+        const s = t.engine.act(t.sim.state, second, t.engine.parseAction({ type: 'stand' }), t.sim.ctx());
+        if (!isRefusal(s)) {
+          t.run(s);
+          ends.push(...(s.rounds ?? []));
+        }
+      }
+      expect(t.sim.view(null).phase).toBe('results');
+      expect(ends.map((r) => r.seat)).toEqual([second]);
+      done = true;
+    }
+    expect(done).toBe(true);
   });
 });
 

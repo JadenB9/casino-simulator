@@ -12,6 +12,34 @@ const PLAYERS = 8;
 /** Seats per lobby table (the catalog's multiplayer limits). */
 const SEATS = { blackjack: 7, roulette: 8, craps: 8, baccarat: 7, threecard: 6, holdem: 9, war: 6, sicbo: 8, bigsix: 8 };
 
+/**
+ * Whether this seat is in the round on the table (dealt in, or chips down), and so must still be
+ * in it after coming back within the same round: a drop never deals anyone out.
+ */
+function inRound(game, view, seat) {
+  if (!view || seat === null) return false;
+  switch (game) {
+    case 'blackjack':
+      return (view.spots ?? []).some((s) => s.seat === seat);
+    case 'threecard':
+    case 'war':
+      return !!view.seats?.[seat] && view.phase !== 'betting';
+    case 'holdem': {
+      // In the hand, or (at the results) holding its cards: a seat always sees its own.
+      const s = view.seats?.[seat];
+      return !!s && (s.inHand || (s.cards?.length ?? 0) > 0);
+    }
+    case 'baccarat':
+      return (!!view.bets?.[seat] && Object.keys(view.bets[seat]).length > 0) || !!view.results?.[seat];
+    case 'roulette':
+    case 'sicbo':
+    case 'bigsix':
+      return (!!view.bets?.[seat] && Object.keys(view.bets[seat]).length > 0) || !!view.settled?.[seat];
+    default:
+      return false;
+  }
+}
+
 /** What this seat has on the layout that must survive a reconnect in the same round (or null). */
 function myBet(game, view, seat) {
   if (!view || seat === null) return null;
@@ -63,7 +91,7 @@ async function lobbyRun(ctx, game, gi, opts) {
   const seated = await Promise.all(players.map((p) => p.buyIn(BUY_IN[game])));
   const out = {
     game, tableId, players: seats, turnedAway: `${turnedAway.filter(Boolean).length}/${accounts.length - seats}`, seated: seated.filter(Boolean).length,
-    rounds: 0, topUps: 0, drops: 0, massDrops: 0, restored: 0, notRestored: [], betsKept: 0, betsLost: [], leftCleanly: 0, errors: {},
+    rounds: 0, topUps: 0, drops: 0, massDrops: 0, midRound: 0, restored: 0, notRestored: [], stillInRound: 0, dealtOut: [], betsKept: 0, betsLost: [], leftCleanly: 0, errors: {},
   };
   if (turnedAway.some((x) => !x)) out.notRestored.push({ problem: 'a player past the seat limit was let in, or not told the table is full' });
   players[0].conn.send({ t: 'start' });
@@ -79,20 +107,30 @@ async function lobbyRun(ctx, game, gi, opts) {
   const bounce = async (p, pause) => {
     if (busy.has(p) || p.leaving) return;
     busy.add(p);
-    const before = { seat: p.seat, round: roundOf(game, p.view), bet: myBet(game, p.view, p.seat), status: p.status };
+    const before = { seat: p.seat, round: roundOf(game, p.view), bet: myBet(game, p.view, p.seat), status: p.status, inRound: inRound(game, p.view, p.seat) };
     p.drop();
     out.drops++;
+    if (before.inRound) out.midRound++;
     await sleep(pause);
     try {
       const snap = await p.connect();
       const ok = snap.you.seat === before.seat && (before.status !== 'seated' || snap.you.status === 'seated' || snap.you.status === 'cashing_out');
       if (ok) out.restored++;
       else out.notRestored.push({ account: p.account.name, before, after: snap.you });
-      if (before.bet !== null && roundOf(game, snap.view) === before.round) {
-        const after = myBet(game, snap.view, snap.you.seat);
-        if (after === before.bet) out.betsKept++;
-        // The betting window can close while away: then the bet was dealt (a new phase, same round).
-        else if (snap.view.phase === 'betting') out.betsLost.push({ account: p.account.name, before: before.bet, after });
+      if (roundOf(game, snap.view) === before.round) {
+        if (before.bet !== null) {
+          const after = myBet(game, snap.view, snap.you.seat);
+          if (after === before.bet) out.betsKept++;
+          // The betting window can close while away: then the bet was dealt (a new phase, same round).
+          else if (snap.view.phase === 'betting') out.betsLost.push({ account: p.account.name, before: before.bet, after });
+        }
+        // Dealt in (or chips down) before the drop, and the same round is still on: still in it.
+        // (Three Card and war hand back an undealt bet whose player is away at the deal, by design:
+        // that is a return of the stake, not a round played without them.)
+        if (before.inRound) {
+          if (inRound(game, snap.view, snap.you.seat)) out.stillInRound++;
+          else out.dealtOut.push({ account: p.account.name, game, phase: snap.view.phase, round: before.round });
+        }
       }
     } catch (err) {
       out.notRestored.push({ account: p.account.name, before, error: String(err) });
