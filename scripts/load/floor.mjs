@@ -1,8 +1,11 @@
 // The casino floor with many people on it: walkers arrive in waves, walk (a frame every 40 ms, the
 // way a browser moves its player), emote now and then (some mash the key: the floor lets three
-// through, then one every two seconds), and a few watch a game's lobby list. Measured: what the
-// one floor object takes in per second (every `mv` is an event it must handle), what each walker
-// receives, and whether everyone saw everyone.
+// through, then one every two seconds), and a few watch a game's lobby list. Some sit down on a
+// floor seat at their stops (a stool, a sofa: `sit`, a while, `stand`), a pool of seats about half
+// as big as the crowd so some are refused ("got there first"); some order from the bar (POST
+// /bar/order, then the drink in their hand: PUT /me/look, which the floor tells everyone).
+// Measured: what the one floor object takes in per second (every `mv` is an event it must handle),
+// what each walker receives, whether everyone saw everyone, and the seats' and orders' answers.
 //
 // `policy` is when a walker sends its position: 'new' is the client's rule (client/src/net/
 // send-policy.ts, the same module), 'old' is a position every 100 ms while moving, as before it.
@@ -10,6 +13,7 @@
 // 'zigzag' (a new heading every few hundred ms, never standing: the worst case for the rule).
 
 import { EMOTES } from '../../shared/src/protocol.ts';
+import { BAR_MENU } from '../../shared/src/items.ts';
 import { shouldSend } from '../../client/src/net/send-policy.ts';
 import { nextIp, sleep } from './net.mjs';
 
@@ -26,6 +30,12 @@ export async function floor(ctx, opts = {}) {
   const seconds = opts.seconds ?? 30;
   const policy = opts.policy ?? 'new';
   const pattern = opts.pattern ?? 'waypoints';
+  /** Share of walkers who sit at some stops, and who order from the bar at some. */
+  const sitShare = opts.sit ?? 0.3;
+  const orderShare = opts.order ?? 0.15;
+  const seatPool = Math.max(2, Math.round(walkers / 2));
+  const seats = { tries: 0, sat: 0, refused: 0, stood: 0 };
+  const orders = { tries: 0, paid: 0, held: 0, refused: {}, ms: [] };
   const accounts = [];
   for (let i = 0; i < walkers; i++) accounts.push(await server.login(`${ctx.tag}w${i}`, nextIp(22)));
 
@@ -36,7 +46,7 @@ export async function floor(ctx, opts = {}) {
     const wave = accounts.slice(i, i + 10).map(async (a) => {
       const c = server.connect('floor', a, meter);
       const hello = await c.next((m) => m.t === 'hello', 15_000);
-      return { a, c, hello, seen: new Set(), snapshots: 0, rows: 0, moves: 0, walkMs: 0, emotesSent: 0, emotesBurst: 0, emotesBack: new Map(), x: hello.you.x, z: hello.you.z, r: hello.you.r };
+      return { a, c, hello, look: hello.you.look, seen: new Set(), snapshots: 0, rows: 0, moves: 0, walkMs: 0, emotesSent: 0, emotesBurst: 0, emotesBack: new Map(), seatsHeard: 0, looksHeard: 0, x: hello.you.x, z: hello.you.z, r: hello.you.r };
     });
     ws.push(...(await Promise.all(wave)));
     await sleep(300);
@@ -51,6 +61,11 @@ export async function floor(ctx, opts = {}) {
         for (const row of m.p) w.seen.add(row[0]);
       } else if (m.t === 'emote') {
         w.emotesBack.set(m.id, (w.emotesBack.get(m.id) ?? 0) + 1);
+      } else if (m.t === 'player') {
+        if (m.seat !== undefined) w.seatsHeard++;
+        if (m.look) w.looksHeard++;
+      } else if (m.t === 'seat.no') {
+        seats.refused++;
       }
     });
   }
@@ -59,6 +74,11 @@ export async function floor(ctx, opts = {}) {
 
   const startAt = Date.now();
   const stopAt = startAt + seconds * 1000;
+  ws.forEach((w, i) => {
+    w.sits = i % Math.max(1, Math.round(1 / sitShare)) === 0;
+    w.orders = i % Math.max(1, Math.round(1 / orderShare)) === 1;
+    w.ordered = 0;
+  });
   const walk = async (w) => {
     let last = null;
     let prev = null;
@@ -104,6 +124,43 @@ export async function floor(ctx, opts = {}) {
       }
       if (pattern === 'zigzag') continue;
       send('st', Date.now());
+      // Some sit down here a while: a seat from the pool, within reach of where they stopped.
+      if (w.sits && rand() < 0.5) {
+        const seat = `load-seat-${Math.floor(rand() * seatPool)}`;
+        const sx = Math.round(w.x + (rand() - 0.5) * 120);
+        const sz = Math.round(w.z + (rand() - 0.5) * 120);
+        const refusedBefore = seats.refused;
+        seats.tries++;
+        w.c.send({ t: 'sit', seat, x: sx, z: sz, r: w.r });
+        await sleep(300);
+        if (seats.refused === refusedBefore) {
+          seats.sat++;
+          w.x = sx;
+          w.z = sz;
+          last = { x: sx, z: sz, r: w.r, at: Date.now() };
+          prev = null;
+          await sleep(2_000 + Math.floor(rand() * 6_000));
+          w.c.send({ t: 'stand' });
+          seats.stood++;
+        }
+      }
+      // Some order from the bar: paid, then the drink shows in their hand (a look everyone hears).
+      if (w.orders && w.ordered < 4 && rand() < 0.35) {
+        const item = BAR_MENU[Math.floor(rand() * 6)];
+        const op = `load${Date.now().toString(36)}${Math.floor(rand() * 1e6).toString(36)}`;
+        orders.tries++;
+        w.ordered++;
+        const t0 = Date.now();
+        const r = await server.api('bar/order', { method: 'POST', token: w.a.token, ip: w.a.ip, body: { item: item.id, op } });
+        orders.ms.push(Date.now() - t0);
+        if (r.status === 200) {
+          orders.paid++;
+          const look = { ...w.look, held: { item: item.id, order: op, until: r.body.order.until } };
+          const l = await server.api('me/look', { method: 'PUT', token: w.a.token, ip: w.a.ip, body: { look } });
+          if (l.status === 200) orders.held++;
+          else orders.refused[`look ${l.status}`] = (orders.refused[`look ${l.status}`] ?? 0) + 1;
+        } else orders.refused[r.status] = (orders.refused[r.status] ?? 0) + 1;
+      }
       // Stand a moment; now and then wave (or mash the emote key).
       if (rand() < 0.3) {
         const mash = rand() < 0.2 ? 6 : 1;
@@ -118,8 +175,10 @@ export async function floor(ctx, opts = {}) {
     send('st', Date.now());
   };
   const inBefore = meter.out;
+  const cpuBefore = ctx.cpu ? await ctx.cpu() : null;
   await Promise.all(ws.map(walk));
   const walkedSec = (Date.now() - startAt) / 1000;
+  const cpuAfter = ctx.cpu ? await ctx.cpu() : null;
   const inbound = meter.out - inBefore;
   await sleep(1_000);
 
@@ -142,6 +201,8 @@ export async function floor(ctx, opts = {}) {
     arrivalMs,
     rosterAtArrival: { first: hellos[0], last: hellos.at(-1) },
     floorInboundPerSec: +(inbound / walkedSec).toFixed(0),
+    // the runtime's CPU while they walk (logins and arrivals left out): the floor's own load
+    workerdCpuShareWhileWalking: cpuBefore && cpuAfter ? +((cpuAfter.cpu - cpuBefore.cpu) / walkedSec).toFixed(2) : null,
     movesPerWalkingSecond: +moveRate.toFixed(2),
     snapshotsPerSecPerWalker: { min: +Math.min(...per).toFixed(1), max: +Math.max(...per).toFixed(1) },
     rowsPerSnapshot: +rows.toFixed(1),
@@ -151,6 +212,9 @@ export async function floor(ctx, opts = {}) {
     emotesDelivered: ws.reduce((s, w) => s + [...w.emotesBack.values()].reduce((x, y) => x + y, 0), 0),
     sendersOverEmoteCap: overCap,
     closedEarly,
+    seats: { ...seats, pool: seatPool, heardPerWalker: +(ws.reduce((s, w) => s + w.seatsHeard, 0) / walkers).toFixed(1) },
+    orders: { tries: orders.tries, paid: orders.paid, held: orders.held, refused: orders.refused, msMedian: orders.ms.sort((a, b) => a - b)[Math.floor(orders.ms.length / 2)] ?? null, msMax: orders.ms.at(-1) ?? null, looksHeardPerWalker: +(ws.reduce((s, w) => s + w.looksHeard, 0) / walkers).toFixed(1) },
+    floorOutboundPerSec: +(ws.reduce((s, w) => s + w.snapshots, 0) / walkedSec).toFixed(0),
     // The last to arrive sees every earlier wave in its hello (its own wave connects alongside it).
     ok: closedEarly.length === 0 && overCap === 0 && sawAll >= walkers - 1 && hellos.at(-1) >= walkers - Math.min(10, walkers),
   };
