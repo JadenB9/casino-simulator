@@ -69,7 +69,10 @@ const stop = () => {
     /* already gone */
   }
 };
+// Stopped from outside too: never leave a wrangler (and its file watcher) running behind us.
 process.on('SIGINT', () => (stop(), process.exit(130)));
+process.on('SIGTERM', () => (stop(), process.exit(143)));
+process.on('exit', stop);
 const server = new Server(port, origin);
 for (let i = 0; ; i++) {
   if (i > 240) throw new Error('wrangler dev never answered; see ' + logPath);

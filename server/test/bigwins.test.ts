@@ -127,7 +127,9 @@ describe('what the floor says about a win, and when', () => {
     expect(describeWin('blackjack', '', [{ type: 'result', seat: 0, hand: 0, outcome: 'win' }, { type: 'result', seat: 0, hand: 1, outcome: 'win' }], 0, 600_000, 1_200_000)).toBe('2 hands won');
     expect(describeWin('blackjack', '', [{ type: 'dealer', bust: true }, { type: 'result', seat: 0, hand: 0, outcome: 'win' }], 0, 500_000, 1_000_000)).toBe('Dealer busts');
     expect(describeWin('war', '', [{ type: 'result', seat: 0, result: { outcome: 'win', tie: 110_000 } }], 0, 10_000, 110_000)).toBe('Tie bet, 10 to 1');
-    expect(describeWin('threecard', '', [{ type: 'hand', to: 0, seat: 0, cards: ['9h', 'Th', 'Jh'] }, { type: 'result', seat: 0, result: { pairPlus: 41_000, bonus: 0 } }], 0, 1_000, 41_000)).toBe('Straight flush');
+    // Named from the hand turned over to be paid (public), never from the seat's own deal.
+    expect(describeWin('threecard', '', [{ type: 'show', seat: 0, cards: ['9h', 'Th', 'Jh'] }, { type: 'result', seat: 0, result: { pairPlus: 41_000, bonus: 0 } }], 0, 1_000, 41_000)).toBe('Straight flush');
+    expect(describeWin('threecard', '', [{ type: 'hand', to: 0, seat: 0, cards: ['9h', 'Th', 'Jh'] }, { type: 'result', seat: 0, result: { pairPlus: 41_000, bonus: 0 } }], 0, 1_000, 41_000)).toBe('Beat the dealer');
   });
 
   it("Hold'em names only a hand that was shown down", () => {

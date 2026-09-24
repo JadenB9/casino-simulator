@@ -18,6 +18,8 @@ import { engineFor } from '../../shared/src/games/index.ts';
 import { TableSim } from '../../shared/test/helpers/table-sim.ts';
 import { seededRng } from '../../shared/test/helpers/seeded.ts';
 import { BUY_IN, ENGINE_READY, LOBBY_GAMES, botDoneBetting, botMove, type Rand } from '../../scripts/load/bots.ts';
+import { describeWin } from '../src/floor/wins.ts';
+import { handName, score } from '../../shared/src/games/threecard/rules.ts';
 
 type Engine = GameEngine<any, any, any>;
 
@@ -311,6 +313,35 @@ describe("Hold'em: folded hole cards stay with their owner", () => {
     t.leave(seat);
     for (const c of hole) expect(cardsIn(t.sim.view(seat))).not.toContain(c);
     expect(t.problems).toEqual([]);
+  });
+});
+
+describe('Three Card big wins are named from what the table showed', () => {
+  it("a settled hand is named from the step that paid it, which carries the public show and not the seat's deal", () => {
+    let named = 0;
+    for (let seed = 1; seed < 60; seed++) {
+      const t = new Table('threecard', seed, 2);
+      t.tick();
+      for (const seat of [0, 1]) t.act(seat, { type: 'bet', ante: 1_000, pairPlus: 500 });
+      t.sim.now += 16_000;
+      t.tick();
+      if (t.sim.view(null).phase !== 'deciding') continue;
+      const res0 = t.engine.act(t.sim.state, 0, t.engine.parseAction({ type: 'play' }), t.sim.ctx());
+      if (isRefusal(res0)) continue;
+      t.run(res0);
+      const settle = t.engine.act(t.sim.state, 1, t.engine.parseAction({ type: 'play' }), t.sim.ctx());
+      if (isRefusal(settle)) continue;
+      t.run(settle);
+      expect(settle.events.some((e) => e.type === 'hand')).toBe(false);
+      for (const r of settle.rounds ?? []) {
+        if (r.returned <= r.wagered) continue;
+        const shown = settle.events.find((e) => e.type === 'show' && e.seat === r.seat)!;
+        const name = handName(score(shown.cards as string[] as never));
+        expect(describeWin('threecard', '', settle.events, r.seat, r.wagered, r.returned)).toContain(name);
+        named++;
+      }
+    }
+    expect(named).toBeGreaterThan(5);
   });
 });
 
