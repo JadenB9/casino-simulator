@@ -1050,8 +1050,9 @@ if (checks.includes('read')) {
     // onto the floor, and again if the page ever reloads under us (a new build, a lost socket)
     const onFloor = async () => {
       if (await page.evaluate(() => !!window.casino?.app && !!document.querySelector('.hud') && !!window.__read).catch(() => false)) return;
-      await page.waitForSelector('.name-input, .menu-item, .editor-panel.guided, .hud', { timeout: 600000 });
-      if (await page.$('.name-input')) {
+      await page.waitForSelector('.front:not(.closing) .name-input, .menu-item, .editor-panel.guided, .hud', { timeout: 600000 });
+      // (a login that is closing still has its field for a moment: only a live one wants filling)
+      if (await page.$('.front:not(.closing) .name-input')) {
         await page.fill('.name-input', 'world3_read');
         await page.fill('.pass-input', PASSWORD);
         await page.click('.enter-btn');
