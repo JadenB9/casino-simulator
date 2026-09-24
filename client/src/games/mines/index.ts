@@ -11,7 +11,7 @@ import { TILES, MIN_MINES, MAX_MINES, gemsOf, multiplier, returnAt, bestStop } f
 import type { MinesView } from '../../../../shared/src/games/mines/engine.ts';
 import { celebrate } from '../../table/celebrate.ts';
 import { attractTexture, pcModel, pcPose, pcScreenCorners, PC_FOOTPRINT, PC_SEAT } from '../online/pc.ts';
-import { OnlineScreen, BetBox, NumberField, actionButton, InfoList, SessionTally, OutcomePop, commitTyping, winTier, siteTone, drawSiteBar, drawAttractPanel, multText, pctText } from '../online/screen.ts';
+import { OnlineScreen, AddChips, BetBox, NumberField, actionButton, InfoList, SessionTally, OutcomePop, commitTyping, winTier, siteTone, drawSiteBar, drawAttractPanel, multText, pctText } from '../online/screen.ts';
 import { MinesBoard } from './board.ts';
 
 /** The chair's trim on the floor: Mines' mint. */
@@ -79,6 +79,7 @@ export const mines: GameClientModule = {
   mount(ctx): TableView {
     const screen = new OnlineScreen('Mines');
     ctx.ui.append(screen.root);
+    const cashier = new AddChips(screen, ctx);
     const corners = pcScreenCorners();
 
     let count = 3;
@@ -253,6 +254,7 @@ export const mines: GameClientModule = {
 
     return {
       onTable(snap) {
+        cashier.table(snap);
         stack = snap.you.stack;
         busy = false;
         animating = false;
@@ -309,12 +311,14 @@ export const mines: GameClientModule = {
       },
 
       onSeat(msg) {
+        cashier.seat(msg);
         stack = msg.stack;
         bet?.setMax(stack);
         sync();
       },
 
       onError() {
+        cashier.refused();
         busy = false;
         sync();
       },
