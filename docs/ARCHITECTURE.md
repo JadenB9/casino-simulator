@@ -272,7 +272,7 @@ interface Step<S> {
   state: S;
   events: GameEvent[];          // what to animate; each addressed to everyone or one seat
   chips?: { seat: number; bet?: Cents; payout?: Cents }[];  // stack -= bet, stack += payout
-  rounds?: { seat: number; wagered: Cents; returned: Cents }[]; // finished rounds, for stats
+  rounds?: { seat: number; wagered: Cents; returned: Cents; spot?: number }[]; // finished rounds (one per hand), for stats
 }
 ```
 

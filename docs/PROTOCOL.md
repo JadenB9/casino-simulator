@@ -265,14 +265,20 @@ folder documents the final shapes):
 
 | game | actions |
 |---|---|
-| blackjack | `bet {amount}`, `undo`, `clear`, `deal` (solo), `insurance {take}`, `hit`, `stand`, `double`, `split`, `surrender` |
+| blackjack | `bet {amount, spot?}`, `undo`, `clear`, `deal` (solo), `spots {n}` (solo, 1-5), `insurance {take, spot?}`, `hit`, `stand`, `double`, `split`, `surrender` (each `{spot?, hand?}`) |
 | roulette | `bet {bets: {kind, numbers?, amount}[]}` (at most 40), `undo`, `clear`, `rebet {double}`, `ready {on}`, `spin` (solo) |
 | craps | `bet {bets: {kind, number?, amount}[]}`, `odds {on, amount}`, `down {id, part?, amount?}`, `working {id, on}`, `roll` (shooter) |
 | baccarat | `bet {player?, banker?, tie?, playerPair?, bankerPair?}` (adds to the spots named), `undo`, `clear`, `deal` (solo) |
 | slots | `spin {coins, denom}` (free games play out inside the paid spin) |
 | videopoker | `deal {coins, denom?}`, `draw {hold: boolean[5]}` |
-| threecard | `bet {ante, pairPlus}`, `deal` (solo), `play`, `fold` |
+| threecard | `bet {ante, pairPlus, spot?}`, `deal` (solo), `spots {n}` (solo, 1-3), `play {spot?}`, `fold {spot?}` |
+| war | `bet {bet, tie, spot?}`, `deal` (solo), `spots {n}` (solo, 1-3), `war {spot?}`, `surrender {spot?}` |
 | holdem | `fold`, `check`, `call`, `bet {amount}`, `raise {to}`, `allin`, `sitout {on}` |
+
+Several hands (blackjack, Three Card Poker, Casino War): a hand is played at a spot numbered like
+the seats, and in these games' events and views every `seat` is a spot. At a shared table a
+player's spot is their seat; a solo player can play spots 0 to n - 1 (`spots {n}`), and `spot`
+in an action says which of them it's for. Each view's `mine` lists the viewer's spots.
 
 Events are what the client animates: `card` (shoe to a hand, face up or down), `flip`,
 `chips` (bets collected or paid), `spin` (roulette result and spin time), `dice` (both

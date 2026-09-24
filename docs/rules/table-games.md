@@ -278,6 +278,42 @@ are counted per action, so one round can have several: 2.78 splits and 10.38 dou
 rounds. The average total amount wagered is 1.1316 initial units, which makes the loss per unit
 of total action ("element of risk") 0.295%. That figure must **not** be used as the house edge.
 
+### 1.7 Several spots (solo tables)
+
+At a solo table a player can play one to five betting circles at once, from the one stack, as a
+player may play two or more spots at a real table. The circles are the ones the first players to
+sit down would take: the middle circle, then the two beside it, then the next two. Each circle
+has its own bet, inside the table's limits for a circle; the stack has to cover every bet as it
+goes down, and a double or a split on any circle as it's made. The choice holds from round to
+round. At a shared table every player keeps one circle.
+
+The round is the round a full table gets. The dealer deals one card to each circle from first
+base (the dealer's left; on screen, the right-hand circle first), the up card, a second card to
+each circle, then the hole card, and the hands are played circle by circle in the same order,
+each split hand finished before the next circle. With an ace up, each circle is asked about
+insurance (or even money, holding a blackjack) on its own. Each circle settles on its own and
+is a round of its own in the player's stats.
+
+**Odds.** Every hand plays by exactly the rules above, so its edge is the published one; the only
+difference sharing a shoe can make is the real card-removal effect of the other hands (their
+cards are unseen by basic strategy, but how long they hit changes what the dealer draws from,
+and more cards a round changes the cut-card effect). The hands of a round share the dealer's
+cards, so they are correlated (a dealer bust wins them all): one hand's result has SD 1.141, but
+the average of a round's three hands has SD 0.868, not 1.141/√3 = 0.659 (a correlation of about
+0.37 between two hands of the same round). The Monte Carlo therefore takes its standard error
+from each round's average over its hands, and plays every hand with the §1.4 chart through the
+same rule functions the table deals with (shared/test/blackjack-spots.mc.test.ts):
+
+| Spots | Dealing | Published (one spot) | Measured per hand | SE | z | N |
+|---|---|---|---|---|---|---|
+| 3 | cut card at 75% | 0.354% | 0.3499% | 0.0250% | −0.16 | 12M rounds, 36M hands |
+| 3 | fresh shoe every round | 0.3336% | 0.3135% | 0.0250% | −0.80 | 12M rounds, 36M hands |
+| 5 | cut card at 75% | 0.354% | 0.3511% | 0.0327% | −0.09 | 6M rounds, 30M hands |
+
+The card-removal effect is far below what these runs can see. A unit test also plays 3,000
+three-spot rounds through the table engine and the bare rule functions from the same seed and
+checks that they deal the same cards to the same circles and reach the same results.
+
 ---
 
 ## 2. Roulette
@@ -852,7 +888,34 @@ which `(5·SD/δ)²` says 9.4×10⁵ rounds catch; the enumeration catches it ex
 war, against 2.3301% from a full shoe (z +0.57). Like baccarat, Casino War shows no measurable
 cut-card effect, so the full-shoe figures are the test targets.
 
-### 7.6 Where sources differ
+### 7.6 Several spots (solo tables)
+
+At a solo table a player can play one to three spots at once, from the one stack: the player's
+own and the spots the next players would take. Each spot has its own bet and Tie bet inside the
+table's limits, and every bet is taken only with its war raise still in the stack, so every spot
+could go to war on the same deal. The round is a full table's: one card face up to each spot,
+first base first, and one to the dealer. Ties are decided one at a time, first base first; once
+every tie is decided, one war deal serves them all (three burned, one card to each spot at war,
+one to the dealer), and each spot settles on its own, a round of its own in the stats. At a
+shared table every player keeps one spot.
+
+**Odds.** Each spot's deal is two cards of the shoe, whatever the other spots hold, so the chance
+of a tie (23/311) and the Tie bet are exactly the one-spot figures. The only card-removal effect
+is two spots tying at once: their war comes from a shoe short of one more card of the tied rank.
+The spots share the dealer's card, so the standard error comes from each round's average over its
+spots (shared/test/war-spots.mc.test.ts, three spots a round, the table's own shoe):
+
+| Bet | Published | Measured per spot | SE | z | N |
+|---|---|---|---|---|---|
+| Bet, going to war on every tie | 2.3301% | 2.3315% | 0.0244% | +0.06 | 10M rounds, 30M spots |
+| Bet, going to war, no bonus | 2.8771% | 2.8778% | 0.0243% | +0.03 | the same deals |
+| Bet, surrendering every tie | 3.6977% | 3.6960% | 0.0231% | −0.08 | the same deals |
+| Tie | 18.6495% | 18.6648% | 0.0524% | +0.29 | the same deals |
+| Bet and Tie through the table engine, one stack | 20.9796% | 20.4934% | 0.4371% | −1.11 | 166,667 rounds |
+
+150,207 of the 10M rounds had two or three spots at war at once.
+
+### 7.7 Where sources differ
 
 | Topic | Disagreement | Choice and reason |
 |---|---|---|
