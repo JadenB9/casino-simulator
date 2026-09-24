@@ -84,16 +84,17 @@ function camera(page, pos, at) {
 // --- fixed views --------------------------------------------------------------------------------
 // Named views of the dev floor, plus hand-placed cameras: the poker room from across the floor
 // (its tables are stand-ins there), the rows of the pit from the staff side, the bar's stools.
+// (v5: the building's rooms; world4.mjs shoots every room from its doorway and inside)
 const CAMS = {
-  pokerfar: { pos: [3.5, 2.2, -3.4], at: [16.8, 0.6, -10.8] },
-  pokernear: { pos: [13.6, 1.9, -5.9], at: [16.8, 0.7, -10.8] },
-  staff: { pos: [-10.6, 1.7, -8.7], at: [6, 0.8, -8.7] },
-  rows: { pos: [-11, 1.8, -3.4], at: [0, 0.8, -8] },
-  stools: { pos: [12.5, 1.4, 13.6], at: [16.5, 0.7, 7.5] },
+  pokerfar: { pos: [11, 2.2, -12.4], at: [20, 0.6, -25] },
+  pokernear: { pos: [12.6, 1.9, -21], at: [16, 0.7, -25] },
+  staff: { pos: [-8.6, 1.7, -12.5], at: [6, 0.8, -12.5] },
+  rows: { pos: [-11, 1.8, -7.4], at: [0, 0.8, -12] },
+  stools: { pos: [24.5, 1.4, 1.2], at: [27, 0.7, -6] },
   marble: { pos: [0, 1.7, 14.6], at: [0, 0.2, 9] },
-  bigsixside: { pos: [-13.4, 2.2, -3.8], at: [-18.4, 1.5, -7.4] },
-  cashierq: { pos: [-12.4, 1.8, -8.4], at: [-16, 1, -12.5] },
-  lounge: { pos: [4.5, 1.6, 3.2], at: [8.5, 0.6, 8.8] },
+  bigsixside: { pos: [-7.4, 2.2, -0.2], at: [-12.4, 1.5, -1.8] },
+  cashierq: { pos: [-9, 1.8, 9.6], at: [-12, 1, 4.5] },
+  lounge: { pos: [21, 1.6, 5], at: [26, 0.6, 10] },
 };
 if (checks.includes('shots')) {
   const only = process.env.SHOTS?.split(',');
@@ -141,9 +142,9 @@ if (checks.includes('calls')) {
     out.push(['tallyback', [t.x - 1.4, 1.7, t.z - 5.0], [t.x, 2.85, t.z]]);
     out.push(['front', [0.6, 1.75, p.entrance.z0 - 1.6], [-1.6, 2.6, m.z]]);
     out.push(['slotsSE', [p.slotsZone.x1 - 3.1, 2.5, p.slotsZone.z1 - 0.7], [p.slotsZone.x0 + 3, 0.8, p.slotsZone.z0 + 2]]);
-    out.push(['slotsN', [-11.4, 1.7, p.slotsZone.z0 - 1], [-11.4, 0.9, p.slotsZone.z1]]);
+    out.push(['slotsN', [-22, 1.7, p.slotsZone.z0 + 1], [-22, 0.9, p.slotsZone.z1]]);
     out.push(['entrance', [0, 1.7, p.entrance.z0 + 1], [0, 1.2, p.pit.z0]]);
-    out.push(['barN', [p.bar.front - 5, 1.7, p.bar.z0 - 2], [p.bar.front, 1, p.bar.z1]]);
+    out.push(['barN', [p.bar.front - 5, 1.7, p.bar.z0 + 1], [p.bar.front, 1, p.bar.z1]]);
     out.push(['poker', [p.pokerRoom.x0 + 0.5, 1.8, p.pokerRoom.z1 - 0.4], [p.pokerRoom.x1 - 1.5, 0.8, p.pokerRoom.z0 + 2.5]]);
     return out;
   });
@@ -235,7 +236,9 @@ if (checks.includes('layout')) {
       return out;
     };
     const props = [];
-    const kinds = { stool: /^stool-/, couch: /-couch-/, 'lamp-floor': /-lamp-/, palm: /^palm-/, 'plant-a': /^plant-/, 'plant-b': /^plant-/ };
+    const kinds = { stool: /^stool-|-hightop-/, couch: /-couch-|-sofa-/, 'lamp-floor': /-lamp-/, palm: /^palm-|-banquette-/, 'plant-a': /^plant-/, 'plant-b': /^plant-/ };
+    // every room drawn, so every prop is there to measure
+    world.rooms?.showAll(true);
     engine.scene.updateMatrixWorld(true);
     engine.scene.traverse((o) => {
       const kind = o.name?.startsWith('prop:') ? o.name.slice(5) : null;
@@ -322,6 +325,7 @@ if (checks.includes('layout')) {
       for (const sol of plan.solids) {
         if (p.role === 'cashier' && sol.group === 'cashier') continue; // inside the cage, by design
         if (sol.y0 >= 1.9) continue; // hangs over a standing body
+        if (p.station && sol.of === p.station) continue; // their own table's chairs
         // how far the body's centre is from the solid's footprint (0 inside it)
         const flat = inside({ ...sol, y0: 0, y1: 2 }, p.x, 1, p.z);
         if (flat < BODY - 0.01) staff.push(`${who} stands in ${sol.id}`);

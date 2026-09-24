@@ -185,6 +185,8 @@ export class StationLod {
     const e = this.entries.find((x) => x.station.id === stationId);
     if (!e) return;
     e.pin = mode;
+    // a pinned stand-in shows all of itself, however far the camera was a moment ago
+    e.distant = false;
     if (mode) this.set(e, mode);
   }
 

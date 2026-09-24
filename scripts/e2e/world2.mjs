@@ -78,15 +78,20 @@ if (checks.includes('layout')) {
       slots: { width: 0.8, depth: 0.9 }, videopoker: { width: 0.7, depth: 0.8 }, highcard: { width: 1.6, depth: 1.6 },
       war: { width: 2.5, depth: 2.0 }, sicbo: { width: 2.6, depth: 2.1 }, bigsix: { width: 2.6, depth: 1.8 },
     };
+    // (v5: tables no longer grow their footprints to hold chairs: every table's chairs are placed
+    // at its seats and checked on their own, so the plans are the modules' own footprints and seats;
+    // the bigger sizes stand in for tables that grow a little)
     const today = (g) => G.GAMES[g].footprint;
+    const seats = (g, v) => G.GAMES[g].seats(v);
+    const grown = (g) => (real[g] ? { width: Math.max(real[g].width, today(g).width), depth: Math.max(Math.min(real[g].depth, today(g).depth + 0.15), today(g).depth) } : today(g));
     const variants = six.split(',');
-    const plan = L.planFloor(today, variants);
+    const plan = L.planFloor(today, variants, { seats });
     const ids = (game) => plan.stations.filter((s) => s.game === game).map((s) => s.id);
     return {
-      today: L.checkLayout(L.planFloor(today)),
+      today: L.checkLayout(L.planFloor(today, undefined, { seats })),
       todaySix: L.checkLayout(plan),
-      real: L.checkLayout(L.planFloor((g) => real[g])),
-      realSix: L.checkLayout(L.planFloor((g) => real[g], variants)),
+      real: L.checkLayout(L.planFloor(grown, undefined, { seats })),
+      realSix: L.checkLayout(L.planFloor(grown, variants, { seats })),
       banks: plan.banks.map((b) => `${b.variant}@${b.x.toFixed(1)},${b.z.toFixed(1)}`),
       stations: { war: ids('war'), sicbo: ids('sicbo'), bigsix: ids('bigsix'), slots: ids('slots').length },
     };
