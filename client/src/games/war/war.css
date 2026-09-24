@@ -45,3 +45,30 @@
 .wr-ring .left { fill: none; stroke: var(--brass-hi); stroke-linecap: round; transform: rotate(-90deg); transform-origin: 50% 50%; }
 .wr-clock.low .left { stroke: var(--lose); }
 .wr-clock-text { position: relative; font-size: 19px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* Touch screens: the rules card's keyboard list means nothing without a keyboard, and its height
+   is measured against the visible screen. */
+@media (pointer: coarse) {
+  .wr-keys { display: none; }
+  .wr-rules { max-height: calc(100dvh - var(--below-hud) - 240px); }
+}
+/* Phones and tablets upright: the decision bar above the back chip, like the tray. */
+@media (max-aspect-ratio: 1/1) {
+  .wr-decide { bottom: 54px; }
+}
+@media (max-width: 560px) {
+  .wr-decide { flex-wrap: wrap; justify-content: center; width: calc(100vw - 20px); max-width: 440px; padding: 8px 10px 10px; }
+  .wr-decide .btn { flex: 1 1 40%; min-width: 0; }
+  .wr-hint { flex: 1 0 100%; text-align: center; margin: 0; }
+  .wr-meters { left: 10px; gap: 2px 12px; padding: 6px 12px; font-size: 16px; }
+  .wr-rules-btn { left: 10px; }
+  .wr-rules { left: 10px; right: 10px; width: auto; max-height: calc(100dvh - var(--below-hud) - 314px); }
+}
+/* On its side: slimmer bars, and the rules card opens on the right where there's height for it. */
+@media (max-height: 480px) {
+  .wr-decide { bottom: max(8px, env(safe-area-inset-bottom, 0px)); padding: 6px 10px; }
+  .wr-decide .btn { min-width: 130px; }
+  .wr-meters { left: 10px; gap: 0 12px; padding: 5px 12px; font-size: 16px; }
+  .wr-rules-btn { top: calc(var(--below-hud) + 82px); left: 10px; }
+  .wr-rules { top: var(--below-hud); left: auto; right: 10px; width: min(380px, 50vw); max-height: calc(100vh - var(--below-hud) - 76px); max-height: calc(100dvh - var(--below-hud) - 76px); }
+}

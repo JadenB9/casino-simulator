@@ -16,3 +16,20 @@
    follows it quietly. */
 .front-login .login-note { max-width: 46ch; }
 .login-note-lead { display: block; margin-bottom: 2px; color: var(--ink-2); }
+
+/* ---------------------------------------------------------------- phones and tablets */
+
+/* Touch screens: Show is a thumb's width. */
+@media (pointer: coarse) {
+  .pass-show { min-height: 44px; padding: 8px 6px; }
+}
+/* A phone on its side: name, password, Enter and the first-time note in 390 px of height. */
+@media (max-height: 480px) {
+  .front-login .front-rule { display: none; }
+  .login-form { gap: 5px; }
+  .name-input { height: 40px; font-size: 24px; }
+  .pass-input { height: 40px; font-size: 21px; }
+  .name-rule { min-height: 18px; margin: 0 0 2px; font-size: 14px; }
+  .enter-btn { margin-top: 4px; }
+  .front-login .login-note { margin-top: 4px; font-size: 13px; line-height: 1.3; }
+}

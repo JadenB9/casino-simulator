@@ -1,0 +1,169 @@
+/* The floor's touch controls (touch.ts): the stick, the action button and its caption, the Leave
+   button that joins the HUD at a table, and the note for an upright phone. The theme's glass and
+   brass, sized for thumbs. They exist only while html has .touch-ui (a touch screen in use). */
+
+/* The floor's own "Press E" prompt speaks keyboard; the action button and its caption stand in. */
+html.touch-ui .world-prompt { display: none !important; }
+
+.touch-layer { position: fixed; inset: 0; z-index: 1; touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+
+/* The stick rests low on the left, just above the back chip (14 px up, 30 px tall), and comes to
+   the thumb wherever it lands on the left side. */
+.touch-stick {
+  position: fixed;
+  left: 22px;
+  bottom: 60px;
+  width: 132px;
+  height: 132px;
+  border-radius: 50%;
+  border: 1px solid var(--line-strong);
+  background: rgba(14, 12, 10, 0.3);
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.28);
+  opacity: 0.55;
+  pointer-events: none;
+  transition: opacity 0.25s var(--ease), border-color 0.15s, box-shadow 0.15s;
+}
+/* the knob's reach */
+.touch-stick::before { content: ''; position: absolute; inset: 20px; border-radius: 50%; border: 1px solid rgba(214, 178, 110, 0.16); }
+/* four brass ticks on the rim: forward, back and the sides */
+.touch-stick::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 50%;
+  background:
+    linear-gradient(var(--brass), var(--brass)) 50% 0 / 2px 9px no-repeat,
+    linear-gradient(var(--brass), var(--brass)) 50% 100% / 2px 9px no-repeat,
+    linear-gradient(var(--brass), var(--brass)) 0 50% / 9px 2px no-repeat,
+    linear-gradient(var(--brass), var(--brass)) 100% 50% / 9px 2px no-repeat;
+  opacity: 0.7;
+}
+.touch-stick.held { opacity: 1; transition: opacity 0.08s; }
+/* pulled past the rim: running */
+.touch-stick.run { border-color: var(--brass-hi); box-shadow: 0 8px 26px rgba(0, 0, 0, 0.28), 0 0 0 3px rgba(241, 213, 154, 0.2), 0 0 22px rgba(241, 213, 154, 0.3); }
+.touch-knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 58px;
+  height: 58px;
+  margin: -29px 0 0 -29px;
+  border-radius: 50%;
+  border: 1.5px solid var(--brass);
+  background: rgba(30, 25, 20, 0.94);
+  box-shadow: inset 0 0 0 6px rgba(216, 176, 106, 0.13), inset 0 0 0 7px rgba(216, 176, 106, 0.3), 0 5px 14px rgba(0, 0, 0, 0.45);
+  transition: transform 0.2s var(--ease);
+}
+.touch-stick.held .touch-knob { transition: none; }
+
+/* The action button over the right thumb, the station it opens written above it. Both stand above
+   the chat dock in the same corner (ui/chat/chat.css: 18 px up, 56 px on a narrow screen, 44 px tall
+   on a touch screen). */
+.touch-act {
+  position: fixed;
+  right: 22px;
+  bottom: 78px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 80px;
+  height: 80px;
+  padding: 0;
+  border: 1px solid #f1d59a;
+  border-radius: 50%;
+  background: linear-gradient(#e2bf7c, #b98d45);
+  box-shadow: 0 0 0 5px rgba(14, 12, 10, 0.5), 0 10px 28px rgba(0, 0, 0, 0.5);
+  color: #1d140a;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  animation: touch-pop 0.22s var(--ease);
+  transition: transform 0.08s;
+}
+.touch-act:active { transform: scale(0.94); }
+.touch-act:focus-visible { outline: 2px solid var(--focus); outline-offset: 4px; }
+.touch-act-label { max-width: 70px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.touch-caption {
+  position: fixed;
+  right: 16px;
+  bottom: 170px;
+  z-index: 2;
+  max-width: calc(100vw - 32px);
+  padding: 7px 13px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--glass);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  color: var(--ink);
+  font-size: 16px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  animation: touch-pop 0.22s var(--ease);
+}
+@keyframes touch-pop { from { opacity: 0; transform: translateY(6px) scale(0.96); } }
+
+/* Leave, first in the HUD's right-hand bar at a table (Esc on a keyboard). */
+.touch-leave {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 44px;
+  padding: 0 14px 0 11px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: rgba(14, 12, 10, 0.84);
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.touch-leave:active { border-color: var(--brass-hi); }
+.touch-leave:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.touch-leave.alone { position: fixed; top: 14px; right: 16px; z-index: 11; }
+.touch-leave .ico, .touch-note .ico { flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.touch-leave .ico { width: 19px; height: 19px; color: var(--brass-hi); }
+
+/* An upright phone at a table: one line, gone on a tap or after a few seconds. */
+.touch-note {
+  position: fixed;
+  left: 50%;
+  top: 44%;
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: max-content;
+  max-width: calc(100vw - 48px);
+  padding: 12px 16px 12px 13px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--glass-2);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  color: var(--ink);
+  font-size: 16px;
+  line-height: 1.35;
+  transform: translate(-50%, -50%);
+  animation: touch-note-in 0.35s var(--ease) both;
+}
+.touch-note .ico { width: 34px; height: 34px; color: var(--brass-hi); }
+@keyframes touch-note-in { from { opacity: 0; translate: 0 8px; } }
+
+/* A phone upright: the chat dock rises clear of the back chip, and these with it. */
+@media (max-width: 520px) {
+  .touch-act { bottom: 114px; }
+  .touch-caption { bottom: 206px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .touch-act, .touch-caption, .touch-note { animation: none; }
+}

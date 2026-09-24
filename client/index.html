@@ -2,10 +2,20 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- A game, not a document: no pinch or double-tap zoom (touch.ts also stops Safari's pinch,
+         which ignores user-scalable), and the on-screen keyboard shrinks the layout so a text
+         field at the bottom stays above it. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, interactive-widget=resizes-content" />
+    <meta name="theme-color" content="#0b0908" />
+    <meta name="format-detection" content="telephone=no" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <meta name="apple-mobile-web-app-title" content="Casino" />
     <meta name="description" content="Casino Simulator: walk a 3D casino and play real-odds blackjack, roulette, craps, baccarat, poker, video poker and slots with other people." />
     <title>Casino Simulator</title>
     <link rel="stylesheet" href="./src/styles/theme.css" />
+    <link rel="stylesheet" href="./src/ui/mobile.css" />
   </head>
   <body>
     <canvas id="scene" aria-hidden="true"></canvas>

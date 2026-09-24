@@ -87,3 +87,8 @@
   .vp-row.win > * { animation: none; background: #fff49a; color: #0b1a6e; }
   .vp-status.win { animation: none; color: #fff49a; }
 }
+
+/* Phones and tablets upright: the tips line clear of the back chip. */
+@media (max-aspect-ratio: 1/1) {
+  .vp-layer ~ .tip-line { bottom: 54px; }
+}

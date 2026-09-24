@@ -112,3 +112,28 @@
 }
 
 .bj-tray .btn.primary { white-space: nowrap; }
+
+/* Phones and tablets upright: the moves wrap to rows above the back chip, like the kit's tray,
+   and the meters sit on the right just above them. */
+@media (max-aspect-ratio: 1/1) {
+  .bj-actions, .bj-insure { bottom: 54px; }
+  .bj-meters { bottom: 232px; right: 10px; }
+}
+@media (max-width: 560px) {
+  .bj-actions, .bj-insure { flex-wrap: wrap; justify-content: center; width: calc(100vw - 20px); max-width: 440px; padding: 8px 10px 10px; }
+  .bj-actions .btn { flex: 1 1 28%; min-width: 0; }
+  .bj-insure-q { flex: 1 0 100%; text-align: center; padding: 0 0 2px; }
+  .bj-insure .btn { flex: 1 1 40%; }
+  .bj-meters { gap: 14px; padding: 6px 12px; }
+  .bj-meter .money { font-size: 18px; }
+  /* The dealer's total grows left from the up card, off a narrow screen: lift it over the cards. */
+  .bj-dealer { right: auto; left: 0; top: -20px; transform: translateY(-100%); }
+}
+/* On its side: the moves stay in one row, clear of the back chip; the meters on the left, over the
+   back chip, where the chat dock doesn't go. */
+@media (max-height: 480px) {
+  .bj-actions, .bj-insure { bottom: max(8px, env(safe-area-inset-bottom, 0px)); padding: 6px 10px; }
+  .bj-actions .btn { min-width: 88px; }
+  .bj-meters { left: 10px; right: auto; bottom: 66px; padding: 5px 12px; }
+  .bj-meter .money { font-size: 18px; }
+}

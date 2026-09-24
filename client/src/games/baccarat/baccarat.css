@@ -83,3 +83,23 @@
 .bc-seat.me { border-color: var(--brass-hi); color: var(--ink); }
 .bc-seat.away { opacity: 0.5; }
 .bc-ready { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--win); }
+
+/* Phones and tablets upright: the meters above the raised tray. */
+@media (max-aspect-ratio: 1/1) {
+  .bc-meters { bottom: 232px; right: 10px; }
+}
+@media (max-width: 560px) {
+  .bc-board { left: 10px; right: 10px; }
+  .bc-board-roads { justify-content: space-between; }
+  .bc-meters { gap: 10px; padding: 6px 10px; }
+  .bc-meter b { font-size: 17px; }
+}
+/* On its side: a smaller scoreboard, the meters on the left over the back chip (the chat dock takes
+   the right, just above the tray). */
+@media (max-height: 480px) {
+  .bc-board { left: 10px; padding: 6px 8px 5px; gap: 4px; }
+  .bc-bead { width: 76px; height: 57px; }
+  .bc-big { width: 152px; height: 57px; }
+  .bc-meters { left: 10px; right: auto; bottom: 66px; gap: 12px; padding: 5px 10px; }
+  .bc-meter b { font-size: 17px; }
+}
