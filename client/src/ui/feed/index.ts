@@ -101,6 +101,11 @@ export function mountFloorLife(deps: FloorLifeDeps): FloorLife {
   let day = '';
   const waiting = new Map<string, number>();
   const told = new Set<string>();
+  // wins already told (or shown in a list); the oldest are forgotten, the floor keeps only 20
+  const remember = (k: string) => {
+    told.add(k);
+    if (told.size > 60) told.delete(told.values().next().value!);
+  };
   let onFloor: () => boolean = () => world.seated === null;
 
   const showList = () => marquee.setEntries(list.map(entry));
@@ -134,8 +139,7 @@ export function mountFloorLife(deps: FloorLifeDeps): FloorLife {
       k,
       window.setTimeout(() => {
         waiting.delete(k);
-        told.add(k);
-        if (told.size > 60) told.delete(told.values().next().value!);
+        remember(k);
         reveal(w, today);
       }, wait),
     );
@@ -147,7 +151,7 @@ export function mountFloorLife(deps: FloorLifeDeps): FloorLife {
       const now = serverNow();
       const later = m.list.filter((w) => w.at > now && !told.has(key(w)));
       list = m.list.filter((w) => !later.includes(w)).slice(0, LIST_MAX);
-      for (const w of list) told.add(key(w));
+      for (const w of list) remember(key(w));
       showList();
       const held = later.reduce((s, w) => s + w.amount, 0);
       setToday({ ...m.today, total: Math.max(0, m.today.total - held), count: Math.max(0, m.today.count - later.length) }, false);

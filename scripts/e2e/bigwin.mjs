@@ -44,7 +44,7 @@ async function player(name, quality) {
     const { mountFloorLife } = await import('/casino/src/ui/feed/index.ts');
     const c = window.casino;
     const life = mountFloorLife({ engine: c.engine, world: c.world, sfx: c.app.sfx });
-    life.connect(c.app.link, { onFloor: () => c.app.hud !== null && c.app.table === null });
+    life.connect(c.app.link, { onFloor: () => c.app.hud !== null && c.app.table === null && c.world.seated === null });
     c.life = life;
   });
   return page;
