@@ -309,11 +309,14 @@ export function mountSkinned(ctx: TableViewCtx): TableView {
     ctx.link.act({ type: 'spin', coins, denom: m.denoms[denomIdx]! });
   };
 
+  /** What the machine takes (its config arrives with the table). */
+  let buyIn = { min: 20_00, max: 10_000_00 };
   const insert = async () => {
     const p = session.profile;
     if (!p) return;
-    const max = Math.max(0, 10_000_00 - stack);
-    const amount = await ctx.kit.askBuyIn({ min: 20_00, max, balance: p.balance, verb: 'Insert' });
+    // the machine's own buy-in: up to its maximum on the machine at once
+    const max = Math.max(0, buyIn.max - stack);
+    const amount = await ctx.kit.askBuyIn({ min: Math.min(buyIn.min, max), max, balance: p.balance, verb: 'Insert' });
     if (!amount) return;
     if (status === 'seated') ctx.link.topUp(amount);
     else ctx.link.buyIn(amount);
@@ -661,6 +664,7 @@ export function mountSkinned(ctx: TableViewCtx): TableView {
   return {
     onTable(snap) {
       const v = snap.view as SlotsView;
+      buyIn = snap.meta.config.buyIn;
       stack = snap.you.stack;
       status = snap.you.status;
       if (v.round > 0) {

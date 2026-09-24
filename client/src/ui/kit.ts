@@ -92,7 +92,9 @@ export function askBuyIn(opts: { min: Cents; max: Cents; balance: Cents; suggest
     input.step = '1';
     input.value = String(Math.min(max, opts.suggested ?? picks[1] ?? opts.min) / 100);
     const quick = el('div', 'row');
-    for (const v of picks) quick.append(button(formatMoney(v), () => (input.value = String(v / 100)), { cls: 'ghost' }));
+    // the last pick is everything you have when the table would take more
+    const all = max < opts.max;
+    for (const v of picks) quick.append(button(all && v === max ? `All ${formatMoney(v)}` : formatMoney(v), () => (input.value = String(v / 100)), { cls: 'ghost' }));
     const ok = button(opts.verb ?? 'Buy in', () => {
       const v = Math.round(Number(input.value)) * 100;
       if (!Number.isFinite(v) || v < opts.min || v > max) {
