@@ -563,14 +563,18 @@ function support(points: Float32Array, o: V3, d: V3, radius: number): number {
   return best;
 }
 
-/** The highest of the points within `radius` (horizontally) of (x, z); -Infinity if none. */
-function top(points: Float32Array, x: number, z: number, radius: number): number {
+/**
+ * The highest of the points within `radius` (horizontally) of (x, z) and no lower than `floor`;
+ * -Infinity if none.
+ */
+function top(points: Float32Array, x: number, z: number, radius: number, floor = -Infinity): number {
   let best = -Infinity;
   const r2 = radius * radius;
   for (let i = 0; i < points.length; i += 3) {
     const dx = points[i]! - x;
     const dz = points[i + 2]! - z;
-    if (dx * dx + dz * dz < r2 && points[i + 1]! > best) best = points[i + 1]!;
+    const y = points[i + 1]!;
+    if (dx * dx + dz * dz < r2 && y > best && y >= floor) best = y;
   }
   return best;
 }
@@ -685,6 +689,9 @@ interface ChainSpec {
   pendant?: 'dice' | 'ace';
 }
 
+/** A chain rests on what's at most this far (m) below the neck's base, never on the waist. */
+const SHOULDER_DROP = 0.18;
+
 const CHAINS: Record<string, ChainSpec> = {
   'rope-chain': { style: 'rope', drop: 0.15, width: 0.0068 },
   figaro: { style: 'figaro', drop: 0.16, width: 0.0064 },
@@ -715,7 +722,9 @@ function chainPath(fit: Fit, drop: number, thick: number): Path {
     const c = Math.cos(th);
     const x = fit.cx + s * (fit.neck.side + gap);
     const z = fit.zc + c * ((c >= 0 ? fit.neck.front : fit.neck.back) + gap);
-    const h = top(fit.shoulders, x, z, 0.014);
+    // Only what's up at the shoulders: on a sleeveless top the bare shoulder is skin (left out), and
+    // the nearest cloth straight below that point is the waist, where the chain went down to.
+    const h = top(fit.shoulders, x, z, 0.014, fit.neckY - SHOULDER_DROP);
     return V(x, (Number.isFinite(h) ? h : fit.neckY) + clear, z);
   };
   // from this far round (either way) the chain lies on the shoulders; nearer the front it drapes
