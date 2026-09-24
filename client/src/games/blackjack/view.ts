@@ -297,7 +297,11 @@ export class BlackjackTable implements TableView {
     let aimed: object = a;
     if (a.type === 'insurance') {
       const sp = this.asked();
-      if (sp) aimed = { ...a, spot: sp.seat };
+      // One answer a question: the prompt goes at once, and a second press before the table has
+      // moved on (it asks your next circle, or deals on) is let go, not sent to be refused.
+      if (!sp || this.acted) return;
+      aimed = { ...a, spot: sp.seat };
+      this.insure.hidden = true;
     } else if (v?.turn && this.owns(v.turn.seat)) {
       aimed = { ...a, spot: v.turn.seat, hand: v.turn.hand };
     }
@@ -676,7 +680,8 @@ export class BlackjackTable implements TableView {
 
     // Each of your spots is asked on its own, in the order they play; its circle is lit meanwhile.
     const spot = this.asked();
-    this.insure.hidden = !spot;
+    // (answered and waiting for the table: the question stays down)
+    this.insure.hidden = !spot || this.acted;
     if (spot) {
       const even = isNatural(spot.hands[0]!);
       this.insureLabel.textContent = even ? 'Even money?' : 'Insurance?';
