@@ -26,7 +26,7 @@ import { CardMesh, CARD_H, dealCard, flipCard } from '../../table/cards.ts';
 import { ChipStack, slideStack } from '../../table/chips.ts';
 import { ease, tween, wait } from '../../table/tween.ts';
 import { ChipTray, button, el } from '../../ui/kit.ts';
-import { baccaratMax, maxRefusal } from '../../table/max.ts';
+import { baccaratMax, chipOn, maxRefusal } from '../../table/max.ts';
 import { serverNow } from '../../net/clock.ts';
 import { feltSpec, kidneyGeometry } from './felt.ts';
 import { setDiscardHeight } from './model.ts';
@@ -412,7 +412,8 @@ export class BaccaratTable implements TableView {
 
   private bet(spot: Spot): void {
     if (this.mySeat === null) return;
-    let amount = this.tray.selected.value;
+    // a chip that would leave the spot under its minimum puts the minimum down, as a dealer asks
+    let amount = chipOn(this.tray.selected.value, this.myBets[spot] ?? 0, limitsFor(this.config, spot));
     // Max picked: the most this spot takes, or every chip here if that is less
     if (this.tray.maxPicked) {
       const m = baccaratMax(this.config, spot, this.myBets, this.stack);

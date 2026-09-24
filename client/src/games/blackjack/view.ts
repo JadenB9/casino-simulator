@@ -25,7 +25,7 @@ import { celebrate } from '../../table/celebrate.ts';
 import { roundMoment } from './moments.ts';
 import { tween, wait, ease } from '../../table/tween.ts';
 import { ChipTray, button, el } from '../../ui/kit.ts';
-import { blackjackMax, maxRefusal } from '../../table/max.ts';
+import { blackjackMax, chipOn, maxRefusal } from '../../table/max.ts';
 import { serverNow } from '../../net/clock.ts';
 import { playFelt } from './felt.ts';
 import { discardStack } from './model.ts';
@@ -339,11 +339,12 @@ export class BlackjackTable implements TableView {
   }
 
   /**
-   * What a click on one of your circles puts down: the picked chip, or with Max picked the most
-   * that circle takes (the limits are per circle) or every chip you have left, whichever is less.
+   * What a click on one of your circles puts down: the picked chip (the table minimum when the
+   * chip alone would leave the circle under it, as a dealer asks), or with Max picked the most that
+   * circle takes (the limits are per circle) or every chip you have left, whichever is less.
    */
   private chipFor(spot: number): Cents | null {
-    if (!this.tray.maxPicked) return this.tray.selected.value;
+    if (!this.tray.maxPicked) return chipOn(this.tray.selected.value, this.betOn(spot), this.limits);
     const m = blackjackMax(this.limits, this.betOn(spot), this.stack);
     if ('none' in m) {
       this.ctx.kit.toast(maxRefusal(m, this.limits));
