@@ -319,7 +319,11 @@ async function playStation(page, id) {
       placed = -1;
     } else {
       // as a player would: the smallest chip on show, on the same spot (a chip under the spot's
-      // minimum puts the minimum down)
+      // minimum puts the minimum down); at craps a winning bet stays up, so clear the layout first
+      if (game === 'craps') {
+        await page.keyboard.press('x');
+        await page.waitForTimeout(700);
+      }
       await page.keyboard.press('1');
       const at = await screenOf(page, spec.max(seat));
       if (at) await page.mouse.click(at.x, at.y);
@@ -461,7 +465,9 @@ async function playStation(page, id) {
             const c = o.localToWorld(engine.camera.position.clone().set(b.max.x, b.max.y, 0)).project(engine.camera);
             min = Math.min(min, (Math.hypot(a.x - c.x, (a.y - c.y) * innerHeight / innerWidth) / 2) * innerWidth);
           });
-          return { ended: s.__events.some((e) => end.includes(e.type)), min: Number.isFinite(min) ? Math.round(min) : null, pick: !!document.querySelector('.tip-pick') };
+          // (with several hands one can still be waiting on a decision, a tie at War, after the
+          // others' results are in)
+          return { ended: s.__events.some((e) => end.includes(e.type)) && s.__view?.phase !== 'deciding', min: Number.isFinite(min) ? Math.round(min) : null, pick: !!document.querySelector('.tip-pick') };
         }, spec.end);
         if (st.min !== null) px = px === null ? st.min : Math.min(px, st.min);
         if (st.ended) break;
