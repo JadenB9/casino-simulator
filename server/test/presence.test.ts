@@ -53,10 +53,13 @@ async function arrive(name: string, token?: string): Promise<Walker> {
 }
 
 /** Rows about one player from the snapshots a client has received so far (consumed). */
-function rowsFor(c: Client, id: number): { ts: number; row: number[] }[] {
-  const out: { ts: number; row: number[] }[] = [];
+/** A snapshot row without its age (the sixth element: ms since that position reached the floor). */
+const pose = (row: number[]) => row.slice(0, 5);
+
+function rowsFor(c: Client, id: number): { ts: number; row: number[]; age: number }[] {
+  const out: { ts: number; row: number[]; age: number }[] = [];
   for (const m of c.msgs.filter((m) => m.t === 's')) {
-    for (const row of m.p) if (row[0] === id) out.push({ ts: m.ts, row });
+    for (const row of m.p) if (row[0] === id) out.push({ ts: m.ts, row: pose(row), age: row[5] });
   }
   c.msgs = c.msgs.filter((m) => m.t !== 's');
   return out;
@@ -111,6 +114,13 @@ describe('floor presence', () => {
     }
     expect(rows.at(-1)!.row).toEqual([a.id, 0, SPAWN.z - 160, 3, 0]);
     for (let i = 1; i < rows.length; i++) expect(rows[i]!.ts).toBeGreaterThan(rows[i - 1]!.ts);
+    // Each row says how long ago its position reached the floor: never negative, never much more
+    // than one flush interval, and the moments it gives only move forward.
+    for (const r of rows) {
+      expect(r.age).toBeGreaterThanOrEqual(0);
+      expect(r.age).toBeLessThanOrEqual(FLUSH_MS + 60);
+    }
+    for (let i = 1; i < rows.length; i++) expect(rows[i]!.ts - rows[i]!.age).toBeGreaterThan(rows[i - 1]!.ts - rows[i - 1]!.age);
     // Snapshots only carry players who moved: b stood still the whole time.
     expect(rowsFor(a.c, b.id)).toEqual([]);
 
@@ -165,7 +175,7 @@ describe('floor presence', () => {
     // The first position places the player anywhere on the floor, clamped to its bounds.
     a.c.send({ t: 'st', x: 99_999, z: -99_999, r: 10 });
     const placed = await o.c.next<any>((m) => m.t === 's' && m.p.some((r: number[]) => r[0] === a.id));
-    expect(placed.p.find((r: number[]) => r[0] === a.id)).toEqual([a.id, FLOOR_BOUNDS.maxX, FLOOR_BOUNDS.minZ, 10, 0]);
+    expect(pose(placed.p.find((r: number[]) => r[0] === a.id))).toEqual([a.id, FLOOR_BOUNDS.maxX, FLOOR_BOUNDS.minZ, 10, 0]);
 
     // After that, a jump across the room stops short at what could have been walked. (Waiting out
     // FLUSH_MS first, since nothing else would come along to flush a lone move.)
@@ -200,7 +210,7 @@ describe('floor presence', () => {
 
     a2.c.send({ t: 'mv', x: 520, z: 600, r: 64 });
     const moved = await b.c.next<any>((m) => m.t === 's' && m.p.some((r: number[]) => r[0] === a1.id));
-    expect(moved.p.find((r: number[]) => r[0] === a1.id)).toEqual([a1.id, 520, 600, 64, 1]);
+    expect(pose(moved.p.find((r: number[]) => r[0] === a1.id))).toEqual([a1.id, 520, 600, 64, 1]);
 
     await leaveAll(a2);
     await b.c.next<any>((m) => m.t === 'leave' && m.id === a1.id);
@@ -288,7 +298,7 @@ describe('floor presence', () => {
     expect(full.length).toBe(512);
     a.c.ws.send(full);
     const ok = await o.c.next<any>((m) => m.t === 's' && m.p.some((r: number[]) => r[0] === a.id));
-    expect(ok.p.find((r: number[]) => r[0] === a.id)).toEqual([a.id, 30, 10, 0, 0]);
+    expect(pose(ok.p.find((r: number[]) => r[0] === a.id))).toEqual([a.id, 30, 10, 0, 0]);
 
     a.c.ws.send(full + ' ');
     await o.c.next<any>((m) => m.t === 'leave' && m.id === a.id);
@@ -316,7 +326,7 @@ describe('floor presence', () => {
     // The woken object still knows both sockets: moves flow and a close reads as a leave.
     a.c.send({ t: 'mv', x: 120, z: 200, r: 5 });
     const moved = await c.c.next<any>((m) => m.t === 's' && m.p.some((r: number[]) => r[0] === a.id));
-    expect(moved.p.find((r: number[]) => r[0] === a.id)).toEqual([a.id, 120, 200, 5, 1]);
+    expect(pose(moved.p.find((r: number[]) => r[0] === a.id))).toEqual([a.id, 120, 200, 5, 1]);
     await leaveAll(b);
     await c.c.next<any>((m) => m.t === 'leave' && m.id === b.id);
     const n = await c.c.next<any>((m) => m.t === 'online');

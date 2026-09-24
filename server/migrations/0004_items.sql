@@ -7,7 +7,7 @@
 -- is the money record for its own spending, written in the same D1 batch as the balance change:
 --
 --   SUM(casino_ledger.amount) - SUM(casino_items.price) - SUM(casino_orders.price)
---     = balance + in_play, per account.
+--     = balance, per account (buy-ins are negative ledger rows, so chips on tables are already out of it).
 --
 -- The same guards as the ledger make a mistake an error that rolls the whole batch back:
 -- balance_nonneg on the account refuses an overdraft, the primary keys refuse a second payment

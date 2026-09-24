@@ -6,12 +6,16 @@ import * as THREE from 'three';
 import type { Batch } from './batch.ts';
 import type { Mats } from './materials.ts';
 import type { Collider } from './collision.ts';
+import { GLOW, type GlowMerge } from './lighting.ts';
 import { CEILING, PIT_CEILING, WALL, type FloorPlan, type Rect, inRect } from './layout.ts';
 
 const FLOOR_Y = 0.004;
 
-/** Builds the shell; returns where chandeliers hang (coffer centres over the pit's middle). */
-export function buildRoom(plan: FloorPlan, b: Batch, m: Mats, col: Collider): { chandeliers: THREE.Vector3[] } {
+/**
+ * Builds the shell; returns where chandeliers hang (coffer centres over the pit's middle) and where
+ * the low ceiling's downlights are (x, z), for the light they throw on the carpet.
+ */
+export function buildRoom(plan: FloorPlan, b: Batch, m: Mats, col: Collider, glow: GlowMerge): { chandeliers: THREE.Vector3[]; downlights: [number, number][] } {
   const R = plan.room;
   const W = R.x1 - R.x0;
   const D = R.z1 - R.z0;
@@ -97,13 +101,14 @@ export function buildRoom(plan: FloorPlan, b: Batch, m: Mats, col: Collider): { 
   // recessed downlights on a 2.4 m grid, trimmed in brass
   const disc = new THREE.CircleGeometry(0.06, 16);
   const ring = new THREE.RingGeometry(0.06, 0.1, 20);
-  const bulb = m.get('glow-bulb');
+  const downlights: [number, number][] = [];
   for (let x = R.x0 + 1.4; x < R.x1 - 1; x += 2.4) {
     for (let z = R.z0 + 1.3; z < R.z1 - 1; z += 2.4) {
       if (inRect(P, x, z, 0.5)) continue;
       const at = new THREE.Matrix4().makeRotationX(Math.PI / 2).premultiply(new THREE.Matrix4().makeTranslation(x, H - 0.004, z));
-      b.add(disc, bulb, at);
+      glow.add(disc, GLOW.bulb, at);
       b.add(ring, brass, at);
+      downlights.push([x, z]);
     }
   }
 
@@ -116,7 +121,6 @@ export function buildRoom(plan: FloorPlan, b: Batch, m: Mats, col: Collider): { 
     { cx: P.x0, cz: (P.z0 + P.z1) / 2, len: P.z1 - P.z0, ry: Math.PI / 2, n: [1, 0] },
     { cx: P.x1, cz: (P.z0 + P.z1) / 2, len: P.z1 - P.z0, ry: -Math.PI / 2, n: [-1, 0] },
   ];
-  const warm = m.get('glow-warm');
   for (const s of sides) {
     b.add(new THREE.PlaneGeometry(s.len, PH - H), fascia, { x: s.cx, y: (H + PH) / 2, z: s.cz, ry: s.ry });
     // the cove lip: a wood ledge with a brass edge; the LED strip hides on top of it
@@ -130,7 +134,7 @@ export function buildRoom(plan: FloorPlan, b: Batch, m: Mats, col: Collider): { 
     b.box(brass, ex, H - 0.05, ez, along ? s.len + lipD * 2 : 0.025, 0.05, along ? 0.025 : s.len + lipD * 2);
     const gx = s.cx + s.n[0] * 0.12;
     const gz = s.cz + s.n[1] * 0.12;
-    b.box(warm, gx, H + 0.045, gz, along ? s.len : 0.05, 0.03, along ? 0.05 : s.len);
+    glow.box(GLOW.warm, gx, H + 0.045, gz, along ? s.len : 0.05, 0.03, along ? 0.05 : s.len);
   }
   // coffer grid sized so a whole number of coffers spans the pit
   const pw = P.x1 - P.x0;
@@ -176,5 +180,5 @@ export function buildRoom(plan: FloorPlan, b: Batch, m: Mats, col: Collider): { 
   for (let i = nx % 2 ? 0 : 1; i < nx; i += 2) chandeliers.push(new THREE.Vector3(P.x0 + (i + 0.5) * cw, PH - 0.02, P.z0 + (j + 0.5) * cd));
   void W;
   void D;
-  return { chandeliers };
+  return { chandeliers, downlights };
 }

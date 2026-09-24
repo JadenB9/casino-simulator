@@ -4,14 +4,19 @@
 import type { GameClientModule } from '../contract.ts';
 import { tableModel } from './model.ts';
 import { BlackjackTable } from './view.ts';
-import { SEATS, seatPosition, seatPose } from './layout.ts';
+import { SEATS, seatPosition, seatPose, spotsPose } from './layout.ts';
+import { spotsInPlay } from '../multihand/frame.ts';
 
 export const blackjack: GameClientModule = {
   game: 'blackjack',
   footprint: { width: 2.3, depth: 1.15 },
   createModel: () => tableModel(),
   seats: () => Array.from({ length: SEATS }, (_, seat) => seatPosition(seat)),
-  playPose: (_variant, seat) => seatPose(seat ?? 3),
+  // A solo player on several circles gets a camera that takes them all in.
+  playPose: (_variant, seat) => {
+    const n = seat === null ? 1 : spotsInPlay('blackjack');
+    return n > 1 ? spotsPose(Array.from({ length: n }, (_, i) => i)) : seatPose(seat ?? 3);
+  },
   mount: (ctx) => new BlackjackTable(ctx),
   async preload() {
     // The felt is painted onto a canvas, which only uses a web font once it has loaded.

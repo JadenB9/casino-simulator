@@ -22,6 +22,29 @@
   animation: world-prompt-in 0.18s var(--ease);
 }
 .world-prompt[hidden] { display: none; }
+/* "Click to look around": the mouse is free on the floor. Below the prompt, quieter than it. */
+#ui .world-hint {
+  position: fixed;
+  left: 50%;
+  bottom: 36px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 14px 6px 10px;
+  background: var(--glass);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font-size: 15px;
+  letter-spacing: 0.04em;
+  color: var(--ink-2);
+  white-space: nowrap;
+  pointer-events: none;
+  animation: world-hint-in 0.4s var(--ease) 0.6s both;
+}
+#ui .world-hint[hidden] { display: none; }
+#ui .world-hint .world-key { min-width: 0; padding: 0 7px; height: 22px; font-size: 13px; }
+@keyframes world-hint-in { from { opacity: 0; } }
 .world-key {
   display: inline-grid;
   place-items: center;

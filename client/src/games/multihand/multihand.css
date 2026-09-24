@@ -1,0 +1,46 @@
+/* "Hands 1 2 3": a caption and a segmented choice, the chosen count lit in brass like a pressed
+   chip. On a desktop it sits at the left, just above the chip tray's height: the middle of the
+   screen, above the tray, is where your own spots lie (Three Card's Play box, War's War box). On
+   a tablet or a phone it follows the tray (ui/mobile.css), above it and clear of the chat dock,
+   and the tips line moves up out of its way. */
+
+.mh-picker { position: fixed; left: 16px; bottom: 100px; display: flex; align-items: center; gap: 10px; padding: 3px 4px 3px 12px; }
+.mh-word { font-size: 12px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-3); }
+.mh-seg { display: flex; border: 1px solid var(--line-strong); border-radius: 4px; overflow: hidden; }
+.mh-n {
+  width: 32px;
+  height: 27px;
+  border: 0;
+  border-left: 1px solid var(--line);
+  background: linear-gradient(#2b241c, #1c1712);
+  color: var(--ink-2);
+  font-size: 17px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.mh-n:first-child { border-left: 0; }
+.mh-n:hover { color: var(--ink); background: linear-gradient(#3a3025, #241d16); }
+.mh-n[aria-checked='true'] { background: linear-gradient(#e2bf7c, #b98d45); color: #1d140a; cursor: default; }
+.mh-n:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+
+@media (pointer: coarse) {
+  .mh-n { width: 44px; height: 40px; }
+}
+/* Upright: over the tray, which sits higher, clear of the back chip. */
+@media (max-aspect-ratio: 1/1) {
+  .mh-picker { left: 50%; bottom: 134px; transform: translateX(-50%); }
+  :root:has(.mh-picker:not([hidden])) { --tip-bottom: 190px; }
+}
+/* A phone upright: the tray is two rows; the picker keeps left of the chat dock's column. */
+@media (max-width: 560px) {
+  .mh-picker { bottom: 176px; left: 10px; transform: none; }
+  :root:has(.mh-picker:not([hidden])) { --tip-bottom: 236px; }
+}
+/* On its side: over the tray, at the right. */
+@media (max-height: 480px) {
+  .mh-picker { left: auto; right: 10px; bottom: 70px; transform: none; padding: 4px 6px 4px 12px; }
+  .mh-n { height: 34px; }
+  :root:has(.mh-picker:not([hidden])) { --tip-bottom: 122px; }
+}
