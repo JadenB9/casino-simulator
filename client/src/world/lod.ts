@@ -4,9 +4,10 @@
 // swaps to a copy baked once at load:
 //   - parts smaller than a few centimetres are dropped (nobody can see them from there),
 //   - untextured parts are merged into one mesh coloured per vertex, and the glowing ones into
-//     one more, so they cost two draw calls however many parts they came from; each part keeps
-//     its own metalness and roughness per vertex too, so chrome and brass still read as metal
-//     and felt as cloth,
+//     one more; each part keeps its own metalness and roughness per vertex too, so chrome and
+//     brass still read as metal and felt as cloth. Every station's two merges go into two
+//     batches for the whole floor (THREE.BatchedMesh), so all the stand-ins' plain and glowing
+//     parts cost two draw calls between them, whichever stations are showing them,
 //   - small textured parts (chip stacks, table signs, a reel strip) become their texture's
 //     average colour and join those two merges; at that distance a chip is a few pixels,
 //   - larger textured and see-through parts are merged per material, so felts, signs and glass
@@ -60,7 +61,13 @@ type Piece = {
 /** A station, its baked stand-in, and where it stands (stations never move). */
 interface Entry {
   station: WorldStation;
+  /** The stand-in's own meshes (textured and see-through parts); its merged parts are in the batches. */
   copy: THREE.Object3D;
+  /** Its instances in the solid and glow batches (-1: none). */
+  solidId: number;
+  glowId: number;
+  /** Pinned to its real model or its stand-in (the headless checks), or null to follow the camera. */
+  pin: 'real' | 'far' | null;
   x: number;
   z: number;
   /** Squared distances: swap to the stand-in past far2, back to the model inside near2. */
@@ -79,6 +86,8 @@ export class StationLod {
   private readonly entries: Entry[] = [];
   private readonly solid: THREE.Material;
   private readonly glow: THREE.MeshBasicMaterial;
+  private readonly solidBatch: THREE.BatchedMesh | null;
+  private readonly glowBatch: THREE.BatchedMesh | null;
   private readonly cam = new THREE.Vector3();
   private readonly frustum = new THREE.Frustum();
   private readonly viewProj = new THREE.Matrix4();
@@ -92,20 +101,71 @@ export class StationLod {
     this.high = quality === 'high';
     this.solid = this.high ? pbrMaterial() : new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
     this.glow = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide });
+    const baked = stations.map((s) => {
+      const b = this.bake(s.model);
+      b.copy.name = `far:${s.id}`;
+      b.copy.visible = false;
+      s.model.parent!.add(b.copy);
+      return b;
+    });
+    // every stand-in's merged parts, in one batch per material beside the stations
+    const parent = stations[0]?.anchor.parent ?? null;
+    this.solidBatch = batch(baked.map((b) => b.solid), this.solid, 'far:solid');
+    this.glowBatch = batch(baked.map((b) => b.glow), this.glow, 'far:glow');
+    const toParent = new THREE.Matrix4();
+    if (parent) {
+      parent.updateWorldMatrix(true, false);
+      toParent.copy(parent.matrixWorld).invert();
+      if (this.solidBatch) parent.add(this.solidBatch);
+      if (this.glowBatch) parent.add(this.glowBatch);
+    }
     const at = new THREE.Vector3();
-    for (const s of stations) {
-      const copy = this.bake(s.model);
-      copy.name = `far:${s.id}`;
-      copy.visible = false;
-      s.model.parent!.add(copy);
+    const place = new THREE.Matrix4();
+    const add = (target: THREE.BatchedMesh | null, geo: THREE.BufferGeometry | null): number => {
+      if (!target || !geo) return -1;
+      const id = target.addInstance(target.addGeometry(geo));
+      target.setMatrixAt(id, place);
+      target.setVisibleAt(id, false);
+      geo.dispose();
+      return id;
+    };
+    stations.forEach((s, i) => {
+      const { copy, solid, glow } = baked[i]!;
+      copy.updateWorldMatrix(true, false);
+      place.multiplyMatrices(toParent, copy.matrixWorld);
       s.anchor.getWorldPosition(at);
       const machine = s.zone === 'slots' || s.zone === 'bar';
       const far = machine ? MACHINE_FAR_M : FAR_M;
       const near = machine ? MACHINE_NEAR_M : NEAR_M;
       const sphere = new THREE.Box3().setFromObject(s.model).getBoundingSphere(new THREE.Sphere());
       const extra = Math.max(0, meshes(s.model) - meshes(copy));
-      this.entries.push({ station: s, copy, x: at.x, z: at.z, far2: far * far, near2: near * near, sphere, extra, d2: 0, real: true });
-    }
+      this.entries.push({
+        station: s,
+        copy,
+        solidId: add(this.solidBatch, solid),
+        glowId: add(this.glowBatch, glow),
+        pin: null,
+        x: at.x,
+        z: at.z,
+        far2: far * far,
+        near2: near * near,
+        sphere,
+        extra,
+        d2: 0,
+        real: true,
+      });
+    });
+  }
+
+  /**
+   * Hold a station on its real model or its stand-in, or let it follow the camera again (null).
+   * Takes effect at once. For the headless checks, which compare the two.
+   */
+  pin(stationId: string, mode: 'real' | 'far' | null): void {
+    const e = this.entries.find((x) => x.station.id === stationId);
+    if (!e) return;
+    e.pin = mode;
+    if (mode) this.show(e, mode === 'real');
   }
 
   /** Show the real model near the camera and the stand-in further away, within the budget. */
@@ -120,7 +180,8 @@ export class StationLod {
       const was = !e.copy.visible;
       // near enough by distance (with hysteresis), and in view: it competes for the budget
       e.real = e.station === seated || (was ? e.d2 <= e.far2 : e.d2 <= e.near2);
-      if (e.real && e.station !== seated && this.frustum.intersectsSphere(e.sphere)) order.push(e);
+      if (e.pin) e.real = e.pin === 'real';
+      else if (e.real && e.station !== seated && this.frustum.intersectsSphere(e.sphere)) order.push(e);
     }
     // nearest first (the ones already real a little nearer still), each while it fits
     order.sort((a, b) => rank(a) - rank(b));
@@ -129,11 +190,14 @@ export class StationLod {
       spent += e.extra;
       if (spent > this.budget) e.real = false;
     }
-    for (const e of this.entries) {
-      if (e.real === !e.copy.visible) continue;
-      e.station.model.visible = e.real;
-      e.copy.visible = !e.real;
-    }
+    for (const e of this.entries) if (e.real !== !e.copy.visible) this.show(e, e.real);
+  }
+
+  private show(e: Entry, real: boolean): void {
+    e.station.model.visible = real;
+    e.copy.visible = !real;
+    if (e.solidId >= 0) this.solidBatch!.setVisibleAt(e.solidId, !real);
+    if (e.glowId >= 0) this.glowBatch!.setVisibleAt(e.glowId, !real);
   }
 
   dispose(): void {
@@ -143,11 +207,16 @@ export class StationLod {
       });
       copy.removeFromParent();
     }
+    for (const b of [this.solidBatch, this.glowBatch]) {
+      b?.dispose();
+      b?.removeFromParent();
+    }
     this.solid.dispose();
     this.glow.dispose();
   }
 
-  private bake(model: THREE.Object3D): THREE.Object3D {
+  /** A station's stand-in: its own meshes, and its merged plain and glowing parts for the batches. */
+  private bake(model: THREE.Object3D): { copy: THREE.Object3D; solid: THREE.BufferGeometry | null; glow: THREE.BufferGeometry | null } {
     const out = new THREE.Group();
     // The copy sits beside the model under the same anchor, so pieces are placed in the model's
     // parent's frame.
@@ -247,16 +316,25 @@ export class StationLod {
       }
     });
 
-    if (solid.length) out.add(new THREE.Mesh(merge(solid, 'color', this.high), this.solid));
-    if (glow.length) out.add(new THREE.Mesh(merge(glow, 'color'), this.glow));
     for (const [mat, pieces] of byMaterial) {
       const mesh = new THREE.Mesh(merge(pieces, 'uv'), mat);
       // A see-through part drawn after the solid ones, as it would be in the live model.
       mesh.renderOrder = mat.transparent ? 1 : 0;
       out.add(mesh);
     }
-    return out;
+    return { copy: out, solid: solid.length ? merge(solid, 'color', this.high) : null, glow: glow.length ? merge(glow, 'color') : null };
   }
+}
+
+/** One batch holding all these geometries (their instances are added by the caller), or null for none. */
+function batch(geos: (THREE.BufferGeometry | null)[], material: THREE.Material, name: string): THREE.BatchedMesh | null {
+  const list = geos.filter((g): g is THREE.BufferGeometry => g !== null);
+  if (list.length === 0) return null;
+  const vertices = list.reduce((n, g) => n + g.attributes.position!.count, 0);
+  const indices = list.reduce((n, g) => n + (g.index?.count ?? 0), 0);
+  const b = new THREE.BatchedMesh(list.length, vertices, indices, material);
+  b.name = name;
+  return b;
 }
 
 /** Where an entry stands in the budget's queue: its distance, less for one already real. */

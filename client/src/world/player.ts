@@ -1,9 +1,13 @@
 // Walking the floor: WASD or the arrow keys move relative to the camera, Shift runs. The
-// character turns to face where it walks. A click on the floor captures the mouse (Pointer Lock)
-// and moving it then turns the camera, walking or not, so W always walks where you look; Esc lets
-// it go. A press that drags looks around without capture, for anyone who'd rather keep the
-// cursor. With the mouse left alone for a few seconds (and not captured) the follow camera swings
-// back in behind the walker, lazily, so a held A or D walks a wide circle, not a spin. Wheel zooms.
+// character turns to face where it walks. On the floor the mouse is held (Pointer Lock): moving it
+// turns the camera, walking or not, so W always walks where you look. Entering the floor takes the
+// mouse at once (the click on Enter Casino is the gesture the browser asks for), and so does
+// standing up from a table. Esc frees the cursor; a click on the floor takes it back. Tables,
+// menus, sheets and the chat line need the cursor, so the mouse is let go while any of those is up,
+// and one that took it gives it back when it closes. With the lock turned off in Settings, a press
+// that drags looks around instead. With the mouse left alone for a few seconds (and not held) the
+// follow camera swings back in behind the walker, lazily, so a held A or D walks a wide circle,
+// not a spin. Wheel zooms.
 // The walker is a circle pushed out of the floor's boxes and posts; the camera backs off the
 // player's head along a ray and pulls in wherever that ray would enter a wall, column or bank.
 
@@ -12,7 +16,7 @@ import { isTyping, onOverlayChange, overlayCount } from '../ui/keyboard.ts';
 import type { Character } from './contract.ts';
 import type { Collider } from './collision.ts';
 import { CEILING, PIT_CEILING, inRect, type Rect } from './layout.ts';
-import { clampSensitivity, loadMouse, saveMouse, type MouseSettings } from './mouse.ts';
+import { loadMouse, onMouseChange, setMouseSettings, type MouseSettings } from './mouse.ts';
 
 const RADIUS = 0.3;
 // A brisk default pace (the floor is 40 m across), and Shift for a run.
@@ -22,7 +26,7 @@ const RUN = 4.8;
 const WALK_CYCLE = 1.75;
 const RUN_CYCLE = 3.9;
 const EYE = 1.5;
-/** Radians per pixel: dragging (a hand on the button covers less ground), and captured. */
+/** Radians per pixel: dragging (a hand on the button covers less ground), and held. */
 const DRAG_YAW = 0.0055;
 const DRAG_PITCH = 0.004;
 const LOCK_RATE = 0.0024;
@@ -31,9 +35,9 @@ const PITCH_MIN = -0.3;
 const PITCH_MAX = 1.1;
 /** Seconds without mouse input before the follow camera swings back behind the walker. */
 const RECENTER_AFTER = 3;
-/** A press that travels less than this (px) is a click, which captures the mouse. */
+/** A press that travels less than this (px) is a click, which takes the mouse. */
 const CLICK_SLOP = 5;
-/** Some browsers report a jump of hundreds of pixels on the first captured move; ignore those. */
+/** Some browsers report a jump of hundreds of pixels on the first held move; ignore those. */
 const MAX_STEP = 250;
 /** The camera never goes lower than this over the floor. */
 const CAM_FLOOR = 0.3;
@@ -54,8 +58,12 @@ export class Player {
   private dist = 3.3;
   private drag: { id: number; x: number; y: number; x0: number; y0: number; moved: boolean; mouse: boolean } | null = null;
   private locked = false;
+  /** The mouse was let go for an overlay or typing, and is taken back when that's done. */
+  private lent = false;
   private mouse: MouseSettings = loadMouse();
   private readonly offOverlay: () => void;
+  private readonly offMouse: () => void;
+  private focusTimer = 0;
   private readonly target = new THREE.Vector3();
   private readonly want = new THREE.Vector3();
   private readonly dir = new THREE.Vector3();
@@ -66,12 +74,12 @@ export class Player {
     private readonly col: Collider,
     private readonly pit: Rect,
     private readonly canvas: HTMLElement,
-    /** Extra say on whether a click may capture the mouse (the app's panels over the floor). */
+    /** Extra say on whether the mouse may be held (the app's panels over the floor). */
     private readonly mayCapture: () => boolean = () => true,
   ) {
     addEventListener('keydown', this.onKey);
     addEventListener('keyup', this.onKey);
-    // before anything else hears it: Esc while captured only lets the mouse go
+    // before anything else hears it: Esc while the mouse is held only lets it go
     addEventListener('keydown', this.onEscape, true);
     addEventListener('blur', this.onBlur);
     canvas.addEventListener('pointerdown', this.onDown);
@@ -80,32 +88,61 @@ export class Player {
     canvas.addEventListener('pointercancel', this.onUp);
     canvas.addEventListener('wheel', this.onWheel, { passive: true });
     document.addEventListener('pointerlockchange', this.onLockChange);
-    // a sheet, dialog or the editor coming up needs the cursor
-    this.offOverlay = onOverlayChange((n) => n > 0 && this.release());
+    // a sheet, dialog or the editor needs the cursor; one that took it gives it back
+    this.offOverlay = onOverlayChange(this.onOverlay);
+    // so does typing (the chat line)
+    document.addEventListener('focusin', this.onFocus);
+    document.addEventListener('focusout', this.onFocus);
+    // the Settings sheet changes these while the floor is up
+    this.offMouse = onMouseChange((m) => {
+      this.mouse = m;
+      if (!m.capture) {
+        this.lent = false;
+        this.release();
+      }
+    });
   }
 
-  /** True while the mouse is captured for looking around. */
+  /** True while the mouse is held for looking around. */
   get captured(): boolean {
     return this.locked;
   }
 
-  /** Mouse sensitivity (1 = default) and whether a click captures the mouse; saved for next time. */
+  /**
+   * True when the floor would like the mouse and a click would give it: walking about, the lock
+   * on in Settings, nothing over the floor, and not held right now (after Esc, say).
+   */
+  get awaitingClick(): boolean {
+    return !this.locked && this.canCapture();
+  }
+
+  /** Mouse sensitivity (1 = default) and whether the floor holds the mouse; saved for next time. */
   get mouseSettings(): MouseSettings {
     return { ...this.mouse };
   }
 
   setMouse(o: Partial<MouseSettings>): void {
-    this.mouse = {
-      sensitivity: clampSensitivity(o.sensitivity ?? this.mouse.sensitivity),
-      capture: o.capture ?? this.mouse.capture,
-    };
-    saveMouse(this.mouse);
-    if (!this.mouse.capture) this.release();
+    setMouseSettings(o);
   }
 
-  /** Let the mouse go (a table, a panel or the app taking over). */
+  /** Let the mouse go (a table, a panel or the app taking over); a click on the floor takes it back. */
   release(): void {
     if (document.pointerLockElement === this.canvas) document.exitPointerLock();
+  }
+
+  /**
+   * Take the mouse, if the floor may. Browsers only allow it straight after a click or key press
+   * (or after the page itself let go); when refused, the next click on the floor takes it.
+   */
+  capture(): void {
+    if (this.locked || !this.canCapture()) return;
+    try {
+      // A promise in Chrome (it rejects without a gesture, or straight after an Esc), nothing elsewhere.
+      const r = this.canvas.requestPointerLock() as Promise<void> | undefined;
+      r?.catch?.(() => {});
+    } catch {
+      /* not allowed right now; the next click tries again */
+    }
   }
 
   /** Place the player (and snap the camera behind them). */
@@ -123,14 +160,24 @@ export class Player {
     return this.enabled;
   }
 
+  /**
+   * Hand the controls over (a table, a menu) or back. Back on the floor the mouse is taken again
+   * straight away: entering from the menu or standing up from a table.
+   */
   setEnabled(on: boolean): void {
+    const was = this.enabled;
     this.enabled = on;
     this.keys.clear();
     this.vel.set(0, 0);
     this.speed = 0;
     this.drag = null;
     this.character.setMotion(0);
-    if (!on) this.release();
+    if (!on) {
+      this.lent = false;
+      this.release();
+    } else if (!was) {
+      this.capture();
+    }
   }
 
   /** Where the follow camera would be right now (for flying back from a table). */
@@ -174,7 +221,7 @@ export class Player {
       const want = Math.atan2(mx, mz);
       this.heading = turn(this.heading, want, 1 - Math.exp(-dt * 12));
       // The camera drifts round behind the walker only once the mouse has been left alone for a
-      // while, and never while it's captured: then the mouse alone steers.
+      // while, and never while it's held: then the mouse alone steers.
       if (!this.locked && this.clock - this.manualAt > RECENTER_AFTER && iz >= 0) this.camYaw = turn(this.camYaw, this.heading + Math.PI, 1 - Math.exp(-dt * 1.4));
     }
     this.speed = moved;
@@ -187,7 +234,11 @@ export class Player {
   dispose(): void {
     this.release();
     this.offOverlay();
+    this.offMouse();
+    clearTimeout(this.focusTimer);
     document.removeEventListener('pointerlockchange', this.onLockChange);
+    document.removeEventListener('focusin', this.onFocus);
+    document.removeEventListener('focusout', this.onFocus);
     removeEventListener('keydown', this.onEscape, true);
     removeEventListener('keydown', this.onKey);
     removeEventListener('keyup', this.onKey);
@@ -275,8 +326,8 @@ export class Player {
     const d = this.drag;
     if (!d || e.pointerId !== d.id) return;
     this.drag = null;
-    // a click (not a drag) with the mouse on the floor view: capture it for looking around
-    if (e.type === 'pointerup' && !d.moved && d.mouse && this.canCapture()) this.capture();
+    // a click (not a drag) with the mouse on the floor view: hold it for looking around
+    if (e.type === 'pointerup' && !d.moved && d.mouse) this.capture();
   };
 
   /** Turn the camera: yaw right for +dx, look down for +dy, pitch clamped. */
@@ -287,18 +338,35 @@ export class Player {
   }
 
   private canCapture(): boolean {
-    return this.mouse.capture && this.enabled && overlayCount() === 0 && this.mayCapture() && typeof this.canvas.requestPointerLock === 'function';
+    return this.mouse.capture && this.enabled && overlayCount() === 0 && !textFocused() && this.mayCapture() && typeof this.canvas.requestPointerLock === 'function';
   }
 
-  private capture(): void {
-    try {
-      // A promise in Chrome (it rejects if the user let go with Esc a moment ago), nothing elsewhere.
-      const r = this.canvas.requestPointerLock() as Promise<void> | undefined;
-      r?.catch?.(() => {});
-    } catch {
-      /* not allowed right now; the next click tries again */
-    }
+  /** Something needs the cursor for a while: let go, and take it back after if it was held. */
+  private lend(): void {
+    if (this.locked) this.lent = true;
+    this.release();
   }
+
+  /** What needed the cursor is done: take the mouse back if it lent it. */
+  private giveBack(): void {
+    if (!this.lent || overlayCount() > 0 || textFocused()) return;
+    this.lent = false;
+    this.capture();
+  }
+
+  private onOverlay = (open: number): void => {
+    if (open > 0) this.lend();
+    else this.giveBack();
+  };
+
+  private onFocus = (): void => {
+    // After the focus has settled: moving between two fields blurs one before focusing the next.
+    clearTimeout(this.focusTimer);
+    this.focusTimer = window.setTimeout(() => {
+      if (textFocused()) this.lend();
+      else this.giveBack();
+    }, 0);
+  };
 
   private onLockChange = (): void => {
     const locked = document.pointerLockElement === this.canvas;
@@ -307,15 +375,17 @@ export class Player {
     this.drag = null;
     // Either way the camera stays where the mouse left it for a while.
     this.manualAt = this.clock;
-    // Captured behind a panel that came up in the meantime: let go again.
-    if (locked && !this.canCapture()) this.release();
+    // Held behind a panel that came up in the meantime: let go again.
+    if (locked && !this.canCapture()) this.lend();
   };
 
   private onEscape = (e: KeyboardEvent): void => {
     if (e.key !== 'Escape' || !this.locked) return;
-    // The browser lets the mouse go; nothing else should also act on this Esc.
+    // The browser lets the mouse go; nothing else should also act on this Esc, and the mouse stays
+    // free until a click on the floor.
     e.preventDefault();
     e.stopImmediatePropagation();
+    this.lent = false;
     this.release();
   };
 
@@ -326,6 +396,15 @@ export class Player {
 }
 
 const MOVE_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ShiftRight']);
+
+/** Text going into a field (the chat line, a name): the cursor and the keyboard belong to it. */
+const TEXT_INPUTS = new Set(['text', 'search', 'password', 'email', 'number', 'tel', 'url']);
+function textFocused(): boolean {
+  const t = document.activeElement as HTMLElement | null;
+  if (!t) return false;
+  if (t instanceof HTMLInputElement) return TEXT_INPUTS.has(t.type);
+  return t.tagName === 'TEXTAREA' || t.isContentEditable;
+}
 
 function clampStep(px: number): number {
   return Number.isFinite(px) && Math.abs(px) <= MAX_STEP ? px : 0;

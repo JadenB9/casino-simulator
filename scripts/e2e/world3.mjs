@@ -8,6 +8,7 @@
 // headless shell refuses Pointer Lock.
 
 import { chromium } from 'playwright';
+import { execFileSync } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 
 const [port = '5930', out = '/tmp/world3', ...wanted] = process.argv.slice(2);
@@ -248,13 +249,12 @@ if (checks.includes('lod')) {
     const ctx = sheet.getContext('2d');
     const img = ctx.createImageData(W, H);
     const out = [];
+    // every station on its real model (under a hidden anchor, so drawn by none), the one being
+    // looked at on whichever the shot wants: the stand-ins' batched parts follow the pins
+    for (const s of world.stations) world.lod.pin(s.id, 'real');
     const shot = (st, far, row, col) => {
-      for (const s of world.stations) {
-        s.anchor.visible = s === st;
-      }
-      const copy = st.model.parent.getObjectByName(`far:${st.id}`);
-      st.model.visible = !far;
-      if (copy) copy.visible = far;
+      for (const s of world.stations) s.anchor.visible = s === st;
+      world.lod.pin(st.id, far ? 'far' : 'real');
       renderer.setRenderTarget(rt);
       renderer.render(scene, cam);
       renderer.readRenderTargetPixels(rt, 0, 0, W, H, buf);
@@ -282,11 +282,7 @@ if (checks.includes('lod')) {
       ctx.putImageData(img, col * W, row * H);
       return n ? [Math.round(r / n), Math.round(g / n), Math.round(b / n), n] : [0, 0, 0, 0];
     };
-    const reset = (st) => {
-      st.model.visible = true;
-      const copy = st.model.parent.getObjectByName(`far:${st.id}`);
-      if (copy) copy.visible = false;
-    };
+    const reset = (st) => world.lod.pin(st.id, 'real');
     picks.forEach((st, row) => {
       const a = st.anchor;
       const size = Math.max(st.footprint.width, st.footprint.depth);
@@ -318,7 +314,10 @@ if (checks.includes('lod')) {
       out.push(entry);
       reset(st);
     });
-    for (const s of world.stations) s.anchor.visible = true;
+    for (const s of world.stations) {
+      s.anchor.visible = true;
+      world.lod.pin(s.id, null);
+    }
     for (const c of hidden) c.visible = true;
     scene.background = bg;
     rt.dispose();
@@ -338,6 +337,229 @@ if (checks.includes('lod')) {
     if (!green(s.topFar)) fail(`${s.id}: the far stand-in's felt is not green (${s.topFar.slice(0, 3)}); the near model's is ${green(s.topNear) ? 'green' : 'not green either (holdem/table.ts: the top cap of the apron covers the felt)'}`);
   }
   await page.close();
+}
+
+// --- the game proper: log in (fixed names; the local dev database only), then the floor ----------
+const gameUrl = `http://localhost:${port}/casino/`;
+const PASSWORD = 'casino-dev'; // DEV_PASSWORD in client/src/net/api.ts
+
+/** Local dev database only: run one statement against it. */
+function sql(command) {
+  execFileSync('node_modules/.bin/wrangler', ['d1', 'execute', 'DB', '--local', '-c', 'server/wrangler.toml', '--command', command], { env: { ...process.env, CI: '1' }, stdio: 'ignore' });
+}
+
+async function openGame(name, init = () => {}) {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  await ctx.addInitScript(init);
+  const page = await ctx.newPage();
+  const errors = watch(page);
+  await page.goto(gameUrl, { timeout: 300000 });
+  await page.waitForSelector('.name-input, .menu-item', { timeout: 600000 });
+  if (await page.$('.name-input')) {
+    await page.fill('.name-input', name);
+    await page.fill('.pass-input', PASSWORD);
+    await page.click('.enter-btn');
+  }
+  await page.waitForSelector('.menu-item, .editor-panel.guided', { timeout: 60000 });
+  return { ctx, page, errors };
+}
+
+const lockState = (page) => page.evaluate(() => ({ lock: document.pointerLockElement?.id ?? null, world: window.casino.world.mouseCaptured }));
+const camYaw = (page) =>
+  page.evaluate(() => {
+    const d = new window.casino.engine.camera.position.constructor();
+    window.casino.engine.camera.getWorldDirection(d);
+    return +Math.atan2(d.x, -d.z).toFixed(3);
+  });
+/** Wait up to `ms` for the lock to be (or not be) held. */
+async function waitLock(page, want, ms = 4000) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < ms) {
+    if ((await lockState(page)).world === want) return true;
+    await page.waitForTimeout(100);
+  }
+  return false;
+}
+
+// --- mouse always held on the floor -----------------------------------------------------------------
+if (checks.includes('lock')) {
+  const { ctx, page, errors } = await openGame('world3_e2e', () => {
+    localStorage.setItem('casino.quality', 'low');
+    localStorage.removeItem('casino.mouse.capture');
+  });
+  const r = {};
+  // a first visit for this name walks through the look first; either way end on the floor
+  if (await page.$('.editor-panel.guided')) {
+    for (let i = 0; i < 3; i++) await page.click('.editor-panel .ed-buttons .btn.primary');
+  } else {
+    await page.click('.menu-item >> nth=0');
+  }
+  await page.waitForSelector('.hud', { timeout: 30000 });
+  r.onEntry = await waitLock(page, true, 3000);
+  // moving the mouse, no button held, turns the camera
+  const y0 = await camYaw(page);
+  for (let i = 1; i <= 12; i++) await page.mouse.move(640 + i * 14, 400);
+  await page.waitForTimeout(300);
+  r.turned = +Math.abs((await camYaw(page)) - y0).toFixed(3);
+  await page.screenshot({ path: `${out}/world3-lock-floor.png` });
+  // Esc frees the cursor; a click on the view takes it back
+  await page.keyboard.press('Escape');
+  r.escFrees = await waitLock(page, false);
+  await page.waitForTimeout(1300); // Chrome refuses a lock straight after an Esc
+  r.hintShown = await page.evaluate(() => !!document.querySelector('.world-hint:not([hidden])'));
+  await page.screenshot({ path: `${out}/world3-lock-hint.png` });
+  await page.mouse.click(640, 420);
+  r.clickTakes = await waitLock(page, true);
+  // an overlay takes the cursor and gives it back when it closes
+  await page.evaluate(async () => {
+    const k = await import('/casino/src/ui/keyboard.ts');
+    const panel = document.createElement('div');
+    document.body.append(panel);
+    window.__release = k.holdKeyboard(panel, () => {});
+  });
+  r.overlayFrees = await waitLock(page, false);
+  await page.evaluate(() => window.__release());
+  r.overlayGivesBack = await waitLock(page, true);
+  if (!r.overlayGivesBack) {
+    await page.mouse.click(640, 420);
+    r.overlayThenClick = await waitLock(page, true);
+  }
+  // typing (a text field with focus, as the chat line) frees it; done typing gives it back
+  await page.evaluate(() => {
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.id = 'w3-typing';
+    document.getElementById('ui').append(input);
+    input.focus();
+  });
+  r.typingFrees = await waitLock(page, false);
+  await page.evaluate(() => {
+    const input = document.getElementById('w3-typing');
+    input.blur();
+    input.remove();
+  });
+  r.typingGivesBack = await waitLock(page, true);
+  if (!r.typingGivesBack) {
+    await page.mouse.click(640, 420);
+    await waitLock(page, true);
+  }
+  // sitting down frees it (tables need the cursor); standing up takes it again
+  await page.evaluate(() => {
+    const w = window.casino.world;
+    w.enter(w.stations.find((s) => s.id === 'bj-1'));
+  });
+  r.seatedFrees = await waitLock(page, false);
+  await page.waitForTimeout(1500);
+  r.seatedClickRefused = await (async () => {
+    await page.mouse.click(640, 300);
+    await page.waitForTimeout(400);
+    return !(await lockState(page)).world;
+  })();
+  await page.keyboard.press('Escape'); // closes the table choice, which stands you up
+  await page.waitForTimeout(400);
+  if (await page.evaluate(() => window.casino.world.seated !== null)) await page.evaluate(() => window.casino.world.exitTable());
+  r.standTakes = await waitLock(page, true, 6000);
+  if (!r.standTakes) {
+    await page.mouse.click(640, 420);
+    r.standThenClick = await waitLock(page, true);
+  }
+  // Settings: Drag turns the lock off at once, and clicks no longer take the mouse
+  await page.evaluate(async () => (await import('/casino/src/world/mouse.ts')).setMouseSettings({ capture: false }));
+  r.dragFrees = await waitLock(page, false);
+  await page.mouse.click(640, 420);
+  await page.waitForTimeout(400);
+  r.dragNoLock = !(await lockState(page)).world;
+  const d0 = await camYaw(page);
+  await page.mouse.move(640, 420);
+  await page.mouse.down();
+  for (let i = 1; i <= 10; i++) await page.mouse.move(640 + i * 12, 420);
+  await page.mouse.up();
+  r.dragTurns = +Math.abs((await camYaw(page)) - d0).toFixed(3);
+  await page.evaluate(async () => (await import('/casino/src/world/mouse.ts')).setMouseSettings({ capture: true }));
+  console.log(JSON.stringify({ check: 'lock', ...r, errors: errors.slice(0, 3) }));
+  for (const k of ['onEntry', 'escFrees', 'clickTakes', 'overlayFrees', 'typingFrees', 'seatedFrees', 'seatedClickRefused', 'dragFrees', 'dragNoLock']) if (!r[k]) fail(`lock: ${k}`);
+  if (r.turned < 0.2) fail(`lock: moving the mouse turned the camera only ${r.turned}`);
+  if (r.dragTurns < 0.2) fail(`lock: dragging with the lock off turned the camera only ${r.dragTurns}`);
+  if (!r.hintShown) fail('lock: no "click to look" hint after Esc');
+  if (!(r.overlayGivesBack || r.overlayThenClick)) fail('lock: not held again after an overlay closed');
+  if (!(r.standTakes || r.standThenClick)) fail('lock: not held again after standing up');
+  if (errors.length) fail(`lock: ${errors[0]}`);
+  await ctx.close();
+}
+
+// --- a new player picks a look before anything else ------------------------------------------------
+if (checks.includes('onboard')) {
+  // the fixed name, made new again: no rounds, just created, the default look (local database only)
+  const NAME = 'world3_new';
+  try {
+    sql(`UPDATE casino_accounts SET look = '{}', created_at = ${Date.now()} WHERE name = '${NAME}'`);
+  } catch {
+    /* first run: login creates it */
+  }
+  const { ctx, page, errors } = await openGame(NAME, () => localStorage.setItem('casino.quality', 'high'));
+  const r = {};
+  r.guided = !!(await page.$('.editor-panel.guided'));
+  if (r.guided) {
+    await page.waitForTimeout(2500); // the model and the framing
+    r.title = await page.textContent('.editor-panel .sheet-title');
+    const steps = [];
+    for (let i = 0; i < 3; i++) {
+      steps.push(await page.textContent('.ed-step-name'));
+      await page.screenshot({ path: `${out}/world3-onboard-${i + 1}.png` });
+      if (i === 2) {
+        // Surprise me deals a whole new look: the clothes' chosen swatches change
+        const picked = () => page.$$eval('.editor-panel [role=radiogroup] [aria-checked=true]', (els) => els.map((e) => e.getAttribute('aria-label')).join('|'));
+        const before = await picked();
+        await page.click('.ed-buttons .btn.ed-reset');
+        await page.waitForTimeout(1200);
+        await page.screenshot({ path: `${out}/world3-onboard-surprise.png` });
+        r.surpriseChanged = before !== (await picked());
+      }
+      await page.click('.editor-panel .ed-buttons .btn.primary');
+      await page.waitForTimeout(600);
+    }
+    r.steps = steps;
+    await page.waitForSelector('.hud', { timeout: 30000 });
+    r.lockedOnEntry = await waitLock(page, true, 3000);
+    await page.waitForTimeout(1500);
+    await page.screenshot({ path: `${out}/world3-onboard-floor.png` });
+    const me = await page.evaluate(async () => {
+      const api = await import('/casino/src/net/api.ts');
+      return (await api.me()).look;
+    });
+    r.saved = me;
+    r.notDefault = !(me.body === 'm' && me.outfit === 'suit' && me.top === '#1f2430' && me.bottom === '#1f2430');
+  }
+  await ctx.close();
+  // back again: not new any more, so the menu as usual
+  const again = await openGame(NAME);
+  r.secondVisitMenu = !!(await again.page.$('.menu-item')) && !(await again.page.$('.editor-panel.guided'));
+  await again.ctx.close();
+  // an older account still in the default suit gets its own look on entering (and keeps it)
+  const OLD = 'world3_old';
+  const first = await openGame(OLD);
+  if (await first.page.$('.editor-panel.guided')) {
+    for (let i = 0; i < 3; i++) await first.page.click('.editor-panel .ed-buttons .btn.primary');
+    await first.page.waitForSelector('.hud', { timeout: 30000 });
+  }
+  await first.ctx.close();
+  sql(`UPDATE casino_accounts SET look = '{}', created_at = ${Date.now() - 86400000} WHERE name = '${OLD}'`);
+  const old = await openGame(OLD);
+  await old.page.click('.menu-item >> nth=0');
+  await old.page.waitForSelector('.hud', { timeout: 30000 });
+  await old.page.waitForTimeout(1500);
+  const oldLook = await old.page.evaluate(async () => (await (await import('/casino/src/net/api.ts')).me()).look);
+  r.oldGotLook = !(oldLook.body === 'm' && oldLook.outfit === 'suit' && oldLook.top === '#1f2430' && oldLook.bottom === '#1f2430');
+  await old.ctx.close();
+  console.log(JSON.stringify({ check: 'onboard', ...r, errors: errors.slice(0, 3) }));
+  if (!r.guided) fail('onboard: a new player went past the look');
+  if (r.guided && r.title !== 'Pick your look') fail(`onboard: title ${r.title}`);
+  if (r.guided && !r.surpriseChanged) fail('onboard: Surprise me did not change the look');
+  if (r.guided && !r.lockedOnEntry) fail('onboard: the mouse was not held on entering the floor');
+  if (r.guided && !r.notDefault) fail('onboard: the saved look is the default suit');
+  if (!r.secondVisitMenu) fail('onboard: a returning player did not get the menu');
+  if (!r.oldGotLook) fail('onboard: an account in the default suit kept it on entering');
+  if (errors.length) fail(`onboard: ${errors[0]}`);
 }
 
 await browser.close();

@@ -25,6 +25,7 @@ import { Bloom, PixelRatio } from './bloom.ts';
 import type { MouseSettings } from './mouse.ts';
 import { Emotes, OWN_BUBBLE_Y, BUBBLE_Y, type CharacterSource } from './emotes.ts';
 import type { EmoteId } from '../../../shared/src/protocol.ts';
+import { el } from '../ui/kit.ts';
 import './world.css';
 
 export type { WorldStation } from './stations.ts';
@@ -151,6 +152,13 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
   const cashier: CashierPoint = { id: 'cashier', anchor: cashierAnchor, position: new THREE.Vector3(plan.cashier.x, 0, plan.cashier.z) };
   const ui = opts.ui ?? document.getElementById('ui') ?? document.body;
   const interact = new Interact(stations, cashier, player, engine.camera, ui, opts.onEscape);
+  // On the floor with the mouse free (after Esc, or before the first click on the dev floor): how
+  // to get looking around back. Only where there's a mouse to hold.
+  const hint = el('div', 'world-hint');
+  hint.append(el('span', 'world-key', 'Click'), 'to look around');
+  hint.hidden = true;
+  ui.append(hint);
+  const finePointer = matchMedia('(pointer: fine)').matches;
 
   const bloom = new Bloom(engine);
   const pr = new PixelRatio(renderer);
@@ -222,6 +230,8 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
       renderer.info.reset();
       player.update(dt);
       interact.update(dt);
+      const idle = finePointer && player.awaitingClick && !interact.seated;
+      if (hint.hidden === idle) hint.hidden = !idle;
       lod.update(engine.camera, interact.seated);
       character.update(dt);
       emotes.update(dt);
@@ -257,6 +267,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
       remotes = source;
     },
     dispose() {
+      hint.remove();
       emotes.dispose();
       lod.dispose();
       interact.dispose();
