@@ -305,6 +305,164 @@ if (wanted('desks')) {
   }
 }
 
+// ------------------------------------------------------------------------------------------------------
+// Part: two players at one Crash table, from two desks; one drops mid-flight
+
+/** Open a multiplayer table from a station: M, then Public (the picked tier), then Sit down. */
+async function openLobby(p, id, { tier = 'Standard', buyin = '1000' } = {}) {
+  const { page } = p;
+  await walkUp(p, id);
+  await page.waitForSelector('.lim-opt', { timeout: 20_000 });
+  await page.click(`.lim-opt:has-text("${tier}")`);
+  await page.keyboard.press('m');
+  await page.waitForSelector('.lobby-actions .btn', { timeout: 10_000 });
+  await page.click('.lobby-actions .btn:has-text("Public")');
+  await page.waitForFunction(() => !!document.querySelector('.modal input[type=number]') || [...document.querySelectorAll('.party-row .btn')].some((b) => b.textContent === 'Sit down'), null, { timeout: 20_000 });
+  if (!(await page.$('.modal input[type=number]'))) await page.click('.party-row .btn:has-text("Sit down")');
+  await page.waitForSelector('.modal input[type=number]', { timeout: 10_000 });
+  await page.fill('.modal input[type=number]', buyin);
+  await page.click('.modal .btn.primary');
+  await page.waitForFunction(() => window.casino.app.table?.seated === true, null, { timeout: 30_000 });
+  return page.evaluate(() => window.casino.app.table.session.snapshot.meta.tableId);
+}
+
+/** Join an open table from the list at a station, and sit down. */
+async function joinLobby(p, id, tableId, buyin = '1000') {
+  const { page } = p;
+  await walkUp(p, id);
+  await page.waitForSelector('.lobby-choice', { timeout: 20_000 });
+  await page.keyboard.press('m');
+  const row = `.lobby-row[data-table="${tableId}"]`;
+  await page.waitForSelector(row, { timeout: 20_000 });
+  await page.click(row);
+  await page.waitForFunction(() => !!document.querySelector('.modal input[type=number]') || [...document.querySelectorAll('.party-row .btn')].some((b) => b.textContent === 'Sit down'), null, { timeout: 20_000 });
+  if (!(await page.$('.modal input[type=number]'))) await page.click('.party-row .btn:has-text("Sit down")');
+  await page.waitForSelector('.modal input[type=number]', { timeout: 10_000 });
+  await page.fill('.modal input[type=number]', buyin);
+  await page.click('.modal .btn.primary');
+  await page.waitForFunction(() => window.casino.app.table?.seated === true, null, { timeout: 30_000 });
+}
+
+const crashView = (p) => p.page.evaluate(() => {
+  const s = window.casino.app.table?.session;
+  return s ? { phase: s.view && s.snapshot ? null : null, seat: s.snapshot?.you.seat, stack: s.snapshot?.you.stack } : null;
+});
+
+/** Wait until the page's table session reports this Crash phase (from the frames it received). */
+async function crashPhase(p, phase, since, ms = 30_000) {
+  const until = Date.now() + ms;
+  while (Date.now() < until) {
+    const ev = tableFrames(p, since).filter((m) => m.t === 'ev' || m.t === 'table').at(-1);
+    if (ev?.view?.phase === phase) return ev;
+    await sleep(100);
+  }
+  throw new Error(`no ${phase} phase within ${ms} ms`);
+}
+
+if (wanted('crash2')) {
+  let a = null;
+  let b = null;
+  try {
+    await clearRate();
+    a = await player('qm_crash_a');
+    b = await player('qm_crash_b');
+    pages.push(a, b);
+    const since = Date.now();
+    const tableId = await openLobby(a, 'cs-1', { buyin: '1000' });
+    log(`qm_crash_a opened ${tableId} at cs-1`);
+    await joinLobby(b, 'cs-2', tableId, '800');
+    log('qm_crash_b joined from cs-2');
+    await a.page.waitForTimeout(800);
+    await shoot(a.page, 'crash2-1-two-desks-a');
+    await shoot(b.page, 'crash2-1-two-desks-b');
+    const partyOverPage = await a.page.evaluate(() => {
+      const party = document.querySelector('.party')?.getBoundingClientRect();
+      const screen = document.querySelector('.os-screen')?.getBoundingClientRect();
+      if (!party || !screen) return null;
+      const x = Math.max(0, Math.min(party.right, screen.right) - Math.max(party.left, screen.left));
+      const y = Math.max(0, Math.min(party.bottom, screen.bottom) - Math.max(party.top, screen.top));
+      return Math.round((x * y) / (screen.width * screen.height) * 100);
+    });
+    log(`the party panel covers ${partyOverPage}% of the site`);
+
+    // A rides an auto cash-out at 2x; B presses Cash out at about 1.2x. Wait for a fresh window
+    // with most of its seven seconds left, so both bets make it.
+    let t0 = Date.now();
+    const fresh = async () => {
+      for (;;) {
+        const f = tableFrames(a, t0).filter((m) => m.t === 'ev').at(-1);
+        if (f?.events.some((e) => e.type === 'betting')) return f.view.round;
+        await sleep(100);
+      }
+    };
+    const round = await Promise.race([fresh(), sleep(200_000).then(() => { throw new Error('no fresh betting window'); })]);
+    log(`round ${round} opens`);
+    await a.page.click('.os-seg button:has-text("Auto cash-out")');
+    await a.page.fill('.os-num-input >> nth=0', '2');
+    await a.page.press('.os-num-input >> nth=0', 'Enter');
+    await a.page.fill('.os-bet-input', '10');
+    await a.page.press('.os-bet-input', 'Enter');
+    await b.page.fill('.os-bet-input', '20');
+    await b.page.press('.os-bet-input', 'Enter');
+    await a.page.click('.os-action:has-text("Bet")');
+    await b.page.click('.os-action:has-text("Bet")');
+    const betsIn = eventsOf(b, 'bet', t0).filter((e) => e.amount);
+    const until = Date.now() + 20_000;
+    while (Date.now() < until && !eventsOf(b, 'launch', t0).some((e) => e.round === round)) await sleep(50);
+    check(eventsOf(b, 'launch', t0).some((e) => e.round === round), `round ${round} launched with both bets in (${eventsOf(b, 'bet', t0).length} bets seen)`);
+    void betsIn;
+    await b.page.waitForTimeout(3200); // about 1.2x
+    if (await b.page.$('.os-action.cash')) await b.page.click('.os-action.cash');
+    await shoot(b.page, 'crash2-2-b-cashed');
+    // A drops mid-flight (the network goes), and comes back once the round is over
+    await a.ctx.setOffline(true);
+    // going offline doesn't break a socket that is already open: drop it the way a lost network would
+    await a.page.evaluate(() => window.casino.app.table.session.socket.ws?.close(4000, 'network'));
+    log('qm_crash_a is offline mid-flight');
+    let crashEv = null;
+    for (const stop = Date.now() + 200_000; Date.now() < stop && !crashEv; await sleep(200)) crashEv = eventsOf(b, 'crash', t0).find((e) => e.round === round) ?? null;
+    check(!!crashEv, `round ${round} crashed (at ${crashEv ? crashEv.crash / 100 : '?'}x)`);
+    await a.ctx.setOffline(false);
+    await a.page.waitForFunction(() => window.casino.app.table?.session.socket.state === 'open', null, { timeout: 30_000 }).catch(() => null);
+    await a.page.waitForTimeout(2500);
+    await shoot(a.page, 'crash2-3-a-back');
+    await shoot(b.page, 'crash2-3-b-after');
+    const seatA = tableFrames(a).filter((m) => m.t === 'table').at(-1)?.you?.seat;
+    const seatB = tableFrames(b).filter((m) => m.t === 'table').at(-1)?.you?.seat;
+    const outs = eventsOf(b, 'cashout', t0);
+    const outA = outs.find((e) => e.seat === seatA);
+    const outB = outs.find((e) => e.seat === seatB);
+    const crashAt = crashEv?.crash ?? 0;
+    if (crashAt > 200) check(outA?.at === 200 && outA.payout === 2000 && outA.how === 'auto', `A, offline, was paid by the 2x auto cash-out: ${JSON.stringify(outA)}`);
+    else check(!outA && crashEv?.busted.includes(seatA), `A's 2x target wasn't reached before the crash at ${crashAt / 100}x, and A lost`);
+    if (outB) {
+      check(outB.how === 'manual' && outB.at < crashAt && outB.payout === (2000 / 100) * outB.at, `B's press paid ${outB.at / 100}x on $20 = ${money(outB.payout)}, below the crash at ${crashAt / 100}x`);
+    } else check(crashEv?.busted.includes(seatB), `B's press came too late: the crash took it (crash ${crashAt / 100}x)`);
+    const tallyA = await a.page.$$eval('.os-tally .os-stat-value', (v) => v.map((x) => x.textContent.replace('\u2212', '-')));
+    const profitA = (outA?.payout ?? 0) - 1000;
+    check(tallyA[0] === '1' && tallyA[1] === '$10' && tallyA[2] === (profitA > 0 ? '+' : '') + money(profitA), `A's page counts the round settled while away: ${tallyA.join(' / ')}`);
+    const expectA = 100_000 - 1000 + (outA?.payout ?? 0);
+    const expectB = 80_000 - 2000 + (outB?.payout ?? 0);
+    // the pages agree with the server afterwards
+    for (const [p, want] of [[a, expectA], [b, expectB]]) {
+      await p.page.waitForTimeout(500);
+      const shown = await p.page.textContent('.os-stack-value');
+      const server = await p.page.evaluate(() => window.casino.app.table?.session.snapshot.you.stack);
+      check(shown === money(server) && server === want, `${p.name}: the page shows ${shown}, the server holds ${money(server)}, the rounds say ${money(want)}`);
+    }
+    // both stand up; everything reconciles
+    await leave(a);
+    await leave(b);
+    await settled(a);
+    await settled(b);
+    await audit(['qm_crash_a', 'qm_crash_b'], 'crash2');
+  } catch (err) {
+    failed('crash2', err);
+    if (a) await shoot(a.page, 'crash2-failure-a').catch(() => null);
+    if (b) await shoot(b.page, 'crash2-failure-b').catch(() => null);
+  }
+}
+
 /** One round of each game through the page's own controls. */
 async function playOne(p, game, since) {
   const { page } = p;

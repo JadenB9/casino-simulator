@@ -359,6 +359,14 @@ export const crash: GameClientModule = {
         stack = snap.you.stack;
         mySeat = snap.you.status === 'watching' ? null : snap.you.seat;
         busy = false;
+        // Back after a drop: a bet the table settled meanwhile (an auto cash-out, the crash) counts
+        // in this session's tally like one seen live.
+        const back = snap.view as CrashView;
+        const settledMine = view && mySeat !== null ? back.bets.find((b) => b.seat === mySeat && (b.cashed !== null || b.busted)) : undefined;
+        if (settledMine && tallied !== back.round) {
+          tally.add(settledMine.amount, settledMine.payout);
+          tallied = back.round;
+        }
         const lim = snap.meta.config.limits.default;
         if (!bet || !limits || lim.min !== limits.min || lim.max !== limits.max || lim.step !== limits.step) {
           bet?.root.remove();
