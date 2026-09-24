@@ -150,7 +150,7 @@ async function multiplayer() {
   const ctxB = await browser.newContext();
   const pageB = await ctxB.newPage();
   for (const p of [page, pageB]) await p.goto(`${base}/casino/`);
-  const login = (p, name) => p.evaluate(async (n) => (await (await fetch('/casino/api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: n }) })).json()).token, name);
+  const login = (p, name) => p.evaluate(async (n) => (await (await fetch('/casino/api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: n, password: 'casino-dev' }) })).json()).token, name);
   const tA = await login(page, NAMES.a);
   const tB = await login(pageB, NAMES.b);
   if (!tA || !tB) throw new Error('login failed (new-account limit?)');

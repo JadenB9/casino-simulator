@@ -3,7 +3,8 @@
 // the page's CSP blocks inline style attributes and injected <style> tags.
 
 import * as THREE from 'three';
-import { BETTING_CHIPS, LOAN_AMOUNT, formatMoney, type Cents, type ChipSpec } from '../../../shared/src/money.ts';
+import { BETTING_CHIPS, formatMoney, type Cents, type ChipSpec } from '../../../shared/src/money.ts';
+import { REFILL_BELOW, REFILL_TO } from '../../../shared/src/bank.ts';
 import { holdKeyboard } from './keyboard.ts';
 import { chipTrayCanvases } from '../table/chips.ts';
 import type { TableStage } from '../table/stage.ts';
@@ -79,7 +80,7 @@ export function askBuyIn(opts: { min: Cents; max: Cents; balance: Cents; suggest
     signal?.addEventListener('abort', cancel);
     const dismiss = () => done(null);
     if (max < opts.min) {
-      const loan = el('p', '', `The cashier lends ${formatMoney(LOAN_AMOUNT)} once your balance and the chips on every table are all gone.`);
+      const loan = el('p', '', `Under ${formatMoney(REFILL_BELOW)} in all, chips on tables included? The cashier tops you up to ${formatMoney(REFILL_TO)}.`);
       m = modal('Not enough to sit down', [note, loan], [button('Close', dismiss)], dismiss);
       return;
     }

@@ -21,6 +21,8 @@ import {
   MAX_TABLE_FRAME,
   PROTOCOL_VERSION,
   parseTableMsg,
+  parseSay,
+  type ChatServerMsg,
   type ErrorCode,
   type LobbySummary,
   type Member,
@@ -32,6 +34,8 @@ import { applyTransfer, buyInStatements, cashOutStatements, refundStatements, mo
 import { Bucket } from '../ratelimit.ts';
 import { closeWith } from '../http.ts';
 import type { CasinoFloor } from '../floor/index.ts';
+import { ChatRoom } from '../floor/chat.ts';
+import { bigWinsIn, type BigWinReport } from '../floor/wins.ts'; // features: big wins
 
 /** How long a dropped player keeps their seat before being cashed out. */
 export const GRACE_MS = 120_000;
@@ -273,10 +277,12 @@ export class CasinoTable extends DurableObject<Env> {
   }
 
   /**
-   * Called by /me and /bank/loan for an escrow that has been open a while: report the live stack,
-   * cash out a seat nobody is using, or refund an escrow this table has no record of.
+   * Called by /me and /bank/loan for an escrow that has been open a while: report the live stack
+   * and the bets it has out, cash out a seat nobody is using, or refund an escrow this table has
+   * no record of. `pending` means chips are still moving to or from D1 (a buy-in, a top-up, a
+   * cash-out), so the bank waits rather than count them.
    */
-  async reconcile(accountId: number): Promise<{ stack?: Cents; pending?: true; refunded?: true }> {
+  async reconcile(accountId: number): Promise<{ stack?: Cents; live?: Cents; pending?: true; refunded?: true }> {
     const mem = this.members.get(accountId);
     const now = Date.now();
     if (mem) {
@@ -285,7 +291,9 @@ export class CasinoTable extends DurableObject<Env> {
         await this.pump();
       }
       const again = this.members.get(accountId);
-      return again ? { stack: again.stack, pending: again.status !== 'seated' ? true : undefined } : { pending: true };
+      if (!again) return { pending: true };
+      const moving = again.status !== 'seated' || this.topUpPending(accountId);
+      return { stack: again.stack, live: again.live, pending: moving ? true : undefined };
     }
     const pending = this.sql.exec<{ n: number }>(`SELECT count(*) AS n FROM outbox WHERE account_id = ?1 AND state = 'pending'`, accountId).one().n;
     if (pending > 0) {
@@ -360,6 +368,7 @@ export class CasinoTable extends DurableObject<Env> {
     this.ctx.acceptWebSocket(server, [`a:${accountId}`]);
     server.serializeAttachment({ accountId } satisfies Att);
     this.send(server, this.snapshotFor(accountId, now));
+    this.chatJoin(server);
     this.broadcastMembers();
     this.runTicks(now);
     this.ctx.waitUntil(this.noteFloor(accountId, station));
@@ -395,6 +404,9 @@ export class CasinoTable extends DurableObject<Env> {
     } catch {
       return;
     }
+    // Chat keeps its own limits and mutes (floor/chat.ts), so it goes round the buckets below.
+    const say = parseSay(data);
+    if (say) return this.chatSay(ws, att.accountId, say.text);
     const msg = parseTableMsg(data);
     if (!msg) return;
     const b = this.bucketsFor(ws);
@@ -970,6 +982,7 @@ export class CasinoTable extends DurableObject<Env> {
     this.broadcastEvents(step.events, now);
     for (const seat of stacks.keys()) this.sendSeat(bySeat.get(seat)!);
     if (readyCleared) this.broadcastMembers();
+    if (step.rounds?.length) this.announceBigWins(step, bySeat, now); // features: big wins
     return true;
   }
 
@@ -1163,6 +1176,24 @@ export class CasinoTable extends DurableObject<Env> {
     }
   }
 
+  // features: rounds that paid big go to the floor's sign (floor/wins.ts decides what counts)
+  private announceBigWins(step: Step<unknown>, bySeat: Map<number, MemberRow>, now: number): void {
+    const m = this.meta!;
+    const who = (seat: number) => {
+      const mem = bySeat.get(seat);
+      return mem ? { accountId: mem.account_id, name: mem.name, station: mem.station } : undefined;
+    };
+    for (const w of bigWinsIn(m.game, m.variant, step, who, now)) this.ctx.waitUntil(this.tellBigWin(w));
+  }
+
+  private async tellBigWin(w: BigWinReport): Promise<void> {
+    try {
+      await this.floor().bigWin(w);
+    } catch (err) {
+      console.error('floor bigWin failed', err);
+    }
+  }
+
   private async syncDirectory(): Promise<void> {
     const m = this.meta;
     if (!m || m.mode !== 'multi') return;
@@ -1190,6 +1221,48 @@ export class CasinoTable extends DurableObject<Env> {
       if (m.pin) await this.floor().releasePin(m.name);
     } catch (err) {
       console.error('floor close failed', err);
+    }
+  }
+
+  // ------------------------------------------------------------------------------------------
+  // Chat: a lobby table's own room, heard and used by its members only. The room and its rules
+  // (cleaning, the word mask, limits, mutes, the stored backlog) are floor/chat.ts; this is
+  // just who may read and post here. Solo tables have no room.
+
+  private chatRoom: ChatRoom | null = null;
+
+  private chat(): ChatRoom | null {
+    const m = this.meta;
+    if (!m || m.mode !== 'multi' || m.closed) return null;
+    return (this.chatRoom ??= new ChatRoom(this.sql));
+  }
+
+  /** A member's new socket gets the room's last lines, after the table snapshot. */
+  private chatJoin(ws: WebSocket): void {
+    const room = this.chat();
+    if (room) this.send(ws, { t: 'chat', lines: room.backlog(), backlog: true });
+  }
+
+  private chatSay(ws: WebSocket, accountId: number, text: string): void {
+    const room = this.chat();
+    const mem = this.members.get(accountId);
+    if (!room || !mem) return;
+    // Signed with the name the table holds for this member, which came from their token.
+    const out = room.say({ id: accountId, name: mem.name }, text);
+    if (!out.ok) {
+      this.send(ws, out.notice);
+      if (out.close) ws.close(CLOSE.RATE_LIMITED, 'slow down');
+      return;
+    }
+    const msg = JSON.stringify({ t: 'chat', lines: [out.line] } satisfies ChatServerMsg);
+    for (const other of this.ctx.getWebSockets()) {
+      const att = other.deserializeAttachment() as Att | null;
+      if (!att || !this.members.has(att.accountId)) continue;
+      try {
+        other.send(msg);
+      } catch {
+        /* closing */
+      }
     }
   }
 }

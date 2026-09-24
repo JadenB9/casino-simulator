@@ -1,7 +1,7 @@
 // The username rule, shared so the login form and the server agree to the character.
 //
-// There is no password on purpose: typing a name logs into that account, whoever you are.
-// It's play money.
+// Names are first come, first served; the password that keeps one yours follows its own rule
+// in password.ts.
 
 export const NAME_RE = /^[A-Za-z0-9_]{3,16}$/;
 

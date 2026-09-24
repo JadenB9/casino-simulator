@@ -3,12 +3,15 @@ import type { TableServerMsg } from '../../shared/src/protocol.ts';
 
 export const ORIGIN = 'http://localhost:5173';
 
-export async function login(name: string): Promise<{ token: string; profile: any }> {
+/** What test accounts log in with: a new name takes it as its password, later logins bring it. */
+export const TEST_PASSWORD = 'test-pass';
+
+export async function login(name: string, password = TEST_PASSWORD): Promise<{ token: string; profile: any }> {
   const res = await exports.default.fetch(
     new Request('http://casino.test/casino/api/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Origin: ORIGIN },
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({ name, password }),
     }),
   );
   if (res.status !== 200) throw new Error(`login ${res.status} ${await res.text()}`);

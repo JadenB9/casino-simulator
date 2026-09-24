@@ -21,6 +21,7 @@ await page.waitForSelector('.name-input', { timeout: 60000 });
 await page.waitForTimeout(1500);
 await shot('01-login');
 await page.fill('.name-input', name);
+await page.fill('.pass-input', 'casino-dev'); // DEV_PASSWORD in client/src/net/api.ts
 await page.click('.enter-btn');
 await page.waitForSelector('.menu-item', { timeout: 20000 });
 await page.waitForTimeout(1500);
