@@ -180,6 +180,29 @@ if (checks.includes('calls')) {
   }, poses.find((p) => p[0] === worst[0]).slice(1));
   await page.waitForTimeout(800);
   await page.screenshot({ path: `${out}/world3-calls-worst-${quality}.png` });
+  // what the worst view's calls are made of: each group of the scene switched off in turn
+  const parts = await page.evaluate(async () => {
+    const { world, engine } = window.casino;
+    const frame = () => new Promise((r) => requestAnimationFrame(r));
+    const calls = async () => {
+      for (let i = 0; i < 3; i++) await frame();
+      return world.stats().calls;
+    };
+    const all = await calls();
+    const out = { all };
+    const floor = engine.scene.getObjectByName('floor');
+    const groups = [...floor.children, ...engine.scene.children.filter((c) => c !== floor)];
+    for (const g of groups) {
+      if (!g.visible) continue;
+      g.visible = false;
+      const saved = all - (await calls());
+      g.visible = true;
+      if (saved > 0) out[g.name || g.type] = (out[g.name || g.type] ?? 0) + saved;
+    }
+    out.realStations = world.stations.filter((s) => s.model.visible).map((s) => s.id).join(',');
+    return out;
+  });
+  console.log(JSON.stringify({ check: 'calls-worst', pose: worst[0], ...parts }));
   console.log(JSON.stringify({ check: 'calls', quality, worst, top: results.slice(0, 8).map(([n, c]) => `${n}:${c}`), all: results.length, errors: errors.slice(0, 3) }));
   const over = results.filter(([, c]) => c > CALL_LIMIT);
   if (over.length) fail(`calls over ${CALL_LIMIT}: ${over.map(([n, c]) => `${n} ${c}`).join(', ')}`);

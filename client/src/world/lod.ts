@@ -41,7 +41,7 @@ const SMALL_M = 0.3;
  * Draw calls the real models in view may cost over their stand-ins. With it the busiest views of
  * the floor stay near 220 calls on High, leaving room under 250 for signs and dealers.
  */
-export const STATION_BUDGET = 96;
+export const STATION_BUDGET = 80;
 /** A station already showing its real model counts as this much nearer, so the budget's edge doesn't flicker. */
 const KEEP = 0.8;
 
@@ -342,11 +342,13 @@ function rank(e: Entry): number {
   return e.copy.visible ? e.d2 : e.d2 * KEEP * KEEP;
 }
 
-/** How many meshes (draw calls, at most) an object draws. */
+/** How many draw calls an object makes at most: one per mesh, or one per group for a mesh of several materials. */
 function meshes(o: THREE.Object3D): number {
   let n = 0;
-  o.traverse((m) => {
-    if ((m as THREE.Mesh).isMesh && m.visible) n++;
+  o.traverseVisible((m) => {
+    const mesh = m as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    n += Array.isArray(mesh.material) ? Math.max(1, mesh.geometry.groups.filter((g) => (mesh.material as THREE.Material[])[g.materialIndex ?? 0]?.visible).length) : 1;
   });
   return n;
 }

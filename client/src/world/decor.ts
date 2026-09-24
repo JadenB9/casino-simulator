@@ -10,6 +10,7 @@ import type { Batch } from './batch.ts';
 import type { Mats } from './materials.ts';
 import { hdr } from './materials.ts';
 import type { Collider } from './collision.ts';
+import { GLOW, type GlowMerge } from './lighting.ts';
 import { BAR_TOP, CEILING, COFFEE_TABLE, COUCH, FLOOR_LAMP, LEAVES, LOUNGE_LAMP_X, PALM_PLANTER, PLANTER, PODIUM, STOOL, planterRadius, type FloorPlan } from './layout.ts';
 import type { WorldStation } from './stations.ts';
 import { CATALOG } from '../../../shared/src/games/catalog.ts';
@@ -68,7 +69,7 @@ function bankTitle(variant: string): string {
   return BANK_TITLES[variant] ?? (CATALOG.slots.variants.find((v) => v.id === variant)?.name ?? variant).toUpperCase();
 }
 
-export function buildDecor(plan: FloorPlan, stations: WorldStation[], b: Batch, m: Mats, col: Collider): Decor {
+export function buildDecor(plan: FloorPlan, stations: WorldStation[], b: Batch, m: Mats, col: Collider, glow: GlowMerge): Decor {
   const out: Decor = { props: [], signs: [], pools: [] };
   const brass = m.get('brass');
   const lacquer = m.get('lacquer');
@@ -79,10 +80,8 @@ export function buildDecor(plan: FloorPlan, stations: WorldStation[], b: Batch, 
   // --- slot bank islands ---------------------------------------------------------------------
   for (const [bi, bank] of plan.banks.entries()) {
     const [c1, c2] = bankColors(bank.variant, bi);
-    m.define1(`led-${bank.variant}`, () => new THREE.MeshBasicMaterial({ color: hdr(c1, 3.2) }));
-    m.define1(`led2-${bank.variant}`, () => new THREE.MeshBasicMaterial({ color: hdr(c2, 2.6) }));
-    const led = m.get(`led-${bank.variant}`);
-    const led2 = m.get(`led2-${bank.variant}`);
+    const led = hdr(c1, 3.2);
+    const led2 = hdr(c2, 2.6);
     const at = (lx: number, y: number, lz: number) => {
       // bank-local (x along the bank, z across) to world
       const c = Math.cos(bank.yaw);
@@ -91,9 +90,10 @@ export function buildDecor(plan: FloorPlan, stations: WorldStation[], b: Batch, 
     };
     const L = bank.length;
     const Dp = bank.depth;
-    const box = (lx: number, y: number, lz: number, sx: number, sy: number, sz: number, mat: THREE.Material, uv?: number) => {
+    const box = (lx: number, y: number, lz: number, sx: number, sy: number, sz: number, mat: THREE.Material | THREE.Color, uv?: number) => {
       const p = at(lx, y, lz);
-      b.add(new THREE.BoxGeometry(sx, sy, sz), mat, p, uv);
+      if (mat instanceof THREE.Color) glow.add(new THREE.BoxGeometry(sx, sy, sz), mat, p);
+      else b.add(new THREE.BoxGeometry(sx, sy, sz), mat, p, uv);
     };
     // plinth with a lit reveal round its foot
     box(0, 0.035, 0, L + 0.5, 0.07, Dp + 0.16, lacquer);
@@ -148,7 +148,7 @@ export function buildDecor(plan: FloorPlan, stations: WorldStation[], b: Batch, 
     b.add(new THREE.CylinderGeometry(0.022, 0.022, len, 10), brass, { x: bar.front - 0.24, y: 0.2, z: zc, rx: Math.PI / 2 });
     for (let z = z0 + 0.3; z < z1 - 0.1; z += 1.2) b.box(brass, bar.front - 0.12, 0.2, z, 0.24, 0.03, 0.03);
     // warm light under the top's overhang
-    b.box(m.get('glow-shelf'), bar.front - 0.1, BAR_TOP - 0.06, zc, 0.03, 0.012, len);
+    glow.box(GLOW.shelf, bar.front - 0.1, BAR_TOP - 0.06, zc, 0.03, 0.012, len);
     col.box(bx, zc, bar.depth + 0.3, len, 0, BAR_TOP + 0.05, { cam: false });
   }
   // returns closing the bartenders' side at both ends
@@ -175,7 +175,7 @@ export function buildDecor(plan: FloorPlan, stations: WorldStation[], b: Batch, 
     let k = 0;
     for (const y of [1.34, 1.78, 2.22]) {
       b.box(chrome, x1 - 0.2, y, zc, 0.34, 0.018, len);
-      b.box(m.get('glow-shelf'), x1 - 0.36, y - 0.016, zc, 0.012, 0.01, len);
+      glow.box(GLOW.shelf, x1 - 0.36, y - 0.016, zc, 0.012, 0.01, len);
       for (let z = bar.z0 + 0.35; z < bar.z1 - 0.35; z += 0.16) {
         const kind = kinds[k++ % kinds.length]!;
         out.props.push({ kind, x: x1 - 0.2 + ((k * 7) % 3) * 0.04 - 0.04, y: y + 0.01, z, ry: (k * 1.3) % 6.28, size: kind === 'bottle-tall' ? 0.34 : 0.3 });
@@ -200,7 +200,7 @@ export function buildDecor(plan: FloorPlan, stations: WorldStation[], b: Batch, 
     for (const z of bar.pendants) {
       const x = bar.front + bar.depth / 2 - 0.1;
       b.add(shade, m.get('shade'), { x, y: 2.28, z });
-      b.add(diffuser, m.get('glow-soft'), new THREE.Matrix4().makeRotationX(Math.PI / 2).premultiply(new THREE.Matrix4().makeTranslation(x, 2.16, z)));
+      glow.add(diffuser, GLOW.soft, new THREE.Matrix4().makeRotationX(Math.PI / 2).premultiply(new THREE.Matrix4().makeTranslation(x, 2.16, z)));
       b.add(new THREE.CylinderGeometry(0.006, 0.006, CEILING - 2.41, 6), chrome, { x, y: (CEILING + 2.41) / 2, z });
       b.add(new THREE.TorusGeometry(0.2, 0.012, 6, 24), brass, new THREE.Matrix4().makeRotationX(Math.PI / 2).premultiply(new THREE.Matrix4().makeTranslation(x, 2.41, z)));
       out.pools.push({ x: x - 0.5, z, r: 1.3 });
@@ -232,7 +232,7 @@ export function buildDecor(plan: FloorPlan, stations: WorldStation[], b: Batch, 
     for (const w of windows) {
       b.box(cage, w - 0.43, 1.5, zf, 0.04, 0.72, 0.05);
       b.box(cage, w + 0.43, 1.5, zf, 0.04, 0.72, 0.05);
-      b.box(m.get('glow-soft'), w, 1.84, zf - 0.03, 0.8, 0.02, 0.02);
+      glow.box(GLOW.soft, w, 1.84, zf - 0.03, 0.8, 0.02, 0.02);
     }
     // fascia above the cage carries the sign; a side wall closes the cage off
     b.box(m.get('lacquer-red'), cx, (2.66 + CEILING) / 2, zf, width, CEILING - 2.66, 0.2);
@@ -240,7 +240,7 @@ export function buildDecor(plan: FloorPlan, stations: WorldStation[], b: Batch, 
     b.box(m.get('wall'), c.x1 + 0.1, CEILING / 2, (plan.room.z0 + c.z1) / 2, 0.2, CEILING, c.z1 - plan.room.z0, 1.6);
     b.box(m.get('wainscot'), c.x1 + 0.21, 0.56, (plan.room.z0 + c.z1) / 2, 0.02, 1.12, c.z1 - plan.room.z0, 2.2);
     // warm light inside the cage, seen through the bars
-    b.box(m.get('glow-shelf'), cx, 2.5, plan.room.z0 + 0.1, width, 0.03, 0.03);
+    glow.box(GLOW.shelf, cx, 2.5, plan.room.z0 + 0.1, width, 0.03, 0.03);
     col.box(cx + 0.1, (plan.room.z0 + c.z1) / 2, width + 0.2, c.z1 - plan.room.z0, 0, CEILING);
     out.signs.push({ kind: 'lit', text: 'CASHIER', color: '#ffe2a8', font: 'Cinzel', at: [cx, (2.66 + CEILING) / 2, zf + 0.105], ry: 0, w: Math.min(width - 0.6, 3.6), h: 0.5 });
     out.pools.push({ x: plan.cashier.x, z: c.z1 + 0.6, r: 2.2 });

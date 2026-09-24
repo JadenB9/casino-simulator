@@ -15,13 +15,13 @@ import { buildRoom } from './room.ts';
 import { buildStations, type WorldStation } from './stations.ts';
 import { buildDecor } from './decor.ts';
 import { buildSigns, floorSigns, loadSignFonts } from './signs.ts';
-import { Lighting, buildPools } from './lighting.ts';
+import { GlowMerge, Lighting, buildPools } from './lighting.ts';
 import { Props } from './props.ts';
 import { Characters } from './characters.ts';
 import { Player } from './player.ts';
 import { Interact } from './interact.ts';
 import { StationLod } from './lod.ts';
-import { Bloom, PixelRatio } from './bloom.ts';
+import { Bloom, FLOOR_BLOOM, PixelRatio, SEATED_BLOOM } from './bloom.ts';
 import type { MouseSettings } from './mouse.ts';
 import { Emotes, OWN_BUBBLE_Y, BUBBLE_Y, type CharacterSource } from './emotes.ts';
 import type { EmoteId } from '../../../shared/src/protocol.ts';
@@ -95,6 +95,20 @@ export interface FloorWorld extends World {
   useRemotes(source: CharacterSource | null): void;
 }
 
+/** Floor materials that mirror the casino on High: reflection strength, and a polish (roughness) for some. */
+const REFLECTIVE: [string, number, number?][] = [
+  ['marble-floor', 1.0, 0.13],
+  ['marble-black', 0.8],
+  ['brass', 0.85],
+  ['chrome', 0.9],
+  ['cage', 0.8],
+  ['mirror', 1.0],
+  ['lacquer', 0.7],
+  ['lacquer-red', 0.6],
+  ['wood', 0.45],
+  ['wainscot', 0.35],
+];
+
 export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Promise<FloorWorld> {
   let quality: Quality = opts.quality ?? engine.quality;
   const renderer = engine.renderer;
@@ -113,7 +127,8 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
   const col = new Collider();
   const batch = new Batch();
 
-  const { chandeliers } = buildRoom(plan, batch, mats, col);
+  const glow = new GlowMerge();
+  const { chandeliers, downlights } = buildRoom(plan, batch, mats, col, glow);
   const stationRoot = new THREE.Group();
   stationRoot.name = 'stations';
   root.add(stationRoot);
@@ -121,10 +136,12 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
   // bar-top video poker changes the bar's counter, its stools and what fits round them
   if (vpMode !== plan.vpMode) setVpMode(plan, vpMode);
   const lod = new StationLod(stations, quality);
-  const decor = buildDecor(plan, stations, batch, mats, col);
-  buildPools(decor.pools, batch, mats);
+  const decor = buildDecor(plan, stations, batch, mats, col, glow);
+  buildPools(decor.pools, downlights, plan, batch, mats);
   const signSpecs = [...floorSigns(plan, batch, mats), ...decor.signs];
   const staticMeshes = batch.build(root, 'floor');
+  const glowMesh = glow.build(root);
+  if (glowMesh) staticMeshes.push(glowMesh);
   const signs = buildSigns(signSpecs, root, quality, aniso);
   progress(0.55);
 
@@ -133,10 +150,32 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
   const lighting = new Lighting(plan, quality);
   root.add(lighting.group);
 
+  // The floor's own reflections (High): the casino captured from the vestibule and prefiltered,
+  // for the polished marble and the metals, so they mirror warm lights and signs, not a studio.
+  let reflections: THREE.WebGLRenderTarget | null = null;
+  const reflect = () => {
+    if (reflections || quality !== 'high') return;
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    props.glinting = false;
+    reflections = pmrem.fromScene(scene, 0, 0.1, 60, { size: 256, position: new THREE.Vector3(0, 1.4, plan.entrance.z0 + 1.2) });
+    props.glinting = true;
+    pmrem.dispose();
+    for (const [name, k, rough] of REFLECTIVE) {
+      const m = mats.get(name) as THREE.MeshStandardMaterial;
+      if (!m.isMeshStandardMaterial) continue;
+      m.envMap = reflections.texture;
+      m.envMapIntensity = k;
+      if (rough !== undefined) m.roughness = rough;
+      m.needsUpdate = true;
+    }
+  };
+
   const characters = new Characters(quality, mats.get('blob'));
   const look = opts.look ?? DEFAULT_LOOK;
   await Promise.all([props.build(decor.props, chandeliers), characters.load(look).catch((err) => console.warn('character failed to load', err))]);
   progress(0.85);
+  // everything that stands on the floor is in: capture it before anyone walks in
+  reflect();
 
   const character = characters.create(look, opts.name ?? '');
   character.setName('');
@@ -181,6 +220,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
   const emotes = new Emotes();
   let remotes: CharacterSource | null = null;
 
+  let bloomSeated = false;
   let lastCalls = 0;
   let lastTris = 0;
   const focusAt = new THREE.Vector3();
@@ -221,7 +261,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
       if (signs) (signs.mesh.material as THREE.MeshBasicMaterial).color.setScalar(q === 'high' ? 2.4 : 1.6);
       lighting.setQuality(q);
       characters.setQuality(q);
-      void props.setQuality(q);
+      void props.setQuality(q).then(() => reflect());
       applyQuality(q);
     },
     update(dt) {
@@ -238,11 +278,14 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
       const f = world.focus;
       lighting.setFocus(f && f.zone !== 'slots' && f.game !== 'videopoker' ? focusAt.copy(f.anchor.position) : null);
       lighting.update(dt);
-      // Seated, the camera is a metre from lit felt and brass: only real light sources (neon,
-      // bulbs, the machines' glass) should bloom there, not the printing on the table.
+      // Seated, the camera is a metre from lit felt, cards and brass: only real light sources
+      // (neon, bulbs, the machines' glass) should glow there, never the cards.
       const close = interact.seated !== null;
-      bloom.pass.threshold = close ? 2.4 : 1.05;
-      bloom.pass.strength = close ? 0.3 : 0.42;
+      if (close !== bloomSeated) {
+        bloomSeated = close;
+        bloom.setLook(close ? SEATED_BLOOM : FLOOR_BLOOM);
+      }
+      props.update(dt);
       characters.updateLabels(engine.camera);
       bloom.update(dt);
       pr.update(dt);
@@ -274,6 +317,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
       player.dispose();
       character.dispose();
       bloom.dispose();
+      reflections?.dispose();
       renderer.info.autoReset = true;
       signs?.texture.dispose();
       for (const m of staticMeshes) m.geometry.dispose();

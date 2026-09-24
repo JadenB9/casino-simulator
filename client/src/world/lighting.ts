@@ -5,10 +5,12 @@
 // on the carpet under tables, banks and lamps are additive decals, not lights.
 
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { Quality } from '../render/engine3d.ts';
 import type { Batch } from './batch.ts';
 import type { Mats } from './materials.ts';
-import { PIT_CEILING, type FloorPlan } from './layout.ts';
+import { PIT_CEILING, inRect, type FloorPlan } from './layout.ts';
+import { canvasTexture } from './carpet.ts';
 
 export class Lighting {
   readonly group = new THREE.Group();
@@ -84,11 +86,96 @@ export class Lighting {
   }
 }
 
-/** Warm pools on the carpet: one additive decal mesh for all of them. */
-export function buildPools(pools: { x: number; z: number; r: number }[], b: Batch, m: Mats): void {
-  const mat = m.get('pool');
-  for (const p of pools) {
-    const g = new THREE.PlaneGeometry(p.r * 2, p.r * 2);
-    b.add(g, mat, new THREE.Matrix4().makeRotationX(-Math.PI / 2).premultiply(new THREE.Matrix4().makeTranslation(p.x, 0.014, p.z)));
+/**
+ * Warm pools on the carpet: one additive decal mesh for all of them. Under tables, banks and lamps
+ * a pool with a bright middle and a long soft edge, amber like incandescent light on red carpet;
+ * under the low ceiling's downlights over the aisles, a small faint scallop each.
+ */
+export function buildPools(pools: { x: number; z: number; r: number }[], downlights: [number, number][], plan: FloorPlan, b: Batch, m: Mats): void {
+  m.define1('pool-warm', () => {
+    const tex = canvasTexture(poolCanvas(128), 1);
+    tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+    return new THREE.MeshBasicMaterial({ map: tex, color: new THREE.Color('#ff9f4a').multiplyScalar(0.19), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+  });
+  const mat = m.get('pool-warm');
+  const flat = (x: number, z: number, r: number, y: number) => {
+    const g = new THREE.PlaneGeometry(r * 2, r * 2);
+    b.add(g, mat, new THREE.Matrix4().makeRotationX(-Math.PI / 2).premultiply(new THREE.Matrix4().makeTranslation(x, y, z)));
+  };
+  for (const p of pools) flat(p.x, p.z, p.r, 0.014);
+  // downlights over the walkways only: over stations and furniture their scallop would land on tops
+  for (const [x, z] of downlights) {
+    if (!plan.aisles.some((a) => inRect(a, x, z, -0.4)) && !inRect(plan.entrance, x, z, -0.4)) continue;
+    flat(x, z, 0.85, 0.012);
+  }
+}
+
+/** A pool's falloff: a warm middle, then a long, soft edge (no ring where it ends). */
+function poolCanvas(size: number): HTMLCanvasElement {
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const ctx = c.getContext('2d')!;
+  const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  for (let i = 0; i <= 12; i++) {
+    const t = i / 12;
+    // a smooth bell: bright middle, gentle shoulder, fades to nothing at the edge
+    const a = Math.pow(Math.cos((t * Math.PI) / 2), 2.2);
+    g.addColorStop(t, `rgba(255,255,255,${a.toFixed(3)})`);
+  }
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+  return c;
+}
+
+/** The glows' colours, pushed past 1 so they bloom (and still read bright without bloom). */
+export const GLOW = {
+  /** The pit's cove strip, washing the fascia. */
+  warm: new THREE.Color('#ffd39a').multiplyScalar(2.6),
+  /** Pendant diffusers and the cashier's window lights. */
+  soft: new THREE.Color('#ffc98a').multiplyScalar(1.25),
+  /** The low ceiling's downlights. */
+  bulb: new THREE.Color('#fff0d0').multiplyScalar(1.12),
+  /** Shelf and counter light strips. */
+  shelf: new THREE.Color('#ffb266').multiplyScalar(2.2),
+};
+
+type Place = THREE.Matrix4 | { x?: number; y?: number; z?: number; rx?: number; ry?: number };
+
+/**
+ * The floor's glowing strips and discs (the slot islands' LED underglow and corner bars, the
+ * cove, the downlights, shelf and counter lights): one unlit mesh coloured per vertex for all of
+ * them, so they cost one draw call between them instead of one per colour.
+ */
+export class GlowMerge {
+  private readonly pieces: THREE.BufferGeometry[] = [];
+
+  add(geo: THREE.BufferGeometry, color: THREE.Color, place: Place): void {
+    const g = geo.index ? geo.toNonIndexed() : geo.clone();
+    for (const name of Object.keys(g.attributes)) if (name !== 'position') g.deleteAttribute(name);
+    g.applyMatrix4(place instanceof THREE.Matrix4 ? place : new THREE.Matrix4().compose(new THREE.Vector3(place.x ?? 0, place.y ?? 0, place.z ?? 0), new THREE.Quaternion().setFromEuler(new THREE.Euler(place.rx ?? 0, place.ry ?? 0, 0, 'YXZ')), new THREE.Vector3(1, 1, 1)));
+    const n = g.getAttribute('position').count;
+    const c = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) c.set([color.r, color.g, color.b], i * 3);
+    g.setAttribute('color', new THREE.BufferAttribute(c, 3));
+    this.pieces.push(g);
+  }
+
+  box(color: THREE.Color, cx: number, cy: number, cz: number, sx: number, sy: number, sz: number, ry = 0): void {
+    this.add(new THREE.BoxGeometry(sx, sy, sz), color, { x: cx, y: cy, z: cz, ry });
+  }
+
+  /** One mesh of everything added, under `parent` (null when nothing was). */
+  build(parent: THREE.Object3D): THREE.Mesh | null {
+    if (this.pieces.length === 0) return null;
+    const merged = mergeGeometries(this.pieces, false);
+    for (const p of this.pieces) p.dispose();
+    this.pieces.length = 0;
+    if (!merged) return null;
+    merged.computeBoundingSphere();
+    const mesh = new THREE.Mesh(merged, new THREE.MeshBasicMaterial({ vertexColors: true }));
+    mesh.name = 'floor:glow';
+    mesh.matrixAutoUpdate = false;
+    parent.add(mesh);
+    return mesh;
   }
 }
