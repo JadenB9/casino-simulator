@@ -15,6 +15,8 @@ import { overlayCount } from '../ui/keyboard.ts';
 import { isMobile } from '../render/engine3d.ts';
 import type { Player } from './player.ts';
 import type { WorldStation } from './stations.ts';
+import type { GameId } from '../../../shared/src/engine.ts';
+import { CATALOG } from '../../../shared/src/games/catalog.ts';
 import './touch.css';
 
 /** How far the knob travels from the centre, px. */
@@ -35,10 +37,12 @@ const LOOK_TURN = Math.PI;
 const LOOK_PITCH = 0.7;
 /**
  * Games an upright phone can't really play: the layout runs off both sides (or, at video poker,
- * the button deck does), so they get the note. At the card tables your own spot and every button
- * fit upright, and a slot machine is tall anyway.
+ * the button deck does), so they get the note, as does every computer in the online lounge (its
+ * wide website). At the card tables your own spot and every button fit upright, and a slot
+ * machine is tall anyway.
  */
-const WIDE = new Set(['roulette', 'craps', 'sicbo', 'bigsix', 'holdem', 'videopoker']);
+const WIDE = new Set<GameId>(['roulette', 'craps', 'sicbo', 'bigsix', 'holdem', 'videopoker']);
+const wide = (game: GameId) => WIDE.has(game) || CATALOG[game]?.online === true;
 /** A portrait screen narrower than this (width / height) gets the note at a table. */
 const NARROW = 0.7;
 const NOTE_MS = 6000;
@@ -226,14 +230,15 @@ export class TouchControls {
       this.leave.hidden = false;
     }
     const upright = innerWidth / innerHeight < NARROW;
-    if (!upright || !WIDE.has(station.game)) {
+    if (!upright || !wide(station.game)) {
       this.hideNote();
       return;
     }
     // After the station's panel (single player or a lobby) has gone: that choice fits upright.
     if (this.notedFor !== station && !document.querySelector('.lobby')) {
       this.notedFor = station;
-      this.noteText.textContent = `Turn your phone sideways to see the whole ${station.game === 'videopoker' ? 'machine' : 'table'}.`;
+      const what = station.game === 'videopoker' ? 'machine' : CATALOG[station.game]?.online ? 'screen' : 'table';
+      this.noteText.textContent = `Turn your phone sideways to see the whole ${what}.`;
       this.note.hidden = false;
       clearTimeout(this.noteTimer);
       this.noteTimer = window.setTimeout(() => this.hideNote(), NOTE_MS);
