@@ -15,6 +15,8 @@ export function collide(plan: FloorPlan, col: Collider): void {
     else col.box(c, (a0 + a1) / 2, WALL, a1 - a0, 0, y1, { walk, cam: true, bottom: y0 });
   };
   for (const w of plan.wallPieces) box(w.axis, w.c, w.a0, w.a1, w.y0, w.y1, w.y0 < HEAD);
+  // the street doors stay shut (door.glb stands in them): nobody walks out of the building
+  for (const d of plan.doors) if (d.b === 'outside') box(d.axis, d.c, d.a0, d.a1, 0, d.height, true);
   // the glass: nobody walks through a shop window
   for (const w of plan.windows) box(w.axis, w.c, w.a0, w.a1, w.y0, w.y1, true);
   for (const s of plan.solids) {

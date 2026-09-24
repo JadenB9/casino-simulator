@@ -4,6 +4,8 @@ import { DOORS, ROOMS } from '../src/world/rooms.ts';
 import { reachFrom, reached, walkGrid, type Grid } from '../src/world/reach.ts';
 import { GAMES } from '../src/games/index.ts';
 import type { GameId } from '../../shared/src/engine.ts';
+import { FLOOR_BOUNDS } from '../../shared/src/protocol.ts';
+import { SPAWN as SERVER_SPAWN } from '../../server/src/floor/presence.ts';
 
 // The game modules' own footprints and seats: the floor as it's built.
 const footprint = (g: GameId) => GAMES[g].footprint;
@@ -57,6 +59,23 @@ describe('the building', () => {
     const entrance = p.doors.find((d) => d.b === 'outside')!;
     expect(Math.abs(SPAWN.x - (entrance.a0 + entrance.a1) / 2)).toBeLessThan(0.5);
     expect(entrance.c - SPAWN.z).toBeLessThan(3);
+  });
+
+  it('fits inside the floor bounds the server clamps to, and the server spawns players where the client does', () => {
+    const p = plan();
+    expect(p.room.x0 * 100).toBeGreaterThanOrEqual(FLOOR_BOUNDS.minX);
+    expect(p.room.x1 * 100).toBeLessThanOrEqual(FLOOR_BOUNDS.maxX);
+    expect(p.room.z0 * 100).toBeGreaterThanOrEqual(FLOOR_BOUNDS.minZ);
+    expect(p.room.z1 * 100).toBeLessThanOrEqual(FLOOR_BOUNDS.maxZ);
+    // every room's floor reaches within a metre of the bounds' edge it faces, so no walkable floor is clamped
+    for (const r of p.rooms) {
+      expect(r.inner.x0 * 100).toBeGreaterThanOrEqual(FLOOR_BOUNDS.minX);
+      expect(r.inner.z1 * 100).toBeLessThanOrEqual(FLOOR_BOUNDS.maxZ);
+    }
+    // and not much more than that
+    expect(FLOOR_BOUNDS.minX).toBeGreaterThan(p.room.x0 * 100 - 50);
+    expect(FLOOR_BOUNDS.maxZ).toBeLessThan(p.room.z1 * 100 + 50);
+    expect([SERVER_SPAWN.x / 100, SERVER_SPAWN.z / 100]).toEqual([SPAWN.x, SPAWN.z]);
   });
 
   it('has doors wide enough to walk through, each in a wall its two rooms share', () => {

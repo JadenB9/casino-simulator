@@ -7,7 +7,7 @@ import type { GameId } from '../../../shared/src/engine.ts';
 import { CATALOG } from '../../../shared/src/games/catalog.ts';
 import { ENGINES } from '../../../shared/src/games/index.ts';
 import { formatMoney } from '../../../shared/src/money.ts';
-import { limitsSpan } from '../../../shared/src/limits.ts';
+import { limitSpec, limitsSpan } from '../../../shared/src/limits.ts';
 import { GAMES } from '../games/index.ts';
 import type { Quality } from '../render/engine3d.ts';
 import type { Station } from './contract.ts';
@@ -39,6 +39,15 @@ export function stationName(game: GameId, variant: string): string {
   const v = info.variants.find((x) => x.id === variant);
   if (!v) return info.name;
   return game === 'slots' ? v.name : `${v.name} ${info.name}`;
+}
+
+/** The tier a high-limit table (the salon's) opens at by default. */
+export const HIGH_TIER = 'High limit';
+
+/** A high-limit table's default limits ("$500–$50,000"), or null for a game without that tier. */
+export function highLimitsText(game: GameId): string | null {
+  const t = limitSpec(game)?.tiers.find((x) => x.name === HIGH_TIER);
+  return t ? `${formatMoney(t.min)}–${formatMoney(t.max)}` : null;
 }
 
 /** The limits a table here can be opened at ("$5–$50,000"), or a machine's bets. */
@@ -74,7 +83,7 @@ export function buildStations(plan: FloorPlan, parent: THREE.Object3D, quality: 
       footprint: p.fp,
       zone: p.zone,
       name: p.tier === 'high' ? `High Limit ${stationName(p.game, p.variant)}` : stationName(p.game, p.variant),
-      limits: limitsText(p.game, p.variant),
+      limits: (p.tier === 'high' ? highLimitsText(p.game) : null) ?? limitsText(p.game, p.variant),
       model,
       yaw: p.yaw,
       room: p.room,

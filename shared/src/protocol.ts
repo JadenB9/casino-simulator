@@ -297,8 +297,12 @@ export type FloorServerMsg =
   | { t: 'err'; code: ErrorCode; msg: string }
   | ChatServerMsg;
 
-/** Floor bounds in centimetres; positions outside are clamped. */
-export const FLOOR_BOUNDS = { minX: -2000, maxX: 2000, minZ: -1500, maxZ: 1500 } as const;
+/**
+ * Floor bounds in centimetres; positions outside are clamped. The building's outer walls
+ * (client/src/world/rooms.ts): x from -31.15 m to 31.15 m, z from -31.15 m (the back rooms) to
+ * 15.15 m (the doors).
+ */
+export const FLOOR_BOUNDS = { minX: -3120, maxX: 3120, minZ: -3120, maxZ: 1520 } as const;
 
 export function parseFloorMsg(raw: unknown, isGame: (g: unknown) => g is GameId): FloorClientMsg | null {
   if (!isObj(raw)) return null;

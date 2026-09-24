@@ -235,7 +235,8 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
     for (const d of directories.meshes) d.visible = vis.has(d.userData.room as string);
   };
   const sees = (room: string, box: THREE.Box3) => visibility.sees(room, box);
-  const map = new MapOverlay({ plan, ui, you: () => ({ x: player.position.x, z: player.position.z, heading: player.heading }) });
+  // the map opens on the floor, not at a table (blackjack's N is "no insurance")
+  const map = new MapOverlay({ plan, ui, you: () => ({ x: player.position.x, z: player.position.z, heading: player.heading }), canOpen: () => !interact.seated && player.isEnabled });
   // On the floor with the mouse free (after Esc, or before the first click on the dev floor): how
   // to get looking around back. Only where there's a mouse to hold (the player knows).
   const hint = el('div', 'world-hint');
