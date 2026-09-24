@@ -701,8 +701,10 @@ if (checks.includes('bloom')) {
     const w = window.casino.world;
     w.enter(w.stations.find((s) => s.id === id));
   }, station);
-  await page.waitForSelector('.lobby-choice', { timeout: 20000 });
-  await page.keyboard.press('s');
+  if (!/^(slots|vp)-/.test(station)) {
+    await page.waitForSelector('.lobby-choice', { timeout: 20000 });
+    await page.keyboard.press('s');
+  }
   // a seat left from an earlier run comes back as it was; otherwise buy in
   await page.waitForFunction(() => window.casino.app.table?.seated === true || !!document.querySelector('.modal input[type=number]'), null, { timeout: 60000 });
   if (await page.$('.modal input[type=number]')) {
