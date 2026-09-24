@@ -85,8 +85,9 @@ const views: Record<string, { pos: [number, number, number]; at: [number, number
   // a player at the south row looking up past the dealers
   marquee: { pos: [m.x + 1.6, 1.7, plan.staff.z1 + 3.6], at: [m.x, 3.3, m.z] },
   north: { pos: [m.x - 1.2, 1.7, plan.staff.z0 - 3.4], at: [m.x, 3.3, m.z] },
-  tally: { pos: [t.x + 2.2, 1.7, t.z + 6.2], at: [t.x, 2.85, t.z] },
-  tallyback: { pos: [t.x - 1.4, 1.7, t.z - 5.0], at: [t.x, 2.85, t.z] },
+  // the meter faces east (toward the pit's arch) and west (down the slots hall)
+  tally: { pos: [t.x + 6.2, 1.7, t.z + 1.2], at: [t.x, 2.85, t.z] },
+  tallyback: { pos: [t.x - 5.0, 1.7, t.z - 1.4], at: [t.x, 2.85, t.z] },
   slots: { pos: [plan.slotsZone.x1 - 3.1, 2.5, plan.slotsZone.z1 - 0.7], at: [plan.slotsZone.x0 + 3, 0.8, plan.slotsZone.z0 + 2] },
   island: { pos: [plan.banks[0]!.x + 2.6, 1.6, plan.banks[0]!.z + 3.2], at: [plan.banks[0]!.x, 1.4, plan.banks[0]!.z] },
 };

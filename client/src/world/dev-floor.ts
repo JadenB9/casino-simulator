@@ -3,7 +3,8 @@
 //   /casino/?dev=floor                   (once main.ts routes it here)
 //   /casino/src/world/dev-floor.html     (works on its own in `npm run dev`)
 //
-// Options: &quality=high|low, &view=entrance|overview|slots|pit|cashier|bar|poker|lounge|bigsix|table
+// Options: &quality=high|low, &view=entrance|overview|lobby|pit|slots|bar|lounge|poker|salon|online|
+// yard|cashier|boutique|bigsix|table
 // (a fixed camera for screenshots), &stats=1 (draw calls and frame time), &lineup=1 (every outfit
 // side by side in debug colours, to check outfits.json), &slots=sevens,neon,... (the slot islands
 // to lay out, instead of the catalogue's variants).
@@ -20,22 +21,32 @@ interface View {
   at: [number, number, number];
 }
 
+/** A camera from a room's own middle: `pos` and `at` are room-local (x, y, z). */
+function inRoom(w: FloorWorld, id: string, pos: [number, number, number], at: [number, number, number]): View {
+  const r = w.plan.rooms.find((q) => q.id === id)!;
+  return { pos: [r.cx + pos[0], pos[1], r.cz + pos[2]], at: [r.cx + at[0], at[1], r.cz + at[2]] };
+}
+
 function views(w: FloorWorld): Record<string, View | 'walk'> {
   const p = w.plan;
   const pitZ = (p.staff.z0 + p.staff.z1) / 2;
-  const cross = p.aisles[0]!;
   const wheel = p.stations.find((s) => s.game === 'bigsix') ?? { x: p.feature.x0 + 1, z: (p.feature.z0 + p.feature.z1) / 2 };
   return {
     entrance: 'walk',
-    overview: { pos: [0.8, 1.95, p.entrance.z0 - 2.4], at: [0, 1.1, pitZ] },
-    // from the south-east corner of the slot floor, across the islands toward the north-west
-    slots: { pos: [p.slotsZone.x1 - 3.1, 2.5, p.slotsZone.z1 - 0.7], at: [p.slotsZone.x0 + 3, 0.8, p.slotsZone.z0 + 2] },
-    pit: { pos: [5.6, 2.0, cross.z1 - 0.3], at: [-1.2, 0.9, pitZ] },
-    cashier: { pos: [p.cashier.x + 4.6, 1.8, p.cashier.z + 1.1], at: [p.cashier.x - 0.4, 1.35, p.cashier.counter.z1] },
-    bar: { pos: [p.bar.front - 4.6, 1.75, (p.bar.z0 + p.bar.z1) / 2 + 4.6], at: [p.bar.back, 1.3, (p.bar.z0 + p.bar.z1) / 2 - 1.6] },
-    // from inside the room's south-west corner (the pit's corner column stands just outside it)
-    poker: { pos: [p.pokerRoom.x0 + 0.5, 2.3, p.pokerRoom.z1 - 0.4], at: [p.pokerRoom.x1 - 1.5, 0.8, p.pokerRoom.z0 + 2.5] },
-    lounge: { pos: [p.lounge.x0 - 1.2, 1.75, p.lounge.z0 - 1.0], at: [(p.lounge.x0 + p.lounge.x1) / 2, 0.7, (p.lounge.z0 + p.lounge.z1) / 2] },
+    // from the pit's cross aisle, just in from the lobby, across both rows
+    overview: { pos: [0.8, 1.95, p.pit.z1 + 2.2], at: [0, 1.1, pitZ] },
+    // each room from its main doorway, looking in
+    lobby: inRoom(w, 'lobby', [0, 1.7, 5.2], [0, 1.4, -9]),
+    pit: inRoom(w, 'pit', [9, 1.9, 1.4], [-4, 0.9, -4.5]),
+    slots: inRoom(w, 'slots', [8.2, 1.8, 1.6], [-4, 1.0, -4]),
+    bar: inRoom(w, 'bar', [-7, 1.8, 9.5], [6, 1.2, -1]),
+    lounge: inRoom(w, 'lounge', [0, 1.7, -5.2], [0, 0.8, 3]),
+    poker: inRoom(w, 'poker', [-9, 1.8, 5.2], [2, 0.8, -1]),
+    salon: inRoom(w, 'salon', [0, 1.8, 5.4], [0, 1.0, -3]),
+    online: inRoom(w, 'online', [9, 1.7, 5.3], [-2, 1.0, -1]),
+    yard: inRoom(w, 'yard', [1.6, 1.8, -5.2], [0.6, 1.6, 3.8]),
+    cashier: inRoom(w, 'bank', [4.4, 1.7, 0.5], [0, 1.4, -5]),
+    boutique: inRoom(w, 'boutique', [-4.4, 1.7, 0.5], [3, 1.2, 0.5]),
     // in front of the wheel, where its players stand
     bigsix: { pos: [wheel.x + 5.2, 1.9, wheel.z + 1.4], at: [wheel.x, 1.5, wheel.z] },
   };
