@@ -42,6 +42,11 @@ export interface FloorAtt {
   t: number;
   /** No position has arrived on this connection yet; the first one places the player. */
   fresh?: boolean;
+  /**
+   * Server time of the last thing this player really did (connected, moved or turned, spoke,
+   * waved, opened a lobby list, said `here`); the floor closes a socket IDLE_MS after it.
+   */
+  active?: number;
 }
 
 type Broadcast = (msg: FloorServerMsg, except?: WebSocket) => void;
@@ -95,6 +100,7 @@ export class Presence {
       watch: null,
       t: now,
       fresh: true,
+      active: now,
     };
     ws.serializeAttachment(att);
     this.live.set(ws, { att, moving: false, bank: MAX_BANK });
@@ -108,7 +114,7 @@ export class Presence {
     }
   }
 
-  onMessage(ws: WebSocket, msg: Exclude<FloorClientMsg, { t: 'watch' } | { t: 'emote' }>): void {
+  onMessage(ws: WebSocket, msg: Extract<FloorClientMsg, { t: 'mv' | 'st' }>): void {
     const w = this.live.get(ws);
     if (!w) return;
     const a = w.att;
@@ -133,6 +139,9 @@ export class Presence {
       }
       w.bank = Math.max(0, w.bank - Math.hypot(x - a.x, z - a.z));
     }
+    // Moving or turning is activity; the same pose again is not. (Walkers keep the object awake,
+    // so this is saved with the pose at the next stop.)
+    if (x !== a.x || z !== a.z || msg.r !== a.r) a.active = now;
     a.x = x;
     a.z = z;
     a.r = msg.r;
@@ -174,6 +183,20 @@ export class Presence {
 
   setLook(accountId: number, look: Look): void {
     if (this.update(accountId, (a) => (a.look = look))) this.broadcast({ t: 'player', id: accountId, look });
+  }
+
+  /** Something this player did besides moving (see FloorAtt.active); kept through hibernation. */
+  touch(ws: WebSocket, now: number): void {
+    const w = this.live.get(ws);
+    if (!w) return;
+    w.att.active = now;
+    this.save(ws, w.att);
+  }
+
+  /** When this socket's player last did something, or null for a socket that isn't a player's. */
+  activeAt(ws: WebSocket): number | null {
+    const w = this.live.get(ws);
+    return w ? (w.att.active ?? w.att.t) : null;
   }
 
   /** Accounts with an open floor connection. */

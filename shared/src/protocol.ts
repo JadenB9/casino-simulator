@@ -13,6 +13,20 @@ import type { Look } from './look.ts';
 
 export const PROTOCOL_VERSION = 1;
 
+// Idle timeouts, one set for everyone. A player who does nothing for IDLE_MS is disconnected: the
+// client does it itself (after a "Still there?" for the last IDLE_WARN_MS) and shows an away
+// screen; the floor and the tables do the same for any socket they hear nothing real from, and a
+// seat is stood up the way Leave does it. While the player is at the keyboard the client says
+// `here` on each socket at most once every HERE_MS, so being busy at a table or in the menu isn't
+// being idle to the floor.
+
+/** No input (client) or no real message (server) for this long is idle. */
+export const IDLE_MS = 15 * 60_000;
+/** The client's "Still there?" comes up this long before its own disconnect. */
+export const IDLE_WARN_MS = 60_000;
+/** A client with input sends `here` at most this often per socket, and always after its last input. */
+export const HERE_MS = 60_000;
+
 export type ErrorCode =
   | 'BAD_REQUEST'
   | 'NOT_YOUR_TURN'
@@ -49,6 +63,8 @@ export const CLOSE = {
   RATE_LIMITED: 4008,
   /** Client and server speak different protocol versions. Reload the page. */
   VERSION: 4009,
+  /** Nothing from this player for IDLE_MS (a seat is stood up first). Show the away screen; reconnect only when they come back. */
+  IDLE: 4010,
 } as const;
 
 // ---------------------------------------------------------------------------------------------
@@ -252,7 +268,9 @@ export type FloorClientMsg =
   | { t: 'mv'; x: number; z: number; r: number }
   | { t: 'st'; x: number; z: number; r: number }
   | { t: 'watch'; game: GameId | null }
-  | { t: 'emote'; e: EmoteId };
+  | { t: 'emote'; e: EmoteId }
+  /** The player is at the keyboard (see HERE_MS); keeps the socket from going idle. */
+  | { t: 'here' };
 
 export type FloorServerMsg =
   | { t: 'hello'; v: number; you: PlayerInfo; players: PlayerInfo[]; online: number; now: number }
@@ -288,6 +306,8 @@ export function parseFloorMsg(raw: unknown, isGame: (g: unknown) => g is GameId)
     case 'emote':
       if (!isOneOf(raw.e, EMOTES)) return null;
       return { t: 'emote', e: raw.e };
+    case 'here':
+      return { t: 'here' };
     default:
       return null;
   }
@@ -305,7 +325,9 @@ export type TableClientMsg =
   | { t: 'visibility'; visibility: 'public' | 'private' }
   | { t: 'start' }
   | { t: 'leave' }
-  | { t: 'sync' };
+  | { t: 'sync' }
+  /** The player is at the keyboard (see HERE_MS); keeps the seat from going idle. */
+  | { t: 'here' };
 
 export type TableServerMsg =
   | {
@@ -351,6 +373,7 @@ export function parseTableMsg(raw: unknown): TableClientMsg | null {
     case 'start':
     case 'leave':
     case 'sync':
+    case 'here':
       return { t: raw.t };
     default:
       return null;
