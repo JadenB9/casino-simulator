@@ -15,7 +15,7 @@ import type { Box, Collider, Post } from '../collision.ts';
 import type { Character } from '../contract.ts';
 import type { Spot } from '../interact.ts';
 import type { Seatable } from '../life-points.ts';
-import type { Player } from '../player.ts';
+import { EYE, type Player } from '../player.ts';
 import type { SeatPose } from '../remote-players.ts';
 import { SeatBook } from '../../../../shared/src/seats.ts';
 import type { FloorClientMsg, FloorServerMsg } from '../../../../shared/src/protocol.ts';
@@ -41,6 +41,13 @@ const OFF_S = 0.32;
 const PLAYER_R = 0.3;
 /** Where a sitter stands up to: this far in front of the seat (or behind a stool at a counter). */
 const STEP = 0.45;
+/** The seated camera's pitch, and how much room behind a seat is room enough for it (m). */
+const SEAT_PITCH = 0.36;
+const ROOMY = 2.2;
+/** A sitter's eyes over the seat (m). */
+const SEATED_HEAD = 0.75;
+/** Ways round from straight behind a seat to try for the camera, nearest first (radians). */
+const CAM_TRIES = [0, 0.35, -0.35, 0.7, -0.7, 1.05, -1.05, 1.4, -1.4, 1.75, -1.75];
 
 type Shape = Box | Post;
 
@@ -54,6 +61,8 @@ export class Seating {
   private readonly aside: Shape[] = [];
   private placed: { x: number; z: number } | null = null;
   private camEase = 0;
+  /** Where the seated camera settles (camYaw), picked once per sit. */
+  private camYaw = 0;
 
   constructor(
     private readonly seats: Seatable[],
@@ -62,6 +71,8 @@ export class Seating {
     private readonly col: Collider,
     /** Stations someone plays at right now (a desk chair there isn't free). */
     private readonly playing: () => ReadonlySet<string>,
+    /** What hangs overhead (collide.ts overhead()): the seated camera keeps out of it too. */
+    private readonly over: Collider | null = null,
   ) {
     for (const s of seats) this.byId.set(s.id, s);
     addEventListener('keydown', this.onKey);
@@ -129,6 +140,7 @@ export class Seating {
     this.setAside(s.x, s.z);
     const p = this.player.position;
     this.glide = { fx: p.x, fz: p.z, fh: this.player.heading, tx: s.x, tz: s.z, th: s.yaw, t: 0, dur: ON_S, sit: true };
+    this.camYaw = this.camYawFor(s);
     this.camEase = 0.9;
   }
 
@@ -180,8 +192,8 @@ export class Seating {
     if (this.mine && this.camEase > 0) {
       this.camEase -= dt;
       const k = 1 - Math.exp(-dt * 4.5);
-      this.player.camYaw = lerpAngle(this.player.camYaw, this.mine.yaw + Math.PI, k);
-      this.player.camPitch += (0.36 - this.player.camPitch) * k;
+      this.player.camYaw = lerpAngle(this.player.camYaw, this.camYaw, k);
+      this.player.camPitch += (SEAT_PITCH - this.player.camPitch) * k;
     }
     this.bringBack();
   }
@@ -197,6 +209,42 @@ export class Seating {
     const me = this.link?.you?.id;
     if (me !== undefined) this.book.set(me, s.id);
     this.link?.send({ t: 'sit', seat: s.id, x: Math.round(s.x * 100), z: Math.round(s.z * 100), r: yawToByte(s.yaw) });
+  }
+
+  /**
+   * Where the camera settles round a seat: straight behind when there's room, else the nearest way
+   * round that has room (a bench against a wall, the banquette round its palm, an armchair with a
+   * lamp at its back), else the way with the most. Behind at any cost put it in the sitter's hair,
+   * or up in the palm's fronds.
+   */
+  private camYawFor(s: Seatable): number {
+    const far = this.player.camDist;
+    const enough = Math.min(far, ROOMY);
+    const behind = s.yaw + Math.PI;
+    const o = { x: s.x, y: EYE, z: s.z };
+    const head = { x: s.x, y: s.top + SEATED_HEAD, z: s.z };
+    const cp = Math.cos(SEAT_PITCH);
+    let best = behind;
+    let most = -Infinity;
+    for (const off of CAM_TRIES) {
+      const yaw = behind + off;
+      const dir = { x: Math.sin(yaw) * cp, y: Math.sin(SEAT_PITCH), z: Math.cos(yaw) * cp };
+      const room = Math.min(far, this.col.raycast(o, dir, far + 0.3) - 0.3);
+      // where the camera would stand: clear of anything hanging there (fronds, a lamp), and with
+      // nothing hanging between it and the sitter's head
+      const cam = { x: o.x + dir.x * room, y: o.y + dir.y * room, z: o.z + dir.z * room };
+      const to = { x: cam.x - head.x, y: cam.y - head.y, z: cam.z - head.z };
+      const d = Math.hypot(to.x, to.y, to.z);
+      const over = this.over;
+      const clear = !over || (!over.boxes.some((b) => inBox(b, cam.x, cam.y, cam.z, 0.35)) && over.raycast(head, { x: to.x / d, y: to.y / d, z: to.z / d }, d) >= d);
+      if (clear && room >= enough) return yaw;
+      const score = clear ? room : room - 2;
+      if (score > most + 0.05) {
+        most = score;
+        best = yaw;
+      }
+    }
+    return best;
   }
 
   /** Where to stand up to: in front of the seat, or behind it when a counter is in front. */
@@ -242,6 +290,16 @@ export class Seating {
     if (e.code !== 'Escape' || !this.mine || e.defaultPrevented || isTyping(e) || overlayCount() > 0) return;
     this.stand();
   };
+}
+
+/** A point within `m` of a box (its outline and its height). */
+function inBox(b: Box, x: number, y: number, z: number, m: number): boolean {
+  if (y < b.bottom - m || y > b.top + m) return false;
+  const c = Math.cos(b.yaw);
+  const n = Math.sin(b.yaw);
+  const dx = x - b.cx;
+  const dz = z - b.cz;
+  return Math.abs(dx * c - dz * n) <= b.hx + m && Math.abs(dx * n + dz * c) <= b.hz + m;
 }
 
 function overlaps(s: Shape, x: number, z: number, r: number): boolean {

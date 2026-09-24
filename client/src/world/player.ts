@@ -25,7 +25,8 @@ const RUN = 4.8;
 /** The speeds the walk and run cycles were made for; the blend between them follows these. */
 const WALK_CYCLE = 1.75;
 const RUN_CYCLE = 3.9;
-const EYE = 1.5;
+/** The follow camera's target over the walker's feet (m). */
+export const EYE = 1.5;
 /** Radians per pixel: dragging (a hand on the button covers less ground), and held. */
 const DRAG_YAW = 0.0055;
 const DRAG_PITCH = 0.004;

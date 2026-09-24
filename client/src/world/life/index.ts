@@ -14,7 +14,8 @@ import * as THREE from 'three';
 import type { BarOrder } from '../../../../shared/src/items.ts';
 import { serverNow } from '../../net/clock.ts';
 import type { Characters } from '../characters.ts';
-import type { Collider } from '../collision.ts';
+import { Collider } from '../collision.ts';
+import { overhead } from '../collide.ts';
 import type { Interact } from '../interact.ts';
 import { roomAt, type FloorPlan } from '../layout.ts';
 import type { LifePoints } from '../life-points.ts';
@@ -99,7 +100,10 @@ export class FloorLife {
     this.bartender = new Bartender(this.ctx, this.waiters);
     this.bankers = new Bankers(this.ctx, () => deps.interact.useCashier());
     if (deps.points.boutique) this.useBoutique(deps.points.boutique);
-    this.seating = new Seating(deps.points.seats, deps.player, deps.player.character, deps.collider, () => this.playing());
+    // the seated camera also keeps out of the palms' fronds and the lamps over the tables
+    const over = new Collider();
+    overhead(deps.plan, over);
+    this.seating = new Seating(deps.points.seats, deps.player, deps.player.character, deps.collider, () => this.playing(), over);
     // the tellers take the cage's customers: its own prompt steps aside
     if (this.bankers.tellers.length) deps.interact.cashierPrompt = false;
     this.offs.push(
