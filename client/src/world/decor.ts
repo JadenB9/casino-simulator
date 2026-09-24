@@ -10,7 +10,7 @@ import type { Batch } from './batch.ts';
 import type { Mats } from './materials.ts';
 import { hdr } from './materials.ts';
 import type { Collider } from './collision.ts';
-import { BAR_TOP, CEILING, COFFEE_TABLE, COUCH, FLOOR_LAMP, LEAVES, LOUNGE_LAMP_X, PALM_PLANTER, PLANTER, PODIUM, STOOL, type FloorPlan } from './layout.ts';
+import { BAR_TOP, CEILING, COFFEE_TABLE, COUCH, FLOOR_LAMP, LEAVES, LOUNGE_LAMP_X, PALM_PLANTER, PLANTER, PODIUM, STOOL, planterRadius, type FloorPlan } from './layout.ts';
 import type { WorldStation } from './stations.ts';
 import { CATALOG } from '../../../shared/src/games/catalog.ts';
 import type { SignSpec } from './signs.ts';
@@ -265,11 +265,11 @@ export function buildDecor(plan: FloorPlan, stations: WorldStation[], b: Batch, 
     col.post(x, z, Math.max(r, reach), h + 0.6, { cam: false });
   };
   for (const p of plan.palms) {
-    planter(p.x, p.z, PALM_PLANTER.r, PALM_PLANTER.h, 1.0);
+    planter(p.x, p.z, planterRadius('palm', p.size), PALM_PLANTER.h, 1.0);
     out.props.push({ kind: 'palm', x: p.x, y: PALM_PLANTER.seat, z: p.z, ry: p.x, size: p.size });
   }
   for (const p of plan.plants) {
-    planter(p.x, p.z, PLANTER.r, PLANTER.h, LEAVES[p.kind].r * p.size - 0.25);
+    planter(p.x, p.z, planterRadius(p.kind, p.size), PLANTER.h, LEAVES[p.kind].r * p.size - 0.25);
     out.props.push({ kind: p.kind, x: p.x, y: PLANTER.seat, z: p.z, ry: p.x + p.z, size: p.size });
   }
 

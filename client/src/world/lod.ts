@@ -4,7 +4,9 @@
 // swaps to a copy baked once at load:
 //   - parts smaller than a few centimetres are dropped (nobody can see them from there),
 //   - untextured parts are merged into one mesh coloured per vertex, and the glowing ones into
-//     one more, so they cost two draw calls however many parts they came from,
+//     one more, so they cost two draw calls however many parts they came from; each part keeps
+//     its own metalness and roughness per vertex too, so chrome and brass still read as metal
+//     and felt as cloth,
 //   - small textured parts (chip stacks, table signs, a reel strip) become their texture's
 //     average colour and join those two merges; at that distance a chip is a few pixels,
 //   - larger textured and see-through parts are merged per material, so felts, signs and glass
@@ -35,6 +37,10 @@ type Piece = {
   matrix: THREE.Matrix4;
   start: number;
   count: number;
+  /** Flat colour, for the vertex-coloured merges. */
+  color?: THREE.Color;
+  /** Metalness and roughness, for the lit merge. */
+  pbr?: [number, number];
   /** A reel band's curvature darkening, pow(normal.z, curve), as its shader draws it (reel strips only). */
   curve?: number;
 };
@@ -56,11 +62,11 @@ export class StationLod {
   private readonly glow: THREE.MeshBasicMaterial;
   private readonly cam = new THREE.Vector3();
 
+  private readonly high: boolean;
+
   constructor(stations: WorldStation[], quality: Quality) {
-    this.solid =
-      quality === 'high'
-        ? new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.62, metalness: 0.18, side: THREE.DoubleSide })
-        : new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
+    this.high = quality === 'high';
+    this.solid = this.high ? pbrMaterial() : new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
     this.glow = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide });
     const at = new THREE.Vector3();
     for (const s of stations) {
@@ -110,8 +116,16 @@ export class StationLod {
     model.updateWorldMatrix(true, true);
     const toModel = new THREE.Matrix4().copy(model.matrixWorld).invert();
 
-    const solid: (Piece & { color: THREE.Color })[] = [];
-    const glow: (Piece & { color: THREE.Color })[] = [];
+    const solid: Piece[] = [];
+    const glow: Piece[] = [];
+    // A lit part's colour, metalness and roughness. On Low the stand-in is Lambert, which can't
+    // show metal; darkening it a little by its metalness keeps chrome from reading as white.
+    const lit = (m: THREE.MeshStandardMaterial, color: THREE.Color): { color: THREE.Color; pbr: [number, number] } => {
+      const metal = m.isMeshStandardMaterial ? m.metalness : 0;
+      const rough = m.isMeshStandardMaterial ? m.roughness : 0.8;
+      if (!this.high) color.multiplyScalar(1 - 0.55 * metal);
+      return { color, pbr: [metal, rough] };
+    };
     const byMaterial = new Map<THREE.Material, Piece[]>();
 
     model.traverseVisible((o) => {
@@ -175,7 +189,7 @@ export class StationLod {
             avg.multiply(m.color);
             // unlit parts (a screen, a lit panel) stay lit
             if ((m as THREE.Material as THREE.MeshBasicMaterial).isMeshBasicMaterial) glow.push({ ...piece, color: avg });
-            else solid.push({ ...piece, color: avg });
+            else solid.push({ ...piece, ...lit(m, avg) });
             continue;
           }
         }
@@ -186,13 +200,13 @@ export class StationLod {
           continue;
         }
         const e = m.emissive;
-        const lit = e && m.emissiveIntensity > 0 && e.r + e.g + e.b > 0.05;
-        if (lit) glow.push({ ...piece, color: e.clone().multiplyScalar(m.emissiveIntensity).add(m.color.clone().multiplyScalar(0.15)) });
-        else solid.push({ ...piece, color: m.color.clone() });
+        const glowing = e && m.emissiveIntensity > 0 && e.r + e.g + e.b > 0.05;
+        if (glowing) glow.push({ ...piece, color: e.clone().multiplyScalar(m.emissiveIntensity).add(m.color.clone().multiplyScalar(0.15)) });
+        else solid.push({ ...piece, ...lit(m, m.color.clone()) });
       }
     });
 
-    if (solid.length) out.add(new THREE.Mesh(merge(solid, 'color'), this.solid));
+    if (solid.length) out.add(new THREE.Mesh(merge(solid, 'color', this.high), this.solid));
     if (glow.length) out.add(new THREE.Mesh(merge(glow, 'color'), this.glow));
     for (const [mat, pieces] of byMaterial) {
       const mesh = new THREE.Mesh(merge(pieces, 'uv'), mat);
@@ -205,10 +219,31 @@ export class StationLod {
 }
 
 /**
- * One indexed geometry from many pieces, positions and normals moved into the model's frame.
- * `extra` is a per-piece colour (the vertex-coloured merges) or the pieces' own UVs.
+ * The lit stand-ins' material: vertex colours, and metalness and roughness from a per-vertex
+ * `pbr` attribute in place of the material's single values, so one draw call carries brass,
+ * chrome, wood and felt each with its own finish.
  */
-function merge(pieces: (Piece & { color?: THREE.Color })[], extra: 'color' | 'uv'): THREE.BufferGeometry {
+function pbrMaterial(): THREE.MeshStandardMaterial {
+  const m = new THREE.MeshStandardMaterial({ vertexColors: true, side: THREE.DoubleSide });
+  m.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute vec2 pbr;\nvarying vec2 vPbr;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvPbr = pbr;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying vec2 vPbr;')
+      .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = vPbr.y;')
+      .replace('#include <metalnessmap_fragment>', 'float metalnessFactor = vPbr.x;');
+  };
+  m.customProgramCacheKey = () => 'station-lod-pbr';
+  return m;
+}
+
+/**
+ * One indexed geometry from many pieces, positions and normals moved into the model's frame.
+ * `extra` is a per-piece colour (the vertex-coloured merges) or the pieces' own UVs; `pbr` adds
+ * each piece's metalness and roughness.
+ */
+function merge(pieces: Piece[], extra: 'color' | 'uv', pbr = false): THREE.BufferGeometry {
   let vertices = 0;
   let indices = 0;
   const ranges = pieces.map((p) => {
@@ -225,6 +260,7 @@ function merge(pieces: (Piece & { color?: THREE.Color })[], extra: 'color' | 'uv
   const position = new Float32Array(vertices * 3);
   const normal = new Float32Array(vertices * 3);
   const second = new Float32Array(vertices * (extra === 'color' ? 3 : 2));
+  const finish = pbr ? new Float32Array(vertices * 2) : null;
   const index = new Uint32Array(indices);
   const v = new THREE.Vector3();
   const nm = new THREE.Matrix3();
@@ -255,6 +291,10 @@ function merge(pieces: (Piece & { color?: THREE.Color })[], extra: 'color' | 'uv
         second[o3] = c.r * sh;
         second[o3 + 1] = c.g * sh;
         second[o3 + 2] = c.b * sh;
+        if (finish) {
+          finish[(vo + k) * 2] = p.pbr?.[0] ?? 0;
+          finish[(vo + k) * 2 + 1] = p.pbr?.[1] ?? 0.8;
+        }
       } else if (uv) {
         const o2 = (vo + k) * 2;
         second[o2] = uv.getX(v0 + k);
@@ -274,6 +314,7 @@ function merge(pieces: (Piece & { color?: THREE.Color })[], extra: 'color' | 'uv
   g.setAttribute('position', new THREE.BufferAttribute(position, 3));
   g.setAttribute('normal', new THREE.BufferAttribute(normal, 3));
   g.setAttribute(extra, new THREE.BufferAttribute(second, extra === 'color' ? 3 : 2));
+  if (finish) g.setAttribute('pbr', new THREE.BufferAttribute(finish, 2));
   g.setIndex(new THREE.BufferAttribute(index, 1));
   g.computeBoundingSphere();
   return g;

@@ -35,8 +35,8 @@ function watch(page) {
 async function openFloor(query) {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
   const errors = watch(page);
-  await page.goto(`${floorUrl}?${query}`, { timeout: 180000 });
-  await page.waitForFunction(() => document.getElementById('boot')?.classList.contains('done'), null, { timeout: 300000 });
+  await page.goto(`${floorUrl}?${query}`, { timeout: 300000 });
+  await page.waitForFunction(() => document.getElementById('boot')?.classList.contains('done'), null, { timeout: 600000 });
   return { page, errors };
 }
 

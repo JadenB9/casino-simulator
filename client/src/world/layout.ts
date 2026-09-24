@@ -175,17 +175,25 @@ export const WALL = 0.3;
 const TRIM = 0.08;
 
 // The loose props' shapes at their placed sizes, measured from the models (world3.mjs audits them).
-/** Planters: radius and height of the pot, and the height the plant stands at. */
+/** Planters: the least radius, the height of the pot and the height the plant stands at. */
 export const PLANTER = { r: 0.32, h: 0.46, seat: 0.42 };
 export const PALM_PLANTER = { r: 0.5, h: 0.62, seat: 0.55 };
-/** Leaf spread (radius) per metre of plant, and where the leaves start, as a fraction of its height. */
-export const LEAVES: Record<PlantKind | 'palm', { r: number; from: number }> = {
-  'plant-a': { r: 0.71, from: 0.08 },
-  'plant-b': { r: 0.77, from: 0.05 },
-  palm: { r: 0.64, from: 0.39 },
+/**
+ * Per metre of plant: the model's own pot or root ball at its foot (the planter is made wider than
+ * that), the leaves' spread, and where the leaves start as a fraction of its height.
+ */
+export const LEAVES: Record<PlantKind | 'palm', { base: number; r: number; from: number }> = {
+  'plant-a': { base: 0.33, r: 0.71, from: 0.03 },
+  'plant-b': { base: 0.21, r: 0.77, from: 0.05 },
+  palm: { base: 0.22, r: 0.64, from: 0.39 },
 };
 /** A palm's trunk leans off the pot's centre (the model is centred on its fronds): its reach, per metre. */
 const PALM_TRUNK = 0.23;
+
+/** The planter a plant stands in: wide enough for the model's own pot to sit inside it. */
+export function planterRadius(kind: PlantKind | 'palm', size: number): number {
+  return Math.max(kind === 'palm' ? PALM_PLANTER.r : PLANTER.r, LEAVES[kind].base * size + 0.04);
+}
 export const STOOL = { r: 0.21, h: 0.8 };
 export const COUCH = { w: 2.2, d: 0.8, h: 0.85 };
 export const FLOOR_LAMP = { r: 0.42, h: 1.45 };
@@ -583,7 +591,7 @@ function palmSolids(p: Palm, i: number): Solid[] {
   const g = `palm-${i + 1}`;
   const r = LEAVES.palm.r * p.size;
   return [
-    { id: `${g}-planter`, group: g, x: p.x, z: p.z, w: 2 * PALM_PLANTER.r, d: 2 * PALM_PLANTER.r, yaw: 0, y0: 0, y1: PALM_PLANTER.h, round: true, floor: true },
+    { id: `${g}-planter`, group: g, x: p.x, z: p.z, w: 2 * planterRadius('palm', p.size), d: 2 * planterRadius('palm', p.size), yaw: 0, y0: 0, y1: PALM_PLANTER.h, round: true, floor: true },
     { id: `${g}-trunk`, group: g, x: p.x, z: p.z, w: 2 * PALM_TRUNK * p.size, d: 2 * PALM_TRUNK * p.size, yaw: 0, y0: PALM_PLANTER.seat, y1: PALM_PLANTER.seat + p.size, round: true },
     { id: `${g}-fronds`, group: g, x: p.x, z: p.z, w: 2 * r, d: 2 * r, yaw: 0, y0: PALM_PLANTER.seat + LEAVES.palm.from * p.size, y1: PALM_PLANTER.seat + p.size, round: true },
   ];
@@ -617,7 +625,7 @@ function plantSolids(p: Plant, i: number): Solid[] {
   const g = `plant-${i + 1}`;
   const leaves = LEAVES[p.kind];
   return [
-    { id: `${g}-planter`, group: g, x: p.x, z: p.z, w: 2 * PLANTER.r, d: 2 * PLANTER.r, yaw: 0, y0: 0, y1: PLANTER.h, round: true, floor: true },
+    { id: `${g}-planter`, group: g, x: p.x, z: p.z, w: 2 * planterRadius(p.kind, p.size), d: 2 * planterRadius(p.kind, p.size), yaw: 0, y0: 0, y1: PLANTER.h, round: true, floor: true },
     { id: `${g}-leaves`, group: g, x: p.x, z: p.z, w: 2 * leaves.r * p.size, d: 2 * leaves.r * p.size, yaw: 0, y0: PLANTER.seat + leaves.from * p.size, y1: PLANTER.seat + p.size, round: true },
   ];
 }
