@@ -44,9 +44,12 @@ const SMALL_M = 0.3;
 export const STATION_BUDGET = 80;
 /** A station already showing its real model counts as this much nearer, so the budget's edge doesn't flicker. */
 const KEEP = 0.8;
-/** Past this a stand-in drops its own textured parts (felts, signs, bulbs) and is only its batched shape. */
-const DISTANT2 = 18 * 18;
-const DISTANT_BACK2 = 17 * 17;
+/**
+ * Past this a stand-in drops its own textured parts (felts, signs, bulbs) and is only its batched
+ * shape: tables from 18 m, the machines (a slots hall holds four dozen) from 12 m.
+ */
+const DISTANT_M = 18;
+const MACHINE_DISTANT_M = 12;
 
 type Piece = {
   geo: THREE.BufferGeometry;
@@ -90,6 +93,8 @@ interface Entry {
   distant: boolean;
   /** World-space box, for the doorway test. */
   box: THREE.Box3;
+  /** Squared distance past which the stand-in is only its batched shape. */
+  distant2: number;
 }
 
 export class StationLod {
@@ -167,6 +172,7 @@ export class StationLod {
         state: 'real',
         distant: false,
         box: new THREE.Box3().setFromObject(s.model),
+        distant2: (machine ? MACHINE_DISTANT_M : DISTANT_M) ** 2,
       });
     });
   }
@@ -203,7 +209,7 @@ export class StationLod {
       if (e.pin) e.real = e.pin === 'real';
       else if (e.real && e.station !== seated && this.frustum.intersectsSphere(e.sphere)) order.push(e);
       // far off, the stand-in's own textured parts go too (its shape and colours stay in the batches)
-      e.distant = !e.pin && (e.distant ? e.d2 > DISTANT_BACK2 : e.d2 > DISTANT2);
+      e.distant = !e.pin && (e.distant ? e.d2 > e.distant2 - 2 * Math.sqrt(e.distant2) + 1 : e.d2 > e.distant2);
     }
     // nearest first (the ones already real a little nearer still), each while it fits; the table
     // you're sitting at is paid for first
