@@ -146,6 +146,30 @@ from stale numbers. The amount is exactly the gap to $50,000. The second and thi
 only follow a loan row with no ledger row yet, so all three happen or none do; a double click
 finds the player at $50,000, and the same op id twice is one loan.
 
+### The boutique and the bar
+
+A purchase moves money out of the balance for good, so it is written like the other edges (one
+batch: a row that records it and the balance change) but not into the ledger: its kinds are
+fixed and the database is only ever added to. Each purchase has a table of its own, and that
+row is the money record:
+
+```sql
+-- a shop item: owning is one row per account per item, so a second purchase collides
+INSERT INTO casino_items (account_id, item, price, bought_at, op_id) VALUES (?, ?, ?, ?, 'shop:' || ? || ':' || ?);
+UPDATE casino_accounts SET balance = balance - ?, rev = rev + 1 WHERE id = ? RETURNING balance, in_play, rev;
+-- a bar order: one row per order, keyed by the account and the client's op
+INSERT INTO casino_orders (op_id, account_id, item, price, created_at) VALUES ('bar:' || ? || ':' || ?, ?, ?, ?, ?);
+UPDATE casino_accounts SET balance = balance - ?, rev = rev + 1 WHERE id = ? RETURNING balance, in_play, rev;
+```
+
+`balance_nonneg` refuses what the balance can't pay; the keys refuse a second charge, and after a
+failed batch the row decides what happened (this op's row: it landed, answer with it; another
+op's item row: you own it already). Every cent is accounted for as
+`SUM(ledger) - SUM(items.price) - SUM(orders.price) = balance` per account (and so `= balance +
+in_play` once nothing is on a table). Owned items are worn through the look, which the gateway
+checks against `casino_items` before storing it; a held bar order is checked against
+`casino_orders`.
+
 ## Accounts and tokens
 
 Logging in is a name and a password. Names are first come, first served and case-insensitive
