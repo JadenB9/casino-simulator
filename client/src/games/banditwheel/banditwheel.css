@@ -76,15 +76,17 @@
 .bw-meter-value { font-size: 19px; font-weight: 600; }
 
 /* the results strip, top left */
-.bw-history { position: fixed; top: var(--below-hud); left: 16px; max-width: min(760px, calc(100vw - 420px)); padding: 8px 10px 10px; background: rgba(38, 36, 33, 0.88); border-radius: 2px; color: #ebe6dc; }
+.bw-history { position: fixed; top: var(--below-hud); left: 16px; padding: 8px 10px 10px; background: rgba(36, 34, 31, 0.92); border-radius: 2px; color: #ebe6dc; }
 .bw-history-label, .bw-players-label { margin-bottom: 6px; font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: #857d70; }
-.bw-history-row { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
-.bw-hist { display: block; width: 26px; height: 26px; }
-.bw-hist.latest { width: 36px; height: 36px; margin-right: 4px; box-shadow: 0 0 0 2px #ebe6dc; }
+/* the latest spin large on the left, the eleven before it on top and eleven more under them */
+.bw-history-row { display: grid; grid-template-columns: 52px repeat(11, 24px); grid-auto-rows: 24px; gap: 4px; align-items: center; }
+.bw-hist { display: block; width: 24px; height: 24px; }
+.bw-hist.latest { grid-row: span 2; width: 48px; height: 48px; box-shadow: 0 0 0 2px #ebe6dc; }
+.bw-history-empty { grid-column: 1 / -1; }
 .bw-history-empty { font-size: 14px; color: #857d70; }
 
 /* the players at the wheel, under the strip */
-.bw-players { position: fixed; top: calc(var(--below-hud) + 84px); left: 16px; width: 330px; display: grid; gap: 5px; padding: 8px 10px; background: rgba(38, 36, 33, 0.88); border-radius: 2px; color: #ebe6dc; }
+.bw-players { position: fixed; top: calc(var(--below-hud) + 96px); left: 16px; width: 330px; display: grid; gap: 5px; padding: 8px 10px; background: rgba(38, 36, 33, 0.88); border-radius: 2px; color: #ebe6dc; }
 .bw-player { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; grid-template-areas: 'name status stack' 'bets bets bets'; column-gap: 8px; align-items: baseline; padding: 3px 0; border-top: 1px solid rgba(255, 255, 255, 0.06); font-size: 16px; }
 .bw-player.you .bw-player-name { color: #f1e3b0; }
 .bw-player.away { opacity: 0.55; }

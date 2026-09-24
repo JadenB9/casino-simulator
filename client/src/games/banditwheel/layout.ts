@@ -128,22 +128,23 @@ export function seatPositions(): { position: [number, number, number]; yaw: numb
 }
 
 /**
- * The camera at a terminal: behind and above the stool, looking at the wheel, with the console's
- * top along the bottom of the picture.
+ * The camera at a terminal: behind and above the stool, looking at the wheel, with your console
+ * along the bottom of the picture. The top of the screen belongs to the HUD and the call line, so
+ * every pose keeps Rust's pointer below them (about a fifth of the way down).
  */
 export function seatPose(seat: number): Pose {
   const i = terminalOfSeat(seat);
-  const [x, z] = onArc(i, STOOL_R + 1.25);
-  return { position: [x, 2.1, z], target: [x * 0.12, 1.36, WHEEL_Z] };
+  const [x, z] = onArc(i, STOOL_R + 1.8);
+  return { position: [x, 2.2, z], target: [x * 0.12, 1.61, WHEEL_Z] };
 }
 
 /** Walking up, before a seat is known: the middle of the arc, a step back. */
-export const OVERVIEW_POSE: Pose = { position: [0, 2.15, ARC_CZ + STOOL_R + 1.5], target: [0, 1.25, WHEEL_Z] };
+export const OVERVIEW_POSE: Pose = { position: [0, 2.3, ARC_CZ + STOOL_R + 1.9], target: [0, 1.55, WHEEL_Z] };
 
-/** The spin: square to the wheel from in front of your terminal, closer. */
+/** The spin: square to the wheel from in front of your terminal, the whole face in view. */
 export function wheelPose(seat: number | null): Pose {
   const a = seat === null ? 0 : terminalAngle(terminalOfSeat(seat)) * 0.3;
-  return { position: [Math.sin(a) * 2.45, HUB_Y + 0.1, WHEEL_Z + Math.cos(a) * 2.45], target: [0, HUB_Y + 0.06, WHEEL_Z] };
+  return { position: [Math.sin(a) * 2.9, HUB_Y + 0.1, WHEEL_Z + Math.cos(a) * 2.9], target: [0, HUB_Y + 0.18, WHEEL_Z] };
 }
 
 /** Then close on the flapper as the wheel slows. */

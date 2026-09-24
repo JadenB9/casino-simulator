@@ -164,8 +164,9 @@ await page.evaluate(() => {
   v.onTable(snap);
   const now = Date.now();
   const seats = { 0: { wagered: 1500, returned: 10500, bets: [[1, 1000, 0], [20, 500, 10500]] } };
-  const next = { ...snap.view, phase: 'results', bets: {}, deadline: now + 10000, spin: { round: 99, slot: 0, number: 20, startAt: now, restAt: now + 5000 }, settled: seats, history: [0, ...snap.view.history] };
-  void v.onEvents([{ type: 'spin', round: 99, slot: 0, number: 20, startAt: now, restAt: now + 5000 }, { type: 'settle', round: 99, slot: 0, number: 20, seats }], next);
+  // a short stand after the stop, so the payout (paced to it) finishes well inside this window
+  const next = { ...snap.view, phase: 'results', bets: {}, deadline: now + 7500, spin: { round: 99, slot: 0, number: 20, startAt: now, restAt: now + 4500 }, settled: seats, history: [0, ...snap.view.history] };
+  void v.onEvents([{ type: 'spin', round: 99, slot: 0, number: 20, startAt: now, restAt: now + 4500 }, { type: 'settle', round: 99, slot: 0, number: 20, seats }], next);
 });
 await until(() => window.casino.table.view.debug.state().spin?.slot === 0, 10000);
 const sp2 = (await state()).spin;
@@ -227,7 +228,8 @@ async function multiplayer() {
   const base = `http://localhost:${port}`;
   const ctxB = await browser.newContext();
   const pageB = await ctxB.newPage();
-  for (const p of [page, pageB]) await p.goto(`${base}/casino/`);
+  // the sockets only need a page on the dev site's origin: a static file, not the whole game
+  for (const p of [page, pageB]) await p.goto(`${base}/casino/fonts/cinzel/OFL.txt`);
   const login = (p, name) => p.evaluate(async (n) => (await (await fetch('/casino/api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: n, password: 'casino-dev' }) })).json()).token, name);
   const tA = await login(page, NAMES.a);
   const tB = await login(pageB, NAMES.b);
@@ -266,7 +268,11 @@ async function multiplayer() {
       const settle = ev.events.find((e) => e.type === 'settle');
       const spin = ev.events.find((e) => e.type === 'spin');
       const stacks = window.bw.msgs.filter((m) => m.t === 'seat').map((m) => m.stack);
-      return { slot: settle.slot, number: settle.number, seats: settle.seats, startToRest: spin.restAt - spin.startAt, stacks, view: ev.view.phase };
+      // the window the bets went into: the last one opened before this spin
+      const idx = window.bw.msgs.indexOf(ev);
+      const opened = window.bw.msgs.slice(0, idx).filter((m) => m.t === 'ev' && m.events.some((e) => e.type === 'betting')).at(-1);
+      const windowDeadline = opened?.events.find((e) => e.type === 'betting').deadline;
+      return { slot: settle.slot, number: settle.number, seats: settle.seats, startToRest: spin.restAt - spin.startAt, spinStartVsDeadlineMs: spin.startAt - windowDeadline, stacks, view: ev.view.phase };
     });
   const ra = await report(page);
   const rb = await report(pageB);
@@ -277,7 +283,7 @@ async function multiplayer() {
   };
   const A = check(ra, sa);
   const B = check(rb, sb);
-  console.log(JSON.stringify({ tableId, startedWithoutLeader: started, slot: ra.slot, number: ra.number, startToRestMs: ra.startToRest, closedAfterMs, A, B, refusedB: errsB }, null, 1));
+  console.log(JSON.stringify({ tableId, startedWithoutLeader: started, slot: ra.slot, number: ra.number, startToRestMs: ra.startToRest, spinStartVsDeadlineMs: ra.spinStartVsDeadlineMs, closedAfterMs, A, B, refusedB: errsB }, null, 1));
   const refusedRight = errsB.includes('BAD_REQUEST');
   if (!started || !A.ok || !B.ok || !refusedRight || B.wagered !== 50000) throw new Error('multiplayer check failed');
   for (const p of [page, pageB]) await p.evaluate(() => window.bw.send({ t: 'leave' }));

@@ -263,9 +263,10 @@ export class History {
       this.row.append(el('span', 'bw-history-empty', 'No spins yet'));
       return;
     }
-    slots.slice(0, 24).forEach((slot, i) => {
+    // the latest large, then two rows of the ones before it
+    slots.slice(0, 23).forEach((slot, i) => {
       const n = numberAt(slot);
-      const c = squareCanvas(n, i === 0 ? 64 : 48, slot + 3);
+      const c = squareCanvas(n, i === 0 ? 96 : 48, slot + 3);
       c.className = i === 0 ? 'bw-hist latest' : 'bw-hist';
       c.title = String(n);
       this.row.append(c);

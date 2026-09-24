@@ -40,11 +40,18 @@ function materialsFor(spec: ChipSpec): THREE.Material[] {
 }
 
 const MAX_SHOWN = 14;
+/** Chips at the terminals are drawn a little larger than life so they read from the stool. */
+export const CHIP_SCALE = 1.3;
 
 /** A pile worth `amount`, largest chips at the bottom. Its origin is at its base. */
 export class Pile extends THREE.Group {
   amount: Cents = 0;
   height = 0;
+
+  constructor() {
+    super();
+    this.scale.setScalar(CHIP_SCALE);
+  }
 
   set(amount: Cents): this {
     this.amount = amount;
@@ -61,7 +68,7 @@ export class Pile extends THREE.Group {
       m.rotation.y = (i * 1.7) % (Math.PI * 2);
       this.add(m);
     });
-    this.height = shown.length * CHIP_H;
+    this.height = shown.length * CHIP_H * CHIP_SCALE;
     return this;
   }
 }
