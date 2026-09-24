@@ -12,13 +12,35 @@ import { isGameId } from '../../../shared/src/games/catalog.ts';
 import type { GameId } from '../../../shared/src/engine.ts';
 import { lookFromJson, type Look } from '../../../shared/src/look.ts';
 import { Presence, type FloorAtt } from './presence.ts';
-import { Directory } from './directory.ts';
+import { Directory, ipKey } from './directory.ts';
 import { FloorChat } from './chat.ts';
 import { Wins, type BigWinReport } from './wins.ts';
-import { Bucket } from '../ratelimit.ts';
+import { Bucket, KeyedBuckets } from '../ratelimit.ts';
 
 /** A hard cap on floor connections; a busy night past this gets a polite "casino is full". */
 export const MAX_FLOOR = 150;
+/**
+ * Connections per account: a burst, then one every few seconds. Every connect sends the whole
+ * roster, so a reconnect loop from one client would otherwise cost the one floor everyone shares.
+ */
+export const FLOOR_CONNECT_BURST = 10;
+const FLOOR_CONNECT_PER_SEC = 1 / 3;
+/** Per address (a /64 for IPv6): generous, since a household or a campus can share one. */
+const ADDR_CONNECT_BURST = 60;
+const ADDR_CONNECT_PER_SEC = 2;
+/** Frames of any kind: well above ten moves a second plus the odd watch and emote. */
+const FRAME_BURST = 60;
+const FRAME_PER_SEC = 30;
+/** Dropped frames a socket may run up (forgiven one a second) before it is closed. */
+export const FLOOR_STRIKES = 200;
+
+interface FloorLimits {
+  frames: Bucket;
+  move: Bucket;
+  misc: Bucket;
+  emote: Bucket;
+  strikes: Bucket;
+}
 
 export class CasinoFloor extends DurableObject<Env> {
   readonly presence: Presence;
@@ -26,7 +48,9 @@ export class CasinoFloor extends DurableObject<Env> {
   readonly chat: FloorChat;
   /** features: big-win announcements (wins.ts) */
   readonly wins: Wins;
-  private buckets = new Map<WebSocket, { move: Bucket; misc: Bucket; emote: Bucket; strikes: number }>();
+  private buckets = new Map<WebSocket, FloorLimits>();
+  private connects = new KeyedBuckets(FLOOR_CONNECT_BURST, FLOOR_CONNECT_PER_SEC);
+  private addrConnects = new KeyedBuckets(ADDR_CONNECT_BURST, ADDR_CONNECT_PER_SEC);
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -42,9 +66,16 @@ export class CasinoFloor extends DurableObject<Env> {
     const accountId = Number(request.headers.get('x-casino-account'));
     const name = request.headers.get('x-casino-name') ?? '';
     const look = lookFromJson(request.headers.get('x-casino-look'));
+    const ip = request.headers.get('x-casino-ip') ?? '';
     const pair = new WebSocketPair();
     const client = pair[0];
     const server = pair[1];
+    // A reconnect loop (or a script) gets a burst, then waits; 4008 makes the client back off.
+    if (!this.connects.take(`a:${accountId}`) || (ip && !this.addrConnects.take(ipKey(ip)))) {
+      server.accept();
+      server.close(CLOSE.RATE_LIMITED, 'slow down');
+      return new Response(null, { status: 101, webSocket: client });
+    }
     if (this.ctx.getWebSockets().length >= MAX_FLOOR && this.ctx.getWebSockets(`a:${accountId}`).length === 0) {
       server.accept();
       server.close(CLOSE.FORBIDDEN, 'the casino is full');
@@ -71,25 +102,35 @@ export class CasinoFloor extends DurableObject<Env> {
       ws.close(1009, 'frame too large');
       return;
     }
+    const b = this.bucketsFor(ws);
+    // Every frame counts, junk and chat included; junk and overflow are dropped and count as strikes.
     let data: unknown;
-    try {
-      data = JSON.parse(raw);
-    } catch {
-      return;
+    if (b.frames.take()) {
+      try {
+        data = JSON.parse(raw);
+      } catch {
+        /* not JSON */
+      }
     }
-    // Chat keeps its own limits and mutes (chat.ts), so it goes round the buckets below.
+    // Chat keeps its own limits and mutes (chat.ts) on top of the frame count.
     const say = parseSay(data);
     if (say) return this.chat.say(ws, say.text);
     const msg = parseFloorMsg(data, isGameId);
-    if (!msg) return;
-    const b = this.bucketsFor(ws);
-    const ok = msg.t === 'mv' || msg.t === 'st' ? b.move.take() : msg.t === 'emote' ? b.emote.take() : b.misc.take();
+    if (!msg) {
+      this.strike(ws, b);
+      return;
+    }
+    // Extra emotes are dropped quietly (people mash the key); they already counted as frames.
+    if (msg.t === 'emote') {
+      if (b.emote.take()) this.emote(ws, msg.e);
+      return;
+    }
+    const ok = msg.t === 'mv' || msg.t === 'st' ? b.move.take() : b.misc.take();
     if (!ok) {
-      if (++b.strikes > 200) ws.close(CLOSE.RATE_LIMITED, 'slow down');
+      this.strike(ws, b);
       return;
     }
     if (msg.t === 'watch') this.directory.watch(ws, msg.game);
-    else if (msg.t === 'emote') this.emote(ws, msg.e);
     else this.presence.onMessage(ws, msg);
   }
 
@@ -164,14 +205,30 @@ export class CasinoFloor extends DurableObject<Env> {
 
   // --- plumbing ------------------------------------------------------------------------------
 
-  private bucketsFor(ws: WebSocket) {
+  private bucketsFor(ws: WebSocket): FloorLimits {
     let b = this.buckets.get(ws);
     if (!b) {
       // Emotes are a gesture, not a chat: a few in a row, then one every couple of seconds.
-      b = { move: new Bucket(30, 16), misc: new Bucket(10, 4), emote: new Bucket(3, 0.5), strikes: 0 };
+      b = {
+        frames: new Bucket(FRAME_BURST, FRAME_PER_SEC),
+        move: new Bucket(30, 16),
+        misc: new Bucket(10, 4),
+        emote: new Bucket(3, 0.5),
+        strikes: new Bucket(FLOOR_STRIKES, 1),
+      };
       this.buckets.set(ws, b);
     }
     return b;
+  }
+
+  /** Count a dropped frame; the socket is closed once there have been too many. */
+  private strike(ws: WebSocket, b: FloorLimits): void {
+    if (b.strikes.take()) return;
+    try {
+      ws.close(CLOSE.RATE_LIMITED, 'slow down');
+    } catch {
+      /* already closing */
+    }
   }
 
   private broadcast(msg: FloorServerMsg, except?: WebSocket): void {

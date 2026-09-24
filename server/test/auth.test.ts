@@ -6,10 +6,12 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { env, exports } from 'cloudflare:workers';
 import { MISSES_PER_IP, MISSES_PER_NAME, PBKDF2_ITERATIONS, hashPassword, pbkdf2, verifyPassword } from '../src/auth.ts';
+import { ipKey } from '../src/floor/directory.ts';
 import { ORIGIN, api } from './helpers.ts';
 
 let ipSeq = 0;
-const freshIp = () => `2001:db8::${(++ipSeq).toString(16)}`;
+// A /64 of its own each time: limits count an IPv6 /64 as one address.
+const freshIp = () => `2001:db8:${(++ipSeq).toString(16)}::1`;
 const enc = new TextEncoder();
 const hex = (b: Uint8Array) => [...b].map((x) => x.toString(16).padStart(2, '0')).join('');
 
@@ -247,7 +249,7 @@ describe('wrong-password limits', () => {
     // Other addresses are fine: one address can't lock a name.
     expect((await login({ name: 'Guarded_1', password: 'the right one' })).status).toBe(200);
     // When the window runs out, so does the lock.
-    await env.DB.prepare(`UPDATE casino_rate SET expires_at = 0 WHERE k = ?1`).bind(`casino-miss-ip:${ip}`).run();
+    await env.DB.prepare(`UPDATE casino_rate SET expires_at = 0 WHERE k = ?1`).bind(`casino-miss-ip:${ipKey(ip)}`).run();
     expect((await login({ name: 'Guarded_1', password: 'the right one' }, ip)).status).toBe(200);
   });
 
@@ -276,19 +278,19 @@ describe('wrong-password limits', () => {
     await login({ name: 'Counted_1', password: 'right one' }, ip);
     await oldAccount('Counted_2');
     await login({ name: 'Counted_2', password: 'right two' }, ip);
-    const misses = () => count(`SELECT count(*) AS n FROM casino_rate WHERE k IN (?1, 'casino-miss-name:counted_1', 'casino-miss-name:counted_2')`, `casino-miss-ip:${ip}`);
+    const misses = () => count(`SELECT count(*) AS n FROM casino_rate WHERE k IN (?1, 'casino-miss-name:counted_1', 'casino-miss-name:counted_2')`, `casino-miss-ip:${ipKey(ip)}`);
     expect(await misses()).toBe(0);
     await login({ name: 'Counted_1', password: 'wrong one' }, ip);
-    const n = await env.DB.prepare(`SELECT k, n FROM casino_rate WHERE k IN (?1, 'casino-miss-name:counted_1') ORDER BY k`).bind(`casino-miss-ip:${ip}`).all<any>();
+    const n = await env.DB.prepare(`SELECT k, n FROM casino_rate WHERE k IN (?1, 'casino-miss-name:counted_1') ORDER BY k`).bind(`casino-miss-ip:${ipKey(ip)}`).all<any>();
     expect(n.results).toEqual([
-      { k: `casino-miss-ip:${ip}`, n: 1 },
+      { k: `casino-miss-ip:${ipKey(ip)}`, n: 1 },
       { k: 'casino-miss-name:counted_1', n: 1 },
     ]);
   });
 
   it('answers a locked login without working out the password', async () => {
     const ip = freshIp();
-    await env.DB.prepare(`INSERT INTO casino_rate (k, n, expires_at) VALUES (?1, ?2, ?3)`).bind(`casino-miss-ip:${ip}`, MISSES_PER_IP, Date.now() + 60_000).run();
+    await env.DB.prepare(`INSERT INTO casino_rate (k, n, expires_at) VALUES (?1, ?2, ?3)`).bind(`casino-miss-ip:${ipKey(ip)}`, MISSES_PER_IP, Date.now() + 60_000).run();
     const derive = vi.spyOn(crypto.subtle, 'deriveBits');
     expect((await login({ name: 'Locked_Out_1', password: 'any password' }, ip)).status).toBe(429);
     expect(derive).not.toHaveBeenCalled();
