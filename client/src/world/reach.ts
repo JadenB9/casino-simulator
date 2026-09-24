@@ -26,7 +26,7 @@ type Shape = { kind: 'box'; x: number; z: number; hx: number; hz: number; yaw: n
 /** What blocks walking in a plan: its walls, its stations and the solids standing on the floor. */
 export function blockers(plan: FloorPlan): Shape[] {
   const out: Shape[] = [];
-  for (const w of plan.walls ?? []) out.push({ kind: 'box', x: (w.x0 + w.x1) / 2, z: (w.z0 + w.z1) / 2, hx: (w.x1 - w.x0) / 2, hz: (w.z1 - w.z0) / 2, yaw: 0 });
+  for (const w of plan.walls) out.push({ kind: 'box', x: (w.x0 + w.x1) / 2, z: (w.z0 + w.z1) / 2, hx: (w.x1 - w.x0) / 2, hz: (w.z1 - w.z0) / 2, yaw: 0 });
   for (const s of plan.stations) out.push({ kind: 'box', x: s.x, z: s.z, hx: s.fp.width / 2, hz: s.fp.depth / 2, yaw: s.yaw });
   for (const s of plan.solids) if (s.y0 < BODY_H) out.push(shapeOf(s));
   return out;
@@ -64,16 +64,13 @@ export function walkGrid(plan: FloorPlan, opts: { radius?: number; extra?: Shape
   const nx = Math.ceil((R.x1 - R.x0 + 2) / cell);
   const nz = Math.ceil((R.z1 - R.z0 + 2) / cell);
   const free = new Uint8Array(nx * nz);
-  // inside a room (or, without rooms, inside the one room less its walls)
-  const rooms = plan.rooms?.length ? plan.rooms.map((r) => r.inner) : [{ x0: R.x0, x1: R.x1, z0: R.z0, z1: R.z1 }];
-  const doors = plan.doorways ?? [];
+  // inside a room or a doorway; the walls themselves then keep walkers a radius from their faces
+  const inside = [...plan.rooms.map((r) => r.inner), ...plan.doorways];
   for (let j = 0; j < nz; j++) {
     const z = z0 + (j + 0.5) * cell;
     for (let i = 0; i < nx; i++) {
       const x = x0 + (i + 0.5) * cell;
-      const inRoom = rooms.some((r) => x >= r.x0 + radius && x <= r.x1 - radius && z >= r.z0 + radius && z <= r.z1 - radius);
-      const inDoor = doors.some((d) => x >= d.x0 + radius && x <= d.x1 - radius && z >= d.z0 && z <= d.z1);
-      if (inRoom || inDoor) free[j * nx + i] = 1;
+      if (inside.some((r) => x >= r.x0 && x <= r.x1 && z >= r.z0 && z <= r.z1)) free[j * nx + i] = 1;
     }
   }
   for (const sh of [...blockers(plan), ...(opts.extra ?? [])]) {

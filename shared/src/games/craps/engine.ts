@@ -57,7 +57,8 @@ function config(_variant: string, mode: TableMode): TableConfig {
     variant: '',
     mode,
     maxSeats: mode === 'solo' ? 1 : 8,
-    buyIn: { min: 100 * D, max: 50_000 * D },
+    // up to a hundred times the table maximum (shared/src/limits.ts scales it with the table)
+    buyIn: { min: 100 * D, max: 500_000 * D },
     // Steps keep every payout a whole number of cents (§3.5). Place 6/8 and lay bets use the
     // steps real tables use; the odds limits are further capped at 3-4-5x (6x laid) the flat bet.
     limits: {

@@ -10,6 +10,8 @@ import { Felt } from '../../table/felt.ts';
 import { CHIP_R, chipFaceCanvas } from '../../table/chips.ts';
 import { CHIPS, formatMoney } from '../../../../shared/src/money.ts';
 import { engine } from '../../../../shared/src/games/baccarat/engine.ts';
+import type { TableConfig } from '../../../../shared/src/engine.ts';
+import { repaintable } from '../../table/limit-sign.ts';
 import { feltSpec, kidneyGeometry } from './felt.ts';
 import { ARC_OVER, CZ, DISCARD, R_RAIL, RACK, RAIL_TUBE, SHOE, TOP_Y, feltOutline, polar } from './layout.ts';
 
@@ -268,22 +270,24 @@ function limitSign(): THREE.Object3D {
     tex.anisotropy = 4;
     signTex = tex;
     paintWithFonts(() => {
-      paintSign(c);
+      paintSign(c.getContext('2d')!, engine.config('', 'multi'));
       tex.needsUpdate = true;
     });
   }
-  const face = new THREE.Mesh(new THREE.PlaneGeometry(0.152, 0.096), new THREE.MeshStandardMaterial({ map: signTex, emissive: '#ffffff', emissiveMap: signTex, emissiveIntensity: 0.75, roughness: 0.35 }));
+  const faceMat = new THREE.MeshStandardMaterial({ map: signTex, emissive: '#ffffff', emissiveMap: signTex, emissiveIntensity: 0.75, roughness: 0.35 });
+  const face = new THREE.Mesh(new THREE.PlaneGeometry(0.152, 0.096), faceMat);
   face.position.set(0, 0.05, 0.0032);
   panel.add(back, face);
   g.add(base, panel);
   g.position.set(0.86, TOP_Y, -0.455);
   g.rotation.y = -0.5;
+  repaintable(g, faceMat, { width: 600, height: 380, paint: paintSign });
   return g;
 }
 
-function paintSign(c: HTMLCanvasElement): void {
-  const g = c.getContext('2d')!;
-  const cfg = engine.config('', 'multi');
+/** The sign's face for a table at these limits (the floor's shows the Standard table's). */
+function paintSign(g: CanvasRenderingContext2D, cfg: TableConfig): void {
+  const c = g.canvas;
   const main = cfg.limits.default;
   g.fillStyle = '#120d0b';
   g.fillRect(0, 0, c.width, c.height);

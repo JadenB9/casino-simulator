@@ -86,13 +86,23 @@ export class Server {
     return { id: r.body.profile.id, name: r.body.profile.name, token: r.body.token, ip };
   }
 
-  /** A socket to `path` (floor, table/<id>, solo/<game>) as this player. */
+  /** A single-use ticket for one socket path, as the client gets one right before connecting (null if refused). */
+  async ticket(path, player) {
+    const r = await this.api('ticket', { method: 'POST', token: player.token, ip: player.ip, body: { target: path } });
+    return r.status === 200 ? r.body.ticket : null;
+  }
+
+  /** A socket to `path` (floor, table/<id>, solo/<game>) as this player, opened with a fresh ticket. */
   connect(path, player, meter, extra = '') {
-    return new Conn(`${this.ws}/casino/ws/${path}?v=1&t=${encodeURIComponent(player.token)}${extra}`, { Origin: this.origin, 'CF-Connecting-IP': player.ip }, meter);
+    const url = this.ticket(path, player).then((t) => `${this.ws}/casino/ws/${path}?v=1${t ? `&ticket=${encodeURIComponent(t)}` : ''}${extra}`);
+    return new Conn(url, { Origin: this.origin, 'CF-Connecting-IP': player.ip }, meter);
   }
 }
 
-/** One WebSocket: a queue of parsed messages to wait on, and the meter it reports to. */
+/**
+ * One WebSocket: a queue of parsed messages to wait on, and the meter it reports to. The URL may
+ * still be on its way (a ticket first); sending before it opens just returns false.
+ */
 export class Conn {
   constructor(url, headers, meter) {
     this.msgs = [];
@@ -100,40 +110,59 @@ export class Conn {
     this.closed = null;
     this.meter = meter;
     this.listeners = new Set();
-    this.ws = new WebSocket(url, { headers });
-    this.opened = new Promise((resolve) => {
-      this.ws.onopen = () => resolve(true);
-      this.ws.onerror = () => resolve(false);
-    });
-    this.ws.onmessage = (e) => {
-      if (typeof e.data !== 'string' || e.data === 'pong') return;
-      let m;
-      try {
-        m = JSON.parse(e.data);
-      } catch {
-        return;
-      }
-      meter?.seen(m, e.data.length);
-      for (const fn of this.listeners) fn(m);
-      this.msgs.push(m);
-      if (this.msgs.length > 500) this.msgs.splice(0, this.msgs.length - 500);
-      for (const w of [...this.waiters]) {
-        if (w.pred(m)) {
-          this.waiters.splice(this.waiters.indexOf(w), 1);
-          const i = this.msgs.lastIndexOf(m);
-          if (i >= 0) this.msgs.splice(i, 1);
-          w.resolve(m);
-        }
-      }
+    this.ws = null;
+    this.wantClose = null;
+    let settle;
+    this.done = new Promise((resolve) => (settle = resolve));
+    const finish = (code, reason) => {
+      if (this.closed) return;
+      this.closed = { code, reason };
+      meter?.closed(code);
+      for (const w of this.waiters.splice(0)) w.reject(new Error(`socket closed ${code} ${reason}`));
+      settle(this.closed);
     };
-    this.done = new Promise((resolve) => {
-      this.ws.onclose = (e) => {
-        this.closed = { code: e.code, reason: e.reason };
-        meter?.closed(e.code);
-        for (const w of this.waiters.splice(0)) w.reject(new Error(`socket closed ${e.code} ${e.reason}`));
-        resolve(this.closed);
-      };
-    });
+    this.opened = Promise.resolve(url).then(
+      (u) => {
+        if (this.wantClose) {
+          finish(this.wantClose.code, this.wantClose.reason);
+          return false;
+        }
+        const ws = new WebSocket(u, { headers });
+        this.ws = ws;
+        ws.onmessage = (e) => this.receive(e);
+        ws.onclose = (e) => finish(e.code, e.reason);
+        return new Promise((resolve) => {
+          ws.onopen = () => resolve(true);
+          ws.onerror = () => resolve(false);
+        });
+      },
+      (err) => {
+        finish(4003, String(err));
+        return false;
+      },
+    );
+  }
+
+  receive(e) {
+    if (typeof e.data !== 'string' || e.data === 'pong') return;
+    let m;
+    try {
+      m = JSON.parse(e.data);
+    } catch {
+      return;
+    }
+    this.meter?.seen(m, e.data.length);
+    for (const fn of this.listeners) fn(m);
+    this.msgs.push(m);
+    if (this.msgs.length > 500) this.msgs.splice(0, this.msgs.length - 500);
+    for (const w of [...this.waiters]) {
+      if (w.pred(m)) {
+        this.waiters.splice(this.waiters.indexOf(w), 1);
+        const i = this.msgs.lastIndexOf(m);
+        if (i >= 0) this.msgs.splice(i, 1);
+        w.resolve(m);
+      }
+    }
   }
 
   on(fn) {
@@ -142,7 +171,7 @@ export class Conn {
   }
 
   send(msg) {
-    if (this.ws.readyState !== WebSocket.OPEN) return false;
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return false;
     const data = typeof msg === 'string' ? msg : JSON.stringify(msg);
     this.ws.send(data);
     this.meter?.sent(data.length);
@@ -174,6 +203,11 @@ export class Conn {
   }
 
   close(code = 1000, reason = 'bye') {
+    if (!this.ws) {
+      // Still getting its ticket: it closes the moment it would have opened.
+      this.wantClose = { code, reason };
+      return this.done;
+    }
     try {
       this.ws.close(code, reason);
     } catch {

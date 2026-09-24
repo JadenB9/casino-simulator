@@ -16,7 +16,7 @@ import { serverNow } from '../../net/clock.ts';
 import type { Characters } from '../characters.ts';
 import type { Collider } from '../collision.ts';
 import type { Interact } from '../interact.ts';
-import type { FloorPlan } from '../layout.ts';
+import { roomAt, type FloorPlan } from '../layout.ts';
 import type { LifePoints } from '../life-points.ts';
 import type { Player } from '../player.ts';
 import { walkGrid } from '../reach.ts';
@@ -157,14 +157,17 @@ export class FloorLife {
     this.seating.update(dt);
   }
 
-  /** After the walker has moved and the camera is placed. */
-  update(dt: number): void {
+  /**
+   * After the walker has moved and the camera is placed. `rooms` and `sees` are the doorway
+   * culling's (visibility.ts): staff in a room the camera can't see into aren't drawn.
+   */
+  update(dt: number, rooms: ReadonlySet<string> | null = null, sees: ((room: string, box: THREE.Box3) => boolean) | null = null): void {
     this.gatherPeople();
     this.waiters.update(dt);
     this.bartender.update(dt);
     this.bankers.update(dt);
     this.shopkeeper?.update(dt);
-    this.crew.update(dt, this.deps.camera);
+    this.crew.update(dt, this.deps.camera, rooms, sees, this.roomOf);
     this.waiters.place();
     this.speech.update(dt);
   }
@@ -183,6 +186,8 @@ export class FloorLife {
     this.crew.dispose();
     this.trays.dispose();
   }
+
+  private readonly roomOf = (x: number, z: number): string | null => roomAt(this.deps.plan, x, z)?.id ?? null;
 
   /** Stations someone is playing at (a desk chair there isn't free to sit on). */
   private playing(): ReadonlySet<string> {

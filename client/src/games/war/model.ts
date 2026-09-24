@@ -7,6 +7,8 @@ import * as THREE from 'three';
 import { CHIPS, formatMoney } from '../../../../shared/src/money.ts';
 import { DEFAULT_RULES, DECKS } from '../../../../shared/src/games/war/rules.ts';
 import { engine } from '../../../../shared/src/games/war/engine.ts';
+import type { TableConfig } from '../../../../shared/src/engine.ts';
+import { repaintable } from '../../table/limit-sign.ts';
 import type { Quality } from '../../render/engine3d.ts';
 import { CHIP_R } from '../../table/chips.ts';
 import { CARD_H, CARD_W } from '../../table/cards.ts';
@@ -153,32 +155,32 @@ function discardHolder(m: ReturnType<typeof materials>): THREE.Group {
 
 let signTexture: THREE.CanvasTexture | null = null;
 
+/** The sign's face for a table at these limits (the floor's shows the Standard table's). */
+function paintSign(g: CanvasRenderingContext2D, cfg: TableConfig): void {
+  const bet = cfg.limits.bet ?? cfg.limits.default;
+  const tie = cfg.limits.tie ?? cfg.limits.default;
+  g.fillStyle = '#0d0a08';
+  g.fillRect(0, 0, 512, 320);
+  g.strokeStyle = 'rgba(216,176,106,0.8)';
+  g.lineWidth = 4;
+  g.strokeRect(10, 10, 492, 300);
+  g.textAlign = 'center';
+  g.fillStyle = '#f1d59a';
+  g.font = '600 46px Cinzel, Georgia, serif';
+  g.fillText('CASINO WAR', 256, 76);
+  g.fillStyle = '#fff4dc';
+  g.font = '600 74px "Barlow Condensed", "Arial Narrow", sans-serif';
+  g.fillText(`${formatMoney(bet.min)} – ${formatMoney(bet.max)}`, 256, 162);
+  g.fillStyle = '#d8b06a';
+  g.font = '600 25px "Barlow Condensed", "Arial Narrow", sans-serif';
+  g.fillText(`${DECKS} DECKS · TIE BET ${formatMoney(tie.min)} – ${formatMoney(tie.max)}`, 256, 218);
+  g.fillText(`TIE PAYS ${DEFAULT_RULES.tiePays} TO 1 · SURRENDER OR GO TO WAR`, 256, 252);
+  g.fillText(`A TIE IN THE WAR PAYS THE RAISE ${DEFAULT_RULES.warTiePays} TO 1`, 256, 286);
+}
+
 /** The lit limits sign on the dealer's right, painted from the table's own config. */
 function limitSign(m: ReturnType<typeof materials>): THREE.Group {
-  if (!signTexture) {
-    const cfg = engine.config('', 'multi');
-    const bet = cfg.limits.bet ?? cfg.limits.default;
-    const tie = cfg.limits.tie ?? cfg.limits.default;
-    signTexture = canvasTexture(512, 320, (g) => {
-      g.fillStyle = '#0d0a08';
-      g.fillRect(0, 0, 512, 320);
-      g.strokeStyle = 'rgba(216,176,106,0.8)';
-      g.lineWidth = 4;
-      g.strokeRect(10, 10, 492, 300);
-      g.textAlign = 'center';
-      g.fillStyle = '#f1d59a';
-      g.font = '600 46px Cinzel, Georgia, serif';
-      g.fillText('CASINO WAR', 256, 76);
-      g.fillStyle = '#fff4dc';
-      g.font = '600 74px "Barlow Condensed", "Arial Narrow", sans-serif';
-      g.fillText(`${formatMoney(bet.min)} – ${formatMoney(bet.max)}`, 256, 162);
-      g.fillStyle = '#d8b06a';
-      g.font = '600 25px "Barlow Condensed", "Arial Narrow", sans-serif';
-      g.fillText(`${DECKS} DECKS · TIE BET ${formatMoney(tie.min)} – ${formatMoney(tie.max)}`, 256, 218);
-      g.fillText(`TIE PAYS ${DEFAULT_RULES.tiePays} TO 1 · SURRENDER OR GO TO WAR`, 256, 252);
-      g.fillText(`A TIE IN THE WAR PAYS THE RAISE ${DEFAULT_RULES.warTiePays} TO 1`, 256, 286);
-    });
-  }
+  if (!signTexture) signTexture = canvasTexture(512, 320, (g) => paintSign(g, engine.config('', 'multi')));
   const g = new THREE.Group();
   const post = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.2, 12), m.brass);
   post.position.y = 0.1;
@@ -189,6 +191,7 @@ function limitSign(m: ReturnType<typeof materials>): THREE.Group {
   g.add(post, panel);
   g.position.set(-0.66, TOP_Y, DEALER_Z - 0.02);
   g.rotation.y = 0.36;
+  repaintable(g, face, { width: 512, height: 320, paint: paintSign });
   return g;
 }
 

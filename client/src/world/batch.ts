@@ -1,6 +1,10 @@
-// Static geometry, merged per material. Walls, ceilings, counters, trims and signs are built from
-// many small pieces; drawing each as its own mesh would cost hundreds of draw calls, so every
-// piece is baked into world space and merged into one mesh per material at the end.
+// Static geometry, merged per material and kept per room. Walls, ceilings, counters, trims and
+// signs are built from many small pieces; drawing each as its own mesh would cost hundreds of draw
+// calls, so every piece is baked into world space and merged. Each room's pieces of a material
+// become one geometry, and all the rooms' geometries of that material one BatchedMesh: with
+// multi-draw that's one draw call per material however many rooms show, and a room that can't be
+// seen (visibility.ts) is switched off without touching the others. Each room's part is also
+// culled against the camera on its own.
 //
 // Pieces can ask for world-projected UVs (`uv: metres per texture repeat`) so a wood or marble
 // texture keeps the same scale on a long counter and a short trim.
@@ -8,20 +12,29 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
-interface Piece {
-  geo: THREE.BufferGeometry;
-}
-
 const tmpN = new THREE.Vector3();
 
+export type Place = THREE.Matrix4 | { x?: number; y?: number; z?: number; ry?: number; rx?: number; rz?: number };
+
+/** The built batches: their meshes, and a switch for each room's part of them. */
+export interface RoomMeshes {
+  meshes: THREE.BatchedMesh[];
+  setRoom(room: string, visible: boolean): void;
+}
+
+/**
+ * Collects pieces into one BatchedMesh per material with one instance per room. `room` is where
+ * the next pieces go; set it before building each room's things.
+ */
 export class Batch {
-  private byMat = new Map<THREE.Material, Piece[]>();
+  room = '';
+  private byMat = new Map<THREE.Material, Map<string, THREE.BufferGeometry[]>>();
 
   /**
-   * Add a piece. The geometry is cloned and baked with `matrix` (or position/rotation), so the
-   * same template can be added many times.
+   * Add a piece. The geometry is cloned and baked with `place`, so the same template can be added
+   * many times. Only positions, normals and UVs are kept.
    */
-  add(geo: THREE.BufferGeometry, mat: THREE.Material, place: THREE.Matrix4 | { x?: number; y?: number; z?: number; ry?: number; rx?: number; rz?: number }, uv?: number): void {
+  add(geo: THREE.BufferGeometry, mat: THREE.Material, place: Place, uv?: number): void {
     const m = place instanceof THREE.Matrix4 ? place : compose(place);
     const g = geo.index ? geo.toNonIndexed() : geo.clone();
     for (const name of Object.keys(g.attributes)) {
@@ -32,9 +45,7 @@ export class Batch {
     if (uv) projectUVs(g, uv);
     else if (!g.getAttribute('uv')) g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(g.getAttribute('position').count * 2), 2));
     g.clearGroups();
-    const list = this.byMat.get(mat) ?? [];
-    list.push({ geo: g });
-    this.byMat.set(mat, list);
+    this.push(mat, g);
   }
 
   /** A box by its centre and size. */
@@ -42,23 +53,55 @@ export class Batch {
     this.add(new THREE.BoxGeometry(sx, sy, sz), mat, { x: cx, y: cy, z: cz, ry }, uv);
   }
 
-  /** Merge everything into one mesh per material and add them to `parent`. */
-  build(parent: THREE.Object3D, name: string): THREE.Mesh[] {
-    const out: THREE.Mesh[] = [];
-    for (const [mat, pieces] of this.byMat) {
-      const merged = mergeGeometries(pieces.map((p) => p.geo), false);
-      for (const p of pieces) p.geo.dispose();
-      if (!merged) continue;
-      merged.computeBoundingSphere();
-      const mesh = new THREE.Mesh(merged, mat);
+  /** A piece already in world space with its own attributes (the glows' colours), taken as it is. */
+  raw(geo: THREE.BufferGeometry, mat: THREE.Material): void {
+    this.push(mat, geo);
+  }
+
+  private push(mat: THREE.Material, g: THREE.BufferGeometry): void {
+    let rooms = this.byMat.get(mat);
+    if (!rooms) this.byMat.set(mat, (rooms = new Map()));
+    const list = rooms.get(this.room) ?? [];
+    list.push(g);
+    rooms.set(this.room, list);
+  }
+
+  /** Merge everything into one BatchedMesh per material, one instance per room, under `parent`. */
+  build(parent: THREE.Object3D, name: string): RoomMeshes {
+    const meshes: THREE.BatchedMesh[] = [];
+    const parts = new Map<string, { mesh: THREE.BatchedMesh; id: number }[]>();
+    const identity = new THREE.Matrix4();
+    for (const [mat, rooms] of this.byMat) {
+      const geos: [string, THREE.BufferGeometry][] = [];
+      for (const [room, pieces] of rooms) {
+        const merged = pieces.length === 1 ? pieces[0]! : mergeGeometries(pieces, false);
+        if (pieces.length > 1) for (const p of pieces) p.dispose();
+        if (merged) geos.push([room, merged]);
+      }
+      if (geos.length === 0) continue;
+      const vertices = geos.reduce((n, [, g]) => n + g.getAttribute('position').count, 0);
+      const mesh = new THREE.BatchedMesh(geos.length, vertices, vertices, mat);
       mesh.name = `${name}:${mat.name || mat.type}`;
+      for (const [room, g] of geos) {
+        const id = mesh.addInstance(mesh.addGeometry(g));
+        mesh.setMatrixAt(id, identity);
+        g.dispose();
+        const list = parts.get(room) ?? [];
+        list.push({ mesh, id });
+        parts.set(room, list);
+      }
       mesh.matrixAutoUpdate = false;
       mesh.updateMatrix();
       parent.add(mesh);
-      out.push(mesh);
+      meshes.push(mesh);
     }
     this.byMat.clear();
-    return out;
+    return {
+      meshes,
+      setRoom(room, visible) {
+        for (const p of parts.get(room) ?? []) p.mesh.setVisibleAt(p.id, visible);
+      },
+    };
   }
 }
 

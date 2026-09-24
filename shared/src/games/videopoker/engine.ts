@@ -8,14 +8,14 @@
 
 import type { Card } from '../../cards.ts';
 import { randInt, type Rng } from '../../rng.ts';
-import { type Cents, DOLLAR, checkBet } from '../../money.ts';
+import { type Cents, DOLLAR, checkBet, formatMoney } from '../../money.ts';
 import type { GameEngine, Step, Refusal, TableConfig, TableMode, GameEvent } from '../../engine.ts';
 import { refuse, seatOf } from '../../engine.ts';
 import { isObj, isInt } from '../../protocol.ts';
 import { rankHand, payCredits, cardCode, HAND_NAMES, MAX_COINS, type HandRank } from './hands.ts';
 
-/** Coin values the player can pick: $1, $5 and $25. */
-export const DENOMS: readonly Cents[] = [1 * DOLLAR, 5 * DOLLAR, 25 * DOLLAR];
+/** Coin values the player can pick: $1, $5, $25 and the high-limit $100. */
+export const DENOMS: readonly Cents[] = [1 * DOLLAR, 5 * DOLLAR, 25 * DOLLAR, 100 * DOLLAR];
 
 export type VideoPokerAction = { type: 'deal'; coins: number; denom?: Cents } | { type: 'draw'; hold: boolean[] };
 
@@ -65,8 +65,9 @@ function config(_variant: string, mode: TableMode): TableConfig {
     variant: '',
     mode,
     maxSeats: 1,
-    buyIn: { min: 20 * DOLLAR, max: 10_000 * DOLLAR },
-    // One $1 coin up to five $25 coins.
+    // up to a thousand of its largest bets (five $100 coins are $500 a hand)
+    buyIn: { min: 20 * DOLLAR, max: 500_000 * DOLLAR },
+    // One $1 coin up to five $100 coins.
     limits: { default: { min: DENOMS[0]!, max: MAX_COINS * DENOMS[DENOMS.length - 1]!, step: DOLLAR } },
     options: { paytable: 'jacks-or-better-9-6', denoms: DENOMS, maxCoins: MAX_COINS },
   };
@@ -164,7 +165,7 @@ export const engine: GameEngine<VideoPokerState, VideoPokerAction, VideoPokerVie
       if (state.phase === 'dealt') return refuse('WRONG_PHASE', 'Hold your cards and draw first.');
       const denom = action.denom ?? state.denom;
       if (action.coins < 1 || action.coins > MAX_COINS) return refuse('LIMIT', `Bet 1 to ${MAX_COINS} coins.`);
-      if (!DENOMS.includes(denom)) return refuse('LIMIT', 'This machine takes $1, $5 or $25 coins.');
+      if (!DENOMS.includes(denom)) return refuse('LIMIT', `This machine takes ${DENOMS.map((d) => formatMoney(d)).join(', ')} coins.`);
       const amount = action.coins * denom;
       if (checkBet(amount, state.cfg.limits.default)) return refuse('LIMIT', 'That bet is outside the machine limits.');
       if (amount > me.stack) return refuse('NOT_ENOUGH_CHIPS', 'Not enough credits for that bet.');

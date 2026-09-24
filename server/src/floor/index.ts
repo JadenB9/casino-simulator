@@ -4,10 +4,10 @@
 //   directory.ts  the lobby list and private-lobby PINs
 //   chat.ts       the floor's chat room
 // Each keeps anything that must survive hibernation in this object's SQLite storage or in the
-// sockets' attachments; memory is only a cache.
+// sockets' attachments; memory is only a cache. The object's one alarm closes idle sockets.
 
 import { DurableObject } from 'cloudflare:workers';
-import { CLOSE, MAX_FLOOR_FRAME, PROTOCOL_VERSION, parseFloorMsg, parseSay, type EmoteId, type FloorServerMsg, type LobbySummary } from '../../../shared/src/protocol.ts';
+import { CLOSE, IDLE_MS, MAX_FLOOR_FRAME, PROTOCOL_VERSION, parseFloorMsg, parseSay, type EmoteId, type FloorServerMsg, type LobbySummary } from '../../../shared/src/protocol.ts';
 import { isGameId } from '../../../shared/src/games/catalog.ts';
 import type { GameId } from '../../../shared/src/engine.ts';
 import { lookFromJson, type Look } from '../../../shared/src/look.ts';
@@ -16,6 +16,7 @@ import { Directory, ipKey } from './directory.ts';
 import { FloorChat } from './chat.ts';
 import { Wins, type BigWinReport } from './wins.ts';
 import { Bucket, KeyedBuckets } from '../ratelimit.ts';
+import { spendTicket } from '../tickets.ts';
 
 /** A hard cap on floor connections; a busy night past this gets a polite "casino is full". */
 export const MAX_FLOOR = 150;
@@ -33,6 +34,8 @@ const FRAME_BURST = 60;
 const FRAME_PER_SEC = 30;
 /** Dropped frames a socket may run up (forgiven one a second) before it is closed. */
 export const FLOOR_STRIKES = 200;
+/** The idle sweep runs at most this often, so a socket goes up to this long after IDLE_MS, never before. */
+export const IDLE_SWEEP_MS = 30_000;
 
 interface FloorLimits {
   frames: Bucket;
@@ -76,6 +79,12 @@ export class CasinoFloor extends DurableObject<Env> {
       server.close(CLOSE.RATE_LIMITED, 'slow down');
       return new Response(null, { status: 101, webSocket: client });
     }
+    // The ticket that let this socket through the Worker opens it once (tickets.ts).
+    if (!spendTicket(this.ctx.storage.sql, request.headers.get('x-casino-ticket'), Number(request.headers.get('x-casino-ticket-exp')), Date.now())) {
+      server.accept();
+      server.close(CLOSE.TICKET, 'ticket used');
+      return new Response(null, { status: 101, webSocket: client });
+    }
     if (this.ctx.getWebSockets().length >= MAX_FLOOR && this.ctx.getWebSockets(`a:${accountId}`).length === 0) {
       server.accept();
       server.close(CLOSE.FORBIDDEN, 'the casino is full');
@@ -94,6 +103,9 @@ export class CasinoFloor extends DurableObject<Env> {
     this.presence.onConnect(server, { accountId, name, look });
     this.chat.join(server);
     this.wins.greet(server); // features: the recent big wins, after hello
+    // Everyone already here is due for the idle sweep no later than this newcomer, so a sweep
+    // already set comes first; with none set (nobody here, or a floor from before idling), set one.
+    if ((await this.ctx.storage.getAlarm()) === null) await this.ctx.storage.setAlarm(Date.now() + IDLE_MS);
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -114,7 +126,10 @@ export class CasinoFloor extends DurableObject<Env> {
     }
     // Chat keeps its own limits and mutes (chat.ts) on top of the frame count.
     const say = parseSay(data);
-    if (say) return this.chat.say(ws, say.text);
+    if (say) {
+      this.presence.touch(ws, Date.now());
+      return this.chat.say(ws, say.text);
+    }
     const msg = parseFloorMsg(data, isGameId);
     if (!msg) {
       this.strike(ws, b);
@@ -122,7 +137,10 @@ export class CasinoFloor extends DurableObject<Env> {
     }
     // Extra emotes are dropped quietly (people mash the key); they already counted as frames.
     if (msg.t === 'emote') {
-      if (b.emote.take()) this.emote(ws, msg.e);
+      if (b.emote.take()) {
+        this.presence.touch(ws, Date.now());
+        this.emote(ws, msg.e);
+      }
       return;
     }
     const ok = msg.t === 'mv' || msg.t === 'st' ? b.move.take() : b.misc.take();
@@ -130,10 +148,50 @@ export class CasinoFloor extends DurableObject<Env> {
       this.strike(ws, b);
       return;
     }
-    if (msg.t === 'watch') this.directory.watch(ws, msg.game);
-    else if (msg.t === 'sit') this.presence.sit(ws, msg);
-    else if (msg.t === 'stand') this.presence.stand(ws);
-    else this.presence.onMessage(ws, msg);
+    if (msg.t === 'watch') {
+      this.directory.watch(ws, msg.game);
+      this.presence.touch(ws, Date.now());
+    } else if (msg.t === 'here') {
+      this.presence.touch(ws, Date.now());
+    } else if (msg.t === 'sit') {
+      // sitting down or getting up is someone at the keyboard too
+      this.presence.sit(ws, msg);
+      this.presence.touch(ws, Date.now());
+    } else if (msg.t === 'stand') {
+      this.presence.stand(ws);
+      this.presence.touch(ws, Date.now());
+    } else {
+      this.presence.onMessage(ws, msg);
+    }
+  }
+
+  /**
+   * The idle sweep: a socket nothing real has come from for IDLE_MS (pings never reach here, and
+   * the same pose again doesn't count) is closed with CLOSE.IDLE. Then it waits for the next one
+   * that could be due, and it stops when nobody is here.
+   */
+  async alarm(): Promise<void> {
+    const now = Date.now();
+    let next = Infinity;
+    for (const ws of this.ctx.getWebSockets()) {
+      const active = this.presence.activeAt(ws);
+      if (active === null) continue;
+      if (now - active >= IDLE_MS) this.idleOut(ws);
+      else next = Math.min(next, active + IDLE_MS);
+    }
+    if (next !== Infinity) await this.ctx.storage.setAlarm(Math.max(next, now + IDLE_SWEEP_MS));
+  }
+
+  private idleOut(ws: WebSocket): void {
+    try {
+      ws.close(CLOSE.IDLE, 'away');
+    } catch {
+      /* already closing */
+    }
+    // Gone from the roster now, as a replaced socket is, rather than whenever its close comes back.
+    this.buckets.delete(ws);
+    this.directory.unwatch(ws);
+    this.presence.onClose(ws);
   }
 
   async webSocketClose(ws: WebSocket, code: number, reason: string): Promise<void> {

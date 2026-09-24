@@ -146,7 +146,7 @@ console.log(JSON.stringify({ slot: sp.slot, flapperShows: rest.shows, history: a
 // Max: the table's $1,000 or the stack, whichever is less
 await freshWindow(6000);
 const before = (await state()).stack;
-await page.keyboard.press('m');
+await page.keyboard.press('a'); // Max (M is the casino's mute)
 await slot(5);
 await until(() => (window.casino.table.view.debug.state().bets[5] ?? 0) > 0, 15000);
 const maxBet = (await state()).bets[5];
@@ -257,13 +257,16 @@ async function multiplayer() {
   if (!tA || !tB) throw new Error('login failed (new-account limit?)');
   const { tableId } = await page.evaluate(async (t) => (await (await fetch('/casino/api/tables', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${t}` }, body: JSON.stringify({ game: 'banditwheel', variant: '', visibility: 'public' }) })).json()), tA);
   const open = (p, t) =>
-    p.evaluate(([id, tok]) => new Promise((res, rej) => {
-      const ws = new WebSocket(`${location.origin.replace('http', 'ws')}/casino/ws/table/${id}?v=1&t=${tok}`);
+    p.evaluate(async ([id, tok]) => {
+      // Sockets open with a single-use ticket for their path, never with the token itself.
+      const { ticket } = await (await fetch('/casino/api/ticket', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${tok}` }, body: JSON.stringify({ target: `table/${id}` }) })).json();
+      return new Promise((res, rej) => {
+      const ws = new WebSocket(`${location.origin.replace('http', 'ws')}/casino/ws/table/${id}?v=1&ticket=${encodeURIComponent(ticket)}`);
       window.bw = { ws, msgs: [], aid: 0, send: (m) => ws.send(JSON.stringify(m)), act: (a) => ws.send(JSON.stringify({ t: 'act', aid: `x${window.bw.aid++}`, a })) };
       ws.onmessage = (e) => window.bw.msgs.push(JSON.parse(e.data));
       ws.onopen = () => res(true);
       ws.onerror = () => rej(new Error('socket failed'));
-    }), [tableId, t]);
+    }); }, [tableId, t]);
   await open(page, tA);
   await open(pageB, tB);
   const wait = (p, pred, ms = 40000) => p.waitForFunction(pred, null, { timeout: ms, polling: 100 });

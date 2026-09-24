@@ -4,8 +4,10 @@
 // layout.ts, the same data the click zones and the chips use.
 
 import * as THREE from 'three';
-import { type Variant, DOUBLE_ZERO, colorOf } from '../../../../shared/src/games/roulette/rules.ts';
+import { type Variant, DOUBLE_ZERO, asVariant, colorOf } from '../../../../shared/src/games/roulette/rules.ts';
 import { engine } from '../../../../shared/src/games/roulette/engine.ts';
+import type { TableConfig } from '../../../../shared/src/engine.ts';
+import { repaintable } from '../../table/limit-sign.ts';
 import { formatMoney } from '../../../../shared/src/money.ts';
 import type { Quality } from '../../render/engine3d.ts';
 import { Felt } from '../../table/felt.ts';
@@ -188,12 +190,11 @@ function roundedShape(w: number, d: number, r: number): THREE.Shape {
   return s;
 }
 
-function limitSign(v: Variant): THREE.Mesh {
-  const lim = engine.config(v, 'multi').limits;
-  const c = document.createElement('canvas');
-  c.width = 640;
-  c.height = 440;
-  const g = c.getContext('2d')!;
+/** The sign's face for a table at these limits (the floor's shows the Standard table's). */
+function paintSign(g: CanvasRenderingContext2D, cfg: TableConfig): void {
+  const c = g.canvas;
+  const v = asVariant(cfg.variant);
+  const lim = cfg.limits;
   g.fillStyle = '#0d0b09';
   g.fillRect(0, 0, c.width, c.height);
   g.strokeStyle = '#d8b06a';
@@ -223,12 +224,20 @@ function limitSign(v: Variant): THREE.Mesh {
   g.fillStyle = '#c9c0ad';
   g.font = '600 28px "Barlow Condensed", sans-serif';
   g.fillText(v === 'american' ? 'TOP LINE 0-00-1-2-3 PAYS 6 TO 1' : 'SINGLE ZERO · FIRST FOUR PAYS 8 TO 1', c.width / 2, 392);
+}
+
+function limitSign(v: Variant): THREE.Mesh {
+  const c = document.createElement('canvas');
+  c.width = 640;
+  c.height = 440;
+  paintSign(c.getContext('2d')!, engine.config(v, 'multi'));
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
   const face = new THREE.MeshStandardMaterial({ map: tex, emissive: '#ffffff', emissiveMap: tex, emissiveIntensity: 0.55, roughness: 0.5 });
   const edge = new THREE.MeshStandardMaterial({ color: '#1a1512', roughness: 0.4, metalness: 0.4 });
   const sign = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.1375, 0.008), [edge, edge, edge, edge, face, edge]);
+  repaintable(sign, face, { width: 640, height: 440, paint: paintSign });
   return sign;
 }
 

@@ -7,24 +7,29 @@ import type { GameId } from '../../../shared/src/engine.ts';
 import { CATALOG } from '../../../shared/src/games/catalog.ts';
 import { ENGINES } from '../../../shared/src/games/index.ts';
 import { formatMoney } from '../../../shared/src/money.ts';
+import { limitsSpan } from '../../../shared/src/limits.ts';
 import { GAMES } from '../games/index.ts';
 import type { Quality } from '../render/engine3d.ts';
 import type { Station } from './contract.ts';
 import type { Collider } from './collision.ts';
-import { BAR_TOP, type Footprint, type FloorPlan, type Placement, type VpMode, type Zone } from './layout.ts';
+import { BAR_TOP, type Footprint, type FloorPlan, type Placement, type RoomId, type VpMode, type Zone } from './layout.ts';
 
 export interface WorldStation extends Station {
   footprint: Footprint;
   zone: Zone;
   /** What the prompt calls it ("Blackjack", "American Roulette", "Neon Nights"). */
   name: string;
-  /** "$5–$5,000", from the engine's solo table limits. */
+  /** "$5–$50,000": the limits a table here can be opened at (a machine's bets). */
   limits: string;
   /** The game module's model (a child of the anchor). */
   model: THREE.Object3D;
   yaw: number;
   /** Per seat, the top of the chair or stool there (metres above the floor), or null to stand (npcs.ts measures them). */
   seatTops?: (number | null)[];
+  /** The room it stands in. */
+  room: RoomId;
+  /** A high-limit table (the salon's): it opens at the higher limits by default. */
+  tier?: 'high';
 }
 
 export { BAR_TOP, type VpMode };
@@ -36,8 +41,11 @@ export function stationName(game: GameId, variant: string): string {
   return game === 'slots' ? v.name : `${v.name} ${info.name}`;
 }
 
+/** The limits a table here can be opened at ("$5–$50,000"), or a machine's bets. */
 export function limitsText(game: GameId, variant: string): string {
   try {
+    const span = limitsSpan(game);
+    if (span) return span;
     const l = ENGINES[game].config(variant, 'solo').limits.default;
     return `${formatMoney(l.min)}–${formatMoney(l.max)}`;
   } catch {
@@ -65,10 +73,12 @@ export function buildStations(plan: FloorPlan, parent: THREE.Object3D, quality: 
       anchor,
       footprint: p.fp,
       zone: p.zone,
-      name: stationName(p.game, p.variant),
+      name: p.tier === 'high' ? `High Limit ${stationName(p.game, p.variant)}` : stationName(p.game, p.variant),
       limits: limitsText(p.game, p.variant),
       model,
       yaw: p.yaw,
+      room: p.room,
+      tier: p.tier,
     };
   };
   for (const p of plan.stations) {

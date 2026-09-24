@@ -211,8 +211,12 @@ export class Crew {
     m.act = null;
   }
 
-  /** Every frame, after the owners have placed their members. */
-  update(dt: number, camera: THREE.Camera): void {
+  /**
+   * Every frame, after the owners have placed their members. `rooms` are the rooms the camera can
+   * see into (visibility.ts) and `roomOf` says which one a point is in: anyone elsewhere isn't
+   * drawn, not even as a still copy.
+   */
+  update(dt: number, camera: THREE.Camera, rooms: ReadonlySet<string> | null = null, sees: ((room: string, box: THREE.Box3) => boolean) | null = null, roomOf: ((x: number, z: number) => string | null) | null = null): void {
     this.clock += dt;
     camera.updateMatrixWorld();
     camera.getWorldPosition(this.cam);
@@ -234,8 +238,12 @@ export class Crew {
       const d = Math.hypot(m.x - this.cam.x, m.z - this.cam.z);
       const near = m.shown ? d < LIVE_M : d < LIVE_M - 1;
       this.sphere.center.set(m.x, 0.95, m.z);
-      const show = near && this.frustum.intersectsSphere(this.sphere);
-      const farShow = !show && !near;
+      const room = rooms && roomOf ? roomOf(m.x, m.z) : null;
+      _box.min.set(m.x - 0.4, 0, m.z - 0.4);
+      _box.max.set(m.x + 0.4, 1.9, m.z + 0.4);
+      const seen = !rooms || !room || (rooms.has(room) && (!sees || sees(room, _box)));
+      const show = seen && near && this.frustum.intersectsSphere(this.sphere);
+      const farShow = seen && !show && !near;
       if (m.far && (farShow !== m.farShown || (farShow && moved))) {
         m.farShown = farShow;
         m.far.dirty = true;
@@ -390,3 +398,4 @@ export class Crew {
 }
 
 const _mat = new THREE.Matrix4();
+const _box = new THREE.Box3();

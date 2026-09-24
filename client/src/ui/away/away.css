@@ -1,0 +1,24 @@
+/* Away: the "Still there?" line and the screen after an idle timeout (app/idle.ts). */
+
+/* Under the HUD, over the dealer's line and the toasts: a player looking back at the screen
+   should see this first. It takes no clicks, so nothing behind it is blocked. */
+.idle-warn { position: fixed; top: var(--below-hud); left: 50%; transform: translateX(-50%); z-index: 42; width: min(440px, calc(100vw - 32px)); padding: 12px 16px 14px; pointer-events: none; border-color: var(--line-strong); animation: idle-in 0.3s var(--ease); }
+.idle-title { display: block; font-family: var(--serif); font-size: 20px; font-weight: 600; letter-spacing: 0.06em; color: var(--brass-hi); }
+.idle-line { margin: 4px 0 10px; font-size: 16px; color: var(--ink-2); text-wrap: pretty; }
+.idle-secs { color: var(--ink); font-variant-numeric: tabular-nums; }
+.idle-bar { height: 2px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+.idle-fill { height: 100%; background: var(--brass); transform-origin: left center; transition: transform 0.25s linear; }
+@keyframes idle-in { from { opacity: 0; translate: 0 -6px; } }
+
+/* The away screen covers the floor (still drawn, dimmed, behind it) until Come back. */
+.away { position: fixed; inset: 0; z-index: 45; display: grid; place-items: center; padding: 24px 16px; background: radial-gradient(120% 90% at 50% 40%, rgba(42, 28, 18, 0.88) 0%, rgba(11, 9, 8, 0.95) 70%); backdrop-filter: blur(6px); animation: away-in 0.4s var(--ease); }
+.away-card { display: grid; justify-items: center; gap: 14px; max-width: 440px; text-align: center; }
+.away-title { margin: 0; font-family: var(--serif); font-size: clamp(24px, 4.2vw, 32px); font-weight: 600; letter-spacing: 0.05em; line-height: 1.25; color: var(--brass-hi); text-wrap: balance; }
+.away-line { margin: 0; font-size: 17px; color: var(--ink-2); text-wrap: pretty; }
+.btn.away-back { margin-top: 8px; height: 52px; min-width: 220px; padding: 0 32px; font-size: 20px; letter-spacing: 0.1em; }
+@keyframes away-in { from { opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .idle-warn, .away { animation: none; }
+  .idle-fill { transition: none; }
+}
