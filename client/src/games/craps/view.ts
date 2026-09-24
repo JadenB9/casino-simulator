@@ -585,18 +585,11 @@ export class CrapsTable implements TableView {
     }
     const m = crapsMoment(decided, total, net);
     if (!m) return false;
-    // the kit rings an object's bounds 35% wider, so an unseen stand-in that much smaller than
-    // the printed box makes the light fill the box
+    // ring the printed box the bet won on (or the chips' spot, for a bet with no box of its own)
     const r = spotRect(m.id, this.solo ? 1 : seatEnd(seat));
-    const stand = new THREE.Mesh(new THREE.PlaneGeometry(r ? (r[2] - r[0]) / 1.35 : 0.05, r ? (r[3] - r[1]) / 1.35 : 0.05));
-    stand.visible = false;
-    stand.rotation.x = -Math.PI / 2;
-    if (r) stand.position.set((r[0] + r[2]) / 2, SURFACE, (r[1] + r[3]) / 2);
-    else stand.position.copy(this.spot(seat, m.id, 'flat'));
-    this.ctx.stage.root.add(stand);
-    celebrate({ stage: this.ctx.stage, ui: this.ctx.ui, sfx: this.ctx.sfx }, { title: m.title, sub: m.sub, tier: m.tier, glow: [stand] });
-    stand.removeFromParent();
-    stand.geometry.dispose();
+    const at = this.spot(seat, m.id, 'flat');
+    const spot = r ? { x: (r[0] + r[2]) / 2, z: (r[1] + r[3]) / 2, w: r[2] - r[0], d: r[3] - r[1] } : { x: at.x, z: at.z, w: 0.06, d: 0.06, round: true };
+    celebrate({ stage: this.ctx.stage, ui: this.ctx.ui, sfx: this.ctx.sfx }, { title: m.title, sub: m.sub, tier: m.tier, spots: [{ ...spot, y: SURFACE - 0.0004 }] });
     return true;
   }
 
