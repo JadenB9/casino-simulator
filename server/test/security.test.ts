@@ -179,6 +179,9 @@ describe('HTTP routes', () => {
     ['POST', 'tables'],
     ['POST', 'tables/join'],
     ['GET', 'leaderboard'],
+    ['GET', 'shop'],
+    ['POST', 'shop/buy'],
+    ['POST', 'bar/order'],
   ];
 
   it('CORS: every route answers the preflight for its method and headers, and errors are readable', async () => {

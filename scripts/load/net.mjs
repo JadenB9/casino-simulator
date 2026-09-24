@@ -202,6 +202,8 @@ export async function audit(cfg, prefix) {
             (SELECT COALESCE(SUM(amount), 0) FROM casino_ledger l WHERE l.account_id = a.id) AS ledger,
             (SELECT COALESCE(SUM(amount), 0) FROM casino_ledger l WHERE l.account_id = a.id AND l.kind IN ('buyin', 'cashout', 'refund')) AS moved,
             (SELECT COALESCE(SUM(amount), 0) FROM casino_ledger l WHERE l.account_id = a.id AND l.kind IN ('grant', 'loan')) AS granted,
+            (SELECT COALESCE(SUM(price), 0) FROM casino_items i WHERE i.account_id = a.id)
+              + (SELECT COALESCE(SUM(price), 0) FROM casino_orders o WHERE o.account_id = a.id) AS spent,
             (SELECT COALESCE(SUM(net), 0) FROM casino_stats s WHERE s.account_id = a.id) AS net,
             (SELECT COALESCE(SUM(rounds), 0) FROM casino_stats s WHERE s.account_id = a.id) AS rounds,
             (SELECT COALESCE(SUM(amount), 0) FROM casino_escrow e WHERE e.account_id = a.id) AS escrow,
@@ -211,13 +213,13 @@ export async function audit(cfg, prefix) {
   );
   const problems = [];
   for (const r of rows) {
-    // The ledger is every change to the balance: it must sum to it.
-    if (r.ledger !== r.balance) problems.push(`${r.name}: ledger ${r.ledger} but balance ${r.balance}`);
+    // The ledger and the shop's purchase rows are every change to the balance: they sum to it.
+    if (r.ledger - r.spent !== r.balance) problems.push(`${r.name}: ledger ${r.ledger} less purchases ${r.spent} but balance ${r.balance}`);
     // Chips taken to tables are exactly the open escrows.
     if (r.in_play !== r.escrow) problems.push(`${r.name}: in_play ${r.in_play} but escrows ${r.escrow}`);
-    // Conservation: balance plus chips on tables = what was granted plus every round's result.
+    // Conservation: balance plus chips on tables = what was granted plus every round's result, less purchases.
     // (Only exact with nothing open: a live stack's wins or losses aren't in D1 until it cashes out.)
-    if (r.escrow === 0 && r.balance !== r.granted + r.net) problems.push(`${r.name}: balance ${r.balance} but granted ${r.granted} + rounds' net ${r.net} = ${r.granted + r.net}`);
+    if (r.escrow === 0 && r.balance !== r.granted + r.net - r.spent) problems.push(`${r.name}: balance ${r.balance} but granted ${r.granted} + rounds' net ${r.net} - purchases ${r.spent} = ${r.granted + r.net - r.spent}`);
     // The money that moved at the edges is the rounds' results, cent for cent.
     if (r.escrow === 0 && r.moved !== r.net) problems.push(`${r.name}: ${r.moved} moved at the edges but rounds' net is ${r.net}`);
   }

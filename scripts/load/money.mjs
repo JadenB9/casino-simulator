@@ -139,6 +139,37 @@ export async function money(ctx) {
   tab2.send({ t: 'leave' });
   await tab2.done;
 
+  // --- the bar, all at once ----------------------------------------------------------------------
+  // One order sent ten times over (a client retrying a lost response): charged once.
+  const e = await server.login(`${ctx.tag}mE`, nextIp(21));
+  const op = `ldrep${Date.now().toString(36)}`;
+  const retries = await Promise.all(Array.from({ length: 10 }, () => server.api('bar/order', { method: 'POST', token: e.token, ip: e.ip, body: { item: 'beer', op } })));
+  me = (await server.api('me', { token: e.token, ip: e.ip })).body.profile;
+  const orderIds = new Set(retries.filter((r) => r.status === 200).map((r) => r.body.order.id));
+  check('one bar order sent ten times at once is charged once', retries.every((r) => r.status === 200) && orderIds.size === 1 && me.balance === START_BALANCE - 900, {
+    statuses: retries.map((r) => r.status),
+    balance: me.balance,
+  });
+
+  // Ten different orders racing for a balance that covers one: exactly one lands, none overdraws.
+  const f = await server.login(`${ctx.tag}mF`, nextIp(21));
+  const fc = await solo(server, meter, f, 'blackjack');
+  fc.send({ t: 'buyin', aid: aid(), amount: 4_800_000 });
+  await settle(fc, 'seated');
+  const race = await Promise.all(
+    Array.from({ length: 10 }, (_, i) => server.api('bar/order', { method: 'POST', token: f.token, ip: f.ip, body: { item: 'dom', op: `ldrace${i}${Date.now().toString(36)}` } })),
+  );
+  me = (await server.api('me', { token: f.token, ip: f.ip })).body.profile;
+  const served = race.filter((r) => r.status === 200).length;
+  const turnedDown = race.filter((r) => r.status === 409 && r.body?.error === 'INSUFFICIENT_FUNDS').length;
+  check('ten $1,200 orders on a $2,000 balance: one served, nine refused, nothing overdrawn', served === 1 && turnedDown === 9 && me.balance === 80_000, {
+    served,
+    refused: turnedDown,
+    balance: me.balance,
+  });
+  fc.send({ t: 'leave' });
+  await fc.done;
+
   out.ok = out.checks.every((x) => x.ok);
   return out;
 }
