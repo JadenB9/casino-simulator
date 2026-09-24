@@ -40,6 +40,7 @@ engine.onFrame((dt) => world.update(dt));
 | `lod` | The far stand-ins: `lod.budget` (draw calls the real models in view may cost over their stand-ins) and `lod.pin(id, 'real' \| 'far' \| null)` for the checks. |
 | `dealerGesture(stationId, g)` | A dealer's arm motion at a table, for its view to call as it animates: `'deal'` (a card off the deck in the left hand, sent out with the right), `'sweep'` (the right arm draws the chips in toward the rack), `'pay'` (both hands forward, setting a payout down). About a second each; a new one replaces one still playing. False when the station has no dealer (machines). Nothing calls it yet. |
 | `staff` | The floor's staff (npcs.ts): `posts` (`{ role, station, x, z, yaw }` for every dealer, the stickman, the bartender and the cashier), `at(stationId)` (that station's dealer character), `gesture(stationId, g)` (what `dealerGesture` calls). |
+| `life` | The floor's life (`life/`, see Floor life below): `useLink(floorLink)` (seats go through the floor socket), `useBar(bar)` (the staff make and bring every order: `bar.deliverWith`), `useApp({ name, openBarMenu, openShop, holdItem, atTable })`, `bank(event)` and `leftBank()` (the banker answers the bank's sheet), `seatFor(id)` (where another player sits on a floor seat, for `RemotePlayers`' `seatFor`). |
 | `plan`, `focus`, `teleport`, `dispose` | The floor plan (layout.ts), the station the player is at, respawn, teardown. |
 
 `SPAWN` (exported) is where a new player appears: `(0, 12.8)`, yaw `Math.PI`, on the marble inside
@@ -139,8 +140,9 @@ Anything else that stands on the floor adds its own collision through `world.col
 Collider built in `createWorld`), as the staff do with a post each.
 ## Staff
 `npcs.ts` puts a dealer behind every table (a stickman across the craps table from its players,
-the Big Six dealer beside the wheel, the roulette dealer between the wheel and the zero), a
-bartender behind the bar and a cashier at the cage's east window. Where a dealer stands comes from
+the Big Six dealer beside the wheel, the roulette dealer between the wheel and the zero), and can
+put a bartender behind the bar and a cashier at the cage (the floor passes `skip` for both: the
+floor's life brings its own, see Floor life). Where a dealer stands comes from
 the table's own model: rays from the dealer's side at a couple of dozen heights find the table's
 edge, and the dealer stands as close as a standing body allows at each height (toes at the floor,
 thighs at table height, belly and chest above it) plus 4 cm, so a rebuilt table moves its dealer.
@@ -173,6 +175,50 @@ The players' seated cameras look over the table at the dealer, who frames it fro
   every table with its dealer from its players' side, the seated views, the bar, the cage and the
   pit, a dealer's three motions and two players sitting at Hold'em (on stand-in chairs), and checks
   the dev views stay under 250 draw calls.
+
+## Floor life
+`life/` brings the floor's people who aren't players or dealers, from the building's life points
+(`lifePoints(plan)` in life-points.ts: every seat that isn't a table's, the bar's two sides and its
+pickup, the teller windows, the boutique, the waiters' loops). npcs.ts leaves the bartender and the
+cashier to it (`new Staff(..., { skip: ['bartender', 'cashier'] })`). Its prompts come through
+`Interact.spots(provider)`: the nearest thing of all (a station, a seat, a waiter) gets "Press E".
+
+- **Sit anywhere** (sitting.ts): "E · Sit" at any free seat; the character glides on, faces the
+  way the seat faces and sits (`Person.sit(top)`), and the camera swings round behind and a little
+  above (the mouse still looks). E ("Stand up"), Esc with the mouse free, or walking gets you up.
+  The floor arbitrates (`sit`/`stand` on the floor socket, `shared/src/seats.ts`): first come, one
+  seat each, freed on stand, walking off, leaving or a second tab; a late second sitter is stood up
+  with the floor's note ("Mia got there first."). Other players are drawn sitting on their seat
+  (`RemotePlayers` `seatFor`) once their walk has reached it. A desk chair in the online lounge is
+  offered only while nobody plays at its computer; table seats stay the tables'.
+- **Waiters** (waiters.ts, routes.ts, rounds.ts, nav.ts, tray.ts): four in teal waistcoats with a
+  tray on the left hand. Each walks a round (the building's loops, else rounds made from the pit,
+  the poker room and the slots), all the same length and a share apart, timed by the server clock,
+  so every client sees them in the same place; paths are A* on a grid of the plan's walkable floor
+  (reach.ts), pulled tight, never through a table. They collect a tray at the bar's pickup, set a
+  drink down at each stop, sidestep people. "E · Order a drink" at one: they stop, turn to you and
+  ask, and the bar's menu opens.
+- **Orders**: `useBar(bar)` takes delivery over (`bar.deliverWith`). The bartender (bartender.ts)
+  makes each paid order (shaken and poured, or fetched from the back bar); at the bar it's handed
+  straight across the counter, otherwise the waiter who took it (or the free one nearest the bar)
+  takes it off the pickup, walks it to you (a seat, a sofa, wherever you stand), holds it out and
+  calls `holdItem(order.id)`. At a game table it waits at the bar until you stand up. Those walks
+  are this screen's own; everyone else sees the round, and the drink in your hand. "E · Order" at
+  the counter brings the bartender over and opens the menu.
+- **Bankers** (bankers.ts): one at each teller window. "E · Bank": they turn to you, greet you by
+  name with a nod ("Good evening, Jaden."), and the bank's sheet opens beside them (the camera stands
+  at the window on wide screens); a top-up is nodded through and counted out ("Here's your
+  $40,000.01. Good luck out there."), a refusal gets a shake of the head. The cage's own prompt
+  steps aside while there are tellers.
+- **Shopkeeper** (shopkeeper.ts): "E · Browse" at the boutique counter (or a mannequin, at what it
+  wears): a welcome with both hands, a word by name, then `openShop()`; a goodbye after. Between
+  customers: polishing a case, straightening a mannequin.
+- **Cost**: the crew (crew.ts) are characters like the dealers (uniforms from characters.ts, one
+  draw call each, the shared material), hidden out of view and in rooms the camera can't see
+  into, waiters and the bartender as still copies past 22 m (one instanced mesh per uniform), one
+  instanced mesh of shadows, trays drawn within 12 m. Lines are short and varied, no emoji
+  (lines.ts). `node scripts/e2e/life4.mjs <port> <dir> [dev floor]` shoots all of it, with two
+  players on the local worker.
 
 ## Rendering
 - Static architecture is merged per material (batch.ts); the floor's glowing strips and discs (LED
