@@ -18,7 +18,7 @@ import { BETTING_MS } from '../../../../shared/src/games/bigsix/engine.ts';
 import { SPOTS, type SymbolId, spotOf, paysLabel, callFor, edgePercent } from '../../../../shared/src/games/bigsix/rules.ts';
 import { BETTING_CHIPS, formatMoney, type Cents } from '../../../../shared/src/money.ts';
 import { ChipTray, el } from '../../ui/kit.ts';
-import { bigSixMax, maxRefusal, type MaxBet } from '../../table/max.ts';
+import { bigSixMax, chipOn, maxRefusal, type MaxBet } from '../../table/max.ts';
 import { tween, wait, ease } from '../../table/tween.ts';
 import { CHIP_R, CHIP_H } from '../../table/chips.ts';
 import { celebrate } from '../../table/celebrate.ts';
@@ -269,8 +269,11 @@ function mountBigSix(ctx: TableViewCtx): TableView {
   function place(key: SymbolId): void {
     if (!canBet()) return;
     const m = maxOn(key);
-    if (m && 'none' in m) return ctx.kit.toast(maxRefusal(m, cfg!.limits.spot ?? cfg!.limits.default));
-    ctx.link.act({ type: 'bet', bets: [{ spot: key, amount: m ? m.amount : tray.selected.value }] });
+    const lim = cfg ? (cfg.limits.spot ?? cfg.limits.default) : null;
+    if (m && 'none' in m) return ctx.kit.toast(maxRefusal(m, lim!));
+    // a chip short of the spot's minimum puts the minimum down
+    const chip = lim ? chipOn(tray.selected.value, myBets()[key] ?? 0, lim) : tray.selected.value;
+    ctx.link.act({ type: 'bet', bets: [{ spot: key, amount: m ? m.amount : chip }] });
     ctx.sfx.play('chip-lay', { volume: 0.7 });
   }
 

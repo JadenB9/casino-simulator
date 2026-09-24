@@ -2,6 +2,11 @@
 // cards come out of the shuffler three rounds around the table, your own three turn over, the
 // Play bet goes down or the hand is mucked, the dealer turns all three cards at once, and each
 // spot is swept or paid where it lies before the chips go back to the players.
+//
+// Hands sit at spots numbered like the seats (the key everywhere below). At a shared table you
+// play your seat's; alone you can play up to three, chosen in the Hands picker: each has its own
+// Ante and Pair Plus, and you Play or Fold them one at a time, first base first, the hand being
+// decided ringed on the felt.
 
 import * as THREE from 'three';
 import type { TableView, TableViewCtx } from '../contract.ts';
@@ -9,7 +14,7 @@ import type { Member } from '../../../../shared/src/protocol.ts';
 import type { TableConfig, GameEvent } from '../../../../shared/src/engine.ts';
 import type { Card } from '../../../../shared/src/cards.ts';
 import { type Cents, BETTING_CHIPS, formatMoney } from '../../../../shared/src/money.ts';
-import { BETTING_MS, DECISION_MS } from '../../../../shared/src/games/threecard/engine.ts';
+import { BETTING_MS, DECISION_MS, MAX_SPOTS } from '../../../../shared/src/games/threecard/engine.ts';
 import type { ThreeCardView, ThreeCardEvent, SeatView } from '../../../../shared/src/games/threecard/protocol.ts';
 import {
   type Paytable,
@@ -33,7 +38,7 @@ import type { Felt } from '../../table/felt.ts';
 import { ease, tween, wait } from '../../table/tween.ts';
 import { handMoment } from './moments.ts';
 import { ChipTray, button, el } from '../../ui/kit.ts';
-import { maxRefusal, threeCardMax } from '../../table/max.ts';
+import { chipOn, maxRefusal, threeCardMax } from '../../table/max.ts';
 import { serverNow } from '../../net/clock.ts';
 import {
   TOP_Y,
@@ -54,8 +59,13 @@ import {
   railPoint,
   seatAngle,
   spotPoint,
+  spotsPose,
+  cameraPose,
 } from './layout.ts';
 import { FLOOR_FELT } from './model.ts';
+import { SpotPicker } from '../multihand/picker.ts';
+import { glideTo, setSpotsInPlay } from '../multihand/frame.ts';
+import { oneAtATime } from '../multihand/turns.ts';
 import './threecard.css';
 
 const KINDS: SpotKind[] = ['pairPlus', 'ante', 'play'];
@@ -149,16 +159,35 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
   // the newest state from the server, which can be ahead of what is drawn while a hand animates
   let latest: ThreeCardView | null = null;
   let members: Member[] = [];
+  // the spots I play (one at a shared table), first spot first
+  let spots: number[] = [];
 
-  // my bets as I've asked for them, ahead of the server's answer, and the steps to undo
-  let mine: Bets = { ...NO_BETS };
-  let history: Bets[] = [];
-  let last: Bets | null = null;
+  // my bets as I've asked for them, by spot, ahead of the server's answer, and the steps to undo
+  let wanted: Record<number, Bets> = {};
+  let history: Record<number, Bets>[] = [];
+  let last: Record<number, Bets> | null = null;
   let lastNet: Cents | null = null;
+  // this round's net over my hands so far (folds settle before the others)
+  let roundNet: Cents = 0;
   let readyOn = false;
   let lastAction: 'bet' | 'other' = 'other';
-  // set once my Play or Fold is on its way, so a stale view can't bring the buttons back
-  let decided = false;
+  // a bet the table refused: until I bet again, my spots are drawn from what the table holds (a
+  // Rebet across several hands sends one message each, and the refusal can come before the others land)
+  let resync = false;
+  // hands whose Play or Fold is on its way, so a stale view can't bring their buttons back
+  const sent = new Set<number>();
+  // how many hands the camera was last framed for (null until the first view)
+  let framed: number | null = null;
+  let disposed = false;
+  // several hands' celebrations take turns
+  const inTurn = oneAtATime();
+
+  /** A hand is mine: my seat's at a shared table, every one at my own. */
+  const owns = (spot: number): boolean => me !== null && (mode === 'solo' || spot === me);
+  const betsOf = (spot: number): Bets => wanted[spot] ?? NO_BETS;
+  /** The Antes on my other hands: each keeps its Play back too. */
+  const antesBesides = (spot: number): Cents => Object.entries(wanted).reduce((a, [s, b]) => (Number(s) === spot ? a : a + b.ante), 0);
+  const total = (b: Record<number, Bets>): Cents => Object.values(b).reduce((a, x) => a + x.ante + x.pairPlus, 0);
 
   // ---- table objects -----------------------------------------------------------------------
 
@@ -224,6 +253,8 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
   });
   tray.select(BETTING_CHIPS[2]!);
   ctx.ui.append(tray.root);
+  const picker = new SpotPicker(MAX_SPOTS, (n) => pickSpots(n));
+  ctx.ui.append(picker.root);
 
   const playBtn = button('Play', () => decide('play'), { cls: 'primary', key: 'P' });
   const foldBtn = button('Fold', () => decide('fold'), { key: 'F' });
@@ -297,6 +328,12 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
   // ---- helpers over the current view -------------------------------------------------------
 
   const seatView = (seat: number | null): SeatView | undefined => (seat === null || !view ? undefined : view.seats[seat]);
+  /** My hand waiting on Play or Fold, first base first: the one the bar and the ring are for. */
+  const deciding = (): number | null => {
+    if (view?.phase !== 'deciding') return null;
+    const waiting = spots.filter((s) => seatView(s)?.decision === 'pending' && !sent.has(s));
+    return waiting.sort((a, b) => positionOf(a) - positionOf(b))[0] ?? null;
+  };
   const canBet = (): boolean => {
     if (me === null || !latest) return false;
     if (mode === 'multi') return latest.phase === 'betting';
@@ -308,33 +345,44 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
   };
 
   const renderMeters = (): void => {
-    const sv = seatView(me);
-    const onLayout = view && sv && (view.phase === 'betting' || view.phase === 'deciding') && sv.decision !== 'fold' ? sv.ante + sv.pairPlus + sv.play : 0;
+    let onLayout = 0;
+    for (const spot of spots) {
+      const sv = seatView(spot);
+      if (view && sv && (view.phase === 'betting' || view.phase === 'deciding') && sv.decision !== 'fold') onLayout += sv.ante + sv.pairPlus + sv.play;
+    }
     meterStack.textContent = money(stack);
-    meterBet.textContent = money(view?.phase === 'betting' ? mine.ante + mine.pairPlus : onLayout);
+    meterBet.textContent = money(view?.phase === 'betting' ? total(wanted) : onLayout);
     meterLast.textContent = lastNet === null ? '–' : signed(lastNet);
     meterLast.className = `money ${lastNet === null || lastNet === 0 ? '' : lastNet > 0 ? 'up' : 'down'}`;
   };
 
   const renderControls = (): void => {
-    const sv = seatView(me);
-    const deciding = view?.phase === 'deciding' && sv?.decision === 'pending' && !decided;
-    decideBar.hidden = !deciding;
-    tray.root.classList.toggle('tc-away', deciding);
-    if (deciding && sv) playBtn.firstChild!.textContent = `Play ${money(sv.ante)}`;
+    const up = deciding();
+    const sv = seatView(up);
+    decideBar.hidden = up === null;
+    tray.root.classList.toggle('tc-away', up !== null);
+    if (up !== null && sv) {
+      playBtn.firstChild!.textContent = `Play ${money(sv.ante)}`;
+      // With several hands to decide, which one this is: they go first base first.
+      const toDecide = spots.filter((s) => seatView(s)?.decision !== 'none' && seatView(s)?.decision != null).sort((a, b) => positionOf(a) - positionOf(b));
+      decideHint.textContent = toDecide.length > 1 ? `Hand ${toDecide.indexOf(up) + 1} of ${toDecide.length} · Play Q-6-4 or better` : 'Play Q-6-4 or better';
+    }
+    picker.show(mode === 'solo' && canBet());
+    picker.set(Math.max(1, spots.length));
     renderTip();
     if (mode === 'solo') {
-      tray.setPrimary('Deal', !!view && view.phase === 'betting' && mine.ante + mine.pairPlus > 0);
+      tray.setPrimary('Deal', !!view && view.phase === 'betting' && total(wanted) > 0);
     } else {
       tray.setPrimary(readyOn ? 'Waiting' : 'Ready', !!view && view.phase === 'betting' && me !== null);
     }
+    renderRings();
     renderMeters();
   };
 
-  /** Tips: Play or Fold by Q-6-4 for my three cards, while that decision is mine to make. */
+  /** Tips: Play or Fold by Q-6-4 for the three cards of the hand I'm deciding. */
   const renderTip = (): void => {
-    const sv = seatView(me);
-    const cards = ctx.tips.on && !decided && view?.phase === 'deciding' && sv?.decision === 'pending' && sv.cards.length === 3 && sv.cards.every((c) => c !== null) ? (sv.cards as Card[]) : null;
+    const sv = seatView(deciding());
+    const cards = ctx.tips.on && sv?.decision === 'pending' && sv.cards.length === 3 && sv.cards.every((c) => c !== null) ? (sv.cards as Card[]) : null;
     const a = cards ? playAdvice(cards) : null;
     playBtn.classList.toggle('tip-pick', a?.play === true);
     foldBtn.classList.toggle('tip-pick', a?.play === false);
@@ -342,11 +390,17 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
   };
   const offTips = ctx.tips.subscribe(() => renderTip());
 
-  /** My hand's moment, if it was one, with the light under my cards. */
-  const celebrateHand = (r: Settlement, cards: Card[]): void => {
-    const m = me === null ? null : handMoment(r, cards, pay);
-    if (!m || me === null) return;
-    celebrate(ctx, { ...m, at: handSlot(me, 1).pos, glow: [hands.get(me) ?? []] });
+  /**
+   * A hand's moment, if it was one, with the light under its cards. Several hands' moments take
+   * turns a couple of seconds apart, so each banner is read on its own.
+   */
+  const celebrateHand = (spot: number, r: Settlement, cards: Card[]): void => {
+    const m = handMoment(r, cards, pay);
+    if (!m) return;
+    inTurn(() => {
+      if (disposed) return;
+      celebrate(ctx, { ...m, at: handSlot(spot, 1).pos, glow: [hands.get(spot) ?? []] });
+    });
   };
 
   // ---- drawing the whole table from a view (on join, and after each batch of events) ---------
@@ -367,7 +421,7 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
   };
 
   const handLabel = (seat: number, sv: SeatView): void => {
-    const cls = `tc-hand${seat === me ? ' mine' : ''}`;
+    const cls = `tc-hand${owns(seat) ? ' mine' : ''}`;
     if (sv.decision === 'fold') {
       setLabel(`hand:${seat}`, handLabelPoint(seat), [{ text: 'Folded', cls: 'muted' }], cls);
       return;
@@ -406,6 +460,10 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
 
   const draw = (v: ThreeCardView): void => {
     view = v;
+    spots = v.mine ?? (me !== null ? [me] : []);
+    if (resync) wanted = serverBets();
+    // a hand the table has answered for is no longer on its way
+    for (const spot of [...sent]) if (v.seats[spot]?.decision !== 'pending') sent.delete(spot);
     clearPayouts();
     for (let seat = 0; seat < SEAT_COUNT; seat++) {
       const sv = v.seats[seat];
@@ -413,8 +471,9 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
       for (const kind of KINDS) {
         const s = spotStack(seat, kind);
         s.position.copy(spotPoint(seat, kind));
-        const own = seat === me && v.phase === 'betting';
-        const amount = own ? (kind === 'ante' ? mine.ante : kind === 'pairPlus' ? mine.pairPlus : 0) : live ? (kind === 'ante' ? sv.ante : kind === 'pairPlus' ? sv.pairPlus : sv.play) : 0;
+        const own = spots.includes(seat) && v.phase === 'betting';
+        const b = betsOf(seat);
+        const amount = own ? (kind === 'ante' ? b.ante : kind === 'pairPlus' ? b.pairPlus : 0) : live ? (kind === 'ante' ? sv.ante : kind === 'pairPlus' ? sv.pairPlus : sv.play) : 0;
         if (s.amount !== amount) s.set(amount);
       }
       const showCards = sv && sv.cards.length === 3 && sv.decision !== 'fold' && v.phase !== 'betting';
@@ -451,44 +510,76 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
     }
     if (v.phase !== 'betting') {
       // the round is over (or cards are out): the next bet starts from nothing
-      mine = { ...NO_BETS };
+      wanted = {};
       history = [];
     }
+    frame();
     renderControls();
   };
 
-  /** What the table itself holds for me right now. */
-  const serverBets = (): Bets => {
-    const sv = seatView(me);
-    return view?.phase === 'betting' && sv ? { ante: sv.ante, pairPlus: sv.pairPlus } : { ...NO_BETS };
+  /**
+   * The camera takes in every hand I play: the app flies to the module's play pose when I sit down
+   * (it asks after this view has seen the table), and a change of count at the table glides.
+   */
+  const frame = (): void => {
+    const n = mode === 'solo' ? Math.max(1, spots.length) : 1;
+    setSpotsInPlay('threecard', n);
+    if (framed !== null && framed !== n && !disposed) void glideTo(ctx.stage, n > 1 ? spotsPose(spots, ctx.stage.engine.camera.aspect) : cameraPose(me ?? 0));
+    framed = n;
+  };
+
+  /** What the table itself holds for me right now, by spot. */
+  const serverBets = (): Record<number, Bets> => {
+    const out: Record<number, Bets> = {};
+    if (view?.phase !== 'betting') return out;
+    for (const spot of spots) {
+      const sv = seatView(spot);
+      if (sv) out[spot] = { ante: sv.ante, pairPlus: sv.pairPlus };
+    }
+    return out;
   };
 
   // ---- the player's moves --------------------------------------------------------------------
 
-  const sendBets = (next: Bets, push = true): void => {
-    if (!canBet() || (next.ante === mine.ante && next.pairPlus === mine.pairPlus)) return;
-    if (push) history.push({ ...mine });
-    mine = next;
-    if (me !== null) {
-      spotStack(me, 'ante').set(next.ante);
-      spotStack(me, 'pairPlus').set(next.pairPlus);
-    }
+  /**
+   * Set my hands' bets to `next` (every spot I play), sending one message per hand that changed.
+   * `push` keeps the step for Undo.
+   */
+  const sendBets = (next: Record<number, Bets>, push = true): void => {
+    if (!canBet()) return;
+    resync = false;
+    const changed = spots.filter((s) => {
+      const a = betsOf(s);
+      const b = next[s] ?? NO_BETS;
+      return a.ante !== b.ante || a.pairPlus !== b.pairPlus;
+    });
+    if (changed.length === 0) return;
+    if (push) history.push(structuredClone(wanted));
+    wanted = structuredClone(next);
     lastAction = 'bet';
-    ctx.link.act({ type: 'bet', ante: next.ante, pairPlus: next.pairPlus });
+    for (const spot of changed) {
+      const b = betsOf(spot);
+      spotStack(spot, 'ante').set(b.ante);
+      spotStack(spot, 'pairPlus').set(b.pairPlus);
+      ctx.link.act({ type: 'bet', ante: b.ante, pairPlus: b.pairPlus, spot });
+    }
     renderControls();
   };
 
-  const addChip = (kind: 'ante' | 'pairPlus'): void => {
+  const addChip = (spot: number, kind: 'ante' | 'pairPlus'): void => {
     if (!canBet()) return;
-    // Max picked: the most this spot takes (the Ante keeping its Play back)
-    let add = tray.selected.value;
-    if (tray.maxPicked && cfg) {
-      const m = threeCardMax(cfg, kind, mine, stack);
-      if ('none' in m) return ctx.kit.toast(maxRefusal(m, cfg.limits[kind] ?? cfg.limits.default));
+    const b = betsOf(spot);
+    const lim = cfg ? (cfg.limits[kind] ?? cfg.limits.default) : null;
+    // a chip short of the minimum puts the minimum down; Max picked, the most this hand takes
+    // (every hand's Ante keeping its Play back)
+    let add = lim ? chipOn(tray.selected.value, b[kind], lim) : tray.selected.value;
+    if (tray.maxPicked && cfg && lim) {
+      const m = threeCardMax(cfg, kind, b, stack, antesBesides(spot));
+      if ('none' in m) return ctx.kit.toast(maxRefusal(m, lim));
       add = m.amount;
     }
     ctx.sfx.play('chip-lay');
-    sendBets({ ...mine, [kind]: mine[kind] + add });
+    sendBets({ ...wanted, [spot]: { ...b, [kind]: b[kind] + add } });
   };
 
   const undo = (): void => {
@@ -496,19 +587,32 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
     if (prev) sendBets(prev, false);
   };
   const clear = (): void => {
-    if (mine.ante + mine.pairPlus > 0) sendBets({ ...NO_BETS });
+    if (total(wanted) > 0) sendBets({});
   };
+  /** Rebet: last round's hands again, spot by spot; ×2 doubles what's down (or last round's). */
   const rebet = (times: number): void => {
-    const from = times > 1 && mine.ante + mine.pairPlus > 0 ? mine : last;
+    const from = times > 1 && total(wanted) > 0 ? wanted : last;
     if (!from) return;
+    const next: Record<number, Bets> = {};
+    for (const spot of spots) if (from[spot]) next[spot] = { ante: from[spot]!.ante * times, pairPlus: from[spot]!.pairPlus * times };
     ctx.sfx.play('chips-handle');
-    sendBets({ ante: from.ante * times, pairPlus: from.pairPlus * times });
+    sendBets(next);
+  };
+
+  /** Solo: play `n` hands; bets on the hands let go come back (the table returns them). */
+  const pickSpots = (n: number): void => {
+    if (mode !== 'solo' || !canBet()) return;
+    for (const spot of Object.keys(wanted).map(Number)) if (spot >= n) delete wanted[spot];
+    history = [];
+    lastAction = 'other';
+    ctx.sfx.play('ui-click');
+    ctx.link.act({ type: 'spots', n });
   };
 
   const primary = (): void => {
     if (!latest || me === null) return;
     if (mode === 'solo') {
-      if (latest.phase === 'betting' && mine.ante + mine.pairPlus > 0) {
+      if (latest.phase === 'betting' && total(wanted) > 0) {
         lastAction = 'other';
         ctx.link.act({ type: 'deal' });
       }
@@ -521,16 +625,17 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
     renderControls();
   };
 
+  /** Play or Fold the hand being decided; the next of mine waiting comes up when the table answers. */
   const decide = (choice: 'play' | 'fold'): void => {
-    const sv = me === null ? undefined : latest?.seats[me];
-    if (decided || latest?.phase !== 'deciding' || sv?.decision !== 'pending') return;
+    const spot = deciding();
+    if (spot === null || latest?.phase !== 'deciding' || latest.seats[spot]?.decision !== 'pending') return;
     ctx.sfx.play('ui-click');
-    decided = true;
+    sent.add(spot);
     decideBar.hidden = true;
     renderTip();
-    tray.root.classList.remove('tc-away');
+    renderRings();
     lastAction = 'other';
-    ctx.link.act({ type: choice });
+    ctx.link.act({ type: choice, spot });
   };
 
   // ---- pointer: bet on my spots, with a hover ring --------------------------------------------
@@ -546,36 +651,71 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
   const tipObj = ctx.stage.label(tip, new THREE.Vector3());
   tipObj.visible = false;
 
-  const mySpotAt = (e: PointerEvent): 'ante' | 'pairPlus' | null => {
+  /** One of my hands' Ante or Pair Plus spots under the pointer. */
+  const mySpotAt = (e: PointerEvent): { spot: number; kind: 'ante' | 'pairPlus' } | null => {
     if (e.target !== canvas || me === null) return null;
-    const hit = ctx.stage.pick(e);
-    const id = hit?.region;
-    if (id === `ante:${me}`) return 'ante';
-    if (id === `pairPlus:${me}`) return 'pairPlus';
+    const id = ctx.stage.pick(e)?.region ?? '';
+    for (const spot of spots) {
+      if (id === `ante:${spot}`) return { spot, kind: 'ante' };
+      if (id === `pairPlus:${spot}`) return { spot, kind: 'pairPlus' };
+    }
     return null;
   };
   const onDown = (e: PointerEvent): void => {
     if (e.button !== 0) return;
-    const kind = mySpotAt(e);
-    if (kind) addChip(kind);
+    const at = mySpotAt(e);
+    if (at) addChip(at.spot, at.kind);
   };
   const onMove = (e: PointerEvent): void => {
-    const kind = canBet() ? mySpotAt(e) : null;
-    hoverRing.visible = kind !== null;
-    tipObj.visible = kind !== null;
-    canvas.style.cursor = kind ? 'pointer' : '';
-    if (!kind || me === null) return;
-    const p = spotPoint(me, kind, TOP_Y + 0.0015);
+    const at = canBet() ? mySpotAt(e) : null;
+    hoverRing.visible = at !== null;
+    tipObj.visible = at !== null;
+    canvas.style.cursor = at ? 'pointer' : '';
+    if (!at) return;
+    const { spot, kind } = at;
+    const p = spotPoint(spot, kind, TOP_Y + 0.0015);
     hoverRing.position.copy(p);
-    tipObj.position.copy(besideSpot(me, kind, 0.16));
-    const amount = kind === 'ante' ? mine.ante : mine.pairPlus;
+    tipObj.position.copy(besideSpot(spot, kind, 0.16));
+    const amount = betsOf(spot)[kind];
     const pays = kind === 'ante' ? 'pays 1 to 1' : `pays up to ${pay.pairPlus[0]} to 1`;
-    const most = tray.maxPicked && cfg ? threeCardMax(cfg, kind, mine, stack) : null;
+    const most = tray.maxPicked && cfg ? threeCardMax(cfg, kind, betsOf(spot), stack, antesBesides(spot)) : null;
     const max = most && 'amount' in most ? ` · Max adds ${money(most.amount)}` : '';
     tip.textContent = `${SPOT_NAMES[kind]} · ${pays}${amount ? ` · ${money(amount)}` : ''}${max}`;
   };
   addEventListener('pointerdown', onDown);
   addEventListener('pointermove', onMove);
+
+  // ---- rings: faint ones round my Ante spots while I bet on several, a lit one round the Play
+  // spot of the hand I'm deciding ----------------------------------------------------------------
+
+  const ringMat = new THREE.MeshBasicMaterial({ color: '#f5dc9c', transparent: true, opacity: 0.38, depthWrite: false });
+  const litMat = new THREE.MeshBasicMaterial({ color: '#ffe7ad', transparent: true, opacity: 0.9, depthWrite: false });
+  const ringGeo = new THREE.RingGeometry(SPOT_RADIUS * 1.16, SPOT_RADIUS * 1.3, 48);
+  const litGeo = new THREE.RingGeometry(SPOT_RADIUS * 1.14, SPOT_RADIUS * 1.46, 48);
+  const rings = new Map<string, THREE.Mesh>();
+  const renderRings = (): void => {
+    const want = new Map<string, { at: THREE.Vector3; lit: boolean }>();
+    if (mode === 'solo' && spots.length > 1 && canBet() && view?.phase !== 'deciding') {
+      for (const spot of spots) want.set(`a:${spot}`, { at: spotPoint(spot, 'ante', TOP_Y + 0.0013), lit: false });
+    }
+    const up = spots.length > 1 ? deciding() : null;
+    if (up !== null) want.set(`p:${up}`, { at: spotPoint(up, 'play', TOP_Y + 0.0013), lit: true });
+    for (const [key, w] of want) {
+      let ring = rings.get(key);
+      if (!ring) {
+        ring = new THREE.Mesh(w.lit ? litGeo : ringGeo, w.lit ? litMat : ringMat);
+        ring.rotation.x = -Math.PI / 2;
+        root.add(ring);
+        rings.set(key, ring);
+      }
+      ring.position.copy(w.at);
+    }
+    for (const [key, ring] of rings) {
+      if (want.has(key)) continue;
+      ring.removeFromParent();
+      rings.delete(key);
+    }
+  };
 
   // ---- name tags for the other players -------------------------------------------------------
 
@@ -652,11 +792,10 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
     );
   };
 
-  const showMine = async (cards: Card[]): Promise<void> => {
-    if (me === null) return;
-    const ms = hands.get(me);
+  const showMine = async (spot: number, cards: Card[]): Promise<void> => {
+    const ms = hands.get(spot);
     if (ms && ms.length === 3) await turnOver(ms, cards, 70);
-    setLabel(`hand:${me}`, handLabelPoint(me), [{ text: handName(score(cards)) }], 'tc-hand mine');
+    setLabel(`hand:${spot}`, handLabelPoint(spot), [{ text: handName(score(cards)) }], 'tc-hand mine');
   };
 
   const placePlay = async (seat: number, amount: Cents): Promise<void> => {
@@ -714,7 +853,7 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
       if (staked === 0) continue;
       if (back === 0) lost.push(kind);
       else if (back > staked) jobs.push(payOut(seat, kind, back - staked, 1));
-      if (seat !== me) continue;
+      if (!owns(seat)) continue;
       if (back === 0) pill(seat, kind, formatMoney(-staked), 'lose');
       else if (back === staked) pill(seat, kind, 'PUSH', 'push');
       else {
@@ -724,7 +863,7 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
     }
     if (r.bonus > 0) {
       jobs.push(payOut(seat, 'ante', r.bonus, -1));
-      if (seat === me) pill(seat, 'ante', `BONUS ${signed(r.bonus)}`, 'win', 0.13);
+      if (owns(seat)) pill(seat, 'ante', `BONUS ${signed(r.bonus)}`, 'win', 0.13);
     }
     if (jobs.length > 0) ctx.sfx.play('chips-stack');
     jobs.push(sweep(seat, lost));
@@ -750,8 +889,8 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
     clearPayouts();
   };
 
-  /** The dealer's calls for my hand once it has settled. */
-  const callResult = async (r: Settlement, mineCards: Card[], dealer: Card[]): Promise<void> => {
+  /** The dealer's calls for my hand once it has settled (brisker when there are several). */
+  const callResult = async (r: Settlement, mineCards: Card[], dealer: Card[], brisk = false): Promise<void> => {
     const ps = score(mineCards);
     const ds = score(dealer);
     const pn = handName(ps);
@@ -768,7 +907,7 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
     else if (r.outcome === null && r.pairPlus === 0) lines.push(`${pn}: Pair Plus loses`);
     for (const line of lines) {
       ctx.kit.say(line, 2600);
-      await wait(1100);
+      await wait(brisk ? 800 : 1100);
     }
   };
 
@@ -785,35 +924,40 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
           break;
         case 'bets':
           // my own bets are already on the felt as I asked for them; this is the echo
-          if (e.seat === me) break;
+          if (spots.includes(e.seat)) break;
           ctx.sfx.play('chip-lay', { volume: 0.4 });
           spotStack(e.seat, 'ante').set(e.ante);
           spotStack(e.seat, 'pairPlus').set(e.pairPlus);
           break;
-        case 'deal':
-          if (me !== null && e.seats.includes(me)) last = { ...mine };
+        case 'deal': {
+          const dealtMine = e.seats.filter(owns);
+          if (dealtMine.length) {
+            last = Object.fromEntries(dealtMine.map((spot) => [spot, betsOf(spot)]));
+            roundNet = 0;
+          }
           await sweepCards();
           await dealAround(e.seats);
           break;
+        }
         case 'hand':
-          if (e.seat === me) await showMine(e.cards);
+          if (owns(e.seat)) await showMine(e.seat, e.cards);
           break;
         case 'decide':
-          decided = false;
-          if (me !== null && next.seats[me]?.decision === 'pending') {
+          sent.clear();
+          if (spots.some((spot) => next.seats[spot]?.decision === 'pending')) {
             view = next;
             renderControls();
-            ctx.kit.say('Play or fold?', 4000);
+            ctx.kit.say(spots.filter((spot) => next.seats[spot]?.decision === 'pending').length > 1 ? 'Play or fold, hand by hand' : 'Play or fold?', 4000);
           }
           break;
         case 'decision':
-          if (e.seat === me) decideBar.hidden = true;
+          if (owns(e.seat)) decideBar.hidden = true;
           if (e.choice === 'play') {
             anyPlayed = true;
             await placePlay(e.seat, e.play);
           } else {
             await muck(e.seat);
-            if (e.seat === me) {
+            if (owns(e.seat)) {
               const sv = next.seats[e.seat];
               ctx.kit.say(sv && sv.pairPlus > 0 ? 'Folded: Ante and Pair Plus lost' : 'Folded: Ante lost', 2400);
             }
@@ -833,25 +977,26 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
           }
           break;
         }
-        case 'show':
-          if (e.seat !== me) {
-            const ms = hands.get(e.seat);
+        case 'show': {
+          const ms = hands.get(e.seat);
+          if (!owns(e.seat)) {
             if (ms && ms.length === 3) await turnOver(ms, e.cards, 50);
-          } else if (me !== null) {
-            const ms = hands.get(me);
-            if (ms && ms.some((m) => !m.faceUp)) await turnOver(ms, e.cards, 50);
-          }
-          setLabel(`hand:${e.seat}`, handLabelPoint(e.seat), [{ text: handName(score(e.cards)) }], `tc-hand${e.seat === me ? ' mine' : ''}`);
+          } else if (ms && ms.some((m) => !m.faceUp)) await turnOver(ms, e.cards, 50);
+          setLabel(`hand:${e.seat}`, handLabelPoint(e.seat), [{ text: handName(score(e.cards)) }], `tc-hand${owns(e.seat) ? ' mine' : ''}`);
           break;
+        }
         case 'result': {
           const sv = next.seats[e.seat];
-          if (e.seat === me) lastNet = e.result.returned - e.result.wagered;
+          if (owns(e.seat)) {
+            roundNet += e.result.returned - e.result.wagered;
+            lastNet = roundNet;
+          }
           if (e.result.outcome === 'fold' || !sv) break;
           settled = true;
           await settleSeat(e.seat, e.result, { ante: sv.ante, pairPlus: sv.pairPlus, play: sv.play });
           handLabel(e.seat, sv);
-          if (e.seat === me && sv.cards.every((c) => c !== null)) celebrateHand(e.result, sv.cards as Card[]);
-          if (e.seat === me && dealer && sv.cards.every((c) => c !== null)) await callResult(e.result, sv.cards as Card[], dealer);
+          if (owns(e.seat) && sv.cards.every((c) => c !== null)) celebrateHand(e.seat, e.result, sv.cards as Card[]);
+          if (owns(e.seat) && dealer && sv.cards.every((c) => c !== null)) await callResult(e.result, sv.cards as Card[], dealer, spots.length > 1);
           renderMeters();
           break;
         }
@@ -895,7 +1040,8 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
       pay = v.paytable ?? paytableOf(cfg.options);
       view = v;
       latest = v;
-      mine = serverBets();
+      spots = v.mine ?? (me !== null ? [me] : []);
+      wanted = serverBets();
       if (!felt) {
         felt = makeFelt(pay, 1400);
         ctx.stage.addFelt(felt, TOP_Y + 0.0006);
@@ -934,9 +1080,10 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
       // a refused move: go back to what the table really holds
       if (lastAction === 'bet') {
         history.pop();
-        mine = serverBets();
+        resync = true;
+        wanted = serverBets();
       } else {
-        decided = false;
+        sent.clear();
       }
       if (view) draw(view);
     },
@@ -987,9 +1134,14 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
 
     update() {
       tickClock();
+      // the ring round the hand being decided breathes, so it's found at a glance
+      litMat.opacity = 0.62 + 0.3 * Math.sin(performance.now() / 260);
     },
 
     dispose() {
+      disposed = true;
+      for (const x of [ringMat, litMat, ringGeo, litGeo]) x.dispose();
+      picker.root.remove();
       offTips();
       ctx.kit.tip(null);
       removeEventListener('pointerdown', onDown);

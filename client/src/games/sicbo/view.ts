@@ -18,7 +18,7 @@ import { BETTING_MS } from '../../../../shared/src/games/sicbo/engine.ts';
 import { spots, spotByKey, spotName, paysLabel, spotRule, houseEdge, winPays, callRoll, facePlural, type Dice } from '../../../../shared/src/games/sicbo/rules.ts';
 import { BETTING_CHIPS, formatMoney, type Cents } from '../../../../shared/src/money.ts';
 import { ChipTray, el } from '../../ui/kit.ts';
-import { maxRefusal, sicBoMax, type MaxBet } from '../../table/max.ts';
+import { chipOn, maxRefusal, sicBoMax, type MaxBet } from '../../table/max.ts';
 import { tween, wait, ease } from '../../table/tween.ts';
 import { CHIP_R, CHIP_H } from '../../table/chips.ts';
 import { celebrate, type Tier } from '../../table/celebrate.ts';
@@ -223,8 +223,12 @@ export function mountSicBo(ctx: TableViewCtx): TableView {
   function place(key: string): void {
     if (!canBet()) return;
     const m = maxOn(key);
-    if (m && 'none' in m) return ctx.kit.toast(maxRefusal(m, cfg!.limits[spotByKey(key)!.limit] ?? cfg!.limits.default));
-    ctx.link.act({ type: 'bet', bets: [{ spot: key, amount: m ? m.amount : tray.selected.value }] });
+    const spot = spotByKey(key);
+    const lim = cfg && spot ? (cfg.limits[spot.limit] ?? cfg.limits.default) : null;
+    if (m && 'none' in m) return ctx.kit.toast(maxRefusal(m, lim!));
+    // a chip short of the box's minimum puts the minimum down
+    const chip = lim ? chipOn(tray.selected.value, myBets()[key] ?? 0, lim) : tray.selected.value;
+    ctx.link.act({ type: 'bet', bets: [{ spot: key, amount: m ? m.amount : chip }] });
     ctx.sfx.play('chip-lay', { volume: 0.7 });
   }
 

@@ -20,7 +20,7 @@ import { engine as craps } from '../../shared/src/games/craps/engine.ts';
 import type { CrapsView } from '../../shared/src/games/craps/protocol.ts';
 import { TableSim } from '../../shared/test/helpers/table-sim.ts';
 import { seededRng } from '../../shared/test/helpers/seeded.ts';
-import { baccaratMax, bigSixMax, blackjackMax, crapsMax, crapsOddsMax, maxRefusal, rouletteMax, sicBoMax, threeCardMax, warMax } from '../src/table/max.ts';
+import { baccaratMax, bigSixMax, blackjackMax, chipOn, crapsMax, crapsOddsMax, maxRefusal, rouletteMax, sicBoMax, threeCardMax, warMax } from '../src/table/max.ts';
 
 const D = 100;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -262,5 +262,48 @@ describe('craps: the line, lay bets and max odds', () => {
     sim.act(0, { type: 'bet', bets: [{ kind: 'pass', amount: 25 * D }] });
     exact(sim, crapsMax(cfg, 'place', 6, undefined, sim.stack(0)), 6 * D, (amount) => ({ type: 'bet', bets: [{ kind: 'place', number: 6, amount }] }));
     expect(sim.stack(0)).toBeLessThan(6 * D);
+  });
+});
+
+describe('Max per hand when one player plays several (solo multi-hand)', () => {
+  it('Three Card: each Ante keeps its own Play back and every other hand\'s', () => {
+    const { sim, cfg } = table(threecard, { min: 25 * D, max: 2_500 * D }, 1_200 * D);
+    sim.act(0, { type: 'spots', n: 3 });
+    sim.act(0, { type: 'bet', spot: 0, ante: 100 * D, pairPlus: 0 });
+    sim.act(0, { type: 'bet', spot: 1, ante: 100 * D, pairPlus: 0 });
+    // $1,000 left: $200 of it the first two hands' Plays, the third hand's Ante half the rest
+    const m = threeCardMax(cfg, 'ante', { ante: 0, pairPlus: 0 }, sim.stack(0), 200 * D);
+    expect(m).toEqual({ amount: 400 * D });
+    exact(sim, m, D, (ante) => ({ type: 'bet', spot: 2, ante, pairPlus: 0 }));
+    const pp = threeCardMax(cfg, 'pairPlus', { ante: 100 * D, pairPlus: 0 }, sim.stack(0), 500 * D);
+    expect(pp).toEqual({ none: 'SHORT' });
+  });
+
+  it("War: each bet keeps its own raise back and every other hand's", () => {
+    const { sim, cfg } = table(war, { min: 10 * D, max: 1_000 * D }, 900 * D);
+    sim.act(0, { type: 'spots', n: 2 });
+    sim.act(0, { type: 'bet', spot: 0, bet: 100 * D, tie: 0 });
+    // $800 left, $100 of it the first hand's raise: the second hand's bet is half the rest
+    const m = warMax(cfg, { bet: 0, tie: 0 }, sim.stack(0), 100 * D);
+    expect(m).toEqual({ amount: 350 * D });
+    exact(sim, m, D, (bet) => ({ type: 'bet', spot: 1, bet, tie: 0 }));
+  });
+
+  it('Blackjack: each circle to its own maximum, from what the others left', () => {
+    const { sim, cfg } = table(blackjack, { min: 25 * D, max: 2_500 * D }, 4_000 * D);
+    sim.act(0, { type: 'spots', n: 2 });
+    sim.act(0, { type: 'bet', spot: 0, amount: 2_500 * D });
+    const m = blackjackMax(cfg.limits.default, 0, sim.stack(0));
+    expect(m).toEqual({ amount: 1_500 * D });
+    exact(sim, m, D, (amount) => ({ type: 'bet', spot: 1, amount }));
+  });
+});
+
+describe('a chip short of a spot minimum', () => {
+  it('puts the minimum down, in the step', () => {
+    expect(chipOn(5 * D, 0, { min: 10 * D, max: 1_000 * D, step: D })).toBe(10 * D);
+    expect(chipOn(5 * D, 7 * D, { min: 10 * D, max: 1_000 * D, step: D })).toBe(5 * D);
+    expect(chipOn(D, 0, { min: 25 * D, max: 5_000 * D, step: 6 * D })).toBe(30 * D);
+    expect(chipOn(100 * D, 0, { min: 25 * D, max: 5_000 * D, step: D })).toBe(100 * D);
   });
 });

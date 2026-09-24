@@ -207,6 +207,29 @@ Ante Bonus.
   divided by drop, the cash and markers exchanged for chips at the table, not the house edge. Do not
   compare the two.
 
+### 1.9 Several hands (solo tables)
+
+At a solo table a player can play one to three hands at once, from the one stack, at the player's
+own position and the ones the next players would take. Each hand has its own Ante and Pair Plus
+inside the table's limits, and every Ante is taken only with its Play bet still in the stack, so
+each hand can be played whatever the cards. All the hands come from the round's one deck (three
+cards to each hand, then the dealer's three). Each hand is played or folded on its own, one at a
+time from first base, and each settles on its own, a round of its own in the stats. At a shared
+table every player keeps one hand.
+
+**Odds.** The deal is a uniformly random pick of cards, so each hand's three cards and the
+dealer's three are a uniformly random six cards whatever the other hands hold, and the Q-6-4 rule
+looks only at the hand's own cards: the other hands are cards nobody looks at. The edge per hand
+is therefore exactly the one-hand edge, 3.373% of the Ante (Q-6-4) and 7.276% for Pair Plus. The
+hands share the dealer's cards, so the Monte Carlo takes its standard error from each round's
+average over its hands (shared/test/threecard-spots.mc.test.ts):
+
+| Bet | Published | Measured per hand | SE | z | N |
+|---|---|---|---|---|---|
+| Ante and Play, Q-6-4 | 3.3730% | 3.3801% | 0.0352% | +0.20 | 10M rounds, 30M hands |
+| Pair Plus | 7.2760% | 7.3423% | 0.0520% | +1.27 | the same deals |
+| All three bets through the table engine, one stack (per Ante) | 10.6490% | 11.1878% | 0.5757% | +0.94 | 166,667 rounds |
+
 ---
 
 ## 2. Video poker: Jacks or Better 9/6

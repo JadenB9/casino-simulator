@@ -88,15 +88,19 @@ whichever is less:
 
 | Table | What Max bets |
 |---|---|
-| Blackjack | Your bet, at once |
-| Casino War | Your bet, at once, keeping its match back for a war (so half your chips at most) |
-| Three Card Poker | Pick Max, then click the Ante (keeping its match back for the Play bet) or Pair Plus (keeping the Play's match back) |
+| Blackjack | Pick Max, then click a circle: that circle's maximum (the limits are per circle), from what your other circles left |
+| Casino War | Pick Max, then click a hand's bet (or press B for every hand): each keeps its own raise's match back and every other hand's |
+| Three Card Poker | Pick Max, then click a hand's Ante (keeping its Play's match back, and every other hand's) or its Pair Plus |
 | Baccarat | Pick Max, then click Player, Banker, Tie or a pair (or press P, B, T) |
 | Roulette, Big Six, Sic Bo | Pick Max, then click any spot: its own maximum, within what the table maximum a round leaves |
 | Craps | Pick Max, then click: a flat bet to its maximum (a lay bet with its commission paid from what you have), or full odds behind your line or come bet |
 | Hold'em | All-in (A, pressed twice), and Max beside the pot-size presets sets the amount to all in |
 | Bandit Wheel | Pick Max (A) in the terminal, then a number |
 | The online games | Max in the bet panel |
+
+Playing several hands alone (blackjack's circles, Three Card and War hands), every limit is per
+hand, and Max works hand by hand. A chip smaller than what a spot still needs to reach its minimum
+puts the minimum down (in the spot's step), as a dealer would ask, rather than being refused.
 
 The hover over a spot says what Max would add there. The server checks every bet as it always has,
 so Max can never put down more than the table allows.

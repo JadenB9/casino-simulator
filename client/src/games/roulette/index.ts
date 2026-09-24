@@ -19,7 +19,7 @@ import { BETTING_MS, LAUNCH_LEAD_MS, LATE_SPIN_MS } from '../../../../shared/src
 import { asVariant, spotByKey, spotName, paysLabel, describePocket, pocketLabel, type Spot } from '../../../../shared/src/games/roulette/rules.ts';
 import { BETTING_CHIPS, formatMoney, type Cents } from '../../../../shared/src/money.ts';
 import { ChipTray, el } from '../../ui/kit.ts';
-import { maxRefusal, rouletteMax, type MaxBet } from '../../table/max.ts';
+import { chipOn, maxRefusal, rouletteMax, type MaxBet } from '../../table/max.ts';
 import { tween, wait, ease } from '../../table/tween.ts';
 import { CHIP_R, CHIP_H } from '../../table/chips.ts';
 import { serverNow } from '../../net/clock.ts';
@@ -260,9 +260,11 @@ function mountRoulette(ctx: TableViewCtx): TableView {
 
   function place(spot: Spot): void {
     if (!canBet()) return;
-    let amount = tray.selected.value;
+    const lim = cfg ? (cfg.limits[spot.inside ? 'inside' : 'outside'] ?? cfg.limits.default) : null;
+    // a chip short of the spot's minimum puts the minimum down
+    let amount = lim ? chipOn(tray.selected.value, myBets()[spot.key] ?? 0, lim) : tray.selected.value;
     const m = maxOn(spot);
-    if (m && 'none' in m) return ctx.kit.toast(maxRefusal(m, cfg!.limits[spot.inside ? 'inside' : 'outside'] ?? cfg!.limits.default));
+    if (m && 'none' in m) return ctx.kit.toast(maxRefusal(m, lim!));
     if (m) amount = m.amount;
     ctx.link.act({ type: 'bet', bets: [{ kind: spot.kind, ...(spot.inside ? { numbers: [...spot.numbers] } : {}), amount }] });
     ctx.sfx.play('chip-lay', { volume: 0.7 });

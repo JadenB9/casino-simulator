@@ -52,17 +52,28 @@ export function baccaratMax(cfg: TableConfig, spot: BaccaratSpot, bets: Partial<
 }
 
 /**
- * Three Card Poker: the Ante keeps its match back for the Play bet, so it goes up by half of what
- * is left over the Ante already down; Pair Plus can use everything but the Play's match.
+ * Three Card Poker, one hand: the Ante keeps its match back for the Play bet (and so does every
+ * other hand's Ante, `otherAntes`), so it goes up by half of what is left over the Antes already
+ * down; Pair Plus can use everything but the Plays' matches.
  */
-export function threeCardMax(cfg: TableConfig, kind: 'ante' | 'pairPlus', bets: { ante: Cents; pairPlus: Cents }, stack: Cents): MaxBet {
-  if (kind === 'ante') return maxBet({ limits: lim(cfg, 'ante'), current: bets.ante, stack: Math.floor((stack - bets.ante) / 2) });
-  return maxBet({ limits: lim(cfg, 'pairPlus'), current: bets.pairPlus, stack: stack - bets.ante });
+export function threeCardMax(cfg: TableConfig, kind: 'ante' | 'pairPlus', bets: { ante: Cents; pairPlus: Cents }, stack: Cents, otherAntes: Cents = 0): MaxBet {
+  const free = stack - bets.ante - otherAntes;
+  if (kind === 'ante') return maxBet({ limits: lim(cfg, 'ante'), current: bets.ante, stack: Math.floor(free / 2) });
+  return maxBet({ limits: lim(cfg, 'pairPlus'), current: bets.pairPlus, stack: free });
 }
 
-/** Casino War: the bet keeps its match back for a war's raise. */
-export function warMax(cfg: TableConfig, bets: { bet: Cents; tie: Cents }, stack: Cents): MaxBet {
-  return maxBet({ limits: lim(cfg, 'bet'), current: bets.bet, stack: Math.floor((stack - bets.bet) / 2) });
+/** Casino War, one hand: the bet keeps its match back for a war's raise, as every other hand's does (`otherBets`). */
+export function warMax(cfg: TableConfig, bets: { bet: Cents; tie: Cents }, stack: Cents, otherBets: Cents = 0): MaxBet {
+  return maxBet({ limits: lim(cfg, 'bet'), current: bets.bet, stack: Math.floor((stack - bets.bet - otherBets) / 2) });
+}
+
+/**
+ * A chip on a spot that checks its minimum as each chip goes down: a chip that would leave the
+ * spot under it puts down the minimum instead (in the spot's step), as a dealer would ask for.
+ */
+export function chipOn(chip: Cents, current: Cents, limits: BetLimits): Cents {
+  if (current + chip >= limits.min) return chip;
+  return Math.ceil((limits.min - current) / limits.step) * limits.step;
 }
 
 /**

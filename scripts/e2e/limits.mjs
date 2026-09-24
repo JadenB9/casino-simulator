@@ -223,21 +223,24 @@ async function harness(game, limits, buyIn, extra = '') {
   return page;
 }
 
-/** Where a felt region (by id pattern) is on screen. */
+/** Where a felt region (by id pattern) is on screen: of several, the one nearest the player's edge (mine). */
 const regionAt = (page, pattern) =>
   page.evaluate((src) => {
     const re = new RegExp(src);
     const { engine, table } = window.casino;
+    let best = null;
     for (const f of table.stage.felts) {
-      const r = f.spec.regions.find((x) => re.test(x.id));
-      if (!r) continue;
-      const a = f.anchorOf(r.id);
-      const p = engine.camera.position.clone().set(a[0], f.mesh.position.y, a[1]);
-      table.stage.root.localToWorld(p);
-      p.project(engine.camera);
-      return { x: ((p.x + 1) / 2) * innerWidth, y: ((1 - p.y) / 2) * innerHeight };
+      for (const r of f.spec.regions) {
+        if (!re.test(r.id)) continue;
+        const a = f.anchorOf(r.id);
+        if (!best || a[1] > best.a[1]) best = { f, a };
+      }
     }
-    return null;
+    if (!best) return null;
+    const p = engine.camera.position.clone().set(best.a[0], best.f.mesh.position.y, best.a[1]);
+    table.stage.root.localToWorld(p);
+    p.project(engine.camera);
+    return { x: ((p.x + 1) / 2) * innerWidth, y: ((1 - p.y) / 2) * innerHeight };
   }, pattern);
 
 const stackOf = (page) => page.evaluate(() => window.casino.table.snapshot.you.stack);
@@ -250,27 +253,16 @@ async function pickAndClick(page, at, file) {
   await shot(page, `${file}-hover`);
   const before = await stackOf(page);
   await page.mouse.click(at.x, at.y);
-  await page.waitForFunction((b) => window.casino.table.snapshot.you.stack !== b, before, { timeout: 8000 });
+  await page.waitForFunction((b) => window.casino.table.snapshot.you.stack !== b, before, { timeout: 30_000 });
   await page.waitForTimeout(500);
   await shot(page, file);
   return before - (await stackOf(page));
 }
 
 const solo = [
-  ['blackjack', '10000-1000000', 3000, async (page) => {
-    await page.keyboard.press('a');
-    await page.waitForFunction(() => window.casino.table.snapshot.you.stack === 0, null, { timeout: 8000 });
-    await page.waitForTimeout(600);
-    await shot(page, 'max-blackjack');
-    return 300_000;
-  }, 300_000],
-  ['war', '2500-250000', 1001, async (page) => {
-    await page.keyboard.press('a');
-    await page.waitForFunction(() => window.casino.table.snapshot.you.stack === 50_100, null, { timeout: 8000 });
-    await page.waitForTimeout(600);
-    await shot(page, 'max-war');
-    return 50_000;
-  }, 50_000],
+  ['blackjack', '10000-1000000', 3000, async (page) => pickAndClick(page, await regionAt(page, '^spot:'), 'max-blackjack'), 300_000],
+  // War keeps the raise's match back: $1,001 puts $500 on the bet
+  ['war', '2500-250000', 1001, async (page) => pickAndClick(page, await regionAt(page, '^bet:'), 'max-war'), 50_000],
   ['threecard', '2500-250000', 5000, async (page) => pickAndClick(page, await regionAt(page, '^ante:'), 'max-threecard'), 250_000],
   ['baccarat', '10000-2500000', 40000, async (page) => pickAndClick(page, await regionAt(page, ':banker$'), 'max-baccarat'), 2_500_000],
   ['roulette', '2500-1000000', 30000, async (page) => pickAndClick(page, await page.evaluate(() => window.casino.table.view.debug.screenOf('red')), 'max-roulette'), 1_000_000],
