@@ -108,14 +108,45 @@ export function askBuyIn(opts: { min: Cents; max: Cents; balance: Cents; suggest
   });
 }
 
-/** The chip tray: pick a denomination (keys 1-7), plus Undo / Clear / Rebet / x2 and a primary action. */
+/**
+ * The tray's Max. 'bet': at a table with one main bet (blackjack, war), a press puts the most
+ * that bet takes, or all your chips, down at once. 'pick': at a layout of many spots, Max is
+ * picked like a chip and every spot clicked while it is gets the most it takes.
+ */
+export type TrayMax = { mode: 'bet'; run: () => void } | { mode: 'pick' };
+
+/**
+ * The Max button every table shares: gold, with its M key. A tray builds its own; a game with
+ * its own bet panel can use this for the same look.
+ */
+export function maxButton(onClick: () => void, title = 'Max: the most this bet takes, or all your chips if that is less (M)'): HTMLButtonElement {
+  const b = el('button', 'btn max-btn');
+  b.type = 'button';
+  b.title = title;
+  b.append(document.createTextNode('Max'), el('span', 'key', 'M'));
+  b.addEventListener('click', onClick);
+  return b;
+}
+
+/** The chip tray: pick a denomination (keys 1-8), plus Undo / Clear / Rebet / x2, Max and a primary action. */
 export class ChipTray {
   readonly root = el('div', 'tray panel');
   private buttons = new Map<number, HTMLButtonElement>();
   selected: ChipSpec = BETTING_CHIPS[1]!;
   private primaryBtn: HTMLButtonElement;
+  /** The Max button, when the table has one. */
+  readonly maxBtn: HTMLButtonElement | null = null;
+  private readonly maxMode: TrayMax | null;
+  private maxOn = false;
 
-  constructor(handlers: { undo?: () => void; clear?: () => void; rebet?: () => void; double?: () => void; primary?: { label: string; key?: string; run: () => void } }) {
+  constructor(handlers: {
+    undo?: () => void;
+    clear?: () => void;
+    rebet?: () => void;
+    double?: () => void;
+    primary?: { label: string; key?: string; run: () => void };
+    max?: TrayMax;
+  }) {
     const chips = el('div', 'chips');
     chipTrayCanvases().forEach(({ spec, canvas }, i) => {
       const b = el('button', 'chip-btn');
@@ -127,6 +158,14 @@ export class ChipTray {
       this.buttons.set(spec.value, b);
       chips.append(b);
     });
+    this.maxMode = handlers.max ?? null;
+    if (this.maxMode) {
+      const mode = this.maxMode;
+      this.maxBtn = mode.mode === 'bet'
+        ? maxButton(() => mode.run())
+        : maxButton(() => this.pickMax(), 'Max: pick it, then click a spot to bet the most it takes, or all your chips if that is less (M)');
+      chips.append(this.maxBtn);
+    }
     const acts = el('div', 'acts');
     if (handlers.undo) acts.append(button('Undo', handlers.undo, { key: '⌫' }));
     if (handlers.clear) acts.append(button('Clear', handlers.clear, { key: 'X' }));
@@ -140,7 +179,40 @@ export class ChipTray {
 
   select(spec: ChipSpec): void {
     this.selected = spec;
+    this.maxOn = false;
     for (const [v, b] of this.buttons) b.setAttribute('aria-pressed', String(v === spec.value));
+    if (this.maxMode?.mode === 'pick') this.maxBtn!.setAttribute('aria-pressed', 'false');
+  }
+
+  /** A 'pick' Max is the current choice: a click on a spot bets the most it takes. */
+  get maxPicked(): boolean {
+    return this.maxOn;
+  }
+
+  /** Pick Max (in 'pick' mode) in place of a chip. */
+  pickMax(): void {
+    if (this.maxMode?.mode !== 'pick') return;
+    this.maxOn = true;
+    for (const b of this.buttons.values()) b.setAttribute('aria-pressed', 'false');
+    this.maxBtn!.setAttribute('aria-pressed', 'true');
+  }
+
+  /**
+   * The table's largest bet: chips above it go back in the rack (the smallest always stays), and a
+   * picked chip that went moves to the largest one left.
+   */
+  setChipMax(max: Cents): void {
+    let largest: ChipSpec | null = null;
+    for (const spec of BETTING_CHIPS) {
+      const hide = spec.value > max && spec !== BETTING_CHIPS[0];
+      this.buttons.get(spec.value)!.hidden = hide;
+      if (!hide) largest = spec;
+    }
+    if (this.buttons.get(this.selected.value)!.hidden && largest) {
+      const keepMax = this.maxOn;
+      this.select(largest);
+      if (keepMax) this.pickMax();
+    }
   }
 
   setPrimary(label: string, enabled: boolean): void {
@@ -148,11 +220,20 @@ export class ChipTray {
     this.primaryBtn.disabled = !enabled;
   }
 
-  /** Number keys pick chips; returns true if the key was one of them. */
+  /**
+   * Number keys pick chips (a chip this table keeps in the rack does nothing) and M is Max;
+   * returns true if the key was one of them.
+   */
   key(e: KeyboardEvent): boolean {
     const n = Number(e.key);
     if (Number.isInteger(n) && n >= 1 && n <= BETTING_CHIPS.length) {
-      this.select(BETTING_CHIPS[n - 1]!);
+      const spec = BETTING_CHIPS[n - 1]!;
+      if (!this.buttons.get(spec.value)!.hidden) this.select(spec);
+      return true;
+    }
+    if (this.maxMode && (e.key === 'm' || e.key === 'M') && !e.shiftKey) {
+      if (this.maxMode.mode === 'bet') this.maxMode.run();
+      else this.pickMax();
       return true;
     }
     return false;

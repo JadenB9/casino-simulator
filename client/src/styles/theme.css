@@ -98,6 +98,10 @@ button { font: inherit; color: inherit; }
 .chip-btn canvas { display: block; width: 100%; height: 100%; border-radius: 50%; }
 .chip-btn[aria-pressed='true'] { transform: translateY(-6px); box-shadow: 0 0 0 2px var(--brass-hi), 0 6px 14px rgba(0, 0, 0, 0.5); }
 .tray .acts { display: flex; gap: 6px; }
+/* Max: gold, beside the chips; picked (at a layout of many spots) it rises like a chip */
+.max-btn { color: var(--brass-hi); border-color: var(--brass); letter-spacing: 0.1em; }
+.tray .chips .max-btn { align-self: center; height: 40px; margin-left: 4px; padding: 0 12px; transition: transform 0.15s var(--ease), border-color 0.15s, background 0.15s; }
+.max-btn[aria-pressed='true'] { transform: translateY(-6px); background: linear-gradient(#e2bf7c, #b98d45); color: #1d140a; border-color: #f1d59a; box-shadow: 0 6px 14px rgba(0, 0, 0, 0.5); }
 .tray .sep { width: 1px; align-self: stretch; background: var(--line); }
 
 /* modal */
