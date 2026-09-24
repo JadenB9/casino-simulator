@@ -24,13 +24,23 @@ import type { Engine3D } from '../render/engine3d.ts';
 
 type Mode = 'probe' | 'hooks' | 'effects' | 'off';
 
-/** The floor's bloom: past this brightness light glows, the knee softens the start, strength and radius size the halo. */
-export const FLOOR_BLOOM = { threshold: 1.0, knee: 0.35, strength: 0.62, radius: 0.18 };
+export interface BloomLook {
+  /** Past this brightness light glows; the knee softens the start; strength and radius size the halo. */
+  threshold: number;
+  knee: number;
+  strength: number;
+  radius: number;
+}
+
+/** Walking the floor: neon, LED strips, bulbs and the machines' glass glow. */
+export const FLOOR_BLOOM: BloomLook = { threshold: 1.0, knee: 0.35, strength: 0.62, radius: 0.18 };
 /**
- * Seated, a metre from lit felt, cards and brass: only real light sources (neon, bulbs, the
- * machines' glass) should glow, never the cards.
+ * Seated at a table, a metre from felt, cards and chips under the pit's spots: lit white printing
+ * reaches three or so, so nothing on the table glows at all; only the strongest light sources do.
  */
-export const SEATED_BLOOM = { threshold: 1.9, knee: 0.4, strength: 0.4, radius: 0.12 };
+export const TABLE_BLOOM: BloomLook = { threshold: 4.2, knee: 0.5, strength: 0.35, radius: 0.12 };
+/** Seated at a machine: its bulbs, candle and glass are the point, and glow a little. */
+export const MACHINE_BLOOM: BloomLook = { threshold: 2.2, knee: 0.4, strength: 0.45, radius: 0.14 };
 
 /** The high pass: each pixel keeps only the part of its light past the threshold (soft-kneed). */
 const EXCESS_FRAGMENT = /* glsl */ `
@@ -94,8 +104,8 @@ export class Bloom {
     if (on && this.mode === 'off') this.mode = 'probe';
   }
 
-  /** How the glow looks: FLOOR_BLOOM on the floor, SEATED_BLOOM at a table. */
-  setLook(l: { threshold: number; knee: number; strength: number; radius: number }): void {
+  /** How the glow looks: FLOOR_BLOOM on the floor, TABLE_BLOOM or MACHINE_BLOOM seated. */
+  setLook(l: BloomLook): void {
     this.pass.threshold = l.threshold;
     this.pass.strength = l.strength;
     this.pass.radius = l.radius;

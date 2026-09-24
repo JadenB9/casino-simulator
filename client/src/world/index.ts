@@ -22,7 +22,7 @@ import { Player } from './player.ts';
 import { Interact } from './interact.ts';
 import { TouchControls } from './touch.ts';
 import { StationLod } from './lod.ts';
-import { Bloom, FLOOR_BLOOM, PixelRatio, SEATED_BLOOM } from './bloom.ts';
+import { Bloom, FLOOR_BLOOM, MACHINE_BLOOM, PixelRatio, TABLE_BLOOM, type BloomLook } from './bloom.ts';
 import type { MouseSettings } from './mouse.ts';
 import { Emotes, OWN_BUBBLE_Y, BUBBLE_Y, type CharacterSource } from './emotes.ts';
 import { Staff, measureSeats, type StaffGesture } from './npcs.ts';
@@ -259,7 +259,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
   let remotes: CharacterSource | null = null;
   let bar: Parameters<FloorWorld['useBar']>[0] = null;
 
-  let bloomSeated = false;
+  let bloomLook: BloomLook = FLOOR_BLOOM;
   let lastCalls = 0;
   let lastTris = 0;
   const focusAt = new THREE.Vector3();
@@ -320,12 +320,13 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
       const f = world.focus;
       lighting.setFocus(f && f.zone !== 'slots' && f.game !== 'videopoker' ? focusAt.copy(f.anchor.position) : null);
       lighting.update(dt);
-      // Seated, the camera is a metre from lit felt, cards and brass: only real light sources
-      // (neon, bulbs, the machines' glass) should glow there, never the cards.
-      const close = interact.seated !== null;
-      if (close !== bloomSeated) {
-        bloomSeated = close;
-        bloom.setLook(close ? SEATED_BLOOM : FLOOR_BLOOM);
+      // Seated, the camera is a metre from lit felt, cards and brass: nothing on a table glows
+      // there; at a machine its own lights do, a little.
+      const seat = interact.seated;
+      const want = !seat ? FLOOR_BLOOM : seat.zone === 'slots' || seat.game === 'videopoker' ? MACHINE_BLOOM : TABLE_BLOOM;
+      if (want !== bloomLook) {
+        bloomLook = want;
+        bloom.setLook(want);
       }
       props.update(dt);
       characters.updateLabels(engine.camera);

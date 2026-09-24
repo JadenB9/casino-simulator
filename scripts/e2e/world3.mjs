@@ -711,6 +711,16 @@ if (checks.includes('bloom')) {
   }
   await page.waitForFunction(() => window.casino.app.table?.seated === true, null, { timeout: 30000 });
   await page.waitForTimeout(1500);
+  if (station !== 'bc-1') {
+    // any other table: the seated view before any round (the felt's own printing under the lights)
+    await page.waitForTimeout(6000);
+    const file = `${out}/world3-bloom-${station}.png`;
+    await page.screenshot({ path: file });
+    console.log(JSON.stringify({ check: 'bloom', station, file, errors: errors.slice(0, 3) }));
+    if (errors.length) fail(`bloom: ${errors[0]}`);
+    await ctx.close();
+  }
+  if (station === 'bc-1') {
   await page.evaluate(() => {
     const s = window.casino.app.table.session;
     s.__done = false;
@@ -742,6 +752,7 @@ if (checks.includes('bloom')) {
   if (!events.includes('card')) fail('bloom: no cards were dealt');
   if (errors.length) fail(`bloom: ${errors[0]}`);
   await ctx.close();
+  }
 }
 
 await browser.close();
