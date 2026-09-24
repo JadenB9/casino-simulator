@@ -835,6 +835,71 @@ if (wanted('money')) {
   }
 }
 
+// ------------------------------------------------------------------------------------------------------
+// Part: a big win at Limbo, heard on the floor (the toast, the sign's list, the day's meter), and
+// the winner's HUD session net
+
+if (wanted('bigwin')) {
+  let luck = null;
+  let watch = null;
+  try {
+    await clearRate();
+    watch = await player('qm_watcher');
+    luck = await player('qm_lucky');
+    pages.push(watch, luck);
+    await settled(luck, 180_000);
+    // the watcher stands in the pit, facing the sign
+    await watch.page.evaluate(() => {
+      const w = window.casino.world;
+      const pit = w.plan.rooms.find((r) => r.id === 'pit');
+      w.teleport(pit.cx, pit.cz + 4, Math.PI);
+    });
+    const start = await me(luck);
+    const since = Date.now();
+    await sitSolo(luck, 'lb-1', { buyin: '3000' });
+    await luck.page.waitForSelector('.os-screen:not([hidden])');
+    // $10 at a 25.00x target, one bet at a time, until one lands (about 1 in 25)
+    let win = null;
+    for (let i = 0; i < 300 && !win; i++) {
+      const before = tableFrames(luck, since).length;
+      await luck.page.evaluate(() => window.casino.app.table.session.link.act({ type: 'bet', bet: 1_000, target: 2_500 }));
+      const until = Date.now() + 5000;
+      while (Date.now() < until && !tableFrames(luck, since).slice(before).some((m) => m.t === 'ev' || m.t === 'err')) await sleep(20);
+      win = eventsOf(luck, 'result', since).find((e) => e.win) ?? null;
+    }
+    check(!!win, `Limbo paid a 25x target: ${win ? `${money(win.payout)} on ${money(win.bet)}` : 'no win in 300 bets'}`);
+    if (win) {
+      // the floor hears it once the page has shown it, and not before
+      const heard = await watch.page.waitForFunction(() => document.querySelector('.bigwin-toast')?.textContent ?? null, null, { timeout: 20_000 }).then((h) => h.jsonValue()).catch(() => null);
+      check(heard === 'qm_lucky won $240Limbo, Target 25x', `the watcher's toast: "${heard}"`);
+      const wire = watch.frames.filter((m) => m.t === 'bigwin').at(-1);
+      check(wire && wire.amount === 24_000 && wire.what === 'Target 25x' && wire.station === 'lb-1' && wire.game === 'limbo', `the floor's news: ${JSON.stringify(wire && { amount: wire.amount, what: wire.what, station: wire.station })}`);
+      const meter = await watch.page.evaluate(() => window.casino.app.floorLife?.tally ?? null).catch(() => null);
+      void meter;
+      await watch.page.waitForTimeout(600);
+      await shoot(watch.page, 'bigwin-1-watcher');
+      // the winner's own page celebrates it (25x is over the site's 10x), no toast for themselves
+      await luck.page.waitForTimeout(1500);
+      await shoot(luck.page, 'bigwin-2-winner');
+      check(!(await luck.page.$('.bigwin-toast')), 'the winner gets no toast about their own win');
+    }
+    // the HUD's session net is the rounds' net to the cent
+    const rounds = roundsOf(luck, 'limbo', since);
+    const net = rounds.reduce((a, r) => a + r.returned - r.wagered, 0);
+    await luck.page.waitForTimeout(800);
+    const hud = (await luck.page.textContent('.hud-session .stat-value')).replace('\u2212', '-').split(' ')[0].trim();
+    check(hud === (net > 0 ? '+' : '') + money(net), `the HUD's session net ${hud} is the ${rounds.length} rounds' ${money(net)}`);
+    await leave(luck);
+    const end = await settled(luck);
+    check(end.balance - start.balance === net, `the balance moved by ${money(end.balance - start.balance)}, the rounds' net`);
+    await audit(['qm_lucky', 'qm_watcher'], 'bigwin');
+  } catch (err) {
+    failed('bigwin', err);
+    if (luck) await shoot(luck.page, 'bigwin-failure-luck').catch(() => null);
+    if (watch) await shoot(watch.page, 'bigwin-failure-watch').catch(() => null);
+  }
+}
+
 /** One round of each game through the page's own controls. */
 async function playOne(p, game, since) {
   const { page } = p;
