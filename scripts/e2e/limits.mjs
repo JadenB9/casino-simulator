@@ -187,8 +187,23 @@ if (wanted('lobby')) try {
   check(over === 'The table maximum is $3,000.', `a bet over the table maximum is refused: "${over}"`);
   const under = await tryAct(b.page, { type: 'bet', amount: 3_000_00 + 100 });
   check(under !== null, 'and so is any bet past it');
-  // Max (A): his $1,000 is under the $3,000 maximum, so all of it goes down.
+  // Max (A), then his circle: his $1,000 is under the $3,000 maximum, so all of it goes down.
   await b.page.keyboard.press('a');
+  const circle = await b.page.evaluate(() => {
+    const { engine } = window.casino;
+    const session = window.casino.app.table.session;
+    const id = `spot:${session.snapshot.you.seat}`;
+    for (const f of session.stage.felts) {
+      const a = f.anchorOf(id);
+      if (!a) continue;
+      const p = engine.camera.position.clone().set(a[0], f.mesh.position.y, a[1]);
+      session.stage.root.localToWorld(p);
+      p.project(engine.camera);
+      return { x: ((p.x + 1) / 2) * innerWidth, y: ((1 - p.y) / 2) * innerHeight };
+    }
+    return null;
+  });
+  await b.page.mouse.click(circle.x, circle.y);
   await b.page.waitForFunction(() => {
     const s = window.casino.app.table.session;
     return s.__view?.bets?.[s.snapshot.you.seat] === 100_000;
