@@ -1,0 +1,58 @@
+/* Dice on the online site: the recent rolls along the top, the 0-100 slider in the middle (red
+   loses, green wins, the handle on the target, the result tag sliding to the roll), and the
+   multiplier, target and win chance fields along the bottom. Design pixels of the 1280 x 800 page. */
+
+.dc-main { position: absolute; inset: 0; }
+.dc-strip { position: absolute; top: 22px; left: 24px; right: 24px; }
+
+.dc-stage { position: absolute; left: 60px; right: 60px; top: 286px; }
+.dc-card { position: relative; display: flex; align-items: center; height: 86px; padding: 0 42px; border-radius: 43px; background: var(--os-card); }
+/* The scale under the bar, each number with a tick pointing up at its place */
+.dc-scale { position: relative; height: 22px; margin: 16px 42px 0; }
+.dc-scale span {
+  position: absolute; top: 6px; translate: -50% 0; font-family: var(--os-num); font-size: 18px; color: var(--os-ink-2);
+}
+.dc-scale span::before {
+  content: ''; position: absolute; left: 50%; bottom: 100%; translate: -50% 0;
+  border: 5px solid transparent; border-bottom-color: var(--os-ink-3);
+}
+.dc-track { position: relative; flex: 1; height: 14px; border-radius: 7px; background: var(--os-lose); cursor: pointer; touch-action: none; }
+.dc-track::before { content: ''; position: absolute; inset: -30px 0; }
+.dc-win { position: absolute; top: 0; bottom: 0; background: var(--os-win); }
+.dc-win.left { left: 0; border-radius: 7px 0 0 7px; }
+.dc-win.right { right: 0; border-radius: 0 7px 7px 0; }
+.dc-handle {
+  position: absolute; top: 50%; width: 44px; height: 44px; translate: -50% -50%; border-radius: 6px;
+  background: #5b7a92; box-shadow: 0 4px 0 #3b5163; cursor: grab;
+}
+.dc-handle::before {
+  content: ''; position: absolute; left: 50%; top: 13px; bottom: 13px; width: 3px; translate: -50% 0; border-radius: 2px;
+  background: #9db4c6; box-shadow: -8px 0 0 #9db4c6, 8px 0 0 #9db4c6;
+}
+.dc-track.dragging .dc-handle { cursor: grabbing; background: #6a8aa3; }
+
+/* The result tag: slides from the last roll to this one, then shows green or red */
+.dc-marker {
+  position: absolute; bottom: 48px; translate: -50% 0; z-index: 1;
+  display: grid; place-items: center; min-width: 100px; height: 58px; padding: 0 14px; border-radius: 8px;
+  background: #eef3f8; color: #1d2b36; font-family: var(--os-num); font-size: 34px; font-variant-numeric: tabular-nums;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35);
+}
+.dc-marker::after {
+  content: ''; position: absolute; left: 50%; top: 100%; translate: -50% 0;
+  border: 9px solid transparent; border-top-color: #eef3f8;
+}
+.dc-marker[hidden] { display: none; }
+.dc-marker.win { color: #10a54a; }
+.dc-marker.lose { color: #e03a4c; }
+.dc-marker.win, .dc-marker.lose { animation: dc-land 0.26s ease-out; }
+@keyframes dc-land { 40% { scale: 1.08; } }
+
+.dc-zone { margin-top: 26px; text-align: center; font-size: 16px; color: var(--os-ink-3); }
+.dc-zone b { color: var(--os-ink-2); font-weight: 600; }
+
+.dc-fields {
+  position: absolute; left: 24px; right: 24px; bottom: 24px;
+  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; padding: 16px 18px 18px; border-radius: 8px; background: var(--os-panel);
+}
+.dc-fields .os-num.tip-pick .os-field { border-color: var(--focus, #f1d59a); }

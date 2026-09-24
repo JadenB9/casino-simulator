@@ -14,7 +14,7 @@ export interface SessionLike {
 
 /** The slice of net/api.ts these screens call. */
 export interface AccountApi {
-  login(name: string): Promise<Profile>;
+  login(name: string, password: string): Promise<Profile>;
   lastName(): string | null;
   me(): Promise<Profile>;
   saveLook(look: Look): Promise<Look>;

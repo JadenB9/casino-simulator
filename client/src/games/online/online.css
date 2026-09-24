@@ -196,6 +196,25 @@
 .os-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .os-pair .os-action { height: 44px; font-size: 15px; font-weight: 700; }
 
+/* The last few bets in the panel, newest first */
+.os-log { display: grid; gap: 6px; }
+.os-log-row {
+  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; align-items: baseline; padding: 6px 10px;
+  font-family: var(--os-num); font-size: 16px; font-variant-numeric: tabular-nums; color: var(--os-ink-2);
+}
+.os-log-row > :last-child { text-align: right; }
+.os-log-body { display: grid; gap: 2px; }
+.os-log-body .os-log-row { background: var(--os-field); border-radius: 4px; }
+.os-log-row.fresh { animation: os-log-in 0.25s var(--ease, ease-out); }
+@keyframes os-log-in { from { opacity: 0; translate: 0 -6px; } }
+.os-log-head { padding-top: 0; padding-bottom: 0; font-family: var(--os-font); font-size: 12px; font-weight: 600; color: var(--os-ink-3); }
+.os-log-row .win { color: var(--os-win); }
+.os-log-row .lose { color: var(--os-ink-3); }
+
+/* Panel parts that keep their size when the panel runs out of room (the log gives way first) */
+.os-fixed { flex-shrink: 0; }
+.os-log { min-height: 0; overflow: hidden; }
+
 /* ---- Added with Tower, Mines, Hi-Lo and Crash (additions only) ---- */
 
 /* The end-of-round pop over a board: it never takes the board's clicks */

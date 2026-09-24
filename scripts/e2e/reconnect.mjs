@@ -17,6 +17,7 @@ await page.goto(`http://localhost:${port}/casino/`);
 await page.waitForSelector('.name-input, .menu-item', { timeout: 180_000 });
 if (await page.$('.name-input')) {
   await page.fill('.name-input', 'drop_e2e');
+  await page.fill('.pass-input', 'casino-dev'); // DEV_PASSWORD in client/src/net/api.ts
   await page.click('.enter-btn');
 }
 await page.waitForSelector('.menu-item', { timeout: 20_000 });

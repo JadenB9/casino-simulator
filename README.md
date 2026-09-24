@@ -5,7 +5,8 @@ Las Vegas Strip rules and pay real odds. Play it at **[j4den.com/casino](https:/
 
 ![The casino floor](docs/screenshot.jpg)
 
-There is no password: typing a name opens that account, and the money is play money.
+Names are first come, first served: pick a password with a new name and the name is yours. The
+money is play money.
 
 ## What's in it
 
@@ -26,8 +27,9 @@ There is no password: typing a name opens that account, and the money is play mo
   the cards or spots that made it light up; the biggest wins drop a shower of chips on the felt.
   Leaderboards show the richest players and the biggest single wins.
 - **Money that stays put.** Accounts start with $50,000. The server holds every balance and deals
-  every card; the browser only sends what you want to do. When everything is gone, balance and
-  table chips alike, the cashier lends another $50,000 and the profile counts the loans.
+  every card; the browser only sends what you want to do. Whenever you're down to less than
+  $10,000, balance and table chips together, the cashier tops you back up to $50,000 and the
+  profile counts the loans.
 
 ## Rules and odds
 
@@ -116,7 +118,9 @@ npm run typecheck
 npm run build               # the client to dist/casino, the Worker to dist/worker
 ```
 
-`?dev=table&game=<game>` opens one game's table on its own, and `?dev=floor` the floor.
+`?dev=table&game=<game>` opens one game's table on its own, and `?dev=floor` the floor. The dev
+pages and the headless scripts in `scripts/e2e/` log in with the password `casino-dev`
+(`DEV_PASSWORD` in `client/src/net/api.ts`), so the names they use stay theirs locally.
 
 ## Credits
 

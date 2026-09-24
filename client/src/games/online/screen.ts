@@ -494,6 +494,66 @@ export function labelled(label: string, control: HTMLElement, note?: HTMLElement
   return g;
 }
 
+/** The last few bets at this computer, newest first: a pocket version of the site's My Bets table. */
+export class BetLog {
+  readonly root = el('div', 'os-log');
+  private readonly body = el('div', 'os-log-body');
+
+  constructor(caption: string, columns: readonly string[], private readonly size = 5) {
+    const head = el('div', 'os-log-row os-log-head');
+    for (const c of columns) head.append(el('span', '', c));
+    this.root.append(el('div', 'os-caption', caption), head, this.body);
+  }
+
+  /** One bet; the last cell (what came back) is coloured by `win`. */
+  push(cells: readonly string[], win: boolean, fresh = true): void {
+    const row = el('div', `os-log-row${fresh ? ' fresh' : ''}`);
+    cells.forEach((c, i) => row.append(el('span', i === cells.length - 1 ? (win ? 'win' : 'lose') : '', c)));
+    this.body.prepend(row);
+    while (this.body.childElementCount > this.size) this.body.lastElementChild!.remove();
+  }
+
+  clear(): void {
+    this.body.replaceChildren();
+  }
+}
+
+/**
+ * The bet panel on a desk's attract picture, down the left under drawSiteBar: labelled fields,
+ * then the green action button. Returns the panel's width, where the game's own picture starts.
+ */
+export function drawAttractPanel(g: CanvasRenderingContext2D, top: number, h: number, fields: readonly [string, string][], action: string): number {
+  const w = 132;
+  g.fillStyle = '#1a2c38';
+  g.fillRect(0, top, w, h - top);
+  g.textBaseline = 'middle';
+  g.textAlign = 'left';
+  let y = top + 18;
+  for (const [label, value] of fields) {
+    g.fillStyle = '#a7b4c6';
+    g.font = '600 11px system-ui, sans-serif';
+    g.fillText(label, 12, y);
+    g.fillStyle = '#0f1e29';
+    g.beginPath();
+    g.roundRect(10, y + 8, 112, 28, 4);
+    g.fill();
+    g.fillStyle = '#eef3f8';
+    g.font = '600 15px system-ui, sans-serif';
+    g.fillText(value, 18, y + 23);
+    y += 52;
+  }
+  g.fillStyle = '#1fd65f';
+  g.beginPath();
+  g.roundRect(10, y + 2, 112, 36, 5);
+  g.fill();
+  g.fillStyle = '#06210f';
+  g.font = '800 16px system-ui, sans-serif';
+  g.textAlign = 'center';
+  g.fillText(action, w / 2, y + 21);
+  g.textAlign = 'left';
+  return w;
+}
+
 // ---------------------------------------------------------------------------------------------
 // Added with Tower, Mines, Hi-Lo and Crash (additions only; nothing above changes): the multiplier
 // and percent text those four print, the pop over their boards when a round ends in a payout,

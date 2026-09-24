@@ -1,6 +1,7 @@
-// The roulette table as it stands on the floor: wooden top and padded rail, the printed layout,
-// the wheel at the head of the layout, and a lit limits sign. The layout is painted from the
-// geometry in layout.ts, the same data the click zones and the chips use.
+// The roulette table as it stands on the floor: a wooden top with a padded leather armrest, the
+// printed layout on woven cloth, the wheel set into a wooden head at the end of the layout, the
+// dealer's chip rack, and a lit limits sign. The layout is painted from the geometry in
+// layout.ts, the same data the click zones and the chips use.
 
 import * as THREE from 'three';
 import { type Variant, DOUBLE_ZERO, colorOf } from '../../../../shared/src/games/roulette/rules.ts';
@@ -10,21 +11,27 @@ import type { Quality } from '../../render/engine3d.ts';
 import { Felt } from '../../table/felt.ts';
 import { layoutOf, zeroRects, XZ, X0, XR, XC, ZT, ZN, ZD, ZE, rowEdge, colEdge, type Rect } from './layout.ts';
 import { buildWheel, WHEEL_R } from './wheel.ts';
+import { feltWeave } from './textures.ts';
+import { paddedRail, woodMaterial, wheelHead, chipRack } from './table.ts';
 
 export const TOP_Y = 0.78;
 export const TABLE_W = 2.86;
 export const TABLE_D = 1.06;
 export const FELT_W = 2.66;
 export const FELT_D = 0.86;
-export const FELT_COLOR = '#0f4a2f';
+export const FELT_COLOR = '#0c3d26';
 /** Wheel centre on the table top: at the head of the layout, beside the zeros. */
 export const WHEEL_X = XZ - 0.08 - WHEEL_R;
 export const WHEEL_Z = 0;
 export const MODEL_FELT = 'roulette-felt-model';
+/** The dealer's chip rack, in the armrest on the dealer's side, beside the wheel. */
+const RACK_X = -0.1;
+const RACK_W = 0.46;
+const RACK_D = 0.094;
 
 const PRINT = '#ead7a2';
-const RED = '#8f161b';
-const BLACK = '#111111';
+const RED = '#7a0a1a';
+const BLACK = '#0b0b0b';
 const ZERO = '#0b6134';
 const NUMERAL = '#f3e8cc';
 
@@ -143,8 +150,12 @@ export function paintLayout(g: CanvasRenderingContext2D, px: (m: number) => numb
   g.globalAlpha = 1;
 }
 
-export function layoutFelt(v: Variant, resolution: number): Felt {
-  return new Felt({
+/**
+ * The printed felt on woven cloth: the painted layout over a fine weave's normal map, tiled at
+ * 12 mm. No sheen: a fabric lobe greys the black boxes and turns the reds orange.
+ */
+export function layoutFelt(v: Variant, resolution: number, quality: Quality = 'high'): Felt {
+  const felt = new Felt({
     width: FELT_W,
     depth: FELT_D,
     color: FELT_COLOR,
@@ -152,6 +163,13 @@ export function layoutFelt(v: Variant, resolution: number): Felt {
     paint: (g, px) => paintLayout(g, px, v),
     regions: [],
   });
+  const cloth = felt.mesh.material as THREE.MeshStandardMaterial;
+  const weave = feltWeave(quality).clone();
+  weave.repeat.set(FELT_W / 0.012, FELT_D / 0.012);
+  cloth.normalMap = weave;
+  cloth.normalScale.set(0.8, 0.8);
+  cloth.roughness = 0.92;
+  return felt;
 }
 
 function roundedShape(w: number, d: number, r: number): THREE.Shape {
@@ -217,24 +235,18 @@ function limitSign(v: Variant): THREE.Mesh {
 /** The table, centred at the origin, players on the +z side, the wheel at −x. */
 export function tableModel(v: Variant, quality: Quality): THREE.Group {
   const g = new THREE.Group();
-  const wood = new THREE.MeshStandardMaterial({ color: '#3a1f12', roughness: 0.45 });
-  const darkWood = new THREE.MeshStandardMaterial({ color: '#24130b', roughness: 0.55 });
-  const leather = new THREE.MeshStandardMaterial({ color: '#1c1210', roughness: 0.62 });
-  const brass = new THREE.MeshStandardMaterial({ color: '#c9a24b', roughness: 0.3, metalness: 1 });
+  const wood = woodMaterial(quality, '#b39486');
+  const darkWood = woodMaterial(quality, '#7d5f50');
+  const legWood = woodMaterial(quality, '#7d5f50', true);
+  const brass = new THREE.MeshStandardMaterial({ color: '#b8923f', roughness: 0.32, metalness: 1 });
 
   const top = new THREE.Mesh(new THREE.ExtrudeGeometry(roundedShape(TABLE_W, TABLE_D, 0.16), { depth: 0.05, bevelEnabled: false, curveSegments: 16 }), wood);
   top.rotation.x = -Math.PI / 2;
   top.position.y = TOP_Y - 0.05;
   g.add(top);
 
-  const ring = roundedShape(TABLE_W - 0.02, TABLE_D - 0.02, 0.15);
-  ring.holes.push(roundedShape(FELT_W + 0.01, FELT_D + 0.01, 0.07));
-  const rail = new THREE.Mesh(
-    new THREE.ExtrudeGeometry(ring, { depth: 0.022, bevelEnabled: true, bevelThickness: 0.014, bevelSize: 0.012, bevelSegments: quality === 'high' ? 5 : 2, curveSegments: 20 }),
-    leather,
-  );
-  rail.rotation.x = -Math.PI / 2;
-  rail.position.y = TOP_Y + 0.012;
+  const rail = paddedRail(FELT_W + 0.012, FELT_D + 0.012, [RACK_X - RACK_W / 2 - 0.004, RACK_X + RACK_W / 2 + 0.004], quality);
+  rail.position.y = TOP_Y;
   g.add(rail);
   const trim = new THREE.Mesh(new THREE.ExtrudeGeometry(roundedShape(TABLE_W + 0.012, TABLE_D + 0.012, 0.165), { depth: 0.012, bevelEnabled: false, curveSegments: 16 }), brass);
   trim.rotation.x = -Math.PI / 2;
@@ -248,20 +260,27 @@ export function tableModel(v: Variant, quality: Quality): THREE.Group {
   const legGeo = new THREE.CylinderGeometry(0.03, 0.022, TOP_Y - 0.17, 16);
   for (const x of [-1.2, 0, 1.2]) {
     for (const z of [-0.36, 0.36]) {
-      const leg = new THREE.Mesh(legGeo, darkWood);
+      const leg = new THREE.Mesh(legGeo, legWood);
       leg.position.set(x, (TOP_Y - 0.17) / 2, z);
       g.add(leg);
     }
   }
 
-  const felt = layoutFelt(v, quality === 'high' ? 560 : 360);
+  const felt = layoutFelt(v, quality === 'high' ? 560 : 360, quality);
   felt.mesh.name = MODEL_FELT;
   felt.mesh.position.y = TOP_Y + 0.0004;
   g.add(felt.mesh);
 
+  const head = wheelHead(-FELT_W / 2 - 0.006, WHEEL_X + WHEEL_R + 0.03, FELT_D + 0.012, { x: WHEEL_X, z: WHEEL_Z, r: WHEEL_R - 0.004 }, quality, wood, brass);
+  head.position.y = TOP_Y;
+  g.add(head);
   const wheel = buildWheel(v, quality);
   wheel.position.set(WHEEL_X, TOP_Y, WHEEL_Z);
   g.add(wheel);
+
+  const rack = chipRack(RACK_W, RACK_D, quality, darkWood);
+  rack.position.set(RACK_X, TOP_Y, -(FELT_D / 2 + 0.006 + RACK_D / 2));
+  g.add(rack);
 
   const sign = limitSign(v);
   sign.position.set(XC - 0.16, TOP_Y + 0.085, ZT - 0.075);
