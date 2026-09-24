@@ -64,6 +64,12 @@ export class Engine3D {
   readonly timer = new THREE.Timer();
   private frames = new Set<FrameFn>();
   private frameTimes: number[] = [];
+  /**
+   * Draw nothing (and run no frame callbacks) while set: behind a loading screen there is nothing
+   * to see, and drawing a scene still being built compiles each new material's shaders on the spot,
+   * holding up the build, where the floor's compileAsync would compile them all in parallel.
+   */
+  paused = false;
 
   /** The ceiling on the pixel ratio: 1.5 on phones and tablets, 2 elsewhere. */
   readonly maxPixelRatio: number;
@@ -113,6 +119,7 @@ export class Engine3D {
 
   private tick(t: number): void {
     this.timer.update(t);
+    if (this.paused) return;
     const dt = Math.min(this.timer.getDelta(), 0.1);
     this.frameTimes.push(dt * 1000);
     if (this.frameTimes.length > 120) this.frameTimes.shift();

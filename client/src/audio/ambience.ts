@@ -263,18 +263,11 @@ export class Ambience {
     src.start();
   }
 
-  /** The tables' chip recordings, decoded once more for this graph (the browser has them cached). */
+  /** The tables' chip recordings: the game's own, decoded on this same context, not fetched again. */
   private async loadChips(): Promise<void> {
     try {
-      const base = `${import.meta.env.BASE_URL}assets/sfx/`;
-      const manifest = (await (await fetch(base + 'sfx.json')).json()) as Record<string, string[]>;
-      await Promise.all(
-        CHIP_SOUNDS.map(async (name) => {
-          const files = manifest[name] ?? [];
-          const bufs = await Promise.all(files.map(async (f) => this.ctx.decodeAudioData(await (await fetch(base + f)).arrayBuffer())));
-          this.chips.set(name, bufs);
-        }),
-      );
+      await this.sfx.load();
+      for (const name of CHIP_SOUNDS) this.chips.set(name, [...this.sfx.variants(name)]);
     } catch (err) {
       console.warn('ambience: chips failed to load', err);
     }

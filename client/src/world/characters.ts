@@ -68,6 +68,11 @@ export class Characters implements CharacterFactory {
   private templates = new Map<string, Promise<Template>>();
   private loaded = new Map<string, Template>();
   private loader = new GLTFLoader();
+  /**
+   * Each model file's bytes, fetched once: the staff's uniforms are cut from the suit and smart
+   * outfits, so those files are built into two templates each (a build rearranges its own parse).
+   */
+  private files = new Map<string, Promise<ArrayBuffer>>();
   private mats: Partial<Record<Quality, THREE.Material>> = {};
   private readonly live = new Set<Person>();
   readonly blobGeometry = new THREE.PlaneGeometry(0.95, 0.95).rotateX(-Math.PI / 2);
@@ -154,7 +159,16 @@ export class Characters implements CharacterFactory {
     const man = await this.manifest;
     const uniform = uniformFor(outfit);
     const entry = (body === 'f' ? man.f : man.m)[uniform ? uniform.base[body === 'f' ? 'f' : 'm'] : outfit] ?? man.m.suit!;
-    const gltf = await this.loader.loadAsync(MODEL_BASE + entry.file);
+    let bytes = this.files.get(entry.file);
+    if (!bytes) {
+      bytes = fetch(MODEL_BASE + entry.file).then((r) => {
+        if (!r.ok) throw new Error(`${entry.file}: ${r.status}`);
+        return r.arrayBuffer();
+      });
+      this.files.set(entry.file, bytes);
+      bytes.catch(() => this.files.delete(entry.file));
+    }
+    const gltf = await this.loader.parseAsync(await bytes, MODEL_BASE);
     const parts: THREE.SkinnedMesh[] = [];
     gltf.scene.traverse((o) => {
       if ((o as THREE.SkinnedMesh).isSkinnedMesh) parts.push(o as THREE.SkinnedMesh);

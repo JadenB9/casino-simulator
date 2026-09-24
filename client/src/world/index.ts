@@ -278,11 +278,21 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
   };
   applyQuality(quality);
 
-  // compile every shader now, behind the loading screen, so the first frames and "Press E" don't stall
+  // compile every shader now, behind the loading screen, so the first frames and "Press E" don't
+  // stall: what's hidden too (far stand-ins, the staff's still copies, characters out of view),
+  // shown for the compile only, or it compiles on the spot the first time it comes into view
+  const hidden: THREE.Object3D[] = [];
+  scene.traverse((o) => {
+    if (o.visible) return;
+    hidden.push(o);
+    o.visible = true;
+  });
   try {
     await renderer.compileAsync(scene, engine.camera);
   } catch {
     /* compiled lazily instead */
+  } finally {
+    for (const o of hidden) o.visible = false;
   }
   // The floor's own reflections (High): the casino captured from inside the doors and
   // prefiltered, for the polished marble, lacquer and wood, so they mirror its warm lights and

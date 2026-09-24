@@ -39,6 +39,8 @@ export async function boot(): Promise<void> {
   // A saved login is checked while the floor loads, not after it.
   const saved = api.savedToken() ? api.me().catch(() => null) : Promise.resolve(null);
   let app: App | null = null;
+  // nothing is drawn behind the loading screen (see Engine3D.paused)
+  engine.paused = true;
   const [world] = await Promise.all([
     createWorld(engine, {
       ui,
@@ -51,10 +53,14 @@ export async function boot(): Promise<void> {
     loadCards(),
     sfx.load().catch((err) => console.warn('sounds failed to load', err)),
   ]);
+  engine.paused = false;
   app = new App(engine, world, sfx, ui);
   // Handles for the console and the headless checks; nothing here can move money.
   (window as unknown as { casino: unknown }).casino = { engine, world, app, session };
   await app.start(saved);
+  // the first frames put the floor on the GPU (the first is long): behind the loading screen, not
+  // on the login screen where they would hold up typing
+  for (let i = 0; i < 2; i++) await new Promise((r) => requestAnimationFrame(r));
 }
 
 interface OpenTable {
