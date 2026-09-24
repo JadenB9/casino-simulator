@@ -282,6 +282,11 @@ if (checks.includes('lod')) {
       ctx.putImageData(img, col * W, row * H);
       return n ? [Math.round(r / n), Math.round(g / n), Math.round(b / n), n] : [0, 0, 0, 0];
     };
+    const reset = (st) => {
+      st.model.visible = true;
+      const copy = st.model.parent.getObjectByName(`far:${st.id}`);
+      if (copy) copy.visible = false;
+    };
     picks.forEach((st, row) => {
       const a = st.anchor;
       const size = Math.max(st.footprint.width, st.footprint.depth);
@@ -295,10 +300,23 @@ if (checks.includes('lod')) {
       const near = shot(st, false, row, 0);
       const far = shot(st, true, row, 1);
       const d = Math.hypot(near[0] - far[0], near[1] - far[1], near[2] - far[2]);
-      out.push({ id: st.id, near, far, diff: +d.toFixed(1) });
-      st.model.visible = true;
-      const copy = st.model.parent.getObjectByName(`far:${st.id}`);
-      if (copy) copy.visible = false;
+      const entry = { id: st.id, near, far, diff: +d.toFixed(1) };
+      // tables: straight down on the playing surface too, near and far (the felt's own colour)
+      if (st.zone === 'pit' || st.zone === 'poker') {
+        cam.position.set(a.position.x, box.max.y + size * 1.1, a.position.z + 0.001);
+        cam.lookAt(a.position.x, box.max.y - 0.2, a.position.z);
+        const top = [shot(st, false, row, 0), shot(st, true, row, 1)];
+        entry.topNear = top[0];
+        entry.topFar = top[1];
+        entry.topDiff = +Math.hypot(top[0][0] - top[1][0], top[0][1] - top[1][1], top[0][2] - top[1][2]).toFixed(1);
+        // redo the side view for the contact sheet
+        cam.position.set(a.position.x + fx * dist * 0.8 + fz * dist * 0.35, a.position.y + 1.3 + size * 0.35, a.position.z + fz * dist * 0.8 - fx * dist * 0.35);
+        cam.lookAt(box.getCenter(new THREE.Vector3()));
+        shot(st, false, row, 0);
+        shot(st, true, row, 1);
+      }
+      out.push(entry);
+      reset(st);
     });
     for (const s of world.stations) s.anchor.visible = true;
     for (const c of hidden) c.visible = true;
@@ -312,8 +330,13 @@ if (checks.includes('lod')) {
   writeFileSync(file, Buffer.from(result.sheet.split(',')[1], 'base64'));
   for (const s of result.stations) console.log(JSON.stringify({ check: 'lod', ...s }));
   console.log(JSON.stringify({ check: 'lod', file, errors: errors.slice(0, 3) }));
-  const bad = result.stations.filter((s) => s.diff > 28);
-  if (bad.length) fail(`far stand-ins off colour: ${bad.map((s) => `${s.id} ${s.diff}`).join(', ')}`);
+  const bad = result.stations.filter((s) => s.diff > 20 || s.topDiff > 20);
+  if (bad.length) fail(`far stand-ins off colour: ${bad.map((s) => `${s.id} ${s.diff}/${s.topDiff ?? '-'}`).join(', ')}`);
+  // poker tables read green on the floor, near and far
+  const green = ([r, g, b]) => g > r * 1.15 && g > b;
+  for (const s of result.stations.filter((x) => /^he-/.test(x.id))) {
+    if (!green(s.topFar)) fail(`${s.id}: the far stand-in's felt is not green (${s.topFar.slice(0, 3)}); the near model's is ${green(s.topNear) ? 'green' : 'not green either (holdem/table.ts: the top cap of the apron covers the felt)'}`);
+  }
   await page.close();
 }
 
