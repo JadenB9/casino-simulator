@@ -169,10 +169,16 @@ The players' seated cameras look over the table at the dealer, who frames it fro
 - Fixed lights: hemisphere + directional always; four spots on High (two pit rows, poker, and a
   focus spot that follows the table you're at). Warm pools on the carpet (under tables, banks and
   lamps, and a small scallop under each downlight over the aisles) are additive decals.
-- High: bloom you can see through. The high pass keeps only the light past the threshold (1.0,
-  with a soft knee), so a neon tube gives most of its light to its halo and a card or a paytable
-  lit a little past it gives almost none; the halo is tight (radius 0.18). Seated, the threshold
-  rises to 1.9 so nothing on the table glows. MSAA, pixel ratio up to 2 with step-down at
+- High: glow only from light sources. The pit's spots are set so the brightest lit surface (white
+  printing, a white chip in a rack) peaks near 1.5, and the floor's bloom threshold sits above
+  that (1.65, soft knee): neon, LED strips, the cove, bulbs, lamp shades, the machines' lamps and
+  specular glints on chrome all run past 2 and glow; cards, printing and chips never do. The high
+  pass keeps only the light past the threshold, so a sign gives most of its light to its halo and
+  the halo is tight (radius 0.2). Seated at a table the threshold is 4.2 (nothing on the table
+  glows); at a machine 2.2 (its own lamps do, a little). `world.glow(on)` turns it off and on for
+  the checks: `world3.mjs read` draws every table and machine, seated and from 6-10 m, idle and
+  with a celebration's light, with the glow on and off and compares the cards' and the layout's
+  own pixels (and the cards' contrast on Low). MSAA, pixel ratio up to 2 with step-down at
   p90 > 17 ms. Engine3D's renderer has no HalfFloat output buffer, so `renderer.setEffects()`
   refuses; bloom.ts renders the floor into its own HalfFloat target from the scene's render hooks
   instead, and switches to `setEffects([bloom])` automatically if the renderer is ever created
