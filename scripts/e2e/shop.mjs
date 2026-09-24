@@ -213,8 +213,16 @@ async function enterAs(name) {
   await p.fill('.name-input', name);
   if (await p.$('.pass-input')) await p.fill('.pass-input', 'casino-dev');
   await p.click('.enter-btn');
-  await p.waitForSelector('.menu-item', { timeout: 30000 });
-  await p.click('.menu-item >> nth=0');
+  await p.waitForSelector('.menu-item, .editor-panel.guided', { timeout: 30000 });
+  if (await p.$('.editor-panel.guided')) {
+    // a new name (a fresh local database) picks a look first, step by step, and walks straight in
+    for (let i = 0; i < 3; i++) {
+      await p.click('.editor-panel .ed-buttons .btn.primary');
+      await p.waitForTimeout(500);
+    }
+  } else {
+    await p.click('.menu-item >> nth=0');
+  }
   await p.waitForSelector('.hud', { timeout: 30000 });
   await p.waitForTimeout(1500);
   return { p, ctx, errors };
@@ -254,11 +262,12 @@ if (checks.includes('floor')) {
   for (const item of ['cuban-link', 'full-gold', 'gold-watch']) await buyAndWear(a.p, item);
   const look = await a.p.evaluate(() => window.casino.session.profile.look);
   if (look.chain !== 'cuban-link' || look.grill !== 'full-gold' || look.watch !== 'gold-watch') fail(`the look wears what was bought: ${JSON.stringify(look)}`);
-  // the bar: order, and it's in the hand a few seconds later (no waiters yet)
+  // the bar: order, and the bartender makes it and a waiter walks it over (world/life)
   await a.p.evaluate(() => window.casino.app.openBarMenu());
   await a.p.click('.bar-order[aria-label^="Order Champagne"]');
-  await a.p.waitForFunction(() => document.querySelector('.bar-status')?.textContent?.startsWith('In your hand: Champagne'), null, { timeout: 12000 });
+  await a.p.waitForFunction(() => document.querySelector('.bar-status')?.textContent?.startsWith('On its way'), null, { timeout: 12000 });
   await a.p.keyboard.press('Escape');
+  await a.p.waitForFunction(() => window.casino.session.profile?.look.held?.item === 'champagne', null, { timeout: 120000 });
   const after = await a.p.evaluate(() => window.casino.session.profile.balance);
   console.log(`balance ${before / 100} -> ${after / 100}`);
   // stand A where B can see them, facing B
