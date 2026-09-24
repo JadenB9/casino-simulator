@@ -5,6 +5,10 @@
 // the poker room, the salon): walking into another room they fade out, move and fade up there.
 // The hemisphere takes the colour of the room you're in, a little at a time. Warm pools on the
 // floor under tables, banks and lamps are additive decals, not lights.
+//
+// The spots are set so the brightest lit surface in the pit (white printing, a white chip in the
+// rack) stays under about 1.5: past the floor's bloom threshold (bloom.ts) only real light
+// sources go, and those are all brighter than 2 (the GLOW colours here, the signs, the LEDs).
 
 import * as THREE from 'three';
 import type { Quality } from '../render/engine3d.ts';
@@ -16,6 +20,9 @@ import { canvasTexture } from './carpet.ts';
 
 /** How many spots light the room you're in. */
 const SPOTS = 3;
+/** Candela of the pit's two wide spots and the focus spot (the other rooms' spots are in rooms.ts). */
+const PIT_SPOT = 50;
+const FOCUS_SPOT = 11;
 
 export class Lighting {
   readonly group = new THREE.Group();
@@ -105,7 +112,7 @@ export class Lighting {
     this.focus.position.set(this.focusFrom.x + 0.3, 3.2, this.focusFrom.z + 0.9);
     // Bright enough to lift the table out of the room, not so bright that gold felt printing and
     // brass pass the bloom threshold when the camera is a metre away.
-    const want = this.focusOn ? 16 : 0;
+    const want = this.focusOn ? FOCUS_SPOT : 0;
     this.focus.intensity += (want - this.focus.intensity) * (1 - Math.exp(-dt * 4));
 
     // the room's spots: fade out, move to the new room, fade up
@@ -156,8 +163,8 @@ function spotsOf(plan: FloorPlan, r: PlannedRoom): (SpotItem & { y?: number })[]
     const rowS = plan.stations.find((s) => s.room === 'pit' && s.zone === 'pit' && s.yaw === 0)?.z ?? (P.z0 + P.z1) / 2 + 2;
     const cx = (P.x0 + P.x1) / 2;
     return [
-      { x: cx, z: rowN + 0.6, tx: cx, tz: rowN, k: 80, angle: 1.05, y: PIT_CEILING - 0.4 },
-      { x: cx, z: rowS - 0.6, tx: cx, tz: rowS, k: 80, angle: 1.05, y: PIT_CEILING - 0.4 },
+      { x: cx, z: rowN + 0.6, tx: cx, tz: rowN, k: PIT_SPOT, angle: 1.05, y: PIT_CEILING - 0.4 },
+      { x: cx, z: rowS - 0.6, tx: cx, tz: rowS, k: PIT_SPOT, angle: 1.05, y: PIT_CEILING - 0.4 },
     ];
   }
   return r.spots.map((s) => ({ ...s, y: r.style.ceiling - 0.1 }));
@@ -211,13 +218,13 @@ function poolCanvas(size: number): HTMLCanvasElement {
 /** The glows' colours, pushed past 1 so they bloom (and still read bright without bloom). */
 export const GLOW = {
   /** The pit's cove strip, washing the fascia. */
-  warm: new THREE.Color('#ffd39a').multiplyScalar(2.6),
+  warm: new THREE.Color('#ffd39a').multiplyScalar(3.0),
   /** Pendant diffusers and the cashier's window lights. */
-  soft: new THREE.Color('#ffc98a').multiplyScalar(1.25),
+  soft: new THREE.Color('#ffc98a').multiplyScalar(2.2),
   /** The low ceiling's downlights. */
-  bulb: new THREE.Color('#fff0d0').multiplyScalar(1.12),
+  bulb: new THREE.Color('#fff0d0').multiplyScalar(2.0),
   /** Shelf and counter light strips. */
-  shelf: new THREE.Color('#ffb266').multiplyScalar(2.2),
+  shelf: new THREE.Color('#ffb266').multiplyScalar(2.8),
 };
 
 type GlowPlace = THREE.Matrix4 | { x?: number; y?: number; z?: number; rx?: number; ry?: number };

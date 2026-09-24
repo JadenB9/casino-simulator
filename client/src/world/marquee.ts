@@ -230,8 +230,8 @@ export class Marquee {
 }
 
 function gainFor(q: Quality): number {
-  // past the floor's bloom threshold (1.05) on High; seated, the threshold rises above it
-  return q === 'high' ? 1.7 : 1.25;
+  // well past the floor's bloom threshold (1.65, bloom.ts) on High; seated, the threshold rises above it
+  return q === 'high' ? 2.8 : 1.25;
 }
 
 // --- geometry ------------------------------------------------------------------------------------
