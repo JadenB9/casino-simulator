@@ -351,6 +351,11 @@ export class CasinoTable extends DurableObject<Env> {
       this.state = engine.create(config, this.engineCtx(now));
       this.putMeta('config', config);
       this.sql.exec(`INSERT OR REPLACE INTO state (id, json) VALUES (1, ?1)`, JSON.stringify(this.state));
+      // A fresh state remembers nobody's round.
+      if (m.held?.length) {
+        m.held = [];
+        this.putMeta('held', m.held);
+      }
     });
   }
 
