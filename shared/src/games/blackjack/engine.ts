@@ -16,13 +16,14 @@
 // first base, the dealer's, a second each, the hole card, then every hand in circle order. Each
 // spot is offered insurance on its own, splits and doubles on its own, and settles on its own
 // (one RoundResult per spot, so the stats count hands). Spots are numbered like seats (see
-// protocol.ts); `spotsOf` says which a seat plays and `owner` whose stack a spot's chips are.
+// games/spots.ts): `spotsOf` says which a seat plays, and a spot's chips are its owner's.
 
 import { type Shoe, cutCardOut, cardsLeft } from '../../cards.ts';
 import { type Cents, DOLLAR, formatMoney } from '../../money.ts';
 import type { EngineCtx, GameEngine, Step, Refusal, TableConfig, TableMode, ChipMove, RoundResult, GameEvent } from '../../engine.ts';
 import { refuse, seatOf } from '../../engine.ts';
-import { isObj, isAmount, isInt, isOneOf } from '../../protocol.ts';
+import { isObj, isAmount, isOneOf } from '../../protocol.ts';
+import * as S from '../spots.ts';
 import {
   type Round,
   type Dealing,
@@ -77,24 +78,12 @@ export interface BlackjackState {
 
 /** The spots a seat bets on: its own at a shared table; spots 0 to n - 1 at a solo table. */
 export function spotsOf(s: Pick<BlackjackState, 'cfg' | 'spotCount'>, seat: number): number[] {
-  if (s.cfg.mode !== 'solo') return [seat];
-  return Array.from({ length: s.spotCount[seat] ?? 1 }, (_, i) => i);
+  return S.spotsOf(s.cfg, s.spotCount, seat);
 }
 
 /** Whether a spot's hand is this seat's: at a solo table every spot is its one player's. */
 function owns(s: Pick<BlackjackState, 'cfg'>, seat: number, spot: number): boolean {
-  return s.cfg.mode === 'solo' || spot === seat;
-}
-
-/** The seat whose stack a spot's chips come from and go back to. */
-function owner(ctx: EngineCtx, spot: number): number {
-  return ctx.mode === 'solo' ? (ctx.seats[0]?.seat ?? spot) : spot;
-}
-
-/** A spot's finished hand, for the stats: each spot is a round of its own. */
-function roundOf(ctx: EngineCtx, spot: number, wagered: Cents, returned: Cents): RoundResult {
-  const seat = owner(ctx, spot);
-  return spot === seat ? { seat, wagered, returned } : { seat, wagered, returned, spot };
+  return S.owns(s.cfg, seat, spot);
 }
 
 function config(_variant: string, mode: TableMode): TableConfig {
@@ -109,15 +98,9 @@ function config(_variant: string, mode: TableMode): TableConfig {
   };
 }
 
-/** An optional index: absent is fine, anything but a whole number below `max` spoils the action. */
-function optIndex(x: unknown, max: number): number | undefined | false {
-  if (x === undefined) return undefined;
-  return isInt(x) && x >= 0 && x < max ? x : false;
-}
-
 function parseAction(raw: unknown): BlackjackAction | null {
   if (!isObj(raw)) return null;
-  const spot = optIndex(raw.spot, SPOT_OF_SEAT.length);
+  const spot = S.optIndex(raw.spot, SPOT_OF_SEAT.length);
   if (spot === false) return null;
   const at = spot === undefined ? {} : { spot };
   switch (raw.type) {
@@ -127,13 +110,15 @@ function parseAction(raw: unknown): BlackjackAction | null {
     case 'clear':
     case 'deal':
       return { type: raw.type };
-    case 'spots':
-      return isInt(raw.n) && raw.n >= 1 && raw.n <= MAX_SPOTS ? { type: 'spots', n: raw.n } : null;
+    case 'spots': {
+      const n = S.spotCount(raw.n, MAX_SPOTS);
+      return n === null ? null : { type: 'spots', n };
+    }
     case 'insurance':
       return typeof raw.take === 'boolean' ? { type: 'insurance', take: raw.take, ...at } : null;
     default: {
       if (!isOneOf(raw.type, MOVES)) return null;
-      const hand = optIndex(raw.hand, MAX_HANDS);
+      const hand = S.optIndex(raw.hand, MAX_HANDS);
       if (hand === false) return null;
       return { type: raw.type, ...at, ...(hand === undefined ? {} : { hand }) };
     }
@@ -187,7 +172,7 @@ function wrapUp(s: BlackjackState, ctx: EngineCtx, events: GameEvent[], before: 
     const b = before.get(sp.seat) ?? { w: sp.wagered, r: sp.returned };
     const bet = sp.wagered - b.w;
     const payout = sp.returned - b.r;
-    const seat = owner(ctx, sp.seat);
+    const seat = S.owner(ctx, sp.seat);
     if ((bet > 0 || payout > 0) && seated.has(seat)) {
       const mv = moves.get(seat) ?? { seat };
       if (bet > 0) mv.bet = (mv.bet ?? 0) + bet;
@@ -199,7 +184,7 @@ function wrapUp(s: BlackjackState, ctx: EngineCtx, events: GameEvent[], before: 
   const multi = ctx.mode === 'multi';
   let rounds: RoundResult[] | undefined;
   if (r.stage === 'done') {
-    rounds = r.spots.filter((sp) => seated.has(owner(ctx, sp.seat))).map((sp) => roundOf(ctx, sp.seat, sp.wagered, sp.returned));
+    rounds = r.spots.filter((sp) => seated.has(S.owner(ctx, sp.seat))).map((sp) => S.roundOf(ctx, sp.seat, sp.wagered, sp.returned));
     s.phase = 'results';
     s.deadline = multi ? ctx.now + RESULTS_MS : null;
     events.push({ type: 'done', round: s.round });
@@ -311,7 +296,7 @@ function closeBetting(state: BlackjackState, ctx: EngineCtx): Step<BlackjackStat
   const min = s.cfg.limits.default.min;
   for (const [key, bet] of Object.entries(s.bets)) {
     const spot = Number(key);
-    const seat = owner(ctx, spot);
+    const seat = S.owner(ctx, spot);
     if (!seated.has(seat)) {
       // Can't happen (a leaving seat's bet comes back in seatLeaving); never deal to an empty chair.
       delete s.bets[spot];

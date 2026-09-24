@@ -1,18 +1,28 @@
 // Casino War on the wire: the actions a player sends, the events the table animates and the view
 // every seat gets. Every card in Casino War is dealt face up, so the views hide nothing but the
 // shoe's order and the burned cards, which never leave the server.
+//
+// Hands are played at spots numbered like the seats (games/spots.ts), and every `seat` in the
+// events and the view below is a spot. At a shared table each player plays their own seat's spot;
+// a solo player can play up to three spots at once, spots 0 to n - 1, from one stack.
 
 import type { Card } from '../../cards.ts';
 import type { Cents } from '../../money.ts';
 import type { Settlement, WarRules } from './rules.ts';
 
 /**
- * `bet` sets both spots to these totals (0 takes a spot down), so Undo, Clear, Rebet and x2 are
- * all one message and a resend can't double a bet. `deal` is solo only; multiplayer deals when the
- * betting window closes. `war` places the raise (always equal to the bet); `surrender` takes half
- * the bet back.
+ * `bet` sets a spot's bet and Tie bet to these totals (0 takes a bet down), so Undo, Clear, Rebet
+ * and x2 are all one message and a resend can't double a bet. `deal` is solo only; multiplayer
+ * deals when the betting window closes. `war` places the raise (always equal to the bet);
+ * `surrender` takes half the bet back. `spot` says which of your spots (your first when absent);
+ * `spots` is solo only, between rounds.
  */
-export type WarAction = { type: 'bet'; bet: Cents; tie: Cents } | { type: 'deal' } | { type: 'war' } | { type: 'surrender' };
+export type WarAction =
+  | { type: 'bet'; bet: Cents; tie: Cents; spot?: number }
+  | { type: 'deal' }
+  | { type: 'spots'; n: number }
+  | { type: 'war'; spot?: number }
+  | { type: 'surrender'; spot?: number };
 
 export type Phase = 'idle' | 'betting' | 'deciding' | 'results';
 
@@ -38,8 +48,10 @@ export interface WarView {
   round: number;
   /** Multiplayer: when the betting window or the decision closes, or the results come down. */
   deadline: number | null;
-  /** Every seat with a bet this round. */
+  /** Every spot with a bet this round. */
   seats: Record<number, SeatView>;
+  /** The spots the viewer plays, first spot first (a spectator: none). */
+  mine: number[];
   dealer: Card | null;
   dealerWar: Card | null;
   rules: WarRules;
@@ -62,4 +74,6 @@ export type WarEvent =
   | { type: 'decision'; seat: number; choice: 'war' | 'surrender'; raise: Cents; auto?: true }
   | { type: 'war'; seats: number[]; cards: Card[]; dealer: Card }
   | { type: 'result'; seat: number; result: Settlement }
+  /** A solo player now plays `n` spots (this `seat` is the player's own seat). */
+  | { type: 'spots'; seat: number; n: number }
   | { type: 'idle' };

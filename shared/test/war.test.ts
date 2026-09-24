@@ -26,6 +26,7 @@ import { type Card, RANKS, newDeck, isCard } from '../src/cards.ts';
 import type { Rng } from '../src/rng.ts';
 import { TableSim } from './helpers/table-sim.ts';
 import { seededRng } from './helpers/seeded.ts';
+import { stackedShoe } from './helpers/stacked.ts';
 
 // shared/ compiles without DOM or Node types; the test runner provides console.
 declare const console: { log(...args: unknown[]): void };
@@ -37,37 +38,7 @@ const card = (c: string): Card => {
 };
 const cards = (s: string): Card[] => s.split(' ').map(card);
 
-/**
- * An Rng that makes the engine's next shoe come out as `top` (the burn card first, then the cards
- * in the order they are dealt) followed by the rest of the six decks. newShoe() shuffles with
- * Fisher-Yates from the last position down, so each draw is answered with the position of a copy
- * of the card wanted there. Anything that draws again (a second shuffle) throws.
- */
-function stackedRng(top: Card[]): Rng {
-  const start: Card[] = [];
-  for (let d = 0; d < DECKS; d++) start.push(...newDeck());
-  const rest = start.slice();
-  for (const c of top) {
-    const k = rest.indexOf(c);
-    if (k < 0) throw new Error(`more than ${DECKS} of ${c}`);
-    rest.splice(k, 1);
-  }
-  const target = [...top, ...rest];
-  const cur = start.slice();
-  const draws: number[] = [];
-  for (let i = cur.length - 1; i > 0; i--) {
-    const j = cur.lastIndexOf(target[i]!, i);
-    draws.push(j);
-    [cur[i], cur[j]] = [cur[j]!, cur[i]!];
-  }
-  let k = 0;
-  return {
-    next32() {
-      if (k >= draws.length) throw new Error('stacked shoe used up');
-      return draws[k++]!;
-    },
-  };
-}
+const stackedRng = (top: Card[]): Rng => stackedShoe(top, DECKS);
 
 type Sim = TableSim<WarState, unknown, WarView>;
 const solo = (rng: Rng, stack = 100_000): Sim => new TableSim(engine, rng, 'solo', [{ seat: 0, stack }]) as Sim;
