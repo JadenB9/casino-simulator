@@ -12,7 +12,7 @@ import { GAMES } from '../games/index.ts';
 import type { Quality } from '../render/engine3d.ts';
 import type { Station } from './contract.ts';
 import type { Collider } from './collision.ts';
-import type { Footprint, FloorPlan, Placement, Zone } from './layout.ts';
+import { BAR_TOP, type Footprint, type FloorPlan, type Placement, type VpMode, type Zone } from './layout.ts';
 
 export interface WorldStation extends Station {
   footprint: Footprint;
@@ -28,10 +28,7 @@ export interface WorldStation extends Station {
   seatTops?: (number | null)[];
 }
 
-/** Bar-top units sit on the counter; anything taller stands on the floor in a gap in the bar. */
-export type VpMode = 'bartop' | 'floor';
-
-export const BAR_TOP = 1.08;
+export { BAR_TOP, type VpMode };
 
 export function stationName(game: GameId, variant: string): string {
   const info = CATALOG[game];

@@ -17,7 +17,7 @@ import { RemotePlayers, type SeatPose } from '../world/remote-players.ts';
 import { FloorLink, byteToYaw } from '../net/presence.ts';
 import { GAMES } from '../games/index.ts';
 import { openTableFlow, PartyPanel, withParty, type TableChoice } from '../ui/lobby/index.ts';
-import { mountHud, mountLogin, mountMenu, openBank, openEditor, openProfile, openSettings, overlayCount, type Hud, type MenuHandle } from '../ui/menu/index.ts';
+import { ensureOwnLook, isNewPlayer, mountHud, mountLogin, mountMenu, openBank, openEditor, openOnboarding, openProfile, openSettings, overlayCount, type Hud, type MenuHandle } from '../ui/menu/index.ts';
 import { isTyping } from '../ui/keyboard.ts';
 import { mountEmotes, openLeaderboard, socialApi, socialButton, type EmoteWheel } from '../ui/social/index.ts';
 import { createChat, type Chat } from '../ui/chat/index.ts';
@@ -128,7 +128,9 @@ class App {
     if (profile) {
       session.set(profile);
       this.connectFloor();
-      this.showMenu();
+      // a new player who reloads half way through picking a look carries on picking it
+      if (isNewPlayer(profile)) this.onboard();
+      else this.showMenu();
       return;
     }
     api.forgetToken();
@@ -144,13 +146,21 @@ class App {
       session,
       sfx: this.sfx,
       backdrop: () => this.pass(),
-      onDone: () => {
+      onDone: (profile) => {
         this.connectFloor();
-        // Menu first, then close the login, so the backdrop pass keeps running between them.
-        this.showMenu();
+        // A new player picks their look first and goes straight onto the floor; everyone else
+        // gets the menu (first, then close the login, so the backdrop pass keeps running).
+        if (isNewPlayer(profile)) this.onboard();
+        else this.showMenu();
         login.close();
       },
     });
+  }
+
+  /** A new player's first stop: "Pick your look", step by step, then onto the floor. */
+  private onboard(): void {
+    this.world.player.setEnabled(false);
+    openOnboarding({ root: this.ui, api, session, engine: this.engine, characters: this.world.characterFactory, sfx: this.sfx, onDone: () => this.enterFloor() });
   }
 
   private showMenu(): void {
@@ -291,6 +301,10 @@ class App {
   }
 
   private enterFloor(): void {
+    // Nobody walks in as the default suit: an account still in it gets a look of its own (saved).
+    ensureOwnLook({ api, session });
+    // Back in control on the floor, the world takes the mouse (this runs inside the Enter Casino
+    // click, the gesture the browser wants for Pointer Lock).
     this.world.player.setEnabled(true);
     this.hud = mountHud({
       root: this.ui,

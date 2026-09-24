@@ -90,9 +90,16 @@ export function chairSpots(): (EdgePoint & { yaw: number })[] {
   return out;
 }
 
-/** Where visual slot `k` of `n` sits on the felt's edge. The dealer has the middle of the far side. */
+/**
+ * Where visual slot `k` of `n` sits on the felt's edge: n + 1 places evenly round the oval from
+ * the middle of the near side (yours, slot 0), one of them left to the dealer. With an even count
+ * (nine seats) the dealer's is the middle of the far side, as it is for the chairs; with an odd
+ * count (six) that middle falls between two seats anyway, and the spare place is the last one.
+ */
 export function slotEdge(k: number, n: number): EdgePoint {
-  return oval(k / (n + 1));
+  const places = n + 1;
+  const dealer = places % 2 === 0 ? places / 2 : places - 1;
+  return oval((k < dealer ? k : k + 1) / places);
 }
 
 /** A point `inset` metres in from the felt's edge at a slot (negative goes outward, past the rail). */
