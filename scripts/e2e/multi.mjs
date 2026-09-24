@@ -197,6 +197,9 @@ try {
     await openLobby(b, station);
     await b.page.fill('.lobby-pin-input', pin);
     await b.page.keyboard.press('Enter');
+    // the PIN shows its table first; join it
+    await b.page.waitForSelector('.lobby-go-btn', { timeout: 10_000 });
+    await b.page.click('.lobby-go-btn');
     await a.page.waitForFunction(() => document.querySelectorAll('.party-member').length === 2, null, { timeout: 15_000 });
     log(`${game}: private lobby PIN ${pin}, both in`);
     await sitDown(a);
