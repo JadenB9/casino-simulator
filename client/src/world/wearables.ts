@@ -41,8 +41,8 @@ const fin = (r: number, g: number, b: number, m: number, rough: number): Finish 
 
 // Measured reflectances: 18k yellow gold is a little paler than pure gold, rose gold has copper
 // in it, white gold is rhodium-plated.
-const GOLD = fin(1.0, 0.72, 0.33, 1, 0.16);
-const GOLD_SOFT = fin(1.0, 0.72, 0.33, 1, 0.3);
+const GOLD = fin(1.0, 0.76, 0.37, 1, 0.16);
+const GOLD_SOFT = fin(1.0, 0.76, 0.37, 1, 0.3);
 const ROSE = fin(0.97, 0.58, 0.45, 1, 0.17);
 const WHITE_GOLD = fin(0.8, 0.79, 0.76, 1, 0.12);
 const STEEL = fin(0.62, 0.62, 0.62, 1, 0.22);
@@ -110,7 +110,7 @@ function casinoEnvironment(renderer: THREE.WebGLRenderer): THREE.Texture {
   const scene = new THREE.Scene();
   const room = new THREE.Mesh(new THREE.BoxGeometry(14, 5, 14), lit(0.028, 0.02, 0.015, THREE.BackSide));
   room.position.y = 1.1;
-  const carpet = new THREE.Mesh(new THREE.PlaneGeometry(14, 14).rotateX(-Math.PI / 2), lit(0.07, 0.012, 0.01));
+  const carpet = new THREE.Mesh(new THREE.PlaneGeometry(14, 14).rotateX(-Math.PI / 2), lit(0.2, 0.055, 0.03));
   carpet.position.y = -1.35;
   scene.add(room, carpet);
 
@@ -130,9 +130,20 @@ function casinoEnvironment(renderer: THREE.WebGLRenderer): THREE.Texture {
     c.position.set(x, 1.5, z);
     scene.add(c);
   }
-  const band = new THREE.Mesh(new THREE.CylinderGeometry(6.2, 6.2, 0.9, 48, 1, true), lit(0.32, 0.19, 0.08, THREE.BackSide));
+  // the glow of slot banks and bar lights all round at eye level, broken into bays
+  const band = new THREE.Mesh(new THREE.CylinderGeometry(6.2, 6.2, 0.9, 48, 1, true), lit(0.55, 0.34, 0.14, THREE.BackSide));
   band.position.y = -0.1;
   scene.add(band);
+  const low = new THREE.Mesh(new THREE.CylinderGeometry(5.6, 5.6, 0.5, 48, 1, true), lit(0.7, 0.42, 0.16, THREE.BackSide));
+  low.position.y = -0.85;
+  scene.add(low);
+  for (let i = 0; i < 7; i++) {
+    const a = (i / 7) * Math.PI * 2 + 0.3;
+    const box = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 1.1), lit(2.2, 1.7, 1.15));
+    box.position.set(Math.sin(a) * 5.9, 0.35, Math.cos(a) * 5.9);
+    box.lookAt(0, 0.35, 0);
+    scene.add(box);
+  }
   // the jeweller's lamp: a broad soft panel above and in front, and a cooler fill from one side
   const key = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 1.2).rotateX(Math.PI / 2), lit(5, 4.3, 3.4));
   key.position.set(0.6, 2.3, 2.4);
@@ -254,6 +265,9 @@ export interface TemplateLike {
   root: THREE.Object3D;
   geometry: THREE.BufferGeometry;
   slot: Uint8Array;
+  /** Per-vertex authored colours (linear rgb), for the pieces of a model that aren't Look slots. */
+  base?: Float32Array;
+  clips?: THREE.AnimationClip[];
 }
 
 const SLOT = { skin: 0, hair: 2, hairShade: 3, brows: 4, top: 5, bottom: 6, shoes: 7, fixed: 255 } as const;
@@ -276,17 +290,23 @@ interface Fit {
   headSkin: Float32Array;
   head: Float32Array;
   forearmL: Float32Array;
-  /** Where the eyes are (centres), the mouth, the chin. */
+  /** The neck (with a hood's collar, where there is one): half-widths to the side, back and front. */
+  neck: { side: number; back: number; front: number };
+  /** The shoulders, collar and chest without the bare neck: what a chain rests on. */
+  shoulders: Float32Array;
+  /** Where the eyes are (centres); the mouth's height and the face's front there. */
   eyes: [V3, V3];
   mouthY: number;
   /** Per-vertex rest position and normal, and the Look slot, for special clothes. */
   rest: THREE.BufferAttribute;
   restN: THREE.BufferAttribute;
   slot: THREE.BufferAttribute;
-  /** The jacket's front opening, for lapels: half-width at the button and at the collar. */
-  lapel: { yB: number; yC: number; v0: number; v1: number };
+  /** The jacket's front opening, for lapels: from the button (yB) to the collar (yC), and its half-width at eight heights between. */
+  lapel: { yB: number; yC: number; v: number[] };
   /** Each bone's rotation at rest, for turning it in the character's frame. */
   quats: THREE.Quaternion[];
+  /** The carrying pose (turns per bone, added on top of the animation) and where a held order sits, at rest. */
+  carry: { turns: Map<string, THREE.Quaternion>; grip: THREE.Matrix4 } | null;
 }
 
 const fits = new WeakMap<THREE.BufferGeometry, Fit>();
@@ -377,31 +397,51 @@ function fitFor(tpl: TemplateLike, female: boolean): Fit | null {
   const eyeL = eye(1);
   const eyeR = eye(-1);
   const eyeY = Math.min(eyeL.y, eyeR.y);
-  // The chin: the lowest point of the face near the mid-line, at the front.
-  let chinY = Infinity;
+  // The mouth: these faces have a nose and a mouth line under it (a man's a little lower); the
+  // tip of the nose is the furthest-forward point between the eyes and the chin.
+  let nose = V(cx, eyeY - 0.055, head.z + 0.13);
   for (let i = 0; i < headSkin.length; i += 3) {
-    if (Math.abs(headSkin[i]! - cx) < 0.02 && headSkin[i + 2]! > head.z + 0.06) chinY = Math.min(chinY, headSkin[i + 1]!);
+    const y = headSkin[i + 1]!;
+    if (Math.abs(headSkin[i]! - cx) < 0.015 && y < eyeY - 0.02 && y > head.y && headSkin[i + 2]! > nose.z) nose = V(headSkin[i]!, y, headSkin[i + 2]!);
   }
-  if (!Number.isFinite(chinY)) chinY = head.y - 0.02;
-  const mouthY = chinY + (eyeY - chinY) * 0.36;
+  const mouthY = nose.y - (female ? 0.015 : 0.031);
 
-  // The jacket's opening: how far the shirt (fixed-colour cloth on the chest) reaches each side
-  // of the mid-line near the bottom and the top of the opening. Models without one get a V.
-  let yB = neck.y - 0.3;
+  // The jacket's opening: at each height, the jacket's front comes no nearer the mid-line than
+  // its opening edge. Where that edge meets the mid-line the jacket closes (the button). A top
+  // with no opening (a blouse) gets a plain V drawn on it.
   const yC = neck.y - 0.03;
-  let v0 = 0.012;
-  let v1 = 0.05;
-  const shirt: [number, number][] = [];
+  const front: [number, number][] = [];
   for (let i = 0; i < n; i++) {
-    const b = names[main[i]!] ?? '';
-    if (tpl.slot[i] !== SLOT.fixed || !/^(Chest|Torso|Abdomen)$/.test(b)) continue;
-    if (rest[i * 3 + 2]! < zc + 0.06) continue;
-    shirt.push([Math.abs(rest[i * 3]! - cx), rest[i * 3 + 1]!]);
+    if (tpl.slot[i] !== SLOT.top || !/^(Chest|Torso|Abdomen|ShoulderL|ShoulderR)$/.test(names[main[i]!] ?? '')) continue;
+    if (rest[i * 3 + 2]! < zc + 0.05 || restN[i * 3 + 2]! < 0.3) continue;
+    front.push([Math.abs(rest[i * 3]! - cx), rest[i * 3 + 1]!]);
   }
-  if (shirt.length > 20) {
-    yB = Math.min(...shirt.map((p) => p[1])) + 0.01;
-    const top = shirt.filter((p) => p[1] > yC - 0.06).map((p) => p[0]);
-    if (top.length) v1 = Math.max(0.03, Math.min(0.075, Math.max(...top)));
+  const edgeAt = (y: number): number | null => {
+    let m = Infinity;
+    for (const [dx, yy] of front) if (Math.abs(yy - y) < 0.012) m = Math.min(m, dx);
+    return Number.isFinite(m) ? m : null;
+  };
+  let yB = neck.y - 0.3;
+  let opening = Array.from({ length: 8 }, (_, k) => 0.012 + (0.05 - 0.012) * (k / 7));
+  const topEdge = edgeAt(yC - 0.01);
+  if (topEdge !== null && topEdge > 0.02) {
+    // walk down from the collar until the opening closes
+    for (let y = yC - 0.01; y > neck.y - 0.4; y -= 0.005) {
+      const e = edgeAt(y);
+      if (e !== null && e < 0.012) break;
+      yB = y;
+    }
+    opening = Array.from({ length: 8 }, (_, k) => edgeAt(yB + ((yC - yB) * k) / 7) ?? NaN);
+    for (let k = 0; k < 8; k++) if (!Number.isFinite(opening[k]!)) opening[k] = k ? opening[k - 1]! : 0.01;
+    for (let k = 1; k < 8; k++) opening[k] = Math.max(opening[k]!, opening[k - 1]!);
+  }
+  // the neck's reach from its axis (a hood's collar counts: a chain goes over it)
+  const neckPts = pick((b) => b === 'Neck');
+  const neckR = { side: 0.045, back: 0.045, front: 0.045 };
+  for (let i = 0; i < neckPts.length; i += 3) {
+    neckR.side = Math.max(neckR.side, Math.abs(neckPts[i]! - cx));
+    neckR.back = Math.max(neckR.back, zc - neckPts[i + 2]!);
+    neckR.front = Math.max(neckR.front, neckPts[i + 2]! - zc);
   }
 
   const fit: Fit = {
@@ -414,6 +454,8 @@ function fitFor(tpl: TemplateLike, female: boolean): Fit | null {
     zc,
     neckY: neck.y,
     torso: pick((b) => /^(Chest|Neck|Torso|Abdomen|ShoulderL|ShoulderR)$/.test(b)),
+    neck: neckR,
+    shoulders: pick((b, s) => /^(Chest|Torso|Abdomen|ShoulderL|ShoulderR)$/.test(b) || (b === 'Neck' && s !== SLOT.skin)),
     headSkin,
     head: headAll,
     forearmL: pick((b) => b === 'LowerArmL' || b === 'WristL'),
@@ -422,11 +464,124 @@ function fitFor(tpl: TemplateLike, female: boolean): Fit | null {
     rest: new THREE.BufferAttribute(rest, 3),
     restN: new THREE.BufferAttribute(restN, 3),
     slot: new THREE.BufferAttribute(Float32Array.from(tpl.slot), 1),
-    lapel: { yB, yC, v0, v1 },
+    lapel: { yB, yC, v: opening },
     quats: bones.map((b) => b.getWorldQuaternion(new THREE.Quaternion())),
+    carry: null,
   };
+  fit.carry = carryPose(tpl, body, fit);
   fits.set(tpl.geometry, fit);
   return fit;
+}
+
+/**
+ * The right arm carrying a drink, worked out on the model itself: from the first frame of its idle
+ * (the pose it's in most of the time), the upper arm comes a little forward and out and the elbow
+ * bends until the forearm is about level; the forearm turns on its own axis until the thumb is
+ * up; the fingers close round where the glass will be. The turns are kept as additive deltas in
+ * each bone's own frame, and the glass's place is carried back to the rest pose the pieces are
+ * skinned from.
+ */
+function carryPose(tpl: TemplateLike, body: THREE.SkinnedMesh, fit: Fit): Fit['carry'] {
+  const bones = body.skeleton.bones;
+  const find = (n: string) => bones[boneIndex(fit, n)];
+  const upper = find('UpperArm.R');
+  const lower = find('LowerArm.R');
+  const wrist = find('Wrist.R');
+  const thumb = find('Thumb3.R');
+  const middle = find('Middle4.R');
+  if (!upper || !lower || !wrist || !thumb || !middle) return null;
+  const saved = bones.map((b) => b.quaternion.clone());
+  const restWrist = wrist.matrixWorld.clone();
+  const root = tpl.root;
+  // the idle's first frame
+  const idle = tpl.clips?.find((c) => c.name === 'Idle');
+  for (const t of idle?.tracks ?? []) {
+    if (!t.name.endsWith('.quaternion')) continue;
+    const b = bones.find((x) => `${x.name}.quaternion` === t.name);
+    if (b) b.quaternion.fromArray(t.values as unknown as number[], 0);
+  }
+  root.updateMatrixWorld(true);
+  const base = new Map<THREE.Object3D, THREE.Quaternion>(bones.map((b) => [b, b.quaternion.clone()]));
+  const worldQ = (b: THREE.Object3D) => b.getWorldQuaternion(new THREE.Quaternion());
+  /** A turn about a world axis, as a delta in the bone's own frame at the idle pose. */
+  const localTurn = (b: THREE.Object3D, axis: V3, angle: number) => {
+    const q = worldQ(b);
+    return new THREE.Quaternion().setFromAxisAngle(axis.clone().applyQuaternion(q.clone().invert()).normalize(), angle);
+  };
+  const turns = new Map<THREE.Object3D, THREE.Quaternion>();
+  const apply = () => {
+    for (const [b, q] of base) b.quaternion.copy(q);
+    for (const [b, d] of turns) b.quaternion.copy(base.get(b)!).multiply(d);
+    root.updateMatrixWorld(true);
+  };
+  const at = (b: THREE.Object3D) => b.getWorldPosition(V());
+  turns.set(upper, localTurn(upper, V(1, 0, 0), -0.2).multiply(localTurn(upper, V(0, 0, 1), -0.1)));
+  apply();
+  // bend the elbow (about the body's left-right axis, in the forearm's frame as it hangs) until
+  // the forearm points ahead, a touch below level
+  const hinge = V(1, 0, 0).applyQuaternion(worldQ(lower).invert()).normalize();
+  let best = { e: 0, d: Infinity };
+  for (let e = 0.3; e <= 2.2; e += 0.02) {
+    turns.set(lower, new THREE.Quaternion().setFromAxisAngle(hinge, -e));
+    apply();
+    const dir = at(wrist).sub(at(lower)).normalize();
+    const d = Math.abs(dir.y + 0.12) + Math.max(0, -dir.z);
+    if (d < best.d) best = { e, d };
+  }
+  const flex = new THREE.Quaternion().setFromAxisAngle(hinge, -best.e);
+  // turn the forearm on its own length until the thumb points up
+  const along = wrist.position.clone().normalize();
+  let twist = { a: 0, up: -Infinity };
+  for (let a = -Math.PI; a < Math.PI; a += Math.PI / 36) {
+    turns.set(lower, flex.clone().multiply(new THREE.Quaternion().setFromAxisAngle(along, a)));
+    apply();
+    const up = at(thumb).sub(at(wrist)).normalize().y;
+    if (up > twist.up) twist = { a, up };
+  }
+  turns.set(lower, flex.clone().multiply(new THREE.Quaternion().setFromAxisAngle(along, twist.a)));
+  apply();
+  // where the glass stands: upright, against the inside of the palm, a hand's width out
+  const w = at(wrist);
+  const fingers = at(middle).sub(w).normalize();
+  const inward = V(1, 0, 0);
+  const palm = w.clone().addScaledVector(fingers, 0.075).add(V(0, 0.012, 0));
+  const glassAt = palm.clone().addScaledVector(inward, 0.038);
+  // curl the fingers round it: each finger joint turns whichever way brings the tips in
+  for (const f of ['Index', 'Middle', 'Ring', 'Pinky']) {
+    for (const [j, amount] of [
+      [1, 0.55],
+      [2, 0.75],
+      [3, 0.5],
+    ] as const) {
+      const b = find(`${f}${j}.R`);
+      const tip = find(`${f}4.R`);
+      if (!b || !tip) continue;
+      let pick: THREE.Quaternion | null = null;
+      let dist = at(tip).distanceTo(glassAt);
+      for (const axis of [V(1, 0, 0), V(-1, 0, 0), V(0, 0, 1), V(0, 0, -1)]) {
+        turns.set(b, new THREE.Quaternion().setFromAxisAngle(axis, amount));
+        apply();
+        const d = at(tip).distanceTo(glassAt);
+        if (d < dist - 0.004) {
+          dist = d;
+          pick = turns.get(b)!.clone();
+        }
+      }
+      if (pick) turns.set(b, pick);
+      else turns.delete(b);
+      apply();
+    }
+  }
+  const posedWrist = wrist.matrixWorld.clone();
+  // the glass frame in the posed hand (+y up, its front facing out), carried back to rest
+  const out = inward.clone().negate();
+  const up = V(0, 1, 0);
+  const grip = frame(glassAt, up.clone().cross(out), up, out);
+  const restGrip = restWrist.clone().multiply(posedWrist.clone().invert()).multiply(grip);
+  // put the template back as it was
+  bones.forEach((b, i) => b.quaternion.copy(saved[i]!));
+  root.updateMatrixWorld(true);
+  return { turns: new Map([...turns].map(([b, q]) => [b.name, q])), grip: restGrip };
 }
 
 /**
@@ -444,6 +599,18 @@ function support(points: Float32Array, o: V3, d: V3, radius: number): number {
     if (s <= 0 || s <= best) continue;
     const q = px * px + py * py + pz * pz - s * s;
     if (q < r2) best = s;
+  }
+  return best;
+}
+
+/** The highest of the points within `radius` (horizontally) of (x, z); -Infinity if none. */
+function top(points: Float32Array, x: number, z: number, radius: number): number {
+  let best = -Infinity;
+  const r2 = radius * radius;
+  for (let i = 0; i < points.length; i += 3) {
+    const dx = points[i]! - x;
+    const dz = points[i + 2]! - z;
+    if (dx * dx + dz * dz < r2 && points[i + 1]! > best) best = points[i + 1]!;
   }
   return best;
 }
@@ -559,9 +726,9 @@ interface ChainSpec {
 const CHAINS: Record<string, ChainSpec> = {
   'rope-chain': { style: 'rope', drop: 0.15, width: 0.0068 },
   figaro: { style: 'figaro', drop: 0.16, width: 0.0064 },
-  'cuban-link': { style: 'cuban', drop: 0.125, width: 0.0118 },
-  'iced-cuban': { style: 'cuban', drop: 0.12, width: 0.0136, iced: true },
-  'dice-pendant': { style: 'cuban', drop: 0.17, width: 0.0088, pendant: 'dice' },
+  'cuban-link': { style: 'cuban', drop: 0.125, width: 0.0135 },
+  'iced-cuban': { style: 'cuban', drop: 0.12, width: 0.0155, iced: true },
+  'dice-pendant': { style: 'cuban', drop: 0.17, width: 0.0095, pendant: 'dice' },
   'ace-pendant': { style: 'rope', drop: 0.17, width: 0.0062, pendant: 'ace' },
 };
 
@@ -573,39 +740,70 @@ interface Path {
 }
 
 /**
- * The line a necklace takes on this body: round the base of the neck at the back and sides,
- * then down over the collarbones to its lowest point on the chest, pushed out to rest on
- * whatever the outfit has there (a collar, a hood, bare skin).
+ * The line a necklace takes on this body. Round the back and over the sides it lies on top of
+ * whatever is just outside the neck (the collar, a hood, the shoulders); from there it drapes down
+ * across the collarbones to its lowest point on the chest, resting against whatever is in front.
  */
 function chainPath(fit: Fit, drop: number, thick: number): Path {
   const K = 96;
-  const yTop = fit.neckY + (fit.female ? 0.004 : 0.012);
+  const clear = thick / 2 + 0.0022;
+  const gap = 0.016 + thick / 2;
+  const ring = (th: number): V3 => {
+    const s = Math.sin(th);
+    const c = Math.cos(th);
+    const x = fit.cx + s * (fit.neck.side + gap);
+    const z = fit.zc + c * ((c >= 0 ? fit.neck.front : fit.neck.back) + gap);
+    const h = top(fit.shoulders, x, z, 0.014);
+    return V(x, (Number.isFinite(h) ? h : fit.neckY) + clear, z);
+  };
+  // from this far round (either way) the chain lies on the shoulders; nearer the front it drapes
+  const TH0 = 1.15;
+  const sideY = [ring(TH0).y, ring(-TH0).y];
+  const low = (sideY[0]! + sideY[1]!) / 2 - drop;
   const pts: V3[] = [];
   const outs: V3[] = [];
-  const rs: number[] = [];
   for (let k = 0; k < K; k++) {
-    const th = (k / K) * Math.PI * 2;
-    const front = Math.pow((1 + Math.cos(th)) / 2, 2.2);
-    const y = yTop - drop * front;
-    const side = Math.sin(th) ** 2;
-    const d = V(Math.sin(th), 0.55 * side * (1 - front), Math.cos(th)).normalize();
-    const o = V(fit.cx + Math.sin(th) * 0.015, y - d.y * 0.02, fit.zc + Math.cos(th) * 0.015);
-    let s = support(fit.torso, o, d, 0.016);
-    if (!Number.isFinite(s)) s = 0.07;
-    rs.push(s);
-    pts.push(o);
-    outs.push(d);
+    const th = (k / K) * Math.PI * 2 - (k / K > 0.5 ? Math.PI * 2 : 0);
+    const d = V(Math.sin(th), 0, Math.cos(th));
+    if (Math.abs(th) >= TH0) {
+      pts.push(ring(th));
+      outs.push(d.clone().add(V(0, 0.8, 0)).normalize());
+      continue;
+    }
+    const t = 1 - Math.abs(th) / TH0;
+    const e = t * t * (3 - 2 * t);
+    const y = THREE.MathUtils.lerp(sideY[th >= 0 ? 0 : 1]!, low, Math.pow(e, 0.85));
+    const o = V(fit.cx, y, fit.zc);
+    let r = support(fit.torso, o, d, 0.014);
+    if (!Number.isFinite(r)) r = 0.1;
+    // at the top of the drape it can't come in closer to the neck than the ring does
+    r = Math.max(r, (fit.neck.side + gap) * (1 - e));
+    pts.push(o.addScaledVector(d, r + clear));
+    outs.push(d.clone().add(V(0, 0.8 * (1 - e), 0)).normalize());
   }
-  // Smooth the reach round the loop (the surface comes from sparse vertices) without letting it
-  // sink in: each sample takes the most of its neighbours, then the average of that.
-  const most = rs.map((_, k) => Math.max(rs[(k + K - 1) % K]!, rs[k]!, rs[(k + 1) % K]!));
-  const smooth = most.map((_, k) => {
+  // The shoulders come from a sparse mesh: even out the heights round the back first, never
+  // lower than the surface they came from by more than a little.
+  const ringK = pts.map((_, k) => Math.abs((k / K) * Math.PI * 2 - (k / K > 0.5 ? Math.PI * 2 : 0)) >= TH0);
+  const heights = pts.map((p) => p.y);
+  for (let k = 0; k < K; k++) {
+    if (!ringK[k]) continue;
     let sum = 0;
-    for (let j = -3; j <= 3; j++) sum += most[(k + j + K) % K]!;
-    return sum / 7;
+    let n = 0;
+    for (let j = -4; j <= 4; j++) {
+      const i = (k + j + K) % K;
+      if (!ringK[i]) continue;
+      sum += heights[i]!;
+      n++;
+    }
+    pts[k]!.y = Math.max(sum / n, heights[k]! - 0.004);
+  }
+  // then smooth the whole line, keeping each point clear of the body
+  const smooth = pts.map((_, k) => {
+    const sum = V();
+    for (let j = -2; j <= 2; j++) sum.add(pts[(k + j + K) % K]!);
+    return sum.divideScalar(5);
   });
-  const clear = thick / 2 + 0.0022;
-  const loop = pts.map((o, k) => o.clone().addScaledVector(outs[k]!, smooth[k]! + clear));
+  const loop = smooth.map((p, k) => (p.distanceTo(V(fit.cx, p.y, fit.zc)) < pts[k]!.distanceTo(V(fit.cx, pts[k]!.y, fit.zc)) ? pts[k]!.clone().setY(p.y) : p));
   const curve = new THREE.CatmullRomCurve3(loop, true, 'centripetal');
   return {
     curve,
@@ -664,14 +862,15 @@ function buildChain(fit: Fit, spec: ChainSpec, out: Out, chest: number): Path {
   }
   // Links along the path, spaced so the loop closes on a whole number of them.
   const pattern = spec.style === 'figaro' ? [1, 1, 1, 2.2] : [1];
-  const unit = spec.style === 'figaro' ? w * 1.35 : w * 0.64;
+  const unit = spec.style === 'figaro' ? w * 1.35 : w * 0.52;
   const cycle = pattern.reduce((a, b) => a + b, 0) * unit;
   const cycles = Math.max(1, Math.round(length / cycle));
   const scale = length / (cycles * cycle);
   let s = 0;
   let i = 0;
-  const base = spec.style === 'figaro' ? null : link(w * 1.2, w, w * 0.34, 0.55, 12);
-  const ice = spec.iced ? link(w * 1.02, w * 0.84, w * 0.2, 0.5, 12) : null;
+  // a curb link: thick wire, a small eye, pressed flat
+  const base = spec.style === 'figaro' ? null : link(w * 1.28, w, w * 0.42, 0.5, 14);
+  const ice = spec.iced ? link(w * 1.08, w * 0.82, w * 0.24, 0.45, 14) : null;
   while (s < length - 1e-6) {
     const k = pattern[i % pattern.length]!;
     const len = k * unit * scale;
@@ -686,10 +885,10 @@ function buildChain(fit: Fit, spec: ChainSpec, out: Out, chest: number): Path {
       out.metal.add(g, m, GOLD, chest);
     } else {
       // a curb: the links twisted to lie flat against each other, alternately
-      const twist = (i % 2 ? 1 : -1) * 0.5;
+      const twist = (i % 2 ? 1 : -1) * 0.42;
       const r = new THREE.Matrix4().makeRotationX(twist);
       out.metal.add(base!.clone(), m.clone().multiply(r), GOLD, chest);
-      if (ice) out.gem.add(ice.clone(), m.clone().multiply(r).multiply(new THREE.Matrix4().makeTranslation(0, 0, w * 0.1)), null, chest);
+      if (ice) out.gem.add(ice.clone(), m.clone().multiply(r).multiply(new THREE.Matrix4().makeTranslation(0, 0, w * 0.08)), null, chest);
     }
     s += len;
     i++;
@@ -835,28 +1034,25 @@ const GRILLS: Record<string, GrillSpec> = {
   'diamond-set': { metal: 'white', rows: 2, top: 8, iced: true },
 };
 
-/** Teeth across the front of the mouth, following the face round, just proud of it. */
+/** Teeth across the front of the mouth, on an even arc round the face, just proud of it. */
 function buildGrill(fit: Fit, spec: GrillSpec, out: Out, headBone: number): void {
-  const tw = fit.female ? 0.0072 : 0.008;
-  const rows: [number, number, number][] = [[fit.mouthY + 0.0055, spec.top, fit.female ? 0.0094 : 0.0104]];
-  if (spec.rows === 2) rows.push([fit.mouthY - 0.0058, spec.top, fit.female ? 0.0078 : 0.0086]);
+  const tw = fit.female ? 0.0054 : 0.0062;
+  const rows: [number, number, number][] = [[fit.mouthY + 0.0048, spec.top, fit.female ? 0.0082 : 0.0092]];
+  if (spec.rows === 2) rows.push([fit.mouthY - 0.0046, spec.top, fit.female ? 0.0068 : 0.0076]);
   const metal = METALS[spec.metal];
   for (const [y, count, th] of rows) {
+    // the front of the face at this height, in the middle; the arc curves back from there
+    const s = support(fit.headSkin, V(fit.cx, y, fit.zc), V(0, 0, 1), 0.012);
+    const z0 = (Number.isFinite(s) ? fit.zc + s : fit.zc + 0.12) + 0.0026;
+    const k = 7.5;
     for (let i = 0; i < count; i++) {
-      const x = fit.cx + (i - (count - 1) / 2) * tw * 1.04;
-      // the face's front at this point, and which way it faces (from its neighbours)
-      const z = (xx: number) => {
-        const s = support(fit.headSkin, V(xx, y, fit.zc), V(0, 0, 1), 0.009);
-        return Number.isFinite(s) ? fit.zc + s : fit.zc + 0.14;
-      };
-      const z0 = z(x);
-      const slope = (z(x + 0.006) - z(x - 0.006)) / 0.012;
+      const dx = (i - (count - 1) / 2) * tw * 1.05;
+      const slope = -2 * k * dx;
       const n = V(-slope, 0, 1).normalize();
-      const o = V(x, y, z0).addScaledVector(n, 0.0024);
-      const m = surfaceFrame(o, V(1, 0, slope), n);
-      const tooth = new RoundedBoxGeometry(tw * 0.94, th, 0.0036, 2, 0.0011);
+      const m = surfaceFrame(V(fit.cx + dx, y, z0 - k * dx * dx), V(1, 0, slope), n);
+      const tooth = new RoundedBoxGeometry(tw * 0.95, th, 0.0036, 4, 0.0017);
       out.metal.add(tooth, m, metal, headBone);
-      if (spec.iced) out.gem.add(new RoundedBoxGeometry(tw * 0.78, th * 0.8, 0.0012, 1, 0.0004), m.clone().multiply(new THREE.Matrix4().makeTranslation(0, 0, 0.0018)), null, headBone);
+      if (spec.iced) out.gem.add(new RoundedBoxGeometry(tw * 0.74, th * 0.76, 0.001, 1, 0.0003), m.clone().multiply(new THREE.Matrix4().makeTranslation(0, 0, 0.0017)), null, headBone);
     }
   }
 }
@@ -870,7 +1066,7 @@ function buildWatch(fit: Fit, iced: boolean, out: Out): void {
   const elbow = fit.at[fore]!;
   const wrist = fit.at[wristI]!;
   const axis = wrist.clone().sub(elbow).normalize();
-  const c = wrist.clone().addScaledVector(axis, -0.028);
+  const c = wrist.clone().addScaledVector(axis, -0.016);
   // the arm's radius there, from the forearm's own vertices
   let r = 0;
   for (let i = 0; i < fit.forearmL.length; i += 3) {
@@ -1059,26 +1255,22 @@ const WATER = fin(0.8, 0.85, 0.85, 0, 0.05);
  * it, +y up), then turned into the hand: at rest the arm hangs, so "up" is the direction the
  * thumb points, which the carrying pose turns up.
  */
+/** Where a held order sits (its own frame: origin where the fingers close, +y up) and the bone it rides. */
 function handFrame(fit: Fit): { m: THREE.Matrix4; bone: number } | null {
   const wristI = boneIndex(fit, 'Wrist.R');
-  if (wristI < 0) return null;
-  const wrist = fit.at[wristI]!;
-  // the fingers hang down from the wrist; the palm faces in toward the body
-  const mid = boneIndex(fit, 'Middle4.R');
-  const fingers = mid >= 0 && fit.at[mid]!.distanceTo(wrist) > 0.03 ? fit.at[mid]!.clone().sub(wrist).normalize() : V(0, -1, 0.1).normalize();
-  const inward = V(1, 0, 0);
-  // the item's up is forward at rest, which the carrying pose turns up; its front faces out
-  const up = V(0, 0, 1).addScaledVector(fingers, -fingers.z).normalize();
-  const outZ = inward.clone().negate().addScaledVector(up, up.x).normalize();
-  const grip = wrist.clone().addScaledVector(fingers, 0.05).addScaledVector(inward, 0.02);
-  return { m: frame(grip, up.clone().cross(outZ).normalize(), up, outZ), bone: wristI };
+  if (wristI < 0 || !fit.carry) return null;
+  return { m: fit.carry.grip, bone: wristI };
 }
 
 function buildHeld(fit: Fit, model: BarModel, out: Out): void {
   const h = handFrame(fit);
   if (!h) return;
+  // The item's frame in the hand: x ahead along the fingers, y up, z out to the side. Stemmed
+  // glasses are held by the stem, a tumbler up in the fingers, a cup's saucer resting inward.
+  const shift = GRIP_SHIFT[model] ?? [0, 0, 0];
+  const m = h.m.clone().multiply(new THREE.Matrix4().makeTranslation(shift[0], shift[1], shift[2]));
   const add = (g: THREE.BufferGeometry, paint: Paint | null, bucket: 'metal' | 'glass' = 'metal', local?: THREE.Matrix4) =>
-    out[bucket].add(g, local ? h.m.clone().multiply(local) : h.m, paint, h.bone);
+    out[bucket].add(g, local ? m.clone().multiply(local) : m, paint, h.bone);
   const lathe = (pts: [number, number][], segs = 24) => new THREE.LatheGeometry(pts.map(([r, y]) => new THREE.Vector2(r, y)), segs);
   const at = (x: number, y: number, z: number) => new THREE.Matrix4().makeTranslation(x, y, z);
   switch (model) {
@@ -1138,6 +1330,14 @@ function buildHeld(fit: Fit, model: BarModel, out: Out): void {
     }
   }
 }
+
+const GRIP_SHIFT: Partial<Record<BarModel, [number, number, number]>> = {
+  martini: [0.006, 0.05, 0],
+  wine: [0.006, 0.05, 0],
+  flute: [0.004, 0.045, 0],
+  rocks: [0.012, 0.03, -0.004],
+  cup: [0, 0.01, -0.05],
+};
 
 /** Where a plate's centre sits from the hand holding its rim: toward the body, in front of it. */
 const PLATE_Z = -0.085;
@@ -1268,39 +1468,15 @@ function buildFarChain(fit: Fit, id: string, out: Out): void {
 // --- the carrying pose ---------------------------------------------------------------------------
 
 const holdClips = new WeakMap<Fit, THREE.AnimationClip>();
-
-/**
- * The right arm carrying something: the upper arm a little forward and out, the elbow bent so the
- * forearm points ahead, as an additive clip (it rides on top of idling and walking). Each turn is
- * made in the character's frame and carried into the bone's own, from the model at rest.
- */
+/** The carrying pose as an additive clip (it rides on top of idling and walking). */
 function holdClip(fit: Fit): THREE.AnimationClip | null {
   const known = holdClips.get(fit);
   if (known) return known;
-  const tracks: THREE.KeyframeTrack[] = [];
-  const turn = (bone: string, axis: V3, angle: number) => {
-    const i = boneIndex(fit, bone);
-    if (i < 0) return;
-    const q = fit.quats[i]!;
-    const local = axis.clone().applyQuaternion(q.clone().invert()).normalize();
-    const d = new THREE.Quaternion().setFromAxisAngle(local, angle);
-    tracks.push(new THREE.QuaternionKeyframeTrack(`${fit.names[i]}.quaternion`, [0, 1], [d.x, d.y, d.z, d.w, d.x, d.y, d.z, d.w]));
-  };
-  turn('UpperArm.R', V(1, 0, 0), -0.32);
-  turn('UpperArm.R', V(0, 0, 1), -0.14);
-  turn('LowerArm.R', V(1, 0, 0), -1.3);
-  if (!tracks.length) return null;
-  // two turns on one bone: fold them into a single track
-  const merged = new Map<string, THREE.Quaternion>();
-  for (const t of tracks) {
-    const q = new THREE.Quaternion(t.values[0], t.values[1], t.values[2], t.values[3]);
-    const was = merged.get(t.name);
-    merged.set(t.name, was ? was.multiply(q) : q);
-  }
+  if (!fit.carry || fit.carry.turns.size === 0) return null;
   const clip = new THREE.AnimationClip(
     'carry',
     1,
-    [...merged].map(([name, q]) => new THREE.QuaternionKeyframeTrack(name, [0, 1], [q.x, q.y, q.z, q.w, q.x, q.y, q.z, q.w])),
+    [...fit.carry.turns].map(([name, q]) => new THREE.QuaternionKeyframeTrack(`${name}.quaternion`, [0, 1], [q.x, q.y, q.z, q.w, q.x, q.y, q.z, q.w])),
     THREE.AdditiveAnimationBlendMode,
   );
   holdClips.set(fit, clip);
@@ -1342,22 +1518,26 @@ const CLOTH_GLSL: Record<ClothesSpec['cloth'], { color?: string; pbr?: string; n
   // metallic lamé: the folds shimmer; two white stripes down the outside of the arms and legs
   lame: {
     color: `
-      float stripe = cloth * step(0.955, abs(vRestN.x)) * step(vRest.y, uNeckY - 0.1) * step(0.2, vRest.y) * (1.0 - step(abs(vRest.x - uCx), 0.16) * step(0.95, vRest.y));
+      float shin = (1.0 - step(0.5, abs(vSlot))) * step(0.12, vRest.y) * step(vRest.y, 0.62);
+      cloth = max(cloth, shin);
+      diffuseColor.rgb = mix(diffuseColor.rgb, uGold, shin);
+      stripe = cloth * step(0.955, abs(vRestN.x)) * step(vRest.y, uNeckY - 0.1) * step(0.2, vRest.y) * (1.0 - step(abs(vRest.x - uCx), 0.16) * step(0.95, vRest.y));
       diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.85, 0.84, 0.8), stripe);`,
-    pbr: `metalnessFactor = mix(metalnessFactor, 0.92, cloth * (1.0 - stripe)); roughnessFactor = mix(roughnessFactor, 0.3, cloth * (1.0 - stripe));`,
-    normal: `normal = normalize(normal + cloth * (1.0 - stripe) * (viewMatrix * vec4((vec3(wNoise(vRest * 38.0), wNoise(vRest * 38.0 + 7.1), wNoise(vRest * 38.0 + 3.7)) - 0.5) * 0.9 + (wFacet(vRest, 260.0)) * 0.25, 0.0)).xyz);`,
+    pbr: `metalnessFactor = mix(metalnessFactor, 0.9, cloth * (1.0 - stripe)); roughnessFactor = mix(roughnessFactor, 0.34, cloth * (1.0 - stripe));`,
+    normal: `normal = normalize(normal + cloth * (1.0 - stripe) * (viewMatrix * vec4((vec3(wNoise(vRest * 14.0), wNoise(vRest * 14.0 + 7.1), wNoise(vRest * 14.0 + 3.7)) - 0.5) * 0.5 + wFacet(vRest, 400.0) * 0.08, 0.0)).xyz);`,
   },
-  // an ivory dinner jacket with black satin lapels and collar
+  // an ivory dinner jacket with black satin lapels and collar, and a black tie
   tux: {
     color: `
-      float lap = top * lapel(vRest, vRestN);
-      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.006, 0.006, 0.007), lap);`,
+      lap = top * lapel(vRest, vRestN);
+      float tie = step(254.5, vSlot) * step(dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11)), 0.2) * step(0.9, vRest.y) * step(vRest.y, uNeckY) * step(0.2, vRestN.z);
+      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.006, 0.006, 0.007), max(lap, tie));`,
     pbr: `roughnessFactor = mix(roughnessFactor, 0.62, top); roughnessFactor = mix(roughnessFactor, 0.2, lap); roughnessFactor = mix(roughnessFactor, 0.5, bottom); roughnessFactor = mix(roughnessFactor, 0.16, shoes);`,
   },
   // burgundy velvet (a sheen at the edges, soft in the middle), a black satin shawl collar
   velvet: {
     color: `
-      float lap = top * lapel(vRest, vRestN);
+      lap = top * lapel(vRest, vRestN);
       diffuseColor.rgb = mix(diffuseColor.rgb * 0.8, vec3(0.006, 0.006, 0.007), lap);`,
     pbr: `roughnessFactor = mix(roughnessFactor, 0.95, top * (1.0 - lap)); roughnessFactor = mix(roughnessFactor, 0.22, lap); roughnessFactor = mix(roughnessFactor, 0.16, shoes);`,
     normal: `normal = normalize(normal + top * (1.0 - lap) * (viewMatrix * vec4(wFacet(vRest, 900.0) * 0.12, 0.0)).xyz);`,
@@ -1366,11 +1546,11 @@ const CLOTH_GLSL: Record<ClothesSpec['cloth'], { color?: string; pbr?: string; n
   // long fur: clumps and strands, a soft sheen, no shine at all
   fur: {
     color: `
-      float clump = wNoise(vRest * 70.0);
-      float strand = wNoise(vRest * vec3(900.0, 260.0, 900.0));
-      diffuseColor.rgb *= mix(vec3(1.0), vec3(0.62 + 0.45 * clump) * vec3(0.9 + 0.12 * strand), top);`,
+      float clump = wNoise(vRest * vec3(55.0, 22.0, 55.0));
+      float strand = wNoise(vRest * vec3(1400.0, 180.0, 1400.0));
+      diffuseColor.rgb *= mix(vec3(1.0), vec3(0.86 + 0.14 * clump) * (0.84 + 0.2 * strand), top);`,
     pbr: `roughnessFactor = mix(roughnessFactor, 1.0, top);`,
-    normal: `normal = normalize(normal + top * (viewMatrix * vec4((vec3(wNoise(vRest * 70.0), wNoise(vRest * 70.0 + 5.0), wNoise(vRest * 70.0 + 9.0)) - 0.5) * 1.4 + wFacet(vRest, 1100.0) * 0.7, 0.0)).xyz);`,
+    normal: `normal = normalize(normal + top * (viewMatrix * vec4(vec3(wNoise(vRest * vec3(900.0, 120.0, 900.0)) - 0.5, -0.35, wNoise(vRest * vec3(900.0, 120.0, 900.0) + 4.0) - 0.5) * 1.1 + wFacet(vRest, 1600.0) * 0.45, 0.0)).xyz);`,
     sheen: `material.sheenColor *= top;`,
   },
   // black wool sewn with diamonds: a scatter of tiny stones that catch the light and glint
@@ -1378,11 +1558,11 @@ const CLOTH_GLSL: Record<ClothesSpec['cloth'], { color?: string; pbr?: string; n
     color: `
       vec3 cell = floor(vRest * 90.0);
       vec3 cen = (cell + 0.5 + (wHash33(cell) - 0.5) * 0.6) / 90.0;
-      float stud = cloth * step(0.35, wHash13(cell + 3.0)) * (1.0 - smoothstep(0.0015, 0.0021, length(vRest - cen)));
+      stud = cloth * step(0.35, wHash13(cell + 3.0)) * (1.0 - smoothstep(0.0015, 0.0021, length(vRest - cen)));
       diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.9, 0.92, 0.95), stud);`,
     pbr: `roughnessFactor = mix(roughnessFactor, 0.72, cloth); metalnessFactor = mix(metalnessFactor, 1.0, stud); roughnessFactor = mix(roughnessFactor, 0.05, stud);`,
     normal: `normal = normalize(normal + stud * (viewMatrix * vec4(wFacet(vRest, 1800.0) * 1.2, 0.0)).xyz);`,
-    emissive: `totalEmissiveRadiance += stud * (wGlint(vRest, 90.0, uTime) * 4.0 + vec3(0.06));`,
+    emissive: `totalEmissiveRadiance += stud * (wGlint(vRest, 90.0, uTime) * 6.0 + vec3(0.09));`,
   },
 };
 
@@ -1397,8 +1577,8 @@ function clothesMaterial(id: string, fit: Fit): THREE.MeshPhysicalMaterial | nul
   const m = new THREE.MeshPhysicalMaterial({ vertexColors: true, metalness: 0, roughness: 0.8, envMapIntensity: 1.1 });
   if (code.sheen) {
     m.sheen = 1;
-    m.sheenColor = spec.cloth === 'fur' ? new THREE.Color(0.85, 0.78, 0.66) : new THREE.Color(0.95, 0.35, 0.42);
-    m.sheenRoughness = spec.cloth === 'fur' ? 0.62 : 0.4;
+    m.sheenColor = spec.cloth === 'fur' ? new THREE.Color(1.0, 0.94, 0.84) : new THREE.Color(0.95, 0.35, 0.42);
+    m.sheenRoughness = spec.cloth === 'fur' ? 0.75 : 0.4;
   }
   m.name = `clothes:${id}`;
   const time = { value: 0 };
@@ -1407,8 +1587,10 @@ function clothesMaterial(id: string, fit: Fit): THREE.MeshPhysicalMaterial | nul
   m.onBeforeCompile = (s) => {
     s.uniforms.uTime = time;
     s.uniforms.uCx = { value: fit.cx };
+    s.uniforms.uGold = { value: new THREE.Color(spec.top) };
     s.uniforms.uNeckY = { value: fit.neckY };
-    s.uniforms.uLapel = { value: new THREE.Vector4(L.yB, L.yC, L.v0, L.v1) };
+    s.uniforms.uLapel = { value: new THREE.Vector2(L.yB, L.yC) };
+    s.uniforms.uV = { value: L.v };
     s.vertexShader = s.vertexShader
       .replace('#include <common>', '#include <common>\nattribute float wSlot;\nattribute vec3 wRest;\nattribute vec3 wRestN;\nvarying float vSlot;\nvarying vec3 vRest;\nvarying vec3 vRestN;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvSlot = wSlot;\nvRest = wRest;\nvRestN = wRestN;');
@@ -1417,15 +1599,17 @@ function clothesMaterial(id: string, fit: Fit): THREE.MeshPhysicalMaterial | nul
         '#include <common>',
         `#include <common>
 varying float vSlot; varying vec3 vRest; varying vec3 vRestN;
-uniform float uTime; uniform float uCx; uniform float uNeckY; uniform vec4 uLapel;
+uniform float uTime; uniform float uCx; uniform float uNeckY; uniform vec2 uLapel; uniform float uV[8]; uniform vec3 uGold;
 ${NOISE_GLSL}
 // The jacket's lapels: a band beside the front opening from the button up to the collar, wider
 // at the top, and the collar round the back of the neck.
 float lapel(vec3 p, vec3 n) {
   float dx = abs(p.x - uCx);
   float t = clamp((p.y - uLapel.x) / (uLapel.y - uLapel.x), 0.0, 1.0);
-  float inner = mix(uLapel.z, uLapel.w, t);
-  float outer = inner + mix(0.008, 0.052, smoothstep(0.0, 0.85, t)) * (1.0 - smoothstep(0.9, 1.0, t) * 0.3);
+  float f = t * 7.0;
+  int i = int(min(6.0, floor(f)));
+  float inner = mix(uV[i], uV[i + 1], f - float(i));
+  float outer = inner + mix(0.006, 0.036, smoothstep(0.0, 0.85, t)) * (1.0 - smoothstep(0.9, 1.0, t) * 0.3);
   float front = step(0.25, n.z) * step(uLapel.x, p.y) * step(p.y, uLapel.y + 0.02);
   float band = step(inner - 0.004, dx) * step(dx, outer);
   float collar = step(uLapel.y - 0.015, p.y) * step(n.z, 0.6) * step(dx, 0.085);

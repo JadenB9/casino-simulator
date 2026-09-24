@@ -172,6 +172,7 @@ export class Showroom {
   private spin = 0;
   private clock = 0;
   private held = 0;
+  private fixed: number | null = null;
   private readonly camAt = new THREE.Vector3();
   private readonly camLook = new THREE.Vector3();
   private placed = false;
@@ -207,6 +208,11 @@ export class Showroom {
     this.held = 2.5;
   }
 
+  /** Hold the figure still at this turn (null lets it turn again). */
+  still(yaw: number | null): void {
+    this.fixed = yaw;
+  }
+
   /** Re-frame after the window or the panel changed size. */
   reframe(): void {
     this.placed = false;
@@ -218,8 +224,8 @@ export class Showroom {
     if (this.held > 0) this.held -= dt;
     else if (f.sway === 0) this.base += dt * 0.28;
     // full figure: a slow turn; close-ups: an easy sway either side of the angle that shows it
-    const want = this.base + f.sway * Math.sin(this.clock * 0.45);
-    this.yaw += (want - this.yaw) * Math.min(1, dt * 3);
+    const want = this.fixed ?? this.base + f.sway * Math.sin(this.clock * 0.45);
+    this.yaw += (want - this.yaw) * (this.fixed !== null ? 1 : Math.min(1, dt * 3));
     this.built.pivot.rotation.y = this.yaw;
     this.character.update(dt);
     this.place(dt);
@@ -236,7 +242,8 @@ export class Showroom {
     const d = f.height / (2 * half * frac * 0.86);
     const cx = ((a.x0 + a.x1) / 2 / vw) * 2 - 1;
     const cy = -(((a.y0 + a.y1) / 2 / vh) * 2 - 1);
-    const focus = this.built.group.position.clone().add(new THREE.Vector3(...f.at).applyAxisAngle(new THREE.Vector3(0, 1, 0), 0)).add(new THREE.Vector3(0, PODIUM_TOP, 0));
+    // the point turns with the figure (with its resting turn, not the sway, so the camera stays calm)
+    const focus = this.built.group.position.clone().add(new THREE.Vector3(...f.at).applyAxisAngle(new THREE.Vector3(0, 1, 0), this.fixed ?? this.base)).add(new THREE.Vector3(0, PODIUM_TOP, 0));
     const halfH = d * half;
     const halfW = halfH * (vw / vh);
     // a little above the point, looking slightly down, like a customer at the counter
