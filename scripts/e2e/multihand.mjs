@@ -140,8 +140,60 @@ async function blackjack() {
   await page.close();
 }
 
+async function threecard() {
+  const t = await open('threecard', `mhtc_${Date.now().toString(36).slice(-5)}`);
+  const { page } = t;
+  const decideUp = () => page.waitForSelector('.tc-decide:not([hidden])', { timeout: 30000 });
+  await t.pick(3);
+  await page.waitForFunction(() => document.querySelector('.mh-n[aria-checked="true"]')?.textContent === '3', null, { timeout: 10000 });
+  await page.waitForTimeout(1100);
+  await t.shot('1-three-hands');
+  // $25 Antes on all three (the tray starts on the $25 chip), $5 Pair Plus on the first two.
+  for (const spot of [0, 1, 2]) {
+    const at = await t.region(`ante:${spot}`);
+    await page.mouse.click(at.x, at.y);
+    await page.waitForTimeout(150);
+  }
+  await page.keyboard.press('2');
+  for (const spot of [0, 1]) {
+    const at = await t.region(`pairPlus:${spot}`);
+    await page.mouse.click(at.x, at.y);
+    await page.waitForTimeout(150);
+  }
+  await page.waitForFunction(() => /Bet\$85/.test(document.querySelector('.tc-meters')?.textContent ?? ''), null, { timeout: 10000 });
+  await t.settle(200);
+  await t.shot('2-bets');
+  await page.keyboard.press('Space');
+  await decideUp();
+  await t.settle(500);
+  await t.shot('3-decide-first');
+  const hints = [await page.textContent('.tc-hint')];
+  await page.keyboard.press('p');
+  await t.settle(300);
+  await decideUp();
+  await t.settle(300);
+  hints.push(await page.textContent('.tc-hint'));
+  await t.shot('4-decide-second');
+  await page.keyboard.press('f');
+  await t.settle(300);
+  await decideUp();
+  hints.push(await page.textContent('.tc-hint'));
+  await page.keyboard.press('p');
+  await page.waitForSelector('.pill', { timeout: 30000 });
+  await page.waitForTimeout(700);
+  await t.shot('5-results');
+  await t.settle(600);
+  await page.waitForFunction(() => /Bet\$0/.test(document.querySelector('.tc-meters')?.textContent ?? ''), null, { timeout: 30000 });
+  await page.waitForTimeout(300);
+  await t.shot('6-settled');
+  const meters = await page.textContent('.tc-meters');
+  report.threecard = { hints, meters, shots: t.shots, errors: t.errors.slice(0, 10) };
+  await page.close();
+}
+
 try {
   if (which === 'all' || which === 'blackjack') await blackjack();
+  if (which === 'all' || which === 'threecard') await threecard();
 } catch (err) {
   report.error = String(err?.stack ?? err);
 }

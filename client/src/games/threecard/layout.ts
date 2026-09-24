@@ -120,6 +120,22 @@ export function cameraPose(seat: number): { position: [number, number, number]; 
   return { position: [cx, 1.78, cz], target: [hx + (0 - hx) * k, TOP_Y, hz + (DEALER_CARDS_Z - hz) * k] };
 }
 
+/**
+ * The camera for a solo player on several hands (spots numbered like seats): over the middle of
+ * their positions and further back and up the wider they spread, so every hand's cards and spots
+ * and the dealer's cards are in view. One hand is its seat's pose.
+ */
+export function spotsPose(spots: readonly number[]): { position: [number, number, number]; target: [number, number, number] } {
+  if (spots.length <= 1) return cameraPose(spots[0] ?? 0);
+  const angles = spots.map(seatAngle);
+  const a = angles.reduce((x, y) => x + y, 0) / angles.length;
+  const spread = Math.max(...angles) - Math.min(...angles);
+  const [cx, cz] = along(a, 1.2 + 0.42 * spread);
+  const [hx, hz] = along(a, HAND_R);
+  const k = 0.08 + 0.05 * spread;
+  return { position: [cx, 1.8 + 0.22 * spread, cz], target: [hx + (0 - hx) * k, TOP_Y, hz + (DEALER_CARDS_Z - hz) * k] };
+}
+
 // ---------------------------------------------------------------------------------------------
 // The D outline
 
