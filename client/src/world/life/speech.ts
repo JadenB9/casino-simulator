@@ -5,11 +5,14 @@
 
 import * as THREE from 'three';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+import { fitOnScreen } from '../onscreen.ts';
 
 /** Metres from the camera beyond which a bubble is hidden. */
 const RANGE = 14;
 /** The last seconds of a bubble, fading. */
 const FADE_S = 0.4;
+/** How far over its anchor the bubble's bottom sits (life.css .staff-say-bubble bottom). */
+const LIFT = 14;
 
 interface Showing {
   tag: CSS2DObject;
@@ -72,6 +75,8 @@ export class Speech {
       let shown = root.visible && root.getWorldPosition(_at).distanceTo(cam) <= RANGE;
       for (let o = root.parent; o && shown; o = o.parent) shown = o.visible;
       s.tag.visible = shown;
+      // up close the head is at the top of the screen: keep the words on it
+      if (shown) fitOnScreen(s.tag, s.bubble, this.camera, LIFT);
     }
   }
 

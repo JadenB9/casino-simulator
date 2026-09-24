@@ -7,7 +7,8 @@
   position: absolute;
   left: 0;
   bottom: 14px;
-  translate: -50% 0;
+  /* --fit-*: kept on screen up close (world/onscreen.ts) */
+  translate: calc(-50% + var(--fit-x, 0px)) var(--fit-y, 0px);
   display: grid;
   gap: 1px;
   width: max-content;
@@ -43,6 +44,7 @@
   border-bottom: 1px solid var(--brass);
   transform: rotate(45deg);
 }
+.staff-say-bubble.pinned::after { display: none; }
 .staff-say-bubble.leaving { animation: staff-say-out 0.4s ease-in forwards; }
 @keyframes staff-say-in { from { opacity: 0; transform: translateY(8px) scale(0.92); } }
 @keyframes staff-say-out { to { opacity: 0; transform: translateY(-10px); } }
