@@ -10,7 +10,7 @@ import { maxBet, type MaxBet } from '../../../shared/src/limits.ts';
 import type { Spot as RouletteSpot } from '../../../shared/src/games/roulette/rules.ts';
 import { limitKey as baccaratKey, type Spot as BaccaratSpot } from '../../../shared/src/games/baccarat/rules.ts';
 import type { Spot as SicBoSpot } from '../../../shared/src/games/sicbo/rules.ts';
-import { layVig, limitKey as crapsKey, maxOdds, oddsLimitKey, type Bet, type BetKind, type PointNumber } from '../../../shared/src/games/craps/rules.ts';
+import { COMMISSION, LAY_PAYS, layVig, limitKey as crapsKey, maxOdds, oddsLimitKey, type Bet, type BetKind, type PointNumber } from '../../../shared/src/games/craps/rules.ts';
 
 export type { MaxBet } from '../../../shared/src/limits.ts';
 
@@ -25,9 +25,9 @@ export function maxRefusal(m: Exclude<MaxBet, { amount: Cents }>, limits: BetLim
   return m.none === 'AT_MAX' ? `That bet is already at the table maximum, ${formatMoney(limits.max)}.` : `Not enough chips for the ${formatMoney(limits.min)} minimum there.`;
 }
 
-/** Blackjack: the main bet. */
-export function blackjackMax(cfg: TableConfig, current: Cents, stack: Cents): MaxBet {
-  return maxBet({ limits: cfg.limits.default, current, stack });
+/** Blackjack: the main bet, under the table's limits. */
+export function blackjackMax(limits: BetLimits, current: Cents, stack: Cents): MaxBet {
+  return maxBet({ limits, current, stack });
 }
 
 /** Roulette: one spot, under its inside or outside limit and the table's maximum a spin. */
@@ -77,11 +77,15 @@ export function crapsMax(cfg: TableConfig, kind: BetKind, n: number | undefined,
   const paid = current?.vig ?? 0;
   const first = maxBet({ limits, current: cur, stack });
   if ('none' in first) return first;
-  // the commission is 5% of what the lay wins, so trimming a step at a time finds it in a few tries
-  for (let add = first.amount; add > 0; add -= limits.step) {
-    if (add + layVig(cur + add, point) - paid <= stack) return cur + add >= limits.min ? { amount: add } : { none: 'SHORT' };
-  }
-  return { none: 'SHORT' };
+  // The commission is a fixed share r = (a/b)(c/d) of the whole lay, so what fits is
+  // add + (cur + add) r - paid <= stack, i.e. add <= ((stack + paid) bd - cur ac) / (bd + ac),
+  // worked in whole cents (a float here can land a cent under a bound that is exact).
+  const [a, b] = LAY_PAYS[point];
+  const [c, d] = COMMISSION;
+  const bound = Math.floor(((stack + paid) * b * d - cur * a * c) / (b * d + a * c));
+  let add = Math.min(first.amount, bound - (bound % limits.step));
+  while (add > 0 && add + layVig(cur + add, point) - paid > stack) add -= limits.step;
+  return add > 0 && cur + add >= limits.min ? { amount: add } : { none: 'SHORT' };
 }
 
 /** Craps, odds behind a line or come bet on `point`: up to 3-4-5x (6x laid) and the odds limit. */

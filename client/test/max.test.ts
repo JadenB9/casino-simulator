@@ -58,19 +58,19 @@ describe('blackjack: the main bet', () => {
   const L = { min: 25 * D, max: 2_500 * D };
   it('up to the table maximum', () => {
     const { sim, cfg } = table(blackjack, L, 10_000 * D);
-    exact(sim, blackjackMax(cfg, 0, sim.stack(0)), D, (amount) => ({ type: 'bet', amount }));
+    exact(sim, blackjackMax(cfg.limits.default, 0, sim.stack(0)), D, (amount) => ({ type: 'bet', amount }));
     expect(sim.stack(0)).toBe(7_500 * D);
-    expect(blackjackMax(cfg, 2_500 * D, sim.stack(0))).toEqual({ none: 'AT_MAX' });
+    expect(blackjackMax(cfg.limits.default, 2_500 * D, sim.stack(0))).toEqual({ none: 'AT_MAX' });
   });
   it('or every chip at the table, on top of what is down', () => {
     const { sim, cfg } = table(blackjack, L, 700 * D);
     sim.act(0, { type: 'bet', amount: 100 * D });
-    exact(sim, blackjackMax(cfg, 100 * D, sim.stack(0)), D, (amount) => ({ type: 'bet', amount }));
+    exact(sim, blackjackMax(cfg.limits.default, 100 * D, sim.stack(0)), D, (amount) => ({ type: 'bet', amount }));
     expect(sim.stack(0)).toBe(0);
   });
   it('nothing when the chips are short of the minimum', () => {
     const { cfg } = table(blackjack, L, 20 * D);
-    const m = blackjackMax(cfg, 0, 20 * D);
+    const m = blackjackMax(cfg.limits.default, 0, 20 * D);
     expect(m).toEqual({ none: 'SHORT' });
     expect(maxRefusal(m as { none: 'SHORT' }, cfg.limits.default)).toBe('Not enough chips for the $25 minimum there.');
   });
@@ -239,6 +239,22 @@ describe('craps: the line, lay bets and max odds', () => {
     expect(m).toEqual({ amount: 682 * D });
     exact(sim, m, 2 * D, (amount) => ({ type: 'bet', bets: [{ kind: 'lay', number: 4, amount }] }));
     expect(sim.stack(0)).toBeLessThan(2 * D);
+  });
+  it('lay 5/9 and 6/8 in their steps, from a big stack and onto a lay already down', () => {
+    for (const [n, step, stack] of [[5, 3, 12_345], [9, 3, 777], [6, 6, 9_999], [8, 6, 20_000]] as const) {
+      const { sim, cfg } = table(craps, L, stack * D, '', seededRng(n), { lay: true });
+      const lay = (amount: number) => ({ type: 'bet', bets: [{ kind: 'lay', number: n, amount }] });
+      // from nothing, with every chip
+      const first = crapsMax(cfg, 'lay', n, undefined, sim.stack(0));
+      expect(wouldRefuse(sim, lay(amountOf(first) + step * D))).not.toBeNull();
+      expect(wouldRefuse(sim, lay(amountOf(first)))).toBeNull();
+      // then onto a lay made with about half of them
+      sim.act(0, lay(amountOf(crapsMax(cfg, 'lay', n, undefined, (stack * D) / 2))));
+      const down = (sim.view(0) as CrapsView).bets[0]![`lay${n}`]!;
+      const m = crapsMax(cfg, 'lay', n, down, sim.stack(0));
+      if ('amount' in m) exact(sim, m, step * D, (amount) => ({ type: 'bet', bets: [{ kind: 'lay', number: n, amount }] }));
+      else expect(m.none).toBe('AT_MAX');
+    }
   });
   it('place 6 in its $6 steps', () => {
     const dice = new Dice();

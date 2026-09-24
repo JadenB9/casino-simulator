@@ -21,6 +21,7 @@ import { dropGlow, handGlow, raiseBanner } from './celebration.ts';
 import { roundMoment } from './moments.ts';
 import { tween, wait, ease } from '../../table/tween.ts';
 import { ChipTray, button, el } from '../../ui/kit.ts';
+import { blackjackMax, maxRefusal } from '../../table/max.ts';
 import { serverNow } from '../../net/clock.ts';
 import { playFelt } from './felt.ts';
 import { discardStack } from './model.ts';
@@ -163,13 +164,11 @@ export class BlackjackTable implements TableView {
       clear: () => this.act({ type: 'clear' }),
       rebet: () => this.rebet(1),
       double: () => this.rebet(2),
+      max: { mode: 'bet', run: () => this.max() },
       primary: { label: 'Deal', run: () => this.primary() },
     });
-    // The table maximum is $5,000, so the $25,000 chip stays in the rack.
-    const chipButtons = [...this.tray.root.querySelectorAll<HTMLButtonElement>('.chip-btn')];
-    BETTING_CHIPS.forEach((c, i) => {
-      if (c.value > this.limits.max) chipButtons[i]!.hidden = true;
-    });
+    // Chips over the table maximum stay in the rack (the limits arrive with the table).
+    this.tray.setChipMax(this.limits.max);
     this.tray.select(BETTING_CHIPS[2]!);
     this.tray.root.classList.add('bj-tray');
 
@@ -215,6 +214,7 @@ export class BlackjackTable implements TableView {
   onTable(snap: TableSnapshot): void {
     this.mode = snap.meta.mode;
     this.limits = snap.meta.config.limits.default ?? this.limits;
+    this.tray.setChipMax(this.limits.max);
     this.seat = snap.you.seat;
     this.seated = snap.you.status === 'seated';
     this.stack = snap.you.stack;
@@ -282,6 +282,14 @@ export class BlackjackTable implements TableView {
     return v && v.phase === 'betting' && this.seat !== null ? (v.bets[this.seat] ?? 0) : 0;
   }
 
+  /** Max: the most the bet takes, or every chip here if that is less. */
+  private max(): void {
+    if (!this.canBet()) return;
+    const m = blackjackMax(this.limits, this.myBet(), this.stack);
+    if ('none' in m) this.ctx.kit.toast(maxRefusal(m, this.limits));
+    else this.act({ type: 'bet', amount: m.amount });
+  }
+
   private rebet(times: 1 | 2): void {
     if (!this.canBet()) return;
     const current = this.myBet();
@@ -323,6 +331,7 @@ export class BlackjackTable implements TableView {
         return true;
       }
       if (e.key === 'Backspace') return this.act({ type: 'undo' }), true;
+      if (k === 'm' && !e.shiftKey) return this.max(), true;
       if (k === 'x') return this.act({ type: 'clear' }), true;
       if (k === 'r') return this.rebet(e.shiftKey ? 2 : 1), true;
       if (e.code === 'Space') return this.primary(), true;
