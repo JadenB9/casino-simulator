@@ -67,7 +67,8 @@
 /* 390 px of height: everything slims down and the tray moves right, out of the back chip's way. */
 @media (max-height: 480px) {
   :root { --tip-bottom: 76px; }
-  .tray { left: auto; right: 10px; bottom: 8px; transform: none; gap: 8px; padding: 6px 10px; }
+  /* above the home indicator on a phone that has one */
+  .tray { left: auto; right: 10px; bottom: max(8px, env(safe-area-inset-bottom, 0px)); transform: none; gap: 8px; padding: 6px 10px; }
   .tray .chips { gap: 4px; }
   .tray .chip-btn { width: 44px; height: 44px; }
   .tray .acts { gap: 5px; }

@@ -94,7 +94,7 @@
 }
 /* On its side: one row, right of the back chip, a little slimmer. */
 @media (max-height: 480px) {
-  .slots-deck { left: auto; right: 10px; bottom: 8px; transform: none; gap: 6px; padding: 6px 8px; }
+  .slots-deck { left: auto; right: 10px; bottom: max(8px, env(safe-area-inset-bottom, 0px)); transform: none; gap: 6px; padding: 6px 8px; }
   .slots-deck .btn { padding: 0 10px; white-space: nowrap; }
   .slots-deck .slots-coin { min-width: 0; }
   .slots-bet { min-width: 0; padding: 0 4px; font-size: 16px; }

@@ -201,7 +201,7 @@
 /* On its side: the bar becomes a column on the right, so your cards and the board stay in view;
    the history drawer opens on the left. */
 @media (max-height: 480px) {
-  .he-bar { left: auto; right: 10px; bottom: 8px; transform: none; width: 330px; padding: 8px 10px; gap: 6px; }
+  .he-bar { left: auto; right: 10px; bottom: max(8px, env(safe-area-inset-bottom, 0px)); transform: none; width: 330px; padding: 8px 10px; gap: 6px; }
   .he-bar.he-idle { width: auto; min-width: 220px; }
   .he-sizing { flex-wrap: wrap; }
   .he-sizing .he-preset { flex: 1 1 auto; }
@@ -210,5 +210,5 @@
   .he-bar.he-live ~ .tip-line { left: 12px; right: 352px; bottom: 60px; transform: none; max-width: none; }
   .he-history { top: var(--below-party); left: 10px; right: auto; width: 260px; }
   .he-history-body { max-height: calc(100vh - var(--below-party) - 110px); max-height: calc(100dvh - var(--below-party) - 110px); }
-  .he-seat { left: auto; right: 10px; bottom: 8px; transform: none; }
+  .he-seat { left: auto; right: 10px; bottom: max(8px, env(safe-area-inset-bottom, 0px)); transform: none; }
 }
