@@ -200,7 +200,7 @@ export class Characters implements CharacterFactory {
       clips: gltf.animations,
       height: box.max.y - box.min.y,
     };
-    return uniform ? tailor(tpl, joined, uniform, from) : tpl;
+    return uniform ? tailor(tpl, joined, uniform, from, body === 'f' ? 'f' : 'm') : tpl;
   }
 }
 
@@ -805,27 +805,48 @@ const ARM = /^(UpperArm|LowerArm)/;
 const HIPS = /^(Body|Hips|UpperLeg)$/;
 const TRUNK = /^(Chest|Torso|Abdomen|Shoulder)/;
 
-/** Restyle a loaded outfit into a uniform (see above). The template's arrays are rebuilt. */
-function tailor(tpl: Template, mesh: THREE.SkinnedMesh, u: Uniform, from: { part: string; material: string }[]): Template {
+/**
+ * Restyle a loaded outfit into a uniform (see above); the template's arrays are rebuilt. It is
+ * measured in the idle pose (the file's own node pose is a twisted one); stopping the clip
+ * afterwards puts the bones back.
+ */
+function tailor(tpl: Template, mesh: THREE.SkinnedMesh, u: Uniform, from: { part: string; material: string }[], body: Body): Template {
+  const mixer = new THREE.AnimationMixer(tpl.root);
+  const idle = tpl.clips.find((c) => c.name === 'Idle');
+  if (idle) mixer.clipAction(idle).play();
+  mixer.update(0);
+  tpl.root.updateMatrixWorld(true);
+  try {
+    return restyle(tpl, mesh, u, from, body);
+  } finally {
+    mixer.stopAllAction();
+    mixer.uncacheRoot(tpl.root);
+    tpl.root.updateMatrixWorld(true);
+  }
+}
+
+function restyle(tpl: Template, mesh: THREE.SkinnedMesh, u: Uniform, from: { part: string; material: string }[], body: Body): Template {
   const geo = mesh.geometry;
   const n = tpl.slot.length;
-  tpl.root.updateMatrixWorld(true);
-  // Each vertex at rest in the character's frame (y up, z forward, x to its left), the bone it
-  // mostly follows and how much of it hangs on the arm bones.
+  // each vertex in the character's frame: y up, z forward, x to its left
   const at = new Float32Array(n * 3);
   const v = new THREE.Vector3();
   for (let i = 0; i < n; i++) mesh.getVertexPosition(i, v).applyMatrix4(mesh.matrixWorld).toArray(at, i * 3);
+  // the bone each vertex mostly follows, and how much of it hangs on the arm (and the forearm)
   const names = mesh.skeleton.bones.map((b) => b.name.replace(/\./g, ''));
   const si = geo.getAttribute('skinIndex');
   const sw = geo.getAttribute('skinWeight');
   const main: string[] = [];
   const arm = new Float32Array(n);
+  const fore = new Float32Array(n);
   for (let i = 0; i < n; i++) {
     let best = 0;
     let bw = -1;
     for (let c = 0; c < 4; c++) {
       const w = sw.getComponent(i, c);
-      if (ARM.test(names[si.getComponent(i, c)] ?? '')) arm[i]! += w;
+      const name = names[si.getComponent(i, c)] ?? '';
+      if (ARM.test(name)) arm[i]! += w;
+      if (name.startsWith('LowerArm')) fore[i]! += w;
       if (w > bw) {
         bw = w;
         best = c;
@@ -836,6 +857,7 @@ function tailor(tpl: Template, mesh: THREE.SkinnedMesh, u: Uniform, from: { part
   const slot = tpl.slot;
   const base = tpl.base;
   const TOP = SLOTS.indexOf('top');
+  const HAIR = SLOTS.indexOf('hair');
   const SKIN = SLOTS.indexOf('skin');
   const BOTTOM = SLOTS.indexOf('bottom');
   const fix = (i: number, c: THREE.Color) => {
@@ -846,6 +868,7 @@ function tailor(tpl: Template, mesh: THREE.SkinnedMesh, u: Uniform, from: { part
   };
   const shirt = (i: number) => (u.sleeves === 'shirt' ? fix(i, SHIRT) : (slot[i] = TOP));
   const isShirt = new Uint8Array(n);
+  const ownFront = from.some((f, i) => f.material === 'White' && f.part.endsWith('_Body') && slot[i] === FIXED);
   for (let i = 0; i < n; i++) {
     const body = from[i]!.part.endsWith('_Body');
     const bone = main[i]!;
@@ -863,8 +886,10 @@ function tailor(tpl: Template, mesh: THREE.SkinnedMesh, u: Uniform, from: { part
         shirt(i);
         isShirt[i] = u.sleeves === 'shirt' ? 1 : 0;
       } else if (u.waist && HIPS.test(bone)) slot[i] = BOTTOM;
-    } else if (body && slot[i] === SKIN && !HAND.test(bone)) {
-      if (arm[i]! >= 0.5) {
+    } else if (body && slot[i] === SKIN) {
+      // bare arms get long sleeves, down to a cuff at the wrist (the ring of the hand that still
+      // follows the forearm), and an open neckline a shirt collar
+      if (HAND.test(bone) ? fore[i]! >= 0.25 : arm[i]! >= 0.5) {
         shirt(i);
         isShirt[i] = u.sleeves === 'shirt' ? 1 : 0;
       } else if (TRUNK.test(bone)) {
@@ -881,18 +906,51 @@ function tailor(tpl: Template, mesh: THREE.SkinnedMesh, u: Uniform, from: { part
     collarY = Math.max(collarY, at[i * 3 + 1]!);
   }
   if (!Number.isFinite(collarY)) return tpl;
-  /** The front of the body near (x, y), and the nearest vertex there (to skin an addition like it). */
+  // A top with a plain round neck (no shirt front of its own, unlike the suit) gets one: a V
+  // cut into its front under the collar, so the bow tie sits on white as it does on the men.
+  if (!ownFront) {
+    const bottom = collarY - 0.19;
+    for (let i = 0; i < n; i++) {
+      if (slot[i] !== TOP || !from[i]!.part.endsWith('_Body') || at[i * 3 + 2]! < 0.04) continue;
+      const y = at[i * 3 + 1]!;
+      if (y > bottom && Math.abs(at[i * 3]!) < 0.5 * (y - bottom)) {
+        fix(i, SHIRT);
+        isShirt[i] = 1;
+      }
+    }
+  }
+  /**
+   * The body's front surface at (x, y): a ray from in front straight back (-z) against the
+   * triangles, and the hit triangle's nearest corner, to skin an addition like the cloth it sits
+   * on. Hair and arms are left out (the neck's front belongs to the head part, so heads count).
+   */
+  const index = geo.getIndex();
   const front = (x: number, y: number): { z: number; i: number } => {
     let z = -Infinity;
     let best = -1;
-    for (let i = 0; i < n; i++) {
-      if (!from[i]!.part.endsWith('_Body')) continue;
-      const dx = at[i * 3]! - x;
-      const dy = at[i * 3 + 1]! - y;
-      if (dx * dx + dy * dy > 0.025 * 0.025) continue;
-      if (at[i * 3 + 2]! > z) {
-        z = at[i * 3 + 2]!;
-        best = i;
+    const tris = index ? index.count : n;
+    for (let t = 0; t + 2 < tris; t += 3) {
+      const a = index ? index.getX(t) : t;
+      const b = index ? index.getX(t + 1) : t + 1;
+      const c = index ? index.getX(t + 2) : t + 2;
+      if (slot[a] === HAIR || arm[a]! >= 0.5 || arm[b]! >= 0.5 || arm[c]! >= 0.5) continue;
+      const ax = at[a * 3]!;
+      const ay = at[a * 3 + 1]!;
+      const bx = at[b * 3]!;
+      const by = at[b * 3 + 1]!;
+      const cx = at[c * 3]!;
+      const cy = at[c * 3 + 1]!;
+      // barycentric weights of (x, y) in the triangle seen from the front
+      const d = (by - cy) * (ax - cx) + (cx - bx) * (ay - cy);
+      if (Math.abs(d) < 1e-12) continue;
+      const wa = ((by - cy) * (x - cx) + (cx - bx) * (y - cy)) / d;
+      const wb = ((cy - ay) * (x - cx) + (ax - cx) * (y - cy)) / d;
+      const wc = 1 - wa - wb;
+      if (wa < 0 || wb < 0 || wc < 0) continue;
+      const hz = wa * at[a * 3 + 2]! + wb * at[b * 3 + 2]! + wc * at[c * 3 + 2]!;
+      if (hz > z) {
+        z = hz;
+        best = wa >= wb && wa >= wc ? a : wb >= wc ? b : c;
       }
     }
     return { z, i: best };
@@ -905,9 +963,13 @@ function tailor(tpl: Template, mesh: THREE.SkinnedMesh, u: Uniform, from: { part
     if (f.i >= 0) extras.push({ geo: bowTie(new THREE.Vector3(0, y, f.z + 0.008)), color: BOW, skin: f.i });
   }
   if (u.badge) {
-    // the wearer's left breast, where the vest or jacket is
-    const x = 0.085;
-    const y = collarY - 0.155;
+    // the wearer's left breast: on the upper chest, a little under halfway out to the side
+    const y = collarY - (body === 'f' ? 0.105 : 0.155);
+    let half = 0;
+    for (let i = 0; i < n; i++) {
+      if (TRUNK.test(main[i]!) && arm[i]! < 0.3 && Math.abs(at[i * 3 + 1]! - y) < 0.012 && at[i * 3 + 2]! > 0) half = Math.max(half, Math.abs(at[i * 3]!));
+    }
+    const x = 0.42 * (half || 0.17);
     const f = front(x, y);
     if (f.i >= 0) {
       const g = new THREE.BoxGeometry(0.066, 0.019, 0.005);
@@ -915,13 +977,13 @@ function tailor(tpl: Template, mesh: THREE.SkinnedMesh, u: Uniform, from: { part
       extras.push({ geo: g, color: BADGE, skin: f.i });
     }
   }
-  if (extras.length === 0) return tpl;
 
   // Carry each addition from the character's frame into the mesh's own (quantized) space, skinned
   // exactly like the vertex it sits on, so it rides the same bones.
-  const pieces: THREE.BufferGeometry[] = [geo];
   const slots = Array.from(slot);
   const bases = Array.from(base);
+  const hard = harden(geo, slots, bases);
+  const pieces: THREE.BufferGeometry[] = [hard];
   for (const x of extras) {
     const toMesh = restMatrix(mesh, x.skin).invert();
     const turn = new THREE.Matrix3().setFromMatrix4(toMesh);
@@ -952,12 +1014,75 @@ function tailor(tpl: Template, mesh: THREE.SkinnedMesh, u: Uniform, from: { part
     pieces.push(out);
     src.dispose();
   }
-  const joined = mergeGeometries(pieces, false);
+  const joined = pieces.length > 1 ? mergeGeometries(pieces, false) : hard;
   if (!joined) return tpl;
   joined.computeBoundingSphere();
   mesh.geometry = joined;
+  if (hard !== joined) hard.dispose();
   geo.dispose();
   return { ...tpl, geometry: joined, slot: Uint8Array.from(slots), base: Float32Array.from(bases) };
+}
+
+/**
+ * Give every face one colour. Where a restyle split a face between two (a sleeve's edge, the V of
+ * a shirt front) the face takes its majority's, and a corner it shares with faces of another
+ * colour is doubled, so edges run crisp along the mesh instead of smearing across a triangle.
+ * `slot` and `base` grow with the doubled corners.
+ */
+function harden(geo: THREE.BufferGeometry, slot: number[], base: number[]): THREE.BufferGeometry {
+  const index = geo.getIndex();
+  if (!index) return geo;
+  const n = geo.getAttribute('position').count;
+  const key = (i: number) => (slot[i] === FIXED ? `${base[i * 3]!.toFixed(3)},${base[i * 3 + 1]!.toFixed(3)},${base[i * 3 + 2]!.toFixed(3)}` : `${slot[i]}`);
+  const keys = Array.from({ length: n }, (_, i) => key(i));
+  const faces = new Uint32Array(index.count);
+  const copies = new Map<string, number>();
+  const from: number[] = [];
+  for (let t = 0; t < index.count; t += 3) {
+    const a = index.getX(t);
+    const b = index.getX(t + 1);
+    const c = index.getX(t + 2);
+    const [ka, kb, kc] = [keys[a]!, keys[b]!, keys[c]!];
+    const k = ka === kb || ka === kc ? ka : kb === kc ? kb : ka;
+    const owner = k === ka ? a : k === kb ? b : c;
+    for (let j = 0; j < 3; j++) {
+      const v = index.getX(t + j);
+      if (keys[v] === k) {
+        faces[t + j] = v;
+        continue;
+      }
+      const id = `${v}|${k}`;
+      let w = copies.get(id);
+      if (w === undefined) {
+        w = n + from.length;
+        copies.set(id, w);
+        from.push(v);
+        slot.push(slot[owner]!);
+        base.push(base[owner * 3]!, base[owner * 3 + 1]!, base[owner * 3 + 2]!);
+      }
+      faces[t + j] = w;
+    }
+  }
+  if (from.length === 0) return geo;
+  const out = new THREE.BufferGeometry();
+  for (const name of ['position', 'normal', 'skinIndex', 'skinWeight'] as const) {
+    const a = geo.getAttribute(name);
+    const Arr = (a.array as THREE.TypedArray).constructor as new (len: number) => THREE.TypedArray;
+    const size = a.itemSize;
+    const b = new THREE.BufferAttribute(new Arr((n + from.length) * size), size, a.normalized);
+    // stored values as they are (no normalising round trip); the loader's may be interleaved
+    const il = (a as THREE.InterleavedBufferAttribute).isInterleavedBufferAttribute ? (a as THREE.InterleavedBufferAttribute) : null;
+    const arr = il ? il.data.array : (a as THREE.BufferAttribute).array;
+    const stride = il ? il.data.stride : size;
+    const offset = il ? il.offset : 0;
+    for (let i = 0; i < n + from.length; i++) {
+      const src = i < n ? i : from[i - n]!;
+      for (let c = 0; c < size; c++) b.array[i * size + c] = arr[src * stride + offset + c]!;
+    }
+    out.setAttribute(name, b);
+  }
+  out.setIndex(new THREE.BufferAttribute(faces, 1));
+  return out;
 }
 
 /** Mesh space to the character's frame, at rest, for a vertex skinned like vertex `j`. */
