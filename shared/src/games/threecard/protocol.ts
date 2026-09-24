@@ -11,7 +11,7 @@ import type { Paytable, Settlement } from './rules.ts';
 
 /**
  * `bet` sets a hand's two bets to these totals (0 takes a bet down), so Undo, Clear, Rebet and x2
- * are all one message and a resend can't double a bet. `deal` is solo only; multiplayer deals
+ * are one message per hand and a resend can't double a bet. `deal` is solo only; multiplayer deals
  * when the betting window closes. `play` places the Play bet (always equal to the Ante). `spot`
  * says which of your hands (your first when absent); `spots` is solo only, between rounds.
  */

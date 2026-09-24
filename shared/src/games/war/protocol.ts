@@ -12,7 +12,7 @@ import type { Settlement, WarRules } from './rules.ts';
 
 /**
  * `bet` sets a spot's bet and Tie bet to these totals (0 takes a bet down), so Undo, Clear, Rebet
- * and x2 are all one message and a resend can't double a bet. `deal` is solo only; multiplayer
+ * and x2 are one message per spot and a resend can't double a bet. `deal` is solo only; multiplayer
  * deals when the betting window closes. `war` places the raise (always equal to the bet);
  * `surrender` takes half the bet back. `spot` says which of your spots (your first when absent);
  * `spots` is solo only, between rounds.
