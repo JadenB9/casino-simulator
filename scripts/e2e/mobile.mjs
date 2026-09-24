@@ -200,6 +200,35 @@ for (const key of list) {
     if (page0.scale !== 1 || page0.top !== 0 || page0.y !== 0 || page0.x !== 0) fail(`the page moved: ${JSON.stringify(page0)}`);
   }
 
+  /** The cashier: walk up with the stick, press the action button, see the bank, close it. */
+  async function cashier() {
+    await page.evaluate(() => {
+      const w = window.casino.world;
+      const c = w.cashier.position;
+      const a = w.cashier.anchor.position;
+      const dx = c.x - a.x;
+      const dz = c.z - a.z;
+      const len = Math.hypot(dx, dz) || 1;
+      // a couple of metres further back from the counter than where you stand to use it
+      w.teleport(c.x + (dx / len) * 2.2, c.z + (dz / len) * 2.2, Math.atan2(-dx, -dz));
+    });
+    await sleep(500);
+    const [sx, sy] = centre(await box('.touch-stick'));
+    await drag([[[sx, sy], [sx, sy - 40]]], 200, 5000, () => visible('.touch-act'));
+    const label = (await page.locator('.touch-act').textContent().catch(() => '')) ?? '';
+    if (!/cashier/i.test(label)) {
+      fail(`cashier: the action button says "${label}"`);
+      return;
+    }
+    await shot('cashier-reach');
+    await tap('.touch-act');
+    await page.waitForSelector('.bank-sheet', { timeout: 10_000 });
+    await sleep(500);
+    await shot('cashier-bank');
+    await tap('.bank-sheet .x-btn');
+    await page.waitForFunction(() => !document.querySelector('.bank-sheet') && !document.querySelector('.touch-layer')?.hidden, null, { timeout: 10_000 }).catch(() => fail('cashier: not back on the floor after closing the bank'));
+  }
+
   /** Walk up to a station with the stick until the action button shows, and press it. */
   async function sit(game) {
     await approach(STATIONS[game], 2.6);
@@ -300,6 +329,7 @@ for (const key of list) {
   try {
     await login();
     await floorChecks();
+    await cashier();
     for (const game of GAMES) {
       try {
         await sit(game);

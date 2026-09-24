@@ -49,9 +49,11 @@
 .tc-dealer-word { font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-2); }
 .tc-dealer-hand { font-size: 20px; color: var(--ink); }
 
-/* Touch screens: the rules card's keyboard list means nothing without a keyboard. */
+/* Touch screens: the rules card's keyboard list means nothing without a keyboard, and its height
+   is measured against the visible screen. */
 @media (pointer: coarse) {
   .tc-keys { display: none; }
+  .tc-rules { max-height: calc(100dvh - var(--below-hud) - 240px); }
 }
 /* Phones and tablets upright: the decision bar above the back chip, like the tray. */
 @media (max-aspect-ratio: 1/1) {
@@ -63,7 +65,7 @@
   .tc-hint { flex: 1 0 100%; text-align: center; margin: 0; }
   .tc-meters { left: 10px; gap: 2px 12px; padding: 6px 12px; font-size: 16px; }
   .tc-rules-btn { left: 10px; }
-  .tc-rules { left: 10px; right: 10px; width: auto; }
+  .tc-rules { left: 10px; right: 10px; width: auto; max-height: calc(100dvh - var(--below-hud) - 314px); }
 }
 /* On its side: slimmer bars, and the rules card opens on the right where there's height for it. */
 @media (max-height: 480px) {
@@ -71,5 +73,5 @@
   .tc-decide .btn { min-width: 130px; }
   .tc-meters { left: 10px; gap: 0 12px; padding: 5px 12px; font-size: 16px; }
   .tc-rules-btn { top: calc(var(--below-hud) + 82px); left: 10px; }
-  .tc-rules { top: var(--below-hud); left: auto; right: 10px; width: min(380px, 50vw); max-height: calc(100vh - var(--below-hud) - 76px); }
+  .tc-rules { top: var(--below-hud); left: auto; right: 10px; width: min(380px, 50vw); max-height: calc(100vh - var(--below-hud) - 76px); max-height: calc(100dvh - var(--below-hud) - 76px); }
 }

@@ -50,6 +50,10 @@
   .ed-turn-btn { width: 44px; height: 44px; }
   .sw { width: 40px; height: 40px; }
 }
+@media (pointer: coarse) and (max-width: 760px) {
+  .editor-stage { min-height: 36dvh; }
+  .editor-panel { max-height: 60dvh; }
+}
 /* A phone on its side: the panel a little narrower, the foot slimmer. */
 @media (max-height: 480px) and (min-width: 761px) {
   .editor-panel { width: 380px; }

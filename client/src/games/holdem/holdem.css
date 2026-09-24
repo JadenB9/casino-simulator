@@ -181,6 +181,7 @@
   .he-history-head .key { display: none; }
   .he-sizing .btn { height: 44px; }
   .he-amount-wrap { height: 44px; }
+  .he-history-body { max-height: 46dvh; }
 }
 /* Phones and tablets upright: the bar and the seat prompt above the back chip. */
 @media (max-aspect-ratio: 1/1) {
@@ -208,6 +209,6 @@
   .he-acts { grid-template-columns: 1fr 1fr; gap: 6px; }
   .he-bar.he-live ~ .tip-line { left: 12px; right: 352px; bottom: 60px; transform: none; max-width: none; }
   .he-history { top: var(--below-party); left: 10px; right: auto; width: 260px; }
-  .he-history-body { max-height: calc(100vh - var(--below-party) - 110px); }
+  .he-history-body { max-height: calc(100vh - var(--below-party) - 110px); max-height: calc(100dvh - var(--below-party) - 110px); }
   .he-seat { left: auto; right: 10px; bottom: 8px; transform: none; }
 }

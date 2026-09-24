@@ -51,7 +51,8 @@
   .modal .row .btn { flex: 1 1 auto; }
   .toasts { max-width: calc(100vw - 32px); }
   .toast { text-align: center; }
-  .dealer-line { font-size: 16px; padding: 6px 12px; }
+  /* The dealer's call spans the width, over the game's top panels for the moment it's up. */
+  .dealer-line { left: 10px; right: 10px; transform: none; max-width: none; z-index: 6; font-size: 16px; padding: 6px 12px; }
   .tip-line { font-size: 14px; padding: 6px 12px; }
   .celebrate { max-width: calc(100vw - 24px); padding: 12px 22px; }
   .celebrate-title { font-size: 24px; text-wrap: balance; }
@@ -72,7 +73,7 @@
   .tray .btn { padding: 0 11px; }
   .chip-btn[aria-pressed='true'] { transform: translateY(-4px); }
 
-  .modal { max-height: calc(100vh - 16px); overflow: auto; padding: 14px 18px; }
+  .modal { max-height: calc(100vh - 16px); max-height: calc(100dvh - 16px); overflow: auto; padding: 14px 18px; }
   .modal h2 { font-size: 18px; margin-bottom: 2px; }
   .modal p { margin: 4px 0; font-size: 15px; }
   .modal .row { margin-top: 10px; }

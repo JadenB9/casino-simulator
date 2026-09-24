@@ -150,10 +150,12 @@
 
 /* ---------------------------------------------------------------- phones and tablets */
 
-/* Touch screens: sheet controls a thumb's width. */
+/* Touch screens: sheet controls a thumb's width, and sheets measured against the visible height
+   (a phone browser's 100vh reaches behind its toolbars). */
 @media (pointer: coarse) {
   .seg-btn { height: 44px; }
   .x-btn { height: 44px; min-width: 44px; justify-content: center; }
+  .sheet { max-height: calc(100dvh - 48px); }
 }
 /* A phone on its side: 390 px of height for the title, you and five menu rows (each still 44 px
    to the thumb), and sheets that use the whole height. */
@@ -171,7 +173,7 @@
   .continue-btn { min-height: 48px; margin-bottom: 8px; }
   .login-note { margin-top: 6px; }
   .sheet-scrim { padding: 8px 12px; }
-  .sheet { max-height: calc(100vh - 16px); }
+  .sheet { max-height: calc(100vh - 16px); max-height: calc(100dvh - 16px); }
   .sheet-head { padding: 12px 18px 10px; }
   .sheet-title { font-size: 19px; }
   .sheet-body { padding: 12px 18px 14px; }
@@ -180,7 +182,7 @@
 /* A phone upright: sheets edge to edge, stat tiles two across. */
 @media (max-width: 560px) {
   .sheet-scrim { padding: 12px 10px; }
-  .sheet { max-height: calc(100vh - 24px); }
+  .sheet { max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px); }
   .sheet-head { padding: 16px 16px 12px; }
   .sheet-body { padding: 14px 16px 18px; }
   .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }

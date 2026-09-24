@@ -62,6 +62,9 @@
 @media (max-aspect-ratio: 1/1) {
   .slots-deck { bottom: 54px; }
 }
+@media (pointer: coarse) {
+  .slots-pays { max-height: calc(100dvh - 140px); }
+}
 /* A phone upright: the bet controls on the first row, Insert, Pays, Max bet and Spin on the
    second (deck children: insert, pays, sep, coin, down, bet, up, max, sep, spin). */
 @media (max-width: 560px) {
@@ -101,5 +104,5 @@
   .slots-banner .amount { font-size: 26px; }
   .slots-countup { top: calc(40% + 50px); padding: 6px 18px 8px; }
   .slots-countup .amount { font-size: 32px; }
-  .slots-pays { max-height: calc(100vh - 24px); }
+  .slots-pays { max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px); }
 }

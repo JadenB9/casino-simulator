@@ -128,8 +128,9 @@
 
 /* ---- phones and tablets ---- */
 
-/* Touch screens: rows and buttons a thumb's width. */
+/* Touch screens: rows and buttons a thumb's width, heights against the visible screen. */
 @media (pointer: coarse) {
+  .lobby { max-height: calc(100dvh - 40px); }
   .lobby-back { height: 44px; }
   .lobby-row { height: 48px; }
   .party-head { height: 44px; }
@@ -141,17 +142,21 @@
 @media (max-width: 640px) {
   .party { top: var(--below-hud); left: 10px; right: 10px; }
   :root:has(.party:not([hidden])) { --below-party: calc(var(--below-hud) + 54px); }
+  .lobby { max-height: calc(100dvh - 100px); }
 }
 /* A phone on its side: the panel uses the height, its list gets shorter, and the party panel
    sits under the one-row HUD. */
 @media (max-height: 480px) {
-  .lobby { right: 12px; max-height: calc(100vh - 16px); }
+  /* hung from under the HUD, so its Leave button stays in reach; the body scrolls if it must */
+  .lobby { top: var(--below-hud); right: 12px; transform: none; animation: none; max-height: calc(100vh - var(--below-hud) - 8px); max-height: calc(100dvh - var(--below-hud) - 8px); }
+  .lobby-body { overflow-y: auto; overscroll-behavior: contain; }
   .lobby-head { padding: 10px 14px 8px; }
   .lobby-choice { padding: 8px 10px; }
-  .lobby-list { max-height: 140px; }
+  .lobby-list { flex: none; max-height: 140px; }
   .lobby-section { padding-top: 10px; }
   .lobby-section:last-child { padding-bottom: 12px; }
   .party { top: var(--below-hud); right: 10px; width: 280px; }
+  .party-row .btn { padding: 0 10px; white-space: nowrap; }
   :root:has(.party:not([hidden])) { --below-party: calc(var(--below-hud) + 52px); }
-  .party-body { max-height: calc(100vh - var(--below-hud) - 70px); overflow-y: auto; }
+  .party-body { max-height: calc(100vh - var(--below-hud) - 70px); max-height: calc(100dvh - var(--below-hud) - 70px); overflow-y: auto; }
 }
