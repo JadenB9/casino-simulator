@@ -455,8 +455,9 @@ export class Staff {
     const home = m.post.yaw;
     let want = 0;
     if (mine) {
-      // face the player: the body turns most of the way, the head the rest
-      want = THREE.MathUtils.clamp(turnToward(home, x, z, this.cam.x, this.cam.z), -0.8, 0.8);
+      // face the player: the body turns part of the way, the head the rest
+      // (not so far that a hand swings over the chip rack)
+      want = THREE.MathUtils.clamp(turnToward(home, x, z, this.cam.x, this.cam.z), -0.5, 0.5);
       if (m.gazeWho !== 'you' || this.clock > m.gazeUntil) {
         // mostly you, now and then a glance down at the layout
         const glance = m.gazeWho === 'you' && this.rand() < 0.3;

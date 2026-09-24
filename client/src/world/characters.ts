@@ -247,7 +247,7 @@ export class Person implements Character {
   /** Seat top above the feet while sitting, and how far the model is lowered for it. */
   private seatTop: number | null = null;
   private seated = 0;
-  private legs: { hip: number; thigh: number; shin: number } | null = null;
+  private legs: { hip: number; thigh: number; knee: number; thighTip: number; shinTip: number } | null = null;
   /** Idle clip speed and phase (staff breathe out of step with each other). */
   private pace: { rate: number; phase: number } | null = null;
 
@@ -472,36 +472,47 @@ export class Person implements Character {
   private sitPose(): number {
     const legs = (this.legs ??= this.measureLegs());
     if (!legs) return 0;
-    // The hip joint rides a hand's width above the seat; the thighs tip forward until the shins,
-    // hanging from the knees, reach the floor (a high stool leaves them bent at the limit).
+    // The hip joint rides a hand's width above the seat. The thighs tip forward (from wherever
+    // the idle pose holds them) until the shins, hanging from the knees, reach the floor; a high
+    // stool leaves them bent at the limit with the feet on its rail.
     const hipY = this.seatTop! + HIP_OVER_SEAT;
-    const c = THREE.MathUtils.clamp((hipY - legs.shin) / legs.thigh, Math.cos(SIT_BEND_MAX), Math.cos(SIT_BEND_MIN));
-    const bend = Math.acos(c);
-    this.turn('thighR', [-bend, 0, 0]);
-    this.turn('shinR', [bend + 0.1, 0, 0]);
-    this.turn('thighL', [-bend, 0, 0]);
-    this.turn('shinL', [bend + 0.1, 0, 0]);
+    const tip = Math.acos(THREE.MathUtils.clamp((hipY - legs.knee) / legs.thigh, Math.cos(SIT_BEND_MAX), Math.cos(SIT_BEND_MIN)));
+    const thigh: Turn = [-(tip - legs.thighTip), 0, 0];
+    const shin: Turn = [tip - legs.thighTip + legs.shinTip + 0.08, 0, 0];
+    this.turn('thighR', thigh);
+    this.turn('shinR', shin);
+    this.turn('thighL', thigh);
+    this.turn('shinL', shin);
     this.turn('torso', [0.1, 0, 0]);
-    // forearms forward and a little in, resting on the rail in front
-    this.turn('upperR', [-0.5, 0, -0.1]);
-    this.turn('upperL', [-0.5, 0, 0.1]);
-    this.turn('lowerR', [-1.05, 0.35, 0]);
-    this.turn('lowerL', [-1.05, -0.35, 0]);
+    // elbows down by the sides at rail height, forearms forward and a little in, resting on it
+    this.turn('upperR', SIT_UPPER);
+    this.turn('upperL', mirror(SIT_UPPER));
+    this.turn('lowerR', SIT_LOWER);
+    this.turn('lowerL', mirror(SIT_LOWER));
     return legs.hip - hipY;
   }
 
-  /** Standing hip height, thigh length and knee height, in the root's frame (for sitting). */
-  private measureLegs(): { hip: number; thigh: number; shin: number } | null {
-    const hip = this.bones.thighR;
-    const knee = this.bones.shinR;
-    if (!this.model || !hip || !knee) return null;
+  /**
+   * The standing legs in the root's frame, for sitting: hip height, thigh length, knee height, and
+   * how far forward the idle pose already tips the thigh and the shin (radians from straight down).
+   */
+  private measureLegs(): { hip: number; thigh: number; knee: number; thighTip: number; shinTip: number } | null {
+    const hipBone = this.bones.thighR;
+    const kneeBone = this.bones.shinR;
+    const foot = this.model?.getObjectByName('FootR') ?? this.model?.getObjectByName('Foot.R');
+    if (!this.model || !hipBone || !kneeBone || !foot) return null;
     this.model.updateWorldMatrix(true, true);
     const lift = this.model.position.y - this.modelY;
-    const h = this.root.worldToLocal(hip.getWorldPosition(_v)).y - lift;
-    const kp = this.root.worldToLocal(knee.getWorldPosition(_w));
-    const kn = kp.y - lift;
-    const hp = this.root.worldToLocal(hip.getWorldPosition(new THREE.Vector3()));
-    return { hip: h, thigh: hp.distanceTo(kp), shin: kn };
+    const hip = this.root.worldToLocal(hipBone.getWorldPosition(new THREE.Vector3()));
+    const knee = this.root.worldToLocal(kneeBone.getWorldPosition(new THREE.Vector3()));
+    const ankle = this.root.worldToLocal(foot.getWorldPosition(new THREE.Vector3()));
+    return {
+      hip: hip.y - lift,
+      thigh: hip.distanceTo(knee),
+      knee: knee.y - lift,
+      thighTip: Math.atan2(knee.z - hip.z, hip.y - knee.y),
+      shinTip: Math.atan2(ankle.z - knee.z, knee.y - ankle.y),
+    };
   }
 
   private applyPace(): void {
@@ -649,10 +660,14 @@ const EYE_Y = 1.64;
 /** How far the head turns toward what it looks at, and past which it gives up and looks ahead. */
 const LOOK_YAW = 1.15;
 const LOOK_GIVE_UP = 1.9;
-/** Sitting: the hip joint's height over the seat top, and the range the hips bend through. */
+/** Sitting: the hip joint's height over the seat top, and how far the thighs tip from straight down. */
 const HIP_OVER_SEAT = 0.1;
 const SIT_BEND_MIN = 1.2;
 const SIT_BEND_MAX = 1.62;
+// The idle pose holds the upper arm 14 degrees back and 27 out, the forearm 24 forward: seated, the
+// upper arm comes to 10 forward and closer in, the forearm level (right arm; the left mirrors).
+const SIT_UPPER: Turn = [-0.43, 0, 0.2];
+const SIT_LOWER: Turn = [-0.72, 0.3, 0];
 
 /** Radians about the character's x (left), y (up) and z (forward) axes, applied z, then x, then y. */
 type Turn = [number, number, number];
@@ -707,18 +722,21 @@ export type StaffGesture = 'deal' | 'sweep' | 'pay';
 /** Up, then down again, between two moments of a gesture (0 outside them). */
 const beat = (t: number, t0: number, t1: number) => (t <= t0 || t >= t1 ? 0 : Math.sin((Math.PI * (t - t0)) / (t1 - t0)));
 
+// Reaching down over the felt: from the idle arm (upper 14 degrees back and 27 out, forearm 24
+// forward) the upper arm swings forward and in and the elbow opens, so the hand comes down to a
+// hand's height over a table 0.78 m high, 30-40 cm out.
 const STAFF_GESTURES: Record<StaffGesture, { dur: number; pose: (t: number) => Pose }> = {
-  // the deck in the left hand at the waist; the right hand takes a card and sends it out
+  // the deck held at the waist in the left hand; the right takes a card and flicks it out
   deal: {
     dur: 1.0,
     pose: (t) => {
-      const flick = beat(t, 0.32, 0.72);
+      const flick = beat(t, 0.35, 0.7);
       return {
-        torso: [0.07, 0, 0],
-        upperL: [-0.45, 0, 0.05],
-        lowerL: [-1.15, -0.45, 0],
-        upperR: [-0.7 - 0.35 * flick, 0.12, -0.05],
-        lowerR: [-0.95 + 0.6 * flick, 0.3, 0],
+        torso: [0.06, 0, 0],
+        upperL: [-0.34, 0, -0.26],
+        lowerL: [-0.81, -0.5, 0],
+        upperR: [-0.88 - 0.2 * flick, 0.1, 0.26],
+        lowerR: [0.67 + 0.15 * flick, 0.15, 0],
       };
     },
   },
@@ -728,9 +746,9 @@ const STAFF_GESTURES: Record<StaffGesture, { dur: number; pose: (t: number) => P
     pose: (t) => {
       const u = smooth(Math.min(1, Math.max(0, (t - 0.2) / 0.85)));
       return {
-        torso: [0.12, 0.12 - 0.22 * u, 0],
-        upperR: [-1.05 + 0.35 * u, 0.55 - 0.85 * u, 0],
-        lowerR: [-0.35 - 0.55 * u, 0.25, 0],
+        torso: [0.14, 0.15 - 0.3 * u, 0],
+        upperR: [-1.0 + 0.45 * u, 0.55 - 0.75 * u, 0.26],
+        lowerR: [0.55 - 0.45 * u, 0.2, 0],
       };
     },
   },
@@ -739,8 +757,8 @@ const STAFF_GESTURES: Record<StaffGesture, { dur: number; pose: (t: number) => P
     dur: 1.1,
     pose: (t) => {
       const push = beat(t, 0.3, 0.8);
-      const upper: Turn = [-0.8 - 0.15 * push, 0.12, -0.04];
-      const lower: Turn = [-0.55 + 0.3 * push, 0.28, 0];
+      const upper: Turn = [-0.8 - 0.15 * push, 0.1, 0.26];
+      const lower: Turn = [0.5 + 0.15 * push, 0.2, 0];
       return { torso: [0.1 + 0.04 * push, 0, 0], upperR: upper, lowerR: lower, upperL: mirror(upper), lowerL: mirror(lower) };
     },
   },
