@@ -10,7 +10,7 @@ import { nextIp, sleep } from './net.mjs';
 
 const PLAYERS = 8;
 /** Seats per lobby table (the catalog's multiplayer limits). */
-const SEATS = { blackjack: 7, roulette: 8, craps: 8, baccarat: 7, threecard: 6, holdem: 9, war: 6, sicbo: 8, bigsix: 8 };
+const SEATS = { blackjack: 7, roulette: 8, craps: 8, baccarat: 7, threecard: 6, holdem: 9, war: 6, sicbo: 8, bigsix: 8, crash: 12, banditwheel: 10 };
 
 /**
  * Whether this seat is in the round on the table (dealt in, or chips down), and so must still be
@@ -34,7 +34,10 @@ function inRound(game, view, seat) {
     case 'roulette':
     case 'sicbo':
     case 'bigsix':
+    case 'banditwheel':
       return (!!view.bets?.[seat] && Object.keys(view.bets[seat]).length > 0) || !!view.settled?.[seat];
+    case 'crash':
+      return (view.bets ?? []).some((b) => b.seat === seat);
     default:
       return false;
   }
@@ -50,7 +53,12 @@ function myBet(game, view, seat) {
     case 'sicbo':
     case 'bigsix':
     case 'baccarat':
+    case 'banditwheel':
       return view.phase === 'betting' && view.bets?.[seat] ? JSON.stringify(view.bets[seat]) : null;
+    case 'crash': {
+      const mine = view.phase === 'betting' ? (view.bets ?? []).find((b) => b.seat === seat) : null;
+      return mine ? JSON.stringify([mine.amount, mine.auto]) : null;
+    }
     case 'threecard':
     case 'war':
       return view.phase === 'betting' && view.seats?.[seat] ? JSON.stringify([view.seats[seat].ante ?? view.seats[seat].bet, view.seats[seat].pairPlus ?? view.seats[seat].tie]) : null;

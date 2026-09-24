@@ -12,7 +12,7 @@
 // (TableSim refuses the step otherwise, exactly as the host does).
 
 import { describe, expect, it } from 'vitest';
-import type { GameEngine, GameEvent, Step } from '../../shared/src/engine.ts';
+import type { GameEngine, GameEvent, GameId, Step } from '../../shared/src/engine.ts';
 import { isRefusal } from '../../shared/src/engine.ts';
 import { engineFor } from '../../shared/src/games/index.ts';
 import { TableSim } from '../../shared/test/helpers/table-sim.ts';
@@ -359,8 +359,8 @@ describe('Blackjack: a seat that leaves with its hand settled keeps the round in
 /** Junk, shapes that are almost right, and hostile values, for parseAction and act. */
 function hostileActions(rand: Rand): unknown[] {
   const nums = [0, -1, 1, 0.5, 1e21, -1e21, Number.MAX_SAFE_INTEGER, 2 ** 53, NaN, Infinity, '100', null, true, [], {}];
-  const keys = ['type', 'amount', 'bets', 'kind', 'numbers', 'spot', 'ante', 'pairPlus', 'bet', 'tie', 'on', 'id', 'part', 'to', 'take', 'hold', 'coins', 'banker', 'player', 'double', '__proto__', 'constructor'];
-  const types = ['bet', 'undo', 'clear', 'deal', 'spin', 'roll', 'rebet', 'ready', 'odds', 'down', 'working', 'insurance', 'hit', 'stand', 'double', 'split', 'surrender', 'play', 'fold', 'war', 'check', 'call', 'raise', 'allin', 'sitout', 'toString', '__proto__', ''];
+  const keys = ['type', 'amount', 'bets', 'kind', 'numbers', 'spot', 'ante', 'pairPlus', 'bet', 'tie', 'on', 'id', 'part', 'to', 'take', 'hold', 'coins', 'banker', 'player', 'double', 'auto', 'mines', 'tile', 'row', 'col', 'picks', 'target', 'over', 'risk', 'rows', 'guess', '__proto__', 'constructor'];
+  const types = ['bet', 'undo', 'clear', 'deal', 'spin', 'roll', 'rebet', 'ready', 'odds', 'down', 'working', 'insurance', 'hit', 'stand', 'double', 'split', 'surrender', 'play', 'fold', 'war', 'check', 'call', 'raise', 'allin', 'sitout', 'max', 'cancel', 'cashout', 'pick', 'reveal', 'drop', 'guess', 'skip', 'higher', 'lower', 'toString', '__proto__', ''];
   const val = (): unknown => {
     const r = rand();
     if (r < 0.4) return nums[Math.floor(rand() * nums.length)];
@@ -380,14 +380,13 @@ function hostileActions(rand: Rand): unknown[] {
 }
 
 describe('hostile actions', () => {
-  for (const game of [...LOBBY_GAMES, 'slots', 'videopoker'] as const) {
+  const SOLO: GameId[] = ['slots', 'videopoker', 'plinko', 'tower', 'mines', 'dice', 'limbo', 'keno', 'hilo'];
+  for (const game of [...LOBBY_GAMES, ...SOLO] as GameId[]) {
     it(`${game}: junk never throws, and nothing it does moves chips a stack can't cover`, () => {
       const engine = engineFor(game) as Engine;
       const rand = rand32(game.length * 101);
-      const sim = new TableSim(engine, seededRng(99), game === 'slots' || game === 'videopoker' ? 'solo' : 'multi', [
-        { seat: 0, stack: 20_000 },
-        ...(game === 'slots' || game === 'videopoker' ? [] : [{ seat: 1, stack: 5_000 }]),
-      ]);
+      const solo = SOLO.includes(game);
+      const sim = new TableSim(engine, seededRng(99), solo ? 'solo' : 'multi', [{ seat: 0, stack: 20_000 }, ...(solo ? [] : [{ seat: 1, stack: 5_000 }])]);
       sim.started = true;
       for (const seat of sim.seats.keys()) sim.apply(engine.seatJoined(sim.state, seat, sim.ctx()));
       let applied = 0;

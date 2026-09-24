@@ -14,7 +14,7 @@ export interface BotSeat {
 }
 
 /** The games the load scripts seat eight players at. */
-export const LOBBY_GAMES = ['blackjack', 'roulette', 'craps', 'baccarat', 'threecard', 'holdem', 'war', 'sicbo', 'bigsix'] as const;
+export const LOBBY_GAMES = ['blackjack', 'roulette', 'craps', 'baccarat', 'threecard', 'holdem', 'war', 'sicbo', 'bigsix', 'crash', 'banditwheel'] as const;
 export type LobbyGame = (typeof LOBBY_GAMES)[number];
 
 /** What each bot brings to a table: enough for a long session at the minimums, within the table's buy-in. */
@@ -28,6 +28,8 @@ export const BUY_IN: Record<LobbyGame, number> = {
   war: 200_000,
   sicbo: 100_000,
   bigsix: 100_000,
+  crash: 100_000,
+  banditwheel: 100_000,
 };
 
 /** Games whose betting window closes early on the game's own Ready action (the others use the table's). */
@@ -138,6 +140,20 @@ export function botMove(game: string, view: any, me: BotSeat, rand: Rand): Recor
       if (!mine.field && me.stack >= 500 && rand() < 0.1) return { type: 'bet', bets: [{ kind: 'field', amount: 500 }] };
       if (view.shooter === seat && !view.rollRequested && (view.point !== null || line)) return { type: 'roll' };
       return null;
+    }
+    case 'crash': {
+      const mine = (view.bets ?? []).find((b: any) => b.seat === seat);
+      if (view.phase === 'betting') {
+        if (mine || me.stack < 500) return null;
+        // Half set an auto cash-out (in hundredths, from 1.01x); the rest press the button.
+        return { type: 'bet', amount: 500, auto: rand() < 0.5 ? 110 + Math.floor(rand() * 300) : null };
+      }
+      if (view.phase === 'running' && mine && mine.cashed === null && !mine.busted && rand() < 0.15) return { type: 'cashout' };
+      return null;
+    }
+    case 'banditwheel': {
+      if (view.phase !== 'betting' || has(view.bets?.[seat])) return null;
+      return me.stack >= 100 ? { type: 'bet', bets: [{ spot: pick(rand, [1, 3, 5, 10, 20]), amount: 100 }] } : null;
     }
     case 'holdem': {
       const legal = view.you?.legal;

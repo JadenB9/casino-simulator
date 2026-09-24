@@ -7,7 +7,6 @@
 //   - eight accounts buy into one lobby in the same instant;
 //   - the same top-up sent from a second tab with the same token and action id lands once.
 
-import { LOBBY_GAMES } from './bots.ts';
 import { START_BALANCE, nextIp, sleep } from './net.mjs';
 
 let aidSeq = 0;
@@ -29,7 +28,8 @@ export async function money(ctx) {
   const { server, meter } = ctx;
   const out = { checks: [] };
   const check = (name, ok, extra = {}) => out.checks.push({ check: name, ok, ...extra });
-  const games = LOBBY_GAMES.filter((g) => g !== 'holdem'); // eight tables whose buy-in allows $5,000
+  // Eight tables whose buy-in allows $5,000 (the sums below are for exactly eight).
+  const games = ['blackjack', 'roulette', 'craps', 'baccarat', 'threecard', 'war', 'sicbo', 'bigsix'];
 
   // --- one account, eight tables at once -----------------------------------------------------
   const a = await server.login(`${ctx.tag}mA`, nextIp(21));
