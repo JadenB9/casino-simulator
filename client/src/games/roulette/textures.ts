@@ -1,7 +1,8 @@
 // The surfaces of the wheel and its table, painted in code the first time they're asked for and
 // shared by every roulette model after that: the veneered apron and cone (eight book-matched
-// wedges, as real wheels are laid), the dark lacquered rim, the brushed steel ball track, the
-// number ring and the flocked pockets, and the table's felt weave, leather grain and wood.
+// wedges, as real wheels are laid), the brushed steel ball track, the number ring and the flocked
+// pockets; the mahogany of the table (stained nearly black, the bowl's rim too), its felt weave,
+// the armrest's leather grain, and the rolls of chips in the dealer's rack.
 //
 // A wood surface's bump and roughness share one texture (bump in red, roughness in green, which
 // is where three.js reads each of them), so a lacquered part costs two textures, not three.

@@ -265,6 +265,7 @@ interface WheelMaterials {
 }
 
 const materialCache = new Map<Quality, WheelMaterials>();
+const faceCache = new Map<string, { ring: THREE.Material; pockets: THREE.Material }>();
 const PHYSICAL_ONLY = ['clearcoat', 'clearcoatRoughness', 'sheen', 'sheenColor', 'sheenRoughness', 'specularIntensity'] as const;
 
 /** A physical material on High; on Low the standard one, without the physical-only layers. */
@@ -274,7 +275,6 @@ function surface(high: boolean, p: THREE.MeshPhysicalMaterialParameters): THREE.
   for (const k of PHYSICAL_ONLY) delete q[k];
   return new THREE.MeshStandardMaterial(q as THREE.MeshStandardMaterialParameters);
 }
-const faceCache = new Map<string, { ring: THREE.Material; pockets: THREE.Material }>();
 
 /**
  * On High the lacquered wood is a physical material, dull wood under a thin clear coat, and the
