@@ -101,16 +101,21 @@
   border-bottom: 1px solid var(--line-strong);
   transform: rotate(45deg);
 }
-.emote-ico {
-  width: 26px;
-  height: 26px;
+/* The wheel's own icon (ui/social/icons.ts), styled here too so the floor needs nothing else. */
+.emote-bubble .emo-glyph {
+  width: 27px;
+  height: 27px;
   fill: none;
   stroke: currentColor;
-  stroke-width: 1.7;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-.emote-ico .fill { fill: currentColor; stroke: none; }
+.emote-bubble .emo-glyph .fill { fill: currentColor; stroke: none; }
+/* Your own, while you sit at a table and your character is out of sight: at the foot of the view,
+   over the chip tray and the tips line, where you sit. */
+.emote.emote-own { position: fixed; left: 50%; bottom: calc(var(--tip-bottom, 104px) + 50px); z-index: 12; transform: translateX(-50%); }
+.emote-own .emote-bubble { width: 50px; height: 50px; }
+.emote-own .emo-glyph { width: 32px; height: 32px; }
 @keyframes emote-in {
   from { opacity: 0; transform: translateY(10px) scale(0.55); }
   70% { transform: translateY(-3px) scale(1.06); }
