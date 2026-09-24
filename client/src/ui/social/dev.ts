@@ -37,7 +37,7 @@ async function ensureSession(): Promise<void> {
     session.set(regular());
     return;
   }
-  session.set(await realApi.login(q.get('name') ?? `dev_${Math.random().toString(36).slice(2, 8)}`));
+  session.set(await realApi.login(q.get('name') ?? `dev_${Math.random().toString(36).slice(2, 8)}`, realApi.DEV_PASSWORD));
 }
 
 async function start(): Promise<void> {

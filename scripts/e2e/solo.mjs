@@ -14,8 +14,13 @@ const [port = '5173', out = '/tmp/casino-solo', ...only] = process.argv.slice(2)
 mkdirSync(out, { recursive: true });
 const STATIONS = {
   blackjack: 'bj-1', roulette: 'rl-us', craps: 'cr-1', baccarat: 'bc-1', threecard: 'tc-1', holdem: 'he-1',
-  slots: 'slots-sevens-1', videopoker: 'vp-1',
+  slots: 'slots-sevens-1', videopoker: 'vp-1', war: 'wr-1', bigsix: 'b6-1', sicbo: 'sb-1',
+  diamonds: 'slots-diamonds-1', cherries: 'slots-cherries-1', goldrush: 'slots-goldrush-1',
 };
+// A coin value each machine takes (its denominations: shared/src/games/slots/*.ts).
+const DENOM = { slots: 100, diamonds: 100, cherries: 25, goldrush: 10 };
+// Every slot machine's rounds count under the one game, slots.
+const statKey = (g) => (STATIONS[g].startsWith('slots-') ? 'slots' : g);
 const games = process.env.ONLY_BROKE ? [] : only.length ? only : Object.keys(STATIONS);
 const errors = [];
 const log = (s) => console.log(new Date().toISOString().slice(11, 19), s);
@@ -34,6 +39,7 @@ async function enterFloor() {
   await page.waitForSelector('.name-input, .menu-item', { timeout: 180_000 });
   if (await page.$('.name-input')) {
     await page.fill('.name-input', name);
+    await page.fill('.pass-input', 'casino-dev'); // DEV_PASSWORD in client/src/net/api.ts
     await page.click('.enter-btn');
   }
   await page.waitForSelector('.menu-item', { timeout: 20_000 });
@@ -64,7 +70,7 @@ async function sit(station, buyIn = 1000) {
 
 /** Play until the table reports a finished round for us, acting through the table link. */
 async function playRound(game) {
-  await page.evaluate((game) => {
+  await page.evaluate(([game, denom]) => {
     const s = window.casino.app.table.session;
     const act = (a) => s.link.act(a);
     s.__done = false;
@@ -83,7 +89,9 @@ async function playRound(game) {
           setTimeout(() => act({ type: 'call' }), 700);
         }
         if (game === 'videopoker' && e.type === 'deal') setTimeout(() => act({ type: 'draw', hold: [true, true, false, false, false] }), 400);
-        if (game === 'slots' && e.type === 'spin') s.__done = true;
+        // A tie at war: go to war (the raise equals the bet, which the buy-in covers).
+        if (game === 'war' && e.type === 'decide' && e.seats.includes(seat())) act({ type: 'war' });
+        if (denom && e.type === 'spin') s.__done = true;
         if (game === 'videopoker' && (e.type === 'result' || e.type === 'draw')) s.__done = true;
         if (game === 'craps' && e.type === 'roll') s.__done = true;
       }
@@ -95,13 +103,19 @@ async function playRound(game) {
       baccarat: [{ type: 'bet', banker: 2500 }, { type: 'deal' }],
       threecard: [{ type: 'bet', ante: 1000, pairPlus: 0 }, { type: 'deal' }],
       holdem: [],
-      slots: [{ type: 'spin', coins: 1, denom: 100 }],
       videopoker: [{ type: 'deal', coins: 5, denom: 100 }],
-    }[game];
+      war: [{ type: 'bet', bet: 1000, tie: 100 }, { type: 'deal' }],
+      bigsix: [{ type: 'bet', bets: [{ spot: 'one', amount: 500 }, { spot: 'star', amount: 100 }] }, { type: 'spin' }],
+      sicbo: [{ type: 'bet', bets: [{ spot: 'small', amount: 500 }, { spot: 'total:10', amount: 100 }] }, { type: 'roll' }],
+    }[game] ?? [{ type: 'spin', coins: 1, denom }];
     first.forEach((a, i) => setTimeout(() => act(a), 300 + i * 600));
-  }, game);
+  }, [game, DENOM[game]]);
   const t0 = Date.now();
   while (Date.now() - t0 < 90_000 && !(await page.evaluate(() => window.casino.app.table?.session.__done))) await page.waitForTimeout(1000);
+  // Roulette, Big Six and Sic Bo send the result with the spin or roll and then play it out; their
+  // views say when they're done, so the screenshot shows the settled table. Software rendering
+  // plays them about three times slower than real time (frames come slower than the 0.1 s step).
+  await page.waitForFunction(() => !window.casino.app.table?.session.view?.debug?.state?.().animating, null, { timeout: 90_000 }).catch(() => {});
   await page.waitForTimeout(2500);
   return (Date.now() - t0) / 1000;
 }
@@ -119,13 +133,13 @@ try {
   const start = await me();
   log(`${name}: balance $${start.balance / 100}, loans ${start.loansTaken}`);
   for (const game of games) {
-    const before = (await me()).stats.games[game]?.rounds ?? 0;
+    const before = (await me()).stats.games[statKey(game)]?.rounds ?? 0;
     await sit(STATIONS[game]);
     const secs = await playRound(game);
     await shot(`solo-${game}`);
     await stand();
     const prof = await me();
-    const after = prof.stats.games[game]?.rounds ?? 0;
+    const after = prof.stats.games[statKey(game)]?.rounds ?? 0;
     log(`${game}: round in ${secs.toFixed(0)} s, rounds ${before} -> ${after}, balance $${prof.balance / 100}, on tables $${prof.inPlay / 100}`);
     if (after <= before) errors.push(`${game}: no round recorded`);
     if (prof.inPlay !== 0) errors.push(`${game}: chips left on the table`);

@@ -149,7 +149,7 @@ async function multiplayer() {
   const ctxB = await browser.newContext();
   const pageB = await ctxB.newPage();
   for (const p of [page, pageB]) await p.goto(`${base}/casino/`);
-  const login = (p, name) => p.evaluate(async (n) => (await (await fetch('/casino/api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: n }) })).json()).token, name);
+  const login = (p, name) => p.evaluate(async (n) => (await (await fetch('/casino/api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: n, password: 'casino-dev' }) })).json()).token, name);
   const tA = await login(page, 'sicbo_alice');
   const tB = await login(pageB, 'sicbo_bob');
   const { tableId } = await page.evaluate(async (t) => (await (await fetch('/casino/api/tables', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${t}` }, body: JSON.stringify({ game: 'sicbo', visibility: 'public' }) })).json()), tA);

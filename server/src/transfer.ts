@@ -1,14 +1,14 @@
 // Money between an account's balance and a table: buy-in, top-up, cash-out, orphan refund, and
-// the bank's loan. Each is one D1 batch, which D1 runs as a single transaction, so a ledger row
-// and its balance change land together or not at all.
+// the bank's top-up (a loan). Each is one D1 batch, which D1 runs as a single transaction, so a
+// ledger row and its balance change land together or not at all.
 //
 // The schema turns every way this could go wrong into an error (see the migration): an overdraft
 // breaks balance_nonneg, a retried op collides on the ledger's primary key, a missing account
 // breaks a foreign key, a missing escrow makes in_play NULL. A failed statement rolls the whole
 // batch back. applyTransfer() then asks the ledger what actually happened.
 
-import type { Cents } from '../../shared/src/money.ts';
-import { LOAN_AMOUNT } from '../../shared/src/money.ts';
+import { isCents, type Cents } from '../../shared/src/money.ts';
+import { REFILL_BELOW, REFILL_TO } from '../../shared/src/bank.ts';
 import type { GameId } from '../../shared/src/engine.ts';
 
 export type TransferOutcome =
@@ -109,25 +109,47 @@ export function refundStatements(db: D1Database, op: { opId: string; accountId: 
   ];
 }
 
+export interface LoanOp {
+  opId: string;
+  accountId: number;
+  /** Chips on the player's tables as those tables reported them (stacks and bets out). */
+  chips: Cents;
+  /** What D1 held on tables (casino_accounts.in_play) when those reports were read. */
+  inPlay: Cents;
+  now: number;
+}
+
 /**
- * The loan: all three statements share the "truly broke" guard, and the first one runs before the
- * balance changes, so either all three happen or none do. A second click finds balance > 0.
+ * The bank's top-up, recorded as a loan: under REFILL_BELOW in all, the balance goes up by
+ * exactly what brings the player to REFILL_TO. "In all" is the balance, read inside this batch,
+ * plus the chips the tables reported a moment before. `inPlay` pins what D1 held on tables when
+ * they were asked: a buy-in, top-up or cash-out landing in between changes it, and then nothing
+ * happens rather than a loan worked out from numbers that no longer hold.
+ *
+ * The first statement decides and records the amount; the other two only follow a loan row with
+ * no ledger row yet (the one this batch just wrote), so all three happen or none do, and a
+ * second request finds the player at $50,000.
  */
-export function loanStatements(db: D1Database, op: { opId: string; accountId: number; now: number }): D1PreparedStatement[] {
+export function loanStatements(db: D1Database, op: LoanOp): D1PreparedStatement[] {
   return [
     db
       .prepare(
         `INSERT INTO casino_loans (op_id, account_id, amount, created_at)
-         SELECT ?1, id, ?3, ?4 FROM casino_accounts WHERE id = ?2 AND balance = 0 AND in_play = 0`,
+         SELECT ?1, id, ?5 - (balance + ?3), ?6 FROM casino_accounts
+          WHERE id = ?2 AND in_play = ?4 AND balance + ?3 < ?7
+         RETURNING amount`,
       )
-      .bind(op.opId, op.accountId, LOAN_AMOUNT, op.now),
+      .bind(op.opId, op.accountId, op.chips, op.inPlay, REFILL_TO, op.now, REFILL_BELOW),
     db
       .prepare(
-        `UPDATE casino_accounts SET balance = balance + ?3, loans_taken = loans_taken + 1, rev = rev + 1
-          WHERE id = ?2 AND balance = 0 AND in_play = 0 AND EXISTS (SELECT 1 FROM casino_loans WHERE op_id = ?1)
+        `UPDATE casino_accounts
+            SET balance = balance + (SELECT amount FROM casino_loans WHERE op_id = ?1),
+                loans_taken = loans_taken + 1, rev = rev + 1
+          WHERE id = ?2 AND EXISTS (SELECT 1 FROM casino_loans WHERE op_id = ?1)
+            AND NOT EXISTS (SELECT 1 FROM casino_ledger WHERE op_id = ?1)
           RETURNING balance, in_play, rev`,
       )
-      .bind(op.opId, op.accountId, LOAN_AMOUNT),
+      .bind(op.opId, op.accountId),
     db
       .prepare(
         `INSERT INTO casino_ledger (op_id, account_id, kind, amount, table_id, created_at)
@@ -163,11 +185,31 @@ export async function applyTransfer(db: D1Database, statements: D1PreparedStatem
   }
 }
 
-/** The loan batch, reported as granted or not. */
-export async function takeLoan(db: D1Database, accountId: number, now: number, opId: string): Promise<{ granted: boolean; money?: MoneyRow }> {
-  const results = await db.batch<MoneyRow>(loanStatements(db, { opId, accountId, now }));
-  const granted = (results[0]?.meta.changes ?? 0) === 1;
-  return { granted, money: results[1]?.results?.[0] };
+/**
+ * The top-up batch, reported as granted (with the amount) or not. The same op id twice is one
+ * loan: a repeat finds the player topped up, or collides on the loan's key, and either way
+ * reports the loan that already landed.
+ */
+export async function takeLoan(db: D1Database, op: LoanOp): Promise<{ granted: boolean; amount?: Cents; money?: MoneyRow }> {
+  if (!isCents(op.chips) || !isCents(op.inPlay)) throw new Error('takeLoan: chips and inPlay must be whole cents');
+  let results: D1Result<MoneyRow & { amount: number }>[];
+  try {
+    results = await db.batch<MoneyRow & { amount: number }>(loanStatements(db, op));
+  } catch (err) {
+    const landed = await loanMade(db, op.opId);
+    if (landed !== null) return { granted: true, amount: landed };
+    throw err;
+  }
+  const made = results[0]?.results?.[0]?.amount;
+  if (made === undefined) {
+    const landed = await loanMade(db, op.opId);
+    return landed !== null ? { granted: true, amount: landed } : { granted: false };
+  }
+  return { granted: true, amount: made, money: results[1]?.results?.[0] };
+}
+
+async function loanMade(db: D1Database, opId: string): Promise<Cents | null> {
+  return (await db.prepare(`SELECT amount FROM casino_loans WHERE op_id = ?1`).bind(opId).first<{ amount: number }>())?.amount ?? null;
 }
 
 export async function moneyOf(db: D1Database, accountId: number): Promise<MoneyRow | null> {

@@ -1,17 +1,20 @@
 // CasinoFloor: the one Durable Object everyone on the casino floor connects to. It owns the
-// sockets and hands each message to one of two parts:
+// sockets and hands each message to one of three parts:
 //   presence.ts   who is here, where they are, who is sitting where, the online count
 //   directory.ts  the lobby list and private-lobby PINs
-// Both keep anything that must survive hibernation in this object's SQLite storage or in the
+//   chat.ts       the floor's chat room
+// Each keeps anything that must survive hibernation in this object's SQLite storage or in the
 // sockets' attachments; memory is only a cache.
 
 import { DurableObject } from 'cloudflare:workers';
-import { CLOSE, MAX_FLOOR_FRAME, PROTOCOL_VERSION, parseFloorMsg, type EmoteId, type FloorServerMsg, type LobbySummary } from '../../../shared/src/protocol.ts';
+import { CLOSE, MAX_FLOOR_FRAME, PROTOCOL_VERSION, parseFloorMsg, parseSay, type EmoteId, type FloorServerMsg, type LobbySummary } from '../../../shared/src/protocol.ts';
 import { isGameId } from '../../../shared/src/games/catalog.ts';
 import type { GameId } from '../../../shared/src/engine.ts';
 import { lookFromJson, type Look } from '../../../shared/src/look.ts';
 import { Presence, type FloorAtt } from './presence.ts';
 import { Directory } from './directory.ts';
+import { FloorChat } from './chat.ts';
+import { Wins, type BigWinReport } from './wins.ts';
 import { Bucket } from '../ratelimit.ts';
 
 /** A hard cap on floor connections; a busy night past this gets a polite "casino is full". */
@@ -20,6 +23,9 @@ export const MAX_FLOOR = 150;
 export class CasinoFloor extends DurableObject<Env> {
   readonly presence: Presence;
   readonly directory: Directory;
+  readonly chat: FloorChat;
+  /** features: big-win announcements (wins.ts) */
+  readonly wins: Wins;
   private buckets = new Map<WebSocket, { move: Bucket; misc: Bucket; emote: Bucket; strikes: number }>();
 
   constructor(ctx: DurableObjectState, env: Env) {
@@ -27,6 +33,8 @@ export class CasinoFloor extends DurableObject<Env> {
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
     this.presence = new Presence(ctx, (msg, except) => this.broadcast(msg, except));
     this.directory = new Directory(ctx, (msg, game) => this.toWatchers(msg, game));
+    this.chat = new FloorChat(ctx, (msg) => this.broadcast(msg));
+    this.wins = new Wins(ctx, (msg) => this.broadcast(msg));
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -53,6 +61,8 @@ export class CasinoFloor extends DurableObject<Env> {
     }
     this.ctx.acceptWebSocket(server, [`a:${accountId}`]);
     this.presence.onConnect(server, { accountId, name, look });
+    this.chat.join(server);
+    this.wins.greet(server); // features: the recent big wins, after hello
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -67,6 +77,9 @@ export class CasinoFloor extends DurableObject<Env> {
     } catch {
       return;
     }
+    // Chat keeps its own limits and mutes (chat.ts), so it goes round the buckets below.
+    const say = parseSay(data);
+    if (say) return this.chat.say(ws, say.text);
     const msg = parseFloorMsg(data, isGameId);
     if (!msg) return;
     const b = this.bucketsFor(ws);
@@ -136,6 +149,11 @@ export class CasinoFloor extends DurableObject<Env> {
 
   joinByPin(p: { pin: string; accountId: number; ip: string }): { tableId: string; game: GameId } | { error: 'BAD_PIN' | 'RATE_LIMITED' } {
     return this.directory.joinByPin(p, Date.now());
+  }
+
+  /** features: a table's round paid big; the floor announces it within its limits (wins.ts). */
+  bigWin(r: BigWinReport): 'sent' | 'limited' | 'refused' {
+    return this.wins.report(r);
   }
 
   /** Everyone on the floor sees the gesture over this player's head. */

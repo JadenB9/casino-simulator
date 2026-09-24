@@ -41,6 +41,7 @@ for (const quality of ['high', 'low']) {
   await page.goto(`http://localhost:${port}/casino/`);
   await page.waitForSelector('.name-input', { timeout: 120_000 });
   await page.fill('.name-input', 'perf_e2e');
+  await page.fill('.pass-input', 'casino-dev'); // DEV_PASSWORD in client/src/net/api.ts
   await page.click('.enter-btn');
   await page.waitForSelector('.menu-item', { timeout: 20_000 });
   await page.waitForTimeout(1500);

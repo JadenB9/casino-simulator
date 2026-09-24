@@ -17,36 +17,60 @@ export interface AccountRow {
   look: string;
   created_at: number;
   last_seen: number;
+  /** "pbkdf2:<iterations>:<hex>", or null for an account from before passwords (migration 0003) */
+  pass_hash: string | null;
+  pass_salt: string | null;
+}
+
+/** An account by name. Names are case-insensitive through the column's NOCASE collation. */
+export async function findAccount(db: D1Database, name: string): Promise<AccountRow | null> {
+  return (await db.prepare(`SELECT * FROM casino_accounts WHERE name = ?1`).bind(name).first<AccountRow>()) ?? null;
 }
 
 /**
- * Log in by name: create the account on first use (with its starting bankroll and a ledger row
- * recording the grant), or open the existing one. Names are case-insensitive through the
- * column's NOCASE collation, so "Ace" and "ace" land on the same row.
+ * Create an account with its password, its starting bankroll and a ledger row recording the
+ * grant. Null if the name turned out to be taken ("Ace" and "ace" are one name): the insert
+ * then does nothing, and the caller treats the request as a login to that account.
  */
-export async function loginAccount(db: D1Database, name: string, now: number): Promise<{ account: AccountRow; created: boolean }> {
+export async function createAccount(db: D1Database, name: string, pass: { hash: string; salt: string }, now: number): Promise<AccountRow | null> {
   const [, , found] = await db.batch([
     db
       .prepare(
-        `INSERT INTO casino_accounts (name, balance, created_at, last_seen) VALUES (?1, ?2, ?3, ?3)
-         ON CONFLICT (name) DO UPDATE SET last_seen = excluded.last_seen`,
+        `INSERT INTO casino_accounts (name, balance, created_at, last_seen, pass_hash, pass_salt) VALUES (?1, ?2, ?3, ?3, ?4, ?5)
+         ON CONFLICT (name) DO NOTHING`,
       )
-      .bind(name, STARTING_BALANCE, now),
-    // Record where the starting money came from, once. Guarded by NOT EXISTS rather than an
+      .bind(name, STARTING_BALANCE, now, pass.hash, pass.salt),
+    // Record where the starting money came from, for the row this batch made (its salt is new,
+    // so it picks out that row and no other). Guarded by NOT EXISTS rather than an
     // ignore-on-conflict clause, which this ledger never uses.
     db
       .prepare(
         `INSERT INTO casino_ledger (op_id, account_id, kind, amount, table_id, created_at)
          SELECT 'grant:' || id, id, 'grant', ?2, NULL, created_at FROM casino_accounts
-          WHERE name = ?1 AND created_at = ?3
+          WHERE name = ?1 AND pass_salt = ?3
             AND NOT EXISTS (SELECT 1 FROM casino_ledger WHERE op_id = 'grant:' || casino_accounts.id)`,
       )
-      .bind(name, STARTING_BALANCE, now),
+      .bind(name, STARTING_BALANCE, pass.salt),
     db.prepare(`SELECT * FROM casino_accounts WHERE name = ?1`).bind(name),
   ]);
   const account = (found!.results as unknown as AccountRow[])[0];
-  if (!account) throw new Error('login: account row missing after upsert');
-  return { account, created: account.created_at === now };
+  return account && account.pass_salt === pass.salt ? account : null;
+}
+
+/**
+ * Give an account from before passwords its first one, which claims the name. False if it
+ * already has a password (someone claimed it first).
+ */
+export async function claimAccount(db: D1Database, id: number, pass: { hash: string; salt: string }, now: number): Promise<boolean> {
+  const r = await db
+    .prepare(`UPDATE casino_accounts SET pass_hash = ?2, pass_salt = ?3, last_seen = ?4 WHERE id = ?1 AND pass_hash IS NULL`)
+    .bind(id, pass.hash, pass.salt, now)
+    .run();
+  return r.meta.changes === 1;
+}
+
+export async function touchAccount(db: D1Database, id: number, now: number): Promise<void> {
+  await db.prepare(`UPDATE casino_accounts SET last_seen = ?2 WHERE id = ?1`).bind(id, now).run();
 }
 
 export async function getAccount(db: D1Database, id: number): Promise<AccountRow | null> {
@@ -157,10 +181,11 @@ export async function loadProfile(db: D1Database, id: number, liveStacks: Map<st
 }
 
 /**
- * Count an attempt against a per-IP window and say whether it is still allowed. One statement
- * reads, increments and resets the window, so concurrent requests can't all read the same count.
+ * Count an attempt against a window (per IP, or per name for wrong passwords) and say whether it
+ * is still allowed. One statement reads, increments and resets the window, so concurrent
+ * requests can't all read the same count.
  */
-export async function bumpRate(db: D1Database, gate: string, ip: string, limit: number, windowMs: number, now: number): Promise<boolean> {
+export async function bumpRate(db: D1Database, gate: string, key: string, limit: number, windowMs: number, now: number): Promise<boolean> {
   const row = await db
     .prepare(
       `INSERT INTO casino_rate (k, n, expires_at) VALUES (?1, 1, ?2)
@@ -169,7 +194,18 @@ export async function bumpRate(db: D1Database, gate: string, ip: string, limit: 
          expires_at = CASE WHEN casino_rate.expires_at <= ?3 THEN ?2 ELSE casino_rate.expires_at END
        RETURNING n`,
     )
-    .bind(`${gate}:${ip}`, now + windowMs, now)
+    .bind(`${gate}:${key}`, now + windowMs, now)
     .first<{ n: number }>();
   return (row?.n ?? 1) <= limit;
+}
+
+/**
+ * Whether any of these counters has already reached its limit in its current window. Read-only
+ * (bumpRate moves them), so a locked-out login is refused before any password work is done.
+ */
+export async function rateReached(db: D1Database, checks: { gate: string; key: string; limit: number }[], now: number): Promise<boolean> {
+  const rows = await db.batch<{ n: number }>(
+    checks.map((c) => db.prepare(`SELECT n FROM casino_rate WHERE k = ?1 AND expires_at > ?2`).bind(`${c.gate}:${c.key}`, now)),
+  );
+  return rows.some((r, i) => (r.results[0]?.n ?? 0) >= checks[i]!.limit);
 }

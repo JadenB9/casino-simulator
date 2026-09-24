@@ -37,14 +37,16 @@ shared/src/        pure TS; imported by server, client and tests; runs anywhere
   engine.ts        GameEngine interface: the settlement contract every game implements
   look.ts          character appearance type + validator
   names.ts         the username rule, shared by client and server
+  password.ts      the password rule (4-64 characters), shared the same way
+  bank.ts          the bank's top-up rule (under $10,000 in all, back up to $50,000)
   games/<game>/    one folder per game: rules, engine, protocol, tests
 server/src/        Cloudflare Worker + Durable Objects
   index.ts         gateway: router, CORS, Origin allowlist, tokens, rate limits
-  auth.ts  db.ts   tokens (HMAC-SHA256) and D1 access
-  transfer.ts      buy-in / cash-out / loan batches and applyTransfer()
+  auth.ts  db.ts   passwords (PBKDF2), the login decision, tokens (HMAC-SHA256); D1 access
+  transfer.ts      buy-in / cash-out / top-up (loan) batches and applyTransfer()
   floor/           CasinoFloor: presence.ts, directory.ts
   table/           CasinoTable: host.ts (engine host, outbox, deadlines), party.ts (lobby/leader)
-server/migrations/ the D1 schema (published to the site as 014_casino.sql)
+server/migrations/ the D1 schema (0001 published to the site as 014_casino.sql, 000N as 0(13+N)_casino_*)
 client/src/
   net/             sockets with jittered reconnect, typed messages, snapshot interpolation, clock
   world/           floor scene, props, lighting, character, controller, camera, stations
@@ -111,44 +113,69 @@ reused.
 
 A table cashes out a seat as soon as it can: when the player leaves, when a stack hits zero
 with nothing on the layout, and when a disconnected player's grace period runs out. That
-keeps `in_play` honest. `/me` and `/bank/loan` also ask any table that has held an escrow for
-more than two minutes to reconcile, so a stuck escrow resolves itself instead of blocking a
-loan.
+keeps `in_play` honest. `/me` also asks any table that has held an escrow for more than two
+minutes to reconcile, so a stuck escrow resolves itself, and `/bank/loan` asks every table
+holding one (below).
 
 ### The bank
 
-A loan is one batch that does anything only when the account is truly broke:
+Under $10,000 in all, the cashier tops a player up to $50,000, as often as that happens. "In all"
+is the balance plus every chip on every table: the gateway asks each table holding one of the
+player's escrows to reconcile, and each seat reports its stack and the bets it has out (chips
+on the felt still count, so putting them down for a moment can't earn a top-up). While chips
+are moving between a table and D1 (a buy-in, top-up or cash-out in flight), or a table doesn't
+answer, the bank answers `409 BUSY` instead of counting. Otherwise one batch decides and pays:
 
 ```sql
 INSERT INTO casino_loans (op_id, account_id, amount, created_at)
-  SELECT ?, id, 5000000, ? FROM casino_accounts WHERE id = ? AND balance = 0 AND in_play = 0;
-UPDATE casino_accounts SET balance = balance + 5000000, loans_taken = loans_taken + 1, rev = rev + 1
-  WHERE id = ? AND balance = 0 AND in_play = 0 AND EXISTS (SELECT 1 FROM casino_loans WHERE op_id = ?);
-INSERT INTO casino_ledger (...) SELECT op_id, account_id, 'loan', amount, NULL, created_at FROM casino_loans WHERE op_id = ?;
+  SELECT ?, id, 5000000 - (balance + :chips), ? FROM casino_accounts
+   WHERE id = ? AND in_play = :in_play AND balance + :chips < 1000000
+  RETURNING amount;
+UPDATE casino_accounts SET balance = balance + (SELECT amount FROM casino_loans WHERE op_id = ?),
+       loans_taken = loans_taken + 1, rev = rev + 1
+ WHERE id = ? AND EXISTS (SELECT 1 FROM casino_loans WHERE op_id = ?)
+   AND NOT EXISTS (SELECT 1 FROM casino_ledger WHERE op_id = ?);
+INSERT INTO casino_ledger (...) SELECT op_id, account_id, 'loan', amount, NULL, created_at FROM casino_loans
+ WHERE op_id = ? AND NOT EXISTS (SELECT 1 FROM casino_ledger WHERE op_id = ?);
 ```
 
-Every statement shares the same guard, so either all three happen or none do, and a double
-click can't produce two loans: after the first, the balance is no longer zero.
+The balance is read inside the transaction; `:chips` is what the tables just reported, and
+`:in_play` pins what D1 held on tables when they were asked, so a buy-in or cash-out landing in
+between turns the batch into a no-op (and the answer into `BUSY`) rather than a loan worked out
+from stale numbers. The amount is exactly the gap to $50,000. The second and third statements
+only follow a loan row with no ledger row yet, so all three happen or none do; a double click
+finds the player at $50,000, and the same op id twice is one loan.
 
 ## Accounts and tokens
 
-Logging in is typing a name. There is no password, on purpose: anyone who types a name gets
-that account. It's play money.
+Logging in is a name and a password. Names are first come, first served and case-insensitive
+(`COLLATE NOCASE`): a new name is created with the password it arrives with, a name that has
+a password needs it, and an account from before passwords (migration 0003) takes the first
+password it is given, which claims it from then on.
 
-`POST /casino/api/login {name}` creates the account if the name is free (names are
-case-insensitive through `COLLATE NOCASE`) and returns a signed token
-`v1.<payload>.<HMAC-SHA256>` carrying the account id and name. The Worker verifies it with
+`POST /casino/api/login {name, password}` does that and returns a signed token
+`v2.<payload>.<HMAC-SHA256>` carrying the account id and name. The Worker verifies it with
 `crypto.subtle.verify` on every request and WebSocket upgrade, strips any `x-casino-*`
 headers the client sent, and forwards the upgrade to the Durable Object with trusted ones.
-Durable Objects can only be reached through the Worker, so they never see a token. The token
-doesn't protect an account (the name does that, which is to say nothing); it binds a
-connection to an account id the server issued and keys the rate limits.
+Durable Objects can only be reached through the Worker, so they never see a token. v1 tokens
+came from the name-only login and are refused, so every session logs in once with a password.
 
-Login and account creation are rate limited per IP with the site's existing atomic D1
-counter (`auth_attempts`, migration 013).
+Passwords (4-64 characters, NFC-normalized) are hashed with PBKDF2-HMAC-SHA256 through
+WebCrypto: a random 16-byte salt per account and 100,000 iterations (the Workers cap), stored
+as `pbkdf2:<iterations>:<hex>` beside the salt in `pass_hash` / `pass_salt`, and compared with
+`crypto.subtle.timingSafeEqual`. Nothing logs a password and no hash leaves the Worker. A
+wrong password gets one answer whatever the account (`401 Wrong name or password.`).
+
+Every login attempt counts against 30 a minute per IP, and a new account against 10 an hour
+per IP (the `casino_rate` counter, one atomic statement per bump). Wrong passwords count
+against 20 per 15 minutes per IP and 60 per 15 minutes per name; past either, logins from
+that address or to that name get `429` without any password work until the window ends. A
+name takes more misses than one address can send, so nobody can lock a player out from a
+single connection.
 
 The client keeps the token in `sessionStorage`, so two tabs can be two different players, and
-remembers the last name in `localStorage` for a one-click "Continue as ...".
+remembers the last name (never the password) in `localStorage`: "Continue as ..." fills in the
+name and asks only for its password.
 
 ## CasinoFloor (one object, "main")
 

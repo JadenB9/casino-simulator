@@ -129,3 +129,88 @@
 .os-result.lose .os-result-mult { color: var(--os-ink-2); }
 .os-result-paid { font-size: 16px; color: var(--os-ink-2); }
 @keyframes os-pop { from { opacity: 0; scale: 0.85; } }
+
+/* ---- Added with Plinko, Dice, Limbo and Keno (additions only) ---- */
+
+/* Segmented choices: hover, and the option the tips recommend */
+.os-seg button:hover:not(:disabled):not(.on) { color: var(--os-ink); background: rgba(47, 69, 83, 0.6); }
+.os-seg button.tip-pick { box-shadow: inset 0 0 0 2px var(--focus, #f1d59a); }
+.os-seg.dense button { font-size: 13px; padding: 0; font-variant-numeric: tabular-nums; }
+
+/* A labelled panel block: its label row above a control */
+.os-group { display: grid; gap: 6px; }
+.os-group-head { display: flex; justify-content: space-between; align-items: baseline; }
+.os-group-note { font-size: 12px; color: var(--os-ink-3); }
+
+/* Typed numbers: multiplier, win chance, target, profit on win */
+.os-num { display: grid; gap: 6px; min-width: 0; }
+.os-num-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.os-num-note { font-size: 12px; color: var(--os-ink-3); white-space: nowrap; }
+.os-num-note.win { color: var(--os-win); }
+.os-num-note.lose { color: var(--os-lose); }
+.os-num-input {
+  flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: transparent; color: var(--os-ink);
+  font-family: var(--os-num); font-size: 22px; font-variant-numeric: tabular-nums;
+}
+.os-num.readonly .os-field { background: var(--os-card); border-color: var(--os-card); }
+.os-num.readonly .os-num-input { color: var(--os-ink-2); cursor: default; }
+.os-num-suffix { color: var(--os-ink-3); font-weight: 700; font-size: 16px; }
+.os-num-btn {
+  width: 32px; height: 32px; margin-right: -6px; border: 0; border-radius: 5px; background: var(--os-card);
+  color: var(--os-ink); font-size: 16px; font-weight: 700; cursor: pointer;
+}
+.os-num-btn:hover:not(:disabled) { background: var(--os-line); }
+.os-num-btn:disabled { color: var(--os-ink-3); cursor: default; }
+
+/* A small caption over a panel block: THIS BOARD, THIS SESSION */
+.os-caption { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--os-ink-3); }
+
+/* Key-value rows under the bet panel */
+.os-infobox { display: grid; gap: 8px; }
+.os-info { display: grid; margin: 0; padding: 2px 12px; background: var(--os-field); border-radius: 6px; }
+.os-info-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--os-panel); }
+.os-info-row:last-child { border-bottom: 0; }
+.os-info dt { font-size: 13px; color: var(--os-ink-3); font-weight: 600; }
+.os-info dd { margin: 0; font-family: var(--os-num); font-size: 18px; font-variant-numeric: tabular-nums; color: var(--os-ink); text-align: right; }
+.os-info dd.win { color: var(--os-win); }
+.os-info dd.lose { color: var(--os-lose); }
+
+/* Recent results, newest on the right */
+.os-strip { display: flex; justify-content: flex-end; gap: 6px; height: 34px; overflow: hidden; }
+.os-strip-item {
+  flex: none; display: grid; place-items: center; min-width: 64px; padding: 0 12px; border-radius: 17px;
+  background: var(--os-card); color: var(--os-ink-2); font-family: var(--os-num); font-size: 16px; font-variant-numeric: tabular-nums;
+}
+.os-strip-item.win { background: var(--os-win); color: var(--os-go-ink); }
+.os-strip-item.fresh { animation: os-strip-in 0.28s var(--ease, ease-out); }
+@keyframes os-strip-in { from { opacity: 0; translate: 22px 0; scale: 0.8; } }
+
+/* The session tally at the foot of the bet panel */
+.os-tally { display: grid; gap: 8px; margin-top: auto; }
+.os-tally .os-stat { padding: 8px 10px; }
+.os-tally .os-stat-value { font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.os-stat-value.win { color: var(--os-win); }
+.os-stat-value.lose { color: var(--os-lose); }
+
+/* Two plain buttons side by side in the panel (Auto Pick, Clear) */
+.os-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.os-pair .os-action { height: 44px; font-size: 15px; font-weight: 700; }
+
+/* The last few bets in the panel, newest first */
+.os-log { display: grid; gap: 6px; }
+.os-log-row {
+  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; align-items: baseline; padding: 6px 10px;
+  font-family: var(--os-num); font-size: 16px; font-variant-numeric: tabular-nums; color: var(--os-ink-2);
+}
+.os-log-row > :last-child { text-align: right; }
+.os-log-body { display: grid; gap: 2px; }
+.os-log-body .os-log-row { background: var(--os-field); border-radius: 4px; }
+.os-log-row.fresh { animation: os-log-in 0.25s var(--ease, ease-out); }
+@keyframes os-log-in { from { opacity: 0; translate: 0 -6px; } }
+.os-log-head { padding-top: 0; padding-bottom: 0; font-family: var(--os-font); font-size: 12px; font-weight: 600; color: var(--os-ink-3); }
+.os-log-row .win { color: var(--os-win); }
+.os-log-row .lose { color: var(--os-ink-3); }
+
+/* Panel parts that keep their size when the panel runs out of room (the log gives way first) */
+.os-fixed { flex-shrink: 0; }
+.os-log { min-height: 0; overflow: hidden; }

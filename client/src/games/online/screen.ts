@@ -195,3 +195,361 @@ export function actionButton(text: string, onClick: () => void, kind: 'go' | 'ca
   b.addEventListener('click', onClick);
   return b;
 }
+
+// ---------------------------------------------------------------------------------------------
+// Added with Plinko, Dice, Limbo and Keno (additions only; nothing above changes): a segmented
+// choice, a typed number field, a key-value list, the recent-results strip, the session tally,
+// a synthesized tone, the celebration threshold, and the site's bar for the desks' attract pictures.
+
+export interface SegOption<T> {
+  value: T;
+  label: string;
+  title?: string;
+}
+
+/** A segmented choice on the shared `os-seg` look: risk, rows, Classic/Low/Medium/High. */
+export class SegChoice<T extends string | number> {
+  readonly root = el('div', 'os-seg');
+  private readonly buttons = new Map<T, HTMLButtonElement>();
+  private current: T;
+
+  constructor(options: readonly SegOption<T>[], value: T, onPick: (value: T) => void) {
+    this.current = value;
+    for (const o of options) {
+      const b = el('button', '', o.label);
+      b.type = 'button';
+      if (o.title) b.title = o.title;
+      b.addEventListener('mousedown', (e) => e.preventDefault());
+      b.addEventListener('click', () => {
+        if (o.value === this.current) return;
+        this.set(o.value);
+        onPick(o.value);
+      });
+      this.buttons.set(o.value, b);
+      this.root.append(b);
+    }
+    this.set(value);
+  }
+
+  get value(): T {
+    return this.current;
+  }
+
+  /** Show `value` as the choice (no callback). */
+  set(value: T): void {
+    this.current = value;
+    for (const [v, b] of this.buttons) b.classList.toggle('on', v === value);
+  }
+
+  setEnabled(on: boolean): void {
+    for (const b of this.buttons.values()) b.disabled = !on;
+  }
+
+  /** Ring the option the tips recommend; null clears it. */
+  tip(value: T | null): void {
+    for (const [v, b] of this.buttons) b.classList.toggle('tip-pick', v === value);
+  }
+}
+
+export interface NumberFieldOptions {
+  label: string;
+  /** Printed after the number: '×', '%'. */
+  suffix?: string;
+  format: (value: number) => string;
+  value: number;
+  /** The typed number (already stripped to digits and a point), or omitted for a read-only field. */
+  onCommit?: (typed: number) => void;
+}
+
+/**
+ * A labelled number the player types (a multiplier, a win chance, a target) or only reads (the
+ * profit on a win). It commits on Enter or when it loses focus; the owner snaps the value and
+ * writes it back with set(), and anything that isn't a number puts the last value back.
+ */
+export class NumberField {
+  readonly root = el('div', 'os-num');
+  readonly input = el('input', 'os-num-input');
+  private readonly label = el('span', 'os-label');
+  private readonly note = el('span', 'os-num-note');
+  private readonly field = el('label', 'os-field');
+  private current: number;
+
+  constructor(private readonly opts: NumberFieldOptions) {
+    this.current = opts.value;
+    this.label.textContent = opts.label;
+    const head = el('div', 'os-num-head');
+    head.append(this.label, this.note);
+    this.input.type = 'text';
+    this.input.inputMode = 'decimal';
+    this.input.autocomplete = 'off';
+    this.input.spellcheck = false;
+    this.input.readOnly = !opts.onCommit;
+    if (!opts.onCommit) this.root.classList.add('readonly');
+    this.field.append(this.input);
+    if (opts.suffix) this.field.append(el('span', 'os-num-suffix', opts.suffix));
+    this.input.addEventListener('change', () => this.commit());
+    this.input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') this.input.blur();
+    });
+    this.root.append(head, this.field);
+    this.set(opts.value);
+  }
+
+  get value(): number {
+    return this.current;
+  }
+
+  set(value: number): void {
+    this.current = value;
+    this.input.value = this.opts.format(value);
+  }
+
+  setLabel(text: string): void {
+    this.label.textContent = text;
+  }
+
+  /** A few words on the right of the label ("98.70% at this bet"). */
+  setNote(text: string, tone: 'win' | 'lose' | null = null): void {
+    this.note.textContent = text;
+    this.note.className = `os-num-note${tone ? ` ${tone}` : ''}`;
+  }
+
+  /** A square button at the end of the field (swap over and under). */
+  addButton(text: string, title: string, onClick: () => void): HTMLButtonElement {
+    const b = el('button', 'os-num-btn', text);
+    b.type = 'button';
+    b.title = title;
+    b.addEventListener('mousedown', (e) => e.preventDefault());
+    b.addEventListener('click', (e) => {
+      e.preventDefault();
+      onClick();
+    });
+    this.field.append(b);
+    return b;
+  }
+
+  setEnabled(on: boolean): void {
+    this.input.disabled = !on;
+    for (const b of this.field.querySelectorAll('button')) b.disabled = !on;
+  }
+
+  private commit(): void {
+    const typed = Number(this.input.value.replace(/[^0-9.]/g, ''));
+    if (this.opts.onCommit && this.input.value.trim() !== '' && Number.isFinite(typed)) this.opts.onCommit(typed);
+    this.input.value = this.opts.format(this.current);
+  }
+}
+
+/** Label and value rows under the bet panel, under a small caption: a board's return, the chance of its top pay. */
+export class InfoList {
+  readonly root = el('div', 'os-infobox');
+  private readonly list = el('dl', 'os-info');
+  private readonly rows = new Map<string, { label: HTMLElement; value: HTMLElement }>();
+
+  constructor(caption?: string) {
+    if (caption) this.root.append(el('div', 'os-caption', caption));
+    this.root.append(this.list);
+  }
+
+  set(key: string, label: string, value: string, tone: 'win' | 'lose' | null = null): void {
+    let row = this.rows.get(key);
+    if (!row) {
+      const r = el('div', 'os-info-row');
+      row = { label: el('dt', ''), value: el('dd', '') };
+      r.append(row.label, row.value);
+      this.list.append(r);
+      this.rows.set(key, row);
+    }
+    row.label.textContent = label;
+    row.value.textContent = value;
+    row.value.className = tone ?? '';
+  }
+}
+
+/** The last few results along the top of a board, newest on the right: green paid more than the bet. */
+export class ResultStrip {
+  readonly root = el('div', 'os-strip');
+
+  constructor(private readonly size = 8) {}
+
+  push(text: string, win: boolean, fresh = true): void {
+    this.root.append(el('span', `os-strip-item${win ? ' win' : ''}${fresh ? ' fresh' : ''}`, text));
+    while (this.root.childElementCount > this.size) this.root.firstElementChild!.remove();
+  }
+
+  clear(): void {
+    this.root.replaceChildren();
+  }
+}
+
+/** Bets, wagered and profit since sitting down at this computer. */
+export class SessionTally {
+  readonly root = el('div', 'os-tally');
+  private bets = 0;
+  private wagered = 0;
+  private net = 0;
+  private readonly betsEl = el('span', 'os-stat-value', '0');
+  private readonly wageredEl = el('span', 'os-stat-value', '$0');
+  private readonly netEl = el('span', 'os-stat-value', '$0');
+
+  constructor() {
+    const stats = el('div', 'os-stats');
+    const stat = (label: string, value: HTMLElement) => {
+      const s = el('div', 'os-stat');
+      s.append(el('span', 'os-stat-label', label), value);
+      return s;
+    };
+    stats.append(stat('Bets', this.betsEl), stat('Wagered', this.wageredEl), stat('Profit', this.netEl));
+    this.root.append(el('div', 'os-caption', 'This session'), stats);
+  }
+
+  add(wagered: Cents, returned: Cents): void {
+    this.bets++;
+    this.wagered += wagered;
+    this.net += returned - wagered;
+    this.betsEl.textContent = this.bets.toLocaleString('en-US');
+    this.wageredEl.textContent = formatMoney(this.wagered);
+    this.netEl.textContent = formatMoney(this.net, { sign: true });
+    this.netEl.className = `os-stat-value${this.net > 0 ? ' win' : this.net < 0 ? ' lose' : ''}`;
+  }
+}
+
+/** Commit whatever is being typed on this page (a bet, a multiplier) before acting on it. */
+export function commitTyping(root: HTMLElement): void {
+  const a = document.activeElement;
+  if (a instanceof HTMLInputElement && root.contains(a)) a.blur();
+}
+
+/**
+ * A celebration only for a return that beats the stake by a real margin: ten times the bet
+ * and up is nice, a hundred big, a thousand huge. Anything less shows on the page and nowhere else.
+ */
+export function winTier(returned: Cents, bet: Cents): 'nice' | 'big' | 'huge' | null {
+  if (bet <= 0 || returned < bet * 10) return null;
+  if (returned >= bet * 1000) return 'huge';
+  return returned >= bet * 100 ? 'big' : 'nice';
+}
+
+/**
+ * One synthesized note through the site's master gain, so mute and volume cover it: a peg's tick,
+ * a keno pop, a win's chime. Silent until the page has had a gesture.
+ */
+export function siteTone(
+  sfx: { muted: boolean; audio: AudioContext; out: AudioNode },
+  freq: number,
+  ms: number,
+  opts: { type?: OscillatorType; gain?: number; at?: number; to?: number } = {},
+): void {
+  if (sfx.muted) return;
+  const ctx = sfx.audio;
+  if (ctx.state !== 'running') return;
+  const start = ctx.currentTime + (opts.at ?? 0) / 1000;
+  const end = start + ms / 1000;
+  const osc = ctx.createOscillator();
+  osc.type = opts.type ?? 'sine';
+  osc.frequency.setValueAtTime(freq, start);
+  if (opts.to) osc.frequency.exponentialRampToValueAtTime(opts.to, end);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, start);
+  g.gain.exponentialRampToValueAtTime(opts.gain ?? 0.05, start + 0.005);
+  g.gain.exponentialRampToValueAtTime(0.0001, end);
+  osc.connect(g).connect(sfx.out);
+  osc.start(start);
+  osc.stop(end + 0.02);
+}
+
+/**
+ * The site's top bar painted on a desk's attract picture (pc.ts attractTexture), so a row of
+ * desks reads as one site. Returns the y where the page below the bar starts.
+ */
+export function drawSiteBar(g: CanvasRenderingContext2D, w: number, title: string): number {
+  g.fillStyle = '#1a2c38';
+  g.fillRect(0, 0, w, 42);
+  g.fillStyle = '#2f4553';
+  g.fillRect(0, 42, w, 2);
+  g.textBaseline = 'middle';
+  g.textAlign = 'left';
+  g.font = '800 19px system-ui, sans-serif';
+  g.fillStyle = '#eef3f8';
+  g.fillText('HOUSE', 16, 22);
+  const x = 16 + g.measureText('HOUSE').width + 7;
+  g.font = '600 11px system-ui, sans-serif';
+  g.fillStyle = '#6f8196';
+  g.fillText('ORIGINALS', x, 23);
+  g.font = '700 18px system-ui, sans-serif';
+  g.fillStyle = '#eef3f8';
+  g.textAlign = 'right';
+  g.fillText(title, w - 16, 22);
+  g.textAlign = 'left';
+  return 44;
+}
+
+/** A block of the bet panel: a label (and an optional note on its right) over a control. */
+export function labelled(label: string, control: HTMLElement, note?: HTMLElement): HTMLElement {
+  const g = el('div', 'os-group');
+  const head = el('div', 'os-group-head');
+  head.append(el('span', 'os-label', label));
+  if (note) head.append(note);
+  g.append(head, control);
+  return g;
+}
+
+/** The last few bets at this computer, newest first: a pocket version of the site's My Bets table. */
+export class BetLog {
+  readonly root = el('div', 'os-log');
+  private readonly body = el('div', 'os-log-body');
+
+  constructor(caption: string, columns: readonly string[], private readonly size = 5) {
+    const head = el('div', 'os-log-row os-log-head');
+    for (const c of columns) head.append(el('span', '', c));
+    this.root.append(el('div', 'os-caption', caption), head, this.body);
+  }
+
+  /** One bet; the last cell (what came back) is coloured by `win`. */
+  push(cells: readonly string[], win: boolean, fresh = true): void {
+    const row = el('div', `os-log-row${fresh ? ' fresh' : ''}`);
+    cells.forEach((c, i) => row.append(el('span', i === cells.length - 1 ? (win ? 'win' : 'lose') : '', c)));
+    this.body.prepend(row);
+    while (this.body.childElementCount > this.size) this.body.lastElementChild!.remove();
+  }
+
+  clear(): void {
+    this.body.replaceChildren();
+  }
+}
+
+/**
+ * The bet panel on a desk's attract picture, down the left under drawSiteBar: labelled fields,
+ * then the green action button. Returns the panel's width, where the game's own picture starts.
+ */
+export function drawAttractPanel(g: CanvasRenderingContext2D, top: number, h: number, fields: readonly [string, string][], action: string): number {
+  const w = 132;
+  g.fillStyle = '#1a2c38';
+  g.fillRect(0, top, w, h - top);
+  g.textBaseline = 'middle';
+  g.textAlign = 'left';
+  let y = top + 18;
+  for (const [label, value] of fields) {
+    g.fillStyle = '#a7b4c6';
+    g.font = '600 11px system-ui, sans-serif';
+    g.fillText(label, 12, y);
+    g.fillStyle = '#0f1e29';
+    g.beginPath();
+    g.roundRect(10, y + 8, 112, 28, 4);
+    g.fill();
+    g.fillStyle = '#eef3f8';
+    g.font = '600 15px system-ui, sans-serif';
+    g.fillText(value, 18, y + 23);
+    y += 52;
+  }
+  g.fillStyle = '#1fd65f';
+  g.beginPath();
+  g.roundRect(10, y + 2, 112, 36, 5);
+  g.fill();
+  g.fillStyle = '#06210f';
+  g.font = '800 16px system-ui, sans-serif';
+  g.textAlign = 'center';
+  g.fillText(action, w / 2, y + 21);
+  g.textAlign = 'left';
+  return w;
+}

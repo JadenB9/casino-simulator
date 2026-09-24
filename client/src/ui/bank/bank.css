@@ -1,9 +1,10 @@
-/* Cashier: the three numbers that decide a loan, the bank's rule set like the sign over a cage
-   window, then one calm line saying where you stand. */
+/* Cashier: the three numbers that decide a top-up, the bank's rule set like the sign over a cage
+   window (the question, then the answer), then one calm line saying where you stand. */
 
 .bank-sheet { width: min(540px, 100%); }
 .bank-stats { margin-bottom: 20px; }
 .bank-rule { margin: 0; font-family: var(--serif); font-size: 17px; font-weight: 500; line-height: 1.5; letter-spacing: 0.03em; color: var(--ink); }
+.bank-rule span { display: block; }
 .bank-terms { margin: 6px 0 16px; }
 .bank-where { display: grid; margin: 0 0 14px; }
 .bank-where:empty { display: none; }
