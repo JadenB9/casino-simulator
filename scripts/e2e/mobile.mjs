@@ -152,10 +152,19 @@ for (const key of list) {
       await shot('login-typed');
     }
     await tap((await visible('.continue-btn')) ? '.continue-btn' : '.enter-btn');
-    await page.waitForSelector('.menu-item', { timeout: 30_000 });
+    await page.waitForSelector('.menu-item, .editor-panel.guided', { timeout: 30_000 });
     await sleep(900);
-    await shot('menu');
-    await tap('.menu-item >> nth=0');
+    if (await visible('.editor-panel.guided')) {
+      // a new name (a fresh local database) picks a look first, step by step, and walks straight in
+      await shot('pick-look');
+      for (let i = 0; i < 3; i++) {
+        await tap('.editor-panel .ed-buttons .btn.primary');
+        await sleep(600);
+      }
+    } else {
+      await shot('menu');
+      await tap('.menu-item >> nth=0');
+    }
     await page.waitForSelector('.hud', { timeout: 30_000 });
     await page.waitForFunction(() => document.documentElement.classList.contains('touch-ui') && !document.querySelector('.touch-layer')?.hidden, null, { timeout: 10_000 }).catch(() => fail('touch controls did not come up on the floor'));
     await sleep(1200);
@@ -269,7 +278,8 @@ for (const key of list) {
     const [sx, sy] = centre(await box('.touch-stick'));
     await drag([[[sx, sy], [sx, sy - 40]]], 200, 5000, () => visible('.touch-act'));
     const label = (await page.locator('.touch-act').textContent().catch(() => '')) ?? '';
-    if (!/visit/i.test(label)) {
+    // a banker at a teller window ("Bank"), or the cage itself ("Visit the cashier")
+    if (!/bank|visit/i.test(label)) {
       fail(`cashier: the action button says "${label}"`);
       return;
     }

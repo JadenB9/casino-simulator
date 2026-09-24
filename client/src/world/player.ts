@@ -25,7 +25,8 @@ const RUN = 4.8;
 /** The speeds the walk and run cycles were made for; the blend between them follows these. */
 const WALK_CYCLE = 1.75;
 const RUN_CYCLE = 3.9;
-const EYE = 1.5;
+/** The follow camera's target over the walker's feet (m). */
+export const EYE = 1.5;
 /** Radians per pixel: dragging (a hand on the button covers less ground), and held. */
 const DRAG_YAW = 0.0055;
 const DRAG_PITCH = 0.004;
@@ -154,7 +155,10 @@ export class Player {
     this.vel.set(0, 0);
     this.dist = this.camDist;
     this.syncCharacter();
-    this.placeCamera(1);
+    // While the controls are lent out (the look editor, the shop, a table) the camera is theirs:
+    // the floor's first hello lands during a new player's "Pick your look" and used to pull the
+    // camera off the dressing room onto the lobby. The next enabled frame places it anyway.
+    if (this.enabled) this.placeCamera(1);
   }
 
   get isEnabled(): boolean {
@@ -327,7 +331,9 @@ export class Player {
   private onKey = (e: KeyboardEvent): void => {
     if (isTyping(e)) return;
     if (e.type === 'keydown') {
-      if (!this.enabled) return;
+      // nothing walks while a panel holds the keyboard (a key typed into the map's panel still
+      // bubbles up to here)
+      if (!this.enabled || overlayCount() > 0) return;
       if (MOVE_KEYS.has(e.code)) {
         this.keys.add(e.code);
         if (e.code.startsWith('Arrow')) e.preventDefault();
@@ -398,8 +404,13 @@ export class Player {
   }
 
   private onOverlay = (open: number): void => {
-    if (open > 0) this.lend();
-    else this.giveBack();
+    if (open > 0) {
+      // the map, the emotes, a sheet: stop where you are rather than walk on blind behind it
+      this.keys.clear();
+      this.lend();
+    } else {
+      this.giveBack();
+    }
   };
 
   private onFocus = (): void => {

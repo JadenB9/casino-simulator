@@ -9,6 +9,20 @@ import { WALL, type FloorPlan } from './layout.ts';
 /** Things lower than this (a sign, a pendant, a lamp over a table) hang over a walker's head. */
 const HEAD = 1.2;
 
+/**
+ * What hangs over the walkers (a palm's fronds, a plant's leaves, a lamp over a table): nothing the
+ * follow camera bumps into while you walk, but a seated camera settling somewhere for a while
+ * should not end up inside a palm (life/sitting.ts). Camera-only boxes from the solids collide()
+ * leaves out, a little inside their outline.
+ */
+export function overhead(plan: FloorPlan, col: Collider): void {
+  for (const s of plan.solids) {
+    if (s.y0 < HEAD) continue;
+    const k = s.round ? 0.8 : 1;
+    col.box(s.x, s.z, s.w * k, s.d * k, s.yaw, s.y1, { walk: false, cam: true, bottom: s.y0 });
+  }
+}
+
 export function collide(plan: FloorPlan, col: Collider): void {
   const box = (axis: 'x' | 'z', c: number, a0: number, a1: number, y0: number, y1: number, walk: boolean) => {
     if (axis === 'x') col.box((a0 + a1) / 2, c, a1 - a0, WALL, 0, y1, { walk, cam: true, bottom: y0 });

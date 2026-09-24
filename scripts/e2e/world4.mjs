@@ -265,6 +265,10 @@ if (checks.includes('reach')) {
     const nz = Math.ceil((R.z1 - R.z0) / CELL);
     const free = new Uint8Array(nx * nz);
     const p = { x: 0, z: 0 };
+    // The waiters walk their rounds: one standing on a point of a round when the grid is taken
+    // would make that point look walled off (a different one every run).
+    const walking = (world.life?.waiters?.list ?? []).map((w) => w.m.col).filter((q) => q && q.walk);
+    for (const q of walking) q.walk = false;
     for (let j = 0; j < nz; j++) {
       for (let i = 0; i < nx; i++) {
         p.x = R.x0 + (i + 0.5) * CELL;
@@ -275,6 +279,7 @@ if (checks.includes('reach')) {
         if (Math.hypot(p.x - x, p.z - z) < 0.002) free[j * nx + i] = 1;
       }
     }
+    for (const q of walking) q.walk = true;
     const idx = (x, z) => {
       const i = Math.floor((x - R.x0) / CELL);
       const j = Math.floor((z - R.z0) / CELL);

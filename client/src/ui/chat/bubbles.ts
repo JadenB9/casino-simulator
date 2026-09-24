@@ -8,6 +8,7 @@
 import * as THREE from 'three';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import type { Character } from '../../world/contract.ts';
+import { fitOnScreen } from '../../world/onscreen.ts';
 import { BUBBLE_Y, EMOTE_S, OWN_BUBBLE_Y } from '../../world/emotes.ts';
 import { sayFor } from './model.ts';
 
@@ -81,6 +82,8 @@ export class SayBubbles {
       if (s.left < FADE_S) s.bubble.classList.add('leaving');
       if (cam) s.tag.visible = ch.root.getWorldPosition(_at).distanceTo(cam) <= RANGE;
       this.place(ch);
+      // someone right in front of the camera: keep their words on screen
+      if (this.camera && s.tag.visible) fitOnScreen(s.tag, s.bubble, this.camera, s.tag.element.classList.contains('lifted') ? 30 : s.own ? 8 : 20);
     }
     for (const [ch, until] of this.emoteUntil) if (until <= this.clock) this.emoteUntil.delete(ch);
   }

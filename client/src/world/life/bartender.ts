@@ -73,6 +73,17 @@ export class Bartender {
     app.openBarMenu();
   }
 
+  /**
+   * An order paid for before the floor went away, whose waiter gave up while nobody was here:
+   * still at the pickup, a waiter is called for it again; gone with a waiter who dropped it, or
+   * never made, it's made again.
+   */
+  retake(order: BarOrder): void {
+    const t = this.tickets.find((x) => x.order.id === order.id && x.phase !== 'done');
+    if (!t) this.take(order);
+    else if (t.phase === 'waiting' && !t.gone) t.phase = 'pass';
+  }
+
   /** A paid order: made next, then across the counter or to a waiter. */
   take(order: BarOrder): void {
     this.tickets.push({ order, phase: 'queued', t: 0, gone: false });

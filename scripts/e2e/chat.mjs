@@ -5,7 +5,8 @@
 // unread counts and previews on a closed dock, a bubble next to an emote, hiding chat, a private
 // lobby's own room, a phone-width box, and the server's mute. Screenshots go to <outDir>.
 // Usage: node scripts/e2e/chat.mjs [port] [outDir]   (PORT_BASE=<port> npm run dev first)
-// On a busy machine: BOOT_MS (loading the floor, default 5 min) and STEP_MS (the least any wait allows).
+// On a busy machine: BOOT_MS (loading the floor, default 5 min) and STEP_MS (the least any wait allows),
+// or GPU=1 to draw on the machine's GPU.
 
 import { chromium } from 'playwright';
 import { mkdirSync } from 'node:fs';
@@ -25,7 +26,8 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 /** A wait's timeout, stretched on a busy machine (STEP_MS). */
 const T = (ms) => ({ timeout: Math.max(ms, Number(process.env.STEP_MS ?? 0)) });
 
-const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+// GPU=1: the machine's GPU (two floors at once are slow on SwiftShader on a busy machine)
+const browser = await chromium.launch(process.env.GPU === '1' ? { channel: 'chromium', args: ['--ignore-gpu-blocklist'] } : { args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 
 async function player(name) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
@@ -41,10 +43,21 @@ async function player(name) {
   await page.fill('.name-input', name);
   if (await page.$('.pass-input')) await page.fill('.pass-input', 'casino-dev');
   await page.click('.enter-btn');
-  await page.waitForSelector('.menu-item', T(20_000));
-  await page.click('.menu-item >> nth=0');
+  await page.waitForSelector('.menu-item, .editor-panel.guided', T(20_000));
+  if (await page.$('.editor-panel.guided')) {
+    // a new name (a fresh local database) picks a look first, step by step, and walks straight in
+    for (let i = 0; i < 3; i++) {
+      await page.click('.editor-panel .ed-buttons .btn.primary');
+      await page.waitForTimeout(500);
+    }
+  } else {
+    await page.click('.menu-item >> nth=0');
+  }
   await page.waitForSelector('.hud', T(20_000));
   await page.waitForSelector('.chat-dock', T(10_000));
+  // Drag to look (Settings, Controls): a floor holding the mouse (Pointer Lock, which a GPU browser
+  // grants) would take every click meant for the chat's buttons.
+  await page.evaluate(() => window.casino.world.setMouse({ capture: false }));
   const id = await page.evaluate(() => window.casino.session.profile.id);
   return { page, name, id };
 }
@@ -182,6 +195,8 @@ try {
   await openLobby(b, 'bj-1');
   await b.page.fill('.lobby-pin-input', pin);
   await b.page.keyboard.press('Enter');
+  // the table's limits first, then Join this table (Enter again)
+  if (await b.page.waitForSelector('button:has-text("Join this table")', T(5_000)).then(() => true, () => false)) await b.page.keyboard.press('Enter');
   await a.page.waitForFunction(() => document.querySelectorAll('.party-member').length === 2, null, T(15_000));
   log(`lobby PIN ${pin}, both in`);
   check(await a.page.isVisible('#chat-tab-table') || (await a.page.$('#chat-tab-table:not([hidden])')) !== null, 'the Table tab appears at a lobby table');

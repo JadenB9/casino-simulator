@@ -7,14 +7,27 @@
 
 import * as THREE from 'three';
 import { el } from '../ui/kit.ts';
-import { isTyping } from '../ui/keyboard.ts';
+import { isTyping, overlayCount } from '../ui/keyboard.ts';
 import type { Player } from './player.ts';
 import type { WorldStation } from './stations.ts';
 import { playPoseWorld } from './stations.ts';
 import type { CashierPoint } from './contract.ts';
 
 const REACH = 1.6;
+/**
+ * A station within this much (m) of the nearest spot wins the prompt: at a video poker machine set
+ * into the bar the bartender's Order would otherwise always win (the counter is right there), and
+ * at a computer the desk chair's Sit took the place of playing it.
+ */
+const STATION_FIRST = 0.5;
 const FLY_IN = 0.9;
+/**
+ * Flying in to a seat and back out, the path rises this much per metre in the middle (at most
+ * ARC_MAX): a straight line from behind the player to a computer's screen went through the gaming
+ * chair's headrest for a frame.
+ */
+const ARC = 0.12;
+const ARC_MAX = 0.6;
 const FLY_OUT = 0.75;
 const AIM = 0.6;
 
@@ -46,7 +59,7 @@ export class Interact {
   /** The cage's own prompt; off while tellers at its windows take the customers (world/life/). */
   cashierPrompt = true;
   seated: WorldStation | null = null;
-  private fly: { from: THREE.Vector3; fromT: THREE.Vector3; to: THREE.Vector3; toT: THREE.Vector3; t: number; dur: number; done: () => void } | null = null;
+  private fly: { from: THREE.Vector3; fromT: THREE.Vector3; to: THREE.Vector3; toT: THREE.Vector3; t: number; dur: number; lift: number; done: () => void } | null = null;
   private readonly look = new THREE.Vector3();
 
   constructor(
@@ -100,6 +113,8 @@ export class Interact {
       f.t = Math.min(1, f.t + dt / f.dur);
       const k = f.t < 0.5 ? 4 * f.t ** 3 : 1 - (-2 * f.t + 2) ** 3 / 2;
       this.camera.position.lerpVectors(f.from, f.to, k);
+      // over whatever stands between (a gaming chair's back, a table's chair): an arc, not a line
+      this.camera.position.y += 4 * k * (1 - k) * f.lift;
       this.look.lerpVectors(f.fromT, f.toT, k);
       this.camera.lookAt(this.look);
       if (f.t >= 1) {
@@ -123,7 +138,7 @@ export class Interact {
     this.player.setEnabled(false);
     this.player.character.root.visible = false;
     const pose = playPoseWorld(s, seat);
-    this.flyTo(pose.position, pose.target, FLY_IN, () => {});
+    this.flyTo(pose.position, pose.target, FLY_IN, () => {}, ARC);
     for (const cb of this.enterCbs) cb(s);
   }
 
@@ -145,10 +160,16 @@ export class Interact {
     this.player.character.root.visible = true;
     const back = this.player.followPose();
     return new Promise((resolve) =>
-      this.flyTo(back.position, back.target, FLY_OUT, () => {
-        this.player.setEnabled(true);
-        resolve();
-      }),
+      this.flyTo(
+        back.position,
+        back.target,
+        FLY_OUT,
+        () => {
+          this.player.setEnabled(true);
+          resolve();
+        },
+        ARC,
+      ),
     );
   }
 
@@ -157,12 +178,14 @@ export class Interact {
     this.prompt.remove();
   }
 
-  private flyTo(to: THREE.Vector3, toT: THREE.Vector3, dur: number, done: () => void): void {
+  /** Fly the camera to a pose; `arc` (m per metre flown, at most ARC_MAX) lifts the middle of the path. */
+  private flyTo(to: THREE.Vector3, toT: THREE.Vector3, dur: number, done: () => void, arc = 0): void {
     const dir = new THREE.Vector3();
     this.camera.getWorldDirection(dir);
     const from = this.camera.position.clone();
     const fromT = from.clone().addScaledVector(dir, from.distanceTo(toT));
-    this.fly = { from, fromT, to: to.clone(), toT: toT.clone(), t: 0, dur, done };
+    const lift = Math.min(ARC_MAX, from.distanceTo(to) * arc);
+    this.fly = { from, fromT, to: to.clone(), toT: toT.clone(), t: 0, dur, lift, done };
   }
 
   /** The closest thing within reach and roughly in front of the player. */
@@ -178,8 +201,9 @@ export class Interact {
       const len = Math.hypot(dx, dz);
       // in front: within about 75 degrees of where the player faces (or practically touching)
       if (!any && len > 0.35 && (dx * fx + dz * fz) / len < 0.26) return;
-      if (!best || d < best.d) best = t;
+      if (!best || rank(t) < rank(best)) best = t;
     };
+    const rank = (t: Target) => (t.kind === 'spot' ? t.d + STATION_FIRST : t.d);
     for (const s of this.stations) {
       const a = s.anchor.position;
       const c = Math.cos(s.yaw);
@@ -229,7 +253,8 @@ export class Interact {
 
   private onKey = (e: KeyboardEvent): void => {
     if (isTyping(e)) return;
-    if (e.code === 'KeyE' && !e.repeat && !this.seated && !this.fly && this.player.isEnabled && this.current) {
+    // (a key typed into an open panel, the map say, still bubbles up to here: not for us)
+    if (e.code === 'KeyE' && !e.repeat && !this.seated && !this.fly && this.player.isEnabled && this.current && overlayCount() === 0) {
       e.preventDefault();
       const t = this.current;
       if (t.kind === 'station') this.enter(t.station);

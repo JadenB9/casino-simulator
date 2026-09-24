@@ -228,7 +228,9 @@ The players' seated cameras look over the table at the dealer, who frames it fro
 (`lifePoints(plan)` in life-points.ts: every seat that isn't a table's, the bar's two sides and its
 pickup, the teller windows, the boutique, the waiters' loops). npcs.ts leaves the bartender and the
 cashier to it (`new Staff(..., { skip: ['bartender', 'cashier'] })`). Its prompts come through
-`Interact.spots(provider)`: the nearest thing of all (a station, a seat, a waiter) gets "Press E".
+`Interact.spots(provider)`: the nearest thing of all (a station, a seat, a waiter) gets "Press E",
+and a station within half a metre of the nearest spot wins it (a video poker machine set into the
+bar over the bartender's Order, a computer over its own desk chair).
 
 - **Sit anywhere** (sitting.ts): "E · Sit" at any free seat; the character glides on, faces the
   way the seat faces and sits (`Person.sit(top)`), and the camera swings round behind and a little
@@ -237,7 +239,12 @@ cashier to it (`new Staff(..., { skip: ['bartender', 'cashier'] })`). Its prompt
   seat each, freed on stand, walking off, leaving or a second tab; a late second sitter is stood up
   with the floor's note ("Mia got there first."). Other players are drawn sitting on their seat
   (`RemotePlayers` `seatFor`) once their walk has reached it. A desk chair in the online lounge is
-  offered only while nobody plays at its computer; table seats stay the tables'.
+  its computer's: E there plays it (the seat is listed, and offered only while nobody plays at
+  its computer, but the computer's own prompt comes first); table seats stay the tables'. A seat
+  refused by the floor steps you back to where you came from. The camera settles behind the seat,
+  or where round it there's room (a wall, a palm's fronds or a lamp behind: collide.ts
+  `overhead()` for what hangs), never in the sitter's hair. Back from away or a dropped
+  connection, the seat is taken again once the floor has been told where you are.
 - **Waiters** (waiters.ts, routes.ts, rounds.ts, nav.ts, tray.ts): four in teal waistcoats with a
   tray on the left hand. Each walks a round (the building's loops, else rounds made from the pit,
   the poker room and the slots), all the same length and a share apart, timed by the server clock,

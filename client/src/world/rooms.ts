@@ -167,6 +167,8 @@ export interface SpotItem {
   tz: number;
   k: number;
   angle: number;
+  /** The light's colour (default: the warm incandescent the other rooms share). */
+  color?: string;
 }
 
 export interface RoomSpec {
@@ -498,7 +500,9 @@ export const ROOMS: RoomSpec[] = [
     z0: -31,
     x1: -9,
     z1: -19,
-    style: { floor: 'carpet-online', floorUv: 2.0, wall: 'wall-dark', wainscot: null, rail: 'chrome', ceiling: 3.2, ceilingMat: 'ceiling-dark', kind: 'panels', downlights: 0, cove: 'cool', ambient: { sky: '#aab4ff', ground: '#120a1c', k: 1.0 } },
+    // A gaming cafe: the neon and the screens set the mood, but the floor between the desks and
+    // the walls must still read (a cool fill, lifted off black, and a cool spot over each island).
+    style: { floor: 'carpet-online', floorUv: 2.0, wall: 'wall-dark', wainscot: null, rail: 'chrome', ceiling: 3.2, ceilingMat: 'ceiling-dark', kind: 'panels', downlights: 0, cove: 'cool', ambient: { sky: '#b8c2ff', ground: '#2e2250', k: 1.6 } },
     stations: [
       {
         kind: 'desks',
@@ -514,7 +518,10 @@ export const ROOMS: RoomSpec[] = [
     furniture: [{ kind: 'sofa', x: 3.2, z: 5.05, yaw: Math.PI }],
     fixtures: [{ kind: 'neon', text: 'HOUSE ORIGINALS', color: '#1fe07e', x: 0, y: 2.35, z: -5.85, ry: 0, w: 5.4, h: 0.62, font: 'Tilt Neon' }],
     hanging: [],
-    spots: [],
+    spots: [
+      { x: -4.6, z: 0.6, tx: -4.6, tz: -0.6, k: 22, angle: 1.0, color: '#cfdcff' },
+      { x: 4.6, z: 0.6, tx: 4.6, tz: -0.6, k: 22, angle: 1.0, color: '#cfdcff' },
+    ],
     aisles: [],
     plants: [
       [-10.4, 5.4],
