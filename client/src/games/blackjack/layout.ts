@@ -148,3 +148,20 @@ export function seatPose(seat: number): { position: [number, number, number]; ta
   const target = s.clone().lerp(DEALER_HAND, 0.5);
   return { position: [eye.x, eye.y, eye.z], target: [target.x, target.y, target.z] };
 }
+
+/**
+ * The camera for a solo player on several circles: behind the middle of them, far enough back and
+ * high enough that every circle, its cards and its split hands are in view with the dealer's cards
+ * across the top, like one player's seat pose widened to the row. One circle is its seat pose.
+ */
+export function spotsPose(spots: readonly number[]): { position: [number, number, number]; target: [number, number, number] } {
+  if (spots.length <= 1) return seatPose(spots[0] ?? 0);
+  const pts = spots.map((s) => spotAt(s));
+  const xs = pts.map((p) => p.x);
+  const span = Math.max(...xs) - Math.min(...xs);
+  const mid = pts.reduce((a, p) => a.add(p), new THREE.Vector3()).divideScalar(pts.length);
+  // The arc's own middle is further from the dealer than the circles either side of it.
+  const eye = new THREE.Vector3(mid.x, TOP_Y + 0.62 + 0.3 * span, mid.z + 0.4 + 0.3 * span);
+  const target = mid.clone().lerp(DEALER_HAND, 0.47);
+  return { position: [eye.x, eye.y, eye.z], target: [target.x, target.y, target.z] };
+}

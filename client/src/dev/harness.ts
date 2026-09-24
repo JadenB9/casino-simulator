@@ -41,7 +41,21 @@ export async function runHarness(params: URLSearchParams): Promise<void> {
   session.on(renderHud);
   renderHud();
 
-  const table = new TableSession({ kind: 'solo', game, variant, station: station.id }, module, stage, ui, sfx, (fn) => engine.onFrame(fn), (code) => toast(`Table closed (${code ?? ''})`, 'err'));
+  // The play pose can depend on the table (a solo player on several spots is framed wider), so
+  // take it again once the view has seen the table, as the app does when you sit down.
+  let posed = JSON.stringify(module.playPose(variant, 0));
+  const repose = (seat: number | null) => {
+    const next = module.playPose(variant, seat ?? 0);
+    if (JSON.stringify(next) === posed) return;
+    posed = JSON.stringify(next);
+    const at = stage.worldPose(next);
+    engine.camera.position.copy(at.position);
+    engine.camera.lookAt(at.target);
+    stage.setRest(next);
+  };
+  const table = new TableSession({ kind: 'solo', game, variant, station: station.id }, module, stage, ui, sfx, (fn) => engine.onFrame(fn), (code) => toast(`Table closed (${code ?? ''})`, 'err'), {
+    onTable: (snap) => repose(snap.you.seat),
+  });
   addEventListener('keydown', (e) => {
     if (e.target instanceof HTMLInputElement) return;
     if (table.view?.keydown?.(e)) e.preventDefault();

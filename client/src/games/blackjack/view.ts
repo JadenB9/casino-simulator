@@ -1,8 +1,13 @@
 // The blackjack table you sit at. Everything on it is drawn from the server's view: `sync()`
-// reconciles cards, chips and labels with it, keyed by seat/hand/card, so the table can always
+// reconciles cards, chips and labels with it, keyed by spot/hand/card, so the table can always
 // be redrawn from scratch after a reconnect. Events animate toward that same state first (cards
 // from the shoe, the hole card turning over, chips sliding to and from the rack) and `sync()`
 // then settles on it without a jump, because both use the positions in layout.ts.
+//
+// Spots are numbered like seats (the rule core's SPOT_OF_SEAT), so every key and position below
+// is a spot's. At a shared table you play your seat's spot; alone you can play up to five: the
+// hands picker in the tray says how many, your circles are ringed while you bet, and the hand
+// being played (or asked about insurance) has its circle lit.
 
 import * as THREE from 'three';
 import type { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
@@ -11,7 +16,7 @@ import type { GameEvent } from '../../../../shared/src/engine.ts';
 import type { Card } from '../../../../shared/src/cards.ts';
 import { BETTING_CHIPS, formatMoney, type BetLimits, type Cents } from '../../../../shared/src/money.ts';
 import type { BlackjackView, HandView, SpotView, BlackjackEvent } from '../../../../shared/src/games/blackjack/protocol.ts';
-import { handTotal, cardValue, type Move, type Outcome } from '../../../../shared/src/games/blackjack/rules.ts';
+import { handTotal, cardValue, MAX_SPOTS, type Move, type Outcome } from '../../../../shared/src/games/blackjack/rules.ts';
 import { BETTING_MS, INSURANCE_MS, TURN_MS } from '../../../../shared/src/games/blackjack/engine.ts';
 import { advise, insuranceAdvice } from '../../../../shared/src/games/blackjack/advice.ts';
 import { CardMesh, dealCard, flipCard } from '../../table/cards.ts';
@@ -25,9 +30,13 @@ import { serverNow } from '../../net/clock.ts';
 import { playFelt } from './felt.ts';
 import { discardStack } from './model.ts';
 import * as L from './layout.ts';
+import { SpotPicker } from '../multihand/picker.ts';
+import { glideTo, setSpotsInPlay } from '../multihand/frame.ts';
 import './blackjack.css';
 
 const SVG = 'http://www.w3.org/2000/svg';
+/** Between one spot's celebration and the next, so each banner has its moment. */
+const CELEBRATION_GAP_MS = 2100;
 
 const MOVE_KEYS: Record<Move, string> = { hit: 'H', stand: 'S', double: 'D', split: 'P', surrender: 'U' };
 const MOVE_LABEL: Record<Move, string> = { hit: 'Hit', stand: 'Stand', double: 'Double', split: 'Split', surrender: 'Surrender' };
@@ -112,6 +121,10 @@ export class BlackjackTable implements TableView {
   private readonly labels = new Map<string, { obj: CSS2DObject; el: HTMLElement }>();
   private readonly discard = discardStack();
   private readonly marker: THREE.Mesh;
+  /** Rings round your circles while you bet on several, and round the one whose hand is up. */
+  private readonly rings = new Map<number, THREE.Mesh>();
+  private readonly ringMat = new THREE.MeshBasicMaterial({ color: '#f1d59a', transparent: true, opacity: 0.4, depthWrite: false });
+  private readonly litMat = new THREE.MeshBasicMaterial({ color: '#ffe3a3', transparent: true, opacity: 0.9, depthWrite: false });
   private v: BlackjackView | null = null;
   /** The round as the animation has got through it (the view is where it ends up). */
   private spots: SpotView[] = [];
@@ -125,10 +138,16 @@ export class BlackjackTable implements TableView {
   private stack: Cents = 0;
   private names = new Map<number, string>();
   private ready = false;
-  private lastBet: Cents = 0;
+  /** The spots you bet on (one at a shared table), and what each had down last round, for Rebet. */
+  private mine: number[] = [];
+  private lastBets: Record<number, Cents> = {};
   private lastNet: Cents | null = null;
+  /** How many spots the camera was last framed for (null until the first view). */
+  private framed: number | null = null;
+  private disposed = false;
 
   private readonly tray: ChipTray;
+  private readonly picker: SpotPicker;
   private readonly actions = el('div', 'bj-actions panel');
   private readonly moveButtons = new Map<Move, HTMLButtonElement>();
   private readonly insure = el('div', 'bj-insure panel');
@@ -172,6 +191,8 @@ export class BlackjackTable implements TableView {
     });
     this.tray.select(BETTING_CHIPS[2]!);
     this.tray.root.classList.add('bj-tray');
+    this.picker = new SpotPicker(MAX_SPOTS, (n) => this.act({ type: 'spots', n }));
+    this.picker.mount(this.tray.root);
 
     for (const m of ['hit', 'stand', 'double', 'split', 'surrender'] as Move[]) {
       const b = button(MOVE_LABEL[m], () => this.decide({ type: m }), { key: MOVE_KEYS[m], cls: m === 'stand' ? 'primary' : '' });
@@ -201,8 +222,9 @@ export class BlackjackTable implements TableView {
 
     this.onPointer = (e: PointerEvent) => {
       if (e.target !== ctx.stage.engine.renderer.domElement) return;
-      const hit = ctx.stage.pick(e);
-      if (hit?.region === `spot:${this.seat}` && this.canBet()) this.act({ type: 'bet', amount: this.tray.selected.value });
+      const region = ctx.stage.pick(e)?.region ?? '';
+      const spot = this.mine.find((s) => region === `spot:${s}`);
+      if (spot !== undefined && this.canBet()) this.act({ type: 'bet', amount: this.tray.selected.value, spot });
     };
     addEventListener('pointerdown', this.onPointer);
     this.offTips = ctx.tips.subscribe(() => this.renderTip());
@@ -264,11 +286,33 @@ export class BlackjackTable implements TableView {
     this.ctx.link.act(a);
   }
 
-  /** A move or an insurance answer: once it's sent, its tip has served. */
+  /**
+   * A move or an insurance answer, aimed at the hand it's for (a second click that lands after that
+   * hand is done is refused rather than played on the next): once it's sent, its tip has served.
+   */
   private decide(a: { type: string; take?: boolean }): void {
+    const v = this.v;
+    let aimed: object = a;
+    if (a.type === 'insurance') {
+      const sp = this.asked();
+      if (sp) aimed = { ...a, spot: sp.seat };
+    } else if (v?.turn && this.owns(v.turn.seat)) {
+      aimed = { ...a, spot: v.turn.seat, hand: v.turn.hand };
+    }
     this.acted = true;
     this.renderTip();
-    this.act(a);
+    this.act(aimed);
+  }
+
+  /** A spot's hand is yours: your seat's at a shared table, every one at your own. */
+  private owns(spot: number): boolean {
+    return this.seat !== null && (this.mode === 'solo' || spot === this.seat);
+  }
+
+  /** Your spot the dealer is asking about insurance, first circle first. */
+  private asked(): SpotView | undefined {
+    const v = this.v;
+    return v?.phase === 'insurance' ? v.spots.find((s) => this.owns(s.seat) && s.insurance === 'offered') : undefined;
   }
 
   private canBet(): boolean {
@@ -277,16 +321,31 @@ export class BlackjackTable implements TableView {
     return v.phase === 'betting' || (this.mode === 'solo' && (v.phase === 'results' || v.phase === 'idle'));
   }
 
-  private myBet(): Cents {
+  /** What's in one of your circles now (nothing between rounds). */
+  private betOn(spot: number): Cents {
     const v = this.v;
-    return v && v.phase === 'betting' && this.seat !== null ? (v.bets[this.seat] ?? 0) : 0;
+    return v && v.phase === 'betting' ? (v.bets[spot] ?? 0) : 0;
   }
 
+  /** Everything you have in your circles now. */
+  private myBet(): Cents {
+    return this.mine.reduce((a, s) => a + this.betOn(s), 0);
+  }
+
+  /** What Rebet puts down: last round's bets on the circles you still play. */
+  private lastTotal(): Cents {
+    return this.mine.reduce((a, s) => a + (this.lastBets[s] ?? 0), 0);
+  }
+
+  /** Rebet: last round's bets again, circle by circle; ×2 doubles what's down (or last round's). */
   private rebet(times: 1 | 2): void {
     if (!this.canBet()) return;
-    const current = this.myBet();
-    if (times === 2 && current > 0) this.act({ type: 'bet', amount: current });
-    else if (current === 0 && this.lastBet > 0) this.act({ type: 'bet', amount: this.lastBet * times });
+    const down = this.mine.filter((s) => this.betOn(s) > 0);
+    if (times === 2 && down.length) {
+      for (const spot of down) this.act({ type: 'bet', amount: this.betOn(spot), spot });
+    } else if (down.length === 0) {
+      for (const spot of this.mine) if (this.lastBets[spot]) this.act({ type: 'bet', amount: this.lastBets[spot]! * times, spot });
+    }
   }
 
   private primary(): void {
@@ -297,7 +356,7 @@ export class BlackjackTable implements TableView {
       this.updateControls();
       return;
     }
-    if (this.myBet() === 0 && this.lastBet > 0) this.act({ type: 'bet', amount: this.lastBet });
+    if (this.myBet() === 0) this.rebet(1);
     this.act({ type: 'deal' });
   }
 
@@ -338,7 +397,11 @@ export class BlackjackTable implements TableView {
     this.acted = false;
     this.spots = structuredClone(v.spots);
     this.dealer = [...v.dealer];
-    if (this.seat !== null && v.last[this.seat]) this.lastBet = v.last[this.seat]!;
+    this.mine = v.mine ?? (this.seat !== null ? [this.seat] : []);
+    // Rebet repeats last round as it was: only the circles that had a bet.
+    const last = Object.entries(v.last).filter(([spot]) => this.owns(Number(spot)));
+    if (last.length) this.lastBets = Object.fromEntries(last);
+    this.frame();
 
     const keepCards = new Set<string>();
     v.dealer.forEach((card, i) => {
@@ -422,6 +485,48 @@ export class BlackjackTable implements TableView {
     if (s.amount !== amount) s.set(amount);
     s.position.copy(pos);
     return s;
+  }
+
+  /**
+   * The camera takes in every circle you play: the app flies to the module's play pose when you sit
+   * down (it asks after this view has seen the table), and a change of count at the table glides.
+   */
+  private frame(): void {
+    const n = this.mode === 'solo' ? Math.max(1, this.mine.length) : 1;
+    setSpotsInPlay('blackjack', n);
+    if (this.framed !== null && this.framed !== n && !this.disposed) {
+      void glideTo(this.ctx.stage, n > 1 ? L.spotsPose(this.mine) : L.seatPose(this.seat ?? 0));
+    }
+    this.framed = n;
+  }
+
+  /**
+   * Rings on the felt: faint ones round your circles while you bet on several (so you can see which
+   * are yours), and a bright one round the circle whose hand is being played or asked about.
+   */
+  private renderRings(): void {
+    const v = this.v;
+    const want = new Map<number, THREE.Material>();
+    if (v && this.mode === 'solo' && this.mine.length > 1 && this.canBet()) for (const s of this.mine) want.set(s, this.ringMat);
+    const up = v?.phase === 'play' && v.turn && this.owns(v.turn.seat) ? v.turn.seat : this.asked()?.seat;
+    if (up !== undefined && this.mine.length > 1) want.set(up, this.litMat);
+    for (const [spot, mat] of want) {
+      let ring = this.rings.get(spot);
+      if (!ring) {
+        ring = new THREE.Mesh(new THREE.RingGeometry(L.SPOT_R + 0.011, L.SPOT_R + 0.017, 64), mat);
+        ring.rotation.x = -Math.PI / 2;
+        ring.position.copy(L.spotAt(spot, L.TOP_Y + 0.0014));
+        this.root.add(ring);
+        this.rings.set(spot, ring);
+      }
+      ring.material = mat;
+    }
+    for (const [spot, ring] of this.rings) {
+      if (want.has(spot)) continue;
+      ring.removeFromParent();
+      ring.geometry.dispose();
+      this.rings.delete(spot);
+    }
   }
 
   private dim(m: CardMesh, on: boolean): void {
@@ -514,30 +619,35 @@ export class BlackjackTable implements TableView {
     if (v.shoe.lastHand) put('lasthand', 'bj-note', 'LAST HAND', L.SHOE_MOUTH.clone().setY(L.TOP_Y + 0.13));
     for (const key of [...this.labels.keys()]) if (!keep.has(key)) this.dropLabel(key);
 
-    // The ring under whichever hand is being played.
-    const turn = v.phase === 'play' ? v.turn : null;
+    // The ring under whichever hand is being played (or, on several spots, asked about insurance).
+    const asked = this.mine.length > 1 ? this.asked() : undefined;
+    const turn = v.phase === 'play' ? v.turn : asked ? { seat: asked.seat, hand: 0 } : null;
     const sp = turn ? v.spots.find((s) => s.seat === turn.seat) : undefined;
     this.marker.visible = !!(turn && sp);
     if (turn && sp) this.marker.position.copy(L.handAnchor(turn.seat, turn.hand, sp.hands.length)).setY(L.TOP_Y + 0.0015);
+    this.renderRings();
   }
 
   private updateControls(): void {
     const v = this.v;
-    const me = this.seat;
     const betting = this.canBet();
     this.tray.root.hidden = !betting;
+    this.picker.show(this.mode === 'solo');
+    this.picker.set(Math.max(1, this.mine.length));
     if (betting) {
       const bet = this.myBet();
+      const bets = this.mine.map((s) => this.betOn(s)).filter((b) => b > 0);
+      const again = this.lastTotal();
       // Ready works without a bet too: sitting a round out still lets the others' hand go.
       if (this.mode === 'multi') this.tray.setPrimary(this.ready ? 'Ready ✓' : 'Ready', true);
-      else if (bet === 0 && this.lastBet > 0) this.tray.setPrimary(`Deal ${formatMoney(this.lastBet)}`, this.lastBet <= this.stack);
-      else this.tray.setPrimary('Deal', bet >= this.limits.min);
+      else if (bet === 0 && again > 0) this.tray.setPrimary(`Deal ${formatMoney(again)}`, again <= this.stack);
+      else this.tray.setPrimary('Deal', bets.length > 0 && bets.every((b) => b >= this.limits.min));
     }
 
-    const turn = v && v.phase === 'play' && v.turn && v.turn.seat === me ? v.turn : null;
+    const turn = v && v.phase === 'play' && v.turn && this.owns(v.turn.seat) ? v.turn : null;
     this.actions.hidden = !turn;
     if (turn && v) {
-      const spot = v.spots.find((s) => s.seat === me)!;
+      const spot = v.spots.find((s) => s.seat === turn.seat)!;
       const hand = spot.hands[turn.hand]!;
       for (const [m, b] of this.moveButtons) {
         const cost = m === 'double' ? hand.bet : m === 'split' ? spot.base : 0;
@@ -546,10 +656,10 @@ export class BlackjackTable implements TableView {
       }
     }
 
-    const spot = v && me !== null ? v.spots.find((s) => s.seat === me) : undefined;
-    const offered = v?.phase === 'insurance' && spot?.insurance === 'offered';
-    this.insure.hidden = !offered;
-    if (offered && spot) {
+    // Each of your spots is asked on its own, in the order they play; its circle is lit meanwhile.
+    const spot = this.asked();
+    this.insure.hidden = !spot;
+    if (spot) {
       const even = isNatural(spot.hands[0]!);
       this.insureLabel.textContent = even ? 'Even money?' : 'Insurance?';
       this.insureYes.firstChild!.textContent = even ? `Even money ${formatMoney(spot.base, { sign: true })}` : `Insure ${formatMoney(spot.base / 2)}`;
@@ -557,6 +667,7 @@ export class BlackjackTable implements TableView {
       this.insureYes.disabled = !even && spot.base / 2 > this.stack;
     }
 
+    this.renderRings();
     this.renderMeters();
     this.placeTimer();
     this.renderTip();
@@ -572,10 +683,11 @@ export class BlackjackTable implements TableView {
     let text: string | null = null;
     let pick: HTMLButtonElement | null = null;
     if (this.ctx.tips.on && v && !this.acted) {
-      const spot = this.seat !== null ? v.spots.find((s) => s.seat === this.seat) : undefined;
+      const asked = this.asked();
+      const spot = asked ?? (v.turn ? v.spots.find((s) => s.seat === v.turn!.seat) : undefined);
       const up = v.dealer[0];
-      if (!this.insure.hidden && spot) {
-        text = insuranceAdvice(isNatural(spot.hands[0]!));
+      if (!this.insure.hidden && asked) {
+        text = insuranceAdvice(isNatural(asked.hands[0]!));
         pick = this.insureNo;
       } else if (!this.actions.hidden && spot && v.turn && up) {
         const open = (m: Move) => !this.moveButtons.get(m)!.disabled;
@@ -590,8 +702,8 @@ export class BlackjackTable implements TableView {
 
   private renderMeters(): void {
     const v = this.v;
-    const spot = v && this.seat !== null ? v.spots.find((s) => s.seat === this.seat) : undefined;
-    const onTable = v?.phase === 'betting' ? this.myBet() : spot && v?.phase !== 'results' ? spot.wagered : 0;
+    const live = v && v.phase !== 'results' ? v.spots.filter((s) => this.owns(s.seat)).reduce((a, s) => a + s.wagered, 0) : 0;
+    const onTable = v?.phase === 'betting' ? this.myBet() : live;
     const cells: [string, string, string][] = [
       ['Chips', formatMoney(this.stack), ''],
       ['Bet', formatMoney(onTable), ''],
@@ -750,7 +862,6 @@ export class BlackjackTable implements TableView {
   }
 
   private async animate(e: BlackjackEvent, next: BlackjackView): Promise<void> {
-    const me = this.seat;
     switch (e.type) {
       case 'betting':
         if (this.cards.size || this.stacks.size) await this.collect();
@@ -777,7 +888,7 @@ export class BlackjackTable implements TableView {
           }
         } else if (before > 0) {
           await this.slideAway(key, L.playerRail(e.seat), 300);
-          if (e.reason === 'min' && e.seat === me) this.ctx.kit.toast(`The table minimum is ${formatMoney(this.limits.min)}: your bet came back.`);
+          if (e.reason === 'min' && this.owns(e.seat)) this.ctx.kit.toast(`The table minimum is ${formatMoney(this.limits.min)}: your bet came back.`);
         }
         break;
       }
@@ -821,8 +932,9 @@ export class BlackjackTable implements TableView {
         break;
       }
       case 'insurance': {
-        const mine = me !== null ? this.spots.find((s) => s.seat === me) : undefined;
-        this.say(mine && isNatural(mine.hands[0]!) ? 'Even money?' : 'Insurance?', 3000);
+        // One spot holding a blackjack is asked for even money; several are asked one by one.
+        const mine = this.spots.filter((s) => this.owns(s.seat));
+        this.say(mine.length === 1 && isNatural(mine[0]!.hands[0]!) ? 'Even money?' : 'Insurance?', 3000);
         break;
       }
       case 'insured': {
@@ -869,10 +981,10 @@ export class BlackjackTable implements TableView {
       }
       case 'turn':
         this.liveTurn(e.seat, e.hand);
-        if (e.seat === me) this.ctx.sfx.play('chip-lay', { volume: 0.25, rate: 1.6 });
+        if (this.owns(e.seat)) this.ctx.sfx.play('chip-lay', { volume: 0.25, rate: 1.6 });
         break;
       case 'stand':
-        if (e.auto && e.seat === me) this.ctx.kit.toast('Time ran out: you stand.');
+        if (e.auto && this.owns(e.seat)) this.ctx.kit.toast('Time ran out: you stand.');
         break;
       case 'double': {
         const sp = this.spotOf(e.seat, next);
@@ -934,9 +1046,9 @@ export class BlackjackTable implements TableView {
         await wait(e.drew ? 500 : 250);
         break;
       case 'done': {
-        const mine = me !== null ? next.spots.find((s) => s.seat === me) : undefined;
-        if (mine) {
-          this.lastNet = mine.returned - mine.wagered;
+        const mine = next.spots.filter((s) => this.owns(s.seat));
+        if (mine.length) {
+          this.lastNet = mine.reduce((a, s) => a + s.returned - s.wagered, 0);
           this.celebrateRound(mine);
         }
         break;
@@ -987,16 +1099,23 @@ export class BlackjackTable implements TableView {
   }
 
   /**
-   * Your round's moment, if it had one, with light under the hands that made it: one light under
-   * them all, since split hands lie side by side and two would overlap into a bright seam.
+   * Each of your spots' moments, if it had one, with light under the hands that made it: one light
+   * under them all, since split hands lie side by side and two would overlap into a bright seam.
+   * Several spots take turns, in the order they played, so each banner is read on its own.
    */
-  private celebrateRound(sp: SpotView): void {
-    const found = roundMoment(sp);
-    if (!found) return;
-    const cards = found.hands.flatMap((hi) => sp.hands[hi]!.cards.map((_, ci) => this.cards.get(`c:${sp.seat}:${hi}:${ci}`)).filter((m): m is CardMesh => !!m));
-    const stand = handGlow(cards, L.TOP_Y + 0.0013);
-    celebrate(this.ctx, { ...found.m, glow: stand ? [stand] : [] });
-    dropGlow(stand);
+  private celebrateRound(spots: SpotView[]): void {
+    const moments = spots.map((sp) => ({ sp, found: roundMoment(sp) })).filter((x) => x.found !== null);
+    moments.forEach(({ sp, found }, i) => {
+      const show = () => {
+        if (this.disposed || !found) return;
+        const cards = found.hands.flatMap((hi) => (sp.hands[hi]?.cards ?? []).map((_, ci) => this.cards.get(`c:${sp.seat}:${hi}:${ci}`)).filter((m): m is CardMesh => !!m));
+        const stand = handGlow(cards, L.TOP_Y + 0.0013);
+        celebrate(this.ctx, { ...found.m, glow: stand ? [stand] : [] });
+        dropGlow(stand);
+      };
+      if (i === 0) show();
+      else setTimeout(show, i * CELEBRATION_GAP_MS);
+    });
   }
 
   private liveTurn(seat: number, hand: number): void {
@@ -1007,6 +1126,10 @@ export class BlackjackTable implements TableView {
   }
 
   dispose(): void {
+    this.disposed = true;
+    for (const ring of this.rings.values()) ring.geometry.dispose();
+    this.ringMat.dispose();
+    this.litMat.dispose();
     removeEventListener('pointerdown', this.onPointer);
     this.offTips();
     this.lowerBanner();
