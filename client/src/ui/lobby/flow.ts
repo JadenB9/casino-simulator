@@ -351,8 +351,10 @@ class TableFlow {
     const pips = el('span', 'lb-pips');
     for (let i = 0; i < l.max; i++) pips.append(el('span', i < l.players ? 'lb-pip on' : 'lb-pip'));
     seats.append(pips, el('span', 'n', `${l.players}/${l.max}`));
-    const limits = el('span', 'lobby-limits-cell', l.limits ? limitsLabel(this.opts.game, l.limits, true) : '');
-    if (l.limits) limits.title = limitsLabel(this.opts.game, l.limits);
+    // in full when it fits the column ("$25–$2,500"), short when it doesn't ("$1K–$100K")
+    const range = l.limits ? limitsLabel(this.opts.game, l.limits) : '';
+    const limits = el('span', 'lobby-limits-cell', range.length <= 11 ? range : limitsLabel(this.opts.game, l.limits!, true));
+    if (range) limits.title = range;
     b.append(host, limits, seats, el('span', 'lobby-go', full ? 'Full' : 'Join'));
     const said = l.limits ? `, limits ${limitsLabel(this.opts.game, l.limits)}` : '';
     b.setAttribute('aria-label', `${l.leader || 'Empty'} table${said}, ${l.players} of ${l.max} seats${l.started ? ', in play' : ''}${full ? ', full' : ''}`);

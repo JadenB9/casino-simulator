@@ -10,12 +10,14 @@
 // Part 2, solo tables in the dev harness at chosen limits: Max at blackjack, War, Three Card,
 // baccarat, roulette, Big Six, Sic Bo and craps, and Hold'em's All-in, with a screenshot of each.
 //
-// Usage: node scripts/e2e/limits.mjs [port] [outDir]   (PORT_BASE=<port> npm run dev first)
+// Usage: node scripts/e2e/limits.mjs [port] [outDir] [lobby|<game>...]   (PORT_BASE=<port> npm run dev first)
+// With no parts named, all of them run.
 
 import { chromium } from 'playwright';
 import { mkdirSync } from 'node:fs';
 
-const [port = '5173', out = '/tmp/casino-limits'] = process.argv.slice(2);
+const [port = '5173', out = '/tmp/casino-limits', ...only] = process.argv.slice(2);
+const wanted = (part) => only.length === 0 || only.includes(part);
 mkdirSync(out, { recursive: true });
 const base = process.env.BASE ?? `http://localhost:${port}`;
 // Fixed names so reruns log back in: the API allows only a few new accounts per hour from one address.
@@ -43,6 +45,8 @@ async function newPage(name) {
     for (const k of Object.keys(localStorage)) if (k.startsWith('casino.limits.')) localStorage.removeItem(k);
   });
   const page = await ctx.newPage();
+  // software rendering on a busy machine: every step gets room
+  page.setDefaultTimeout(120_000);
   page.on('console', (m) => {
     if (m.type() === 'error' && !/404|Failed to load resource/.test(m.text())) errors.push(`${name}: ${m.text()}`);
   });
@@ -113,7 +117,7 @@ const tryAct = (page, action) =>
 // ---------------------------------------------------------------------------------------------
 // Part 1
 
-try {
+if (wanted('lobby')) try {
   const a = await player(`lim_al_${tag}`);
   const b = await player(`lim_bo_${tag}`);
   log(`logged in ${a.name} and ${b.name}`);
@@ -161,7 +165,7 @@ try {
   await b.page.waitForSelector(row, { timeout: 15_000 });
   const cell = (await b.page.textContent(`${row} .lobby-limits-cell`)).trim();
   const said = await b.page.getAttribute(row, 'aria-label');
-  check(cell === '$30–$3K' && said.includes('limits $30–$3,000'), `Bob sees the limits before joining: "${cell}", "${said}"`);
+  check(cell === '$30–$3,000' && said.includes('limits $30–$3,000'), `Bob sees the limits before joining: "${cell}", "${said}"`);
   await b.page.waitForTimeout(300);
   await shot(b.page, 'limits-3-list');
   await b.page.click(row);
@@ -275,6 +279,7 @@ const solo = [
 ];
 
 for (const [game, limits, buyIn, run, want] of solo) {
+  if (!wanted(game)) continue;
   try {
     const page = await harness(game, limits, buyIn);
     const got = await run(page);
@@ -286,7 +291,7 @@ for (const [game, limits, buyIn, run, want] of solo) {
 }
 
 // Hold'em: All-in and Max in the action bar at $1/$2
-try {
+if (wanted('holdem')) try {
   const page = await harness('holdem', '100-200', 200);
   await page.waitForSelector('.he-bar.he-live', { timeout: 60_000 });
   await page.waitForTimeout(400);
