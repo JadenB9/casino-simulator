@@ -11,6 +11,7 @@ import { closeWith, corsHeaders, fail, json, originAllowed, readJson } from './h
 import { bearer, signToken, verifyToken, type Claims } from './auth.ts';
 import { bumpRate, escrowsOf, getAccount, loadProfile, loginAccount, setLook } from './db.ts';
 import { takeLoan } from './transfer.ts';
+import { shopApi } from './shop.ts';
 import { leaderboard } from './leaderboard.ts';
 import type { CasinoFloor } from './floor/index.ts';
 import type { CasinoTable } from './table/host.ts';
@@ -90,13 +91,14 @@ async function handleApi(request: Request, env: Env, route: string, cors: Record
   if (route === 'me/look' && request.method === 'PUT') {
     const look = parseLook((await readJson(request, 1024) as { look?: unknown } | null)?.look);
     if (!look) return fail(400, 'BAD_REQUEST', "That look isn't valid.", cors);
-    await setLook(env.DB, claims.a, look);
+    const stored = await setLook(env.DB, claims.a, look, now);
+    if ('error' in stored) return fail(403, 'NOT_ELIGIBLE', stored.error, cors);
     try {
-      await floor(env).playerLook(claims.a, look);
+      await floor(env).playerLook(claims.a, stored.look);
     } catch (err) {
       console.error('floor look update failed', err);
     }
-    return json({ look }, 200, cors);
+    return json({ look: stored.look }, 200, cors);
   }
 
   if (route === 'bank/loan' && request.method === 'POST') {
@@ -136,6 +138,9 @@ async function handleApi(request: Request, env: Env, route: string, cors: Record
     }
     return json({ tableId: found.tableId, game: found.game } satisfies JoinByPinResponse, 200, cors);
   }
+
+  // The boutique and the bar (shop.ts): paid from the balance, never from chips on tables.
+  if (route === 'shop' || route.startsWith('shop/') || route.startsWith('bar/')) return shopApi(request, env, route, claims.a, cors);
 
   return fail(404, 'NOT_FOUND', 'Not here.', cors);
 }

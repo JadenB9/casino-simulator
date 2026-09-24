@@ -2,6 +2,7 @@
 
 import { STARTING_BALANCE } from '../../shared/src/money.ts';
 import { lookFromJson, type Look } from '../../shared/src/look.ts';
+import { HOLD_MS, ITEM_KINDS, shopItem } from '../../shared/src/items.ts';
 import type { GameId, } from '../../shared/src/engine.ts';
 import type { GameStats, Profile } from '../../shared/src/protocol.ts';
 import { CATALOG, isGameId } from '../../shared/src/games/catalog.ts';
@@ -52,8 +53,43 @@ export async function getAccount(db: D1Database, id: number): Promise<AccountRow
   return (await db.prepare(`SELECT * FROM casino_accounts WHERE id = ?1`).bind(id).first<AccountRow>()) ?? null;
 }
 
-export async function setLook(db: D1Database, id: number, look: Look): Promise<void> {
-  await db.prepare(`UPDATE casino_accounts SET look = ?2 WHERE id = ?1`).bind(id, JSON.stringify(look)).run();
+/**
+ * Store a look, keeping only what this account may wear (wornLook). A look wearing a shop item
+ * the account doesn't own is refused whole: nothing is stored and the reason comes back.
+ */
+export async function setLook(db: D1Database, id: number, look: Look, now = Date.now()): Promise<{ look: Look } | { error: string }> {
+  const worn = await wornLook(db, id, look, now);
+  if ('look' in worn) await db.prepare(`UPDATE casino_accounts SET look = ?2 WHERE id = ?1`).bind(id, JSON.stringify(worn.look)).run();
+  return worn;
+}
+
+/**
+ * Check a look against what the account has paid for. Every shop item on it must be owned (an
+ * error names the first that isn't). A held bar order stays only while it is this account's own
+ * paid order, of that item, and still in hand; its end time comes from when the order was paid,
+ * whatever the client says, and an order that has run out is simply dropped.
+ */
+export async function wornLook(db: D1Database, accountId: number, look: Look, now: number): Promise<{ look: Look } | { error: string }> {
+  const wearing = ITEM_KINDS.flatMap((k) => (look[k] ? [look[k]] : []));
+  if (wearing.length === 0 && !look.held) return { look };
+  const [owned, order] = await db.batch([
+    db.prepare(`SELECT item FROM casino_items WHERE account_id = ?1`).bind(accountId),
+    db.prepare(`SELECT item, created_at FROM casino_orders WHERE op_id = ?1`).bind(orderKey(accountId, look.held?.order ?? '')),
+  ]);
+  const mine = new Set((owned!.results as { item: string }[]).map((r) => r.item));
+  const missing = wearing.find((id) => !mine.has(id));
+  if (missing) return { error: `You don't own the ${shopItem(missing)?.name ?? 'item'} yet.` };
+  if (!look.held) return { look };
+  const { held, ...rest } = look;
+  const paid = (order!.results as { item: string; created_at: number }[])[0];
+  const until = paid ? paid.created_at + HOLD_MS : 0;
+  if (!paid || paid.item !== held.item || until <= now) return { look: rest };
+  return { look: { ...rest, held: { ...held, until } } };
+}
+
+/** Where a bar order is kept: the account is part of the key, so one player's op never matches another's. */
+export function orderKey(accountId: number, op: string): string {
+  return `bar:${accountId}:${op}`;
 }
 
 export interface EscrowRow {

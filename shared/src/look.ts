@@ -1,6 +1,8 @@
 // A character's appearance. Stored as JSON on the account, sent to everyone on the floor, and
 // drawn by the world from the outfit models. Every field is checked before it is stored.
 
+import { ITEM_KINDS, barItem, isOp, itemOfKind } from './items.ts';
+
 export const BODIES = ['m', 'f'] as const;
 export type Body = (typeof BODIES)[number];
 
@@ -22,6 +24,25 @@ export interface Look {
   top: string;
   bottom: string;
   shoes: string;
+  // The boutique and the bar (items.ts), all optional. The server keeps a shop item only if the
+  // account owns it, and a held order only while it is a recent paid one.
+  chain?: string;
+  grill?: string;
+  /** Special clothes: they dress the outfit model in their own cloth. */
+  clothes?: string;
+  watch?: string;
+  shades?: string;
+  hat?: string;
+  /** A bar order in your right hand. */
+  held?: Held;
+}
+
+export interface Held {
+  item: string;
+  /** The order's op id (BarOrder.id). */
+  order: string;
+  /** Server time it leaves your hand; everyone stops drawing it then. */
+  until: number;
 }
 
 export const DEFAULT_LOOK: Look = {
@@ -49,7 +70,7 @@ export function parseLook(raw: unknown): Look | null {
   for (const k of ['hair', 'top', 'bottom', 'shoes'] as const) {
     if (typeof o[k] !== 'string' || !HEX.test(o[k] as string)) return null;
   }
-  return {
+  const look: Look = {
     v: 1,
     body,
     outfit: o.outfit,
@@ -60,6 +81,16 @@ export function parseLook(raw: unknown): Look | null {
     bottom: (o.bottom as string).toLowerCase(),
     shoes: (o.shoes as string).toLowerCase(),
   };
+  // Worn items are kept when they name an item of the right kind and dropped otherwise, rather
+  // than failing the whole look: a stored look outlives an item leaving the catalog.
+  for (const kind of ITEM_KINDS) {
+    if (itemOfKind(o[kind], kind)) look[kind] = o[kind] as string;
+  }
+  const held = o.held as Record<string, unknown> | undefined;
+  if (held && typeof held === 'object' && barItem(held.item) && isOp(held.order) && Number.isSafeInteger(held.until) && (held.until as number) > 0) {
+    look.held = { item: held.item as string, order: held.order as string, until: held.until as number };
+  }
+  return look;
 }
 
 /** Parse stored JSON, falling back to the default look for anything missing or broken. */
