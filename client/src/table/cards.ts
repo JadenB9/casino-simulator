@@ -28,6 +28,8 @@ async function raster(url: string): Promise<THREE.Texture> {
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 8;
+  // every table's cards draw from these: a table leaving (TableStage.dispose) keeps them
+  tex.userData.shared = true;
   return tex;
 }
 
@@ -47,6 +49,8 @@ export async function loadCards(): Promise<void> {
 
 const geometry = new THREE.BoxGeometry(CARD_W, THICK, CARD_H);
 const edge = new THREE.MeshStandardMaterial({ color: '#f3efe6', roughness: 0.7 });
+geometry.userData.shared = true;
+edge.userData.shared = true;
 
 /** A card mesh. Face up means the face points +Y (toward a camera above the table). */
 export class CardMesh extends THREE.Mesh {

@@ -53,6 +53,7 @@ function faceTexture(spec: ChipSpec): THREE.CanvasTexture {
   if (!t) {
     t = new THREE.CanvasTexture(chipFaceCanvas(spec));
     t.colorSpace = THREE.SRGBColorSpace;
+    t.userData.shared = true;
     faceCache.set(spec.value, t);
   }
   return t;
@@ -72,12 +73,14 @@ function sideTexture(spec: ChipSpec): THREE.CanvasTexture {
     t = new THREE.CanvasTexture(c);
     t.colorSpace = THREE.SRGBColorSpace;
     t.wrapS = THREE.RepeatWrapping;
+    t.userData.shared = true;
     sideCache.set(spec.value, t);
   }
   return t;
 }
 
 const geo = new THREE.CylinderGeometry(CHIP_R, CHIP_R, CHIP_H, 40);
+geo.userData.shared = true;
 
 function chipMaterials(spec: ChipSpec): THREE.Material[] {
   const side = new THREE.MeshStandardMaterial({ map: sideTexture(spec), roughness: 0.45 });
