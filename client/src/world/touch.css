@@ -56,11 +56,13 @@ html.touch-ui .world-prompt { display: none !important; }
 }
 .touch-stick.held .touch-knob { transition: none; }
 
-/* The action button over the right thumb, the station it opens written above it. */
+/* The action button over the right thumb, the station it opens written above it. Both stand above
+   the chat dock in the same corner (ui/chat/chat.css: 18 px up, 56 px on a narrow screen, 44 px tall
+   on a touch screen). */
 .touch-act {
   position: fixed;
   right: 22px;
-  bottom: 64px;
+  bottom: 78px;
   z-index: 2;
   display: grid;
   place-items: center;
@@ -88,7 +90,7 @@ html.touch-ui .world-prompt { display: none !important; }
 .touch-caption {
   position: fixed;
   right: 16px;
-  bottom: 158px;
+  bottom: 170px;
   z-index: 2;
   max-width: calc(100vw - 32px);
   padding: 7px 13px 8px;
@@ -155,6 +157,12 @@ html.touch-ui .world-prompt { display: none !important; }
 }
 .touch-note .ico { width: 34px; height: 34px; color: var(--brass-hi); }
 @keyframes touch-note-in { from { opacity: 0; translate: 0 8px; } }
+
+/* A phone upright: the chat dock rises clear of the back chip, and these with it. */
+@media (max-width: 520px) {
+  .touch-act { bottom: 114px; }
+  .touch-caption { bottom: 206px; }
+}
 
 @media (prefers-reduced-motion: reduce) {
   .touch-act, .touch-caption, .touch-note { animation: none; }

@@ -160,6 +160,8 @@
 /* A phone on its side: 390 px of height for the title, you and five menu rows (each still 44 px
    to the thumb), and sheets that use the whole height. */
 @media (max-height: 480px) {
+  /* the fields run further across a short, wide screen: so does the shade under them */
+  .front-shade { background: linear-gradient(90deg, rgba(8, 6, 5, 0.92) 0%, rgba(8, 6, 5, 0.8) 56%, rgba(8, 6, 5, 0) 84%); }
   .front-col { top: 14px; gap: 10px; }
   .front-title { font-size: 30px; }
   .front-rule { margin-top: 8px; }
@@ -179,8 +181,10 @@
   .sheet-body { padding: 12px 18px 14px; }
   .sheet-foot { margin-top: 12px; }
 }
-/* A phone upright: sheets edge to edge, stat tiles two across. */
+/* A phone upright: the column spans the screen, so the room behind it is shaded top to bottom,
+   not only on the left; sheets edge to edge, stat tiles two across. */
 @media (max-width: 560px) {
+  .front-shade { background: linear-gradient(180deg, rgba(8, 6, 5, 0.9) 0%, rgba(8, 6, 5, 0.8) 62%, rgba(8, 6, 5, 0.45) 100%); }
   .sheet-scrim { padding: 12px 10px; }
   .sheet { max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px); }
   .sheet-head { padding: 16px 16px 12px; }
