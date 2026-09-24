@@ -522,8 +522,8 @@ export function openEditor(deps: EditorDeps): Closable {
   backBtn.addEventListener('click', () => goTo(step - 1));
   let deals = 0;
   surpriseBtn.addEventListener('click', () => {
-    // another whole look, dealt from the same palettes
-    look = startingLook((Date.now() + ++deals * 7919) & 0x7fffffff);
+    // another whole look, dealt from the same palettes (anything worn from the shop stays on)
+    look = { ...look, ...startingLook((Date.now() + ++deals * 7919) & 0x7fffffff) };
     character.setLook(look);
     renderFields();
     paintState();

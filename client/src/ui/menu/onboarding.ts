@@ -32,7 +32,7 @@ export function openOnboarding(deps: OnboardingDeps): Closable {
   return openEditor({
     ...rest,
     guided: true,
-    start: p ? startingLook(p.id) : DEFAULT_LOOK,
+    start: p ? { ...p.look, ...startingLook(p.id) } : DEFAULT_LOOK,
     onClose: (saved) => onDone(saved ?? deps.session.profile?.look ?? DEFAULT_LOOK),
   });
 }
@@ -46,7 +46,8 @@ export function openOnboarding(deps: OnboardingDeps): Closable {
 export function ensureOwnLook(deps: { api: Pick<AccountApi, 'saveLook'>; session: SessionLike }): Look | null {
   const p = deps.session.profile;
   if (!p || !sameLook(p.look, DEFAULT_LOOK)) return null;
-  const look = startingLook(p.id);
+  // only the body and clothes are dealt: anything worn from the boutique or the bar stays on
+  const look: Look = { ...p.look, ...startingLook(p.id) };
   deps.session.set({ ...p, look });
   const save = (tries: number) =>
     deps.api
