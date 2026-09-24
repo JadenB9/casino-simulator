@@ -1009,7 +1009,7 @@ const GESTURES: Record<EmoteId, Gesture> = {
     pose: (t, seated) => {
       const w = Math.sin(t * Math.PI * 2 * 1.6);
       const lift = seated ? 0.3 : 0.08;
-      const hand = (up: number): Hand => ({ upper: [-0.12, -1, seated ? 0.45 : 0.22], fore: [-0.18, lift + 0.42 * up, 1], palm: [0, 1, 0], fingers: [-0.15, 0, 1] });
+      const hand = (up: number): Hand => ({ upper: [-0.1, -1, seated ? 0.45 : 0.28], fore: [-0.07, lift + 0.42 * up, 1], palm: [0, 1, 0], fingers: [-0.1, 0, 1] });
       return { handR: hand(w), handL: hand(-w), head: [0.03 + 0.06 * Math.abs(w), 0, 0.06 * w] };
     },
   },

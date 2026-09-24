@@ -201,6 +201,49 @@ if (checks.includes('poses')) {
   await page.close();
 }
 
+if (checks.includes('seated')) {
+  // Two players in the Hold'em chairs, drawn by the real RemotePlayers from a stand-in floor link
+  // (as npcs.mjs does), frozen partway through each emote.
+  const { page, errors } = await openFloor();
+  await castHelpers(page);
+  const st = await page.evaluate(async () => {
+    const c = window.casino;
+    const { seatWorld } = await import('/casino/src/world/stations.ts');
+    const { RemotePlayers } = await import('/casino/src/world/remote-players.ts');
+    const look = (body, outfit, skin, hair, top, bottom) => ({ v: 1, body, outfit, skin, hair, top, bottom, shoes: '#1a1a1a' });
+    const players = new Map([
+      [101, { info: { id: 101, name: 'Marisol', look: look('f', 'dress', 3, '#2b1a12', '#7a1f3d', '#7a1f3d'), at: { station: 'he-1' } }, track: { at: () => ({ x: 0, z: 0, r: 0, moving: false }) }, last: null }],
+      [102, { info: { id: 102, name: 'Dev', look: look('m', 'suit', 1, '#4a3020', '#1f2430', '#1f2430'), at: { station: 'he-1' } }, track: { at: () => ({ x: 0, z: 0, r: 0, moving: false }) }, last: null }],
+    ]);
+    for (const p of players.values()) await c.world.characterFactory.load(p.info.look);
+    const remotes = new RemotePlayers({ players, on: () => () => {} }, c.engine.scene, { factory: c.world.characterFactory, seatOf: (id, slot) => seatWorld(c.world.stations.find((x) => x.id === id), slot) });
+    for (let i = 0; i < 5; i++) remotes.update(0.05);
+    c.cast = [remotes.character(101), remotes.character(102)];
+    const s = c.world.stations.find((x) => x.id === 'he-1');
+    return { x: s.anchor.position.x, z: s.anchor.position.z };
+  });
+  for (const e of ['clap', 'sixseven', 'wave', 'cheer', 'thumbs', 'shrug']) {
+    if (only && !only.includes(e)) continue;
+    const t = e === 'clap' ? 1 / 3 : e === 'sixseven' ? 0.47 : 0.9;
+    const m = await page.evaluate(([e, t]) => {
+      const c = window.casino;
+      c.freeze(e, t);
+      return c.cast.map((p) => ({ ...c.hands(p), palms: c.palms(p) }));
+    }, [e, t]);
+    await place(page, [st.x - 2.3, 1.55, st.z + 2.6], [st.x - 0.2, 0.8, st.z + 0.1]);
+    await frames(page);
+    await page.screenshot({ path: `${out}/seated-${e}.png` });
+    await place(page, [st.x - 2.6, 1.1, st.z + 0.9], [st.x - 0.9, 0.85, st.z + 0.55]);
+    await frames(page);
+    await page.screenshot({ path: `${out}/seated-${e}-side.png` });
+    console.log(`seated ${e} ${t.toFixed(2)}s: ${m.map((x) => `gap ${(x.gap * 100).toFixed(1)} cm, hands at ${x.yR.toFixed(2)}/${x.yL.toFixed(2)} m, palms ${x.palms.R} / ${x.palms.L}`).join(' | ')}`);
+    if (e === 'clap' && m.some((x) => Math.abs(x.gap) > 0.025)) fail('seated clap: the palms do not meet');
+    if (e === 'sixseven' && m.some((x) => !(x.palms.R[1] > 0.8 && x.palms.L[1] > 0.8))) fail('seated 67: palms not up');
+  }
+  if (errors.length) fail(`seated: ${errors.join(' | ')}`);
+  await page.close();
+}
+
 await browser.close();
 console.log(failed ? `${failed} check(s) failed` : 'all emotes checks passed');
 process.exit(failed ? 1 : 0);
