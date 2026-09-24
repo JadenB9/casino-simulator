@@ -1001,7 +1001,7 @@ if (checks.includes('read')) {
                 });
                 return y;
               })();
-              stops.push(window.__kit.celebrate({ stage, ui: document.getElementById('ui'), sfx: { play() {} } }, { title: 'Big win', tier: 'big', spots: [{ x: 0, y: top + 0.002, z: 0.2, w: 0.5, d: 0.32 }] }));
+              stops.push(window.__kit.celebrate({ stage, ui: document.getElementById('ui'), sfx: { play() {}, audio: { state: 'suspended' } } }, { title: 'Big win', tier: 'big', spots: [{ x: 0, y: top + 0.002, z: 0.2, w: 0.5, d: 0.32 }] }));
               for (const o of stage.root.children) if (o.isMesh && o.material?.blending === 2) o.material.opacity = 0.34;
             }
           }
@@ -1115,7 +1115,7 @@ if (checks.includes('read')) {
             let stop = null;
             if (state === 'celebration') {
               const spot = /^(slots|vp)-/.test(id) ? [] : [{ x: 0, y: 0.8, z: 0.25, w: 0.5, d: 0.32 }];
-              stop = window.__kit.celebrate({ stage, ui: session.ui, sfx: { play() {} } }, { title: 'Big win', tier: 'big', glow: cards.length ? [cards] : [], spots: cards.length ? [] : spot });
+              stop = window.__kit.celebrate({ stage, ui: session.ui, sfx: { play() {}, audio: { state: 'suspended' } } }, { title: 'Big win', tier: 'big', glow: cards.length ? [cards] : [], spots: cards.length ? [] : spot });
               for (const o of stage.root.children) if (o.isMesh && o.material?.blending === 2) o.material.opacity = 0.34;
             }
             const targets = { layout: read.screen(0.18, 0.22, 0.82, 0.8) };
