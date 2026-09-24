@@ -264,11 +264,12 @@ export const dice: GameClientModule = {
     };
     const offTips = ctx.tips.subscribe(tipFor);
 
-    // The slider: press anywhere on it and drag; the target snaps to half points.
+    // The slider: press anywhere on it and drag. The win chance snaps to half a percent, on
+    // either side, so a drag lands on round chances and clean multipliers (25% is 3.9600×).
     const fromPointer = (e: PointerEvent) => {
       const r = track.getBoundingClientRect();
       const f = clamp((e.clientX - r.left) / r.width, 0, 1);
-      setTarget(Math.round(f * 200) * 50);
+      setChance(Math.round((over ? 1 - f : f) * 200) * 50);
     };
     track.addEventListener('pointerdown', (e) => {
       if (e.button !== 0) return;
