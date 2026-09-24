@@ -55,16 +55,18 @@ button.hud-who:focus-visible { outline: 2px solid var(--focus); outline-offset: 
   .hud-stat .stat-value { font-size: 17px; }
 }
 
-/* A phone upright: two rows. You, your money and (at a table) Leave on top; who's online and the
-   buttons underneath. The right-hand bar's pieces join the HUD's own rows to wrap freely. */
+/* A phone upright: two rows. You, your money, who's online and (at a table) Leave on top; every
+   button underneath, sharing the row's width (nine of them don't fit at 44 px, and a third row
+   would sit on the table). The right-hand bar's pieces join the HUD's own rows. */
 @media (max-width: 560px) {
   :root { --below-hud: 118px; }
-  .hud { flex-wrap: wrap; align-items: center; gap: 8px 6px; }
+  .hud { flex-wrap: wrap; align-items: center; gap: 8px 4px; }
   .hud-right { display: contents; }
-  .hud-left { order: -3; }
-  .hud .touch-leave { order: -2; margin-left: auto; }
+  .hud-left { order: -4; }
+  .hud-online { order: -3; margin-right: auto; }
+  .hud .touch-leave { order: -2; }
   .hud::after { content: ''; order: -1; flex-basis: 100%; }
-  .hud-online { margin-right: auto; }
+  .hud-btn { flex: 1 1 0; width: auto; min-width: 0; max-width: 44px; }
   .hud-stat { padding: 5px 12px 6px; }
 }
 
