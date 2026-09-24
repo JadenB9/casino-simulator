@@ -91,6 +91,8 @@ class App {
   private passOff: (() => void) | null = null;
   private lookKey = '';
   private stopped = false;
+  /** The latest profile refresh after leaving a table (refreshProfile); older ones stop. */
+  private refreshRun = 0;
   /** netsec: idle. The page's own idle clock (app/idle.ts), running while the floor is connected. */
   private readonly idle: IdleWatch;
   private idleWarning: WarningHandle | null = null;
@@ -606,8 +608,12 @@ class App {
    * and on any bets still in play), so ask for the profile until the chips have come home.
    */
   private async refreshProfile(): Promise<void> {
-    for (const wait of [800, 2500, 6000, 15_000]) {
+    // A dropped seat keeps its chips through the two-minute grace period, so keep asking that long;
+    // a newer call takes over from an older one.
+    const run = ++this.refreshRun;
+    for (const wait of [800, 2500, 6000, 15_000, 30_000, 30_000, 30_000, 30_000, 30_000]) {
       await new Promise((r) => setTimeout(r, wait));
+      if (run !== this.refreshRun || this.stopped) return;
       try {
         const p = await api.me();
         session.set(p);
@@ -627,6 +633,7 @@ class App {
     open.party?.dispose();
     this.chat?.setTable(null);
     this.hud?.setTableChips(null);
+    void this.refreshProfile();
     toast(code === CLOSE.FORBIDDEN ? "You can't join that table." : code === CLOSE.NOT_FOUND ? 'That table has closed.' : 'Lost the table.', 'err');
     void this.world.exitTable();
   }
