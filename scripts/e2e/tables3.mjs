@@ -48,6 +48,7 @@ async function enterFloor(page, name) {
   await page.waitForSelector('.name-input, .menu-item', { timeout: 180_000 });
   if (await page.$('.name-input')) {
     await page.fill('.name-input', name);
+    await page.fill('.pass-input', 'casino-dev'); // DEV_PASSWORD in client/src/net/api.ts
     await press(page, '.enter-btn');
   }
   await page.waitForSelector('.menu-item', { timeout: 60_000 });
@@ -421,9 +422,167 @@ async function glowChecks() {
 }
 
 // ---------------------------------------------------------------------------------------------
+// The poker room from the floor, and the Hold'em model audited for overlaps.
+
+/**
+ * In the page: every Hold'em station's model checked against itself, in its own frame. The
+ * table's solid part (felt, racetrack, rail, apron, dealer's shelf and tray) is measured from its
+ * meshes; no chair may reach into it, into a pedestal or into another chair, nothing may leave
+ * the station's footprint, the dealer's place stays clear, and the tray, deck and muck stay clear
+ * of the rail's ends.
+ */
+async function audit(page) {
+  return page.evaluate(async () => {
+    const G = await import(`/casino/src/games/index.ts`);
+    const { world } = window.casino;
+    const fp = G.GAMES.holdem.footprint;
+    const out = [];
+    for (const s of world.stations.filter((x) => x.game === 'holdem')) {
+      const model = s.model;
+      model.updateWorldMatrix(true, true);
+      const inv = model.matrixWorld.clone().invert();
+      const V = () => model.position.clone();
+      const m = model.matrixWorld.clone();
+      const probs = [];
+      // the oval's radius of a point: its distance from the felt's centre line (x in [-SL, SL])
+      const SL = 0.62;
+      const ovalR = (x, z) => (Math.abs(x) <= SL ? Math.abs(z) : Math.hypot(Math.abs(x) - SL, z));
+      /** Every vertex of a mesh (each instance of an instanced one) in the model's frame. */
+      const verts = (mesh, fn) => {
+        const pos = mesh.geometry.attributes.position;
+        const local = m.copy(inv).multiply(mesh.matrixWorld);
+        const one = (im) => {
+          const p = V();
+          for (let i = 0; i < pos.count; i++) {
+            p.fromBufferAttribute(pos, i);
+            if (im) p.applyMatrix4(im);
+            p.applyMatrix4(local);
+            fn(p);
+          }
+        };
+        if (mesh.isInstancedMesh) {
+          const im = local.clone();
+          for (let k = 0; k < mesh.count; k++) {
+            mesh.getMatrixAt(k, im);
+            one(im);
+          }
+        } else one(null);
+      };
+      const under = (o, name) => { for (let q = o; q; q = q.parent) if (q.name === name) return true; return false; };
+      const meshes = [];
+      model.traverse((o) => o.isMesh && meshes.push(o));
+      const chairs = meshes.filter((o) => under(o, 'holdem-chairs'));
+      const pedestals = meshes.filter((o) => under(o, 'holdem-pedestals'));
+      const body = meshes.filter((o) => !under(o, 'holdem-chairs') && !under(o, 'holdem-pedestals') && !under(o, 'holdem-cups'));
+      // the table's rim: how far out it reaches, and how low it comes, from its own vertices
+      let reach = 0;
+      let low = Infinity;
+      for (const b of body) verts(b, (p) => { const r = ovalR(p.x, p.z); reach = Math.max(reach, r); if (r > 0.55) low = Math.min(low, p.y); });
+      // everything inside the footprint
+      let outside = 0;
+      for (const o of meshes) verts(o, (p) => { if (Math.abs(p.x) > fp.width / 2 + 0.001 || Math.abs(p.z) > fp.depth / 2 + 0.001) outside++; });
+      if (outside) probs.push(`${outside} vertices outside the ${fp.width.toFixed(2)} x ${fp.depth.toFixed(2)} footprint`);
+      // chairs against the table's rim, the pedestals and the dealer's place
+      let intoRim = 0;
+      let intoDealer = 0;
+      for (const c of chairs) verts(c, (p) => {
+        if (p.y > low - 0.003 && ovalR(p.x, p.z) < reach + 0.003) intoRim++;
+        if (p.z < -0.5 && Math.abs(p.x) < 0.4) intoDealer++;
+      });
+      if (intoRim) probs.push(`${intoRim} chair vertices inside the table's rim (reach ${reach.toFixed(3)}, from y ${low.toFixed(3)})`);
+      if (intoDealer) probs.push(`${intoDealer} chair vertices in the dealer's place`);
+      let pedR = 0;
+      let pedTop = 0;
+      for (const pm of pedestals) verts(pm, (p) => { pedR = Math.max(pedR, Math.hypot(Math.abs(p.x) - 0.4464, p.z)); pedTop = Math.max(pedTop, p.y); });
+      let intoPed = 0;
+      for (const c of chairs) verts(c, (p) => { if (p.y < pedTop && Math.hypot(Math.abs(p.x) - 0.4464, p.z) < pedR + 0.003) intoPed++; });
+      if (intoPed) probs.push(`${intoPed} chair vertices inside a pedestal's reach (${pedR.toFixed(3)})`);
+      // chair against chair: their footprints (oriented rectangles) must not overlap
+      const wood = chairs.find((c) => c.name === 'holdem-chairs-wood');
+      const rects = [];
+      if (wood) {
+        wood.geometry.computeBoundingBox();
+        const bb = wood.geometry.boundingBox;
+        const im = m.clone();
+        for (let k = 0; k < wood.count; k++) {
+          wood.getMatrixAt(k, im);
+          const corners = [[bb.min.x, bb.min.z], [bb.max.x, bb.min.z], [bb.max.x, bb.max.z], [bb.min.x, bb.max.z]].map(([x, z]) => V().set(x, 0, z).applyMatrix4(im));
+          rects.push(corners);
+        }
+      }
+      const axes = (r) => [0, 1].map((i) => { const a = r[i], b = r[i + 1]; return [b.z - a.z, a.x - b.x]; });
+      const apart = (a, b) => [...axes(a), ...axes(b)].some(([ax, az]) => {
+        const pa = a.map((p) => p.x * ax + p.z * az);
+        const pb = b.map((p) => p.x * ax + p.z * az);
+        return Math.max(...pa) < Math.min(...pb) || Math.max(...pb) < Math.min(...pa);
+      });
+      let touching = 0;
+      for (let i = 0; i < rects.length; i++) for (let j = i + 1; j < rects.length; j++) if (!apart(rects[i], rects[j])) touching++;
+      if (touching) probs.push(`${touching} pairs of chairs overlap`);
+      // the dealer's things against the rail's ends
+      const rail = meshes.find((o) => o.name === 'holdem-rail');
+      let gap = Infinity;
+      if (rail) verts(rail, (p) => { if (p.z < -0.5) gap = Math.min(gap, Math.abs(p.x)); });
+      // (the shelf itself runs on under the rail's rounded ends, as it should)
+      const dealer = meshes.filter((o) => under(o, 'holdem-dealer') && o.name !== 'holdem-shelf');
+      let widest = 0;
+      for (const d of dealer) verts(d, (p) => { if (p.y > 0.75) widest = Math.max(widest, Math.abs(p.x)); });
+      if (widest > gap - 0.004) probs.push(`the dealer's shelf things reach x ${widest.toFixed(3)}, the rail's ends start at ${gap.toFixed(3)}`);
+      // cup holders: in the rail, clear of the gap and of each other
+      const cups = meshes.find((o) => o.name === 'holdem-cup-rings');
+      const centres = [];
+      if (cups) { const im = m.clone(); for (let k = 0; k < cups.count; k++) { cups.getMatrixAt(k, im); centres.push(V().setFromMatrixPosition(im)); } }
+      for (const c of centres) if (c.z < 0 && Math.abs(c.x) < gap + 0.046) probs.push(`a cup holder at x ${c.x.toFixed(2)} runs into the dealer's gap`);
+      for (let i = 0; i < centres.length; i++) for (let j = i + 1; j < centres.length; j++) if (centres[i].distanceTo(centres[j]) < 0.1) probs.push('two cup holders overlap');
+      out.push({ id: s.id, chairs: rects.length, cups: centres.length, reach: +reach.toFixed(3), rimFrom: +low.toFixed(3), railGap: +gap.toFixed(3), shelfWidest: +widest.toFixed(3), problems: probs });
+    }
+    return out;
+  });
+}
+
+async function pokerChecks() {
+  const page = await newPage('poker');
+  await page.goto(`${base}src/world/dev-floor.html?quality=high&view=poker`, { timeout: 180_000 });
+  await page.waitForFunction(() => document.getElementById('boot')?.classList.contains('done'), null, { timeout: 300_000 });
+  await page.waitForTimeout(2500);
+  await shot(page, 'poker-room');
+  const tables = await page.evaluate(() => window.casino.world.stations.filter((s) => s.game === 'holdem').map((s) => ({ id: s.id, x: s.anchor.position.x, z: s.anchor.position.z })));
+  await page.evaluate(() => {
+    const { engine } = window.casino;
+    window.__cam = null;
+    engine.onFrame(() => {
+      if (!window.__cam) return;
+      engine.camera.position.set(...window.__cam.pos);
+      engine.camera.lookAt(...window.__cam.at);
+    });
+  });
+  for (const t of tables) {
+    // close, from inside the room; then from the pit, past the stand-in distance
+    for (const [name, pos] of [['near', [t.x + 1.2, 1.9, t.z + 3.0]], ['far', [t.x - 11.5, 2.4, t.z + 4.5]]]) {
+      await page.evaluate(([pos, at]) => (window.__cam = { pos, at }), [pos, [t.x, 0.7, t.z]]);
+      // the swap happens a frame after the camera moves, and frames are slow here
+      const want = name === 'far';
+      const standIn = await page
+        .waitForFunction(([id, want]) => !window.casino.world.stations.find((s) => s.id === id).model.visible === want, [t.id, want], { timeout: 20_000, polling: 250 })
+        .then(() => want, () => !want);
+      await page.waitForTimeout(1200);
+      report.poker[`${t.id}-${name}`] = standIn ? 'stand-in' : 'model';
+      if (name === 'far' && !standIn) fail(`${t.id}: still the full model from ${Math.hypot(11.5, 4.5).toFixed(1)} m`);
+      await shot(page, `poker-${t.id}-${name}`);
+    }
+  }
+  // how green the tables read: the felt's mean colour from the room's own camera, model and stand-in
+  report.poker.audit = await audit(page);
+  for (const a of report.poker.audit) for (const p of a.problems) fail(`${a.id}: ${p}`);
+  log(`poker audit: ${JSON.stringify(report.poker.audit)}`);
+  await page.context().close();
+}
+
+// ---------------------------------------------------------------------------------------------
 
 try {
   if (checks.includes('glow')) await glowChecks();
+  if (checks.includes('poker')) await pokerChecks();
 } catch (err) {
   fail(`stopped: ${String(err).split('\n')[0]}`);
 }

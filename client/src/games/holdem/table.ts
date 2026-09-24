@@ -24,11 +24,11 @@ export const RAIL_OUT = RAIL_IN + RAIL_W;
 /** The rail breaks for the dealer between these x on the far side (the tray sits there). */
 export const DEALER_GAP = 0.34;
 /**
- * Where the chairs stand (the middle of each seat, 0.48 m up): far enough out that a chair's back
- * stays inside the station's footprint (the oval RR + 0.62 out), near enough that the seat's front
- * edge tucks under the rail's overhang.
+ * Where the chairs stand (the middle of each seat, 0.48 m up): near enough in that every chair's
+ * back, the turned ones at the ends included, stays inside the station's footprint (the oval
+ * RR + 0.62 out), with the seat's front edge tucked under the rail's overhang.
  */
-export const CHAIR_R = RR + 0.32;
+export const CHAIR_R = RR + 0.3;
 /** The footprint's reach round the oval, as it has always been (the poker room is laid out on it). */
 export const FOOTPRINT_R = RR + 0.62;
 

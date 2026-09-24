@@ -26,6 +26,8 @@ const APRON_R = RAIL_OUT - 0.03;
 const APRON_BOTTOM = -0.13;
 /** Rail stitches, one every this many metres (the texture holds eight). */
 const STITCH = 0.009;
+/** The rail's ends are rounded off over this length. */
+const RAIL_END = 0.03;
 
 type Profile = [number, number][];
 
@@ -250,7 +252,7 @@ function rail(profile: Profile, mats: PokerMaterials, step: number): THREE.Mesh 
   const farStart = SL + Math.PI * base; // where the far side begins (x = -SL)
   const t0 = (farStart + SL + DEALER_GAP) / perim;
   const t1 = 1 + (farStart + SL - DEALER_GAP) / perim;
-  const END = 0.03;
+  const END = RAIL_END;
   const stations = path(base, t0, t1, step, END);
   // distance of each station from the nearer end, for the rounded ends
   const along = [0];
@@ -284,11 +286,13 @@ function dealerStation(mats: PokerMaterials): THREE.Group {
   const zOut = -RAIL_OUT;
   const depth = zIn - zOut;
   const zMid = (zIn + zOut) / 2;
-  // the shelf fills the rail's gap, its front face over the apron; its top half a millimetre
-  // under the racetrack, which laps onto it
+  // the shelf fills the rail's gap and runs on under its rounded ends (so no hollow shows under
+  // them), its front face over the apron; its top half a millimetre under the racetrack, which
+  // laps onto it
   const shelfTop = TOP_Y + 0.0037;
-  const shelf = new THREE.Mesh(new THREE.BoxGeometry(2 * DEALER_GAP + 0.02, 0.034, depth + 0.004), mats.walnut);
+  const shelf = new THREE.Mesh(new THREE.BoxGeometry(2 * (DEALER_GAP + RAIL_END), 0.034, depth + 0.004), mats.walnut);
   shelf.position.set(0, shelfTop - 0.017, zMid - 0.002);
+  shelf.name = 'holdem-shelf';
   g.add(shelf);
 
   // the tray: a lacquered well a little proud of the shelf, chips standing in rolls in it
@@ -392,6 +396,7 @@ function pedestals(mats: PokerMaterials, high: boolean): THREE.Group {
   g.add(new THREE.Mesh(mergeGeometries(woods, false)!, mats.walnut));
   g.add(new THREE.Mesh(mergeGeometries(blacks, false)!, mats.tray));
   g.add(new THREE.Mesh(mergeGeometries(brasses, false)!, mats.brass));
+  g.name = 'holdem-pedestals';
   return g;
 }
 
@@ -435,6 +440,7 @@ function cupHolders(mats: PokerMaterials, high: boolean): THREE.Group {
   wells.computeBoundingSphere();
   rings.name = 'holdem-cup-rings';
   wells.name = 'holdem-cup-wells';
+  g.name = 'holdem-cups';
   g.add(rings, wells);
   return g;
 }
@@ -504,6 +510,7 @@ function chairs(mats: PokerMaterials): THREE.Group {
   wood.name = 'holdem-chairs-wood';
   leather.name = 'holdem-chairs-leather';
   const g = new THREE.Group();
+  g.name = 'holdem-chairs';
   g.add(wood, leather);
   return g;
 }
