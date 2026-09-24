@@ -612,6 +612,215 @@ if (wanted('wheel')) {
   }
 }
 
+// ------------------------------------------------------------------------------------------------------
+// Part: money at the edges: logins, big limits, the bank, the boutique and the bar, the boards
+
+/** Move an account's balance to exactly `cents`, keeping the ledger whole (a grant row for the difference). */
+async function setBalance(name, cents) {
+  const [r] = await sql(`SELECT id, balance FROM casino_accounts WHERE name = '${name}'`);
+  const delta = cents - r.balance;
+  if (delta === 0) return;
+  await sql(
+    `INSERT INTO casino_ledger (op_id, account_id, kind, amount, table_id, created_at) VALUES ('qa-adjust:${r.id}:${Date.now()}:${Math.random().toString(36).slice(2)}', ${r.id}, 'grant', ${delta}, NULL, ${Date.now()});
+     UPDATE casino_accounts SET balance = balance + ${delta}, rev = rev + 1 WHERE id = ${r.id};`,
+  );
+}
+
+/** An account from before passwords: no hash, its grant in the ledger. */
+async function oldAccount(name) {
+  const now = Date.now();
+  await sql(
+    `INSERT INTO casino_accounts (name, balance, created_at, last_seen) SELECT '${name}', 5000000, ${now}, ${now} WHERE NOT EXISTS (SELECT 1 FROM casino_accounts WHERE name = '${name}');
+     INSERT INTO casino_ledger (op_id, account_id, kind, amount, table_id, created_at) SELECT 'grant:' || id, id, 'grant', 5000000, NULL, created_at FROM casino_accounts WHERE name = '${name}' AND NOT EXISTS (SELECT 1 FROM casino_ledger WHERE op_id = 'grant:' || casino_accounts.id);
+     UPDATE casino_accounts SET pass_hash = NULL, pass_salt = NULL WHERE name = '${name}';`,
+  );
+}
+
+const loginApi = (name, password = PASS) => api('login', { method: 'POST', body: { name, password } });
+
+if (wanted('money')) {
+  const names = [];
+  try {
+    await clearRate();
+    // --- logins -----------------------------------------------------------------------------------
+    await oldAccount('qm_oldtimer');
+    names.push('qm_oldtimer');
+    const claimPass = `claim-${Date.now().toString(36)}`;
+    const o = await newPage('qm_oldtimer');
+    pages.push(o);
+    await o.page.goto(`${base}/casino/`, { waitUntil: 'domcontentloaded' });
+    await o.page.waitForSelector('.name-input', { timeout: 300_000 });
+    const note = await o.page.textContent('.login-note');
+    check(/first one you pick claims your name/.test(note), `the login says how an old name is claimed: "${note}"`);
+    await o.page.fill('.name-input', 'QM_OldTimer');
+    await o.page.fill('.pass-input', claimPass);
+    await o.page.click('.enter-btn');
+    await o.page.waitForSelector('.menu-item, .editor-panel.guided', { timeout: 60_000 });
+    const [claimed] = await sql(`SELECT name, pass_hash IS NOT NULL AS has FROM casino_accounts WHERE name = 'qm_oldtimer'`);
+    check(claimed.has === 1 && claimed.name === 'qm_oldtimer', `an old name is claimed by its first password, in any case ("QM_OldTimer" logged into ${claimed.name})`);
+    const again = await loginApi('qm_oldtimer', 'someone-else');
+    check(again.status === 401 && again.body?.msg === 'Wrong name or password.', `after that, another password is refused: ${again.status} "${again.body?.msg}"`);
+    // a wrong password in the page: said under the field, the field emptied, nothing else happens
+    const w = await newPage('qm_wrongpass');
+    pages.push(w);
+    await w.page.goto(`${base}/casino/`, { waitUntil: 'domcontentloaded' });
+    await w.page.waitForSelector('.name-input', { timeout: 300_000 });
+    await w.page.fill('.name-input', 'qm_oldtimer');
+    await w.page.fill('.pass-input', 'not-the-password');
+    await w.page.click('.enter-btn');
+    await w.page.waitForSelector('.pass-rule.err', { timeout: 20_000 });
+    const said = await w.page.textContent('.pass-rule');
+    check(said === 'Wrong name or password.' && (await w.page.inputValue('.pass-input')) === '', `a wrong password is said under the field and the field empties: "${said}"`);
+    await shoot(w.page, 'money-1-wrong-password');
+    // "Continue as" in a new tab: the name is remembered (localStorage), the session isn't (sessionStorage)
+    const tab = await o.ctx.newPage();
+    await tab.goto(`${base}/casino/`, { waitUntil: 'domcontentloaded' });
+    await tab.waitForSelector('.continue-btn:not([hidden])', { timeout: 300_000 });
+    const cont = await tab.textContent('.continue-name');
+    check(cont === 'qm_oldtimer' && (await tab.inputValue('.pass-input')) === '', `a new tab offers Continue as ${cont}, with the password field empty`);
+    await shoot(tab, 'money-2-continue-as');
+    await tab.fill('.pass-input', claimPass);
+    await tab.click('.continue-btn');
+    await tab.waitForSelector('.menu-item, .editor-panel.guided', { timeout: 60_000 });
+    check(true, 'Continue as logs back in with the password');
+    await tab.close();
+
+    // --- big limits: Penthouse at an online desk, buy-ins to 100x the max, a top-up past it -------
+    const whale = await player('qm_whale');
+    pages.push(whale);
+    names.push('qm_whale');
+    await settled(whale, 180_000);
+    await setBalance('qm_whale', 60_000_000 * 100);
+    await whale.page.evaluate(async () => window.casino.session.set(await (await import('/casino/src/net/api.ts')).me()));
+    const w0 = await me(whale);
+    await walkUp(whale, 'lb-1');
+    await whale.page.waitForSelector('.lim-opt', { timeout: 20_000 });
+    await whale.page.click('.lim-opt:has-text("Penthouse")');
+    const bigLine = await whale.page.textContent('.lim-buyin');
+    check(bigLine === 'Buy-in $10,000–$10,000,000', `Penthouse at Limbo buys in up to 100x its $100,000 max: "${bigLine}"`);
+    await whale.page.keyboard.press('s');
+    await whale.page.waitForSelector('.modal input[type=number]', { timeout: 30_000 });
+    const picks = await whale.page.$$eval('.modal .row .btn.ghost', (bs) => bs.map((b) => b.textContent).filter((t) => t.startsWith('$') || t.startsWith('All')));
+    check(picks.at(-1) === '$10,000,000', `the prompt's last pick is the table's $10,000,000: ${picks.join(', ')}`);
+    await shoot(whale.page, 'money-3-penthouse-buyin');
+    await whale.page.fill('.modal input[type=number]', '10000000');
+    await whale.page.click('.modal .btn.primary');
+    await whale.page.waitForFunction(() => window.casino.app.table?.seated === true, null, { timeout: 30_000 });
+    await whale.page.waitForSelector('.os-screen:not([hidden])');
+    await whale.page.waitForTimeout(800);
+    await whale.page.click('.os-chip-btn:has-text("Max")');
+    check((await whale.page.inputValue('.os-bet-input')) === '100000', `Max at Penthouse is the $100,000 table max: ${await whale.page.inputValue('.os-bet-input')}`);
+    await shoot(whale.page, 'money-4-penthouse-limbo');
+    const sinceW = Date.now();
+    await whale.page.click('.os-action.go');
+    await whale.page.waitForTimeout(2500);
+    // a top-up past the table's buy-in is refused in words, with the amounts written out
+    const errBefore = tableFrames(whale).filter((m) => m.t === 'err').length;
+    await whale.page.evaluate(() => window.casino.app.table.session.link.topUp(500_000_000));
+    await whale.page.waitForTimeout(1200);
+    const topErr = tableFrames(whale).filter((m) => m.t === 'err').slice(errBefore).at(-1);
+    check(topErr?.code === 'LIMIT' && /^This table takes \$10,000,000 at most: you can add up to \$[0-9,]+\.$/.test(topErr.msg), `a top-up past the buy-in maximum says how much more fits: "${topErr?.msg}"`);
+    // a top-up that fits, then Cash out while it's still on its way
+    const stackNow = await whale.page.evaluate(() => window.casino.app.table.session.snapshot.you.stack);
+    const add = Math.min(1_000_000_00, 10_000_000_00 - stackNow);
+    await whale.page.evaluate((a) => {
+      const l = window.casino.app.table.session.link;
+      l.topUp(a);
+      l.cashOut();
+    }, add);
+    await whale.page.waitForTimeout(2500);
+    const busyErr = tableFrames(whale, sinceW).filter((m) => m.t === 'err').map((m) => `${m.code}: ${m.msg}`);
+    const seatAfter = lastSeat(whale);
+    log(`top-up then cash-out: ${busyErr.join(' | ') || 'no refusals'}; seat ${seatAfter?.status} ${money(seatAfter?.stack ?? 0)}`);
+    await leave(whale);
+    const w1 = await settled(whale);
+    const rounds = roundsOf(whale, 'limbo', sinceW);
+    const netW = rounds.reduce((s2, r) => s2 + r.returned - r.wagered, 0);
+    check(w1.balance - w0.balance === netW, `big limits: the balance moved by the rounds' net ${money(netW)} (${money(w0.balance)} to ${money(w1.balance)})`);
+
+    // --- the bank: under $10,000 in all tops up to $50,000; $10,000 exactly doesn't -----------------
+    const broke = await player('qm_broke');
+    pages.push(broke);
+    names.push('qm_broke');
+    await settled(broke, 180_000);
+    const tb = await token(broke);
+    await setBalance('qm_broke', 999_999);
+    let r = await api('bank/loan', { method: 'POST', token: tb });
+    check(r.status === 200 && r.body.loan.amount === 4_000_001 && r.body.profile.balance === 5_000_000, `$9,999.99 is topped up by $40,000.01 to $50,000: ${r.status} ${JSON.stringify(r.body?.loan)}`);
+    const loans1 = r.body?.profile?.loansTaken;
+    await setBalance('qm_broke', 1_000_000);
+    r = await api('bank/loan', { method: 'POST', token: tb });
+    check(r.status === 409 && r.body.error === 'NOT_ELIGIBLE' && r.body.msg === 'You have $10,000 in all. The bank tops you up when that is under $10,000.', `$10,000 exactly is not under the line: ${r.status} "${r.body?.msg}"`);
+    // chips on a table count
+    await setBalance('qm_broke', 1_100_000);
+    await sitSolo(broke, 'dc-1', { buyin: '6000' });
+    r = await api('bank/loan', { method: 'POST', token: tb });
+    check(r.status === 409 && /\$11,000 in all, \$6,000 of it in chips on tables/.test(r.body?.msg ?? ''), `$5,000 in the balance and $6,000 at Dice is $11,000 in all: "${r.body?.msg}"`);
+    // the cashier's window says the same
+    await leave(broke);
+    await settled(broke);
+    await setBalance('qm_broke', 100_000);
+    await broke.page.evaluate(async () => window.casino.session.set(await (await import('/casino/src/net/api.ts')).me()));
+    await broke.page.evaluate(() => window.casino.app.openCashier());
+    await broke.page.waitForSelector('.bank-sheet', { timeout: 10_000 });
+    await broke.page.waitForTimeout(600);
+    const standing = await broke.page.textContent('.bank-status');
+    check(/You have \$1,000 in all\. The bank will add \$49,000\./.test(standing), `the cashier says what it will add: "${standing}"`);
+    // a race: three asks at once make one loan
+    const race = await Promise.all([0, 1, 2].map(() => api('bank/loan', { method: 'POST', token: tb })));
+    const granted = race.filter((x) => x.status === 200);
+    check(granted.length === 1 && granted[0].body.loan.amount === 4_900_000, `three asks at once: one loan of $49,000 (${race.map((x) => x.status).join(', ')})`);
+    const bp = (await api('me', { token: tb })).body.profile;
+    check(bp.balance === 5_000_000 && bp.loansTaken === loans1 + 1, `after the race: $50,000 and ${bp.loansTaken} loans (one more than before)`);
+    await broke.page.click('.bank-take');
+    await broke.page.waitForTimeout(1200);
+    const afterAsk = await broke.page.textContent('.bank-status');
+    check(/\$50,000 in all/.test(afterAsk), `asking at $50,000 is answered with the count: "${afterAsk}"`);
+    await shoot(broke.page, 'money-5-cashier');
+    await broke.page.keyboard.press('Escape');
+
+    // --- the boutique and the bar: exactly the balance, refusals in words -------------------------
+    const shopper = await player('qm_shopper');
+    pages.push(shopper);
+    names.push('qm_shopper');
+    await settled(shopper, 180_000);
+    const ts = await token(shopper);
+    const shop = (await api('shop', { token: ts })).body;
+    const owned = new Set(shop.owned.map((x) => x.item));
+    const item = shop.items.filter((x) => !owned.has(x.id)).sort((x, y) => x.price - y.price)[0];
+    await setBalance('qm_shopper', item.price);
+    const op = `qa-${Date.now().toString(36)}-shop`;
+    const buy = await api('shop/buy', { method: 'POST', token: ts, body: { item: item.id, op } });
+    check(buy.status === 200 && buy.body.balance === 0, `the ${item.name} for exactly the balance (${money(item.price)}): ${buy.status}, balance ${money(buy.body?.balance ?? -1)}`);
+    const same = await api('shop/buy', { method: 'POST', token: ts, body: { item: item.id, op } });
+    check(same.status === 200 && same.body.balance === 0 && same.body.at === buy.body.at, 'the same op again is the same purchase, not a second charge');
+    const twice = await api('shop/buy', { method: 'POST', token: ts, body: { item: item.id, op: `${op}-2` } });
+    check(twice.status === 409 && twice.body.error === 'NOT_ELIGIBLE', `buying it again: ${twice.status} "${twice.body?.msg}"`);
+    const dom = await api('bar/order', { method: 'POST', token: ts, body: { item: 'dom', op: `${op}-bar` } });
+    check(dom.status === 409 && dom.body.msg === 'Not enough: the Bottle of Dom is $1,200 and your balance is $0.', `the bar refuses what the balance can't pay: "${dom.body?.msg}"`);
+    const loan0 = await api('bank/loan', { method: 'POST', token: ts });
+    check(loan0.status === 200 && loan0.body.loan.amount === 5_000_000, `at $0 the bank tops up the whole $50,000: ${loan0.body?.loan?.amount}`);
+    // in the page: the bar's refusal is shown in words
+    await setBalance('qm_shopper', 500);
+    await shopper.page.evaluate(async () => window.casino.session.set(await (await import('/casino/src/net/api.ts')).me()));
+    await shopper.page.evaluate(() => window.casino.app.openBarMenu());
+    await shopper.page.waitForTimeout(800);
+    await shoot(shopper.page, 'money-6-bar-menu');
+    const barHtml = await shopper.page.evaluate(() => document.querySelector('.sheet, .bar-sheet, .barmenu')?.textContent ?? '');
+    log(`bar menu at $5: ${barHtml.slice(0, 200)}`);
+
+    // --- the leaderboards -----------------------------------------------------------------------
+    const boards = (await api('leaderboard', { token: await token(whale) })).body;
+    const rich = boards.boards.richest;
+    const wp = await me(whale);
+    const top = rich.top.find((x) => x.name === 'qm_whale');
+    check(top && top.rank === 1 && top.value === wp.balance + wp.inPlay, `the whale leads Richest at balance + chips on tables (${money(top?.value ?? 0)}; age ${boards.age} ms)`);
+    await audit(names, 'money');
+  } catch (err) {
+    failed('money', err);
+  }
+}
+
 /** One round of each game through the page's own controls. */
 async function playOne(p, game, since) {
   const { page } = p;

@@ -15,7 +15,7 @@ import { engineFor } from '../../../shared/src/games/index.ts';
 import { gameInfo, isGameId, variantOf } from '../../../shared/src/games/catalog.ts';
 import { cryptoRng, type Rng } from '../../../shared/src/rng.ts';
 import { lookFromJson } from '../../../shared/src/look.ts';
-import type { Cents } from '../../../shared/src/money.ts';
+import { formatMoney, type Cents } from '../../../shared/src/money.ts';
 import { applyLimits, clampLimits, hasLimitChoice, limitsOf, parseLimitsParam, sameLimits, type TableLimits } from '../../../shared/src/limits.ts';
 import {
   CLOSE,
@@ -869,8 +869,21 @@ export class CasinoTable extends DurableObject<Env> {
     if (kind === 'topup' && this.topUpPending(mem.account_id)) return this.err(ws, 'BUSY', 'Your last chips are still on the way.', aid);
     if (kind === 'buyin' && this.seatNotReady(mem, now)) return this.err(ws, 'BUSY', 'This seat opens when the round in play ends.', aid);
     const after = mem.stack + amount;
-    if (amount % 100 !== 0 || amount < (kind === 'buyin' ? cfg.buyIn.min : 100) || after > cfg.buyIn.max) {
-      return this.err(ws, 'LIMIT', `Bring between $${cfg.buyIn.min / 100} and $${cfg.buyIn.max / 100} to this table.`, aid);
+    if (amount % 100 !== 0) return this.err(ws, 'LIMIT', 'Chips come in whole dollars.', aid);
+    if (kind === 'buyin' && (amount < cfg.buyIn.min || after > cfg.buyIn.max)) {
+      return this.err(ws, 'LIMIT', `This table takes ${formatMoney(cfg.buyIn.min)} to ${formatMoney(cfg.buyIn.max)}.`, aid);
+    }
+    if (kind === 'topup' && (amount < 100 || after > cfg.buyIn.max)) {
+      // Say how much more fits, not the buy-in range: the stack already counts toward it.
+      const room = Math.max(0, cfg.buyIn.max - mem.stack);
+      return this.err(
+        ws,
+        'LIMIT',
+        room >= 100
+          ? `This table takes ${formatMoney(cfg.buyIn.max)} at most: you can add up to ${formatMoney(room - (room % 100))}.`
+          : `You have the ${formatMoney(cfg.buyIn.max)} this table takes at most.`,
+        aid,
+      );
     }
     this.ctx.storage.transactionSync(() => {
       this.rememberAid(mem.account_id, aid, now);

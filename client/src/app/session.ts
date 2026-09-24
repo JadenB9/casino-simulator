@@ -7,7 +7,13 @@ type Listener = (p: Profile) => void;
 
 class Session {
   profile: Profile | null = null;
+  /** Spent in the boutique and at the bar since the page loaded, so the HUD can tell it from losses. */
+  spent = 0;
   private listeners = new Set<Listener>();
+
+  spend(amount: number): void {
+    if (Number.isSafeInteger(amount) && amount > 0) this.spent += amount;
+  }
 
   set(p: Profile): void {
     this.profile = p;
