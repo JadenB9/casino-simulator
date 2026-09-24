@@ -22,7 +22,7 @@ import {
   type BigWinReport,
 } from '../src/floor/wins.ts';
 import type { GameEvent, Step } from '../../shared/src/engine.ts';
-import { ORIGIN, connect, type Client } from './helpers.ts';
+import { ORIGIN, TEST_PASSWORD, connect, type Client } from './helpers.ts';
 
 function floor(): DurableObjectStub<CasinoFloor> {
   return env.FLOOR.get(env.FLOOR.idFromName('main'));
@@ -34,7 +34,7 @@ async function arrive(name: string): Promise<{ id: number; token: string }> {
     new Request('http://casino.test/casino/api/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Origin: ORIGIN, 'CF-Connecting-IP': `198.51.100.${++ipSeq}` },
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({ name, password: TEST_PASSWORD }),
     }),
   );
   expect(res.status).toBe(200);

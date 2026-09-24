@@ -8,7 +8,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { env, exports } from 'cloudflare:workers';
 import { evictDurableObject, runInDurableObject } from 'cloudflare:test';
-import { ORIGIN, connect, type Client } from './helpers.ts';
+import { ORIGIN, TEST_PASSWORD, connect, type Client } from './helpers.ts';
 import type { CasinoFloor } from '../src/floor/index.ts';
 import type { CasinoTable } from '../src/table/host.ts';
 import { CHAT_BURST, FLOOD, MUTE_MS, STRIKES, maskWords } from '../src/floor/chat.ts';
@@ -31,7 +31,7 @@ async function player(tag: string): Promise<Player> {
     new Request('http://casino.test/casino/api/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Origin: ORIGIN, 'CF-Connecting-IP': `198.51.100.${seq}` },
-      body: JSON.stringify({ name: `ch${tag}${seq}` }),
+      body: JSON.stringify({ name: `ch${tag}${seq}`, password: TEST_PASSWORD }),
     }),
   );
   expect(res.status).toBe(200);
