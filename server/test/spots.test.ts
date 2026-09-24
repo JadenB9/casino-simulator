@@ -133,12 +133,13 @@ describe('several spots at a solo table', () => {
       else stack += netOf(view.spots);
     }
     expect(inPlay).not.toBeNull();
-    const bets = BJ_BETS.reduce((a, b) => a + b, 0);
+    // Mid-round the bets are down, and a spot's natural is already paid when the dealer can't have one.
+    const midRound = stack + netOf(inPlay.spots);
 
     c.ws.close(1000, 'network drop');
     const { c: again, snap } = await open('blackjack', token);
     expect(snap.you.status).toBe('seated');
-    expect(snap.you.stack).toBe(stack - bets);
+    expect(snap.you.stack).toBe(midRound);
     expect(snap.view.mine).toEqual([0, 1, 2]);
     expect(snap.view.spots).toEqual(inPlay.spots);
     expect(snap.view.turn).toEqual(inPlay.turn);
@@ -146,7 +147,7 @@ describe('several spots at a solo table', () => {
 
     await evictDurableObject(env.TABLE.get(env.TABLE.idFromName(`solo:blackjack:-:${id}`)), { webSockets: 'close' });
     const { c: third, snap: restored } = await open('blackjack', token);
-    expect(restored.you.stack).toBe(stack - bets);
+    expect(restored.you.stack).toBe(midRound);
     expect(restored.view.mine).toEqual([0, 1, 2]);
     expect(restored.view.spots).toEqual(inPlay.spots);
 
