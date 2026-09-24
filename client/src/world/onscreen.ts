@@ -14,6 +14,8 @@ const SIDE = 8;
 
 const _v = new THREE.Vector3();
 const last = new WeakMap<HTMLElement, string>();
+/** A bubble's size, measured once: its words don't change, and reading it every frame forces a layout. */
+const sizes = new WeakMap<HTMLElement, [number, number]>();
 
 /**
  * Keep `bubble` on screen. `anchor` is the CSS2DObject it hangs from; `lift` is how far above the
@@ -29,8 +31,9 @@ export function fitOnScreen(anchor: THREE.Object3D, bubble: HTMLElement, camera:
     const h = innerHeight;
     const x = ((_v.x + 1) / 2) * w;
     const y = ((1 - _v.y) / 2) * h;
-    const bw = bubble.offsetWidth;
-    const bh = bubble.offsetHeight;
+    let size = sizes.get(bubble);
+    if (!size || size[0] === 0) sizes.set(bubble, (size = [bubble.offsetWidth, bubble.offsetHeight]));
+    const [bw, bh] = size;
     dy = Math.max(0, Math.round(TOP - (y - lift - bh)));
     const left = x - bw / 2;
     if (left < SIDE) dx = Math.round(SIDE - left);
