@@ -46,12 +46,12 @@ function leaves(cap: number): Map<number, Frac> {
 }
 
 describe('crash curve', () => {
-  it('is e^(0.00006 t): 2× at 11.55 s, 10× at 38.4 s, the cap at 153.5 s', () => {
+  it('is e^(0.00006 t): 2× at 11.553 s, 10× at 38.377 s, the cap at 153.506 s', () => {
     expect(RATE).toBe(0.00006);
     expect(timeTo(100)).toBe(0);
     expect(timeTo(101)).toBe(166);
     expect(timeTo(200)).toBe(11_553);
-    expect(timeTo(1_000)).toBe(38_376);
+    expect(timeTo(1_000)).toBe(38_377);
     expect(timeTo(CAP)).toBe(153_506);
     expect(multAt(0)).toBe(100);
     expect(multAt(165)).toBe(100);
@@ -346,7 +346,8 @@ describe('crash engine: the round loop', () => {
     open(sim);
     for (let i = 0; i < 30; i++) {
       launch(sim, rng, 101 + i);
-      sim.advance(timeTo(101 + i) + CRASHED_MS);
+      sim.advance(timeTo(101 + i));
+      sim.advance(CRASHED_MS);
     }
     expect(sim.state.history).toHaveLength(HISTORY_LEN);
     expect(sim.state.history[0]).toBe(130);
