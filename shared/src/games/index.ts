@@ -12,6 +12,15 @@ import { engine as holdem } from './holdem/engine.ts';
 import { engine as war } from './war/engine.ts';
 import { engine as bigsix } from './bigsix/engine.ts';
 import { engine as sicbo } from './sicbo/engine.ts';
+import { engine as plinko } from './plinko/engine.ts';
+import { engine as tower } from './tower/engine.ts';
+import { engine as mines } from './mines/engine.ts';
+import { engine as dice } from './dice/engine.ts';
+import { engine as limbo } from './limbo/engine.ts';
+import { engine as keno } from './keno/engine.ts';
+import { engine as hilo } from './hilo/engine.ts';
+import { engine as crash } from './crash/engine.ts';
+import { engine as banditwheel } from './banditwheel/engine.ts';
 import { engine as highcard } from './highcard/engine.ts';
 
 // Each engine keeps its own state/action/view types; the host only ever handles them opaquely.
@@ -30,6 +39,15 @@ export const ENGINES: Record<GameId, AnyEngine> = {
   war,
   bigsix,
   sicbo,
+  plinko,
+  tower,
+  mines,
+  dice,
+  limbo,
+  keno,
+  hilo,
+  crash,
+  banditwheel,
   highcard,
 };
 

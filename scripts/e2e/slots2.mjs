@@ -155,3 +155,5 @@ for (const variant of variants) {
 }
 console.log(JSON.stringify(report, null, 1));
 await browser.close();
+// Fail the run on page errors, reels that stopped off the server's stops, or a wheel off its segment.
+process.exit(report.some((r) => r.errors.length || r.results.some((x) => !x.landed) || r.showpiece.wheelCheck?.landed === false) ? 1 : 0);

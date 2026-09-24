@@ -1,0 +1,20 @@
+/* Big-win toasts: under the HUD, centred, in the row the dealer's line takes at a table. A brass
+   edge on the left like the LED sign's trim, the name in the house serif, the amount in brass. */
+
+.bigwin-toasts { position: fixed; top: var(--below-hud); left: 50%; transform: translateX(-50%); z-index: 41; display: grid; justify-items: center; width: max-content; max-width: calc(100vw - 32px); }
+.bigwin-toast { position: relative; display: grid; gap: 2px; min-width: 240px; max-width: 100%; padding: 9px 18px 10px 20px; border-color: var(--line-strong); overflow: hidden; animation: bigwin-in 0.34s var(--ease); }
+.bigwin-toast::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: linear-gradient(var(--brass-hi), var(--brass)); }
+.bigwin-toast.out { opacity: 0; transform: translateY(-6px); transition: opacity 0.38s var(--ease), transform 0.38s var(--ease); }
+.bigwin-line { display: flex; align-items: baseline; gap: 0; min-width: 0; white-space: nowrap; }
+.bigwin-name { overflow: hidden; text-overflow: ellipsis; font-family: var(--serif); font-size: 16px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--brass-hi); }
+.bigwin-won { padding: 0 0.4em; font-size: 16px; color: var(--ink-2); }
+.bigwin-amount { font-size: 19px; font-weight: 600; letter-spacing: 0.02em; color: var(--ink); }
+.bigwin-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; letter-spacing: 0.03em; color: var(--ink-3); }
+@keyframes bigwin-in { from { opacity: 0; transform: translateY(-8px); } }
+
+@media (max-width: 720px) {
+  .bigwin-toast { min-width: 0; padding: 7px 14px 8px 16px; }
+  .bigwin-name, .bigwin-won { font-size: 15px; }
+  .bigwin-amount { font-size: 17px; }
+  .bigwin-sub { font-size: 14px; }
+}

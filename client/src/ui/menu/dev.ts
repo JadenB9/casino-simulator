@@ -65,7 +65,7 @@ async function ensureSession(): Promise<void> {
   if (session.profile) return;
   const name = q.get('name') ?? `dev_${Math.random().toString(36).slice(2, 8)}`;
   // A canned player keeps its own name unless the URL asks for another.
-  session.set(fixture && !q.has('name') ? await api.me() : await api.login(name));
+  session.set(fixture && !q.has('name') ? await api.me() : await api.login(name, realApi.DEV_PASSWORD));
 }
 
 let hud: Hud | null = null;

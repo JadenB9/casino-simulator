@@ -8,7 +8,7 @@ import { devRoom } from '../world/dev-room.ts';
 import { TableStage } from '../table/stage.ts';
 import { TableSession } from '../app/table-session.ts';
 import { session } from '../app/session.ts';
-import { login } from '../net/api.ts';
+import { DEV_PASSWORD, login } from '../net/api.ts';
 import { updateTweens } from '../table/tween.ts';
 import { loadCards } from '../table/cards.ts';
 import { Sfx } from '../audio/sfx.ts';
@@ -25,7 +25,7 @@ export async function runHarness(params: URLSearchParams): Promise<void> {
   const sfx = new Sfx();
   await Promise.all([loadCards(), sfx.load().catch(() => {}), module.preload?.()]);
   const name = params.get('name') ?? `dev_${Math.random().toString(36).slice(2, 8)}`;
-  session.set(await login(name));
+  session.set(await login(name, DEV_PASSWORD));
 
   const station = devRoom(engine, module, variant);
   const stage = new TableStage(engine, station.anchor);

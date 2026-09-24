@@ -8,7 +8,7 @@ import { Engine3D, savedQuality } from '../../render/engine3d.ts';
 import { devRoom } from '../../world/dev-room.ts';
 import { GAMES } from '../../games/index.ts';
 import { session } from '../../app/session.ts';
-import { login, socketUrl } from '../../net/api.ts';
+import { DEV_PASSWORD, login, socketUrl } from '../../net/api.ts';
 import { Socket } from '../../net/socket.ts';
 import { CATALOG, isGameId, variantOf } from '../../../../shared/src/games/catalog.ts';
 import type { FloorServerMsg, TableClientMsg } from '../../../../shared/src/protocol.ts';
@@ -32,7 +32,7 @@ async function main(): Promise<void> {
   engine.camera.position.set(0.95, 1.75, 2.5);
   engine.camera.lookAt(0.95, 0.45, 0);
 
-  session.set(await login(params.get('name') ?? `dev_${Math.random().toString(36).slice(2, 8)}`));
+  session.set(await login(params.get('name') ?? `dev_${Math.random().toString(36).slice(2, 8)}`, DEV_PASSWORD));
   const hud = el('div', 'panel');
   hud.style.cssText = 'position:fixed;top:12px;left:12px;padding:8px 12px;font-size:16px';
   const renderHud = () => (hud.textContent = `${session.profile?.name} · ${formatMoney(session.profile?.balance ?? 0)}`);

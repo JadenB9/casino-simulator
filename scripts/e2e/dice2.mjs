@@ -255,3 +255,5 @@ for (const r of runs) {
 }
 console.log(JSON.stringify(report, null, 1));
 await browser.close();
+// Fail the run when a section threw or logged page errors.
+process.exit(Object.values(report).some((r) => r?.failed || r?.errors?.length) ? 1 : 0);

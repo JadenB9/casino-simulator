@@ -190,7 +190,7 @@ function mountBigSix(ctx: TableViewCtx): TableView {
     }, ease.inOut);
   }
   function glideTo(pose: Pose, ms: number): Promise<void> {
-    camHome ??= { pos: camera.position.clone(), quat: camera.quaternion.clone() };
+    camHome ??= stage.restPose(camera);
     const to = stage.worldPose(pose);
     const q = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(to.position, to.target, camera.up));
     return glide(to.position, q, ms);

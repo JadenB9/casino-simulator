@@ -46,9 +46,10 @@ button { font: inherit; color: inherit; }
 #scene { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
 #labels { position: fixed; inset: 0; pointer-events: none; }
 #ui { position: fixed; inset: 0; pointer-events: none; }
-#ui > * { pointer-events: auto; }
+/* Zero specificity, so an overlay's own pointer-events: none (the tip line, a banner) wins. */
+:where(#ui) > * { pointer-events: auto; }
 #ui .pass { pointer-events: none; }
-#ui .pass > * { pointer-events: auto; }
+:where(#ui .pass) > * { pointer-events: auto; }
 
 .boot { position: fixed; inset: 0; display: grid; place-content: center; gap: 14px; background: radial-gradient(120% 90% at 50% 40%, #2a1c12 0%, #0b0908 70%); z-index: 50; transition: opacity 0.5s var(--ease); }
 .boot.done { opacity: 0; pointer-events: none; }
