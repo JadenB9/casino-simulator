@@ -31,7 +31,7 @@ const ACCEL = 1.4;
 /** A waiter's E prompt shows within this (m). */
 const REACH = 1.3;
 /** How close to you a waiter stops to hand a drink over (m), and to someone in their way. */
-const HAND_M = 0.85;
+const HAND_M = 1.0;
 const AHEAD_M = 1.5;
 const SIDESTEP = 0.55;
 /** How long a waiter waits for you to pick from the menu before going back to work (s). */

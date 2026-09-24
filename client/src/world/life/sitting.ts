@@ -63,6 +63,8 @@ export class Seating {
   private camEase = 0;
   /** Where the seated camera settles (camYaw), picked once per sit. */
   private camYaw = 0;
+  /** Where the sitter walked up from (a refused seat steps back there). */
+  private from: { x: number; z: number } | null = null;
 
   constructor(
     private readonly seats: Seatable[],
@@ -101,7 +103,8 @@ export class Seating {
       } else if (m.t === 'leave') {
         this.book.free(m.id);
       } else if (m.t === 'seat.no' && this.mine?.id === m.seat) {
-        this.stand({ send: false });
+        // back to where we came from, not onto the lap of whoever got there first
+        this.stand({ send: false, back: true });
         toast(m.msg);
       }
     });
@@ -139,13 +142,14 @@ export class Seating {
     this.claim(s);
     this.setAside(s.x, s.z);
     const p = this.player.position;
+    this.from = { x: p.x, z: p.z };
     this.glide = { fx: p.x, fz: p.z, fh: this.player.heading, tx: s.x, tz: s.z, th: s.yaw, t: 0, dur: ON_S, sit: true };
     this.camYaw = this.camYawFor(s);
     this.camEase = 0.9;
   }
 
   /** Get up. From E or Esc the character steps off the seat; walking off just goes. */
-  stand(opts: { send?: boolean; walk?: boolean } = {}): void {
+  stand(opts: { send?: boolean; walk?: boolean; back?: boolean } = {}): void {
     const s = this.mine;
     if (!s) return;
     this.mine = null;
@@ -155,7 +159,7 @@ export class Seating {
     if (opts.send !== false) this.link?.send({ t: 'stand' });
     this.glide = null;
     if (!opts.walk) {
-      const to = this.standSpot(s);
+      const to = opts.back && this.from ? this.from : this.standSpot(s);
       const p = this.player.position;
       this.glide = { fx: p.x, fz: p.z, fh: this.player.heading, tx: to.x, tz: to.z, th: this.player.heading, t: 0, dur: OFF_S, sit: false };
     }
