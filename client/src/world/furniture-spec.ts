@@ -71,14 +71,15 @@ export const FURNITURE: Record<FurnitureKind, FurnitureSpec> = {
   crate: { w: 0.62, d: 0.62, h: 0.5, seats: [{ x: 0, z: 0, yaw: 0 }], top: 0.5, seatKind: 'stool' },
   barrel: { w: 0.6, d: 0.6, h: 0.9, round: true },
   pallets: { w: 1.22, d: 1.02, h: 0.62 },
-  scrap: { w: 1.9, d: 1.4, h: 1.15 },
-  workbench: { w: 1.8, d: 0.72, h: 0.94 },
+  scrap: { w: 2.0, d: 1.56, h: 1.15 },
+  // (its lamp stands half a metre over the top)
+  workbench: { w: 1.8, d: 0.72, h: 1.5 },
   'drum-fire': { w: 0.62, d: 0.62, h: 0.92, round: true, walk: 0.62 },
   'plank-bench': { w: 1.9, d: 0.46, h: 0.48, seats: [-0.46, 0.46].map((x) => ({ x, z: 0, yaw: 0 })), top: 0.48, seatKind: 'bench' },
   // the lobby's directory: a board on two posts
   directory: { w: 1.5, d: 0.36, h: 2.36 },
   // a host stand
-  podium: { w: 0.92, d: 0.56, h: 1.16 },
+  podium: { w: 0.92, d: 0.56, h: 1.52 },
   lamp: { w: 0.84, d: 0.84, h: 1.45, round: true },
   palm: { w: 1.0, d: 1.0, h: 0.62, round: true },
 };
@@ -88,9 +89,10 @@ export type ChairKind = 'chair' | 'plush' | 'stool' | 'velvet-stool';
 
 export const CHAIRS: Record<ChairKind, { w: number; d: number; h: number; round?: boolean }> = {
   // a casino table chair: upholstered seat and back on a wood frame, brass foot ring
-  chair: { w: 0.46, d: 0.46, h: 1.0 },
+  // (deeper than its seat: the back's posts rake back)
+  chair: { w: 0.46, d: 0.56, h: 1.06 },
   // the salon's: velvet, a rounder back
-  plush: { w: 0.5, d: 0.5, h: 1.02 },
+  plush: { w: 0.5, d: 0.5, h: 1.06 },
   // a backless stool on a chrome post
   stool: { w: 0.31, d: 0.31, h: 0.7, round: true },
   'velvet-stool': { w: 0.33, d: 0.33, h: 0.74, round: true },

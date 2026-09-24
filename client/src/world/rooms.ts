@@ -542,7 +542,7 @@ export const ROOMS: RoomSpec[] = [
       { kind: 'crate', x: -4.5, z: -3.6, yaw: 0.3 },
       { kind: 'crate', x: -3.4, z: -2.2, yaw: -0.4 },
       { kind: 'workbench', x: -6.1, z: -0.2, yaw: Math.PI / 2 },
-      { kind: 'scrap', x: 5.4, z: -4.7, yaw: 0.4 },
+      { kind: 'scrap', x: 5.4, z: -4.5, yaw: 0.4 },
       { kind: 'plank-bench', x: 6.2, z: -1.4, yaw: -Math.PI / 2 },
       { kind: 'crate', x: 5.9, z: 1.7, yaw: 0.2 },
       { kind: 'barrel', x: 6.1, z: 5.2, yaw: 0 },

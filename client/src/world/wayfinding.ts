@@ -288,7 +288,7 @@ export class MapOverlay {
     if (here !== this.here) {
       this.here = here;
       const r = this.deps.plan.rooms.find((q) => q.id === here);
-      this.sheet.sub.textContent = r ? `You are in the ${r.name}` : '';
+      this.sheet.sub.textContent = r ? `You are in ${r.name.startsWith('The ') ? '' : 'the '}${r.name}` : '';
       this.sheet.sub.hidden = !r;
       for (const [id, rect] of this.roomsEl) rect.classList.toggle('here', id === here);
     }

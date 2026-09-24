@@ -122,8 +122,11 @@ export interface FloorWorld extends World {
   dropHeld(): void;
   /** Where holdItem and dropHeld go (the app's bar, ui/shop/bar.ts); null to forget. */
   useBar(bar: { hold(id: string): unknown; drop(): unknown } | null): void;
-  /** The room the camera is in, and the rooms being drawn (the rest can't be seen from here). */
-  readonly rooms: { readonly current: string; readonly visible: ReadonlySet<string> };
+  /**
+   * The room the camera is in, and the rooms being drawn (the rest can't be seen from here).
+   * `showAll(true)` draws every room until `showAll(false)` (the headless checks, captures).
+   */
+  readonly rooms: { readonly current: string; readonly visible: ReadonlySet<string>; showAll(on: boolean): void };
   /** The casino map (the HUD's map button, or N). */
   readonly map: MapOverlay;
   /** The procedural furniture: every table's chairs and stools, the lounges' chairs, and the rest. */
@@ -235,6 +238,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
     for (const d of directories.meshes) d.visible = vis.has(d.userData.room as string);
   };
   const sees = (room: string, box: THREE.Box3) => visibility.sees(room, box);
+  let everything = false;
   // the map opens on the floor, not at a table (blackjack's N is "no insurance")
   const map = new MapOverlay({ plan, ui, you: () => ({ x: player.position.x, z: player.position.z, heading: player.heading }), canOpen: () => !interact.seated && player.isEnabled });
   // On the floor with the mouse free (after Esc, or before the first click on the dev floor): how
@@ -364,11 +368,11 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
       const idle = player.awaitingClick && !interact.seated;
       if (hint.hidden === idle) hint.hidden = !idle;
       touch.update();
-      if (visibility.update(engine.camera)) applyRooms();
+      if (!everything && visibility.update(engine.camera)) applyRooms();
       lighting.setRoom(visibility.room);
-      lod.update(engine.camera, interact.seated, visibility.visible, sees);
+      lod.update(engine.camera, interact.seated, everything ? null : visibility.visible, everything ? null : sees);
       character.update(dt);
-      staff.update(dt, engine.camera, interact.seated, visibility.visible, sees);
+      staff.update(dt, engine.camera, interact.seated, everything ? null : visibility.visible, everything ? null : sees);
       map.update(dt);
       emotes.update(dt);
       const f = world.focus;
@@ -419,6 +423,12 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
       },
       get visible() {
         return visibility.visible;
+      },
+      showAll(on) {
+        everything = on;
+        if (on) visibility.all();
+        applyRooms();
+        if (!on) visibility.update(engine.camera) && applyRooms();
       },
     },
     map,

@@ -203,7 +203,6 @@ function plushChair(): Part[] {
   const out: Part[] = [
     box('velvet-green', 0.48, 0.1, 0.46, { y: t - 0.05 }),
     { geo: placed(back, { y: t + 0.2, z: -0.02 }), mat: 'velvet-green' },
-    cyl('velvet-green', 0.26, 0.26, 0.05, { y: t + 0.43, z: -0.02 }, 20),
     box('brass', 0.5, 0.03, 0.48, { y: t - 0.115 }),
   ];
   for (const x of [-0.2, 0.2]) for (const z of [-0.19, 0.19]) out.push(cyl('brass', 0.022, 0.012, t - 0.13, { x, y: (t - 0.13) / 2, z }, 8));
@@ -220,7 +219,6 @@ function tubChair(): Part[] {
   return [
     box('velvet-green', s.w - 0.06, 0.14, s.d - 0.08, { y: t - 0.07 }),
     { geo: placed(back, { y: t + (s.h - t) / 2 - 0.02 }), mat: 'velvet-green' },
-    cyl('velvet-green', r + 0.01, r + 0.01, 0.06, { y: s.h - 0.03 }, 24),
     box('velvet-green', s.w - 0.02, t - 0.22, s.d - 0.04, { y: 0.1 + (t - 0.22) / 2 }),
     box('brass', s.w, 0.03, s.d - 0.02, { y: 0.09 }),
     ...[-1, 1].flatMap((e) => [-1, 1].map((f) => cyl('brass', 0.02, 0.014, 0.08, { x: e * (s.w / 2 - 0.08), y: 0.04, z: f * (s.d / 2 - 0.08) }, 8))),
@@ -271,12 +269,13 @@ function banquette(): Part[] {
   const s = FURNITURE.banquette;
   const R = s.w / 2;
   const t = s.top!;
+  // (a lathe's faces look to the right of its profile's run: outward going up, up going inward)
   const seat = new THREE.LatheGeometry(
     [
-      [0.78, t],
-      [R - 0.02, t],
-      [R, t - 0.04],
       [R, 0.1],
+      [R, t - 0.04],
+      [R - 0.02, t],
+      [0.78, t],
     ].map(([x, y]) => new THREE.Vector2(x, y)),
     48,
   );
@@ -291,9 +290,9 @@ function banquette(): Part[] {
   );
   const plinth = new THREE.LatheGeometry(
     [
-      [R - 0.04, 0.1],
-      [R - 0.04, 0],
       [0.6, 0],
+      [R - 0.04, 0],
+      [R - 0.04, 0.1],
     ].map(([x, y]) => new THREE.Vector2(x, y)),
     48,
   );
@@ -395,7 +394,7 @@ function scrap(): Part[] {
     box('rust', 0.9, 0.05, 0.7, { x: 0.3, y: 0.55, z: -0.1, rx: -0.5, rz: -0.3 }),
     cyl('rust', 0.26, 0.26, 0.8, { x: -0.5, y: 0.26, z: -0.35, rz: Math.PI / 2, ry: 0.4 }, 16),
     cyl('steel', 0.04, 0.04, 1.5, { x: 0.2, y: 0.6, z: 0.35, rz: 1.1, ry: -0.3 }, 8),
-    ring('fabric', 0.32, 0.11, { x: 0.55, y: 0.15, z: 0.35, rx: 0 }, 20),
+    ring('fabric', 0.3, 0.1, { x: 0.45, y: 0.4, z: 0.3, rx: 0 }, 20),
     box('planks', 1.4, 0.04, 0.16, { x: 0, y: 0.82, z: 0, rx: 0.1, rz: 0.4 }),
     box('steel', 0.5, 0.35, 0.4, { x: 0.55, y: 0.18, z: -0.4, ry: 0.5 }),
     box('rust', 0.6, 0.04, 0.5, { x: -0.1, y: s.h - 0.25, z: 0.1, rx: 0.9, rz: -0.2 }),
@@ -405,12 +404,14 @@ function scrap(): Part[] {
 /** A workbench: a thick timber top on steel legs, a vice, a lamp, tools. */
 function workbench(): Part[] {
   const s = FURNITURE.workbench;
-  const out: Part[] = [box('planks', s.w, 0.07, s.d, { y: s.h - 0.035 }), box('planks', s.w - 0.1, 0.03, s.d - 0.1, { y: 0.25 })];
-  for (const x of [-(s.w / 2 - 0.06), s.w / 2 - 0.06]) for (const z of [-(s.d / 2 - 0.06), s.d / 2 - 0.06]) out.push(box('steel', 0.06, s.h - 0.07, 0.06, { x, y: (s.h - 0.07) / 2, z }));
-  out.push(box('steel', 0.16, 0.12, 0.14, { x: s.w / 2 - 0.2, y: s.h + 0.06, z: s.d / 2 - 0.12 }));
-  out.push(box('rust', 0.3, 0.06, 0.12, { x: -0.3, y: s.h + 0.03, z: 0.1, ry: 0.4 }));
-  out.push(cyl('steel', 0.015, 0.015, 0.5, { x: -s.w / 2 + 0.2, y: s.h + 0.25, z: -s.d / 2 + 0.12 }, 6));
-  out.push(cyl('fire', 0.06, 0.08, 0.1, { x: -s.w / 2 + 0.2, y: s.h + 0.48, z: -s.d / 2 + 0.12 }, 10));
+  // the bench top at 0.94 m; the lamp on its post reaches the spec's height
+  const top = 0.94;
+  const out: Part[] = [box('planks', s.w, 0.07, s.d, { y: top - 0.035 }), box('planks', s.w - 0.1, 0.03, s.d - 0.1, { y: 0.25 })];
+  for (const x of [-(s.w / 2 - 0.06), s.w / 2 - 0.06]) for (const z of [-(s.d / 2 - 0.06), s.d / 2 - 0.06]) out.push(box('steel', 0.06, top - 0.07, 0.06, { x, y: (top - 0.07) / 2, z }));
+  out.push(box('steel', 0.16, 0.12, 0.14, { x: s.w / 2 - 0.2, y: top + 0.06, z: s.d / 2 - 0.12 }));
+  out.push(box('rust', 0.3, 0.06, 0.12, { x: -0.3, y: top + 0.03, z: 0.1, ry: 0.4 }));
+  out.push(cyl('steel', 0.015, 0.015, 0.46, { x: -s.w / 2 + 0.2, y: top + 0.23, z: -s.d / 2 + 0.12 }, 6));
+  out.push(cyl('fire', 0.06, 0.08, 0.1, { x: -s.w / 2 + 0.2, y: top + 0.46, z: -s.d / 2 + 0.12 }, 10));
   return out;
 }
 
@@ -424,12 +425,14 @@ function plankBench(): Part[] {
 /** A host stand: a wood desk with a marble top and a small brass lamp. */
 function podium(): Part[] {
   const s = FURNITURE.podium;
+  // the desk at 1.16 m; its lamp reaches the spec's height
+  const top = 1.16;
   return [
-    box('wood', s.w - 0.06, s.h - 0.04, s.d - 0.06, { y: (s.h - 0.04) / 2 }),
-    box('marble-black', s.w, 0.04, s.d, { y: s.h - 0.02, rx: -0.12 }),
+    box('wood', s.w - 0.06, top - 0.04, s.d - 0.06, { y: (top - 0.04) / 2 }),
+    box('marble-black', s.w - 0.02, 0.04, s.d - 0.04, { y: top - 0.02, rx: -0.12 }),
     box('brass', s.w - 0.04, 0.03, 0.02, { y: 0.4, z: s.d / 2 - 0.02 }),
-    cyl('brass', 0.01, 0.01, 0.3, { x: s.w / 2 - 0.12, y: s.h + 0.15, z: -0.1 }, 6),
-    cyl('shade', 0.07, 0.09, 0.08, { x: s.w / 2 - 0.12, y: s.h + 0.3, z: -0.1 }, 12),
+    cyl('brass', 0.01, 0.01, 0.28, { x: s.w / 2 - 0.12, y: top + 0.14, z: -0.1 }, 6),
+    cyl('shade', 0.07, 0.09, 0.08, { x: s.w / 2 - 0.12, y: top + 0.3, z: -0.1 }, 12),
   ];
 }
 
