@@ -14,6 +14,12 @@ import { playPoseWorld } from './stations.ts';
 import type { CashierPoint } from './contract.ts';
 
 const REACH = 1.6;
+/**
+ * A station within this much (m) of the nearest spot wins the prompt: at a video poker machine set
+ * into the bar the bartender's Order would otherwise always win (the counter is right there), and
+ * at a computer the desk chair's Sit took the place of playing it.
+ */
+const STATION_FIRST = 0.5;
 const FLY_IN = 0.9;
 const FLY_OUT = 0.75;
 const AIM = 0.6;
@@ -178,8 +184,9 @@ export class Interact {
       const len = Math.hypot(dx, dz);
       // in front: within about 75 degrees of where the player faces (or practically touching)
       if (!any && len > 0.35 && (dx * fx + dz * fz) / len < 0.26) return;
-      if (!best || d < best.d) best = t;
+      if (!best || rank(t) < rank(best)) best = t;
     };
+    const rank = (t: Target) => (t.kind === 'spot' ? t.d + STATION_FIRST : t.d);
     for (const s of this.stations) {
       const a = s.anchor.position;
       const c = Math.cos(s.yaw);
