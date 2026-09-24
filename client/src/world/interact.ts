@@ -7,7 +7,7 @@
 
 import * as THREE from 'three';
 import { el } from '../ui/kit.ts';
-import { isTyping } from '../ui/keyboard.ts';
+import { isTyping, overlayCount } from '../ui/keyboard.ts';
 import type { Player } from './player.ts';
 import type { WorldStation } from './stations.ts';
 import { playPoseWorld } from './stations.ts';
@@ -229,7 +229,8 @@ export class Interact {
 
   private onKey = (e: KeyboardEvent): void => {
     if (isTyping(e)) return;
-    if (e.code === 'KeyE' && !e.repeat && !this.seated && !this.fly && this.player.isEnabled && this.current) {
+    // (a key typed into an open panel, the map say, still bubbles up to here: not for us)
+    if (e.code === 'KeyE' && !e.repeat && !this.seated && !this.fly && this.player.isEnabled && this.current && overlayCount() === 0) {
       e.preventDefault();
       const t = this.current;
       if (t.kind === 'station') this.enter(t.station);

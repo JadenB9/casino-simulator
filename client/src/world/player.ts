@@ -331,7 +331,9 @@ export class Player {
   private onKey = (e: KeyboardEvent): void => {
     if (isTyping(e)) return;
     if (e.type === 'keydown') {
-      if (!this.enabled) return;
+      // nothing walks while a panel holds the keyboard (a key typed into the map's panel still
+      // bubbles up to here)
+      if (!this.enabled || overlayCount() > 0) return;
       if (MOVE_KEYS.has(e.code)) {
         this.keys.add(e.code);
         if (e.code.startsWith('Arrow')) e.preventDefault();
@@ -402,8 +404,13 @@ export class Player {
   }
 
   private onOverlay = (open: number): void => {
-    if (open > 0) this.lend();
-    else this.giveBack();
+    if (open > 0) {
+      // the map, the emotes, a sheet: stop where you are rather than walk on blind behind it
+      this.keys.clear();
+      this.lend();
+    } else {
+      this.giveBack();
+    }
   };
 
   private onFocus = (): void => {
