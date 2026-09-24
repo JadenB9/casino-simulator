@@ -511,7 +511,8 @@ function buildTerminals(m: Shared, screenMat: THREE.Material): THREE.Object3D[] 
     const a = (k / 3) * Math.PI * 2 + 0.4;
     stool.add(new THREE.CylinderGeometry(0.008, 0.008, 0.15, 6), [Math.cos(a) * 0.075, 0.3, stoolZ + Math.sin(a) * 0.075], [0, -a, Math.PI / 2]);
   }
-  stoolWood.add(scaleUv(new THREE.CylinderGeometry(STOOL_SEAT_R, STOOL_SEAT_R - 0.012, 0.045, 22), 0.9, 0.2), [0, STOOL_TOP - 0.0225, stoolZ]);
+  // one board's worth of grain across the seat: the caps map the texture flat, so scale evenly
+  stoolWood.add(scaleUv(new THREE.CylinderGeometry(STOOL_SEAT_R, STOOL_SEAT_R - 0.012, 0.045, 22), 0.38, 0.38), [0, STOOL_TOP - 0.0225, stoolZ]);
 
   const places: THREE.Matrix4[] = [];
   for (let i = 0; i < TERMINALS; i++) {

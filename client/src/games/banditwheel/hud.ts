@@ -60,7 +60,7 @@ export class Panel {
   pick: Pick;
   private defaultHint = '';
 
-  constructor(private readonly h: PanelHandlers) {
+  constructor(h: PanelHandlers) {
     this.root.setAttribute('aria-label', 'Bandit Wheel betting terminal');
     const head = el('header', 'bw-head');
     head.append(this.title, this.seatNote);

@@ -10,7 +10,6 @@
 import * as THREE from 'three';
 import './banditwheel.css';
 import type { GameClientModule, TableView, TableViewCtx, TableSnapshot, MembersMsg } from '../contract.ts';
-import type { Pose } from '../../table/stage.ts';
 import type { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import type { GameEvent } from '../../../../shared/src/engine.ts';
 import type { Member } from '../../../../shared/src/protocol.ts';
@@ -25,7 +24,7 @@ import {
   seatPositions, seatPose, wheelPose, terminalOfSeat, terminalYaw, cupPlace, onArc,
 } from './layout.ts';
 import { wheelModel, WHEEL_GROUP, ROTOR_NAME, GLOW_NAME, LAMPS_NAME, type Flapper, type Screens } from './model.ts';
-import { WheelSpin, chooseEnding, angleFor, flapAngle, slotAt, TAU, SECTOR, G_TOUCH } from './spin.ts';
+import { WheelSpin, chooseEnding, angleFor, flapAngle, slotAt, SECTOR, G_TOUCH } from './spin.ts';
 import { CupChips, Pile } from './chips.ts';
 import { WheelSound } from './sound.ts';
 import { Panel, History, Players, TerminalTag, type PlayerRow } from './hud.ts';
@@ -340,10 +339,6 @@ function mountBanditWheel(ctx: TableViewCtx): TableView {
 
   // ------------------------------------------------------------------------------------------
   // Drawing the settled table
-
-  function nameOf(seat: number): string {
-    return members.find((m) => m.seat === seat && m.status !== 'watching')?.name ?? `Seat ${seat + 1}`;
-  }
 
   function drawPlayers(): void {
     const seated = members.filter((m) => m.seat !== null && m.status !== 'watching').sort((a, b) => terminalOfSeat(a.seat!) - terminalOfSeat(b.seat!));
