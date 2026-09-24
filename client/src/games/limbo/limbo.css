@@ -1,0 +1,23 @@
+/* Limbo on the online site: the recent results along the top, the big multiplier counting up in
+   the middle (green when it reaches the target, red when it stops short), and the target and win
+   chance fields along the bottom. Design pixels of the 1280 x 800 page. */
+
+.lb-main { position: absolute; inset: 0; }
+.lb-strip { position: absolute; top: 22px; left: 24px; right: 24px; }
+
+.lb-stage { position: absolute; left: 24px; right: 24px; top: 150px; height: 330px; display: grid; place-content: center; justify-items: center; gap: 10px; }
+.lb-number {
+  font-family: var(--os-num); font-size: 168px; line-height: 1; font-weight: 600; letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums; color: var(--os-ink); white-space: nowrap;
+}
+.lb-number.win { color: var(--os-win); text-shadow: 0 0 34px rgba(31, 214, 95, 0.35); }
+.lb-number.lose { color: var(--os-lose); text-shadow: 0 0 34px rgba(255, 90, 95, 0.3); }
+.lb-number.win, .lb-number.lose { animation: lb-land 0.3s ease-out; }
+@keyframes lb-land { 40% { scale: 1.05; } }
+.lb-caption { font-size: 18px; color: var(--os-ink-3); }
+.lb-caption b { color: var(--os-ink-2); font-weight: 600; }
+
+.lb-fields {
+  position: absolute; left: 24px; right: 24px; bottom: 24px;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 16px 18px 18px; border-radius: 8px; background: var(--os-panel);
+}

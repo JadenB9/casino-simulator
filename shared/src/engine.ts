@@ -16,7 +16,10 @@ import type { Cents, BetLimits, BuyInLimits } from './money.ts';
 import type { Rng } from './rng.ts';
 import type { ErrorCode } from './protocol.ts';
 
-export const GAME_IDS = ['blackjack', 'roulette', 'craps', 'baccarat', 'slots', 'videopoker', 'threecard', 'holdem', 'war', 'bigsix', 'sicbo'] as const;
+export const GAME_IDS = [
+  'blackjack', 'roulette', 'craps', 'baccarat', 'slots', 'videopoker', 'threecard', 'holdem', 'war', 'bigsix', 'sicbo',
+  'plinko', 'tower', 'mines', 'dice', 'limbo', 'keno', 'hilo', 'crash', 'banditwheel',
+] as const;
 
 /** The casino's games, plus `highcard`: a tiny fixture game used by tests and the dev harness. */
 export type GameId = (typeof GAME_IDS)[number] | 'highcard';

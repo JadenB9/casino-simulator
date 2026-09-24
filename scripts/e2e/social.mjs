@@ -122,3 +122,4 @@ async function page(query, viewport = { width: 1280, height: 800 }) {
 
 console.log(JSON.stringify({ results, errors: errors.slice(0, 10) }, null, 1));
 await browser.close();
+process.exit(errors.length ? 1 : 0);

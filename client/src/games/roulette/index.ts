@@ -96,7 +96,7 @@ function mountRoulette(ctx: TableViewCtx): TableView {
   const ball = wheel.getObjectByName(BALL_NAME) as THREE.Mesh;
   const modelFelt = stage.anchor.getObjectByName(MODEL_FELT);
   if (modelFelt) modelFelt.visible = false;
-  const felt = layoutFelt(variant, 1400);
+  const felt = layoutFelt(variant, 1400, stage.engine.quality);
   stage.addFelt(felt, FELT_Y);
 
   // state
@@ -185,7 +185,7 @@ function mountRoulette(ctx: TableViewCtx): TableView {
     }, ease.inOut);
   }
   function glideToWheel(ms: number): Promise<void> {
-    camHome ??= { pos: camera.position.clone(), quat: camera.quaternion.clone() };
+    camHome ??= stage.restPose(camera);
     const to = stage.worldPose(WHEEL_POSE);
     const q = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(to.position, to.target, camera.up));
     return glide(to.position, q, ms);
