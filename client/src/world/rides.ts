@@ -146,9 +146,9 @@ export const RIDES: Record<string, RideSpec> = {
     axles: [{ y: 0.24, z: 0, r: 0.24 }],
   },
   'hover-throne': {
-    walk: 3.3,
+    walk: 3.4,
     run: 5.2,
-    accel: 1.5,
+    accel: 2,
     coast: 0.7,
     turn: 3.2,
     radius: 0.45,
@@ -600,7 +600,8 @@ const GOLD_SATIN = fin(1.0, 0.74, 0.34, 1, 0.3);
 
 /**
  * The Hover Throne: a gilded dais floating on four thruster pods, a throne on it with a red velvet
- * seat and a tall buttoned back, scrolled gold arms and a crest; the footrest is the dais's front.
+ * seat and a buttoned back, scrolled gold arms and a crest; the footrest is the dais's front. The
+ * back stops at the sitter's head, under the follow camera's line to it.
  */
 function buildThrone(parts: Parts): void {
   const spec = RIDES['hover-throne']!;
@@ -631,16 +632,16 @@ function buildThrone(parts: Parts): void {
   for (const x of [-0.29, 0.29]) for (const z of [-0.22, 0.23]) parts.add(new THREE.SphereGeometry(0.035, 14, 10), T(x, dais + 0.03, z), GOLD);
   // the back: a tall gold frame, a buttoned velvet panel, a crest over it
   const backZ = -0.23;
-  parts.add(new RoundedBoxGeometry(0.66, 0.95, 0.07, 3, 0.03), T(0, seat + 0.42, backZ), GOLD_SATIN);
-  parts.add(new RoundedBoxGeometry(0.52, 0.8, 0.03, 3, 0.012), T(0, seat + 0.42, backZ + 0.045), VELVET);
-  for (let r = 0; r < 4; r++) for (const x of r % 2 ? [-0.075, 0.075] : [-0.15, 0, 0.15]) parts.add(new THREE.SphereGeometry(0.009, 8, 6), T(x, seat + 0.15 + r * 0.18, backZ + 0.062), GOLD);
+  parts.add(new RoundedBoxGeometry(0.66, 0.68, 0.07, 3, 0.03), T(0, seat + 0.32, backZ), GOLD_SATIN);
+  parts.add(new RoundedBoxGeometry(0.52, 0.56, 0.03, 3, 0.012), T(0, seat + 0.32, backZ + 0.045), VELVET);
+  for (let r = 0; r < 3; r++) for (const x of r % 2 ? [-0.075, 0.075] : [-0.15, 0, 0.15]) parts.add(new THREE.SphereGeometry(0.009, 8, 6), T(x, seat + 0.14 + r * 0.18, backZ + 0.062), GOLD);
   const crest = new THREE.Shape();
   crest.moveTo(-0.3, 0);
-  crest.bezierCurveTo(-0.25, 0.1, -0.1, 0.06, 0, 0.2);
-  crest.bezierCurveTo(0.1, 0.06, 0.25, 0.1, 0.3, 0);
+  crest.bezierCurveTo(-0.25, 0.07, -0.1, 0.04, 0, 0.13);
+  crest.bezierCurveTo(0.1, 0.04, 0.25, 0.07, 0.3, 0);
   crest.lineTo(-0.3, 0);
-  parts.add(new THREE.ExtrudeGeometry(crest, { depth: 0.05, bevelEnabled: true, bevelThickness: 0.008, bevelSize: 0.008, bevelSegments: 2, curveSegments: 12 }), T(0, seat + 0.88, backZ - 0.025), GOLD);
-  parts.add(new THREE.SphereGeometry(0.03, 16, 10), T(0, seat + 1.1, backZ), fin(0.36, 0.004, 0.02, 0.25, 0.04));
+  parts.add(new THREE.ExtrudeGeometry(crest, { depth: 0.05, bevelEnabled: true, bevelThickness: 0.008, bevelSize: 0.008, bevelSegments: 2, curveSegments: 12 }), T(0, seat + 0.645, backZ - 0.025), GOLD);
+  parts.add(new THREE.SphereGeometry(0.024, 16, 10), T(0, seat + 0.8, backZ), fin(0.36, 0.004, 0.02, 0.25, 0.04));
   // the arms: gold rails ending in scrolls, velvet pads on top
   for (const side of [-1, 1]) {
     parts.add(new RoundedBoxGeometry(0.06, 0.2, 0.44, 2, 0.02), T(side * 0.3, seat + 0.1, 0.0), GOLD_SATIN);

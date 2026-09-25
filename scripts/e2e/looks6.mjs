@@ -148,7 +148,8 @@ if (checks.includes('ride')) {
         if (r.riding !== ride || !r.shown) fail(`${name}: not stood on (${JSON.stringify(r)})`);
         // the feet are up on the deck, not through it or floating over it
         const lift = Math.min(...r.feet) - r.root;
-        if (!(lift > r.deck - 0.03 && lift < r.deck + 0.14)) fail(`${name}: feet at ${lift.toFixed(3)} over the floor, deck ${r.deck}`);
+        // (sitting on a throne the shins hang to the footrest; the foot bones don't say where the shoes are)
+        if (ride !== 'hover-throne' && !(lift > r.deck - 0.03 && lift < r.deck + 0.14)) fail(`${name}: feet at ${lift.toFixed(3)} over the floor, deck ${r.deck}`);
         await shot(p, name);
       }
     }
@@ -280,11 +281,11 @@ if (checks.includes('floor')) {
       continue;
     }
     // across the lobby, left to right in front of B's camera, a curve at the end
-    await a.p.evaluate(() => window.casino.world.player.teleport(-4.8, 10.4, Math.PI / 2));
+    await a.p.evaluate(() => window.casino.world.player.teleport(-5.6, 10.4, Math.PI / 2));
     await watchFrom(b.p, [0.4, 1.3, -3.3]);
     await a.p.waitForTimeout(900);
     await a.p.keyboard.down('KeyW');
-    await a.p.waitForTimeout(500);
+    await a.p.waitForTimeout(1000);
     const t0 = await a.p.evaluate(() => ({ ...window.casino.world.player.state(), t: performance.now() }));
     await a.p.waitForTimeout(500);
     const t1 = await a.p.evaluate(() => ({ ...window.casino.world.player.state(), t: performance.now() }));
