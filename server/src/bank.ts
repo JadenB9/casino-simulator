@@ -29,7 +29,7 @@ import type { CasinoFloor } from './floor/index.ts';
 /** Bank operations per account per minute (savings, deposits, the fund). */
 const LIMIT = 30;
 /** Transfers per account per minute, refused ones included. */
-const SEND_LIMIT = 6;
+const SEND_LIMIT = 10;
 /** Reads again and tries again this many times when another request changed things in between. */
 const TRIES = 4;
 
