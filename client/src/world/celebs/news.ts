@@ -103,11 +103,18 @@ export class Sighting {
 }
 
 /** The photo with a celebrity (or a gift box's find): a card that slides in at the right and goes. */
-export function photoCard(root: HTMLElement, p: { tag: string; title: string; amount: Cents; line?: string; foot?: string }): void {
+export function photoCard(root: HTMLElement, p: { tag: string; title: string; amount: Cents; line?: string; foot?: string; picture?: HTMLCanvasElement | null }): void {
   const card = el('div', 'celeb-photo panel');
   card.setAttribute('role', 'status');
-  const frame = el('div', 'celeb-photo-frame');
-  frame.append(el('div', 'celeb-photo-tag', p.tag), el('div', 'celeb-photo-title', p.title));
+  const frame = el('div', `celeb-photo-frame${p.picture ? ' shot' : ''}`);
+  if (p.picture) {
+    p.picture.className = 'celeb-photo-picture';
+    p.picture.setAttribute('aria-hidden', 'true');
+    frame.append(p.picture);
+  }
+  const caption = el('div', 'celeb-photo-caption');
+  caption.append(el('div', 'celeb-photo-tag', p.tag), el('div', 'celeb-photo-title', p.title));
+  frame.append(caption);
   card.append(frame, el('div', 'celeb-photo-amount money', `+${formatMoney(p.amount)}`));
   if (p.line) card.append(el('div', 'celeb-photo-line', p.line));
   if (p.foot) card.append(el('div', 'celeb-photo-foot', p.foot));

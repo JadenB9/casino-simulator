@@ -9,7 +9,8 @@
 .daily-sheet { width: min(620px, 100%); }
 .daily-sheet .sheet-body { display: grid; gap: 16px; padding: 18px 24px 22px; overflow-y: auto; }
 .daily-loading { color: var(--ink-3); }
-.daily-streak { display: flex; align-items: baseline; gap: 10px; }
+.daily-streak { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.daily-streak-hint { font-size: 15px; letter-spacing: 0.03em; color: var(--ink-3); }
 .daily-streak-n { font-family: var(--serif); font-size: 40px; font-weight: 600; line-height: 1; color: var(--brass-hi); }
 .daily-streak-label { font-size: 16px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-2); }
 
@@ -38,7 +39,7 @@
 .daily-met-count { font-size: 15px; font-weight: 600; letter-spacing: 0.04em; color: var(--ink-2); }
 .daily-met { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 0; padding: 0; list-style: none; }
 .daily-celeb { display: grid; gap: 1px; padding: 7px 10px 8px; border: 1px solid rgba(214, 178, 110, 0.14); border-radius: 4px; background: rgba(255, 255, 255, 0.015); }
-.daily-celeb-name { overflow: hidden; font-family: var(--serif); font-size: 14px; font-weight: 600; letter-spacing: 0.03em; color: var(--ink-3); text-overflow: ellipsis; white-space: nowrap; }
+.daily-celeb-name { font-family: var(--serif); font-size: 14px; font-weight: 600; line-height: 1.2; letter-spacing: 0.03em; color: var(--ink-3); text-wrap: balance; }
 .daily-celeb-known { overflow: hidden; font-size: 12px; letter-spacing: 0.03em; color: #6f675b; text-overflow: ellipsis; white-space: nowrap; }
 .daily-celeb.met { border-color: var(--line); background: rgba(241, 213, 154, 0.05); }
 .daily-celeb.met .daily-celeb-name { color: var(--brass-hi); }

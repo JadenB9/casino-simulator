@@ -36,6 +36,7 @@ import { Flashes, screenFlash } from './flash.ts';
 import { GiftModel } from './gift.ts';
 import { Notices, Sighting, photoCard } from './news.ts';
 import { chime, shutter } from './sound.ts';
+import { selfieCamera, takeSelfie, type Snapper } from './selfie.ts';
 import './celebs.css';
 
 /** What this needs from the floor socket (FloorLink has all of it). */
@@ -52,6 +53,8 @@ export interface CelebApp {
   sfx: Sfx | null;
   /** Walking the floor (not in the menus, at a table or in a sheet): notices and the card show only then. */
   onFloor(): boolean;
+  /** The renderer and scene, for the selfie's picture (none: the photo card goes without one). */
+  snapper?: Snapper | null;
 }
 
 export interface CelebsDeps {
@@ -69,8 +72,9 @@ export interface CelebsDeps {
 const RANGE = 32;
 /** How long the celebrity looks at someone they're talking to. */
 const TALK_S = 4;
-/** Word at the door this long before they walk in. */
+/** Word at the door this long before they walk in (not when it's a moment away: the arrival says it). */
 const TEASE_MS = 75_000;
+const TEASE_MIN_MS = 12_000;
 /** An ask with no answer for this long can be asked again. */
 const ASK_MS = 5_000;
 const HEAD_Y = 1.62;
@@ -152,6 +156,10 @@ export class Celebs {
   /** Someone they're talking to, and until when (server seconds into the visit). */
   private talk: { id: number; until: number } | null = null;
   private cardIn = 0;
+  /** Your selfie: when the phone goes off (performance.now()), the picture once taken, and the tip it goes with. */
+  private snap: { at: number; id: number } | null = null;
+  private picture: HTMLCanvasElement | null = null;
+  private photo: { title: string; amount: number; line: string; foot: string; until: number } | null = null;
   private readonly head = new THREE.Vector3();
   private readonly frustum = new THREE.Frustum();
   private readonly vp = new THREE.Matrix4();
@@ -205,6 +213,7 @@ export class Celebs {
     const now = serverNow();
     this.flashes.update(dt);
     this.updateGift(dt, now);
+    this.selfie();
     const v = this.visit;
     if (!v || now >= visitEnd(v)) {
       if (this.cast.length) this.clearCast();
@@ -214,7 +223,7 @@ export class Celebs {
     const celeb = celebOf(v.celeb);
     if (!celeb) return;
     if (now < v.start) {
-      if (v.start - now < TEASE_MS && !this.teased.has(v.id) && this.onFloor()) {
+      if (v.start - now < TEASE_MS && v.start - now > TEASE_MIN_MS && !this.teased.has(v.id) && this.onFloor()) {
         this.teased.add(v.id);
         this.news().show({ tag: 'Word at the door', title: `${celeb.name} is on the way`, sub: `${celeb.known}. Arriving through the lobby any minute.` });
       }
@@ -265,9 +274,9 @@ export class Celebs {
         this.app?.money(m);
         const c = this.visit?.id === m.visit ? this.celeb : null;
         if (c) {
-          const line = c.lines.hello[m.line] ?? '';
-          // the photo lands with the flash (onTalk times it)
-          setTimeout(() => photoCard(this.ui(), { tag: 'Photo with', title: c.name, amount: m.amount, line: `"${line}"`, foot: m.met === 1 ? 'Your first celebrity. Find the rest.' : `${m.met} of ${CELEBS.length} celebrities met` }), 1500);
+          // the photo lands with the flash (onTalk times it), or on its own if the flash never comes
+          this.photo = { title: c.name, amount: m.amount, line: `"${c.lines.hello[m.line] ?? ''}"`, foot: m.met === 1 ? 'Your first celebrity. Find the rest.' : `${m.met} of ${CELEBS.length} celebrities met`, until: performance.now() + 3000 };
+          this.picture = null;
         }
         break;
       }
@@ -474,8 +483,9 @@ export class Celebs {
     }
   }
 
+  /** A line in a bubble over the head, clear of the name tag (characters.ts NAME_Y) under it. */
   private say(a: Actor, text: string): void {
-    this.deps.speech.say(a.ch.root, text, this.celeb?.name ?? '', 2.02);
+    this.deps.speech.say(a.ch.root, text, this.celeb?.name ?? '', 2.3);
   }
 
   /** The floor says the celebrity had a word with someone (maybe you). */
@@ -487,15 +497,50 @@ export class Celebs {
     this.talk = { id, until: t + TALK_S };
     this.say(star, this.celeb.lines.hello[line] ?? this.celeb.lines.hello[0]!);
     star.act = { m: CELEB_MOTIONS.selfie, t: 0 };
-    const mine = id === this.link?.you?.id;
+    if (id === this.link?.you?.id) {
+      // your own: the picture is taken at the flash, from the phone's side (selfie())
+      this.snap = { at: performance.now() + 1250, id };
+      this.deps.player.character.gesture?.('thumbs');
+      return;
+    }
     setTimeout(() => {
       const who = this.whereIs(id);
       if (who) this.flashes.pop(who.x, HEAD_Y + 0.35, who.z, 0.5);
-      if (!mine) return;
+    }, 1300);
+  }
+
+  /**
+   * Your selfie's moment: the picture from the phone (drawn now, at the start of the frame, before
+   * the frame's own drawing replaces it), the flash, the shutter, and the photo card with the tip.
+   */
+  private selfie(): void {
+    const t = performance.now();
+    const s = this.snap;
+    if (s && t >= s.at) {
+      this.snap = null;
+      const star = this.star();
+      const me = this.deps.player.position;
+      const snapper = this.app?.snapper;
+      if (star && snapper) {
+        const cam = this.deps.camera.position;
+        this.picture = takeSelfie(snapper, selfieCamera({ x: star.x, z: star.z }, { x: me.x, z: me.z }, { x: cam.x, z: cam.z }));
+      }
+      this.flashes.pop(me.x, HEAD_Y + 0.35, me.z, 0.5);
       screenFlash(this.ui());
       shutter(this.app?.sfx);
-      this.deps.player.character.gesture?.('thumbs');
-    }, 1300);
+      this.showPhoto();
+      return;
+    }
+    // the tip came but the moment didn't (the celebrity out of sight on this screen): the card anyway
+    if (this.photo && !this.snap && t >= this.photo.until) this.showPhoto();
+  }
+
+  private showPhoto(): void {
+    const p = this.photo;
+    if (!p) return;
+    this.photo = null;
+    photoCard(this.ui(), { tag: 'Photo with', title: p.title, amount: p.amount, line: p.line, foot: p.foot, picture: this.picture });
+    this.picture = null;
   }
 
   /** Where a player stands: you, or another player on the floor. */

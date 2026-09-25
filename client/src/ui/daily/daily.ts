@@ -112,9 +112,12 @@ export function mountDaily(deps: DailyDeps): DailyHandle {
       // the days taken so far in this streak (a streak past seven keeps paying the seventh)
       const taken = s.claimed ? Math.min(7, s.streak) : Math.min(6, s.streak);
       const today = s.claimed ? -1 : s.next - 1;
+      // a streak to keep going, or one to start
+      const days = (n: number) => (n === 1 ? 'day in a row' : 'days in a row');
       streak.replaceChildren(
-        el('span', 'daily-streak-n', s.streak > 0 ? `${s.streak}` : '0'),
-        el('span', 'daily-streak-label', s.streak === 1 ? 'day in a row' : 'days in a row'),
+        ...(s.streak > 0
+          ? [el('span', 'daily-streak-n', `${s.streak}`), el('span', 'daily-streak-label', days(s.streak)), ...(s.claimed ? [] : [el('span', 'daily-streak-hint', `Claim today to make it ${s.streak + 1}.`)])]
+          : [el('span', 'daily-streak-n', 'Day 1'), el('span', 'daily-streak-label', 'Start a streak today')]),
       );
       week.replaceChildren(
         ...s.amounts.map((amount, i) => {

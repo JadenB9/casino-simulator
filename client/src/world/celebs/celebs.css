@@ -18,9 +18,13 @@
 .celeb-sighting-known { font-size: 13px; letter-spacing: 0.03em; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .celeb-sighting-where { margin-top: 3px; font-size: 14px; font-weight: 600; letter-spacing: 0.06em; color: var(--ink-2); }
 
-.celeb-photo { position: fixed; right: 16px; bottom: 96px; z-index: 42; display: grid; gap: 6px; width: 264px; padding: 10px 10px 12px; border-color: var(--line-strong); transform: rotate(-1.5deg); animation: celeb-photo-in 0.5s var(--ease); }
+.celeb-photo { position: fixed; right: 16px; bottom: 96px; z-index: 42; display: grid; gap: 6px; width: 284px; padding: 10px 10px 12px; border-color: var(--line-strong); transform: rotate(-1.5deg); animation: celeb-photo-in 0.5s var(--ease); }
 .celeb-photo.out { opacity: 0; transform: rotate(-1.5deg) translateY(10px); transition: opacity 0.45s var(--ease), transform 0.45s var(--ease); }
-.celeb-photo-frame { display: grid; align-content: end; gap: 2px; height: 118px; padding: 10px 12px; border-radius: 3px; background: radial-gradient(120% 90% at 50% 0%, rgba(241, 213, 154, 0.2), rgba(20, 16, 12, 0) 60%), linear-gradient(#2a2119, #120f0c); border: 1px solid rgba(241, 213, 154, 0.24); }
+.celeb-photo-frame { position: relative; display: grid; align-content: end; height: 118px; border-radius: 3px; overflow: hidden; background: radial-gradient(120% 90% at 50% 0%, rgba(241, 213, 154, 0.2), rgba(20, 16, 12, 0) 60%), linear-gradient(#2a2119, #120f0c); border: 1px solid rgba(241, 213, 154, 0.24); }
+.celeb-photo-frame.shot { height: auto; aspect-ratio: 4 / 3; border: 4px solid #efe8da; border-bottom-width: 4px; background: #0b0908; }
+.celeb-photo-picture { position: absolute; inset: 0; width: 100%; height: 100%; }
+.celeb-photo-caption { position: relative; display: grid; gap: 2px; padding: 10px 12px; }
+.celeb-photo-frame.shot .celeb-photo-caption { padding: 18px 10px 7px; background: linear-gradient(rgba(8, 6, 5, 0), rgba(8, 6, 5, 0.82)); }
 .celeb-photo-tag { font-size: 11px; font-weight: 600; letter-spacing: 0.24em; text-transform: uppercase; color: var(--brass); }
 .celeb-photo-title { font-family: var(--serif); font-size: 20px; font-weight: 600; letter-spacing: 0.04em; line-height: 1.1; color: var(--ink); text-wrap: balance; }
 .celeb-photo-amount { padding: 0 4px; font-size: 22px; font-weight: 600; letter-spacing: 0.02em; color: var(--win); }

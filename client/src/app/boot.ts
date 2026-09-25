@@ -328,7 +328,7 @@ class App {
       atTable: () => this.table !== null || this.world.seated !== null,
     });
     // v6 celebs6: a celebrity's tip and a gift box land in the balance; their notices show while you walk the floor
-    this.world.life.celebs.useApp({ money: (m) => session.balance(m.balance, m.inPlay, m.rev), sfx: this.sfx, onFloor: () => this.hud !== null && this.table === null && this.world.seated === null && overlayCount() === 0 });
+    this.world.life.celebs.useApp({ money: (m) => session.balance(m.balance, m.inPlay, m.rev), sfx: this.sfx, onFloor: () => this.hud !== null && this.table === null && this.world.seated === null && overlayCount() === 0, snapper: this.engine });
   }
 
   /**
