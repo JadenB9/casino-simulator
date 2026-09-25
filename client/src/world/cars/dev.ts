@@ -1,6 +1,10 @@
 // Dev page for the cars, served by Vite in development only:
 //   /casino/src/world/cars/dev.html?view=lineup            every car in a row
 //   /casino/src/world/cars/dev.html?car=<id>&yaw=<rad>     one car close up (&paint=%23hex)
+//   /casino/src/world/cars/dev.html?view=ground&at=stand|lot|garage|street&owned=a,b,c
+//                                                          the whole floor, walked on the ground
+//                                                          floor (no server): window.dev.call(id)
+//                                                          brings a car round, dev.back() sends it
 // &quality=low|high. A plain evening light, so the cars can be judged on their own.
 
 import * as THREE from 'three';
@@ -10,6 +14,10 @@ import { CarMaterials } from './materials.ts';
 import { carKit, mergeCars, type CarMat } from './models.ts';
 
 const q = new URLSearchParams(location.search);
+if (q.get('view') === 'ground') void import('./dev-ground.ts').then((m) => m.runGround(q));
+else lineup();
+
+function lineup(): void {
 const quality: Quality = q.get('quality') === 'low' ? 'low' : 'high';
 const engine = new Engine3D(document.getElementById('scene') as HTMLCanvasElement, document.getElementById('labels')!, quality);
 const scene = engine.scene;
@@ -42,3 +50,4 @@ if (one) {
   cam.lookAt(0, 0.5, 0);
 }
 (window as unknown as { dev: unknown }).dev = { engine, carKit };
+}

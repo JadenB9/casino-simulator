@@ -629,34 +629,57 @@ export interface Placed {
 }
 
 /**
- * Many cars (a car park, a showroom) merged into one geometry per material: however many cars,
- * one draw call per material.
+ * Pieces merged into one geometry per car material: cars (a car park, a showroom) and anything
+ * else built in the cars' materials (lamp posts, the valet's podium, the garage's fittings), so
+ * however many there are, it's one draw call per material.
  */
-export function mergeCars(cars: readonly Placed[]): Map<CarMat, THREE.BufferGeometry> {
-  const lists = new Map<CarMat, THREE.BufferGeometry[]>();
-  const put = (m: CarMat, g: THREE.BufferGeometry) => {
-    const l = lists.get(m) ?? [];
-    l.push(g);
-    lists.set(m, l);
-  };
-  for (const c of cars) {
+export class MatBatch {
+  private readonly lists = new Map<CarMat, THREE.BufferGeometry[]>();
+
+  /** A piece in a material, its colour in the vertices (white for glass). */
+  add(mat: CarMat, geo: THREE.BufferGeometry, color = '#ffffff', matrix?: THREE.Matrix4): this {
+    const g = prep(geo, color);
+    if (matrix) g.applyMatrix4(matrix);
+    this.put(mat, g);
+    return this;
+  }
+
+  car(c: Placed): this {
     const kit = carKit(c.id);
-    for (const [m, gs] of bodyGeometries(c.id, c.paint)) for (const g of gs) put(m, g.applyMatrix4(c.matrix));
+    for (const [m, gs] of bodyGeometries(c.id, c.paint)) for (const g of gs) this.put(m, g.applyMatrix4(c.matrix));
     const wheel = wheelGeometries(c.id);
     for (let i = 0; i < 4; i++) {
       const wm = new THREE.Matrix4().multiplyMatrices(c.matrix, wheelMatrix(kit, i));
-      for (const [m, gs] of wheel) for (const g of gs) put(m, g.clone().applyMatrix4(wm));
+      for (const [m, gs] of wheel) for (const g of gs) this.put(m, g.clone().applyMatrix4(wm));
     }
     for (const gs of wheel.values()) for (const g of gs) g.dispose();
+    return this;
   }
-  const out = new Map<CarMat, THREE.BufferGeometry>();
-  for (const [m, list] of lists) {
-    const g = mergeGeometries(list, false);
-    for (const x of list) x.dispose();
-    if (g) {
-      g.computeBoundingSphere();
-      out.set(m, g);
+
+  build(): Map<CarMat, THREE.BufferGeometry> {
+    const out = new Map<CarMat, THREE.BufferGeometry>();
+    for (const [m, list] of this.lists) {
+      const g = mergeGeometries(list, false);
+      for (const x of list) x.dispose();
+      if (g) {
+        g.computeBoundingSphere();
+        out.set(m, g);
+      }
     }
+    this.lists.clear();
+    return out;
   }
-  return out;
+
+  private put(m: CarMat, g: THREE.BufferGeometry): void {
+    const l = this.lists.get(m) ?? [];
+    l.push(g);
+    this.lists.set(m, l);
+  }
+}
+
+/** Many cars merged: one geometry per material. */
+export function mergeCars(cars: readonly Placed[]): Map<CarMat, THREE.BufferGeometry> {
+  const b = new MatBatch();
+  for (const c of cars) b.car(c);
+  return b.build();
 }

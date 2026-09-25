@@ -41,11 +41,11 @@ export class CarMaterials {
     const env = this.env;
     this.mats.set('paint', this.paint());
     this.mats.set('trim', new THREE.MeshStandardMaterial({ color: '#ffffff', vertexColors: true, roughness: 0.72, metalness: 0.05, envMap: env, envMapIntensity: 0.5 }));
-    this.mats.set('metal', new THREE.MeshStandardMaterial({ color: '#ffffff', vertexColors: true, roughness: 0.16, metalness: 1, envMap: env, envMapIntensity: 1.3 }));
+    this.mats.set('metal', new THREE.MeshStandardMaterial({ color: '#ffffff', vertexColors: true, roughness: 0.2, metalness: 1, envMap: env, envMapIntensity: 1.0 }));
     this.mats.set('glass', new THREE.MeshStandardMaterial({ color: '#0b1016', roughness: 0.05, metalness: 0.9, envMap: env, envMapIntensity: 1.2 }));
     // lamps glow on their own (a headlamp is lit whatever the light)
     this.mats.set('lamp', new THREE.MeshBasicMaterial({ color: '#ffffff', vertexColors: true }));
-    this.mats.set('gold', new THREE.MeshStandardMaterial({ color: '#d9a93e', vertexColors: true, roughness: 0.2, metalness: 1, envMap: env, envMapIntensity: 1.5 }));
+    this.mats.set('gold', new THREE.MeshStandardMaterial({ color: '#c99a36', vertexColors: true, roughness: 0.3, metalness: 1, envMap: env, envMapIntensity: 0.85 }));
   }
 
   dispose(): void {

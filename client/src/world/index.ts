@@ -24,7 +24,7 @@ import { GlowMerge, Lighting, buildPools } from './lighting.ts';
 import { Props } from './props.ts';
 import { Characters } from './characters.ts';
 import { Player } from './player.ts';
-import { Interact } from './interact.ts';
+import { Interact, type SpotProvider } from './interact.ts';
 import { TouchControls } from './touch.ts';
 import { StationLod } from './lod.ts';
 import { Bloom, FLOOR_BLOOM, MACHINE_BLOOM, PixelRatio, STUDIO_BELOW, STUDIO_BLOOM, TABLE_BLOOM, type BloomLook } from './bloom.ts';
@@ -146,6 +146,8 @@ export interface FloorWorld extends World {
   readonly map: MapOverlay;
   /** The procedural furniture: every table's chairs and stools, the lounges' chairs, and the rest. */
   readonly furniture: Furniture;
+  /** v6 cars6: more things to walk up to and press E at (the valet stand, the garage); returns the undo. */
+  spots(fn: SpotProvider): () => void;
 }
 
 /**
@@ -471,6 +473,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
     },
     map,
     furniture,
+    spots: (fn) => interact.spots(fn), // v6 cars6
     dispose() {
       map.dispose();
       directories.dispose();
