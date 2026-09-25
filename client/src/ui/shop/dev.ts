@@ -15,7 +15,7 @@ import { Sfx } from '../../audio/sfx.ts';
 import * as realApi from '../../net/api.ts';
 import { session } from '../../app/session.ts';
 import { DEFAULT_LOOK, type Look } from '../../../../shared/src/look.ts';
-import { HOLD_MS, ITEM_KINDS, SHOP_ITEMS, shopItem, type BuyResponse, type OrderResponse } from '../../../../shared/src/items.ts';
+import { EFFECTS, EMOTE_ITEMS, HOLD_MS, ITEM_KINDS, SHOP_ITEMS, STATUE, shopEmote, shopItem, type BuyResponse, type OrderResponse } from '../../../../shared/src/items.ts';
 import { barItem } from '../../../../shared/src/items.ts';
 import type { Profile } from '../../../../shared/src/protocol.ts';
 import { ApiError } from '../../net/api.ts';
@@ -82,7 +82,15 @@ function fixtureApi(): ShopApi & { order(item: string, op: string): Promise<Orde
   return {
     async shop() {
       await wait();
-      return { items: SHOP_ITEMS, owned: [...owned].map(([item, o]) => ({ item, price: o.price, at: o.at })), balance: session.profile!.balance };
+      return {
+        items: SHOP_ITEMS.filter((i) => !i.reward),
+        owned: [...owned].map(([item, o]) => ({ item, price: o.price, at: o.at })),
+        balance: session.profile!.balance,
+        emotes: EMOTE_ITEMS.filter((e) => shopEmote(e.id)),
+        effects: EFFECTS,
+        statue: STATUE,
+        statues: [],
+      };
     },
     async buy(item: string): Promise<BuyResponse> {
       await wait();

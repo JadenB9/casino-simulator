@@ -225,7 +225,14 @@ export function effectItem(id: unknown): EffectItem | null {
  * A lasting mark on the building: a gold statue of your character on a plinth in the lobby. Bought
  * once and kept (a casino_items row); the lobby shows the STATUES most recent buyers.
  */
-export const STATUE: { id: 'statue'; name: string; price: Cents; about: string } = {
+export interface StatueItem {
+  id: 'statue';
+  name: string;
+  price: Cents;
+  about: string;
+}
+
+export const STATUE: StatueItem = {
   id: 'statue',
   name: 'Your Statue',
   price: 10_000_000 * DOLLAR,
@@ -285,12 +292,23 @@ export function isOp(x: unknown): x is string {
 // HTTP (GET /shop, POST /shop/buy, POST /bar/order)
 
 export interface ShopResponse {
+  /** The worn items and rides the boutique sells (never a reward). */
   items: readonly ShopItem[];
-  /** Ids you own, with what you paid and when. */
-  owned: { item: string; price: Cents; at: number }[];
+  /**
+   * Ids you own (worn items, rides, emotes, the statue), with what you paid and when. A reward
+   * you earned is here too, with price 0 and the feat that gave it.
+   */
+  owned: { item: string; price: Cents; at: number; feat?: string }[];
   balance: Cents;
+  /** v6: the emotes it sells (not the free six, not rewards), the effects, and the statue. */
+  emotes: readonly EmoteItem[];
+  effects: readonly EffectItem[];
+  statue: StatueItem;
+  /** v6: the statues in the lobby now, newest first. */
+  statues: Statue[];
 }
 
+/** POST /shop/buy: a worn item or ride, an emote, or the statue (by id). */
 export interface BuyRequest {
   item: string;
   op: string;
