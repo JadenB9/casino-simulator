@@ -1,0 +1,40 @@
+/* The effects' caption: who bought what's playing where you are, and what's queued next. Top left,
+   under the HUD's own block, clear of the big-win toasts in the middle. */
+#ui .fx-caption {
+  position: fixed;
+  top: var(--below-hud);
+  left: 16px;
+  z-index: 12;
+  display: grid;
+  gap: 4px;
+  pointer-events: none;
+  animation: fx-caption-in 0.35s var(--ease);
+}
+#ui .fx-caption[hidden] { display: none; }
+#ui .fx-line {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: max-content;
+  max-width: min(360px, calc(100vw - 32px));
+  padding: 5px 12px 6px 11px;
+  background: var(--glass);
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--brass);
+  border-radius: 4px;
+  white-space: nowrap;
+}
+#ui .fx-what { font-family: var(--serif); font-size: 13px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--brass-hi); }
+#ui .fx-who { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 15px; color: var(--ink); }
+#ui .fx-time { font-size: 14px; font-variant-numeric: tabular-nums; color: var(--ink-3); }
+#ui .fx-next { border-left-color: var(--line-strong); background: rgba(14, 12, 10, 0.62); }
+#ui .fx-next .fx-what { color: var(--ink-2); }
+#ui .fx-tag { font-size: 11px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-3); }
+@keyframes fx-caption-in { from { opacity: 0; transform: translateY(-4px); } }
+
+/* A phone: the HUD's block is a row of its own; stay small. */
+@media (max-width: 560px) {
+  #ui .fx-caption { left: 10px; }
+  #ui .fx-line { gap: 8px; padding: 4px 10px 5px 9px; }
+  #ui .fx-who { font-size: 14px; }
+}
