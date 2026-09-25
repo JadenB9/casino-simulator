@@ -12,6 +12,7 @@ import { Marquee, marqueePlacement } from '../marquee.ts';
 import { Tally } from '../tally.ts';
 import type { FloorWorld } from '../index.ts';
 import type { Person } from '../characters.ts';
+import { isFree, walkGrid, type Grid } from '../reach.ts'; // v6 qa6
 
 /** Your id on the dev floor, and the stranger's. */
 const ME = 1;
@@ -44,6 +45,7 @@ export function fxDev(world: FloorWorld, engine: Engine3D, params: URLSearchPara
   engine.scene.add(tally.mesh);
   world.useFx({ self: () => ME, marquee, tally });
   let stranger: Person | null = null;
+  let grid: Grid | null = null; // v6 qa6
   world.useRemotes({ character: (id) => (id === STRANGER && stranger ? stranger : undefined) });
   engine.onFrame((dt) => stranger?.update(dt));
 
@@ -75,6 +77,9 @@ export function fxDev(world: FloorWorld, engine: Engine3D, params: URLSearchPara
     },
     stranger(x, z) {
       stranger ??= world.characterFactory.create(SAMPLES[2]!.look, 'Lucky Sam');
+      // v6 qa6: never in a fountain, a plinth or a wall: the nearest spot a walker could stand
+      grid ??= walkGrid(world.plan);
+      [x, z] = nearestFree(grid, x, z);
       stranger.root.position.set(x, 0, z);
       engine.scene.add(stranger.root);
       return stranger;
@@ -84,4 +89,18 @@ export function fxDev(world: FloorWorld, engine: Engine3D, params: URLSearchPara
   const n = Number(params.get('statues') ?? 0);
   if (n > 0) void dev.statues(n);
   return dev;
+}
+
+/** v6 qa6: (x, z) if a walker can stand there, else the nearest point that's free, ring by ring. */
+export function nearestFree(g: Grid, x: number, z: number): [number, number] {
+  if (isFree(g, x, z)) return [x, z];
+  for (let ring = 1; ring < 60; ring++) {
+    const r = ring * g.cell;
+    for (let k = 0; k < ring * 8; k++) {
+      const a = (k / (ring * 8)) * Math.PI * 2;
+      const p: [number, number] = [x + Math.cos(a) * r, z + Math.sin(a) * r];
+      if (isFree(g, p[0], p[1])) return p;
+    }
+  }
+  return [x, z];
 }

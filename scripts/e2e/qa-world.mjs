@@ -334,7 +334,7 @@ if (checks.includes('away')) {
     await idle(0);
   };
   // on a bench
-  const s = await seatNamed(a.p, 'lobby.bench.2.2');
+  const s = await seatNamed(a.p, 'lobby.bench.1.1'); // qa6: rooms6's lobby (elevator, fountain) has one bench left
   await travel(a.p, s.x + Math.sin(s.yaw) * 0.8, s.z + Math.cos(s.yaw) * 0.8, s.yaw + Math.PI);
   await sitOn(a.p, s);
   await a.p.waitForTimeout(1200);

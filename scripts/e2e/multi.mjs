@@ -188,9 +188,15 @@ try {
   if (moved < 0.2) errors.push('presence: the walk did not show up on the other side');
   await shot(b, 'multi-0-presence');
 
+  const created = []; // qa6: when each lobby was opened
   for (const game of games) {
     const station = TABLES[game];
     await openLobby(a, station);
+    // qa6: one account opens at most 5 lobbies a minute (server/src/floor/directory.ts LIMITS);
+    // on the GPU the rounds are quick enough to reach it, so wait out the window
+    const recent = created.filter((t) => Date.now() - t < 61_000);
+    if (recent.length >= 5) await a.page.waitForTimeout(61_000 - (Date.now() - recent[0]));
+    created.push(Date.now());
     await a.page.click('.lobby-actions .btn:has-text("Private")');
     await a.page.waitForSelector('.party-pin-digits', { timeout: 10_000 }).catch(async (err) => {
       await shot(a, `multi-${game}-private-failed`);
