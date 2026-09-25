@@ -217,7 +217,7 @@ export const EFFECTS: readonly EffectItem[] = [
   { id: 'fx-disco', name: 'Disco Night', price: 100_000 * DOLLAR, about: 'A mirror ball comes down and the room goes disco.', secs: 60, reach: 'room' },
   { id: 'fx-marquee', name: 'Headline', price: 250_000 * DOLLAR, about: 'Your name up on the LED sign over the pit.', secs: 120, reach: 'casino' },
   { id: 'fx-goldenhour', name: 'Golden Hour', price: 1_000_000 * DOLLAR, about: 'Gold light and falling gold coins in every room.', secs: 30, reach: 'casino' },
-  { id: 'fx-takeover', name: 'Own the Night', price: 1_000_000_000 * DOLLAR, about: 'The whole casino is yours for a minute: your name on every sign and screen, fireworks overhead, gold everywhere.', secs: 60, reach: 'casino' },
+  { id: 'fx-takeover', name: 'Own the Night', price: 1_000_000_000 * DOLLAR, about: 'Your name on every sign and screen, fireworks and gold in every room.', secs: 60, reach: 'casino' },
 ];
 
 const FX_BY_ID = new Map(EFFECTS.map((i) => [i.id, i]));
