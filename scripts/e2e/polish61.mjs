@@ -3,7 +3,8 @@
 //   GPU=1 node scripts/e2e/polish61.mjs [port] [out dir] [high|low|both] [only...]
 // Every room from two corners (<quality>-<room>-a/b.png), the doorway views the dev floor knows,
 // the ground floor's lots (the valet lobby, the valet, the street, the garage, the jail) and the
-// roof, each with the frame's draw calls; `only` limits it to shots whose name has one of the words.
+// roof, and seated at the first station of each game (seat-<game>.png), each with the frame's draw
+// calls; `only` limits it to shots whose name has one of the words.
 // Draw calls on High over CALL_LIMIT (250) fail.
 
 import { chromium } from 'playwright';
@@ -97,6 +98,34 @@ async function tour(quality) {
       failed++;
       console.log(`FAIL ${quality} ${p.name}: ${s.calls} draw calls`);
     }
+  }
+  // seated: the first station of each game, as E puts you there (seat-<game>.png)
+  const games = await page.evaluate(() => {
+    const seen = new Map();
+    for (const s of window.casino.world.stations) if (!seen.has(s.game)) seen.set(s.game, s.id);
+    return [...seen];
+  });
+  for (const [game, id] of games) {
+    const name = `seat-${game}`;
+    if (only.length && !only.some((w) => name.includes(w))) continue;
+    const s = await page.evaluate(async (id) => {
+      const { world } = window.casino;
+      window.__cam?.();
+      window.__cam = null;
+      const st = world.stations.find((x) => x.id === id);
+      const a = st.anchor.position;
+      world.player.setEnabled(true);
+      world.teleport(a.x + Math.sin(st.yaw) * 1.6, a.z + Math.cos(st.yaw) * 1.6, st.yaw + Math.PI);
+      world.enter(st);
+      await new Promise((r) => setTimeout(r, 1800));
+      return world.stats();
+    }, id);
+    await page.screenshot({ path: `${out}/${quality}-${name}.png` });
+    shots.push(`${name} ${s.calls}`);
+    await page.evaluate(async () => {
+      await window.casino.world.exitTable();
+      await new Promise((r) => setTimeout(r, 600));
+    });
   }
   console.log(`${quality}: ${shots.join(' | ')}`);
   if (errors.length) {

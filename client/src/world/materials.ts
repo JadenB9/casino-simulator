@@ -237,7 +237,7 @@ export class Mats {
     // brass set flush into a floor (the runners' edging, the lobby's compass rose): rough and dull,
     // so looking along it toward the lights it reads as an inlay, never as a strip of light
     this.makers.set('brass-inlay', (q) => (hi(q) ? std({ color: '#9c7a3c', metalness: 0.7, roughness: 0.62, envMapIntensity: 0.35 }) : lambert({ color: '#8a6a30', emissive: '#1e1405' })));
-    this.makers.set('brass', (q) => (hi(q) ? std({ color: '#c9a24a', metalness: 1, roughness: 0.3 }) : lambert({ color: '#9c7632', emissive: '#2b1c07' })));
+    this.makers.set('brass', (q) => (hi(q) ? std({ color: '#c9a24a', metalness: 1, roughness: 0.4 }) : lambert({ color: '#9c7632', emissive: '#2b1c07' })));
     this.makers.set('chrome', (q) => (hi(q) ? std({ color: '#cfd0d6', metalness: 1, roughness: 0.18 }) : lambert({ color: '#8e8f96', emissive: '#1a1a1c' })));
     this.makers.set('marble-black', (q) =>
       hi(q) ? std({ map: t.marbleBlack ?? null, color: t.marbleBlack ? '#9a9a9a' : '#141213', roughness: 0.16 }) : lambert({ map: t.marbleBlack ?? null, color: t.marbleBlack ? '#9a9a9a' : '#141213' }),
