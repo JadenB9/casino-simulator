@@ -351,7 +351,13 @@ if (checks.includes('floor')) {
       else delete l.ride;
       ch.setLook(l);
       await settle();
-      out[id ?? 'foot'] = world.stats().calls;
+      // the least over a few frames: a waiter walking into view isn't the ride's
+      let least = Infinity;
+      for (let i = 0; i < 8; i++) {
+        await new Promise((r) => requestAnimationFrame(r));
+        least = Math.min(least, world.stats().calls);
+      }
+      out[id ?? 'foot'] = least;
     }
     ch.setLook(look);
     return out;
