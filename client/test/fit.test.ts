@@ -72,6 +72,15 @@ describe('bestSpace', () => {
     expect(lens.dy).toBeLessThan(0);
   });
 
+  it('widens a little rather than throw the board off to one side', () => {
+    // a phone on its side: the HUD's left cluster over the top of a tall machine face
+    const hud = [{ left: 12, top: 10, right: 166, bottom: 52 }, { left: 332, top: 10, right: 832, bottom: 52 }];
+    const bar = { left: 218, top: 340, right: 836, bottom: 382 };
+    const b = { left: 330, top: 40, right: 520, bottom: 330 };
+    const { lens } = bestSpace(b, [...hud, bar], 844, 390);
+    expect(Math.abs(lens.dx)).toBeLessThan(150);
+  });
+
   it('goes beside a tall panel when that costs less than going above it', () => {
     // a party panel down the right: the board is tall and narrow, so it goes to the left of it
     const panel = { left: 1000, top: 80, right: 1264, bottom: 700 };
@@ -102,6 +111,16 @@ describe('bestSpace', () => {
     const b = { left: 20, top: 300, right: 880, bottom: 900 };
     const { lens } = bestSpace(b, [wide], 900, 1000);
     expect(overlaps(lensed(b, lens, 900, 1000), wide)).toBe(false);
+  });
+
+  it('searches a busy screen quickly (it runs again whenever a control moves)', () => {
+    const obs = Array.from({ length: 20 }, (_, i) => ({ left: (i * 97) % 1200, top: (i * 61) % 680, right: ((i * 97) % 1200) + 60, bottom: ((i * 61) % 680) + 30 }));
+    const b = { left: 100, top: 100, right: 1100, bottom: 600 };
+    bestSpace(b, obs, W, H);
+    const t0 = performance.now();
+    for (let i = 0; i < 5; i++) bestSpace(b, obs, W, H);
+    // a few ms warm; generous for a loaded machine
+    expect((performance.now() - t0) / 5).toBeLessThan(60);
   });
 
   it('falls back to the whole screen when controls leave no room at all', () => {

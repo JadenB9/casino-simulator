@@ -6,7 +6,8 @@
 // chip tray, the action bar, the party panel, the tips line, the chat). Screenshots of each go to
 // outDir; DEBUG=1 draws the key points and the controls' boxes on them.
 // Usage: node scripts/e2e/fit6.mjs [port] [outDir] [games...]   (PORT_BASE=<port> npm run dev first)
-//   VIEWPORTS=1280x720,1024x640 limits the window sizes; PHONES=0 skips the device runs;
+//   VIEWPORTS=1280x720,1024x640 limits the window sizes; PHONES=0 skips the device runs, DESK=0 the
+//   desktop one, SHOTS=0 the rounds played for the wheel and dice shots;
 //   FIT=off opens the game with fitting switched off (?fit=off), to see what it was before;
 //   GPU=1 draws on the machine's GPU (much faster than SwiftShader).
 // Stub games (still being built elsewhere) are skipped: coinflip, wheel, cases, diamonds,
@@ -168,6 +169,8 @@ async function sweep(page, tag, game, sizes) {
     const bad = check(m);
     const zoom = m.fit.lens.zoom.toFixed(2);
     if (bad.length) failures.push(`${tag} ${game} ${size} (zoom ${zoom}): ${bad.length} points: ${bad.slice(0, 3).join('; ')}`);
+    // the controls themselves stay on the screen too (a tray wider than a narrow window)
+    for (const r of m.ui.filter((r) => r.left < -1 || r.right > m.W + 1 || r.bottom > m.H + 1)) failures.push(`${tag} ${game} ${size}: ${r.cls} runs off the edge (${r.left.toFixed(0)}..${r.right.toFixed(0)})`);
     log(`${tag} ${game} ${size}: ${m.pts.length} points, zoom ${zoom}, slide ${m.fit.lens.dx.toFixed(0)},${m.fit.lens.dy.toFixed(0)}${bad.length ? `, ${bad.length} OUT` : ', all in view'}`);
     if (DEBUG) await overlay(page, m);
     await page.screenshot({ path: `${out}/${tag}-${game}-${size}.png`, scale: 'css' });
@@ -249,7 +252,7 @@ async function run(tag, contextOpts, list, sizes) {
   await ctx.close();
 }
 
-await run('desk', { viewport: { width: VIEWPORTS[0][0], height: VIEWPORTS[0][1] } }, games, VIEWPORTS);
+if (process.env.DESK !== '0') await run('desk', { viewport: { width: VIEWPORTS[0][0], height: VIEWPORTS[0][1] } }, games, VIEWPORTS);
 for (const [tag, opts, list] of PHONES) {
   const mine = only.length ? list.filter((g) => only.includes(g)) : list;
   if (mine.length) await run(tag, opts, mine, [[0, 0]]);

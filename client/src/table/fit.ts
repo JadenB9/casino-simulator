@@ -28,6 +28,7 @@
 // breathe in and out with it.
 
 import * as THREE from 'three';
+import './fit.css';
 import { Felt, type Region } from './felt.ts';
 import type { Pose } from './stage.ts';
 
@@ -97,8 +98,8 @@ export function lensed(b: Rect, lens: Lens, w: number, h: number): Rect {
 
 /**
  * Of every rectangle clear of the obstacles, the one where the board (spanning `b` at the game's
- * framing) fits the least changed: the least widening first, then the least slide, then the most
- * room. `margin` is kept inside it all round. Obstacles are clipped to the screen first.
+ * framing) fits the least changed (changeOf: widening and slide), then the roomiest. `margin` is
+ * kept inside it all round. Obstacles are clipped to the screen first.
  */
 export function bestSpace(b: Rect, obstacles: Rect[], w: number, h: number, margin = marginFor(w, h)): { safe: Rect; lens: Lens } {
   // whole pixels, rounded outward, so the edges searched are exactly the obstacles' edges
@@ -117,16 +118,17 @@ export function bestSpace(b: Rect, obstacles: Rect[], w: number, h: number, marg
       const across = obs.filter((o) => o.left < right && o.right > left);
       for (let k = 0; k < ys.length; k++) {
         const top = ys[k]!;
+        // a space inside a bigger one never fits the board better: only the deepest clear one counts
+        let bottom = -1;
         for (let l = k + 1; l < ys.length; l++) {
-          const bottom = ys[l]!;
-          if (bottom - top <= 2 * margin) continue;
-          if (across.some((o) => o.top < bottom && o.bottom > top)) break;
-          const safe = { left: left + margin, top: top + margin, right: right - margin, bottom: bottom - margin };
-          const lens = lensFor(b, safe, w, h);
-          // two hundredths of zoom either way can't be seen, a slide can: within that, least slide
-          const score: [number, number, number] = [Math.round(lens.zoom * 50), -Math.round(Math.abs(lens.dx) + Math.abs(lens.dy)), (right - left) * (bottom - top)];
-          if (!best || better(score, best.score)) best = { safe, lens, score };
+          if (across.some((o) => o.top < ys[l]! && o.bottom > top)) break;
+          bottom = ys[l]!;
         }
+        if (bottom - top <= 2 * margin) continue;
+        const safe = { left: left + margin, top: top + margin, right: right - margin, bottom: bottom - margin };
+        const lens = lensFor(b, safe, w, h);
+        const score: [number, number, number] = [-changeOf(lens, w, h), (right - left) * (bottom - top), 0];
+        if (!best || better(score, best.score)) best = { safe, lens, score };
       }
     }
   }
@@ -134,6 +136,16 @@ export function bestSpace(b: Rect, obstacles: Rect[], w: number, h: number, marg
   // no clear space at all (a panel over everything): fit the screen, controls or not
   const safe = { left: margin, top: margin, right: w - margin, bottom: h - margin };
   return { safe, lens: lensFor(b, safe, w, h) };
+}
+
+/**
+ * How much a lens changes the game's framing: the widening, plus the slide as a share of the
+ * screen at a third of the weight (sliding a board a whole screen width costs as much as seeing
+ * it at 70%). A slide keeps the board's size; a big one throws it off to a side, so both count.
+ * Rounded to a thousandth so near-equal options fall to the tie-break (the roomier space).
+ */
+export function changeOf(lens: Lens, w: number, h: number): number {
+  return Math.round((1 - lens.zoom + 0.3 * (Math.abs(lens.dx) / w + Math.abs(lens.dy) / h)) * 1000) / 1000;
 }
 
 function better(a: [number, number, number], b: [number, number, number]): boolean {
