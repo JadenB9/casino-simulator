@@ -207,6 +207,33 @@ for (const game of games) {
     out.notes.push(`opens ${opens.length}: ${opens.map((o) => `${o.case} ${o.mult / 100}x`).join(', ')}; chips shown ${await checkChips()}`);
   }
 
+  if (game === 'diamonds') {
+    await setBet(10);
+    await page.click('.os-action.go');
+    await settle(450);
+    await shot('1-dropping');
+    await settle(1200);
+    await shot('2-hand');
+    const d = events('draw').at(-1);
+    check(!!d && d.gems.length === 5, 'five gems came back');
+    const shown = await page.$$eval('.dm-slot .dm-gem', (g) => g.map((x) => x.title));
+    const NAMES = ['Emerald', 'Sapphire', 'Ruby', 'Amethyst', 'Topaz', 'Aquamarine', 'Rose'];
+    check(JSON.stringify(shown) === JSON.stringify(d.gems.map((c) => NAMES[c])), `the page shows the server's gems (${shown.join(' ')})`);
+    const hit = await page.$eval('.dm-pay.hit .dm-pay-name', (e) => e.textContent).catch(() => null);
+    out.notes.push(`hand ${d.gems.join('')} ${d.pattern} ${d.mult / 100}x paid ${money(d.payout)}; paytable lit "${hit}"`);
+    // Play on until a hand of two pair or better (or twenty hands).
+    for (let i = 0; i < 20; i++) {
+      const p = events('draw').at(-1).pattern;
+      if (!['none', 'pair'].includes(p)) break;
+      await page.keyboard.press('Space');
+      await settle(1700);
+    }
+    await shot('3-better-hand');
+    const hands = events('draw');
+    check(hands.every((h) => h.payout === (h.bet / 100) * h.mult), 'every hand paid its pattern exactly');
+    out.notes.push(`hands ${hands.length}: ${hands.map((h) => h.pattern).join(', ')}; chips shown ${await checkChips()}`);
+  }
+
   out.notes.push(`frames: ${frames.length}`);
   report.push(out);
   // Stand up, so the chips go home and the next run starts with a buy-in.

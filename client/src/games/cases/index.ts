@@ -121,7 +121,7 @@ export const cases: GameClientModule = {
     // each case button carries its top prize under its name
     caseSeg.root.querySelectorAll('button').forEach((b, i) => {
       const top = CASE_INFO[CASES[i]!].items.at(-1)!;
-      b.append(el('span', `ca-case-top r-${rarityOf(top.mult)}`, `Up to ${multText(top.mult).replace('.00', '')}`));
+      b.append(el('span', `ca-case-top ca-r-${rarityOf(top.mult)}`, `Up to ${multText(top.mult).replace('.00', '')}`));
     });
     const speedSeg = new SegChoice<'normal' | 'quick'>([{ value: 'normal', label: 'Full reel' }, { value: 'quick', label: 'Quick open', title: 'A short reel (Q)' }], 'normal', (v) => {
       quick = v === 'quick';
@@ -222,7 +222,7 @@ export const cases: GameClientModule = {
       const it = CASE_INFO[o.case].items[o.item]!;
       const r = rarityOf(it.mult);
       result.replaceChildren(
-        el('span', `ca-result-rarity r-${r}`, RARITY_NAMES[r]),
+        el('span', `ca-result-rarity ca-r-${r}`, RARITY_NAMES[r]),
         el('span', 'ca-result-name', it.name),
         el('span', `ca-result-mult${o.payout > o.bet ? ' win' : ''}`, `${multText(it.mult)} · ${formatMoney(o.payout)}`),
       );

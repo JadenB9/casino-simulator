@@ -28,7 +28,7 @@ const mult = (m: number) => `${(m / 100).toLocaleString('en-US', { minimumFracti
 
 /** An item's card: its picture on a glow of its rarity, its multiplier, optionally its name. */
 export function itemCard(it: CaseItem, cls: string, named = false): HTMLElement {
-  const card = el('div', `${cls} r-${rarityOf(it.mult)}`);
+  const card = el('div', `${cls} ca-r-${rarityOf(it.mult)}`);
   card.append(el('div', 'ca-glow'), itemIcon(it.kind), el('span', 'ca-card-mult', mult(it.mult)));
   if (named) card.append(el('span', 'ca-card-name', it.name));
   return card;

@@ -2,13 +2,13 @@
    item it stopped on, and everything the case holds along the bottom. Design pixels of the
    1280 x 800 page (the board is 950 x 702). Each rarity sets --ca-r, its colour. */
 
-.r-common { --ca-r: #9aa7b5; }
-.r-uncommon { --ca-r: #4fb3ff; }
-.r-rare { --ca-r: #3b6cff; }
-.r-epic { --ca-r: #9b5cff; }
-.r-legendary { --ca-r: #e040fb; }
-.r-mythic { --ca-r: #ff4d4f; }
-.r-exotic { --ca-r: #ffc53d; }
+.ca-r-common { --ca-r: #9aa7b5; }
+.ca-r-uncommon { --ca-r: #4fb3ff; }
+.ca-r-rare { --ca-r: #3b6cff; }
+.ca-r-epic { --ca-r: #9b5cff; }
+.ca-r-legendary { --ca-r: #e040fb; }
+.ca-r-mythic { --ca-r: #ff4d4f; }
+.ca-r-exotic { --ca-r: #ffc53d; }
 
 .ca-board { position: absolute; inset: 0; }
 
