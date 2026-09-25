@@ -10,6 +10,10 @@
 //   game    logged in: F, walk, sit on a stool with E, stand, sit down at blackjack with E, buy
 //           in, leave with Esc back to the eyes, the Settings sheet's Camera row, chat typing an
 //           f, and a reload that comes back in first person
+//   flows   logged in, in first person throughout: a banker's window and back, the boutique and
+//           back, a drink a waiter brings (in the corner of the view looking down), away and
+//           Come back, and a new player's dressing room; every frame, your own head is drawn
+//           exactly when the camera isn't in it
 // Usage: node scripts/e2e/camera6.mjs [port] [outDir] [checks...]   (default: all)
 //   floor and touch need Vite only; game the local worker too (PORT_BASE=<port> npm run dev).
 //   GPU=1 draws on the machine's GPU. Fixed names (camera6_e2e_*) with the dev password.
@@ -20,7 +24,7 @@ import { execFileSync } from 'node:child_process';
 
 const [port = '6210', out = '/tmp/camera6', ...wanted] = process.argv.slice(2);
 mkdirSync(out, { recursive: true });
-const checks = wanted.length ? wanted : ['floor', 'touch', 'game'];
+const checks = wanted.length ? wanted : ['floor', 'touch', 'game', 'flows'];
 const browser = await chromium.launch(process.env.GPU === '1' ? { channel: 'chromium', args: ['--ignore-gpu-blocklist'] } : { args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 let failed = 0;
 const fail = (what) => {
@@ -329,9 +333,12 @@ if (checks.includes('touch')) {
 
 // --- the game ----------------------------------------------------------------------------------------
 
-async function enterAs(name) {
+async function enterAs(name, first = false) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
-  await ctx.addInitScript(() => localStorage.setItem('casino.quality', 'low'));
+  await ctx.addInitScript((f) => {
+    localStorage.setItem('casino.quality', 'low');
+    if (f) localStorage.setItem('casino.camera.view', 'first');
+  }, first);
   const p = await ctx.newPage();
   const errors = [];
   watch(p, errors);
@@ -511,6 +518,162 @@ if (checks.includes('game')) {
   await p.evaluate(() => window.casino.world.setMouse({ view: 'third' }));
   if (errors.length) fail(`game errors: ${errors.slice(0, 3).join(' | ')}`);
   await ctx.close();
+}
+
+const sql = (q) => execFileSync('npx', ['wrangler', 'd1', 'execute', 'DB', '--local', '--command', q, '-c', 'server/wrangler.toml'], { stdio: 'pipe' });
+
+/**
+ * Watch every frame for your own head drawn with the camera inside it, or shrunk away with the
+ * camera out of it (a banker's window, the fly back); read() says how many of each.
+ */
+const headWatch = (p) =>
+  p.evaluate(() => {
+    const c = window.casino;
+    const w = c.world;
+    const pl = w.life.seating.player;
+    const r = { inside: 0, missing: 0, frames: 0 };
+    c.headWatch?.off();
+    const off = c.engine.onFrame(() => {
+      const head = w.player.character.root.getObjectByName('Head');
+      if (!head || !w.player.character.root.visible || pl.view !== 'first' || !pl.isEnabled) return;
+      r.frames++;
+      const d = c.engine.camera.position.distanceTo(pl.eye);
+      const shrunk = head.scale.x < 0.01;
+      if (d < 0.05 && !shrunk) r.inside++;
+      if (d > 0.5 && shrunk) r.missing++;
+    });
+    c.headWatch = { off, r };
+  });
+const headRead = (p) => p.evaluate(() => ({ ...window.casino.headWatch.r }));
+
+async function travelTo(p, x, z, yaw) {
+  const from = await state(p);
+  const n = Math.max(1, Math.ceil(Math.hypot(x - from.at.x, z - from.at.z) / 7));
+  for (let i = 1; i <= n; i++) {
+    await p.evaluate(([a, b, c]) => window.casino.world.teleport(a, b, c), [from.at.x + ((x - from.at.x) * i) / n, from.at.z + ((z - from.at.z) * i) / n, yaw]);
+    await p.waitForTimeout(1100);
+  }
+}
+
+if (checks.includes('flows')) {
+  sql('DELETE FROM casino_rate');
+  const { p, ctx, errors } = await enterAs('camera6_e2e_b', true);
+  const f0 = await state(p);
+  ok(f0.view === 'first' && dist(f0.cam, f0.eye) < 0.02, 'a saved first person: Enter Casino puts you at the eyes');
+  await headWatch(p);
+
+  // a banker's window: the camera goes over your shoulder, and flies back into your eyes
+  const win = await p.evaluate(() => window.casino.world.life.bankers.tellers[1].customer);
+  await travelTo(p, win.x, win.z + 0.5, Math.PI);
+  await p.evaluate(() => {
+    const w = window.casino.world;
+    w.life.seating.player.camYaw = 0;
+    w.life.bankers.spots(w.player.position)[0]?.use();
+  });
+  await p.waitForSelector('.bank-sheet', { timeout: 8000 });
+  await p.waitForTimeout(1200);
+  await shot(p, 'flows-bank');
+  await p.keyboard.press('Escape');
+  await p.waitForTimeout(300);
+  await shot(p, 'flows-bank-back');
+  await p.waitForTimeout(1200);
+  const b1 = await state(p);
+  ok(dist(b1.cam, b1.eye) < 0.02 && b1.shown && b1.shrunk, 'back from the bank: at the eyes');
+
+  // the boutique: its showroom borrows the camera, and gives it back to the eyes
+  // (at the watches: on the contract base the boutique's list trips over the reward pieces in
+  // SHOP_ITEMS, which shopItem() no longer returns; shop6's to fix)
+  await p.evaluate(() => window.casino.app.openShop('gold-watch'));
+  await p.waitForSelector('.bq-item', { timeout: 15_000 });
+  await p.waitForTimeout(1200);
+  const shop = await p.evaluate(() => {
+    const head = window.casino.world.player.character.root.getObjectByName('Head');
+    return { camY: window.casino.engine.camera.position.y, shrunk: head.scale.x < 0.01 };
+  });
+  ok(shop.camY < -20 && !shop.shrunk, `the boutique's showroom has the camera (y ${shop.camY.toFixed(1)}) and your head is whole`);
+  await shot(p, 'flows-boutique');
+  await p.keyboard.press('Escape');
+  await p.waitForTimeout(900);
+  const s1 = await state(p);
+  ok(dist(s1.cam, s1.eye) < 0.02 && s1.shrunk, 'out of the boutique: at the eyes');
+
+  // a drink: ordered at the bar menu, a waiter walks it over; looking down, it's in your hand
+  await p.evaluate(() => window.casino.app.openBarMenu());
+  await p.click('.bar-order[aria-label^="Order Champagne"]');
+  await p.waitForFunction(() => document.querySelector('.bar-status')?.textContent?.startsWith('On its way'), null, { timeout: 12_000 });
+  await p.keyboard.press('Escape');
+  const got = await p.waitForFunction(() => window.casino.session.profile?.look.held?.item === 'champagne', null, { timeout: 150_000 }).then(
+    () => true,
+    () => false,
+  );
+  ok(got, 'a waiter brings the drink in first person');
+  await p.evaluate(() => (window.casino.world.life.seating.player.camPitch = 0.55));
+  await p.waitForTimeout(700);
+  await shot(p, 'flows-drink');
+
+  // away and Come back: at the eyes again
+  await p.evaluate(async () => {
+    const { IdleWatch } = await import('/casino/src/app/idle.ts');
+    const app = window.casino.app;
+    app.idle.stop();
+    app.idle = new IdleWatch(app.idle.hooks, { idleMs: 6_000, warnMs: 3_000, hereMs: 3_000 });
+    app.idle.start();
+  });
+  await p.waitForSelector('.away', { timeout: 30_000 });
+  await p.waitForTimeout(1_000);
+  await p.click('.away-back');
+  await p.waitForFunction(() => window.casino.app.link?.you, null, { timeout: 20_000 });
+  await p.evaluate(async () => {
+    const { IdleWatch } = await import('/casino/src/app/idle.ts');
+    const app = window.casino.app;
+    app.idle.stop();
+    app.idle = new IdleWatch(app.idle.hooks);
+    app.idle.start();
+  });
+  await p.waitForTimeout(1_500);
+  const a1 = await state(p);
+  ok(dist(a1.cam, a1.eye) < 0.02 && a1.shrunk, 'away and back: at the eyes');
+  const h = await headRead(p);
+  ok(h.frames > 100 && h.inside <= 2 && h.missing === 0, `over ${h.frames} frames your head was drawn with the camera in it ${h.inside} times and missing from view ${h.missing} times`);
+  if (errors.length) fail(`flows errors: ${errors.slice(0, 3).join(' | ')}`);
+  await ctx.close();
+
+  // a new player who chose first person: the dressing room is the dressing room, then the eyes
+  try {
+    sql(`UPDATE casino_accounts SET look = '{}', created_at = ${Date.now()} WHERE name = 'camera6_e2e_new'`);
+  } catch {
+    /* not made yet: the first run makes it */
+  }
+  const ctx2 = await browser.newContext({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
+  await ctx2.addInitScript(() => {
+    localStorage.setItem('casino.quality', 'low');
+    localStorage.setItem('casino.camera.view', 'first');
+  });
+  const q = await ctx2.newPage();
+  const errs2 = [];
+  watch(q, errs2);
+  await q.goto(`http://localhost:${port}/casino/`, { timeout: 180_000 });
+  await q.waitForSelector('.name-input, .menu-item', { timeout: 300_000 });
+  await q.fill('.name-input', 'camera6_e2e_new');
+  if (await q.$('.pass-input')) await q.fill('.pass-input', 'casino-dev');
+  await q.click('.enter-btn');
+  await q.waitForSelector('.editor-panel.guided', { timeout: 60_000 });
+  await q.waitForFunction(() => window.casino.app.link?.you, null, { timeout: 20_000 });
+  await q.waitForTimeout(1500);
+  const dressing = await q.evaluate(() => window.casino.engine.camera.position.y);
+  ok(dressing < -20, `Pick your look in first person still frames the dressing room (camera at y ${dressing.toFixed(1)})`);
+  await shot(q, 'flows-onboard');
+  for (let i = 0; i < 3; i++) {
+    await q.click('.editor-panel .ed-buttons .btn.primary');
+    await q.waitForTimeout(500);
+  }
+  await q.waitForSelector('.hud', { timeout: 30_000 });
+  await q.waitForTimeout(1500);
+  const n1 = await state(q);
+  ok(n1.view === 'first' && dist(n1.cam, n1.eye) < 0.02 && n1.shrunk, 'then onto the floor at the eyes');
+  await shot(q, 'flows-onboard-floor');
+  if (errs2.length) fail(`onboarding errors: ${errs2.slice(0, 3).join(' | ')}`);
+  await ctx2.close();
 }
 
 await browser.close();
