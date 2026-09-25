@@ -10,8 +10,9 @@
 //   desktop one, SHOTS=0 the rounds played for the wheel and dice shots;
 //   FIT=off opens the game with fitting switched off (?fit=off), to see what it was before;
 //   GPU=1 draws on the machine's GPU (much faster than SwiftShader).
-// Stub games (still being built elsewhere) are skipped: coinflip, wheel, cases, diamonds,
-// letitride, paigow, bingo, pachinko.
+// Games built but not yet placed on the floor (Coinflip, Wheel, Cases, Diamonds) are checked on the
+// dev table page (?dev=table&game=...), with the same measures. Stubs still being built elsewhere
+// are skipped: letitride, paigow, bingo, pachinko (HARNESS=a,b adds any game to the dev-page run).
 
 import { chromium, devices } from 'playwright';
 import { mkdirSync } from 'node:fs';
@@ -31,7 +32,8 @@ const STATIONS = {
   banditwheel: 'bw-1', plinko: 'pk-1', tower: 'tw-1', mines: 'mn-1', dice: 'dc-1', limbo: 'lb-1', keno: 'kn-1', hilo: 'hl-1', crash: 'cs-1',
   'vip-blackjack': 'vip-bj-1', 'vip-baccarat': 'vip-bc-1', 'vip-roulette': 'vip-rl-1',
 };
-const STUBS = ['coinflip', 'wheel', 'cases', 'diamonds', 'letitride', 'paigow', 'bingo', 'pachinko'];
+const STUBS = ['letitride', 'paigow', 'bingo', 'pachinko'];
+const HARNESS = (process.env.HARNESS ?? 'coinflip,wheel,cases,diamonds').split(',').filter(Boolean);
 const VIEWPORTS = (process.env.VIEWPORTS ?? '1920x1080,1440x900,1366x768,1280x720,1280x600,1024x640,2560x1080,900x1000')
   .split(',')
   .map((s) => s.split('x').map(Number));
@@ -41,7 +43,7 @@ const PHONES = process.env.PHONES === '0' ? [] : [
   ['iphone-land', { ...strip(devices['iPhone 13 landscape']), viewport: { width: 844, height: 390 } }, ['blackjack', 'roulette', 'slots', 'plinko', 'craps']],
   ['ipad', strip(devices['iPad (gen 7)']), ['blackjack', 'roulette', 'baccarat', 'mines']],
 ];
-const games = (only.length ? only : Object.keys(STATIONS)).filter((g) => !STUBS.includes(g));
+const games = (only.length ? only : Object.keys(STATIONS)).filter((g) => !STUBS.includes(g) && STATIONS[g]);
 
 const failures = [];
 const log = (s) => console.log(new Date().toISOString().slice(11, 19), s);
@@ -94,7 +96,8 @@ const measure = (page) =>
   page.evaluate(() => {
     const W = innerWidth;
     const H = innerHeight;
-    const s = window.casino.app.table?.session;
+    // the game proper's table, or the dev table page's
+    const s = window.casino.app ? window.casino.app.table?.session : window.casino.table;
     const stage = s?.stage;
     if (!stage) return null;
     const cam = stage.engine.camera;
@@ -253,6 +256,30 @@ async function run(tag, contextOpts, list, sizes) {
 }
 
 if (process.env.DESK !== '0') await run('desk', { viewport: { width: VIEWPORTS[0][0], height: VIEWPORTS[0][1] } }, games, VIEWPORTS);
+// the dev table page: log in as the page does, buy in, then the same sweep
+const harness = HARNESS.filter((g) => !only.length || only.includes(g));
+if (harness.length && process.env.DESK !== '0') {
+  const ctx = await browser.newContext({ viewport: { width: VIEWPORTS[0][0], height: VIEWPORTS[0][1] } });
+  await ctx.addInitScript(() => localStorage.setItem('casino.quality', 'low'));
+  const page = await ctx.newPage();
+  page.setDefaultTimeout(90_000);
+  for (const game of harness) {
+    try {
+      await page.goto(`${base}/casino/?dev=table&game=${game}&name=fit6_e2e_dev${OFF ? '&fit=off' : ''}`);
+      await page.waitForSelector('.modal input[type=number]', { timeout: 120_000 });
+      await page.fill('.modal input[type=number]', '1000');
+      await page.click('.modal .btn.primary');
+      await page.waitForFunction(() => window.casino?.table?.snapshot?.you?.status !== 'watching' && !document.querySelector('.modal'), null, { timeout: 30_000 });
+      await page.waitForTimeout(2000);
+      await sweep(page, 'dev', game, VIEWPORTS);
+      await page.setViewportSize({ width: VIEWPORTS[0][0], height: VIEWPORTS[0][1] });
+    } catch (err) {
+      failures.push(`dev ${game}: ${String(err?.message ?? err).split('\n')[0]}`);
+    }
+  }
+  await ctx.close();
+}
+
 for (const [tag, opts, list] of PHONES) {
   const mine = only.length ? list.filter((g) => only.includes(g)) : list;
   if (mine.length) await run(tag, opts, mine, [[0, 0]]);
