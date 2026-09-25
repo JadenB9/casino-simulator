@@ -26,6 +26,7 @@ import { Bar, openBarMenu, openShop, shopApi, shopButton } from '../ui/shop/inde
 import { button, modal, toast } from '../ui/kit.ts';
 import { showAway, showIdleWarning, type AwayHandle, type WarningHandle } from '../ui/away/away.ts';
 import { IdleWatch } from './idle.ts';
+import { mountFeats, type FeatsUi } from '../ui/feats/index.ts'; // v6 feats6
 import { ENGINES } from '../../../shared/src/games/index.ts';
 import { CLOSE, type Profile } from '../../../shared/src/protocol.ts';
 
@@ -104,6 +105,8 @@ class App {
   private awayWalking = false;
   /** Where each station's n-th seated player is drawn; stations never move. */
   private readonly seatCache = new Map<string, SeatPose | null>();
+  /** v6 feats6: the achievements (HUD cup, J, the sheet, the card when you earn one). */
+  private feats: FeatsUi | null = null;
 
   constructor(
     private readonly engine: Engine3D,
@@ -305,6 +308,8 @@ class App {
       this.menu?.setOnline(n);
     });
     link.on('state', (_s, code) => void this.endsSession(code));
+    // v6 feats6: a feat of yours the floor heard of before any table said (earned as you left)
+    link.subscribe((m) => m.t === 'feat' && this.feats?.floorFeat(m));
     // Kept through away and back, with whatever is paid for and on its way.
     this.bar ??= new Bar({
       session,
@@ -390,6 +395,11 @@ class App {
     bar.insertBefore(socialButton('leaderboard', 'Leaderboards', () => openLeaderboard({ root: this.ui, api: socialApi })), first);
     bar.insertBefore(shopButton('boutique', 'Boutique', () => this.openShop()), first);
     bar.insertBefore(shopButton('bar', 'Bar', () => this.openBarMenu()), first);
+    // v6 feats6: the achievements, their cup in the bar and your title under your name
+    this.feats?.dispose();
+    this.feats = mountFeats({ root: this.ui, session, sfx: this.sfx, game: () => this.table?.station.game ?? null });
+    bar.insertBefore(this.feats.button, first);
+    this.feats.useHud(this.hud.root);
     this.chat?.setVisible(true);
   }
 
@@ -398,6 +408,8 @@ class App {
     if (this.table) await this.leaveTable();
     this.emotes?.dispose();
     this.emotes = null;
+    this.feats?.dispose(); // v6 feats6
+    this.feats = null;
     this.chat?.setVisible(false);
     this.hud?.close();
     this.hud = null;
@@ -540,6 +552,8 @@ class App {
           if (seated) this.poseForSeat(m.seat);
         },
         onChat: (m) => current() && this.chat?.tableMessage(m),
+        // v6 feats6: earned here; shown once the round behind it has played out
+        onFeat: (m) => this.feats?.tableFeat(m, current() ? (fn) => table!.afterShown(fn) : undefined),
       },
     );
     this.table = { station, session: table, party, seated: false, posed: null };
@@ -668,6 +682,8 @@ class App {
     this.table?.session.close();
     this.emotes?.dispose();
     this.emotes = null;
+    this.feats?.dispose(); // v6 feats6
+    this.feats = null;
     this.disconnectFloor();
     this.world.player.setEnabled(false);
     modal(title, [text], [button('Reload', () => location.reload(), { cls: 'primary' })]);

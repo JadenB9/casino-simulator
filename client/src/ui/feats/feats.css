@@ -1,0 +1,128 @@
+/* Achievements: the sheet (a rail of games beside the list), the card that slides in when you
+   earn one, and the title worn under a name (the HUD's and the name tags over people). Shared
+   pieces (.sheet, .stats, .seg, .field-label) come from menu.css; colours from theme.css. No
+   backdrop-filter: these sit over the running 3D canvas. */
+
+/* ---------------------------------------------------------------- the sheet */
+
+.feats-sheet { --ft-top: clamp(0px, 6vh - 24px, 40px); width: min(960px, 100%); align-self: start; margin-top: var(--ft-top); max-height: calc(100vh - 48px - var(--ft-top)); }
+.feats-sheet .sheet-body { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+
+.ft-stats { flex: none; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.ft-stats .stat { padding: 10px 16px 11px; }
+
+.ft-titles { flex: none; display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; margin: 14px 0 14px; }
+.ft-titles .field-label { white-space: nowrap; }
+.ft-title-seg .seg-btn { height: 30px; padding: 0 12px; font-size: 14px; }
+.ft-title-seg .seg-btn.on { background: rgba(226, 190, 118, 0.16); color: var(--brass-hi); }
+.ft-title-seg .seg-btn:first-child { border-left: 0; }
+.ft-title-note { margin: 0; font-size: 14px; }
+
+.ft-main { flex: 1 1 auto; display: grid; grid-template-columns: 212px minmax(0, 1fr); height: min(60vh, 620px); min-height: 240px; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+
+.ft-rail { overflow: auto; overscroll-behavior: contain; padding: 4px 0 10px; border-right: 1px solid var(--line); background: rgba(255, 255, 255, 0.015); }
+.ft-rail-head { padding: 12px 14px 5px; font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-3); }
+.ft-rail-btn { display: flex; align-items: baseline; gap: 10px; width: 100%; padding: 6px 14px; border: 0; background: none; color: var(--ink-2); font-size: 16px; letter-spacing: 0.03em; text-align: left; cursor: pointer; transition: background 0.12s, color 0.12s; }
+.ft-rail-btn:hover { background: rgba(226, 190, 118, 0.06); color: var(--ink); }
+.ft-rail-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.ft-rail-btn.on { background: rgba(226, 190, 118, 0.12); color: var(--brass-hi); box-shadow: inset 2px 0 0 var(--brass-hi); }
+.ft-rail-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ft-rail-n { font-size: 14px; color: var(--ink-3); }
+.ft-rail-btn.done .ft-rail-n { color: var(--brass); }
+
+.ft-list { overflow: auto; overscroll-behavior: contain; padding: 0 20px 16px; }
+.ft-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: flex-end; gap: 16px; padding: 16px 0 11px; border-bottom: 1px solid var(--line); background: rgb(17, 14, 11); }
+.ft-head-titles { flex: 1; min-width: 0; }
+.ft-group { margin: 0; font-family: var(--serif); font-size: 19px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--brass-hi); }
+.ft-count { margin-top: 3px; font-size: 14px; letter-spacing: 0.04em; color: var(--ink-3); }
+.ft-won { font-size: 13px; letter-spacing: 0.14em; text-transform: uppercase; white-space: nowrap; }
+.ft-won.yes { color: var(--win); }
+.ft-won.no { color: var(--ink-3); }
+
+.ft-row { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 14px; align-items: start; padding: 13px 0 12px; border-bottom: 1px solid rgba(214, 178, 110, 0.11); }
+.ft-row:last-child { border-bottom: 0; }
+.ft-medal { width: 28px; height: 28px; margin-top: 1px; fill: none; stroke: rgba(214, 178, 110, 0.4); stroke-width: 1.4; }
+.ft-medal .ft-arc { stroke: var(--brass-hi); stroke-width: 1.8; stroke-linecap: round; }
+.ft-medal.on { stroke: var(--brass); }
+.ft-medal.on .fill { fill: var(--brass-hi); stroke: var(--brass-hi); }
+.ft-top { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.ft-name { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 18px; font-weight: 600; letter-spacing: 0.04em; color: var(--ink-2); }
+.ft-row.earned .ft-name { color: var(--ink); }
+.ft-kind { font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-3); white-space: nowrap; }
+.ft-about { margin: 2px 0 0; font-size: 15px; letter-spacing: 0.02em; color: var(--ink-3); }
+.ft-bar { max-width: 360px; height: 4px; margin-top: 9px; border-radius: 2px; background: rgba(255, 255, 255, 0.07); overflow: hidden; }
+.ft-bar i { display: block; height: 100%; min-width: 0; background: linear-gradient(90deg, var(--brass), var(--brass-hi)); border-radius: 2px; transition: width 0.5s var(--ease); }
+.ft-prog { margin-top: 5px; font-size: 13px; letter-spacing: 0.04em; color: var(--ink-3); }
+
+.ft-side { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.ft-rewards { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; max-width: 280px; margin: 0; padding: 0; list-style: none; }
+.ft-reward { padding: 1px 7px 2px; border: 1px solid var(--line); border-radius: 3px; font-size: 13px; letter-spacing: 0.04em; color: var(--ink-2); white-space: nowrap; }
+.ft-reward.cash { border-color: rgba(226, 190, 118, 0.45); color: var(--brass-hi); font-variant-numeric: tabular-nums; }
+.ft-reward.title { font-style: normal; }
+.ft-row.earned .ft-reward { border-color: rgba(214, 178, 110, 0.18); color: var(--ink-3); }
+.ft-when { font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--brass); white-space: nowrap; }
+.ft-row.fresh { animation: ft-fresh 2.4s var(--ease); }
+.ft-problem { margin-top: 12px; color: var(--lose); }
+
+@keyframes ft-fresh { 0%, 30% { background: rgba(226, 190, 118, 0.14); } 100% { background: transparent; } }
+
+@media (max-width: 760px) {
+  .ft-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ft-stats .stat:nth-child(3) { border-left: 0; }
+  .ft-stats .stat:nth-child(n + 3) { border-top: 1px solid var(--line); }
+  .ft-main { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); height: min(66vh, 620px); }
+  /* the rail becomes a row of games to swipe along */
+  .ft-rail { display: flex; gap: 2px; overflow-x: auto; overflow-y: hidden; padding: 6px; border-right: 0; border-bottom: 1px solid var(--line); }
+  .ft-rail-head { display: none; }
+  .ft-rail-btn { flex: none; width: auto; padding: 6px 10px; border-radius: 4px; }
+  .ft-rail-btn.on { box-shadow: inset 0 -2px 0 var(--brass-hi); }
+  .ft-list { padding: 0 14px 14px; }
+  .ft-row { grid-template-columns: 24px minmax(0, 1fr); }
+  .ft-side { grid-column: 2; align-items: flex-start; }
+  .ft-rewards { justify-content: flex-start; }
+}
+
+@media (pointer: coarse) {
+  .feats-sheet { max-height: calc(100dvh - 48px - var(--ft-top)); }
+}
+
+/* ---------------------------------------------------------------- the unlock card */
+
+/* Under the HUD's right-hand buttons (and a lobby's party panel), above the table's panels. */
+.ft-cards { position: fixed; top: calc(var(--below-party) + 6px); right: 16px; z-index: 41; display: grid; justify-items: end; }
+.ft-card { position: relative; display: flex; align-items: center; gap: 14px; width: min(340px, calc(100vw - 32px)); padding: 12px 18px 13px 16px; border-color: var(--line-strong); color: var(--ink); text-align: left; cursor: pointer; overflow: hidden; animation: ft-in 0.42s var(--ease); }
+.ft-card::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: linear-gradient(var(--brass-hi), var(--brass)); }
+.ft-card:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.ft-card .ft-medal { flex: none; width: 40px; height: 40px; margin: 0; stroke-width: 1.2; animation: ft-medal 0.9s var(--ease) 0.15s both; }
+.ft-card-text { min-width: 0; }
+.ft-card-kind { font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--brass); }
+.ft-card-name { margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--serif); font-size: 18px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--brass-hi); }
+.ft-card-sub { margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; letter-spacing: 0.03em; color: var(--ink-2); }
+.ft-card.out { opacity: 0; transform: translateX(14px); transition: opacity 0.38s var(--ease), transform 0.38s var(--ease); }
+
+@keyframes ft-in { from { opacity: 0; transform: translateX(24px); } }
+@keyframes ft-medal { from { transform: rotate(-90deg) scale(0.6); opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .ft-card, .ft-card .ft-medal, .ft-row.fresh { animation: none; }
+  .ft-bar i { transition: none; }
+}
+
+@media (max-width: 720px) {
+  .ft-cards { right: 8px; }
+  .ft-card { padding: 10px 14px 11px 12px; }
+  .ft-card .ft-medal { width: 32px; height: 32px; }
+  .ft-card-name { font-size: 16px; }
+  .ft-card-sub { font-size: 14px; }
+}
+
+/* ---------------------------------------------------------------- titles under names */
+
+/* The HUD: your name, and the title you wear under it. */
+.hud-who.titled { flex-direction: column; align-items: flex-start; justify-content: center; gap: 1px; line-height: 1.1; }
+.hud-who .hud-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.hud-who .hud-title { max-width: 100%; overflow: hidden; text-overflow: ellipsis; font-family: var(--ui); font-size: 11px; font-weight: 600; letter-spacing: 0.18em; color: var(--ink-3); }
+
+/* Name tags over people on the floor: the title on a line of its own under the name. */
+.world-tag.titled, .remote-tag.titled { border-radius: 9px; text-align: center; }
+.tag-title { display: block; margin-top: 1px; font-size: 11px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: var(--brass-hi); }

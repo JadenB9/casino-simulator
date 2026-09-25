@@ -12,6 +12,7 @@ import type { Character, CharacterFactory } from './contract.ts';
 import { byteToYaw, type FloorLink, type RemotePlayer } from '../net/presence.ts';
 import { serverNow } from '../net/clock.ts';
 import { SKIN_TONES, type Look } from '../../../shared/src/look.ts';
+import { titleOf } from '../../../shared/src/feats.ts';
 import type { EmoteId } from '../../../shared/src/protocol.ts';
 import './remote-players.css';
 
@@ -107,7 +108,11 @@ export class RemotePlayers {
     this.offs = [
       link.on('join', (p) => this.add(p)),
       link.on('leave', (id) => this.remove(id)),
-      link.on('look', (id, look) => this.drawn.get(id)?.ch.setLook(look)),
+      link.on('look', (id, look) => {
+        const ch = this.drawn.get(id)?.ch;
+        ch?.setLook(look);
+        if (ch) showTitle(ch, look); // v6 feats6
+      }),
     ];
   }
 
@@ -247,6 +252,7 @@ export class RemotePlayers {
   private add(p: RemotePlayer): void {
     if (this.drawn.has(p.info.id)) return;
     const ch = this.factory.create(p.info.look, p.info.name);
+    showTitle(ch, p.info.look); // v6 feats6
     ch.root.visible = false; // until its first update places it
     this.group.add(ch.root);
     this.drawn.set(p.info.id, { ch, x: 0, z: 0, speed: 0, onFloor: false, placed: false, shown: false, rank: 0 });
@@ -373,4 +379,25 @@ class CapsuleCharacter implements Character {
 
 function cloth(): THREE.MeshStandardMaterial {
   return new THREE.MeshStandardMaterial({ roughness: 0.78, metalness: 0 });
+}
+
+// v6 feats6: the title a player wears (a feat's, shared/src/feats.ts), on a line of its own under
+// the name in their tag. The tag's text is the name (setName writes it), so the title is a child
+// element added after it, and taken off again when they stop wearing one.
+function showTitle(ch: Character, look: Look): void {
+  const tag = (ch as { tag?: { element?: HTMLElement } }).tag?.element ?? (ch as unknown as { label?: HTMLElement }).label;
+  if (!tag) return;
+  const title = titleOf(look.title)?.reward.title ?? null;
+  let line = tag.querySelector<HTMLElement>('.tag-title');
+  tag.classList.toggle('titled', title !== null);
+  if (!title) {
+    line?.remove();
+    return;
+  }
+  if (!line) {
+    line = document.createElement('span');
+    line.className = 'tag-title';
+    tag.append(line);
+  }
+  line.textContent = title;
 }
