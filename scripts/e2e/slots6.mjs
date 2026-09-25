@@ -248,7 +248,8 @@ for (const variant of variants) {
   console.log(`--- ${variant}, high limit`);
   const name = `slots6_e2e_h${variant.slice(0, 4)}`;
   await highRoller(name, 10_000_000_00);
-  const t = await open(variant, 'desktop', { name, buyIn: 3_000_000 });
+  // $2.5 million: every machine takes it (Lucky Cherries' most, a hundred $25,000 spins)
+  const t = await open(variant, 'desktop', { name, buyIn: 2_500_000 });
   const { page, frames } = t;
   const last = frames.filter((f) => f.dir === 'in' && (f.msg.t === 'seat' || f.msg.t === 'table')).at(-1)?.msg;
   const startCredit = last?.t === 'seat' ? last.stack : last?.you?.stack;

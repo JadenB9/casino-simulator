@@ -111,7 +111,10 @@ async function shot(p, name) {
 /** Open the boutique at an id and wait for it to know what you own. */
 async function openAt(p, id) {
   await p.evaluate((i) => window.casino.app.openShop(i), id);
-  await p.waitForSelector(`.bq-item[data-id="${id}"][aria-selected="true"]`);
+  await p.waitForSelector(`.bq-item[data-id="${id}"][aria-selected="true"]`).catch(async (e) => {
+    await p.screenshot({ path: `${out}/failed-open-${id}.png` }); // qa6: what was on screen instead
+    throw e;
+  });
   await p.waitForFunction(() => !document.querySelector('.bq-status')?.textContent?.startsWith('Checking'));
 }
 

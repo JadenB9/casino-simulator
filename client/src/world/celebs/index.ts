@@ -35,7 +35,7 @@ import { CELEB_MOTIONS, type CelebMotion } from './motions.ts';
 import { followersOf, placeFollower, seeded, type Follower } from './crowd.ts';
 import { Flashes, screenFlash } from './flash.ts';
 import { GiftModel } from './gift.ts';
-import { HappyCard, Notices, Sighting, photoCard } from './news.ts';
+import { HappyCard, Notices, Sighting, photoCard, sightingTitle } from './news.ts';
 import { clockText, happyHour, setHappyHour } from './happy.ts';
 import { chime, shutter } from './sound.ts';
 import { selfieCamera, takeSelfie, type Snapper } from './selfie.ts';
@@ -401,7 +401,7 @@ export class Celebs {
     const fresh = t < 25;
     this.news().show({
       tag: 'Celebrity sighting',
-      title: fresh ? `${celeb.name} just walked in through the lobby` : `${celeb.name} is on the floor${room ? `, in the ${room.name}` : ''}`,
+      title: sightingTitle(celeb.name, room?.name ?? null, fresh),
       sub: `${celeb.known}. Say hello while they're here.`,
     });
   }

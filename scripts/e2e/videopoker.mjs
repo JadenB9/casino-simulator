@@ -49,8 +49,8 @@ out.states.push(['idle', await screenState()]);
 await page.keyboard.press('d');
 await page.waitForTimeout(150);
 out.states.push(['denom $5', await screenState()]);
-await page.keyboard.press('d');
-await page.keyboard.press('d');
+// round the rest of the coin values (however many the machine has) back to $1
+for (let i = 0; i < 10 && (await page.textContent('.vp-denom')) !== '$1'; i++) await page.keyboard.press('d');
 await page.waitForTimeout(150);
 const betOne = await page.evaluate(() => {
   const { engine, table } = window.casino;
