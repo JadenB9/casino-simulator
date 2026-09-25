@@ -294,8 +294,14 @@ class App {
     // Big wins are announced to people out on the floor, never to the winner at their table.
     this.lifeOff = this.life.connect(link, { onFloor: () => this.hud !== null && this.table === null && this.world.seated === null });
     link.on('emote', (id, e) => void this.world.showEmote(id === link.you?.id ? 'me' : id, e));
-    // v6 emotes6: an emote bought or earned while you're on the floor unlocks on the wheel at once
-    link.subscribe((m) => void (m.t === 'owned' && this.emotes?.grant(m.emotes)));
+    // v6 emotes6: an emote bought or earned while you're on the floor is yours at once: in the
+    // profile (the wheel reads it there next time) and unlocked on a wheel that's up now
+    link.subscribe((m) => {
+      if (m.t !== 'owned') return;
+      const p = session.profile;
+      if (p) session.set({ ...p, owned: [...new Set([...(p.owned ?? []), ...m.emotes])] });
+      this.emotes?.grant(m.emotes);
+    });
     link.on('hello', (you, first) => {
       // A tab that takes over from another one carries on where that one stood. Coming back from
       // away, the floor forgot us; the first position we send puts us back where we stand.
