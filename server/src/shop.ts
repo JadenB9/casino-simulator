@@ -14,7 +14,7 @@
 
 import { formatMoney, type Cents } from '../../shared/src/money.ts';
 import {
-  EFFECTS, EMOTE_ITEMS, HOLD_MS, SHOP_ITEMS, STATUE, barItem, effectItem, emoteItem, isFreeEmote, isOp, shopEmote, shopItem, wornItem,
+  EFFECTS, EMOTE_ITEMS, HOLD_MS, SHOP_ITEMS, STATUE, barItem, theName, effectItem, emoteItem, isFreeEmote, isOp, shopEmote, shopItem, wornItem,
   type BarItem, type BuyResponse, type EffectItem, type EffectResponse, type FxEvent, type OrderResponse, type ShopResponse,
 } from '../../shared/src/items.ts';
 import type { EmoteId } from '../../shared/src/protocol.ts';
@@ -47,9 +47,9 @@ function sold(id: unknown): Sold | null {
 
 /** Why the boutique won't sell something it knows (a reward, a free emote), or null. */
 function notSold(id: unknown): string | null {
-  if (isFreeEmote(id)) return `Everyone has the ${emoteItem(id)!.name} already.`;
+  if (isFreeEmote(id)) return `Everyone has ${theName(emoteItem(id)!.name)} already.`;
   const earned = wornItem(id) ?? emoteItem(id);
-  return earned?.reward ? `The ${earned.name} isn't sold: it's earned.` : null;
+  return earned?.reward ? `${theName(earned.name, true)} isn't sold: it's earned.` : null;
 }
 
 export async function shopApi(request: Request, env: Env, route: string, accountId: number, cors: Record<string, string>): Promise<Response> {
@@ -70,7 +70,7 @@ export async function shopApi(request: Request, env: Env, route: string, account
     if (!isOp(body?.op)) return fail(400, 'BAD_REQUEST', 'A purchase needs an operation id.', cors);
     if (!(await bumpRate(db, 'casino-shop', `a${accountId}`, LIMIT, 60_000, now))) return fail(429, 'RATE_LIMITED', 'Give it a minute.', cors);
     const r = await buyItem(db, accountId, item, body.op, now);
-    if (r.kind === 'owned') return fail(409, 'NOT_ELIGIBLE', `You already own the ${item.name}.`, cors);
+    if (r.kind === 'owned') return fail(409, 'NOT_ELIGIBLE', `You already own ${theName(item.name)}.`, cors);
     if (r.kind === 'short') return notEnough(item, r, cors);
     // The floor hears about it (a retry too: both calls are harmless twice). The purchase stands
     // if it doesn't answer: the next floor connect reads emotes from D1, and the statues refresh.
@@ -107,8 +107,8 @@ export async function shopApi(request: Request, env: Env, route: string, account
   return fail(404, 'NOT_FOUND', 'Not here.', cors);
 }
 
-function notEnough(item: { name: string; price: Cents }, money: { balance: Cents; inPlay: Cents }, cors: Record<string, string>): Response {
-  return fail(409, 'INSUFFICIENT_FUNDS', `Not enough: the ${item.name} is ${formatMoney(item.price)} and your balance is ${formatMoney(money.balance)}.`, cors, {
+function notEnough(item: { name: string; price: Cents }, money: { balance: Cents; inPlay: Cents }, cors: Record<string, string>, bare = false): Response {
+  return fail(409, 'INSUFFICIENT_FUNDS', `Not enough: ${bare ? item.name : theName(item.name)} is ${formatMoney(item.price)} and your balance is ${formatMoney(money.balance)}.`, cors, {
     balance: money.balance,
     inPlay: money.inPlay,
   });
@@ -183,7 +183,7 @@ async function playEffect(env: Env, accountId: number, fx: EffectItem, op: strin
 
   // Short already: say so before holding a slot for it (the batch below still guards).
   const before = await money(db, accountId);
-  if (before.balance < fx.price) return notEnough(fx, before, cors);
+  if (before.balance < fx.price) return notEnough(fx, before, cors, true);
 
   const held = await floor.fxReserve(accountId, fx.id, op);
   if ('error' in held) {
@@ -198,7 +198,7 @@ async function playEffect(env: Env, accountId: number, fx: EffectItem, op: strin
   } catch (err) {
     if (overdraft(err)) {
       await floor.fxCancel(accountId, op);
-      return notEnough(fx, await money(db, accountId), cors);
+      return notEnough(fx, await money(db, accountId), cors, true);
     }
     // The same op landing from a request running alongside this one: it's paid, so it plays.
     const landed = await db.prepare(`SELECT 1 AS n FROM casino_orders WHERE op_id = ?1`).bind(key).first();

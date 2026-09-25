@@ -15,6 +15,8 @@ describe('money', () => {
     expect(formatMoney(3750, { sign: true })).toBe('+$37.50');
     expect(formatCompact(5_000_000)).toBe('$50K');
     expect(formatCompact(150_000_000)).toBe('$1.5M');
+    expect(formatCompact(100_000_000_000)).toBe('$1B');
+    expect(formatCompact(250_000_000_000)).toBe('$2.5B');
     expect(formatCompact(99_900)).toBe('$999');
   });
 
