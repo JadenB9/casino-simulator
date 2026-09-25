@@ -1,0 +1,57 @@
+/* Celebrities and the gift box on screen: notices under the HUD (a row below the big-win toasts),
+   the "on the floor" card at the right, the photo you get with a celebrity, and the camera flash.
+   The house's look: glass panels, a brass edge, the serif for names. */
+
+.celeb-notices { position: fixed; top: calc(var(--below-hud) + 58px); left: 50%; transform: translateX(-50%); z-index: 41; display: grid; justify-items: center; width: max-content; max-width: calc(100vw - 32px); pointer-events: none; }
+.celeb-notice { position: relative; display: grid; gap: 2px; min-width: 280px; max-width: min(560px, calc(100vw - 32px)); padding: 9px 20px 10px 22px; border-color: var(--line-strong); overflow: hidden; animation: celeb-in 0.34s var(--ease); }
+.celeb-notice::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: linear-gradient(var(--brass-hi), var(--brass)); }
+.celeb-notice.out { opacity: 0; transform: translateY(-6px); transition: opacity 0.38s var(--ease), transform 0.38s var(--ease); }
+.celeb-notice-tag { font-size: 12px; font-weight: 600; letter-spacing: 0.22em; text-transform: uppercase; color: var(--brass); }
+.celeb-notice-title { font-family: var(--serif); font-size: 17px; font-weight: 600; letter-spacing: 0.04em; color: var(--ink); text-wrap: balance; }
+.celeb-notice-sub { font-size: 15px; letter-spacing: 0.03em; color: var(--ink-3); text-wrap: balance; }
+
+.celeb-sighting { position: fixed; top: var(--below-hud); right: 16px; z-index: 30; display: grid; gap: 1px; width: 236px; padding: 9px 14px 10px; border-color: var(--line-strong); pointer-events: none; animation: celeb-slide 0.4s var(--ease); }
+.celeb-sighting-tag { display: flex; align-items: center; gap: 7px; font-size: 11px; font-weight: 600; letter-spacing: 0.24em; text-transform: uppercase; color: var(--brass); }
+.celeb-sighting-tag::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: #e0556b; box-shadow: 0 0 0 3px rgba(224, 85, 107, 0.22); animation: celeb-live 1.6s ease-in-out infinite; }
+.celeb-sighting.met .celeb-sighting-tag::before { background: var(--brass); box-shadow: none; animation: none; }
+.celeb-sighting-name { font-family: var(--serif); font-size: 16px; font-weight: 600; line-height: 1.2; letter-spacing: 0.04em; color: var(--brass-hi); text-wrap: balance; }
+.celeb-sighting-known { font-size: 13px; letter-spacing: 0.03em; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.celeb-sighting-where { margin-top: 3px; font-size: 14px; font-weight: 600; letter-spacing: 0.06em; color: var(--ink-2); }
+
+.celeb-photo { position: fixed; right: 16px; bottom: 96px; z-index: 42; display: grid; gap: 6px; width: 284px; padding: 10px 10px 12px; border-color: var(--line-strong); transform: rotate(-1.5deg); animation: celeb-photo-in 0.5s var(--ease); }
+.celeb-photo.out { opacity: 0; transform: rotate(-1.5deg) translateY(10px); transition: opacity 0.45s var(--ease), transform 0.45s var(--ease); }
+.celeb-photo-frame { position: relative; display: grid; align-content: end; height: 118px; border-radius: 3px; overflow: hidden; background: radial-gradient(120% 90% at 50% 0%, rgba(241, 213, 154, 0.2), rgba(20, 16, 12, 0) 60%), linear-gradient(#2a2119, #120f0c); border: 1px solid rgba(241, 213, 154, 0.24); }
+.celeb-photo-frame.shot { height: auto; aspect-ratio: 4 / 3; border: 4px solid #efe8da; border-bottom-width: 4px; background: #0b0908; }
+.celeb-photo-picture { position: absolute; inset: 0; width: 100%; height: 100%; }
+.celeb-photo-caption { position: relative; display: grid; gap: 2px; padding: 10px 12px; }
+.celeb-photo-frame.shot .celeb-photo-caption { padding: 18px 10px 7px; background: linear-gradient(rgba(8, 6, 5, 0), rgba(8, 6, 5, 0.82)); }
+.celeb-photo-tag { font-size: 11px; font-weight: 600; letter-spacing: 0.24em; text-transform: uppercase; color: var(--brass); }
+.celeb-photo-title { font-family: var(--serif); font-size: 20px; font-weight: 600; letter-spacing: 0.04em; line-height: 1.1; color: var(--ink); text-wrap: balance; }
+.celeb-photo-amount { padding: 0 4px; font-size: 22px; font-weight: 600; letter-spacing: 0.02em; color: var(--win); }
+.celeb-photo-line { padding: 0 4px; font-family: var(--serif); font-size: 14px; font-style: italic; line-height: 1.3; color: var(--ink-2); text-wrap: pretty; }
+.celeb-photo-foot { padding: 0 4px; font-size: 13px; letter-spacing: 0.05em; color: var(--ink-3); }
+
+.celeb-flash { position: fixed; inset: 0; z-index: 60; background: #fffdf6; pointer-events: none; opacity: 0; animation: celeb-flash 0.6s ease-out; }
+
+@keyframes celeb-in { from { opacity: 0; transform: translateY(-8px); } }
+@keyframes celeb-slide { from { opacity: 0; transform: translateX(12px); } }
+@keyframes celeb-photo-in { from { opacity: 0; transform: rotate(3deg) translateY(16px); } }
+@keyframes celeb-flash { 0% { opacity: 0.92; } 100% { opacity: 0; } }
+@keyframes celeb-live { 50% { opacity: 0.45; } }
+
+/* Reduce flashing & motion (app/comfort.ts), or the system's reduced motion: a soft glow, a still dot */
+.celeb-flash.calm { animation-name: celeb-flash-soft; }
+.celeb-sighting.calm .celeb-sighting-tag::before { animation: none; }
+@keyframes celeb-flash-soft { 0% { opacity: 0.22; } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .celeb-flash { animation-name: celeb-flash-soft; }
+  .celeb-sighting-tag::before { animation: none; }
+}
+
+@media (max-width: 720px) {
+  .celeb-notice { min-width: 0; padding: 7px 14px 8px 16px; }
+  .celeb-notice-title { font-size: 15px; }
+  .celeb-sighting { width: 188px; padding: 7px 11px 8px; }
+  .celeb-photo { width: 220px; bottom: 150px; }
+  .celeb-photo-frame { height: 88px; }
+}
