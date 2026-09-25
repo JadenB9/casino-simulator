@@ -17,7 +17,7 @@ const RUN = 4.8;
 describe('the catalog has a model for everything worn', () => {
   it('every ride, sold or given, has a spec and a model', () => {
     const rides = SHOP_ITEMS.filter((i) => i.kind === 'ride');
-    expect(rides.map((r) => r.id).sort()).toEqual(['e-scooter', 'golden-board', 'hoverboard', 'segway', 'skateboard']);
+    expect(rides.map((r) => r.id).sort()).toEqual(['e-scooter', 'golden-board', 'hover-throne', 'hoverboard', 'segway', 'skateboard']);
     for (const r of rides) {
       expect(rideSpec(r.id), r.id).not.toBeNull();
       expect(hasRideModel(r.id), r.id).toBe(true);
@@ -94,9 +94,11 @@ describe('riding', () => {
     expect(segwayPitch(100)).toBeLessThanOrEqual(0.14);
   });
 
-  it('stands across a board and faces ahead on a bar', () => {
+  it('stands across a board, faces ahead on a bar, sits on a throne', () => {
     for (const r of Object.values(RIDES)) {
       expect(stanceYaw(r)).toBe(r.stance === 'side' ? -Math.PI / 2 : 0);
+      // a seat has a height over its footrest, nothing else does
+      expect(r.seat !== undefined).toBe(r.stance === 'seat');
       // a bar to hold means a front stance, and the other way round
       expect(!!r.grip).toBe(r.stance === 'front');
       // the left foot is on the left

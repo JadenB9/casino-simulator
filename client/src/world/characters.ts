@@ -942,6 +942,14 @@ export class Person implements Character {
     model.getWorldQuaternion(_rootQ).invert();
     _rootInv.copy(model.matrixWorld).invert();
     this.tag.position.y = NAME_Y + lift;
+    if (spec.stance === 'seat') {
+      // a throne: sat on as on any chair, the seat's height over the footrest the feet are on
+      const was = this.seatTop;
+      this.seatTop = spec.seat ?? 0.45;
+      const drop = this.sitPose();
+      this.seatTop = was;
+      return lift - drop;
+    }
     const find = (n: string) => model.getObjectByName(n.replace('.', '')) ?? model.getObjectByName(n);
     const body = find('Body');
     // the hips down: the knees take it

@@ -39,8 +39,10 @@ export interface RideSpec {
   turn: number;
   /** The walker's circle while riding (m): the deck reaches further than feet do. */
   radius: number;
-  /** Sideways across a board, or facing ahead with the hands on a bar. */
-  stance: 'side' | 'front';
+  /** Sideways across a board, facing ahead with the hands on a bar, or sitting (a throne). */
+  stance: 'side' | 'front' | 'seat';
+  /** Sitting: the seat's top over the footrest the feet are on (the footrest is `deck`). */
+  seat?: number;
   /** The deck's top over the floor, where the soles stand (m). */
   deck: number;
   /**
@@ -142,6 +144,26 @@ export const RIDES: Record<string, RideSpec> = {
     grip: [-0.2, 1.08, 0.2],
     tip: 1,
     axles: [{ y: 0.24, z: 0, r: 0.24 }],
+  },
+  'hover-throne': {
+    walk: 3.3,
+    run: 5.2,
+    accel: 1.5,
+    coast: 0.7,
+    turn: 3.2,
+    radius: 0.45,
+    stance: 'seat',
+    deck: 0.22,
+    seat: 0.43,
+    feet: [
+      [0.1, 0.3],
+      [-0.1, 0.3],
+    ],
+    toes: [0.1, -0.1],
+    crouch: 0,
+    tip: 0.5,
+    hover: '#ff6a3a',
+    axles: [],
   },
   'golden-board': {
     walk: 5.6,
@@ -573,6 +595,60 @@ function buildHoverboard(parts: Parts, gold: boolean): void {
   }
 }
 
+const VELVET = fin(0.2, 0.008, 0.016, 0, 0.92);
+const GOLD_SATIN = fin(1.0, 0.74, 0.34, 1, 0.3);
+
+/**
+ * The Hover Throne: a gilded dais floating on four thruster pods, a throne on it with a red velvet
+ * seat and a tall buttoned back, scrolled gold arms and a crest; the footrest is the dais's front.
+ */
+function buildThrone(parts: Parts): void {
+  const spec = RIDES['hover-throne']!;
+  const dais = spec.deck;
+  const seat = dais + spec.seat!;
+  const glow = fin(1.0, 0.45, 0.2, 0, 0.3);
+  // the dais: a rounded slab, a gold moulding round it, glowing pods under the corners
+  parts.add(new RoundedBoxGeometry(0.78, 0.07, 0.92, 3, 0.025), T(0, dais - 0.035, 0.08), GOLD_SATIN);
+  parts.add(new RoundedBoxGeometry(0.72, 0.006, 0.86, 1, 0.003), T(0, dais + 0.001, 0.08), VELVET);
+  const outline = board(0.95, 0.8, 0.012, () => dais - 0.05, 32, 4);
+  const rim = outline.rim;
+  for (const g of [outline.top, outline.bottom, outline.edge]) g.dispose();
+  parts.add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(rim, true), 120, 0.006, 6, true), T(0, 0, 0.08), GOLD);
+  for (const [x, z] of [
+    [-0.28, -0.24],
+    [0.28, -0.24],
+    [-0.28, 0.4],
+    [0.28, 0.4],
+  ] as const) {
+    parts.add(turned([[0.0001, -0.03], [0.05, -0.03], [0.066, -0.01], [0.062, 0.02], [0.0001, 0.02]], 24).rotateZ(Math.PI / 2), T(x, dais - 0.09, z), GOLD_SATIN);
+    parts.add(new THREE.TorusGeometry(0.045, 0.006, 6, 28).rotateX(Math.PI / 2), T(x, dais - 0.121, z), glow, 0, 3.2);
+    parts.add(new THREE.CircleGeometry(0.036, 20).rotateX(Math.PI / 2), T(x, dais - 0.123, z), glow, 0, 1.6);
+  }
+  // the seat: a gold frame with a deep red velvet cushion
+  parts.add(new RoundedBoxGeometry(0.62, seat - dais - 0.07, 0.5, 2, 0.02), T(0, (seat + dais - 0.07) / 2, 0.0), GOLD_SATIN);
+  parts.add(new RoundedBoxGeometry(0.54, 0.08, 0.44, 3, 0.035), T(0, seat - 0.04, 0.01), VELVET);
+  // legs: short scrolled feet at the corners
+  for (const x of [-0.29, 0.29]) for (const z of [-0.22, 0.23]) parts.add(new THREE.SphereGeometry(0.035, 14, 10), T(x, dais + 0.03, z), GOLD);
+  // the back: a tall gold frame, a buttoned velvet panel, a crest over it
+  const backZ = -0.23;
+  parts.add(new RoundedBoxGeometry(0.66, 0.95, 0.07, 3, 0.03), T(0, seat + 0.42, backZ), GOLD_SATIN);
+  parts.add(new RoundedBoxGeometry(0.52, 0.8, 0.03, 3, 0.012), T(0, seat + 0.42, backZ + 0.045), VELVET);
+  for (let r = 0; r < 4; r++) for (const x of r % 2 ? [-0.075, 0.075] : [-0.15, 0, 0.15]) parts.add(new THREE.SphereGeometry(0.009, 8, 6), T(x, seat + 0.15 + r * 0.18, backZ + 0.062), GOLD);
+  const crest = new THREE.Shape();
+  crest.moveTo(-0.3, 0);
+  crest.bezierCurveTo(-0.25, 0.1, -0.1, 0.06, 0, 0.2);
+  crest.bezierCurveTo(0.1, 0.06, 0.25, 0.1, 0.3, 0);
+  crest.lineTo(-0.3, 0);
+  parts.add(new THREE.ExtrudeGeometry(crest, { depth: 0.05, bevelEnabled: true, bevelThickness: 0.008, bevelSize: 0.008, bevelSegments: 2, curveSegments: 12 }), T(0, seat + 0.88, backZ - 0.025), GOLD);
+  parts.add(new THREE.SphereGeometry(0.03, 16, 10), T(0, seat + 1.1, backZ), fin(0.36, 0.004, 0.02, 0.25, 0.04));
+  // the arms: gold rails ending in scrolls, velvet pads on top
+  for (const side of [-1, 1]) {
+    parts.add(new RoundedBoxGeometry(0.06, 0.2, 0.44, 2, 0.02), T(side * 0.3, seat + 0.1, 0.0), GOLD_SATIN);
+    parts.add(new RoundedBoxGeometry(0.07, 0.03, 0.38, 2, 0.012), T(side * 0.3, seat + 0.21, -0.02), VELVET);
+    parts.add(new THREE.TorusGeometry(0.035, 0.014, 8, 20).rotateY(Math.PI / 2), T(side * 0.3, seat + 0.17, 0.22), GOLD);
+  }
+}
+
 // --- the material, the glow, the shared builds -------------------------------------------------------------
 
 let rideMat: THREE.MeshStandardMaterial | null = null;
@@ -630,6 +706,7 @@ const BUILDERS: Record<string, (p: Parts) => void> = {
   segway: buildSegway,
   hoverboard: (p) => buildHoverboard(p, false),
   'golden-board': (p) => buildHoverboard(p, true),
+  'hover-throne': buildThrone,
 };
 
 /** Whether a ride id has a model (every ride in the catalog should). */

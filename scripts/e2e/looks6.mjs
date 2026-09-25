@@ -69,9 +69,12 @@ const PIECES = [
   ['leather-jacket', 'clothes', 'full', -0.35],
   ['sequin-suit', 'clothes', 'full', -0.35],
   ['champion-jacket', 'clothes', 'full', 2.8],
+  ['billionaire-chain', 'chain', 'chest', 0],
+  ['emperor-robe', 'clothes', 'full', -0.35],
+  ['imperial-crown', 'hat', 'head', 0.5],
 ];
 
-const RIDE_IDS = ['skateboard', 'e-scooter', 'hoverboard', 'segway', 'golden-board'];
+const RIDE_IDS = ['skateboard', 'e-scooter', 'hoverboard', 'segway', 'golden-board', 'hover-throne'];
 
 async function showroom() {
   const r = await page(`http://localhost:${port}/casino/src/ui/shop/dev.html?screen=wear`, { width: 900, height: 900 });
@@ -112,6 +115,8 @@ if (checks.includes('wear')) {
   await shot(p, 'wear-all-new-m');
   await wear(p, { ...F, clothes: 'champion-jacket', chain: 'royal-pendant', shades: 'high-roller-shades', hat: 'gold-crown' }, 'full', -0.3);
   await shot(p, 'wear-all-new-f');
+  await wear(p, { ...M, clothes: 'emperor-robe', chain: 'billionaire-chain', hat: 'imperial-crown', ride: 'hover-throne' }, 'full', -0.3);
+  await shot(p, 'wear-all-billions');
   if (errors.length) fail(`wear page errors: ${errors.slice(0, 5).join(' | ')}`);
   else pass('every new piece drawn on both bodies');
   await p.close();
@@ -259,6 +264,7 @@ if (checks.includes('floor')) {
     ['hoverboard', 250000],
     ['segway', 400000],
     ['golden-board', 25000000],
+    ['hover-throne', 2500000000],
     ['top-hat', 90000],
     ['tennis-chain', 1200000],
     ['leather-jacket', 180000],
@@ -313,7 +319,7 @@ if (checks.includes('floor')) {
     ch.update(0.016);
     return { sitting, standing: { riding: ch.riding, shown: ch.ride.outer.visible } };
   });
-  if (parked.sitting.riding !== null || parked.sitting.shown || parked.standing.riding !== 'golden-board' || !parked.standing.shown) fail(`sitting doesn't park the ride: ${JSON.stringify(parked)}`);
+  if (parked.sitting.riding !== null || parked.sitting.shown || parked.standing.riding !== 'hover-throne' || !parked.standing.shown) fail(`sitting doesn't park the ride: ${JSON.stringify(parked)}`);
   else pass('sitting parks the ride and standing brings it back');
   // B steps off, and back on
   await a.p.mouse.click(640, 400);
@@ -324,11 +330,11 @@ if (checks.includes('floor')) {
   await a.p.keyboard.press('KeyB');
   await a.p.waitForFunction(() => !!window.casino.session.profile.look.ride, null, { timeout: 8000 }).catch(() => {});
   const onLook = await a.p.evaluate(() => window.casino.session.profile.look.ride ?? null);
-  if (offLook !== null || onLook !== 'golden-board') fail(`B: off ${offLook}, back on ${onLook}`);
-  else pass('B steps off and back onto the golden board');
+  if (offLook !== null || onLook !== 'hover-throne') fail(`B: off ${offLook}, back on ${onLook}`);
+  else pass('B steps off and back onto the hover throne');
   await b.p.waitForTimeout(1200);
   const seenBack = await remoteOf(b.p);
-  if (seenBack?.riding !== 'golden-board') fail(`B's screen after the toggle: ${JSON.stringify(seenBack)}`);
+  if (seenBack?.riding !== 'hover-throne') fail(`B's screen after the toggle: ${JSON.stringify(seenBack)}`);
   // what a ride costs to draw: A's own view standing still, on foot and on each ride (drawn only
   // on this screen, nothing saved)
   await a.p.evaluate(() => window.casino.world.player.teleport(0, 9, Math.PI));
