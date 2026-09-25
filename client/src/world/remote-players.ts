@@ -1,5 +1,6 @@
 // Everyone else on the floor, drawn from FloorLink's tracks: one Character per remote player,
-// placed 200 ms in the past and walking or idling by how fast that drawn position moves. A player
+// placed 200 ms in the past and walking or idling by how fast that drawn position moves (or, on a
+// ride, gliding: their character stands on it and eases through the snapshots' corners). A player
 // sitting at a station is drawn at the seat the scene hands back, or hidden if there is none; one
 // sitting on a floor seat (a stool, a sofa) is drawn sitting on it.
 //
@@ -81,6 +82,8 @@ const ARRIVED_M = 0.9;
 export const MAX_DRAWN = 40;
 /** Someone already drawn counts as this much nearer, so the crowd's edge doesn't flicker. */
 const KEEP_M = 1;
+/** How quickly a rider's drawn position catches up with their snapshots (1/s). */
+const RIDE_EASE = 10;
 
 export class RemotePlayers {
   readonly group = new THREE.Group();
@@ -196,8 +199,15 @@ export class RemotePlayers {
       d.onFloor = false;
       return false;
     }
-    const x = pose.x / 100;
-    const z = pose.z / 100;
+    let x = pose.x / 100;
+    let z = pose.z / 100;
+    // Someone on a ride glides: the drawn line eases through the corners the snapshots cut (a
+    // position every 200 ms is a metre and more apart at a ride's speed).
+    if (d.onFloor && (d.ch as { riding?: string | null }).riding && Math.hypot(x - d.x, z - d.z) < SNAP_M) {
+      const k = 1 - Math.exp(-dt * RIDE_EASE);
+      x = d.x + (x - d.x) * k;
+      z = d.z + (z - d.z) * k;
+    }
     // Speed from the drawn motion itself, eased so one late snapshot doesn't stutter the walk.
     const step = d.onFloor ? Math.hypot(x - d.x, z - d.z) : 0;
     const v = dt > 0 && step < SNAP_M ? step / dt : 0;

@@ -32,19 +32,19 @@ const V = (x = 0, y = 0, z = 0): V3 => new THREE.Vector3(x, y, z);
 // --- finishes ----------------------------------------------------------------------------------
 // Colour in linear RGB (vertex colours are linear), metalness and roughness, per vertex.
 
-interface Finish {
+export interface Finish {
   c: readonly [number, number, number];
   m: number;
   r: number;
 }
-const fin = (r: number, g: number, b: number, m: number, rough: number): Finish => ({ c: [r, g, b], m, r: rough });
+export const fin = (r: number, g: number, b: number, m: number, rough: number): Finish => ({ c: [r, g, b], m, r: rough });
 
 // Measured reflectances: 18k yellow gold is a little paler than pure gold, rose gold has copper
 // in it, white gold is rhodium-plated.
-const GOLD = fin(1.0, 0.76, 0.37, 1, 0.16);
+export const GOLD = fin(1.0, 0.76, 0.37, 1, 0.16);
 const GOLD_SOFT = fin(1.0, 0.76, 0.37, 1, 0.3);
 const ROSE = fin(0.97, 0.58, 0.45, 1, 0.17);
-const WHITE_GOLD = fin(0.8, 0.79, 0.76, 1, 0.12);
+export const WHITE_GOLD = fin(0.8, 0.79, 0.76, 1, 0.12);
 const STEEL = fin(0.62, 0.62, 0.62, 1, 0.22);
 const ENAMEL = fin(0.006, 0.006, 0.008, 0, 0.16);
 const DIAL = fin(0.58, 0.42, 0.22, 0.85, 0.3);
@@ -65,7 +65,8 @@ let envStarted = false;
 const reflective = new Set<THREE.MeshStandardMaterial>();
 let tickedFrame = -1;
 
-function reflect(m: THREE.MeshStandardMaterial): void {
+/** Give a material the dim casino to reflect (now, or once it has been built). */
+export function reflect(m: THREE.MeshStandardMaterial): void {
   reflective.add(m);
   if (env) {
     m.envMap = env;
@@ -77,7 +78,7 @@ function reflect(m: THREE.MeshStandardMaterial): void {
  * Runs before any wearable is drawn: keeps the glint clock and, the first time, builds the casino
  * the metal reflects (after that frame, with the renderer that drew it).
  */
-function beforeDraw(renderer: THREE.WebGLRenderer): void {
+export function beforeDraw(renderer: THREE.WebGLRenderer): void {
   const frame = renderer.info.render.frame;
   if (frame !== tickedFrame) {
     tickedFrame = frame;

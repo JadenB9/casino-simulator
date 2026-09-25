@@ -30,6 +30,7 @@ import type { Quality } from '../render/engine3d.ts';
 import type { Character, CharacterFactory } from './contract.ts';
 import type { EmoteId } from '../../../shared/src/protocol.ts';
 import { Wearables, dressed } from './wearables.ts';
+import { Ride, kneeFor, rideSpec, stanceYaw } from './rides.ts';
 
 export const MODEL_BASE = `${import.meta.env.BASE_URL}assets/models/`;
 
@@ -274,6 +275,15 @@ export class Person implements Character {
   private blobMesh: THREE.Mesh | null = null;
   private rootFloor = 0;
   private rootSet = Number.NaN;
+  // --- v6 looks6: riding (rides.ts) ---
+  /** The ride the look wears, hung on the root; stood on unless sitting. */
+  private ride: Ride | null = null;
+  /** Bones the riding stance moved (feet, hips), and where the animation had them (put back next frame). */
+  private readonly moved = new Map<THREE.Object3D, THREE.Vector3>();
+  /** Where the root was last frame, and how fast it goes and turns (for the ride's wheels and lean). */
+  private rideLast: { x: number; z: number; yaw: number } | null = null;
+  private rideSpeed = 0;
+  private rideYaw = 0;
 
   constructor(
     private readonly factory: Characters,
@@ -303,6 +313,7 @@ export class Person implements Character {
 
   setLook(look: Look): void {
     this.look = look = dressed(look);
+    this.mountRide(look.ride);
     const key = `${look.body}/${look.outfit}`;
     if (key === this.shownKey) {
       this.paint();
@@ -422,8 +433,11 @@ export class Person implements Character {
     // the mixer only rewrites bones its clips move: undo last frame's gesture first
     for (const [bone, q] of this.posed) bone.quaternion.copy(q);
     this.posed.clear();
-    // idle -> walk -> run by weight, eased so starts and stops cross-fade
-    const s = this.speed;
+    for (const [bone, p] of this.moved) bone.position.copy(p);
+    this.moved.clear();
+    const riding = this.rideOn(dt);
+    // idle -> walk -> run by weight, eased so starts and stops cross-fade (a rider stands still on it)
+    const s = riding ? 0 : this.speed;
     const target = s <= 1 ? [1 - s, s, 0] : [0, 2 - s, s - 1];
     const k = 1 - Math.exp(-dt * 9);
     for (let i = 0; i < 3; i++) {
@@ -440,6 +454,7 @@ export class Person implements Character {
     let y = 0;
     let drop = 0;
     if (this.seatTop !== null) drop = this.sitPose();
+    else if (riding) y += this.ridePose();
     else if (this.swaySeed !== null) this.swayPose(dt);
     this.lookPose(dt);
     if (this.act) y += this.perform(dt);
@@ -763,6 +778,7 @@ export class Person implements Character {
     if (this.model) this.mixer?.uncacheRoot(this.model);
     this.mesh?.geometry.dispose();
     this.wear.dispose();
+    this.ride?.dispose();
     this.tag.element.remove();
     this.root.removeFromParent();
     this.factory.forget(this);
@@ -855,7 +871,158 @@ export class Person implements Character {
     attr.needsUpdate = true;
     this.wear.dress(this.look, tpl, this.model!, this.mesh!, this.mixer);
   }
+
+  // --- riding (v6 looks6) ---------------------------------------------------------------------
+
+  /** The ride this character stands on right now (not while sitting), for the walker's speeds. */
+  get riding(): string | null {
+    return this.ride && this.seatTop === null ? this.ride.id : null;
+  }
+
+  private mountRide(id: string | undefined): void {
+    const spec = rideSpec(id);
+    if ((this.ride?.id ?? null) === (spec ? id : null)) return;
+    this.ride?.dispose();
+    this.ride = spec ? new Ride(id!, spec) : null;
+    if (this.ride) this.root.add(this.ride.outer);
+    this.rideLast = null;
+  }
+
+  /**
+   * The ride rolls on under the character (it's parked out of sight while they sit): its wheels
+   * and lean from how fast the root moves and turns. True while it's stood on.
+   */
+  private rideOn(dt: number): boolean {
+    const ride = this.ride;
+    const on = !!ride && this.seatTop === null && !!this.model;
+    if (ride) ride.outer.visible = on;
+    if (ride && on) {
+      const p = this.root.position;
+      const yaw = this.root.rotation.y;
+      const last = this.rideLast;
+      let v = 0;
+      let w = 0;
+      if (last && dt > 0) {
+        const step = Math.hypot(p.x - last.x, p.z - last.z);
+        // a jump (a teleport, someone drawn again after a while) isn't speed
+        if (step < 1.5) {
+          v = step / dt;
+          w = Math.atan2(Math.sin(yaw - last.yaw), Math.cos(yaw - last.yaw)) / dt;
+        }
+      }
+      this.rideLast = { x: p.x, z: p.z, yaw };
+      const k = 1 - Math.exp(-dt * 8);
+      this.rideSpeed += (v - this.rideSpeed) * k;
+      this.rideYaw += (w - this.rideYaw) * k;
+      ride.update(dt, this.rideSpeed, this.rideYaw);
+    } else if (this.model && this.model.rotation.y + this.model.rotation.x + this.model.rotation.z !== 0) {
+      this.model.rotation.set(0, 0, 0);
+      this.tag.position.y = NAME_Y;
+    }
+    return on;
+  }
+
+  /**
+   * Stand on the ride: the model up on its deck, turned sideways across a board, leaning with the
+   * ride. From here on the posing works in the rider's own frame (so the stance and any emote on
+   * top of it read the same on a board as on the floor). The hips come down, each foot goes to its
+   * place on the deck with the leg solved to reach it, the knees forward; on a board the arms
+   * hang out for balance and the head looks where it's going, on a bar the hands grip it. Returns
+   * how high the model stands.
+   */
+  private ridePose(): number {
+    const ride = this.ride!;
+    const spec = ride.spec;
+    const model = this.model!;
+    const side = spec.stance === 'side';
+    const lift = spec.deck + ride.bob;
+    model.position.y = this.modelY + lift;
+    model.rotation.set(side ? ride.lean : ride.pitch, stanceYaw(spec), side ? 0 : ride.lean, 'YXZ');
+    model.updateMatrixWorld(true);
+    model.getWorldQuaternion(_rootQ).invert();
+    _rootInv.copy(model.matrixWorld).invert();
+    this.tag.position.y = NAME_Y + lift;
+    const find = (n: string) => model.getObjectByName(n.replace('.', '')) ?? model.getObjectByName(n);
+    const body = find('Body');
+    // the hips down: the knees take it
+    if (body?.parent) {
+      this.moved.set(body, body.position.clone());
+      const at = local(body, _rv).add(_rw.set(0, -spec.crouch, 0)).applyMatrix4(model.matrixWorld);
+      body.position.copy(body.parent.worldToLocal(at));
+      body.updateMatrixWorld(true);
+    }
+    for (const [i, s] of [
+      ['L', 1],
+      ['R', -1],
+    ] as const) {
+      const thigh = this.bones[s === 1 ? 'thighL' : 'thighR'];
+      const shin = this.bones[s === 1 ? 'shinL' : 'shinR'];
+      const foot = find(`Foot.${i}`);
+      if (!thigh || !shin || !foot?.parent) continue;
+      const H = local(thigh, _rh);
+      const K0 = local(shin, _rk);
+      const A0 = local(foot, _ra);
+      const a = H.distanceTo(K0);
+      const b = K0.distanceTo(A0);
+      // where the shin ends, in its own frame: it stays that way as the leg turns
+      const end = shin.worldToLocal(foot.getWorldPosition(_re));
+      const [fx, fz] = spec.feet[s === 1 ? 0 : 1];
+      const want = _rv.set(fx, A0.y, fz);
+      const reached = kneeFor(H, want, a, b, _rw.set(0.25 * s, 0, 1), _rn);
+      const knee = _rn;
+      this.rotate(thigh, _rq.setFromUnitVectors(_rd.subVectors(K0, H).normalize(), _rd2.subVectors(knee, H).normalize()));
+      const K = local(shin, _rk);
+      const E = shin.localToWorld(end.clone()).applyMatrix4(_rootInv);
+      this.rotate(shin, _rq.setFromUnitVectors(_rd.subVectors(E, K).normalize(), _rd2.subVectors(reached, K).normalize()));
+      // the foot (a target of its own, not the shin's child) onto the deck, toes turned
+      this.moved.set(foot, foot.position.clone());
+      foot.position.copy(foot.parent.worldToLocal(reached.clone().applyMatrix4(model.matrixWorld)));
+      foot.updateMatrixWorld(true);
+      this.rotate(foot, _rq.setFromAxisAngle(_rw.set(0, 1, 0), spec.toes[s === 1 ? 0 : 1] * s));
+    }
+    this.turn('torso', [side ? 0.12 : 0.06, side ? 0.12 : 0, 0]);
+    if (side) {
+      // looking along the board, arms out a little for balance
+      this.turn('chest', [0, 0.14, 0]);
+      this.turn('neck', [0, 0.42, 0]);
+      this.turn('head', [0.08, 0.62, 0]);
+      this.turn('upperR', [-0.2, 0, -0.32]);
+      this.turn('upperL', [-0.12, 0, 0.36]);
+      this.turn('lowerR', [-0.35, 0, 0]);
+      this.turn('lowerL', [-0.3, 0, 0]);
+      return lift;
+    }
+    // both hands on the bar
+    const r = this.arms.R;
+    const l = this.arms.L;
+    if (!r || !l) return lift;
+    const right = local(r.upper, _sh);
+    const mid = local(l.upper, _mid).add(right).multiplyScalar(0.5);
+    const len = right.distanceTo(local(r.lower, _el)) + _el.distanceTo(local(r.wrist, _wr));
+    for (const [arm, m] of [
+      [r, 1],
+      [l, -1],
+    ] as const) {
+      const g = ride.grip(m === 1 ? 1 : -1, _rg);
+      if (!g) continue;
+      g.applyMatrix4(_rootInv).sub(mid).divideScalar(len);
+      this.reach(arm, m, { at: [g.x * m, g.y, g.z], elbow: [-1, -0.6, -0.5], palm: [0, -1, 0.25], fingers: [0.15, -0.2, 1], fist: 0.75 }, mid, len, 1);
+    }
+    return lift;
+  }
 }
+
+const _rv = new THREE.Vector3();
+const _rw = new THREE.Vector3();
+const _rh = new THREE.Vector3();
+const _rk = new THREE.Vector3();
+const _ra = new THREE.Vector3();
+const _re = new THREE.Vector3();
+const _rn = new THREE.Vector3();
+const _rd = new THREE.Vector3();
+const _rd2 = new THREE.Vector3();
+const _rg = new THREE.Vector3();
+const _rq = new THREE.Quaternion();
 
 // --- gestures ---------------------------------------------------------------------------------
 
