@@ -75,6 +75,11 @@ async function enterAs(name, viewport = { width: 1440, height: 900 }) {
   }
   await p.waitForSelector('.hud', { timeout: 60_000 });
   await p.waitForTimeout(1500);
+  // whatever opens on arrival (today's daily bonus) is put away first
+  for (let i = 0; i < 5 && (await p.$('.sheet-scrim')); i++) {
+    await p.keyboard.press('Escape');
+    await p.waitForTimeout(500);
+  }
   return { p, errors };
 }
 
