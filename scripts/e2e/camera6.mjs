@@ -14,6 +14,11 @@
 //           back, a drink a waiter brings (in the corner of the view looking down), away and
 //           Come back, and a new player's dressing room; every frame, your own head is drawn
 //           exactly when the camera isn't in it
+//   chat    the chat's pin: T and a line sent put an unpinned box away; pinned it stays up (idle)
+//           while you walk, look and play, lets clicks through to the floor and the felt, and is
+//           up again after a reload; T and Esc type and stop; unpinning puts it away. On a phone,
+//           on its side and upright, the idle lines stand clear of the stick and the action
+//           button, and a tap on the dock types
 // Usage: node scripts/e2e/camera6.mjs [port] [outDir] [checks...]   (default: all)
 //   floor and touch need Vite only; game the local worker too (PORT_BASE=<port> npm run dev).
 //   GPU=1 draws on the machine's GPU. Fixed names (camera6_e2e_*) with the dev password.
@@ -24,7 +29,7 @@ import { execFileSync } from 'node:child_process';
 
 const [port = '6210', out = '/tmp/camera6', ...wanted] = process.argv.slice(2);
 mkdirSync(out, { recursive: true });
-const checks = wanted.length ? wanted : ['floor', 'touch', 'game', 'flows'];
+const checks = wanted.length ? wanted : ['floor', 'touch', 'game', 'flows', 'chat'];
 const browser = await chromium.launch(process.env.GPU === '1' ? { channel: 'chromium', args: ['--ignore-gpu-blocklist'] } : { args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 let failed = 0;
 const fail = (what) => {
@@ -333,8 +338,8 @@ if (checks.includes('touch')) {
 
 // --- the game ----------------------------------------------------------------------------------------
 
-async function enterAs(name, first = false) {
-  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
+async function enterAs(name, first = false, device = null) {
+  const ctx = await browser.newContext(device ?? { viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
   await ctx.addInitScript((f) => {
     localStorage.setItem('casino.quality', 'low');
     if (f) localStorage.setItem('casino.camera.view', 'first');
@@ -674,6 +679,173 @@ if (checks.includes('flows')) {
   await shot(q, 'flows-onboard-floor');
   if (errs2.length) fail(`onboarding errors: ${errs2.slice(0, 3).join(' | ')}`);
   await ctx2.close();
+}
+
+/** The chat's corner: what it shows, and what a click in the middle of its log lands on. */
+const chatState = (p) =>
+  p.evaluate(() => {
+    const root = document.querySelector('.chat');
+    const box = root.querySelector('.chat-box');
+    const log = root.querySelector('.chat-log').getBoundingClientRect();
+    const hit = document.elementFromPoint(log.left + log.width / 2, log.top + log.height / 2);
+    const pin = root.querySelector('.chat-pin');
+    const pr = pin.getBoundingClientRect();
+    return {
+      open: !box.hidden,
+      idle: root.classList.contains('idle'),
+      typing: root.classList.contains('typing'),
+      pinned: pin.getAttribute('aria-pressed') === 'true',
+      saved: localStorage.getItem('casino.chat.open'),
+      through: !!hit && !root.contains(hit),
+      hitTag: hit ? `${hit.tagName.toLowerCase()}.${hit.className}` : null,
+      pinHit: pr.width > 0 && document.elementFromPoint(pr.left + pr.width / 2, pr.top + pr.height / 2)?.closest('.chat-pin') === pin,
+      log: { l: log.left, t: log.top, r: log.right, b: log.bottom },
+      lines: [...root.querySelectorAll('#chat-list-floor .chat-line')].map((e) => e.textContent),
+    };
+  });
+const overlap = (a, b) => a && b && a.l < b.r && b.l < a.r && a.t < b.b && b.t < a.b;
+const rectOf = (p, sel) =>
+  p.evaluate((q) => {
+    const e = document.querySelector(q);
+    if (!e || e.hidden) return null;
+    const r = e.getBoundingClientRect();
+    return r.width ? { l: r.left, t: r.top, r: r.right, b: r.bottom } : null;
+  }, sel);
+
+if (checks.includes('chat')) {
+  sql('DELETE FROM casino_rate');
+  const { p, ctx, errors } = await enterAs('camera6_e2e_c');
+  await p.evaluate(() => {
+    localStorage.removeItem('casino.chat.open');
+    window.casino.world.setMouse({ view: 'third' });
+  });
+  // unpinned: T, a line, Enter, and the box goes away again
+  await p.keyboard.press('KeyT');
+  await p.waitForTimeout(250);
+  await p.keyboard.type('unpinned line');
+  await p.keyboard.press('Enter');
+  await p.waitForTimeout(500);
+  const c0 = await chatState(p);
+  ok(!c0.open && !c0.pinned, 'unpinned, a line sent with Enter puts the box away');
+
+  // pinned: the pin in the head while typing (the line keeps focus), then a line and Enter
+  await p.keyboard.press('KeyT');
+  await p.waitForTimeout(250);
+  await p.click('.chat-pin');
+  const typingStill = await p.evaluate(() => document.activeElement?.classList.contains('chat-input'));
+  await p.keyboard.type('pinned, and walking');
+  await p.keyboard.press('Enter');
+  await p.waitForTimeout(600);
+  const c1 = await chatState(p);
+  ok(typingStill && c1.open && c1.idle && c1.pinned && c1.saved === '1', 'pinned while typing: after Enter the chat stays up, idle, and the pin is remembered');
+  ok(c1.lines.some((l) => l.includes('pinned, and walking')), 'the line went out and shows in the pinned log');
+  ok(c1.through, `a click in the middle of the idle log lands on the game (${c1.hitTag})`);
+  ok(c1.pinHit, 'the pin itself still takes its click');
+  const keysFree = await p.evaluate(async () => (await import('/casino/src/ui/keyboard.ts')).overlayCount());
+  const w0 = await state(p);
+  await p.keyboard.down('KeyW');
+  await p.waitForTimeout(800);
+  await p.keyboard.up('KeyW');
+  const w1 = await state(p);
+  ok(keysFree === 0 && flat(w1.at, w0.at) > 0.8, `with the chat pinned, W walks (${flat(w1.at, w0.at).toFixed(2)} m) and nothing holds the keyboard`);
+  await shot(p, 'chat-pinned-walk');
+  // first person too, with the log up
+  await p.keyboard.press('KeyF');
+  await p.waitForTimeout(700);
+  await shot(p, 'chat-pinned-first');
+  await p.keyboard.press('KeyF');
+
+  // T types into the pinned box again, Esc stops typing and leaves it up
+  await p.keyboard.press('KeyT');
+  await p.waitForTimeout(250);
+  const t1 = await chatState(p);
+  await p.keyboard.press('Escape');
+  await p.waitForTimeout(300);
+  const t2 = await chatState(p);
+  ok(t1.typing && !t1.idle && t2.open && t2.idle && !t2.typing, 'T types into the pinned chat (whole again), Esc hands the keys back and leaves it up');
+
+  // at a table: still up, and the felt under the log still takes clicks
+  await p.evaluate(() => {
+    const w = window.casino.world;
+    const s = w.stations.find((x) => x.id === 'bj-1');
+    const a = s.anchor.position;
+    const d = s.footprint.depth / 2 + 0.7;
+    return [a.x + Math.sin(s.yaw) * d, a.z + Math.cos(s.yaw) * d, s.yaw + Math.PI];
+  }).then(([x, z, yaw]) => travelTo(p, x, z, yaw));
+  await p.evaluate(() => window.casino.world.enter(window.casino.world.stations.find((s) => s.id === 'bj-1')));
+  await p.waitForSelector('.lobby-choice', { timeout: 15_000 });
+  await p.keyboard.press('s');
+  await p.waitForSelector('.modal input[type=number]', { timeout: 20_000 });
+  await p.fill('.modal input[type=number]', '500');
+  await p.click('.modal .btn.primary');
+  await p.waitForFunction(() => window.casino.app.table?.seated === true, null, { timeout: 20_000 });
+  await p.waitForTimeout(1800);
+  const c2 = await chatState(p);
+  ok(c2.open && c2.idle && c2.through, `seated at blackjack the pinned chat is up and clicks go through it (${c2.hitTag})`);
+  await shot(p, 'chat-pinned-table');
+  await p.evaluate(() => window.casino.app.escape());
+  const leave = await p.waitForSelector('.modal .btn.primary', { timeout: 3000 }).catch(() => null);
+  if (leave) await leave.click();
+  await p.waitForFunction(() => !window.casino.app.table && window.casino.world.seated === null, null, { timeout: 30_000 });
+  await p.waitForTimeout(800);
+
+  // a reload: up again, pinned
+  await p.reload();
+  await p.waitForSelector('.menu-item', { timeout: 300_000 });
+  await p.click('.menu-item >> nth=0');
+  await p.waitForSelector('.hud', { timeout: 30_000 });
+  await p.waitForTimeout(1500);
+  const c3 = await chatState(p);
+  ok(c3.open && c3.idle && c3.pinned, 'after a reload the chat is pinned up again');
+  // unpinned from its head (Esc first: entering took the mouse, and a held mouse clicks nothing)
+  if (await p.evaluate(() => document.pointerLockElement !== null)) await p.keyboard.press('Escape');
+  await p.click('.chat-pin');
+  await p.waitForTimeout(300);
+  const c4 = await chatState(p);
+  ok(!c4.open && !c4.pinned && c4.saved === null, 'unpinned, it goes away and forgets');
+  if (errors.length) fail(`chat errors: ${errors.slice(0, 3).join(' | ')}`);
+  await ctx.close();
+
+  // phones, pinned from the start
+  for (const [key, dev, vp] of [
+    ['land', devices['iPhone 13 landscape'], { width: 844, height: 390 }],
+    ['up', devices['iPhone 13'], { width: 390, height: 844 }],
+  ]) {
+    const { defaultBrowserType, ...d } = dev;
+    const ph = await enterAs(`camera6_e2e_${key}`, false, { ...d, viewport: vp });
+    await ph.p.evaluate(() => localStorage.setItem('casino.chat.open', '1'));
+    await ph.p.reload();
+    await ph.p.waitForSelector('.menu-item', { timeout: 300_000 });
+    await ph.p.tap('.menu-item >> nth=0');
+    await ph.p.waitForSelector('.hud', { timeout: 30_000 });
+    await ph.p.waitForFunction(() => document.documentElement.classList.contains('touch-ui') && !document.querySelector('.touch-layer')?.hidden, null, { timeout: 10_000 });
+    await ph.p.waitForTimeout(1200);
+    // the stick's ring, and the action button (in reach of blackjack)
+    const s = await ph.p.evaluate(() => {
+      const w = window.casino.world;
+      const st = w.stations.find((x) => x.id === 'bj-1');
+      const a = st.anchor.position;
+      const d = st.footprint.depth / 2 + 0.7;
+      return [a.x + Math.sin(st.yaw) * d, a.z + Math.cos(st.yaw) * d, st.yaw + Math.PI];
+    });
+    await travelTo(ph.p, ...s);
+    await ph.p.waitForTimeout(600);
+    const c = await chatState(ph.p);
+    const stick = await rectOf(ph.p, '.touch-stick');
+    const act = await rectOf(ph.p, '.touch-act');
+    const cap = await rectOf(ph.p, '.touch-caption');
+    const dock = await rectOf(ph.p, '.chat-dock');
+    ok(c.open && c.idle && c.through && !!dock, `${key}: pinned, the newest lines are up over the floor, touched through, the dock under them`);
+    ok(!overlap(c.log, stick) && !overlap(c.log, act) && !overlap(c.log, cap), `${key}: the lines keep clear of the stick, the action button and its caption`);
+    await ph.p.screenshot({ path: `${out}/camera6-chat-phone-${key}.png` });
+    await ph.p.tap('.chat-dock');
+    await ph.p.waitForTimeout(500);
+    const typing = await chatState(ph.p);
+    ok(typing.typing && !typing.idle, `${key}: a tap on the dock types, in the whole box`);
+    await ph.p.screenshot({ path: `${out}/camera6-chat-phone-${key}-typing.png` });
+    if (ph.errors.length) fail(`${key} phone errors: ${ph.errors.slice(0, 3).join(' | ')}`);
+    await ph.ctx.close();
+  }
 }
 
 await browser.close();
