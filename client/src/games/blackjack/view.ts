@@ -29,7 +29,6 @@ import { ChipTray, button, el } from '../../ui/kit.ts';
 import { blackjackMax, chipOn, maxRefusal } from '../../table/max.ts';
 import { serverNow } from '../../net/clock.ts';
 import { playFelt } from './felt.ts';
-import { discardStack } from './model.ts';
 import * as L from './layout.ts';
 import { SpotPicker } from '../multihand/picker.ts';
 import { glideTo, setSpotsInPlay } from '../multihand/frame.ts';
@@ -38,6 +37,8 @@ import './blackjack.css';
 import { wave } from '../../app/comfort.ts';
 
 const SVG = 'http://www.w3.org/2000/svg';
+/** How far above the felt the shuffling machine's loading well is (model.ts shuffler). */
+const CSM_WELL_Y = 0.074;
 
 const MOVE_KEYS: Record<Move, string> = { hit: 'H', stand: 'S', double: 'D', split: 'P', surrender: 'U' };
 const MOVE_LABEL: Record<Move, string> = { hit: 'Hit', stand: 'Stand', double: 'Double', split: 'Split', surrender: 'Surrender' };
@@ -120,7 +121,6 @@ export class BlackjackTable implements TableView {
   private readonly cards = new Map<string, CardMesh>();
   private readonly stacks = new Map<string, ChipStack>();
   private readonly labels = new Map<string, { obj: CSS2DObject; el: HTMLElement }>();
-  private readonly discard = discardStack();
   private readonly marker: THREE.Mesh;
   /** Rings round your circles while you bet on several, and round the one whose hand is up. */
   private readonly rings = new Map<number, THREE.Mesh>();
@@ -132,7 +132,6 @@ export class BlackjackTable implements TableView {
   /** The round as the animation has got through it (the view is where it ends up). */
   private spots: SpotView[] = [];
   private dealer: (Card | null)[] = [];
-  private discards = 0;
 
   private mode: 'solo' | 'multi' = 'solo';
   private limits: BetLimits = { min: 2500, max: 500_000, step: 100 };
@@ -172,7 +171,6 @@ export class BlackjackTable implements TableView {
     this.root = new THREE.Group();
     ctx.stage.root.add(this.root);
     ctx.stage.addFelt(this.felt, L.TOP_Y + 0.0012);
-    this.root.add(this.discard.mesh);
     this.marker = new THREE.Mesh(
       new THREE.RingGeometry(0.058, 0.064, 48),
       new THREE.MeshBasicMaterial({ color: '#f1d59a', transparent: true, opacity: 0.85 }),
@@ -477,8 +475,6 @@ export class BlackjackTable implements TableView {
       }
     }
 
-    this.discards = v.shoe.discards;
-    this.discard.set(this.discards);
     this.renderLabels(v);
     this.updateControls();
   }
@@ -641,7 +637,6 @@ export class BlackjackTable implements TableView {
         put(`name:${seat}`, `bj-name${seat === this.seat ? ' me' : ''}`, seat === this.seat ? `${name} (you)` : name, at);
       }
     }
-    if (v.shoe.lastHand) put('lasthand', 'bj-note', 'LAST HAND', L.SHOE_MOUTH.clone().setY(L.TOP_Y + 0.13));
     for (const key of [...this.labels.keys()]) if (!keep.has(key)) this.dropLabel(key);
 
     // The ring under whichever hand is being played (or, on several spots, asked about insurance).
@@ -857,15 +852,19 @@ export class BlackjackTable implements TableView {
     }
   }
 
-  /** Cards to the discard holder, chips back to their players, labels off: the table is clear. */
+  /**
+   * Cards into the shuffling machine's loading well (the next round is dealt from a freshly
+   * shuffled shoe), chips back to their players, labels off: the table is clear.
+   */
   private async collect(): Promise<void> {
     const moves: Promise<void>[] = [];
-    let n = 0;
+    let i = 0;
     for (const m of this.cards.values()) {
-      n++;
-      const to = L.DISCARD.clone().setY(L.DISCARD.y + 0.02 + this.discards * 0.00032);
+      const to = L.DISCARD.clone().setY(L.DISCARD.y + CSM_WELL_Y);
       if (m.scale.x !== 1) void this.scaleTo(m, 1, 360);
-      moves.push(dealCard(m, m.position.clone(), to, { faceUp: false, ms: 360, yaw: 0 }).then(() => void m.removeFromParent()));
+      // one after another, the way a dealer drops a stack in
+      const delay = Math.min(i++, 8) * 40;
+      moves.push(wait(delay).then(() => dealCard(m, m.position.clone(), to, { faceUp: false, ms: 360, yaw: 0 })).then(() => void m.removeFromParent()));
     }
     for (const [key, s] of this.stacks) {
       const seat = Number(key.split(':')[1]);
@@ -876,8 +875,6 @@ export class BlackjackTable implements TableView {
     this.dropLabels('');
     this.marker.visible = false;
     await Promise.all(moves);
-    this.discards += n;
-    this.discard.set(this.discards);
   }
 
   private clearTable(): void {
@@ -921,26 +918,15 @@ export class BlackjackTable implements TableView {
         }
         break;
       }
+      // (the table deals from a continuous shuffler, so a shoe game's shuffle, burn card and cut
+      // card never come; a shoe run dry mid-round, which can't happen with a fresh shoe, just says so)
       case 'shuffle':
-        this.say(e.discards ? 'Out of cards: shuffling the discards' : 'Shuffling', 2200);
+        this.say('Shuffling', 2200);
         this.ctx.sfx.play('card-shuffle');
-        await tween(500, (k) => this.discard.set(Math.round(this.discards * (1 - k))));
-        this.discards = 0;
         await wait(700);
         break;
-      case 'burn': {
-        const m = new CardMesh(null);
-        m.rotation.order = 'YXZ';
-        this.root.add(m);
-        this.ctx.sfx.play('card-deal');
-        await dealCard(m, L.SHOE_MOUTH.clone(), L.DISCARD.clone().setY(L.DISCARD.y + 0.02), { faceUp: false, ms: 360, yaw: 0 });
-        m.removeFromParent();
-        this.discards++;
-        this.discard.set(this.discards);
-        break;
-      }
+      case 'burn':
       case 'cut':
-        this.say('Last hand before the shuffle', 2600);
         break;
       case 'card': {
         const sp = this.spotOf(e.seat, next);

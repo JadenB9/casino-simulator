@@ -29,8 +29,8 @@ function below(rng: Rng, n: number): number {
 
 /**
  * `rounds` rounds of `spots` hands, flat $1 on each, the chart deciding every hand, never
- * insurance. `fresh` deals every round from a newly shuffled shoe; otherwise the shoe runs to the
- * cut card (75%) and is reshuffled after that round, exactly as the table deals.
+ * insurance. `fresh` deals every round from a newly shuffled shoe, exactly as the table deals (its
+ * continuous shuffler); otherwise the shoe runs to a cut card at 75%, the shoe game for reference.
  */
 function simulate(rounds: number, spots: number, seed: number, fresh: boolean): { perRound: Tally; perHand: Tally } {
   const rng = mcRng(seed);
@@ -75,16 +75,8 @@ function report(label: string, published: number, spots: number, run: { perRound
   console.log(`  ${run.perHand.n} hands in ${run.perRound.n} rounds of ${spots}; per-hand SD ${run.perHand.sd.toFixed(4)}, per-round-mean SD ${run.perRound.sd.toFixed(4)}`);
 }
 
-// The published figures are the single-spot ones from docs/rules/table-games.md §1.2: 0.354% to the
-// cut card and 0.3336% from a fresh shoe (Wizard of Odds' calculator for these rules).
-it('blackjack, three spots: basic strategy to a 75% cut card keeps the published 0.354% per hand (Monte Carlo, 3 SE)', () => {
-  const PUBLISHED = 0.00354;
-  const n = mcRounds(12_000_000);
-  const run = simulate(n, 3, 20260924, false);
-  report('blackjack 3 spots, 6D S17 DAS LS, basic strategy, cut card at 75%', PUBLISHED, 3, run);
-  expect(Math.abs(run.perRound.edge - PUBLISHED)).toBeLessThanOrEqual(3 * run.perRound.se);
-});
-
+// The published figures are the single-spot ones from docs/rules/table-games.md §1.2: 0.3336% from a
+// fresh shoe, as the table deals (a continuous shuffler), and 0.354% to a cut card, for reference.
 it('blackjack, three spots: from a fresh shoe every round the edge per hand is the published 0.3336% (Monte Carlo, 3 SE)', () => {
   const PUBLISHED = 0.003336;
   const n = mcRounds(12_000_000);
@@ -93,10 +85,18 @@ it('blackjack, three spots: from a fresh shoe every round the edge per hand is t
   expect(Math.abs(run.perRound.edge - PUBLISHED)).toBeLessThanOrEqual(3 * run.perRound.se);
 });
 
-it('blackjack, five spots (a whole solo row): basic strategy to the cut card keeps the published 0.354% per hand (Monte Carlo, 3 SE)', () => {
-  const PUBLISHED = 0.00354;
+it('blackjack, five spots (a whole solo row): from a fresh shoe every round the edge per hand is the published 0.3336% (Monte Carlo, 3 SE)', () => {
+  const PUBLISHED = 0.003336;
   const n = mcRounds(12_000_000) / 2;
-  const run = simulate(n, 5, 20260926, false);
-  report('blackjack 5 spots, 6D S17 DAS LS, basic strategy, cut card at 75%', PUBLISHED, 5, run);
+  const run = simulate(n, 5, 20260926, true);
+  report('blackjack 5 spots, 6D S17 DAS LS, basic strategy, fresh shoe every round', PUBLISHED, 5, run);
+  expect(Math.abs(run.perRound.edge - PUBLISHED)).toBeLessThanOrEqual(3 * run.perRound.se);
+});
+
+it('blackjack, three spots, for reference: a shoe dealt to a 75% cut card keeps 0.354% per hand (Monte Carlo, 3 SE)', () => {
+  const PUBLISHED = 0.00354;
+  const n = mcRounds(12_000_000);
+  const run = simulate(n, 3, 20260924, false);
+  report('blackjack 3 spots, 6D S17 DAS LS, basic strategy, cut card at 75% (reference)', PUBLISHED, 3, run);
   expect(Math.abs(run.perRound.edge - PUBLISHED)).toBeLessThanOrEqual(3 * run.perRound.se);
 });

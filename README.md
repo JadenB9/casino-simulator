@@ -54,7 +54,7 @@ within three standard errors of the published one:
 
 | Game | Bet | Published edge | Measured |
 |---|---|---|---|
-| Blackjack (6 decks, S17, 3:2, DAS, late surrender) | Basic strategy | 0.354% | 0.328% (12M rounds) |
+| Blackjack (6 decks in a continuous shuffler, S17, 3:2, DAS, late surrender) | Basic strategy | 0.334% | 0.326% (12M rounds) |
 | Roulette, American | Every bet but the top line | 5.263% | 5.229% on red (3M spins) |
 | Roulette, European | Every bet | 2.703% | 2.717% on red (3M spins) |
 | Craps | Pass line | 1.414% | 1.426% (4M bets) |

@@ -100,17 +100,6 @@
 }
 .bj-name.me { color: var(--brass-hi); }
 
-.bj-note {
-  padding: 2px 7px 1px;
-  border-radius: 3px;
-  background: var(--brass);
-  color: #1d140a;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.16em;
-  white-space: nowrap;
-}
-
 .bj-tray .btn.primary { white-space: nowrap; }
 
 /* Phones and tablets upright: the moves wrap to rows above the back chip, like the kit's tray,

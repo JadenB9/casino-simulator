@@ -1,9 +1,11 @@
 // The blackjack table as it stands on the floor: a lacquered wooden half-moon with a padded
 // leather rail, the printed felt, the dealer's chip rack, the shoe on the dealer's left, the
-// discard holder on the dealer's right and a lit limit sign. Everything is built in code (there
+// continuous shuffling machine on the dealer's right (the dealer feeds each round's cards into it,
+// and it keeps the shoe topped up with shuffled decks) and a lit limit sign. Everything is built in code (there
 // is no CC0 casino table good enough to use), with small canvas textures shared by every table.
 
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { CHIPS, formatMoney, type ChipSpec } from '../../../../shared/src/money.ts';
 import { chipFaceCanvas, CHIP_R } from '../../table/chips.ts';
 import { engine } from '../../../../shared/src/games/blackjack/engine.ts';
@@ -233,23 +235,59 @@ function shoe(m: ReturnType<typeof materials>): THREE.Object3D {
   return g;
 }
 
-function discardHolder(m: ReturnType<typeof materials>): THREE.Object3D {
+let csmFace: THREE.CanvasTexture | null = null;
+
+/**
+ * A continuous shuffling machine where a discard holder would be: a charcoal cabinet with a brushed
+ * steel top, the loading tray the dealer drops each round's cards into (a steel rim round a dark
+ * well, the last card lying in it), and an amber readout on the face toward the players. The
+ * readout's texture is shared by every table.
+ */
+function shuffler(m: ReturnType<typeof materials>): THREE.Object3D {
   const g = new THREE.Group();
-  const w = 0.078;
-  const d = 0.102;
-  const h = 0.11;
-  const t = 0.003;
-  const base = new THREE.Mesh(new THREE.BoxGeometry(w, t, d), m.acrylic);
-  base.position.y = t / 2;
-  const back = new THREE.Mesh(new THREE.BoxGeometry(w, h, t), m.acrylic);
-  back.position.set(0, h / 2, -d / 2);
-  const left = new THREE.Mesh(new THREE.BoxGeometry(t, h, d), m.acrylic);
-  left.position.set(-w / 2, h / 2, 0);
-  const right = left.clone();
-  right.position.x = w / 2;
-  const front = new THREE.Mesh(new THREE.BoxGeometry(w, h * 0.35, t), m.acrylic);
-  front.position.set(0, (h * 0.35) / 2, d / 2);
-  g.add(base, back, left, right, front);
+  const w = 0.13;
+  const d = 0.15;
+  const h = 0.066;
+  const cabinet = new THREE.MeshStandardMaterial({ color: '#26262a', roughness: 0.5, metalness: 0.25 });
+  const steel = new THREE.MeshStandardMaterial({ color: '#a4a7ac', roughness: 0.3, metalness: 0.85 });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), cabinet);
+  body.position.y = h / 2;
+  const top = new THREE.Mesh(new THREE.BoxGeometry(w, 0.004, d), steel);
+  top.position.y = h + 0.002;
+  // the loading tray: a dark well framed by a raised steel rim, a card lying in it
+  const tw = 0.074;
+  const td = 0.1;
+  const tz = -0.014;
+  const well = new THREE.Mesh(new THREE.BoxGeometry(tw, 0.002, td), m.rackBody);
+  well.position.set(0, h + 0.005, tz);
+  const card = new THREE.Mesh(new THREE.BoxGeometry(0.063, 0.0015, 0.088), m.cardBack);
+  card.position.set(0, h + 0.0068, tz);
+  // the rim's four sides as one mesh
+  const rail = (rw: number, rd: number, x: number, z: number) => new THREE.BoxGeometry(rw, 0.009, rd).translate(x, h + 0.0085, z);
+  const rim = new THREE.Mesh(
+    mergeGeometries([
+      rail(tw + 0.012, 0.006, 0, tz - td / 2 - 0.003),
+      rail(tw + 0.012, 0.006, 0, tz + td / 2 + 0.003),
+      rail(0.006, td, -tw / 2 - 0.003, tz),
+      rail(0.006, td, tw / 2 + 0.003, tz),
+    ])!,
+    steel,
+  );
+  g.add(body, top, well, card, rim);
+  if (!csmFace) {
+    csmFace = canvasTexture(256, 64, (c) => {
+      c.fillStyle = '#0a0806';
+      c.fillRect(0, 0, 256, 64);
+      c.fillStyle = '#ffae3d';
+      c.font = '600 34px "Barlow Condensed", "Arial Narrow", sans-serif';
+      c.textAlign = 'center';
+      c.fillText('6 DECKS  ·  SHUFFLED', 128, 44);
+    });
+  }
+  const glow = new THREE.MeshStandardMaterial({ map: csmFace, emissive: '#ffffff', emissiveMap: csmFace, emissiveIntensity: 0.8, roughness: 0.3 });
+  const readout = new THREE.Mesh(new THREE.PlaneGeometry(0.092, 0.023), glow);
+  readout.position.set(0, h * 0.6, d / 2 + 0.0008);
+  g.add(readout);
   g.position.copy(DISCARD);
   return g;
 }
@@ -298,23 +336,6 @@ export function tableModel(): THREE.Group {
   const m = materials();
   const g = new THREE.Group();
   g.name = 'blackjack-table';
-  g.add(tableTop(m), chipRack(m), shoe(m), discardHolder(m), limitSign(m));
+  g.add(tableTop(m), chipRack(m), shoe(m), shuffler(m), limitSign(m));
   return g;
-}
-
-/** A stack of face-down cards in the discard holder, as tall as `count` cards. */
-export function discardStack(): { mesh: THREE.Mesh; set(count: number): void } {
-  const m = materials();
-  const edge = new THREE.MeshStandardMaterial({ color: '#ece6d8', roughness: 0.8 });
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.063, 1, 0.088), [edge, edge, m.cardBack, edge, edge, edge]);
-  mesh.position.set(DISCARD.x, DISCARD.y, DISCARD.z);
-  return {
-    mesh,
-    set(count: number) {
-      const h = Math.max(0.0001, count * 0.00032);
-      mesh.visible = count > 0;
-      mesh.scale.y = h;
-      mesh.position.y = DISCARD.y + 0.003 + h / 2;
-    },
-  };
 }

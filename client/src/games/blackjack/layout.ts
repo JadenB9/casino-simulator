@@ -128,6 +128,7 @@ export const RACK = new THREE.Vector3(0, TOP_Y + 0.02, -0.395);
 export const SHOE = { pos: new THREE.Vector3(0.66, TOP_Y, -0.33), yaw: THREE.MathUtils.degToRad(-18) };
 /** Where a card leaves the shoe. */
 export const SHOE_MOUTH = new THREE.Vector3(0.555, TOP_Y + 0.03, -0.305);
+/** The continuous shuffling machine on the dealer's right, where each round's cards go. */
 export const DISCARD = new THREE.Vector3(-0.67, TOP_Y, -0.34);
 
 /** Where a seated player's character goes, facing the table. */

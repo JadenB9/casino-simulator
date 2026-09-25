@@ -44,8 +44,8 @@ Every hand plays by the same rules, so the figures below are per hand either way
 shoe or deck changes nothing measurable (Three Card Poker, Let It Ride and Pai Gow Poker exactly
 nothing). The Monte Carlo runs with several hands, their standard errors taken
 from each round's average since the hands share the dealer's cards, are in rules/table-games.md
-§1.7 and §7.6 and rules/cards-and-machines.md §1.9: blackjack on three spots to the cut card
-0.3499% per hand (36M hands, z −0.16), Three Card Poker on three hands 3.3801% (30M hands,
+§1.7 and §7.6 and rules/cards-and-machines.md §1.9: blackjack on three spots 0.3135% per hand
+(36M hands, z −0.80) and on five 0.2756% (30M hands, z −1.77), Three Card Poker on three hands 3.3801% (30M hands,
 z +0.20), Casino War on three spots 2.3315% (30M spots, z +0.06); and in rules/table-games.md
 (Let It Ride, Pai Gow Poker): Let It Ride on three hands against one board 3.2225% per unit
 (10M hands, z −1.58), Pai Gow Poker on three hands against the dealer's one 2.8401% (3M hands,
@@ -60,7 +60,7 @@ inside 3. Seeds are fixed, so `npm run test:mc` reproduces these exactly.
 
 | Game | Rules | Bet | Published | Measured |
 |---|---|---|---|---|
-| Blackjack | 6 decks, dealer stands on soft 17, blackjack pays 3:2, double any two, double after split, split to 4 hands, no resplitting aces, late surrender, dealer peeks, insurance 2:1, cut card at 75% | Basic strategy, cut card | 0.354% | 0.328% (12M rounds, z −0.80) |
+| Blackjack | 6 decks in a continuous shuffling machine (every round from a freshly shuffled shoe), dealer stands on soft 17, blackjack pays 3:2, double any two, double after split, split to 4 hands, no resplitting aces, late surrender, dealer peeks, insurance 2:1 | Basic strategy | 0.334% | 0.326% (12M rounds, z −0.23) |
 | Roulette (American) | 0 and 00, all inside and outside bets | Every bet but the top line | 5.263% | red 5.229%, odd 5.222%, straight 17 5.748% (3M spins, z −0.59, −0.72, +1.46) |
 | | | Top line (0-00-1-2-3), 6:1 | 7.895% | 7.924% (3M spins, z +0.21) |
 | Roulette (European) | single 0, no la partage | Every bet | 2.703% | red 2.717%, odd 2.601%, straight 17 2.813% (3M spins, z +0.24, −1.77, +0.33) |
@@ -125,8 +125,10 @@ inside 3. Seeds are fixed, so `npm run test:mc` reproduces these exactly.
 | Pachinko | batches of 25 balls; start pocket 1 in 20 pays 4 and spins the reels, tulips 1 in 20 each pay 3; jackpot 1 in 32 spins pays 150 and chains on an odd number, up to 8 | Every batch, any power | 96.69189453125% RTP | 96.5720% (2M batches, z +0.59); through the engine 96.8248% (200K batches, z −0.21) |
 
 The blackjack figure is for exactly these rules. The often-quoted 0.26-0.28% assumes aces can be
-resplit, which this table doesn't allow, and a cut card adds about 0.02 points over dealing each
-round from a fresh shoe (0.334%).
+resplit, which this table doesn't allow. Every round is dealt from a freshly shuffled shoe (a
+continuous shuffling machine, as on many Strip tables and online), so counting cards gains
+nothing; the same rules dealt as a shoe game to a 75% cut card would be 0.354%, and a counter
+spreading bets could beat that (docs/ODDS-AUDIT.md §1.1).
 
 The Casino War figure most often quoted, 2.88%, is for tables that pay a tie in the war only even
 money on the raise. Pennsylvania's rules and the Mirage pay it 2:1 (a bonus equal to the bet), which
