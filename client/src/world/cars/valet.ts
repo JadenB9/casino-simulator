@@ -9,7 +9,7 @@ import { ARRIVE_MS, CURB, VALET_STAND, type CarCall } from '../../../../shared/s
 import { carItem } from '../../../../shared/src/items.ts';
 import type { Look } from '../../../../shared/src/look.ts';
 import { uniformOutfit } from '../characters.ts';
-import type { Collider } from '../collision.ts';
+import type { Box, Collider } from '../collision.ts';
 import type { Character, CharacterFactoryExt } from '../contract.ts';
 import type { Spot } from '../interact.ts';
 import { turnToward } from '../npcs.ts';
@@ -82,6 +82,8 @@ interface Out {
   d: number;
   leaving: boolean;
   runner: { ch: Character; t: number; to: THREE.Vector3; back: THREE.Vector3; handed: boolean; gone: boolean } | null;
+  /** While it stands at the curb, it's in the way like any car. */
+  solid: Box | null;
 }
 
 export interface ValetDeps {
@@ -204,7 +206,7 @@ export class Valet {
     if (!carItem(call.car) || call.slot >= CURB.length) return;
     const rig = new Rig(call.car, this.deps.mats);
     this.group.add(rig.root);
-    this.out.set(call.id, { call, rig, d: 0, leaving: false, runner: null });
+    this.out.set(call.id, { call, rig, d: 0, leaving: false, runner: null, solid: null });
   }
 
   /** Everything at the curb, as the floor has it after hello. */
@@ -220,11 +222,19 @@ export class Valet {
     return o && o.call.until > this.deps.now() ? o.call : null;
   }
 
+  private unsolid(o: Out): void {
+    if (!o.solid) return;
+    const i = this.deps.col.boxes.indexOf(o.solid);
+    if (i >= 0) this.deps.col.boxes.splice(i, 1);
+    o.solid = null;
+  }
+
   private drop(id: number): void {
     const o = this.out.get(id);
     if (!o) return;
     o.rig.dispose();
     if (o.runner && !o.runner.gone) o.runner.ch.dispose();
+    this.unsolid(o);
     this.out.delete(id);
   }
 
@@ -257,6 +267,7 @@ export class Valet {
         if (!o.leaving) {
           o.leaving = true;
           o.d = 0;
+          this.unsolid(o);
         }
         o.rig.roll(d - o.d);
         o.d = d;
@@ -270,7 +281,13 @@ export class Valet {
         pose = along(path, d);
         o.rig.roll(d - o.d);
         o.d = d;
-        if (k >= 1) this.handover(o, dt, t - DRIVE_S);
+        if (k >= 1) {
+          if (!o.solid) {
+            const kit = carKit(o.call.car);
+            o.solid = this.deps.col.box(pose.x, pose.z, kit.width, kit.length, pose.yaw, kit.height, { cam: false });
+          }
+          this.handover(o, dt, t - DRIVE_S);
+        }
       }
       o.rig.root.position.set(pose.x, 0, pose.z);
       // turn with the path, smoothly (the path's corners are cut by the easing of the yaw)

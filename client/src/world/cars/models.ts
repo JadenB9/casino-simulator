@@ -341,7 +341,7 @@ function buildLamps(s: CarSpec, o: Outline, geos: Geos): void {
       const r = s.lamps === 'quad' ? 0.07 : 0.095;
       for (const lx of spots) {
         add(geos, 'lamp', onFace(o, 'front', s.lampY, lens(r, 0.04), side * lx, 0.004), HEAD);
-        add(geos, 'metal', onFace(o, 'front', s.lampY, new THREE.TorusGeometry(r + 0.008, 0.013, 6, 18), side * lx, 0.02), s.chrome ? CHROME : DARK);
+        add(geos, 'metal', onFace(o, 'front', s.lampY, new THREE.TorusGeometry(r + 0.008, 0.013, 4, 12), side * lx, 0.02), s.chrome ? CHROME : DARK);
       }
     } else {
       const [w, h] = s.lamps === 'rect' ? [0.32, 0.12] : [0.4, 0.055];
@@ -472,12 +472,12 @@ function buildWheel(s: CarSpec, geos: Geos): void {
     [ri, -w / 2], [R - 0.035, -w / 2], [R - 0.008, -w / 2 + 0.02], [R, -w / 2 + 0.05],
     [R, w / 2 - 0.05], [R - 0.008, w / 2 - 0.02], [R - 0.035, w / 2], [ri, w / 2],
   ].map(([x, y]) => new THREE.Vector2(x, y));
-  add(geos, 'trim', new THREE.LatheGeometry(prof, 18).rotateZ(-Math.PI / 2), TYRE);
+  add(geos, 'trim', new THREE.LatheGeometry(prof, 14).rotateZ(-Math.PI / 2), TYRE);
   const face = w / 2 - 0.02;
-  const disc = (r: number, d: number, at: number) => new THREE.CylinderGeometry(r, r, d, 20).rotateZ(Math.PI / 2).translate(at, 0, 0);
+  const disc = (r: number, d: number, at: number) => new THREE.CylinderGeometry(r, r, d, 14).rotateZ(Math.PI / 2).translate(at, 0, 0);
   const rim = s.gold ? '#e0b84a' : (s.rimColor ?? CHROME);
   if (s.whitewall) add(geos, 'trim', new THREE.RingGeometry(ri + 0.015, ri + 0.085, 24).rotateY(Math.PI / 2).translate(w / 2 + 0.002, 0, 0), '#f1eee6');
-  add(geos, 'metal', new THREE.TorusGeometry(ri, 0.022, 6, 24).rotateY(Math.PI / 2).translate(face, 0, 0), rim);
+  add(geos, 'metal', new THREE.TorusGeometry(ri, 0.022, 4, 16).rotateY(Math.PI / 2).translate(face, 0, 0), rim);
   const spokes = (n: number, width: number, color: string, part: Part, twist = 0) => {
     for (let i = 0; i < n; i++) {
       const a = (i / n) * Math.PI * 2;
