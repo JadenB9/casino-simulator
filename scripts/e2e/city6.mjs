@@ -348,7 +348,12 @@ async function enterAs(name, quality = 'high') {
   }
   await p.waitForSelector('.hud', { timeout: 30_000 });
   await p.waitForFunction(() => window.casino.app.link?.you, null, { timeout: 20_000 });
-  await p.waitForTimeout(1200);
+  await p.waitForTimeout(1500);
+  // the day's bonus (or anything else that greets you) closes first
+  for (let i = 0; i < 3 && (await p.$('.sheet-scrim, .modal')); i++) {
+    await p.keyboard.press('Escape');
+    await p.waitForTimeout(400);
+  }
   return { p, ctx, errors };
 }
 

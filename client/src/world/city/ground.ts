@@ -44,14 +44,14 @@ export function buildGround(mats: Mats, col: Collider, quality: Quality): ZoneBu
   kit.box('marble-black', H.x0 + 3.2, H.x1 - 1.2, -0.1, 0.003, 1.3, 1.6, 1.2);
   // walls: honey stone above a dark wood wainscot, with a bronze rail
   const B = G.building;
-  const wall = (x0: number, x1: number, z0: number, z1: number, y0 = 0, y1 = HH) => {
+  const wall = (x0: number, x1: number, z0: number, z1: number, y0 = 0, y1: number = HH) => {
     kit.box('limestone', x0, x1, Math.max(y0, 1.1), y1, z0, z1, 2.4);
     if (y0 < 1.1) kit.box('wainscot', x0, x1, y0, 1.1, z0, z1, 1.2);
     kit.solid(x0, x1, z0, z1, y1);
   };
   // north and south walls, a bronze rail along the wainscot's top
-  wall(B.x0, B.x1, B.z0, H.z0);
-  wall(B.x0, B.x1, H.z1, B.z1);
+  wall(B.x0 + 0.2, B.x1, B.z0, H.z0, 0, HH + 0.2);
+  wall(B.x0 + 0.2, B.x1, H.z1, B.z1, 0, HH + 0.2);
   kit.box('brass', H.x0, H.x1 - 0.2, 1.1, 1.14, H.z0, H.z0 + 0.02);
   kit.box('brass', H.x0, H.x1 - 0.2, 1.1, 1.14, H.z1 - 0.02, H.z1);
   // the west wall either side of the elevators, and over them (the cars stand behind it)
@@ -73,7 +73,7 @@ export function buildGround(mats: Mats, col: Collider, quality: Quality): ZoneBu
   for (let x = H.x0 + 3.0; x < H.x1 - 1.5; x += 3.6) {
     for (const z of [-9.4, -5.6, 5.6, 9.4]) {
       kit.glow.add(new THREE.CylinderGeometry(0.11, 0.11, 0.012, 16), GLOW.bulb, { x, y: HH - 0.51, z });
-      kit.pool(x, z, 1.9, 0.006);
+      kit.pool(x, z, 1.9);
     }
   }
   kit.light(GLOW.warm, (H.x0 + H.x1) / 2, HH - 0.52, H.z0 + 1.02, H.x1 - H.x0 - 2, 0.03, 0.03);
@@ -154,7 +154,7 @@ export function buildGround(mats: Mats, col: Collider, quality: Quality): ZoneBu
   const doors = new SlidingDoors({ x: gx, z0: G.doors.z0 - 0.1, z1: G.doors.z1 + 0.1, height: 3.1 }, mats, col);
   group.add(doors.group);
   // a mat inside the doors
-  kit.box('fabric', gx - 3.2, gx - 0.3, 0, 0.006, -1.6, 1.6);
+  kit.box('fabric', gx - 3.2, gx - 0.3, 0, 0.006, -1.2, 1.2);
 
   // a round table under the chandeliers with flowers on it, rugs under the sofas
   kit.cylinder('marble-black', 116.6, 0, 0.8, 0, 0.74, 32, 0.72);
@@ -195,7 +195,7 @@ export function buildGround(mats: Mats, col: Collider, quality: Quality): ZoneBu
   // the drive: asphalt, a painted edge and a stop line at the crosswalk to the plaza
   kit.box('asphalt', G.drive.x0, G.drive.x1, -0.1, 0, G.drive.z0, G.drive.z1, 6);
   for (let z = G.walkway.z0; z < G.walkway.z1 - 0.1; z += 0.8) kit.flat('paint-white', G.drive.x0 + 0.3, G.drive.x1 - 0.3, z, z + 0.45, 0.003);
-  kit.flat('paint-white', G.drive.x0 + 0.1, G.drive.x0 + 0.22, G.drive.z0, G.drive.z1, 0.003);
+  kit.flat('paint-white', G.drive.x0 + 0.1, G.drive.x0 + 0.22, G.drive.z0 + 0.02, G.drive.z1 - 0.02, 0.003);
   // the valet stand: a lacquered podium with a brass top and a lamp
   const V = VALET_STAND;
   kit.box('lacquer', V.x - 0.28, V.x + 0.28, 0, 1.12, V.z - 0.42, V.z + 0.42);
@@ -289,7 +289,7 @@ export function buildGround(mats: Mats, col: Collider, quality: Quality): ZoneBu
     [cuts[3]!, z1],
   ] as const) {
     kit.box('sidewalk', WW.x0, WW.x1, -0.1, 0.006, a, b, 2.4);
-    kit.box('curb', WW.x1 - 0.22, WW.x1, -0.1, 0.01, a, b);
+    kit.box('curb', WW.x1 - 0.22, WW.x1, -0.1, 0.01, a + 0.01, b - 0.01);
   }
   for (const side of [-1, 1] as const) {
     const za = side * 40.5;
@@ -297,15 +297,15 @@ export function buildGround(mats: Mats, col: Collider, quality: Quality): ZoneBu
     kit.box('asphalt', G.drive.x0, WW.x1, -0.1, 0, Math.min(za, zb), Math.max(za, zb), 6);
   }
   kit.box('sidewalk', WE.x0, WE.x1, -0.1, 0.006, z0, z1, 2.4);
-  kit.box('curb', WE.x0, WE.x0 + 0.22, -0.1, 0.01, z0, z1);
+  kit.box('curb', WE.x0, WE.x0 + 0.22, -0.1, 0.01, z0 + 0.01, z1 - 0.01);
   kit.box('asphalt', R.x0, R.x1, -0.1, 0, z0, z1, 6);
   // the double yellow down the middle, dashed lane lines, the crosswalk's zebra and stop lines
   const mid = (R.x0 + R.x1) / 2;
   const cw = G.crosswalk;
   const along = (x0: number, x1: number, mat: string, dash: number, gap: number) => {
     for (let z = z0; z < z1; z += dash + gap) {
-      const a = z;
-      const b = Math.min(z1, z + dash);
+      const a = Math.max(z0 + 0.02, z);
+      const b = Math.min(z1 - 0.02, z + dash);
       // (the markings stop at the crosswalk)
       if ((b > cw.z0 - 2.2 && a < cw.z1 + 2.2) || (b > JAIL_WALK - 4.2 && a < JAIL_WALK + 4.2)) continue;
       kit.flat(mat, x0, x1, a, b, 0.003);
@@ -328,7 +328,7 @@ export function buildGround(mats: Mats, col: Collider, quality: Quality): ZoneBu
     [WW.x1 - 0.5, cw.z0 - 0.8, 1],
     [WE.x0 + 0.5, cw.z1 + 0.8, -1],
   ] as const) {
-    kit.cylinder('steel', x, z, 0.08, 0, 3.4, 10);
+    kit.cylinder('steel', x, z, 0.08, 0, 3.3, 10);
     kit.box('lacquer', x - 0.18, x + 0.18, 2.5, 3.4, z - 0.14, z + 0.14);
     // red for the traffic here, the walking man lit for the crosswalk
     kit.light(hdr('#ff3a22', 2.6), x + face * 0.19, 3.2, z, 0.01, 0.16, 0.16);
