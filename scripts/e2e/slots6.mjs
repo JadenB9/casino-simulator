@@ -10,6 +10,8 @@
 // Usage: node scripts/e2e/slots6.mjs [port] [outDir] [variants...]   (GPU=1: the Mac's GPU)
 
 import { chromium } from 'playwright';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 
 const [port = '6450', outDir = '/tmp', ...only] = process.argv.slice(2);
 const variants = only.length ? only : ['sevens', 'diamonds'];
@@ -28,7 +30,7 @@ const check = (ok, what) => {
 };
 const money = (c) => `$${(c / 100).toFixed(2)}`;
 
-async function open(variant, device) {
+async function open(variant, device, opts = {}) {
   const ctx = await browser.newContext(device === 'phone' ? { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 } : { viewport: { width: 1280, height: 800 } });
   await ctx.addInitScript(() => localStorage.setItem('casino.quality', 'low'));
   const page = await ctx.newPage();
@@ -47,14 +49,16 @@ async function open(variant, device) {
     ws.on('framesent', note('out'));
     ws.on('framereceived', note('in'));
   });
-  await page.goto(`http://localhost:${port}/casino/?dev=table&game=slots&variant=${variant}&name=slots6_e2e_${device === 'phone' ? 'p' : 'd'}${variant.slice(0, 4)}`);
+  const game = opts.game ?? 'slots';
+  await page.goto(`http://localhost:${port}/casino/?dev=table&game=${game}&variant=${variant}&name=${opts.name ?? `slots6_e2e_${device === 'phone' ? 'p' : 'd'}${variant.slice(0, 4)}`}`);
   await page.waitForSelector('.modal input[type=number], .slots-deck', { timeout: 60000 });
   await page.waitForTimeout(2500);
   if (await page.$('.modal input[type=number]')) {
-    await page.fill('.modal input[type=number]', '300');
+    await page.fill('.modal input[type=number]', String(opts.buyIn ?? 300));
     await page.click('.modal .btn.primary');
   }
-  await page.waitForFunction(() => !document.querySelector('.slots-deck .slots-spin')?.disabled, null, { timeout: 30000 });
+  if (game === 'slots') await page.waitForFunction(() => !document.querySelector('.slots-deck .slots-spin')?.disabled, null, { timeout: 30000 });
+  else await page.waitForTimeout(2500);
   return { ctx, page, frames, errors };
 }
 
@@ -216,6 +220,109 @@ for (const variant of variants) {
   const feats = featCash(frames, t0);
   check(p1.inPlay === 0 && p1.balance - p0.balance === all.credit + feats, `${variant}: cashed out, the balance rose by the ${money(all.credit)} of credits${feats ? ` and ${money(feats)} of feats` : ''} (${money(p0.balance)} to ${money(p1.balance)}, in play ${money(p1.inPlay)})`);
   check(t.errors.length === 0, `${variant}: no page errors${t.errors.length ? ': ' + t.errors.slice(0, 3).join(' | ') : ''}`);
+  await t.ctx.close();
+}
+
+// --- the high-limit room: a high roller at the top coin, Auto at $30,000 or $50,000 a spin, and
+// video poker at five $5,000 coins
+const run = promisify(execFile);
+async function sql(query) {
+  const { stdout } = await run('npx', ['wrangler', 'd1', 'execute', 'DB', '--local', '-c', 'server/wrangler.toml', '--json', '--command', query], { env: { ...process.env, CI: '1' }, maxBuffer: 64 * 1024 * 1024 });
+  return JSON.parse(stdout.slice(stdout.indexOf('[')))[0]?.results ?? [];
+}
+/** Log in (making the account), then give it exactly `cents`, keeping the ledger whole with a grant row. */
+async function highRoller(name, cents) {
+  const res = await fetch(`http://localhost:${port}/casino/api/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, password: 'casino-dev' }) });
+  if (res.status !== 200) throw new Error(`login ${name}: ${res.status}`);
+  const [r] = await sql(`SELECT id, balance FROM casino_accounts WHERE name = '${name}'`);
+  const delta = cents - r.balance;
+  if (delta) {
+    await sql(
+      `INSERT INTO casino_ledger (op_id, account_id, kind, amount, table_id, created_at) VALUES ('e2e-adjust:${r.id}:${Date.now()}', ${r.id}, 'grant', ${delta}, NULL, ${Date.now()});
+       UPDATE casino_accounts SET balance = balance + ${delta}, rev = rev + 1 WHERE id = ${r.id};`,
+    );
+  }
+}
+
+for (const variant of variants) {
+  console.log(`--- ${variant}, high limit`);
+  const name = `slots6_e2e_h${variant.slice(0, 4)}`;
+  await highRoller(name, 10_000_000_00);
+  const t = await open(variant, 'desktop', { name, buyIn: 3_000_000 });
+  const { page, frames } = t;
+  const last = frames.filter((f) => f.dir === 'in' && (f.msg.t === 'seat' || f.msg.t === 'table')).at(-1)?.msg;
+  const startCredit = last?.t === 'seat' ? last.stack : last?.you?.stack;
+  const p0 = await me(page);
+  // the arrows walk up to the top coin and stop there; C goes round to the first and Shift+C back; A is Max
+  for (let i = 0; i < 10; i++) await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('c');
+  await page.waitForTimeout(200);
+  const first = await page.textContent('.slots-coin');
+  await page.keyboard.press('Shift+C');
+  await page.keyboard.press('a');
+  await page.waitForTimeout(400);
+  const coin = await page.textContent('.slots-coin');
+  const bet = await page.textContent('.slots-bet');
+  check(!coin.includes(',') && /\$(25|30|50),000/.test(bet), `${variant}: the top coin and Max read "${coin.trim()}", "${bet.trim()}"`);
+  await page.keyboard.press('ArrowLeft');
+  await page.waitForTimeout(200);
+  const lower = await page.textContent('.slots-coin');
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight');
+  await page.waitForTimeout(200);
+  check(lower !== coin && first !== coin && (await page.textContent('.slots-coin')) === coin, `${variant}: C goes round to "${first.trim()}", Shift+C back to the top, the arrows step down ("${lower.trim()}") and back up, stopping at the top`);
+  await page.screenshot({ path: `${outDir}/slots6-${variant}-high.png` });
+  await page.click('.slots-auto');
+  await page.click('.slots-auto-seg .btn:nth-child(1)');
+  const feat = await page.$('.slots-auto-check input');
+  if (await feat.isChecked()) await feat.uncheck();
+  await page.fill('.slots-auto-pop .slots-auto-money input >> nth=0', '100000');
+  await page.waitForTimeout(250);
+  await page.screenshot({ path: `${outDir}/slots6-${variant}-high-panel.png` });
+  const autoStart = Date.now();
+  await page.click('.slots-auto-go');
+  await resultsSince(t, autoStart, 2);
+  await page.screenshot({ path: `${outDir}/slots6-${variant}-high-running.png` });
+  await idle(page);
+  await page.waitForTimeout(500);
+  const said = await page.textContent('.dealer-line').catch(() => '');
+  const a = audit(t, autoStart, `${variant} high-limit Auto`, startCredit);
+  check(a.spins === 10 || /Jackpot|Out of credits|Credits under/.test(said), `${variant}: Auto at the top bet spun ${a.spins} and says "${said}"`);
+  const top = frames.filter((f) => f.dir === 'in' && f.msg.t === 'ev' && f.at >= autoStart).map((f) => f.msg.events.find((e) => e.type === 'spin')?.bet);
+  check(top.every((b) => b >= 2_500_000), `${variant}: every Auto spin was at the top bet (${[...new Set(top)].map(money).join(', ')})`);
+  await page.waitForTimeout(2500);
+  await page.screenshot({ path: `${outDir}/slots6-${variant}-high-after.png` });
+  await page.evaluate(() => window.casino.table.link.cashOut());
+  await page.waitForFunction(async () => (await (await import('/casino/src/net/api.ts')).me()).inPlay === 0, null, { timeout: 20000, polling: 500 }).catch(() => {});
+  const p1 = await me(page);
+  const feats = featCash(frames, autoStart - 60_000);
+  check(p1.inPlay === 0 && p1.balance - p0.balance === a.credit + feats, `${variant}: cashed out ${money(a.credit)} to the cent (balance ${money(p0.balance)} to ${money(p1.balance)}${feats ? `, ${money(feats)} of feats` : ''})`);
+  check(t.errors.length === 0, `${variant} high limit: no page errors${t.errors.length ? ': ' + t.errors.slice(0, 3).join(' | ') : ''}`);
+  await t.ctx.close();
+}
+
+{
+  console.log('--- video poker, high limit');
+  const name = 'slots6_e2e_hvp';
+  await highRoller(name, 10_000_000_00);
+  const t = await open('', 'desktop', { name, game: 'videopoker', buyIn: 2_500_000 });
+  const { page, frames } = t;
+  for (let i = 0; i < 10; i++) await page.keyboard.press('ArrowRight');
+  await page.waitForTimeout(300);
+  const denom = await page.textContent('.vp-denom').catch(() => '');
+  const since = Date.now();
+  // Max: five coins, dealt
+  await page.keyboard.press('b');
+  await page.waitForTimeout(2500);
+  await page.screenshot({ path: `${outDir}/slots6-vp-high.png` });
+  const deal = frames.filter((f) => f.dir === 'in' && f.msg.t === 'ev' && f.at >= since).flatMap((f) => f.msg.events).find((e) => e.type === 'deal');
+  check(/\$5K/.test(denom) && deal?.bet === 2_500_000, `video poker: the coin reads "${denom.trim()}" and Max deals $25,000 (${money(deal?.bet ?? 0)})`);
+  await page.keyboard.press('Space');
+  await page.waitForTimeout(3000);
+  const result = frames.filter((f) => f.dir === 'in' && f.msg.t === 'ev' && f.at >= since).flatMap((f) => f.msg.events).find((e) => e.type === 'result');
+  check(!!result && result.payout === result.credits * 500_000, `video poker: a $25,000 hand paid ${money(result?.payout ?? -1)} (${result?.credits} credits of $5,000)`);
+  await page.screenshot({ path: `${outDir}/slots6-vp-high-drawn.png` });
+  check(t.errors.length === 0, `video poker high limit: no page errors${t.errors.length ? ': ' + t.errors.slice(0, 3).join(' | ') : ''}`);
   await t.ctx.close();
 }
 

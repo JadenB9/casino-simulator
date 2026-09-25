@@ -26,8 +26,8 @@ export const DIAMONDS: StepperMachine<DiamondSymbol, DiamondCombo, 'diamonds'> =
   kind: 'stepper',
   id: 'diamonds',
   name: 'Diamond Line',
-  // $1, $2, $5, and the high-limit $25 and $100
-  denoms: [100, 200, 500, 2500, 10_000],
+  // $1, $2, $5, $25 and $100, and the high-limit room's $1,000, $5,000 and $10,000 ($30,000 a spin)
+  denoms: [100, 200, 500, 2500, 10_000, 100_000, 500_000, 1_000_000],
   maxCoins: 3,
   lines: 1,
   virtualStops: 64,

@@ -10,7 +10,7 @@
 
 import * as THREE from 'three';
 import type { TableView, TableViewCtx } from '../contract.ts';
-import { formatMoney, type Cents } from '../../../../shared/src/money.ts';
+import { formatCompact, formatMoney, type Cents } from '../../../../shared/src/money.ts';
 import { MACHINES, isMachineId, type Machine, type MachineId } from '../../../../shared/src/games/slots/machines.ts';
 import { neonSymbolAt } from '../../../../shared/src/games/slots/rules.ts';
 import type { ReelsEvent, ResultEvent, SlotsEvent, SlotsView, SpinEvent } from '../../../../shared/src/games/slots/protocol.ts';
@@ -141,7 +141,7 @@ export function mountSlots(ctx: TableViewCtx): TableView {
   // --- DOM: the button deck, a result tag at the win meter, banners
   const deck = el('div', 'slots-deck panel');
   const paysBtn = button('Pays', () => togglePays(), { key: 'I', cls: 'ghost' });
-  const coinBtn = button('', () => nextCoin(), { key: 'C', title: 'Coin value' });
+  const coinBtn = button('', () => nextCoin(), { key: 'C', title: 'Coin value (C, Shift+C or ← → to step)' });
   coinBtn.classList.add('slots-coin');
   const downBtn = button('−', () => setCoins(coins - 1), { key: '↓', title: video ? 'Fewer credits per line' : 'One coin less' });
   const betLabel = el('div', 'slots-bet');
@@ -232,7 +232,8 @@ export function mountSlots(ctx: TableViewCtx): TableView {
     drawMeters();
   };
 
-  const coinText = () => formatMoney(m.denoms[denomIdx]!);
+  // "$0.25" up to "$10K" on the high-limit coins
+  const coinText = () => formatCompact(m.denoms[denomIdx]!);
   const refreshBet = () => {
     coinBtn.firstChild!.textContent = `Coin ${coinText()}`;
     betLabel.textContent = video ? `${coins} per line · ${formatMoney(betOf())}` : `${coins} coin${coins > 1 ? 's' : ''} · ${formatMoney(betOf())}`;
@@ -266,12 +267,17 @@ export function mountSlots(ctx: TableViewCtx): TableView {
     coins = c;
     refreshBet();
   };
-  const nextCoin = () => {
+  /** The next coin value up or down: C (Shift+C back) goes round, the arrows stop at the ends. */
+  const stepCoin = (dir: 1 | -1, wrap: boolean) => {
     if (busy || pressed) return;
-    denomIdx = (denomIdx + 1) % m.denoms.length;
+    const n = m.denoms.length;
+    const next = wrap ? (denomIdx + dir + n) % n : Math.max(0, Math.min(n - 1, denomIdx + dir));
+    if (next === denomIdx) return;
+    denomIdx = next;
     ctx.sfx.play('ui-switch', { volume: 0.5 });
     refreshBet();
   };
+  const nextCoin = () => stepCoin(1, true);
 
   /** One spin at the deck's bet: true when it went, false while one is playing, else why not. */
   const spin = (): boolean | string => {
@@ -541,13 +547,16 @@ export function mountSlots(ctx: TableViewCtx): TableView {
       bulbMode.value = CHASE;
       candleFlash = 2;
       sound.handPayBell(6);
-      celebrate(party, { title: 'Jackpot · Hand pay', sub: `${handOf(res, lastReels)} · ${timesBet(total, bet)}`, tier: tier ?? 'big' });
+      // the top award, or a big win that needs the attendant, gets the celebration; a smaller
+      // return over the W-2G line (every win at the high-limit coins) is the lockup alone
+      if (top || tier) celebrate(party, { title: top ? 'Jackpot · Hand pay' : `${tier === 'huge' ? 'Huge' : 'Big'} win · Hand pay`, sub: `${handOf(res, lastReels)} · ${timesBet(total, bet)}`, tier: tier ?? 'big' });
       showCount('Hand pay', total, bet);
-      await skippable(4200, 1500);
+      const shown = top || tier;
+      await skippable(shown ? 4200 : 2400, shown ? 1500 : 800);
       countup.hidden = true;
       setMeters({ win: total, credit: res.credit });
       showResult(`Hand pay ${formatMoney(total)} · ${formatMoney(total - bet, { sign: true })}`, 'win');
-      await wait(1200);
+      await wait(shown ? 1200 : 600);
       bulbMode.value = IDLE;
       candleFlash = 0;
     } else if (!tier) {
@@ -581,7 +590,7 @@ export function mountSlots(ctx: TableViewCtx): TableView {
       showResult(`Paid ${formatMoney(total)} · ${formatMoney(total - bet, { sign: true })}`, 'win');
     }
     lastWin = total > 0 ? total : null;
-    outcome = { bet, win: total, credit: res.credit, feature: res.freeSpins > 0, handPay: total >= HAND_PAY || !!top };
+    outcome = { bet, win: total, credit: res.credit, feature: res.freeSpins > 0, jackpot: !!top };
     void r;
   };
 
@@ -690,7 +699,11 @@ export function mountSlots(ctx: TableViewCtx): TableView {
         return true;
       }
       if (e.key === 'c' || e.key === 'C') {
-        nextCoin();
+        stepCoin(e.shiftKey ? -1 : 1, true);
+        return true;
+      }
+      if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+        stepCoin(e.key === 'ArrowRight' ? 1 : -1, false);
         return true;
       }
       if (e.key === 'Escape' && pays) {

@@ -267,14 +267,14 @@ describe('video poker engine', () => {
     for (const denom of DENOMS) {
       for (let coins = 1; coins <= 5; coins++) {
         for (const [ten, rank] of hands) {
-          const sim = machine(1_000_000);
+          const sim = machine(10_000_000);
           sim.act(0, { type: 'deal', coins, denom });
           rig(sim, ten);
           sim.act(0, { type: 'draw', hold: [true, true, true, true, true] });
           const r = sim.view(0).result!;
           expect(r.rank).toBe(rank);
           expect(r.payout).toBe(payCredits(rank, coins) * denom);
-          expect(sim.stack(0)).toBe(1_000_000 - coins * denom + r.payout);
+          expect(sim.stack(0)).toBe(10_000_000 - coins * denom + r.payout);
         }
       }
     }
@@ -368,11 +368,12 @@ describe('video poker engine', () => {
     expect(engine.shiftDeadlines(sim.state, 5_000)).toBe(sim.state);
   });
 
-  it('config: one seat, $1 to $500 a hand in whole dollars (five of the high-limit $100 coins)', () => {
+  it('config: one seat, $1 to $25,000 a hand in whole dollars (five of the high-limit $5,000 coins)', () => {
     const cfg = engine.config('', 'solo');
     expect(cfg.maxSeats).toBe(1);
-    expect(cfg.limits.default).toEqual({ min: 100, max: 50_000, step: 100 });
-    expect(cfg.buyIn).toEqual({ min: 2_000, max: 50_000_000 });
+    expect(cfg.limits.default).toEqual({ min: 100, max: 2_500_000, step: 100 });
+    expect(cfg.buyIn).toEqual({ min: 2_000, max: 250_000_000 });
+    expect(DENOMS).toEqual([100, 500, 2_500, 10_000, 50_000, 100_000, 500_000]);
     expect(engine.seats.multiplayer).toBe(false);
   });
 });

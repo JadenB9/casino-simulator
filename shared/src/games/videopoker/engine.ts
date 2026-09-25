@@ -15,7 +15,8 @@ import { isObj, isInt } from '../../protocol.ts';
 import { rankHand, payCredits, cardCode, HAND_NAMES, MAX_COINS, type HandRank } from './hands.ts';
 
 /** Coin values the player can pick: $1, $5, $25 and the high-limit $100. */
-export const DENOMS: readonly Cents[] = [1 * DOLLAR, 5 * DOLLAR, 25 * DOLLAR, 100 * DOLLAR];
+/** Coin values; $500 and up are the high-limit machine's (five $5,000 coins: $25,000 a hand). */
+export const DENOMS: readonly Cents[] = [1 * DOLLAR, 5 * DOLLAR, 25 * DOLLAR, 100 * DOLLAR, 500 * DOLLAR, 1_000 * DOLLAR, 5_000 * DOLLAR];
 
 export type VideoPokerAction = { type: 'deal'; coins: number; denom?: Cents } | { type: 'draw'; hold: boolean[] };
 
@@ -65,9 +66,9 @@ function config(_variant: string, mode: TableMode): TableConfig {
     variant: '',
     mode,
     maxSeats: 1,
-    // up to a thousand of its largest bets (five $100 coins are $500 a hand)
-    buyIn: { min: 20 * DOLLAR, max: 500_000 * DOLLAR },
-    // One $1 coin up to five $100 coins.
+    // a hundred of its largest bets (five $5,000 coins are $25,000 a hand): $2.5 million
+    buyIn: { min: 20 * DOLLAR, max: 100 * MAX_COINS * DENOMS[DENOMS.length - 1]! },
+    // One $1 coin up to five $5,000 coins.
     limits: { default: { min: DENOMS[0]!, max: MAX_COINS * DENOMS[DENOMS.length - 1]!, step: DOLLAR } },
     options: { paytable: 'jacks-or-better-9-6', denoms: DENOMS, maxCoins: MAX_COINS },
   };

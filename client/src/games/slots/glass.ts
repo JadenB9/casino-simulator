@@ -4,6 +4,7 @@
 
 import { NEON, SEVENS, WILD, type MachineId, type NeonSymbol } from '../../../../shared/src/games/slots/machines.ts';
 import { drawNeonSymbol, drawStepperSymbol, neonColor, STRIP_CREAM } from './symbols.ts';
+import { segText } from './segments.ts';
 
 type G = CanvasRenderingContext2D;
 
@@ -436,14 +437,6 @@ export interface MeterValues {
 }
 
 const METER_DIGITS = { credit: 9, bet: 6, win: 9 };
-
-function segText(amountCents: number, digits: number): { text: string; ghost: string } {
-  const s = (Math.max(0, Math.round(amountCents)) / 100).toFixed(2);
-  const intDigits = digits - 2;
-  const [i, f] = s.split('.') as [string, string];
-  const int = i.length > intDigits ? i.slice(-intDigits) : i.padStart(intDigits, '!');
-  return { text: `${int}.${f}`, ghost: `${'8'.repeat(intDigits)}.88` };
-}
 
 export function paintMeters(canvas: HTMLCanvasElement, machine: MachineId, v: MeterValues | null, scale = 1): void {
   const W = 1024, H = 136;

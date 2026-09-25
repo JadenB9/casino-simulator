@@ -227,7 +227,7 @@ describe('a solo table', () => {
     expect(snap2.meta.config.limits.default).toEqual({ min: 100, max: 100_000, step: 100 });
     c2.ws.close();
     const [c3, snap3] = await enter(p, 'solo/slots', '&variant=sevens&limits=10000-1000000');
-    expect(snap3.meta.config.limits.default).toEqual({ min: 25, max: 30_000, step: 25 });
+    expect(snap3.meta.config.limits.default).toEqual({ min: 25, max: 3_000_000, step: 25 });
     c3.ws.close();
   });
 });

@@ -178,7 +178,8 @@ export function mountAutoDeck(o: AutoDeckOpts): AutoDeck {
     }
     paint();
 
-    o.deck.append(root);
+    o.ui.append(root);
+    place(root);
     autoBtn.classList.add('open');
     const release = holdKeyboard(root, () => close());
     const outside = (e: PointerEvent) => {
@@ -186,9 +187,12 @@ export function mountAutoDeck(o: AutoDeckOpts): AutoDeck {
       if (!root.contains(t) && !autoBtn.contains(t)) close();
     };
     addEventListener('pointerdown', outside, true);
+    const onResize = () => place(root);
+    addEventListener('resize', onResize);
     function close() {
       if (pop?.root !== root) return;
       pop = null;
+      removeEventListener('resize', onResize);
       release();
       removeEventListener('pointerdown', outside, true);
       root.remove();
@@ -197,6 +201,16 @@ export function mountAutoDeck(o: AutoDeckOpts): AutoDeck {
     pop = { root, close };
     segBtns[AUTO_SPINS.indexOf(pick.spins)]?.focus({ preventScroll: true });
   };
+
+  /**
+   * Just over the deck. On a wide screen it stands at the window's right edge, clear of the
+   * cabinet in the middle so the reels stay in view; on a narrow one, over the deck's right end.
+   */
+  function place(root: HTMLElement) {
+    const d = o.deck.getBoundingClientRect();
+    root.style.bottom = `${Math.round(innerHeight - d.top + 10)}px`;
+    root.style.right = `${innerWidth >= 1000 && innerHeight > 480 ? 16 : Math.max(10, Math.round(innerWidth - d.right))}px`;
+  }
 
   function row(label: string, control: HTMLElement): HTMLElement {
     const r = el('div', 'slots-auto-row');

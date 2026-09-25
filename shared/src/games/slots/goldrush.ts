@@ -25,8 +25,8 @@ export const GOLDRUSH: GoldRushMachine = {
   kind: 'lines',
   id: 'goldrush',
   name: 'Gold Rush',
-  // 1¢, 5¢, 10¢, and the high-limit 25¢ and $1
-  denoms: [1, 5, 10, 25, 100],
+  // 1¢, 5¢, 10¢, 25¢ and $1, and the high-limit room's $25, $100 and $250 ($50,000 a spin: 5 a line on 40 lines)
+  denoms: [1, 5, 10, 25, 100, 2500, 10_000, 25_000],
   maxCoins: 5,
   lines: 40,
   rows: 4,

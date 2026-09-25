@@ -9,7 +9,7 @@
 
 import * as THREE from 'three';
 import type { TableView, TableViewCtx } from '../contract.ts';
-import { formatMoney, type Cents } from '../../../../shared/src/money.ts';
+import { formatCompact, formatMoney, type Cents } from '../../../../shared/src/money.ts';
 import { LINEUP } from '../../../../shared/src/games/slots/lineup.ts';
 import { DIAMONDS } from '../../../../shared/src/games/slots/diamonds.ts';
 import { GOLDRUSH } from '../../../../shared/src/games/slots/goldrush.ts';
@@ -180,7 +180,7 @@ export function mountSkinned(ctx: TableViewCtx): TableView {
   // --- DOM: the button deck, the result pill at the win meter, banners and the count-up
   const deck = el('div', 'slots-deck panel');
   const paysBtn = button('Pays', () => togglePays(), { key: 'I', cls: 'ghost' });
-  const coinBtn = button('', () => nextCoin(), { key: 'C', title: 'Coin value' });
+  const coinBtn = button('', () => nextCoin(), { key: 'C', title: 'Coin value (C, Shift+C or ← → to step)' });
   coinBtn.classList.add('slots-coin');
   const downBtn = button('−', () => setCoins(coins - 1), { key: '↓', title: stepper ? 'One coin less' : 'Fewer credits per line' });
   const betLabel = el('div', 'slots-bet');
@@ -276,7 +276,7 @@ export function mountSkinned(ctx: TableViewCtx): TableView {
   };
 
   const refreshBet = () => {
-    coinBtn.firstChild!.textContent = `Coin ${formatMoney(m.denoms[denomIdx]!)}`;
+    coinBtn.firstChild!.textContent = `Coin ${formatCompact(m.denoms[denomIdx]!)}`;
     betLabel.textContent = stepper ? `${coins} coin${coins > 1 ? 's' : ''} · ${formatMoney(betOf())}` : `${coins} per line · ${formatMoney(betOf())}`;
     tintMat.color.set(candleColor(m.denoms[denomIdx]!));
     placeColumn(coins);
@@ -304,12 +304,17 @@ export function mountSkinned(ctx: TableViewCtx): TableView {
     coins = c;
     refreshBet();
   };
-  const nextCoin = () => {
+  /** The next coin value up or down: C (Shift+C back) goes round, the arrows stop at the ends. */
+  const stepCoin = (dir: 1 | -1, wrap: boolean) => {
     if (busy || pressed) return;
-    denomIdx = (denomIdx + 1) % m.denoms.length;
+    const n = m.denoms.length;
+    const next = wrap ? (denomIdx + dir + n) % n : Math.max(0, Math.min(n - 1, denomIdx + dir));
+    if (next === denomIdx) return;
+    denomIdx = next;
     ctx.sfx.play('ui-switch', { volume: 0.5 });
     refreshBet();
   };
+  const nextCoin = () => stepCoin(1, true);
 
   /** One spin at the deck's bet: true when it went, false while one is playing, else why not. */
   const spin = (): boolean | string => {
@@ -619,13 +624,16 @@ export function mountSkinned(ctx: TableViewCtx): TableView {
       bulbMode.value = CHASE;
       candleFlash = 2;
       sound.handPayBell(6);
-      celebrate(party, { title: 'Jackpot · Hand pay', sub: `${handOf(res, lastReels)} · ${timesBet(total, bet)}`, tier: tier ?? 'big', at: new THREE.Vector3(0, l.deck.front[1] + 0.02, l.deck.front[0] + 0.05) });
+      // the top award, or a big win that needs the attendant, gets the celebration; a smaller
+      // return over the W-2G line (every win at the high-limit coins) is the lockup alone
+      if (top || tier) celebrate(party, { title: top ? 'Jackpot · Hand pay' : `${tier === 'huge' ? 'Huge' : 'Big'} win · Hand pay`, sub: `${handOf(res, lastReels)} · ${timesBet(total, bet)}`, tier: tier ?? 'big', at: new THREE.Vector3(0, l.deck.front[1] + 0.02, l.deck.front[0] + 0.05) });
       showCount('Hand pay', total, bet);
-      await skippable(4200, 1500);
+      const shown = top || tier;
+      await skippable(shown ? 4200 : 2400, shown ? 1500 : 800);
       countup.hidden = true;
       setMeters({ win: total, credit: res.credit });
       showResult(`Hand pay ${formatMoney(total)} · ${formatMoney(total - bet, { sign: true })}`, 'win');
-      await wait(1200);
+      await wait(shown ? 1200 : 600);
       bulbMode.value = IDLE;
       candleFlash = 0;
     } else if (!tier) {
@@ -665,7 +673,7 @@ export function mountSkinned(ctx: TableViewCtx): TableView {
       showResult(`Paid ${formatMoney(total)} · ${formatMoney(total - bet, { sign: true })}`, 'win');
     }
     lastWin = total > 0 ? total : null;
-    outcome = { bet, win: total, credit: res.credit, feature: res.freeSpins > 0 || !!lastReels?.wheel, handPay: total >= HAND_PAY || top };
+    outcome = { bet, win: total, credit: res.credit, feature: res.freeSpins > 0 || !!lastReels?.wheel, jackpot: top };
   };
 
   /** What the spin just shown came to, for Auto's stops. */
@@ -771,7 +779,11 @@ export function mountSkinned(ctx: TableViewCtx): TableView {
         return true;
       }
       if (e.key === 'c' || e.key === 'C') {
-        nextCoin();
+        stepCoin(e.shiftKey ? -1 : 1, true);
+        return true;
+      }
+      if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+        stepCoin(e.key === 'ArrowRight' ? 1 : -1, false);
         return true;
       }
       if (e.key === 'Escape' && pays) {

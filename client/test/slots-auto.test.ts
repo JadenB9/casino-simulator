@@ -4,7 +4,7 @@ import { SpinDriver, autoStop, autoCount, type AutoStops, type SpinOutcome } fro
 const STOPS: AutoStops = { spins: null, below: null, winOver: null, feature: false };
 
 /** A machine the way the views behave: one spin at a time, the bet off the credits when it goes. */
-function machine(opts: { credit?: number; bet?: number; wins?: number[]; feature?: number[]; handPay?: number[] } = {}) {
+function machine(opts: { credit?: number; bet?: number; wins?: number[]; feature?: number[]; jackpot?: number[] } = {}) {
   const bet = opts.bet ?? 100;
   let credit = opts.credit ?? 10_000;
   let busy = false;
@@ -30,7 +30,7 @@ function machine(opts: { credit?: number; bet?: number; wins?: number[]; feature
     const win = opts.wins?.[i] ?? 0;
     credit += win;
     busy = false;
-    const o = { bet, win, credit, feature: !!opts.feature?.includes(i), handPay: !!opts.handPay?.includes(i) };
+    const o = { bet, win, credit, feature: !!opts.feature?.includes(i), jackpot: !!opts.jackpot?.includes(i) };
     driver.settled(o);
     return o;
   };
@@ -64,7 +64,7 @@ function machine(opts: { credit?: number; bet?: number; wins?: number[]; feature
 }
 
 describe('slots Auto: stops', () => {
-  const o = (x: Partial<SpinOutcome>): SpinOutcome => ({ bet: 100, win: 0, credit: 5_000, feature: false, handPay: false, ...x });
+  const o = (x: Partial<SpinOutcome>): SpinOutcome => ({ bet: 100, win: 0, credit: 5_000, feature: false, jackpot: false, ...x });
 
   it('carries on while nothing says stop', () => {
     expect(autoStop(STOPS, null, o({}))).toBeNull();
@@ -91,8 +91,17 @@ describe('slots Auto: stops', () => {
     expect(autoStop(STOPS, null, o({ feature: true }))).toBeNull();
     expect(autoStop({ ...STOPS, feature: true }, null, o({ feature: true }))).toBe('Feature played');
   });
-  it('always stops on a hand pay', () => {
-    expect(autoStop(STOPS, null, o({ win: 250_000, handPay: true }))).toBe('Hand pay $2,500');
+  it('always stops on the jackpot', () => {
+    expect(autoStop(STOPS, null, o({ win: 250_000, jackpot: true }))).toBe('Jackpot $2,500');
+  });
+  it('works the same at the high-limit coins', () => {
+    // three $10,000 coins: $30,000 a spin, with $3 million in the machine
+    const big = (x: Partial<SpinOutcome>) => o({ bet: 3_000_000, credit: 300_000_000, ...x });
+    expect(autoStop({ ...STOPS, winOver: 10_000_000 }, null, big({ win: 6_000_000 }))).toBeNull();
+    expect(autoStop({ ...STOPS, winOver: 10_000_000 }, null, big({ win: 12_000_000 }))).toBe('Won $120,000');
+    expect(autoStop({ ...STOPS, below: 250_000_000 }, null, big({ credit: 249_000_000 }))).toBe('Credits under $2,500,000');
+    expect(autoStop(STOPS, null, big({ credit: 2_999_999 }))).toBe('Out of credits');
+    expect(autoStop(STOPS, null, big({ credit: 3_000_000 }))).toBeNull();
   });
   it('counts what is left, the spin playing included', () => {
     expect(autoCount({ left: 22, spun: 3 }, true)).toBe('23 left');
@@ -167,12 +176,22 @@ describe('slots Auto: the driver', () => {
     expect(m.said).toEqual(['Credits under $25']);
   });
 
-  it('always stops on a hand pay', () => {
-    const m = machine({ wins: [0, 300_000], handPay: [1] });
+  it('always stops on the jackpot', () => {
+    const m = machine({ wins: [0, 300_000], jackpot: [1] });
     m.driver.start({ ...STOPS, spins: 100 });
     m.run();
     expect(m.sent).toBe(2);
-    expect(m.said).toEqual(['Hand pay $3,000']);
+    expect(m.said).toEqual(['Jackpot $3,000']);
+  });
+
+  it('runs at $30,000 a spin to the cent, and stops when the credits cannot cover the next', () => {
+    const m = machine({ credit: 10_000_000, bet: 3_000_000, wins: [0, 6_000_000] });
+    m.driver.start({ ...STOPS, spins: 25 });
+    m.run();
+    // $100,000: five spins of $30,000 with $60,000 back on the second leave $10,000
+    expect(m.sent).toBe(5);
+    expect(m.credit).toBe(10_000_000 - 5 * 3_000_000 + 6_000_000);
+    expect(m.said).toEqual(['Out of credits']);
   });
 
   it('a stop from the player lets the spin out finish and sends nothing more', () => {

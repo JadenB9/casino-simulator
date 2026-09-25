@@ -275,11 +275,13 @@ describe('engine', () => {
     new TableSim(engine, rng, 'solo', [{ seat: 0, stack }], engine.config(variant, 'solo'));
 
   it('config: one seat, limits from the machine, unknown variants fall back to Classic Sevens', () => {
-    // with the high-limit coins: $25 and $100 at Classic Sevens, $5 at Neon Nights, $100 at 5x Wild
-    expect(engine.config('sevens', 'solo')).toMatchObject({ game: 'slots', variant: 'sevens', maxSeats: 1, limits: { default: { min: 25, max: 30_000, step: 25 } } });
-    expect(engine.config('neon', 'solo').limits.default).toEqual({ min: 100, max: 50_000, step: 100 });
-    expect(engine.config('wild', 'solo').limits.default).toEqual({ min: 100, max: 30_000, step: 100 });
-    expect(engine.config('sevens', 'solo').buyIn).toEqual({ min: 2_000, max: 50_000_000 });
+    // with the high-limit coins: up to $10,000 at Classic Sevens and 5x Wild ($30,000 a spin),
+    // $500 at Neon Nights (five credits on twenty lines: $50,000); a hundred top bets to buy in
+    expect(engine.config('sevens', 'solo')).toMatchObject({ game: 'slots', variant: 'sevens', maxSeats: 1, limits: { default: { min: 25, max: 3_000_000, step: 25 } } });
+    expect(engine.config('neon', 'solo').limits.default).toEqual({ min: 100, max: 5_000_000, step: 100 });
+    expect(engine.config('wild', 'solo').limits.default).toEqual({ min: 100, max: 3_000_000, step: 100 });
+    expect(engine.config('sevens', 'solo').buyIn).toEqual({ min: 2_000, max: 300_000_000 });
+    expect(engine.config('neon', 'solo').buyIn).toEqual({ min: 2_000, max: 500_000_000 });
     expect(engine.config('nope', 'solo').variant).toBe('sevens');
     expect(engine.seats).toEqual({ min: 1, max: 1, multiplayer: false });
   });
@@ -371,7 +373,7 @@ describe('engine', () => {
   it('money adds up over thousands of spins on every machine, and nothing is ever left live', () => {
     for (const variant of ['sevens', 'neon', 'wild']) {
       const m = MACHINES[variant as 'sevens'];
-      const t = sim(variant, 10_000_000, seededRng(variant.length));
+      const t = sim(variant, 10_000_000_000, seededRng(variant.length));
       for (let i = 0; i < 3000; i++) {
         const denom = m.denoms[i % m.denoms.length]!;
         const coins = 1 + (i % m.maxCoins);
@@ -379,7 +381,7 @@ describe('engine', () => {
         expect(engine.liveBets(t.state, 0)).toBe(0);
       }
       const net = t.rounds.reduce((s, r) => s + r.returned - r.wagered, 0);
-      expect(t.stack(0)).toBe(10_000_000 + net);
+      expect(t.stack(0)).toBe(10_000_000_000 + net);
       expect(t.rounds).toHaveLength(3000);
       expect((t.view(0) as SlotsView).round).toBe(3000);
     }

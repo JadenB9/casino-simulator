@@ -31,13 +31,13 @@ export interface SpinOutcome {
   credit: Cents;
   /** Free games or a bonus (the Cherry Wheel) played. */
   feature: boolean;
-  /** A hand pay: the machine locks up for the attendant. */
-  handPay: boolean;
+  /** The machine's top award (its jackpot): Auto always stops there. */
+  jackpot: boolean;
 }
 
 /** Why Auto should stop after this spin, or null to carry on. */
 export function autoStop(stops: AutoStops, left: number | null, o: SpinOutcome): string | null {
-  if (o.handPay) return `Hand pay ${formatMoney(o.win)}`;
+  if (o.jackpot) return `Jackpot ${formatMoney(o.win)}`;
   if (stops.feature && o.feature) return 'Feature played';
   if (stops.winOver !== null && o.win > stops.winOver) return `Won ${formatMoney(o.win)}`;
   if (left !== null && left <= 0) return 'Spins done';

@@ -25,8 +25,8 @@ export const CHERRIES: CherriesMachine = {
   kind: 'lines',
   id: 'cherries',
   name: 'Lucky Cherries',
-  // 1¢, 5¢, 25¢, and the high-limit $1 and $5
-  denoms: [1, 5, 25, 100, 500],
+  // 1¢, 5¢, 25¢, $1 and $5, and the high-limit room's $25, $100 and $500 ($25,000 a spin: 5 a line on 10 lines)
+  denoms: [1, 5, 25, 100, 500, 2500, 10_000, 50_000],
   maxCoins: 5,
   lines: 10,
   rows: 3,

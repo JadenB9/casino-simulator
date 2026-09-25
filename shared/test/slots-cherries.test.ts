@@ -258,10 +258,12 @@ describe('Lucky Cherries draws', () => {
 describe('Lucky Cherries on the engine', () => {
   const sim = (stack: number, rng: Rng) => new TableSim(engine, rng, 'solo', [{ seat: 0, stack }], engine.config('cherries', 'solo'));
 
-  it('config: 10 lines, 1-5 credits a line at 1, 5 or 25 cents, or the high-limit $1 and $5', () => {
+  it('config: 10 lines, 1-5 credits a line at 1, 5 or 25 cents, $1 or $5, or the high-limit $25, $100 and $500', () => {
     const cfg = engine.config('cherries', 'solo');
-    expect(cfg.limits.default).toEqual({ min: 10, max: 25_000, step: 10 });
-    expect(cfg.options).toEqual({ machine: 'cherries', denoms: [1, 5, 25, 100, 500], maxCoins: 5, lines: 10 });
+    // five credits a line on ten lines of $500: $25,000 a spin, and a hundred of those to buy in
+    expect(cfg.limits.default).toEqual({ min: 10, max: 2_500_000, step: 10 });
+    expect(cfg.buyIn).toEqual({ min: 2_000, max: 250_000_000 });
+    expect(cfg.options).toEqual({ machine: 'cherries', denoms: [1, 5, 25, 100, 500, 2500, 10_000, 50_000], maxCoins: 5, lines: 10 });
   });
 
   it('a wheel spin pays with the spin: lines plus prize x multiplier x total bet', () => {

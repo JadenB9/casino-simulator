@@ -111,7 +111,20 @@ so Max can never put down more than the table allows.
 
 ## Machines
 
-Slots and video poker keep their coin values rather than table limits, with high-limit coins added:
-Classic Sevens 25¢ to $100, Neon Nights 5¢ to $5, 5x Wild $1 to $100, Diamond Line $1 to $100,
-Lucky Cherries 1¢ to $5, Gold Rush 1¢ to $1, video poker $1 to $100 (five coins, so up to $500 a hand).
-Every pay is per coin, so every machine's return is the same at every coin value.
+Slots and video poker keep their coin values rather than table limits, with a high-limit room's coins
+added, so the top bet on every machine is $25,000 to $50,000:
+
+| Machine | Coin values | Top bet |
+|---|---|---|
+| Classic Sevens | 25¢, $1, $5, $25, $100, $1,000, $5,000, $10,000 | 3 coins: $30,000 |
+| 5x Wild | $1, $5, $25, $100, $1,000, $5,000, $10,000 | 3 coins: $30,000 |
+| Diamond Line | $1, $2, $5, $25, $100, $1,000, $5,000, $10,000 | 3 coins: $30,000 |
+| Neon Nights | 5¢, 25¢, $1, $5, $25, $100, $500 | 5 a line on 20 lines: $50,000 |
+| Lucky Cherries | 1¢, 5¢, 25¢, $1, $5, $25, $100, $500 | 5 a line on 10 lines: $25,000 |
+| Gold Rush | 1¢, 5¢, 10¢, 25¢, $1, $25, $100, $250 | 5 a line on 40 lines: $50,000 |
+| Video poker | $1, $5, $25, $100, $500, $1,000, $5,000 | 5 coins: $25,000 a hand |
+
+A machine takes a hundred of its top bets at most (never less than $500,000). Every pay is per coin,
+so every machine's return is the same at every coin value. The meters show dollars and cents, and
+whole dollars once an amount is too big for them. C (Shift+C back) or the left and right arrows step
+the coin value on the slots; D (Shift+D back) or the arrows on video poker.

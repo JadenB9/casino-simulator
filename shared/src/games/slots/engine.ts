@@ -48,14 +48,16 @@ function betRange(m: AnyMachine): { min: Cents; max: Cents; step: Cents } {
 
 function config(variant: string, mode: TableMode): TableConfig {
   const m = machineOf(variant);
+  const range = betRange(m);
   return {
     game: 'slots',
     variant: m.id,
     mode,
     maxSeats: 1,
-    // up to a thousand of its largest bets ($500 a spin at the high-limit coins)
-    buyIn: { min: 20 * DOLLAR, max: 500_000 * DOLLAR },
-    limits: { default: betRange(m) },
+    // a hundred of its largest bets at the high-limit coins ($3 million at $30,000 a spin), and
+    // never under the $500,000 the machines have always taken
+    buyIn: { min: 20 * DOLLAR, max: Math.max(500_000 * DOLLAR, 100 * range.max) },
+    limits: { default: range },
     options: { machine: m.id, denoms: [...m.denoms], maxCoins: m.maxCoins, lines: m.lines },
   };
 }

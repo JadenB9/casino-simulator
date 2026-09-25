@@ -53,8 +53,8 @@ export const SEVENS: StepperMachine<SevensSymbol, SevensCombo> = {
   kind: 'stepper',
   id: 'sevens',
   name: 'Classic Sevens',
-  // 25¢, $1, $5, and the high-limit $25 and $100
-  denoms: [25, 100, 500, 2500, 10_000],
+  // 25¢, $1, $5, $25 and $100, and the high-limit room's $1,000, $5,000 and $10,000 ($30,000 a spin)
+  denoms: [25, 100, 500, 2500, 10_000, 100_000, 500_000, 1_000_000],
   maxCoins: 3,
   lines: 1,
   virtualStops: 64,
@@ -102,8 +102,8 @@ export const WILD: StepperMachine<WildSymbol, WildCombo> = {
   kind: 'stepper',
   id: 'wild',
   name: '5x Wild',
-  // $1, $5, $25, and the high-limit $100
-  denoms: [100, 500, 2500, 10_000],
+  // $1, $5, $25 and $100, and the high-limit room's $1,000, $5,000 and $10,000 ($30,000 a spin)
+  denoms: [100, 500, 2500, 10_000, 100_000, 500_000, 1_000_000],
   maxCoins: 3,
   lines: 1,
   virtualStops: 72,
@@ -157,8 +157,8 @@ export const NEON: VideoMachine = {
   kind: 'video',
   id: 'neon',
   name: 'Neon Nights',
-  // 5¢, 25¢, $1, and the high-limit $5
-  denoms: [5, 25, 100, 500],
+  // 5¢, 25¢, $1 and $5, and the high-limit room's $25, $100 and $500 ($50,000 a spin: 5 a line on 20 lines)
+  denoms: [5, 25, 100, 500, 2500, 10_000, 50_000],
   maxCoins: 5,
   lines: 20,
   rows: 3,

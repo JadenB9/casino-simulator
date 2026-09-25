@@ -6,6 +6,7 @@
 import type * as THREE from 'three';
 import type { ReelLook } from './reels.ts';
 import { REGIONS, BUTTONS, type DeckButton, type Rect } from './glass.ts';
+import { segText } from './segments.ts';
 
 export type SkinId = 'diamonds' | 'cherries' | 'goldrush';
 export type ZY = [z: number, y: number];
@@ -242,14 +243,6 @@ export interface MeterValues {
 }
 
 const METER_DIGITS = { credit: 9, bet: 6, win: 9 };
-
-function segText(amountCents: number, digits: number): { text: string; ghost: string } {
-  const s = (Math.max(0, Math.round(amountCents)) / 100).toFixed(2);
-  const intDigits = digits - 2;
-  const [i, f] = s.split('.') as [string, string];
-  const int = i.length > intDigits ? i.slice(-intDigits) : i.padStart(intDigits, '!');
-  return { text: `${int}.${f}`, ghost: `${'8'.repeat(intDigits)}.88` };
-}
 
 export function paintSkinMeters(canvas: HTMLCanvasElement, theme: MeterTheme, v: MeterValues | null, scale = 1): void {
   const W = 1024, H = 136;

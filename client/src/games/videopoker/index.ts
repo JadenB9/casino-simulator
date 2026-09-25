@@ -12,7 +12,7 @@ import type { GameEvent } from '../../../../shared/src/engine.ts';
 import type { Card } from '../../../../shared/src/cards.ts';
 import { DENOMS, type VideoPokerView } from '../../../../shared/src/games/videopoker/engine.ts';
 import { MAX_COINS, JACKS_OR_BETTER, FULL_HOUSE, FOUR_OF_A_KIND, STRAIGHT_FLUSH, ROYAL_FLUSH } from '../../../../shared/src/games/videopoker/hands.ts';
-import { formatMoney, type Cents } from '../../../../shared/src/money.ts';
+import { formatCompact, formatMoney, type Cents } from '../../../../shared/src/money.ts';
 import { tween, wait, ease, finishAll } from '../../table/tween.ts';
 import { celebrate } from '../../table/celebrate.ts';
 import { el } from '../../ui/kit.ts';
@@ -129,7 +129,7 @@ export const videopoker: GameClientModule = {
         b.lens.emissiveIntensity = on ? LIT : DARK;
       }
       screen.setHoldable(dealt && !busy);
-      screen.setDenom(formatMoney(denom), !dealt && !busy);
+      screen.setDenom(formatCompact(denom), !dealt && !busy);
     };
 
     const press = (id: ButtonId) => {
@@ -194,9 +194,13 @@ export const videopoker: GameClientModule = {
       dealOrDraw();
     };
 
-    const nextDenom = () => {
+    /** The next coin value: D goes round (Shift+D back), the arrows left and right stop at the ends. */
+    const nextDenom = (dir: 1 | -1 = 1, wrap = true) => {
       if (phase === 'dealt' || busy || animating) return sounds.refuse();
-      denom = DENOMS[(DENOMS.indexOf(denom) + 1) % DENOMS.length]!;
+      const i = DENOMS.indexOf(denom) + dir;
+      const next = wrap ? (i + DENOMS.length) % DENOMS.length : Math.max(0, Math.min(DENOMS.length - 1, i));
+      if (DENOMS[next] === denom) return;
+      denom = DENOMS[next]!;
       sounds.bet(1);
       renderMeters();
       light();
@@ -426,9 +430,13 @@ export const videopoker: GameClientModule = {
           betOne(e.key === 'ArrowUp' ? 1 : -1);
           return true;
         }
+        if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+          nextDenom(e.key === 'ArrowRight' ? 1 : -1, false);
+          return true;
+        }
         const k = e.key.toLowerCase();
         if (k === 'b' || k === 'a') betMax();
-        else if (k === 'd') nextDenom();
+        else if (k === 'd') nextDenom(e.shiftKey ? -1 : 1);
         else if (k === 'h') {
           press('pays');
           screen.toggleHelp();
