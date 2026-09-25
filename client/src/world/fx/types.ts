@@ -22,8 +22,8 @@ export interface FxWorld {
   characters: Characters;
   /** Where the player with this floor id stands now (you, or someone drawn), or null. */
   where(id: number): THREE.Vector3 | null;
-  /** The characters drawn on the floor now (you and everyone else), each with its floor id if known. */
-  people(): Iterable<{ id: number | null; ch: FxPerson }>;
+  /** The characters drawn on the floor now: you and everyone else (never the staff). */
+  people(): Iterable<FxPerson>;
   /** The polished metals' reflections of the casino (High), for gold that looks like gold. */
   env(): THREE.Texture | null;
 }

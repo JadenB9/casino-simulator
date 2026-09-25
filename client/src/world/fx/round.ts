@@ -32,7 +32,7 @@ export function round(w: FxWorld, ev: FxEvent, late: boolean): Effect {
   let scan = 0;
 
   const give = (now: number) => {
-    for (const { ch } of w.people()) {
+    for (const ch of w.people()) {
       const g = given.get(ch);
       if (g) {
         if (ch.currentLook === g.drawn) continue;
@@ -58,7 +58,7 @@ export function round(w: FxWorld, ev: FxEvent, late: boolean): Effect {
   /** Everyone still drawn goes back to the look they had (whoever left took their glass with them). */
   const giveBack = () => {
     const live = new Set<FxPerson>();
-    for (const { ch } of w.people()) live.add(ch);
+    for (const ch of w.people()) live.add(ch);
     for (const [ch, g] of given) if (live.has(ch) && ch.currentLook === g.drawn) ch.setLook(g.was);
     given.clear();
   };

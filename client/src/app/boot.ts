@@ -294,6 +294,13 @@ class App {
     // Big wins are announced to people out on the floor, never to the winner at their table.
     this.lifeOff = this.life.connect(link, { onFloor: () => this.hud !== null && this.table === null && this.world.seated === null });
     link.on('emote', (id, e) => void this.world.showEmote(id === link.you?.id ? 'me' : id, e));
+    // v6 fx6: the shop's effects and the lobby's statues, for everyone on the floor (world/fx/)
+    this.world.useFx({ self: () => link.you?.id ?? null, marquee: this.life.marquee });
+    link.subscribe((m) => {
+      if (m.t === 'fx') this.world.playFx(m);
+      else if (m.t === 'fxs') this.world.syncFx(m.list);
+      else if (m.t === 'statues') void this.world.setStatues(m.list);
+    });
     link.on('hello', (you, first) => {
       // A tab that takes over from another one carries on where that one stood. Coming back from
       // away, the floor forgot us; the first position we send puts us back where we stand.

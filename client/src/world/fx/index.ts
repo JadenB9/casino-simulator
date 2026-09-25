@@ -115,9 +115,7 @@ export class FxPlayer {
       collider: o.collider,
       characters: o.characters,
       where,
-      people: function* people(this: void) {
-        for (const ch of o.characters.people()) yield { id: null, ch };
-      },
+      people: () => o.characters.people(),
       env: o.env,
     };
   }
