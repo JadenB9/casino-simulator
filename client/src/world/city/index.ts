@@ -115,6 +115,11 @@ export class City {
   private lightMix = 0;
   private lightSide: 'inside' | 'outside' = 'outside';
   private readonly hemiTo = { sky: new THREE.Color(), ground: new THREE.Color() };
+  /**
+   * The app's way off a table (cashing out through the table's session). A move from the server
+   * while you sit at one (the law's) stands you up with it, once you're placed.
+   */
+  leaveTable: (() => void) | null = null;
   /** Tests and the e2e script: what happened with the last ride. */
   lastRide: { to: ZoneId; ok: boolean; msg?: string } | null = null;
 
@@ -532,6 +537,8 @@ export class City {
     f.standUp();
     f.player.spawn(x, z, (r / 256) * Math.PI * 2);
     this.syncZone();
+    // (placed first, so the camera flies back from the table to behind you where you are now)
+    if (f.seated()) this.leaveTable?.();
   }
 
   private hearDoors(bank: Bank): void {

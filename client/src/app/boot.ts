@@ -420,6 +420,7 @@ class App {
     // by the waiters, and the staff's greetings by name.
     this.world.life.useLink(link);
     this.world.useFloor(link); // v6 city6: the elevator and the server's moves
+    this.world.city.leaveTable = () => void this.leaveTable(); // v6 city6: a move while at a table
     this.law.useLink(link); // v6 law6
     this.world.life.useBar(this.bar);
     this.invites = this.inviteHub(link); // v6 invite6
