@@ -60,7 +60,30 @@ function frame(b: LiftBank): THREE.Matrix4 {
   return new THREE.Matrix4().makeRotationY(yaw).setPosition(b.x / 100, 0, b.z / 100);
 }
 
-export class Bank {
+/** What the city asks of an elevator: a bank of cars, or the casino's entrance doors (entrance.ts). */
+export interface Lift {
+  readonly spec: LiftBank;
+  readonly group: THREE.Group;
+  readonly yaw: number;
+  readonly cars: CarBox[];
+  /** The cars' ceiling (m), for the follow camera. */
+  readonly ceiling: number;
+  held: number;
+  onDoor: ((car: number, opening: boolean) => void) | null;
+  carAt(x: number, z: number, margin?: number): number;
+  centre(i: number): { x: number; z: number };
+  doorway(i: number): { x: number; z: number };
+  nearest(x: number, z: number): { car: number; d: number };
+  call(i: number): void;
+  isOpen(i: number): boolean;
+  isShut(i: number): boolean;
+  shut(i: number): void;
+  update(dt: number, people: Iterable<{ x: number; z: number }>): void;
+  dispose(): void;
+}
+
+export class Bank implements Lift {
+  readonly ceiling = CAR_H;
   readonly group = new THREE.Group();
   readonly yaw: number;
   readonly cars: CarBox[] = [];

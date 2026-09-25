@@ -450,6 +450,6 @@ export function buildDecor(plan: FloorPlan, stations: WorldStation[], b: Batch, 
   buildThemes(plan, b, m, glow, out);
 
   // --- the entrance doors ----------------------------------------------------------------------
-  out.props.push({ kind: 'door', x: (plan.door.x0 + plan.door.x1) / 2, y: 0, z: plan.door.z + 0.05, ry: Math.PI, size: plan.door.height, room: 'lobby' });
+  // v6 city6: the street doors are the casino's elevator now: their leaves slide (city/entrance.ts)
   return out;
 }

@@ -7,6 +7,10 @@ import { CARS } from '../../../../shared/src/items.ts';
 import { CURB } from '../../../../shared/src/valet.ts';
 import { LOTS, type Rect } from '../../../../shared/src/zones.ts';
 import { LOT_PAINTS } from './specs.ts';
+import { carKit } from './models.ts';
+
+/** The longest car the lot parks (m): the city's stalls are 5.2 m deep. */
+export const MAX_PARKED = 5.15;
 
 /** A lot (cm) in metres. */
 export function metres(r: Rect): { x0: number; x1: number; z0: number; z1: number } {
@@ -54,7 +58,8 @@ export function stalls(): Stall[] {
 /** The cars parked in a set of stalls tonight: most full, a few gaps, the same every time. */
 export function parked(list: readonly Stall[] = stalls(), seed = 20260925, fill = 0.82): { stall: Stall; id: string; paint: string }[] {
   // what a guest would drive here, never the top of the range (and nothing longer than a stall)
-  const kinds = ['stallard-440', 'aurelian-saloon', 'ardent-overland', 'brenner-rally', 'raffica-v10', 'halden-roadster', 'strale-gt', 'solenne-cabriolet', 'ombra-hyper'];
+  // (short enough for a stall: in rows parked back to back, a longer car would reach into the next)
+  const kinds = ['stallard-440', 'brenner-rally', 'raffica-v10', 'halden-roadster', 'strale-gt', 'ombra-hyper'].filter((id) => carKit(id, true).length <= MAX_PARKED);
   let s = seed;
   const rnd = () => ((s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
   const out: { stall: Stall; id: string; paint: string }[] = [];

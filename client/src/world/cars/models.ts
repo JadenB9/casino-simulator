@@ -201,7 +201,7 @@ function buildBody(s: CarSpec, o: Outline, geos: Geos, lite: boolean): void {
   shape.absarc(s.rear, s.wheelR, ar, a0, Math.PI - a0, false);
   shape.lineTo(o.zR + 0.12, s.sill);
   shape.closePath();
-  const g = lite ? extrude(shape, s.half, 6, 1) : extrude(shape, s.half);
+  const g = lite ? extrude(shape, s.half, 10, 1) : extrude(shape, s.half);
   const p = g.getAttribute('position');
   for (let i = 0; i < p.count; i++) {
     const x = p.getX(i);
@@ -213,7 +213,7 @@ function buildBody(s: CarSpec, o: Outline, geos: Geos, lite: boolean): void {
   add(geos, 'paint', smooth(g), '#ffffff');
   // the wheel wells: dark, so the arches read as openings
   for (const az of [s.front, s.rear]) {
-    const well = new THREE.CylinderGeometry(ar - B - 0.02, ar - B - 0.02, 2 * s.half * taper(s, o, az) - 0.06, 20, 1, true, Math.PI / 2 - 1.2, 2.4).rotateZ(Math.PI / 2);
+    const well = new THREE.CylinderGeometry(ar - B - 0.08, ar - B - 0.08, 2 * s.half * taper(s, o, az) - 0.06, 20, 1, true, Math.PI / 2 - 1.2, 2.4).rotateZ(Math.PI / 2);
     well.translate(0, s.wheelR, az);
     // seen from under the arch: its inside faces out
     add(geos, 'trim', flipWinding(well.toNonIndexed()), '#0c0c0d');
@@ -258,7 +258,11 @@ function buildCabin(s: CarSpec, o: Outline, geos: Geos): { roofY: number; roofZ:
     return q;
   };
   if (roof.length) add(geos, 'paint', piece(roof), '#ffffff');
-  add(geos, 'glass', piece(glass), '#ffffff');
+  // the glass sits a centimetre inside the painted roof and pillars, so the two never share a plane
+  const g2 = piece(glass);
+  g2.scale(0.965, 1, 1);
+  g2.translate(0, -0.004, 0);
+  add(geos, 'glass', g2, '#ffffff');
   // the roof's extent, for the roof's extras
   const flatPts = pts.filter((q) => q[1] > top - 0.1);
   const zs = flatPts.map((q) => q[0]);
@@ -289,9 +293,9 @@ function buildCabin(s: CarSpec, o: Outline, geos: Geos): { roofY: number; roofZ:
   const roofF = flatPts.reduce((a, b) => (b[0] > a[0] ? b : a));
   const roofR = flatPts.reduce((a, b) => (b[0] < a[0] ? b : a));
   for (const side of [1, -1] as const) {
-    add(geos, framePart, sideBand(side, [rear[0] + 0.05, base + 0.035], [front[0] - 0.05, base + 0.035], 0.04, cabinX), frame);
     add(geos, framePart, sideBand(side, [front[0] - 0.02, front[1]], roofF, 0.07, cabinX), frame);
-    add(geos, framePart, sideBand(side, [rear[0] + 0.02, rear[1]], roofR, s.sail !== undefined ? 0.04 : 0.09, cabinX), frame);
+    // (a car with a painted pillar behind the last window has no band there)
+    if (s.sail === undefined) add(geos, framePart, sideBand(side, [rear[0] + 0.02, rear[1]], roofR, 0.09, cabinX), frame);
     add(geos, framePart, sideBand(side, roofR, roofF, 0.035, cabinX), frame);
   }
   return { roofY: top + B, roofZ: [Math.min(...zs), Math.max(...zs)] };
@@ -313,7 +317,7 @@ function sideBand(side: 1 | -1, a: [number, number], b: [number, number], w: num
   const at = (t: number, k: number): [number, number, number] => {
     const z = a[0] + dz * t + pz * k;
     const y = a[1] + dy * t + py * k;
-    return [side * (xAt(z, y) + 0.006), y, z];
+    return [side * (xAt(z, y) + 0.035), y, z];
   };
   for (let i = 0; i < n; i++) {
     const t0 = i / n;
@@ -342,7 +346,7 @@ function flipWinding(g: THREE.BufferGeometry): THREE.BufferGeometry {
 }
 
 /** A strip laid on the body's (or the roof's) top between z0 and z1, x from xa to xb, following its line. */
-function topStrip(heightAt: (z: number) => number, z0: number, z1: number, xa: (z: number) => number, xb: (z: number) => number, lift = 0.008): THREE.BufferGeometry {
+function topStrip(heightAt: (z: number) => number, z0: number, z1: number, xa: (z: number) => number, xb: (z: number) => number, lift = 0.014): THREE.BufferGeometry {
   const n = Math.max(2, Math.ceil((z1 - z0) / 0.12));
   const v: number[] = [];
   for (let i = 0; i < n; i++) {
@@ -366,7 +370,7 @@ function buildOpen(s: CarSpec, o: Outline, geos: Geos): void {
   // the cockpit: a dark opening in the top, the seats' backs standing out of it
   const [c0, c1] = op.cockpit;
   const inset = (z: number) => s.half * taper(s, o, z) * (1 - s.tumble) - 0.12;
-  add(geos, 'trim', topStrip((z) => o.yAt(z), c0, c1, (z) => -inset(z), (z) => inset(z), 0.004), shade(s.interior, 0.35));
+  add(geos, 'trim', topStrip((z) => o.yAt(z), c0, c1, (z) => -inset(z), (z) => inset(z), 0.012), shade(s.interior, 0.35));
   const rows = op.seats > 2 ? [c0 + 0.32, c0 + (c1 - c0) * 0.62] : [c0 + (c1 - c0) * 0.42];
   const lean = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -0.22);
   const y = o.yAt((c0 + c1) / 2) + B;
@@ -385,10 +389,8 @@ function buildOpen(s: CarSpec, o: Outline, geos: Geos): void {
   const tilt = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -op.rake);
   const cy = op.screenY + B + (op.screenH / 2) * Math.cos(op.rake);
   const cz = op.screenZ - (op.screenH / 2) * Math.sin(op.rake);
-  add(geos, 'glass', box(w, op.screenH, 0.02, 0, cy, cz, tilt), '#ffffff');
-  const up = new THREE.Vector3(0, op.screenH / 2, 0).applyQuaternion(tilt);
-  add(geos, 'metal', box(w + 0.04, 0.03, 0.035, 0, cy + up.y, cz + up.z, tilt), CHROME);
-  for (const sx of [1, -1]) add(geos, 'metal', box(0.03, op.screenH, 0.035, (sx * (w + 0.02)) / 2, cy, cz, tilt), CHROME);
+  add(geos, 'glass', box(w, op.screenH, 0.012, 0, cy, cz, tilt), '#ffffff');
+  for (const sx of [1, -1]) add(geos, 'metal', box(0.035, op.screenH + 0.08, 0.05, sx * (w / 2 + 0.03), cy, cz, tilt), CHROME);
 }
 
 /** A colour darkened (k < 1) or lightened. */
@@ -396,13 +398,21 @@ function shade(hex: string, k: number): string {
   return `#${tmpColor.set(hex).multiplyScalar(k).getHexString()}`;
 }
 
-/** A piece set on the nose or the tail at height y, facing the way the panel faces there. */
-function onFace(o: Outline, end: 'front' | 'rear', y: number, geo: THREE.BufferGeometry, x: number, out = 0): THREE.BufferGeometry {
+/**
+ * A piece set on the nose or the tail at height y, facing the way the panel faces there; `up`
+ * moves it along the panel from that point (so a grille's bars share the grille's own plane).
+ */
+function onFace(o: Outline, end: 'front' | 'rear', y: number, geo: THREE.BufferGeometry, x: number, out = 0, up = 0): THREE.BufferGeometry {
   const f = o.face(end, y);
+  if (up) geo.translate(0, up, 0);
   const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, f.ny, f.nz).normalize());
   geo.applyQuaternion(q);
-  const dz = f.nz * (B + out);
-  const dy = f.ny * (B + out);
+  // (pieces are deep enough that their backs sink well into the panel and their faces stand well
+  // proud of it: nothing lies within a centimetre of the paint, where far off the depth buffer
+  // can't tell them apart)
+  const lift = B + out;
+  const dz = f.nz * lift;
+  const dy = f.ny * lift;
   geo.translate(x, y + dy, f.z + dz);
   return geo;
 }
@@ -410,26 +420,27 @@ function onFace(o: Outline, end: 'front' | 'rear', y: number, geo: THREE.BufferG
 function buildLamps(s: CarSpec, o: Outline, geos: Geos): void {
   const fz = o.face('front', s.lampY).z;
   const rz = o.face('rear', s.tailY).z;
-  const hx = s.lampX * taper(s, o, fz);
+  // (kept in from the rounded corner, where the panel turns away under the lamp)
+  const hx = Math.min(s.lampX * taper(s, o, fz), s.half * taper(s, o, fz) - B - 0.14);
   const tx = s.lampX * taper(s, o, rz) * 1.05;
   for (const side of [1, -1]) {
     if (s.lamps === 'round' || s.lamps === 'quad') {
       const spots = s.lamps === 'quad' ? [hx + 0.1, hx - 0.1] : [hx];
       const r = s.lamps === 'quad' ? 0.07 : 0.095;
       for (const lx of spots) {
-        add(geos, 'lamp', onFace(o, 'front', s.lampY, lens(r, 0.04), side * lx, 0.004), HEAD);
-        add(geos, 'metal', onFace(o, 'front', s.lampY, new THREE.TorusGeometry(r + 0.008, 0.013, 4, 12), side * lx, 0.02), s.chrome ? CHROME : DARK);
+        add(geos, 'lamp', onFace(o, 'front', s.lampY, lens(r, 0.09), side * lx, 0.03), HEAD);
+        add(geos, 'metal', onFace(o, 'front', s.lampY, new THREE.TorusGeometry(r + 0.014, 0.013, 4, 12), side * lx, 0.085), s.chrome ? CHROME : DARK);
       }
     } else {
       const [w, h] = s.lamps === 'rect' ? [0.32, 0.12] : [0.4, 0.055];
-      add(geos, 'lamp', onFace(o, 'front', s.lampY, box(w, h, 0.03), side * hx, 0.002), HEAD);
+      add(geos, 'lamp', onFace(o, 'front', s.lampY, box(w, h, 0.05), side * hx, 0.004), HEAD);
     }
     // tail lamps: a bar on the modern ones, a round pair on the old
-    if (s.chrome && s.lamps === 'round') add(geos, 'lamp', onFace(o, 'rear', s.tailY, lens(0.07, 0.04), side * tx, 0.004), TAIL);
-    else add(geos, 'lamp', onFace(o, 'rear', s.tailY, box(s.lamps === 'slit' ? 0.5 : 0.36, s.lamps === 'slit' ? 0.05 : 0.11, 0.03), side * tx, 0.002), TAIL);
+    if (s.chrome && s.lamps === 'round') add(geos, 'lamp', onFace(o, 'rear', s.tailY, lens(0.07, 0.05), side * tx, 0.015), TAIL);
+    else add(geos, 'lamp', onFace(o, 'rear', s.tailY, box(s.lamps === 'slit' ? 0.5 : 0.36, s.lamps === 'slit' ? 0.05 : 0.11, 0.08), side * tx, 0.015), TAIL);
   }
   // a light bar right across the tail of the modern mid-engined cars
-  if (s.lamps === 'slit') add(geos, 'lamp', onFace(o, 'rear', s.tailY, box(2 * tx - 0.4, 0.02, 0.02), 0, 0.002), TAIL);
+  if (s.lamps === 'slit') add(geos, 'lamp', onFace(o, 'rear', s.tailY, box(2 * tx - 0.4, 0.02, 0.08), 0, 0.012), TAIL);
 }
 
 function buildNose(s: CarSpec, o: Outline, geos: Geos): void {
@@ -439,27 +450,29 @@ function buildNose(s: CarSpec, o: Outline, geos: Geos): void {
   const [w, h] =
     s.grille === 'upright' ? [0.46, 0.36]
     : s.grille === 'oval' ? [0.42, 0.18]
-    : s.grille === 'wide' ? [Math.max(0.5, 2 * inner - 0.34), 0.17]
+    : s.grille === 'wide' ? [Math.max(0.5, 2 * inner - 0.5), 0.17]
     : [2 * s.half * taper(s, o, gz) - 0.5, 0.13];
   const gyAt = s.grille === 'upright' ? gy + 0.02 : gy;
-  add(geos, 'trim', onFace(o, 'front', gyAt, box(w, h, 0.03), 0, 0.004), '#0e0f11');
+  add(geos, 'trim', onFace(o, 'front', gyAt, box(w, h, 0.05), 0, 0.006), '#0e0f11');
+  // (the chrome is set in the grille's own plane, above and below it and across it)
   if (s.chrome || s.grille === 'upright') {
-    add(geos, 'metal', onFace(o, 'front', gyAt + h / 2, box(w + 0.04, 0.025, 0.03), 0, 0.012), CHROME);
-    add(geos, 'metal', onFace(o, 'front', gyAt - h / 2, box(w + 0.04, 0.025, 0.03), 0, 0.012), CHROME);
-    if (s.grille === 'upright') for (let i = -3; i <= 3; i++) add(geos, 'metal', onFace(o, 'front', gyAt, box(0.012, h, 0.02), (i * w) / 8, 0.012), CHROME);
+    add(geos, 'metal', onFace(o, 'front', gyAt, box(w + 0.04, 0.025, 0.02), 0, 0.058, h / 2), CHROME);
+    add(geos, 'metal', onFace(o, 'front', gyAt, box(w + 0.04, 0.025, 0.02), 0, 0.058, -h / 2), CHROME);
+    if (s.grille === 'upright') for (let i = -3; i <= 3; i++) add(geos, 'metal', onFace(o, 'front', gyAt, box(0.012, h - 0.06, 0.02), (i * w) / 8, 0.045), CHROME);
   }
   // bumpers: chrome bars on the old cars; a dark lip and a diffuser on the new
   const by = s.sill + 0.1;
   const fw = 2 * s.half * taper(s, o, o.face('front', by).z) + 0.04;
   const rw = 2 * s.half * taper(s, o, o.face('rear', by).z) + 0.04;
   if (s.chrome) {
-    add(geos, 'metal', onFace(o, 'front', by, box(fw, 0.085, 0.1), 0, 0.03), CHROME);
-    add(geos, 'metal', onFace(o, 'rear', by, box(rw, 0.085, 0.1), 0, 0.03), CHROME);
+    add(geos, 'metal', onFace(o, 'front', by, box(fw, 0.085, 0.14), 0, 0.03), CHROME);
+    add(geos, 'metal', onFace(o, 'rear', by, box(rw, 0.085, 0.14), 0, 0.03), CHROME);
   } else {
-    add(geos, 'trim', onFace(o, 'rear', s.sill + 0.06, box(rw - 0.1, 0.1, 0.06), 0, 0.0), DARK);
+    // (on the tail's own panel, above where it turns under towards the sills)
+    add(geos, 'trim', onFace(o, 'rear', Math.max(s.sill + 0.06, o.pts[0]![1] + 0.06), box(rw - 0.1, 0.1, 0.06), 0, 0.0), DARK);
   }
   // the number plate, rear
-  add(geos, 'trim', onFace(o, 'rear', s.sill + 0.24, box(0.52, 0.12, 0.012), 0, 0.006), '#e7e3d6');
+  add(geos, 'trim', onFace(o, 'rear', s.sill + 0.24, box(0.52, 0.12, 0.04), 0, 0.006), '#e7e3d6');
 }
 
 function buildExtras(s: CarSpec, o: Outline, geos: Geos, roof: { roofY: number; roofZ: [number, number] } | null): void {
@@ -467,9 +480,8 @@ function buildExtras(s: CarSpec, o: Outline, geos: Geos, roof: { roofY: number; 
   const mz = s.cabin ? s.cabin.at(-1)![0] - 0.18 : s.open ? s.open.screenZ - 0.05 : 0;
   const my = o.yAt(mz) + B + 0.1;
   for (const side of [1, -1]) {
-    const x = side * (sideAt(s, o, my, mz) + 0.08);
+    const x = side * (sideAt(s, o, my, mz) + 0.14);
     add(geos, s.chrome ? 'metal' : 'paint', box(0.14, 0.08, 0.06, x, my, mz), s.chrome ? CHROME : '#ffffff');
-    add(geos, 'trim', box(0.1, 0.02, 0.03, x - side * 0.08, my - 0.02, mz + 0.01), DARK);
   }
   // a line along each side between the wheel arches, at the shoulder: chrome on the older cars, a
   // dark crease on the rest
@@ -493,7 +505,7 @@ function buildExtras(s: CarSpec, o: Outline, geos: Geos, roof: { roofY: number; 
     for (const off of [-0.13, 0.13]) {
       const [xa, xb] = lane(off);
       add(geos, 'accent', topStrip((z) => o.yAt(z), o.zR + 0.05, o.zF - 0.04, xa, xb), s.stripes);
-      if (s.cabin && roof) add(geos, 'accent', topStrip(() => roof.roofY - B, roof.roofZ[0] + 0.03, roof.roofZ[1] - 0.03, xa, xb, 0.006), s.stripes);
+      if (s.cabin && roof) add(geos, 'accent', topStrip(() => roof.roofY - B, roof.roofZ[0] + 0.03, roof.roofZ[1] - 0.03, xa, xb, 0.014), s.stripes);
     }
   }
   if (s.wing) {
@@ -509,9 +521,9 @@ function buildExtras(s: CarSpec, o: Outline, geos: Geos, roof: { roofY: number; 
     const z = roof.roofZ[1] - 0.12;
     add(geos, 'trim', box(1.1, 0.05, 0.08, 0, roof.roofY + 0.04, z), DARK);
     for (let i = 0; i < 4; i++) {
-      const g = lens(0.075, 0.07).translate(-0.45 + i * 0.3, roof.roofY + 0.12, z + 0.03);
+      const g = lens(0.07, 0.07, 12).translate(-0.45 + i * 0.3, roof.roofY + 0.12, z + 0.035);
       add(geos, 'lamp', g, HEAD);
-      add(geos, 'trim', new THREE.CylinderGeometry(0.085, 0.085, 0.08, 14).rotateX(Math.PI / 2).translate(-0.45 + i * 0.3, roof.roofY + 0.12, z - 0.02), DARK);
+      add(geos, 'trim', new THREE.CylinderGeometry(0.09, 0.09, 0.06, 10).rotateX(Math.PI / 2).translate(-0.45 + i * 0.3, roof.roofY + 0.12, z - 0.03), DARK);
     }
   }
   if (s.roofRails && roof && s.cabinHalf) {
@@ -545,9 +557,9 @@ function buildExtras(s: CarSpec, o: Outline, geos: Geos, roof: { roofY: number; 
   if (s.deck) {
     const [z0, z1] = s.deck;
     const inset = (z: number) => s.half * taper(s, o, z) * (1 - s.tumble) - 0.1;
-    add(geos, 'trim', topStrip((z) => o.yAt(z), z0, z1, (z) => -inset(z), (z) => inset(z), 0.004), '#7a4a26');
+    add(geos, 'trim', topStrip((z) => o.yAt(z), z0, z1, (z) => -inset(z), (z) => inset(z), 0.012), '#7a4a26');
     // the teak's seams
-    for (let i = -3; i <= 3; i++) add(geos, 'trim', topStrip((z) => o.yAt(z), z0 + 0.04, z1 - 0.04, () => i * 0.12 - 0.006, () => i * 0.12 + 0.006, 0.007), '#3a2412');
+    for (let i = -3; i <= 3; i++) add(geos, 'trim', topStrip((z) => o.yAt(z), z0 + 0.04, z1 - 0.04, () => i * 0.12 - 0.006, () => i * 0.12 + 0.006, 0.02), '#3a2412');
   }
   // door handles and a shut line hint: chrome dashes on the older cars
   if (s.chrome) {
@@ -565,8 +577,9 @@ function buildWheel(s: CarSpec, geos: Geos, lite: boolean): void {
   if (lite) {
     // a parked car's or a passing car's wheel: a plain tyre and a flat rim with a hub
     add(geos, 'trim', new THREE.CylinderGeometry(R, R, w, 12).rotateZ(Math.PI / 2), TYRE);
-    add(geos, 'metal', new THREE.CylinderGeometry(ri, ri, 0.02, 10).rotateZ(Math.PI / 2).translate(w / 2 + 0.002, 0, 0), s.gold ? '#e0b84a' : (s.rimColor ?? CHROME));
-    add(geos, 'trim', new THREE.CylinderGeometry(ri * 0.35, ri * 0.35, 0.02, 8).rotateZ(Math.PI / 2).translate(w / 2 + 0.006, 0, 0), '#1c1d20');
+    // the rim stands 1.5 cm proud of the tyre's wall and the hub 1.5 cm proud of the rim
+    add(geos, 'metal', new THREE.CylinderGeometry(ri, ri, 0.03, 10).rotateZ(Math.PI / 2).translate(w / 2 + 0.0, 0, 0), s.gold ? '#e0b84a' : (s.rimColor ?? CHROME));
+    add(geos, 'trim', new THREE.CylinderGeometry(ri * 0.35, ri * 0.35, 0.03, 8).rotateZ(Math.PI / 2).translate(w / 2 + 0.015, 0, 0), '#1c1d20');
     return;
   }
   const prof = [
@@ -578,7 +591,7 @@ function buildWheel(s: CarSpec, geos: Geos, lite: boolean): void {
   const disc = (r: number, d: number, at: number) => new THREE.CylinderGeometry(r, r, d, 14).rotateZ(Math.PI / 2).translate(at, 0, 0);
   const rim = s.gold ? '#e0b84a' : (s.rimColor ?? CHROME);
   if (s.whitewall) add(geos, 'trim', new THREE.RingGeometry(ri + 0.015, ri + 0.085, 24).rotateY(Math.PI / 2).translate(w / 2 + 0.002, 0, 0), '#f1eee6');
-  add(geos, 'metal', new THREE.TorusGeometry(ri, 0.022, 4, 16).rotateY(Math.PI / 2).translate(face, 0, 0), rim);
+  add(geos, 'metal', new THREE.TorusGeometry(ri - 0.012, 0.02, 4, 16).rotateY(Math.PI / 2).translate(face + 0.006, 0, 0), rim);
   const spokes = (n: number, width: number, color: string, part: Part, twist = 0) => {
     for (let i = 0; i < n; i++) {
       const a = (i / n) * Math.PI * 2;
@@ -670,7 +683,7 @@ export function carKit(id: string, lite = false): CarKit {
   buildExtras(s, o, body, roof);
   const wheel: Geos = new Map();
   buildWheel(s, wheel, lite);
-  const wx = s.half * Math.min(taper(s, o, s.front), taper(s, o, s.rear)) + B - s.wheelW / 2 + 0.03;
+  const wx = s.half * Math.min(taper(s, o, s.front), taper(s, o, s.rear)) + B - s.wheelW / 2 + 0.07;
   const kit: CarKit = {
     body: mergeAll(body),
     wheel: mergeAll(wheel),

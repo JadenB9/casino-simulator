@@ -272,30 +272,33 @@ export const ROOMS: RoomSpec[] = [
       // view as you come in, clear of the palms' fronds and of anyone's path
       { kind: 'directory', x: -3.6, z: -0.3, yaw: 0.72 },
       { kind: 'bench', x: -6.2, z: -3.3, yaw: Math.PI / 2 },
-      // two palms flank the way on from the fountain to the pit
+      { kind: 'bench', x: 6.2, z: -3.3, yaw: -Math.PI / 2 },
+      // two palms flank the way on to the pit
       { kind: 'palm', x: -3.0, z: -3.6, yaw: 0 },
       { kind: 'palm', x: 3.0, z: -3.6, yaw: 0 },
     ],
-    // the fountain in the middle of the marble, under the tray and its chandelier
-    fixtures: [{ kind: 'fountain', x: 0, z: 0 }],
+    fixtures: [],
     hanging: [],
-    spots: [{ x: 0, z: 2.6, tx: 0, tz: 0, k: 20, angle: 0.8 }],
-    // the runner from the doors to the fountain, and on from it to the pit; then kept clear: the lift
-    // bank on the south wall east of the doors and the way up to it (city6's, shared/src/lifts.ts)
+    spots: [],
+    // the runner from the doors to the compass rose (the floor in front of the doors, where players
+    // arrive, stays clear), and on from it to the pit
     aisles: [
       { x0: -2.2, z0: -5.85, x1: 2.2, z1: -1.7 },
       { x0: -2.2, z0: 1.7, x1: 2.2, z1: 5.85 },
     ],
-    keep: [{ x0: 1.9, z0: 2.5, x1: 6.5, z1: 5.85 }],
     // where the lobby's statues stand (the shop's, fx6): each plinth with a clear walk round it,
     // clear of the doors' approaches, the directory, the palms and the lift bank; best first, each
     // facing the lobby's middle three metres toward the doors
     statues: [
       [3.4, -1.4, -0.85],
       [-4.0, 3.6, 0.93],
-      [5.6, -2.6, -1.08],
+      [4.0, 3.6, -0.93],
     ],
-    plants: [[-6.4, 5.4]],
+    // (v6 city6: the south-east corner has its plant back, the freestanding lift bank gone)
+    plants: [
+      [-6.4, 5.4],
+      [6.4, 5.4],
+    ],
   },
 
   // --- the pit: table games in two rows round the staff area, under the coffered ceiling ------------
@@ -342,8 +345,10 @@ export const ROOMS: RoomSpec[] = [
       // the Big Six stands about 3 m tall against the west wall, facing the main aisle
       { kind: 'station', id: 'b6-1', game: 'bigsix', x: -11.55, z: 6.2, yaw: Math.PI / 2 },
     ],
-    furniture: [{ kind: 'banquette', x: 8.4, z: 6.3, yaw: 0 }],
-    fixtures: [{ kind: 'pit-podium' }],
+    // the round banquette under its palm west of the main aisle, the fountain in the open floor east
+    // of it, between the cross aisle and the lobby's wall, two metres and more clear all round
+    furniture: [{ kind: 'banquette', x: -6.3, z: 7.3, yaw: 0 }],
+    fixtures: [{ kind: 'pit-podium' }, { kind: 'fountain', x: 6.6, z: 7.0 }],
     hanging: [
       { id: 'table-games', x: 0, y: 3.5, z: -0.15, ry: 0, w: 4.6, h: 0.6, kind: 'lit', text: 'TABLE GAMES', color: '#ffe0a0' },
       // over the north aisle, either side of the salon's door (clear of the signs over the doors):

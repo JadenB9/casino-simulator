@@ -23,11 +23,11 @@ export function lotCars(stalls: readonly Stall[], mats: CarMaterials, opts: { se
   group.name = 'valet-lot';
   const batch = new MatBatch();
   parked(stalls, opts.seed, opts.fill).forEach((p, i) => {
-    // a little off the stall's middle, as people park
+    // a little off the stall's middle, as people park: sideways only (the next row is right behind)
     const jx = Math.sin(i * 12.9898) * 0.1;
-    const yaw = p.stall.yaw + Math.sin(i * 78.233) * 0.025;
-    const x = p.stall.x + jx;
-    const z = p.stall.z + jx * 0.5;
+    const yaw = p.stall.yaw + Math.sin(i * 78.233) * 0.02;
+    const x = p.stall.x + Math.cos(p.stall.yaw) * jx;
+    const z = p.stall.z - Math.sin(p.stall.yaw) * jx;
     batch.car({ id: p.id, paint: p.paint, matrix: new THREE.Matrix4().makeRotationY(yaw).setPosition(x, 0, z), lite: true });
     if (opts.collider) {
       const k = carKit(p.id);
