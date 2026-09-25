@@ -103,7 +103,7 @@ export const STAFF: readonly StaffSpec[] = [
     ],
   },
   {
-    // The front of house: the lobby (round the fountain), down into the pit and along its open south half.
+    // The front of house: the lobby, down into the pit and along its open south half (clear of its fountain).
     id: 'g1',
     kind: 'guard',
     name: 'security',
@@ -119,7 +119,7 @@ export const STAFF: readonly StaffSpec[] = [
       { x: 0, z: -2, wait: 4, face: N, sweep: 0.6 },
       { x: -10, z: -6.5, wait: 6, face: E, sweep: 0.7 },
       { x: 10, z: -6.5, wait: 6, face: W, sweep: 0.7 },
-      { x: 6.7, z: -2.9 },
+      { x: 2.6, z: -2.9 },
       { x: -1.8, z: 8 },
       { x: -2, z: 8.6 },
       { x: -1.8, z: 12.8 },

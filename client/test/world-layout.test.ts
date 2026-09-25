@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SPAWN, checkLayout, planFloor, roomAt, setVpMode, slotVariants, type FloorPlan, type Placement } from '../src/world/layout.ts';
+import { FOUNTAIN, SPAWN, checkLayout, planFloor, roomAt, setVpMode, slotVariants, type FloorPlan, type Placement } from '../src/world/layout.ts';
 import { DOORS, ROOMS } from '../src/world/rooms.ts';
 import { reachFrom, reached, walkGrid, type Grid } from '../src/world/reach.ts';
 import { GAMES } from '../src/games/index.ts';
@@ -140,6 +140,25 @@ describe('the building', () => {
     setVpMode(top, 'bartop');
     expect(top.bar.segments).toHaveLength(1);
     expect(checkLayout(top)).toEqual([]);
+  });
+
+  it("stands the fountain in the pit's open floor, two metres clear all round, off the main aisle", () => {
+    const p = plan();
+    expect(p.fountains).toHaveLength(1);
+    const f = p.fountains[0]!;
+    expect(f.room).toBe('pit');
+    const clear = FOUNTAIN.r + 2;
+    for (const s of p.solids) {
+      if (s.group.startsWith('fountain')) continue;
+      const r = s.round ? s.w / 2 : Math.hypot(s.w, s.d) / 2;
+      expect(Math.hypot(s.x - f.x, s.z - f.z) - r, s.id).toBeGreaterThan(clear);
+    }
+    for (const s of p.stations) expect(Math.hypot(s.x - f.x, s.z - f.z) - Math.hypot(s.fp.width, s.fp.depth) / 2, s.id).toBeGreaterThan(clear);
+    // not on the way in from the lobby, nor in the staff corridor between the rows
+    const lobbyDoor = p.doors.find((d) => d.id === 'lobby-pit')!;
+    // (the main aisle runs 2.1 m either side of the grand opening's middle: the basin keeps a metre off it)
+    expect(Math.abs(f.x - (lobbyDoor.a0 + lobbyDoor.a1) / 2) - FOUNTAIN.r).toBeGreaterThan(2.1 + 1);
+    expect(f.z - FOUNTAIN.r > p.staff.z1).toBe(true);
   });
 
   it('has no rope barriers: only real things are solid', () => {
