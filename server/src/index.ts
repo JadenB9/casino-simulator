@@ -127,7 +127,7 @@ async function handleApi(request: Request, env: Env, route: string, cors: Record
   }
 
   // v6 bot6: the Quick check (fair.ts); on the dev stack, POST /api/dev/check forces one
-  if (route === 'check' || route === 'dev/check') return fairApi(request, env, route, claims.a, cors, (id) => refreshTables(env, id));
+  if (route === 'check' || route === 'dev/check' || route === 'dev/check/answer') return fairApi(request, env, route, claims.a, cors, (id) => refreshTables(env, id));
 
   // Names and numbers only; the boards are kept for a minute (see leaderboard.ts).
   // v6 stats6: ?game=<id> for one game's boards; GET /stats for your own record

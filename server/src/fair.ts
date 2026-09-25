@@ -214,7 +214,8 @@ async function turnstileOk(env: FairEnv, token: string, idempotency: string, ip:
 
 /**
  * GET /api/check (where you stand; a challenge if one waits, ?kind=chip for the built-in one),
- * POST /api/check (an answer), and on the dev stack POST /api/dev/check {paused?} to force one.
+ * POST /api/check (an answer), and on the dev stack POST /api/dev/check {paused?} to force one
+ * and GET /api/dev/check/answer for where the newest picture's ring is (the e2e's hand).
  * `refresh` has the tables holding this account's chips read its state again (a pass, a force).
  */
 export async function fairApi(
@@ -231,6 +232,13 @@ export async function fairApi(
     await forceCheck(env.DB, accountId, now, body?.paused === true);
     await refresh(accountId);
     return json({ state: body?.paused === true ? 'paused' : 'due' }, 200, cors);
+  }
+  // The dev stack's e2e passes the picture the way a person would, told where the ring is.
+  if (route === 'dev/check/answer' && request.method === 'GET' && env.CASINO_DEV === '1') {
+    const row = await env.DB.prepare(`SELECT answer FROM casino_checks WHERE account_id = ?1 AND kind = 'chip' AND used = 0 AND expires_at > ?2 ORDER BY issued_at DESC LIMIT 1`)
+      .bind(accountId, now)
+      .first<{ answer: string }>();
+    return row ? json(JSON.parse(row.answer), 200, cors) : fail(404, 'NOT_FOUND', 'No picture out.', cors);
   }
   if (route !== 'check') return fail(404, 'NOT_FOUND', 'Not here.', cors);
   // Each challenge is a picture drawn and a row written; each answer a few reads and writes.
