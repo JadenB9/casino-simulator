@@ -177,6 +177,9 @@ export class CasinoFloor extends DurableObject<Env> {
     } else if (msg.t === 'stand') {
       this.presence.stand(ws);
       this.presence.touch(ws, Date.now());
+    } else if (msg.t === 'lift') {
+      // v6 contract: the city slice checks you're at an elevator and moves you (presence.teleport)
+      this.presence.touch(ws, Date.now());
     } else {
       this.presence.onMessage(ws, msg);
     }

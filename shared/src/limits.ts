@@ -110,6 +110,9 @@ export const LIMITS: Partial<Record<GameId, LimitSpec>> = {
   wheel: ONLINE(),
   cases: ONLINE(),
   diamonds: ONLINE(),
+  // v6 parlor6: a bingo card, a pachinko batch of 25 balls
+  bingo: ONLINE(),
+  pachinko: ONLINE(),
   // the test fixture, so the host's limits can be tested on the simplest engine
   highcard: ONLINE(),
 };
