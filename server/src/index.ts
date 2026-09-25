@@ -17,7 +17,10 @@ import { bumpRate, escrowsOf, getAccount, loadProfile, ownedOf, setLook } from '
 import { isFreeEmote, emoteItem } from '../../shared/src/items.ts';
 import { featsOf } from './feats.ts';
 import type { FeatsResponse } from '../../shared/src/feats.ts';
-import { takeLoan } from './transfer.ts';
+import { refillCounted, takeLoan } from './transfer.ts';
+// v6 bank6
+import { bankApi, settleSavings } from './bank.ts';
+import { priceNow } from './market.ts';
 import { shopApi } from './shop.ts';
 import { leaderboard } from './leaderboard.ts';
 import { statsOf } from './stats.ts'; // v6 stats6
@@ -26,6 +29,8 @@ import { dailyApi } from './daily.ts';
 import { celebsDevApi } from './floor/celebs.ts';
 import { ipKey } from './floor/directory.ts';
 import type { CasinoFloor } from './floor/index.ts';
+import { jailOf } from './law.ts'; // v6 law6
+import { isJailGame, jailLimits, jailTableName } from '../../shared/src/law/rules.ts'; // v6 law6
 import type { CasinoTable } from './table/host.ts';
 
 export { CasinoFloor } from './floor/index.ts';
@@ -154,18 +159,27 @@ async function handleApi(request: Request, env: Env, route: string, cors: Record
     if (!(await bumpRate(env.DB, 'casino-loan', `a${claims.a}`, 10, 60_000, now))) return fail(429, 'RATE_LIMITED', 'Give it a minute.', cors);
     const counted = await chipsOnTables(env, claims.a);
     if (!counted) return fail(409, 'BUSY', STILL_MOVING, cors);
-    const loan = await takeLoan(env.DB, { opId: `loan:${claims.a}:${crypto.randomUUID()}`, accountId: claims.a, chips: counted.chips, inPlay: counted.inPlay, now });
+    // v6 bank6: the bank counts too (transfer.ts IN_BANK): savings paid up to now, the fund at today's price
+    await settleSavings(env.DB, claims.a, now);
+    const { price: fundPrice } = await priceNow(env.DB, env.CASINO_TOKEN_SECRET, now);
+    const loan = await takeLoan(env.DB, { opId: `loan:${claims.a}:${crypto.randomUUID()}`, accountId: claims.a, chips: counted.chips, inPlay: counted.inPlay, now, fundPrice });
     const profile = await loadProfile(env.DB, claims.a, counted.stacks);
     if (!profile) return fail(401, 'UNAUTHORIZED', 'That account is gone.', cors);
     if (!loan.granted) {
       // A buy-in or cash-out landed between the count and the loan: the count is stale.
       if (profile.inPlay !== counted.inPlay) return fail(409, 'BUSY', STILL_MOVING, cors);
-      return fail(409, 'NOT_ELIGIBLE', notYet(profile.balance + counted.chips, counted.chips), cors, {
+      const inBank = await refillCounted(env.DB, claims.a, fundPrice, now);
+      return fail(409, 'NOT_ELIGIBLE', notYet(profile.balance + counted.chips + inBank, counted.chips, inBank), cors, {
         balance: profile.balance,
         inPlay: profile.inPlay,
       });
     }
     return json({ profile, loan: { amount: loan.amount!, at: now } } satisfies LoanResponse, 200, cors);
+  }
+
+  // v6 law6: an inmate plays only the jail's own tables (see handleSocket)
+  if ((route === 'tables' || route === 'tables/join') && request.method === 'POST' && (await jailOf(env.DB, claims.a))) {
+    return fail(403, 'NOT_ELIGIBLE', IN_JAIL, cors);
   }
 
   if (route === 'tables' && request.method === 'POST') {
@@ -214,13 +228,20 @@ async function handleApi(request: Request, env: Env, route: string, cors: Record
 
   // v6 celebs6: the daily bonus (daily.ts); on the dev stack only, a celebrity or a gift box on demand
   if (route === 'daily' || route === 'daily/claim') return dailyApi(request, env, route, claims.a, cors);
+  if (route === 'dev/bank/clock') return bankApi(request, env, route, { id: claims.a, name: claims.n }, cors); // v6 bank6
   if (route.startsWith('dev/') && env.CASINO_DEV === '1') return celebsDevApi(request, env, route, cors, floor(env));
+
+  // v6 bank6: savings, deposits, the Casino Index, transfers and the statement (bank.ts)
+  if (route === 'bank' || route.startsWith('bank/')) return bankApi(request, env, route, { id: claims.a, name: claims.n }, cors);
 
   // The boutique and the bar (shop.ts): paid from the balance, never from chips on tables.
   if (route === 'shop' || route.startsWith('shop/') || route.startsWith('bar/')) return shopApi(request, env, route, claims.a, cors);
 
   return fail(404, 'NOT_FOUND', 'Not here.', cors);
 }
+
+// v6 law6
+const IN_JAIL = "You're in jail. Make bail at the jail's tables first.";
 
 const STILL_MOVING = 'Chips are still moving at one of your tables. Try again in a moment.';
 
@@ -316,8 +337,13 @@ async function handleSocket(request: Request, env: Env, url: URL, route: string,
     return floorStub(env).fetch(forward(request, headers));
   }
 
+  // v6 law6: an inmate's only tables are the jail's: no lobby, no other game, and the jail's own
+  // table (its name and limits set here) for the games it has
+  const jail = route === 'floor' ? null : await jailOf(env.DB, ticket.a);
+
   const lobby = route.match(/^table\/([a-z0-9-]+)$/);
   if (lobby) {
+    if (jail) return closeWith(CLOSE.FORBIDDEN, 'in jail');
     const id = lobby[1]!;
     if (!TABLE_ID_RE.test(id)) return closeWith(CLOSE.NOT_FOUND, 'no such table');
     headers.set('x-casino-table', id);
@@ -331,14 +357,15 @@ async function handleSocket(request: Request, env: Env, url: URL, route: string,
   if (solo) {
     const game = solo[1];
     if (!isGameId(game)) return closeWith(CLOSE.NOT_FOUND, 'no such game');
+    if (jail && !isJailGame(game)) return closeWith(CLOSE.FORBIDDEN, 'in jail');
     const variant = variantOf(game, url.searchParams.get('variant'));
     // The name comes from the ticket's account, so nobody can open another player's solo table.
-    const name = soloTableName(game, variant, ticket.a);
+    const name = jail ? jailTableName(game, ticket.a) : soloTableName(game, variant, ticket.a);
     headers.set('x-casino-table', name);
     headers.set('x-casino-solo', `${game}|${variant}`);
     // This sitting's limits, moved to the nearest the game allows (none for the machines).
     const asked = parseLimitsParam(url.searchParams.get('limits'));
-    const limits = asked ? clampLimits(game, asked) : null;
+    const limits = jail ? jailLimits(game, jail.bail) : asked ? clampLimits(game, asked) : null;
     if (limits) headers.set('x-casino-limits', limitsParam(limits));
     return tableStub(env, name).fetch(forward(request, headers));
   }

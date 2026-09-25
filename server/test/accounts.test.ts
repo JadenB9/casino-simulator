@@ -140,7 +140,9 @@ describe('profile', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('Cache-Control')).toBe('no-store');
     const p = (await res.json<any>()).profile;
-    expect(Object.keys(p).sort()).toEqual(['balance', 'createdAt', 'feats', 'id', 'inPlay', 'loans', 'loansTaken', 'look', 'name', 'owned', 'rev', 'stats', 'tables']);
+    expect(Object.keys(p).sort()).toEqual(['balance', 'bank', 'createdAt', 'feats', 'id', 'inPlay', 'loans', 'loansTaken', 'look', 'name', 'owned', 'rev', 'stats', 'tables']);
+    // v6 bank6: nothing in the bank yet, so net worth is the balance
+    expect(p.bank).toEqual({ savings: 0, deposits: 0, fundCost: 0, fundValue: 0, gain: 0, worth: STARTING_BALANCE });
     expect(p.id).toBe(profile.id);
     expect(p.stats).toEqual({ total: { rounds: 0, wagered: 0, net: 0, biggestWin: 0 }, games: {} });
   });

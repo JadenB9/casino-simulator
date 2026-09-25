@@ -32,9 +32,14 @@ import { RideSound, rideKey } from '../world/rides.ts';
 import { mountFeats, type FeatsUi } from '../ui/feats/index.ts'; // v6 feats6
 import { ENGINES } from '../../../shared/src/games/index.ts';
 import { mountDaily, dailyApi, type DailyHandle } from '../ui/daily/index.ts'; // v6 celebs6
+// v6 bank6: the bank's calls and its transfer notices
+import * as bankApi from '../ui/bank/api.ts';
+import { bankNotices } from '../ui/bank/notices.ts';
 import { CLOSE, type Profile } from '../../../shared/src/protocol.ts';
 // v6 dine6: drinking and eating what the bar brings
 import { Diner } from '../world/consumables/diner.ts';
+import { mountLaw, type Law } from '../world/law/index.ts'; // v6 law6
+import type { Person } from '../world/characters.ts'; // v6 law6
 
 export async function boot(): Promise<void> {
   const ui = document.getElementById('ui')!;
@@ -109,6 +114,8 @@ class App {
   private comingBack = false;
   /** Walking when we went away (or at a table, which puts us back on the floor): walking again after. */
   private awayWalking = false;
+  /** v6 bank6: money from other players, told on the floor, while the floor is connected. */
+  private bankOff: (() => void) | null = null;
   /** v6 invite6: invites to lobby tables (ui/lobby/invites.ts), while the floor is connected. */
   private invites: InviteHub | null = null;
   /** v6 celebs6: the daily bonus's HUD button and sheet, while the HUD is up. */
@@ -117,6 +124,8 @@ class App {
   private readonly seatCache = new Map<string, SeatPose | null>();
   /** v6 dine6: you, drinking and eating what the bar brings (world/consumables/). */
   readonly diner: Diner;
+  /** v6 law6: security, the pit boss, punches and the jail (world/law/). */
+  private readonly law: Law;
   /** v6 feats6: the achievements (HUD cup, J, the sheet, the card when you earn one). */
   private feats: FeatsUi | null = null;
 
@@ -156,6 +165,17 @@ class App {
       true,
     );
     this.life = mountFloorLife({ engine, world, sfx, ui });
+    // v6 law6:
+    this.law = mountLaw({
+      engine,
+      world,
+      ui,
+      sfx,
+      character: (id) => this.remotes?.character(id) as Person | undefined,
+      canPunch: () => this.hud !== null && this.table === null && world.seated === null,
+      leaveTable: () => void this.leaveTable(),
+      openBank: () => this.openCashier(),
+    });
     // v6 looks6: B steps off your ride and back on (a look save, so everyone sees it)
     rideKey({
       profile: () => session.profile,
@@ -372,6 +392,7 @@ class App {
     // by the waiters, and the staff's greetings by name.
     this.world.life.useLink(link);
     this.world.useFloor(link); // v6 city6: the elevator and the server's moves
+    this.law.useLink(link); // v6 law6
     this.world.life.useBar(this.bar);
     this.invites = this.inviteHub(link); // v6 invite6
     this.world.life.useApp({
@@ -383,6 +404,8 @@ class App {
     });
     // v6 celebs6: a celebrity's tip and a gift box land in the balance; their notices show while you walk the floor
     this.world.life.celebs.useApp({ money: (m) => session.balance(m.balance, m.inPlay, m.rev), sfx: this.sfx, onFloor: () => this.hud !== null && this.table === null && this.world.seated === null && overlayCount() === 0, snapper: this.engine });
+    // v6 bank6: money from other players, told on the floor (ui/bank/notices.ts)
+    this.bankOff = bankNotices({ link, inbox: () => bankApi.bank().then((s) => s.inbox), me: api.me, setProfile: (p) => session.set(p), say: (t) => toast(t, 'info', 6000), sfx: this.sfx });
   }
 
   /**
@@ -392,10 +415,13 @@ class App {
   private disconnectFloor(keepBar = false): void {
     this.idle.stop();
     this.world.life.celebs.useApp(null); // v6 celebs6
+    this.bankOff?.(); // v6 bank6
+    this.bankOff = null;
     this.world.life.useApp(null);
     this.world.life.useBar(null);
     this.world.life.useLink(null);
     this.world.useFloor(null); // v6 city6
+    this.law.useLink(null); // v6 law6
     this.world.useBar(null);
     if (!keepBar) {
       this.bar?.dispose();
@@ -570,8 +596,14 @@ class App {
   // --- tables ---------------------------------------------------------------------------------
 
   private async sitDown(station: WorldStation): Promise<void> {
+    // v6 law6: the jail's tables go straight to a solo table, and only for inmates
+    const jailed = this.law.tableChoice(station);
+    if (jailed === 'refuse') {
+      await this.world.exitTable();
+      return;
+    }
     // v6 invite6: an invite being joined sits straight down at its table
-    const choice = this.invites?.claim(station) ?? await openTableFlow({
+    const choice = jailed ?? this.invites?.claim(station) ?? await openTableFlow({
       game: station.game,
       variant: station.variant,
       floor: this.link,

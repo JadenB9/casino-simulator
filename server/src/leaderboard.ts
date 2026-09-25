@@ -63,11 +63,11 @@ const TALLY = 'casino_tally INDEXED BY idx_casino_tally_key_n';
 
 /**
  * Net worth, spelled exactly as its expression index is (SQLite only uses the index for the same
- * expression). When the bank's column lands (bank6's migration 0007: casino_accounts.banked and
- * idx_casino_accounts_networth), these two become 'balance + in_play + banked' and that index.
+ * expression): the balance, chips on tables and the bank (bank6's migration 0007: banked is
+ * savings, open deposits and the Casino Index at cost).
  */
-const WORTH = 'balance + in_play';
-const WORTH_INDEX = 'idx_casino_accounts_worth';
+const WORTH = 'balance + in_play + banked';
+const WORTH_INDEX = 'idx_casino_accounts_networth';
 /** The same, on a named row ("me.balance + me.in_play"). */
 const worthOf = (row: string) => WORTH.split(' + ').map((col) => `${row}.${col}`).join(' + ');
 
