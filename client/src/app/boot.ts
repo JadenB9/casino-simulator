@@ -29,6 +29,8 @@ import { showAway, showIdleWarning, type AwayHandle, type WarningHandle } from '
 import { IdleWatch } from './idle.ts';
 import { ENGINES } from '../../../shared/src/games/index.ts';
 import { CLOSE, type Profile } from '../../../shared/src/protocol.ts';
+import { mountLaw, type Law } from '../world/law/index.ts'; // v6 law6
+import type { Person } from '../world/characters.ts'; // v6 law6
 
 export async function boot(): Promise<void> {
   const ui = document.getElementById('ui')!;
@@ -105,6 +107,8 @@ class App {
   private awayWalking = false;
   /** Where each station's n-th seated player is drawn; stations never move. */
   private readonly seatCache = new Map<string, SeatPose | null>();
+  /** v6 law6: security, the pit boss, punches and the jail (world/law/). */
+  private readonly law: Law;
 
   constructor(
     private readonly engine: Engine3D,
@@ -142,6 +146,17 @@ class App {
       true,
     );
     this.life = mountFloorLife({ engine, world, sfx, ui });
+    // v6 law6:
+    this.law = mountLaw({
+      engine,
+      world,
+      ui,
+      sfx,
+      character: (id) => this.remotes?.character(id) as Person | undefined,
+      canPunch: () => this.hud !== null && this.table === null && world.seated === null,
+      leaveTable: () => void this.leaveTable(),
+      openBank: () => this.openCashier(),
+    });
     this.idle = new IdleWatch({
       showWarning: (at) => {
         this.idleWarning?.close();
@@ -317,6 +332,7 @@ class App {
     // The floor's life: seats arbitrated on this socket, orders made by the bartender and brought
     // by the waiters, and the staff's greetings by name.
     this.world.life.useLink(link);
+    this.law.useLink(link); // v6 law6
     this.world.life.useBar(this.bar);
     this.world.life.useApp({
       name: () => session.profile?.name ?? null,
@@ -336,6 +352,7 @@ class App {
     this.world.life.useApp(null);
     this.world.life.useBar(null);
     this.world.life.useLink(null);
+    this.law.useLink(null); // v6 law6
     this.world.useBar(null);
     if (!keepBar) {
       this.bar?.dispose();
@@ -494,7 +511,13 @@ class App {
   // --- tables ---------------------------------------------------------------------------------
 
   private async sitDown(station: WorldStation): Promise<void> {
-    const choice = await openTableFlow({
+    // v6 law6: the jail's tables go straight to a solo table, and only for inmates
+    const jailed = this.law.tableChoice(station);
+    if (jailed === 'refuse') {
+      await this.world.exitTable();
+      return;
+    }
+    const choice = jailed ?? await openTableFlow({
       game: station.game,
       variant: station.variant,
       floor: this.link,
