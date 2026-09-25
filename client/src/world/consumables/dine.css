@@ -26,7 +26,7 @@
 .dine-chip-fed { --dot: #93c46a; }
 
 /* a few drinks: the view's edges go warm and soft */
-.dine-vignette { position: fixed; inset: 0; z-index: 1; pointer-events: none; opacity: 0; background: radial-gradient(ellipse 72% 68% at 50% 48%, rgba(80, 30, 5, 0) 58%, rgba(96, 38, 8, 0.32) 82%, rgba(46, 16, 4, 0.62) 100%); transition: opacity 0.8s linear; }
+.dine-vignette { position: fixed; inset: 0; z-index: 1; pointer-events: none; opacity: 0; background: radial-gradient(ellipse 70% 66% at 50% 48%, rgba(80, 30, 5, 0) 52%, rgba(104, 42, 8, 0.36) 78%, rgba(52, 18, 4, 0.72) 100%); transition: opacity 0.8s linear; }
 
 @keyframes dine-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
 

@@ -14,7 +14,7 @@ import { mkdirSync } from 'node:fs';
 const args = process.argv.slice(2).filter((a) => !a.startsWith('--'));
 const flag = (n) => process.argv.includes(`--${n}`);
 const [port = '6270', out = '/tmp/dine6-shots', ...wanted] = args;
-const checks = wanted.length ? wanted : ['menu', 'drinks', 'food'];
+const checks = wanted.length ? wanted : ['menu', 'drinks', 'food', 'phone'];
 mkdirSync(out, { recursive: true });
 
 const browser = await chromium.launch(flag('sw') ? { args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] } : { channel: 'chromium', args: ['--ignore-gpu-blocklist'] });
@@ -32,8 +32,8 @@ async function shot(p, name) {
   console.log('shot', `${out}/${name}.png`);
 }
 
-async function enterAs(name) {
-  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
+async function enterAs(name, phone = false) {
+  const ctx = await browser.newContext(phone ? { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true } : { viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
   const p = await ctx.newPage();
   const errors = [];
   p.on('console', (m) => m.type() === 'error' && !m.location()?.url?.endsWith('/favicon.ico') && !/status of 404/.test(m.text()) && errors.push(m.text()));
@@ -279,6 +279,32 @@ if (checks.includes('drinks')) {
   await free(a.p);
   await a.p.evaluate(() => window.casino.world.player.setEnabled(true));
 
+  // a few drinks in: the view sways and warms at the edges, the body leans; the switch turns the view's part off
+  await a.p.evaluate(() => {
+    const fx = window.casino.app.diner.effects;
+    for (let i = 0; i < 16; i++) fx.portion('whiskey', Date.now(), false);
+  });
+  await tp(a, A_AT);
+  await a.p.waitForTimeout(1500);
+  const warm = await a.p.evaluate(() => Number(getComputedStyle(document.querySelector('.dine-vignette')).opacity));
+  check(warm > 0.3, `tipsy warms the view's edges (${warm})`);
+  const roll1 = await a.p.evaluate(() => window.casino.engine.camera.rotation.z);
+  await a.p.waitForTimeout(900);
+  const roll2 = await a.p.evaluate(() => window.casino.engine.camera.rotation.z);
+  check(Math.abs(roll1 - roll2) > 1e-4, `and sways it (${roll1.toFixed(4)} -> ${roll2.toFixed(4)})`);
+  await shot(a.p, 'tipsy-view');
+  await a.p.evaluate(() => window.casino.app.openBarMenu());
+  await a.p.waitForSelector('.dine-switch');
+  if ((await a.p.getAttribute('.dine-switch', 'aria-pressed')) === 'true') await a.p.click('.dine-switch');
+  await a.p.keyboard.press('Escape');
+  await a.p.waitForTimeout(1200);
+  const cool = await a.p.evaluate(() => Number(getComputedStyle(document.querySelector('.dine-vignette')).opacity));
+  check(cool < 0.05, `the switch takes the sway off the view (${cool})`);
+  await a.p.evaluate(() => window.casino.app.openBarMenu());
+  await a.p.waitForSelector('.dine-switch');
+  await a.p.click('.dine-switch');
+  await a.p.keyboard.press('Escape');
+
   for (const [who, r] of [['a', a], ['b', b]]) if (r.errors.length) fail(`${who} errors: ${r.errors.slice(0, 5).join(' | ')}`);
   await a.ctx.close();
   await b.ctx.close();
@@ -343,6 +369,21 @@ if (checks.includes('food')) {
   const chips = await a.p.$$eval('.dine-chip', (els) => els.map((e) => e.textContent));
   check(chips.some((c) => c.startsWith('Well fed')), `a well fed chip (${chips.join(', ')})`);
   if (a.errors.length) fail(`food errors: ${a.errors.slice(0, 5).join(' | ')}`);
+  await a.ctx.close();
+}
+
+// --- a phone: the card's button takes the sip ---------------------------------------------------
+
+if (checks.includes('phone')) {
+  const a = await enterAs('dine6_e2e_a', true);
+  await order(a.p, 'Margarita');
+  await a.p.waitForTimeout(500);
+  await a.p.tap('.dine-act');
+  await a.p.waitForTimeout(800);
+  const s = await a.p.evaluate(() => window.casino.app.diner.current.state);
+  check(s.act?.kind === 'sip', `a tap on the card takes a sip (${s.act?.kind})`);
+  await shot(a.p, 'phone-sip');
+  if (a.errors.length) fail(`phone errors: ${a.errors.slice(0, 5).join(' | ')}`);
   await a.ctx.close();
 }
 
