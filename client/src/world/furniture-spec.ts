@@ -123,8 +123,8 @@ export const SEATING: Partial<Record<GameId, { kind: ChairKind; top: number; hig
   sicbo: { kind: 'stool', top: 0.6 },
   bigsix: { kind: 'stool', top: 0.68 },
   slots: { kind: 'stool', top: 0.6 },
-  letitride: { kind: 'chair', top: 0.58 },
-  paigow: { kind: 'chair', top: 0.58 },
+  letitride: { kind: 'chair', top: 0.56 },
+  paigow: { kind: 'chair', top: 0.56 },
   // the long tables stand 0.74 m; the machine's trays about 0.95
   bingo: { kind: 'folding', top: 0.48 },
   pachinko: { kind: 'parlour-stool', top: 0.6 },
