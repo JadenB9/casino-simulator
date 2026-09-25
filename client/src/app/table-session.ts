@@ -95,9 +95,15 @@ export class TableSession {
     });
     // the board is fitted after the view has moved things for the frame
     stage.fit.watch(ui);
+    let tipWait = 0;
     this.offFrame = onFrame((dt) => {
       this.view?.update(dt);
       stage.fit.update(dt);
+      // v6.1 casino61: the Tip panel follows the tray, a few times a second
+      if ((tipWait -= dt) <= 0 && this.tipCtl) {
+        tipWait = 0.2;
+        this.tipCtl.place();
+      }
     });
   }
 
