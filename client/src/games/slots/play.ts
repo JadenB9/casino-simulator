@@ -29,6 +29,8 @@ import { EMPTY_OVERLAY, lineColorOf, paintLineOverlay, paintSkinMeters, type Met
 import { DIAMOND_COLUMNS } from './diamonds.ts';
 import { REGIONS } from './glass.ts';
 import { MachineSound } from './sound.ts';
+import { mountAutoDeck } from './autodeck.ts';
+import type { SpinOutcome } from './auto.ts';
 import { openPaysheet } from './paysheet.ts';
 import { slotsTip, timesBet, winTier } from './moments.ts';
 import './slots2.css';
@@ -185,9 +187,20 @@ export function mountSkinned(ctx: TableViewCtx): TableView {
   const upBtn = button('+', () => setCoins(coins + 1), { key: '↑', title: stepper ? 'One coin more' : 'More credits per line' });
   const maxBtn = button('Max bet', () => setCoins(m.maxCoins), { key: 'A' });
   const insertBtn = button('Insert', () => void insert(), { cls: 'ghost', title: 'Add money to this machine' });
-  const spinBtn = button('Spin', () => spin(), { cls: 'primary', key: 'Space' });
+  // Spin (tap for one, hold to keep going) and Auto: each next spin only once the last has settled
+  const auto = mountAutoDeck({
+    spin: () => spin(),
+    deck,
+    canvas: ctx.stage.engine.renderer.domElement,
+    ui: ctx.ui,
+    bet: betOf,
+    seated: () => status === 'seated',
+    say: (text) => ctx.kit.say(text),
+    changed: () => refreshButtons(),
+  });
+  const spinBtn = auto.spinBtn;
   const sep = () => el('div', 'sep');
-  deck.append(insertBtn, paysBtn, sep(), coinBtn, downBtn, betLabel, upBtn, maxBtn, sep(), spinBtn);
+  deck.append(insertBtn, paysBtn, sep(), coinBtn, downBtn, betLabel, upBtn, maxBtn, sep(), auto.autoBtn, spinBtn);
   ctx.ui.append(deck);
 
   const banner = el('div', `slots-banner feature skin-${id}`);
@@ -273,13 +286,15 @@ export function mountSkinned(ctx: TableViewCtx): TableView {
   const refreshButtons = () => {
     const idle = !busy && !pressed;
     const seated = status === 'seated';
-    spinBtn.disabled = !idle || !seated || stack < betOf();
+    // held down, the button stays live between spins so letting go is always heard
+    spinBtn.disabled = !auto.driver.holding && (!idle || !seated || stack < betOf());
     downBtn.disabled = !idle || coins <= 1;
     upBtn.disabled = !idle || coins >= m.maxCoins;
     maxBtn.disabled = !idle || coins >= m.maxCoins;
     coinBtn.disabled = !idle;
     insertBtn.disabled = busy;
     insertBtn.classList.toggle('attn', seated && idle && stack < m.lines * m.denoms[0]!);
+    auto.refresh();
   };
 
   const setCoins = (n: number) => {
@@ -296,20 +311,23 @@ export function mountSkinned(ctx: TableViewCtx): TableView {
     refreshBet();
   };
 
-  const spin = () => {
-    if (busy || pressed || disposed) return;
+  /** One spin at the deck's bet: true when it went, false while one is playing, else why not. */
+  const spin = (): boolean | string => {
+    if (busy || pressed || disposed) return false;
     if (status !== 'seated') {
       void insert();
-      return;
+      return 'Insert money to play';
     }
     if (stack < betOf()) {
-      ctx.kit.say(stack < m.lines * m.denoms[0]! ? 'Insert money to play' : 'Lower the bet or insert more money');
-      return;
+      const why = stack < m.lines * m.denoms[0]! ? 'Insert money to play' : 'Lower the bet or insert more money';
+      ctx.kit.say(why);
+      return why;
     }
     pressed = true;
     refreshButtons();
     sound.press();
     ctx.link.act({ type: 'spin', coins, denom: m.denoms[denomIdx]! });
+    return true;
   };
 
   /** What the machine takes (its config arrives with the table). */
@@ -338,14 +356,14 @@ export function mountSkinned(ctx: TableViewCtx): TableView {
 
   // --- 3D deck buttons
   const onPointer = (e: PointerEvent) => {
-    if (e.target !== ctx.stage.engine.renderer.domElement) return;
+    if (e.target !== ctx.stage.engine.renderer.domElement || auto.ate(e)) return;
     if (skip) {
       skip();
       return;
     }
     const hit = ctx.stage.pickObjects(e, [handle.printed]);
     const b = buttonAtUv(hit?.uv);
-    if (b === 'spin') spin();
+    if (b === 'spin') auto.press(e);
     else if (b === 'maxBet') setCoins(m.maxCoins);
     else if (b === 'betOne') setCoins(coins >= m.maxCoins ? 1 : coins + 1);
     else if (b === 'pays') togglePays();
@@ -647,7 +665,11 @@ export function mountSkinned(ctx: TableViewCtx): TableView {
       showResult(`Paid ${formatMoney(total)} · ${formatMoney(total - bet, { sign: true })}`, 'win');
     }
     lastWin = total > 0 ? total : null;
+    outcome = { bet, win: total, credit: res.credit, feature: res.freeSpins > 0 || !!lastReels?.wheel, handPay: total >= HAND_PAY || top };
   };
+
+  /** What the spin just shown came to, for Auto's stops. */
+  let outcome: SpinOutcome | null = null;
 
   const settle = (v: SlotsView) => {
     useStrips(0);
@@ -667,6 +689,8 @@ export function mountSkinned(ctx: TableViewCtx): TableView {
   return {
     onTable(snap) {
       const v = snap.view as SlotsView;
+      // a fresh picture of the machine (joining, or back after a drop): Auto doesn't carry on through it
+      auto.driver.reset();
       buyIn = snap.meta.config.buyIn;
       stack = snap.you.stack;
       status = snap.you.status;
@@ -687,6 +711,7 @@ export function mountSkinned(ctx: TableViewCtx): TableView {
 
     async onEvents(events, view) {
       const v = view as SlotsView;
+      outcome = null;
       for (const e of events as SlotsEvent[]) {
         if (disposed) return;
         if (e.type === 'spin') beginSpin(e);
@@ -700,6 +725,7 @@ export function mountSkinned(ctx: TableViewCtx): TableView {
       }
       if (disposed) return;
       settle(v);
+      auto.driver.settled(outcome);
     },
 
     onSeat(msg) {
@@ -710,15 +736,21 @@ export function mountSkinned(ctx: TableViewCtx): TableView {
       refreshButtons();
     },
 
-    onError() {
+    onError(_code, msg) {
       pressed = false;
+      // a spin refused (too fast, the table closing): holding and Auto stop, saying why
+      auto.driver.refused(msg);
       refreshButtons();
     },
 
     keydown(e) {
+      // on Auto, any key (Esc too) only stops it
+      if (auto.keydown(e)) return true;
       if (e.code === 'Space') {
-        if (skip) skip();
-        else spin();
+        // held, it keeps spinning (auto.ts); the key's repeats are the same hold
+        if (e.repeat) return true;
+        skip?.();
+        auto.driver.hold(true);
         return true;
       }
       if (e.key === 'ArrowUp') {
@@ -794,6 +826,7 @@ export function mountSkinned(ctx: TableViewCtx): TableView {
       unTips();
       ctx.kit.tip(null);
       removeEventListener('pointerdown', onPointer);
+      auto.dispose();
       pays?.close();
       deck.remove();
       banner.remove();
