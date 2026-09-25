@@ -196,8 +196,16 @@ if (checks.includes('game')) {
   // down to the ground floor, then a celebrity walks into the casino
   const bank = await p.evaluate(() => {
     const L = window.casino.world.city.casinoBank;
-    return { car: L.centre(0), yaw: L.yaw };
+    const door = L.doorway(0);
+    const car = L.centre(0);
+    const n = Math.hypot(door.x - car.x, door.z - car.z);
+    return { door, car, yaw: L.yaw, nx: (door.x - car.x) / n, nz: (door.z - car.z) / n };
   });
+  // up to the doors (they open for someone walking up), then in
+  for (const k of [2.2, 0.9]) {
+    await p.evaluate(([x, z, y]) => window.casino.world.teleport(x, z, y), [bank.door.x + bank.nx * k, bank.door.z + bank.nz * k, bank.yaw + Math.PI]);
+    await p.waitForTimeout(1400);
+  }
   await p.evaluate(([x, z, y]) => window.casino.world.teleport(x, z, y), [bank.car.x, bank.car.z, bank.yaw]);
   await p.waitForTimeout(800);
   await p.keyboard.press('KeyE');
