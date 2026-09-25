@@ -25,6 +25,7 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 import type { Look } from '../../../shared/src/look.ts';
 import { barItem, itemOfKind, type BarModel } from '../../../shared/src/items.ts';
 import { serverNow } from '../net/clock.ts';
+import { calmScale } from '../app/comfort.ts';
 
 type V3 = THREE.Vector3;
 const V = (x = 0, y = 0, z = 0): V3 => new THREE.Vector3(x, y, z);
@@ -32,19 +33,19 @@ const V = (x = 0, y = 0, z = 0): V3 => new THREE.Vector3(x, y, z);
 // --- finishes ----------------------------------------------------------------------------------
 // Colour in linear RGB (vertex colours are linear), metalness and roughness, per vertex.
 
-interface Finish {
+export interface Finish {
   c: readonly [number, number, number];
   m: number;
   r: number;
 }
-const fin = (r: number, g: number, b: number, m: number, rough: number): Finish => ({ c: [r, g, b], m, r: rough });
+export const fin = (r: number, g: number, b: number, m: number, rough: number): Finish => ({ c: [r, g, b], m, r: rough });
 
 // Measured reflectances: 18k yellow gold is a little paler than pure gold, rose gold has copper
 // in it, white gold is rhodium-plated.
-const GOLD = fin(1.0, 0.76, 0.37, 1, 0.16);
+export const GOLD = fin(1.0, 0.76, 0.37, 1, 0.16);
 const GOLD_SOFT = fin(1.0, 0.76, 0.37, 1, 0.3);
 const ROSE = fin(0.97, 0.58, 0.45, 1, 0.17);
-const WHITE_GOLD = fin(0.8, 0.79, 0.76, 1, 0.12);
+export const WHITE_GOLD = fin(0.8, 0.79, 0.76, 1, 0.12);
 const STEEL = fin(0.62, 0.62, 0.62, 1, 0.22);
 const ENAMEL = fin(0.006, 0.006, 0.008, 0, 0.16);
 const DIAL = fin(0.58, 0.42, 0.22, 0.85, 0.3);
@@ -65,7 +66,8 @@ let envStarted = false;
 const reflective = new Set<THREE.MeshStandardMaterial>();
 let tickedFrame = -1;
 
-function reflect(m: THREE.MeshStandardMaterial): void {
+/** Give a material the dim casino to reflect (now, or once it has been built). */
+export function reflect(m: THREE.MeshStandardMaterial): void {
   reflective.add(m);
   if (env) {
     m.envMap = env;
@@ -77,12 +79,15 @@ function reflect(m: THREE.MeshStandardMaterial): void {
  * Runs before any wearable is drawn: keeps the glint clock and, the first time, builds the casino
  * the metal reflects (after that frame, with the renderer that drew it).
  */
-function beforeDraw(renderer: THREE.WebGLRenderer): void {
+export function beforeDraw(renderer: THREE.WebGLRenderer): void {
   const frame = renderer.info.render.frame;
   if (frame !== tickedFrame) {
     tickedFrame = frame;
-    const t = performance.now() / 1000;
-    for (const u of timeUniforms) u.value = t;
+    // calm (app/comfort.ts): the stones glint at a third of the pace
+    const now = performance.now() / 1000;
+    glintT += Math.min(0.1, Math.max(0, now - glintAt)) * calmScale(1 / 3);
+    glintAt = now;
+    for (const u of timeUniforms) u.value = glintT;
   }
   if (envStarted) return;
   envStarted = true;
@@ -96,6 +101,8 @@ function beforeDraw(renderer: THREE.WebGLRenderer): void {
 }
 
 const timeUniforms: { value: number }[] = [];
+let glintT = 0;
+let glintAt = 0;
 
 function lit(r: number, g: number, b: number, side: THREE.Side = THREE.FrontSide): THREE.MeshBasicMaterial {
   return new THREE.MeshBasicMaterial({ color: new THREE.Color(r, g, b), side, toneMapped: false });
@@ -681,12 +688,12 @@ function surfaceFrame(o: V3, t: V3, n: V3): THREE.Matrix4 {
 // --- chains --------------------------------------------------------------------------------------
 
 interface ChainSpec {
-  style: 'rope' | 'figaro' | 'cuban';
+  style: 'rope' | 'figaro' | 'cuban' | 'tennis';
   /** How far the front hangs below the back of the neck, and the chain's width (m). */
   drop: number;
   width: number;
   iced?: boolean;
-  pendant?: 'dice' | 'ace';
+  pendant?: 'dice' | 'ace' | 'twentyone' | 'royal' | 'horseshoe' | 'billion';
 }
 
 /** A chain rests on what's at most this far (m) below the neck's base, never on the waist. */
@@ -699,6 +706,11 @@ const CHAINS: Record<string, ChainSpec> = {
   'iced-cuban': { style: 'cuban', drop: 0.12, width: 0.0155, iced: true },
   'dice-pendant': { style: 'cuban', drop: 0.17, width: 0.0095, pendant: 'dice' },
   'ace-pendant': { style: 'rope', drop: 0.17, width: 0.0062, pendant: 'ace' },
+  'tennis-chain': { style: 'tennis', drop: 0.13, width: 0.0056 },
+  'twentyone-pendant': { style: 'rope', drop: 0.17, width: 0.0062, pendant: 'twentyone' },
+  'royal-pendant': { style: 'cuban', drop: 0.175, width: 0.0095, pendant: 'royal' },
+  'horseshoe-pendant': { style: 'figaro', drop: 0.165, width: 0.0064, pendant: 'horseshoe' },
+  'billionaire-chain': { style: 'rope', drop: 0.2, width: 0.0165, pendant: 'billion' },
 };
 
 interface Path {
@@ -774,7 +786,11 @@ function chainPath(fit: Fit, drop: number, thick: number): Path {
     for (let j = -2; j <= 2; j++) sum.add(pts[(k + j + K) % K]!);
     return sum.divideScalar(5);
   });
-  const loop = smooth.map((p, k) => (p.distanceTo(V(fit.cx, p.y, fit.zc)) < pts[k]!.distanceTo(V(fit.cx, pts[k]!.y, fit.zc)) ? pts[k]!.clone().setY(p.y) : p));
+  let loop = smooth.map((p, k) => (p.distanceTo(V(fit.cx, p.y, fit.zc)) < pts[k]!.distanceTo(V(fit.cx, pts[k]!.y, fit.zc)) ? pts[k]!.clone().setY(p.y) : p));
+  // A rope as thick as a thumb shows every kink of the sparse mesh under it. Round the neck's axis
+  // its distance out is taken as the most of its neighbours' (so it stays clear) and then eased,
+  // and its height eased, both over a wider stretch.
+  if (thick >= 0.016) loop = evenOut(loop, fit.cx, fit.zc);
   const curve = new THREE.CatmullRomCurve3(loop, true, 'centripetal');
   return {
     curve,
@@ -785,6 +801,38 @@ function chainPath(fit: Fit, drop: number, thick: number): Path {
       return outs[a % K]!.clone().lerp(outs[(a + 1) % K]!, f - a).normalize();
     },
   };
+}
+
+/** A closed line round the axis (cx, zc), its distance out and height evened over its neighbours, never nearer the axis. */
+function evenOut(loop: V3[], cx: number, zc: number): V3[] {
+  const K = loop.length;
+  const r = loop.map((p) => Math.hypot(p.x - cx, p.z - zc));
+  const a = loop.map((p) => Math.atan2(p.x - cx, p.z - zc));
+  const wrap = (k: number) => (k + K) % K;
+  const ease = (v: number[], reach: number, passes: number): number[] => {
+    let out = v;
+    for (let n = 0; n < passes; n++) {
+      const from = out;
+      out = from.map((_, k) => {
+        let sum = 0;
+        for (let j = -reach; j <= reach; j++) sum += from[wrap(k + j)]!;
+        return sum / (reach * 2 + 1);
+      });
+    }
+    return out;
+  };
+  const most = r.map((_, k) => {
+    let m = 0;
+    for (let j = -3; j <= 3; j++) m = Math.max(m, r[wrap(k + j)]!);
+    return m;
+  });
+  const out = ease(most, 4, 3).map((v, k) => Math.max(v, r[k]!));
+  const y = ease(
+    loop.map((p) => p.y),
+    4,
+    3,
+  );
+  return loop.map((_, k) => V(cx + Math.sin(a[k]!) * out[k]!, y[k]!, zc + Math.cos(a[k]!) * out[k]!));
 }
 
 /** A curve given by a function (a strand twisting round a chain's centre line). */
@@ -803,6 +851,28 @@ function link(len: number, wide: number, tube: number, flat: number, segs = 12):
   const g = new THREE.TorusGeometry(R, tube / 2, 6, segs);
   g.scale((len - tube) / 2 / R, 1, flat);
   return g;
+}
+
+/**
+ * A round brilliant, `r` across its girdle, table up (+z): the crown's eight facets over a short
+ * girdle, the pavilion coming to a point below.
+ */
+function brilliant(r: number): THREE.BufferGeometry {
+  const g = new THREE.LatheGeometry(
+    [
+      [0.0001, -r * 0.62],
+      [r, -r * 0.04],
+      [r, r * 0.04],
+      [r * 0.56, r * 0.34],
+      [0.0001, r * 0.34],
+    ].map(([x, y]) => new THREE.Vector2(x!, y!)),
+    8,
+  ).rotateX(Math.PI / 2);
+  // facets, not a smooth cone
+  const flat = g.toNonIndexed();
+  g.dispose();
+  flat.computeVertexNormals();
+  return flat;
 }
 
 function buildChain(fit: Fit, spec: ChainSpec, out: Out, chest: number): Path {
@@ -829,6 +899,32 @@ function buildChain(fit: Fit, spec: ChainSpec, out: Out, chest: number): Path {
       strand.arcLengthDivisions = segs * 2;
       out.metal.add(new THREE.TubeGeometry(strand, segs, w * 0.27, 5, true), new THREE.Matrix4(), GOLD, chest);
     }
+    return path;
+  }
+  if (spec.style === 'tennis') {
+    // one row of round brilliants, each in a white gold box setting with a prong at each corner,
+    // the boxes hinged end to end
+    const count = Math.max(8, Math.round(length / (w * 1.08)));
+    const step = length / count;
+    const cup = new RoundedBoxGeometry(step * 0.96, w, w * 0.52, 1, w * 0.1);
+    const prong = new THREE.SphereGeometry(w * 0.11, 6, 4);
+    const stone = brilliant(w * 0.43);
+    for (let k = 0; k < count; k++) {
+      const u = (k + 0.5) / count;
+      const m = surfaceFrame(curve.getPointAt(u), curve.getTangentAt(u), path.out(u));
+      out.metal.add(cup.clone(), m, WHITE_GOLD, chest);
+      out.gem.add(stone.clone(), m.clone().multiply(translate(0, 0, w * 0.26)), null, chest);
+      for (const [px, py] of [
+        [1, 1],
+        [1, -1],
+        [-1, 1],
+        [-1, -1],
+      ] as const)
+        out.metal.add(prong.clone(), m.clone().multiply(translate(px * w * 0.33, py * w * 0.33, w * 0.3)), WHITE_GOLD, chest);
+    }
+    cup.dispose();
+    prong.dispose();
+    stone.dispose();
     return path;
   }
   // Links along the path, spaced so the loop closes on a whole number of them.
@@ -883,7 +979,7 @@ function lowest(path: Path): { p: V3; t: V3; n: V3 } {
   return { p: path.curve.getPointAt(best), t: path.curve.getTangentAt(best), n: path.out(best) };
 }
 
-function buildPendant(fit: Fit, kind: 'dice' | 'ace', path: Path, out: Out, chest: number): void {
+function buildPendant(fit: Fit, kind: NonNullable<ChainSpec['pendant']>, path: Path, out: Out, chest: number): void {
   const at = lowest(path);
   // hang straight down from the chain, resting against the chest
   const down = V(0, -1, 0);
@@ -892,6 +988,19 @@ function buildPendant(fit: Fit, kind: 'dice' | 'ace', path: Path, out: Out, ches
   // a small ring the chain runs through: in the plane of "up" and "out", its axis along the chain
   const along = at.t.clone().setY(0).normalize();
   out.metal.add(link(0.011, 0.008, 0.0024, 1, 12), frame(bail, face.clone().cross(along).cross(along).negate().normalize(), V(0, 1, 0), along).multiply(new THREE.Matrix4().makeRotationZ(Math.PI / 2)), GOLD, chest);
+  if (kind === 'twentyone' || kind === 'royal' || kind === 'horseshoe' || kind === 'billion') {
+    // a flat charm hanging from the bail, its back against the chest
+    const hang = (drop: number, thick: number): THREE.Matrix4 => {
+      const c = bail.clone().addScaledVector(down, drop);
+      const s = support(fit.torso, c.clone().addScaledVector(face, -0.08), face, 0.02);
+      if (Number.isFinite(s)) c.addScaledVector(face, -0.08).addScaledVector(face, s + thick / 2 + 0.001);
+      return frame(c, face.clone().cross(V(0, 1, 0)).negate(), V(0, 1, 0), face);
+    };
+    if (kind === 'billion') buildBillion(hang(0.058, 0.014), out, chest);
+    else if (kind === 'horseshoe') buildHorseshoe(hang(0.0215, 0.004), out, chest);
+    else buildCards(kind, hang(kind === 'royal' ? 0.018 : 0.0225, 0.006), out, chest);
+    return;
+  }
   if (kind === 'ace') {
     const r = 0.022;
     const c = bail.clone().addScaledVector(down, r + 0.006);
@@ -938,6 +1047,145 @@ function buildPendant(fit: Fit, kind: 'dice' | 'ace', path: Path, out: Out, ches
       }
     }
   }
+}
+
+const ENAMEL_WHITE = fin(0.8, 0.78, 0.72, 0, 0.14);
+const ENAMEL_RED = fin(0.42, 0.012, 0.018, 0, 0.14);
+const EMERALD = fin(0.012, 0.3, 0.09, 0.2, 0.04);
+
+/** A rectangle with rounded corners, centred on the origin. */
+function roundRect(w: number, h: number, r: number): THREE.Shape {
+  const s = new THREE.Shape();
+  const x = w / 2 - r;
+  const y = h / 2 - r;
+  s.moveTo(-x, -h / 2);
+  s.lineTo(x, -h / 2);
+  s.absarc(x, -y, r, -Math.PI / 2, 0, false);
+  s.lineTo(w / 2, y);
+  s.absarc(x, y, r, 0, Math.PI / 2, false);
+  s.lineTo(-x, h / 2);
+  s.absarc(-x, y, r, Math.PI / 2, Math.PI, false);
+  s.lineTo(-w / 2, -y);
+  s.absarc(-x, -y, r, Math.PI, Math.PI * 1.5, false);
+  return s;
+}
+
+/** A capital J, `h` tall, centred on the origin. */
+function jShape(h: number): THREE.Shape {
+  const s = new THREE.Shape();
+  const k = (x: number, y: number): [number, number] => [x * h, y * h];
+  s.moveTo(...k(-0.14, 0.5));
+  s.lineTo(...k(0.3, 0.5));
+  s.lineTo(...k(0.3, 0.41));
+  s.lineTo(...k(0.25, 0.41));
+  s.lineTo(...k(0.25, -0.2));
+  s.absarc(0, -0.2 * h, 0.25 * h, 0, Math.PI, true);
+  s.lineTo(...k(-0.25, -0.08));
+  s.lineTo(...k(-0.08, -0.08));
+  s.lineTo(...k(-0.08, -0.2));
+  s.absarc(0, -0.2 * h, 0.08 * h, Math.PI, Math.PI * 2, false);
+  s.lineTo(...k(0.08, 0.41));
+  s.lineTo(...k(-0.14, 0.41));
+  return s;
+}
+
+/** A flat shape, `depth` thick with a little bevel, its front face at z = depth. */
+function slab(shape: THREE.Shape, depth: number, bevel = 0.0004): THREE.BufferGeometry {
+  return new THREE.ExtrudeGeometry(shape, { depth: depth - bevel * 2, bevelEnabled: bevel > 0, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 1, curveSegments: 8 }).translate(0, 0, bevel);
+}
+
+/**
+ * Playing cards in gold: blackjack's ace and jack fanned, the ace behind, white enamel faces; or
+ * a royal flush, five gold cards fanned from the bottom corner like a hand, a black enamel spade
+ * on each. `m` is the charm's frame (y up, z out of the chest), at the middle of the fan.
+ */
+function buildCards(kind: 'twentyone' | 'royal', m: THREE.Matrix4, out: Out, chest: number): void {
+  const card = (w: number, h: number, local: THREE.Matrix4, face: 'ace' | 'jack' | 'spade') => {
+    const at = m.clone().multiply(local);
+    // a satin-finished gold back and rim (a mirror polish shows only the dark room), white enamel face
+    out.metal.add(slab(roundRect(w, h, w * 0.13), 0.0016), at, GOLD_SOFT, chest);
+    out.metal.add(new THREE.ShapeGeometry(roundRect(w * 0.8, h * 0.85, w * 0.09), 4), at.clone().multiply(translate(0, 0, 0.00162)), ENAMEL_WHITE, chest);
+    if (face === 'jack') out.metal.add(new THREE.ShapeGeometry(jShape(h * 0.5), 8), at.clone().multiply(translate(0, 0, 0.00172)), ENAMEL_RED, chest);
+    else out.metal.add(new THREE.ShapeGeometry(spadeShape(h * (face === 'ace' ? 0.46 : 0.36)), 8), at.clone().multiply(translate(0, -h * 0.02, 0.00172)), ENAMEL, chest);
+    if (face === 'spade') out.metal.add(new THREE.ShapeGeometry(spadeShape(h * 0.12), 6), at.clone().multiply(translate(-w * 0.24, h * 0.3, 0.00172)), ENAMEL, chest);
+  };
+  const tilt = (x: number, y: number, z: number, a: number) => translate(x, y, z).multiply(new THREE.Matrix4().makeRotationZ(a));
+  if (kind === 'twentyone') {
+    card(0.025, 0.034, tilt(-0.0055, 0.001, -0.001, 0.2), 'ace');
+    card(0.025, 0.034, tilt(0.0055, -0.001, 0.0009, -0.16), 'jack');
+    return;
+  }
+  // five cards fanned from a pivot under the middle one
+  const w = 0.019;
+  const h = 0.027;
+  for (let i = 0; i < 5; i++) {
+    const a = (2 - i) * 0.24;
+    const pivot = translate(0, -h * 0.55, i * 0.0005).multiply(new THREE.Matrix4().makeRotationZ(a)).multiply(translate(0, h * 0.45, 0));
+    card(w, h, pivot, 'spade');
+  }
+  // a pavé stud where the cards are pinned together
+  out.gem.add(new THREE.SphereGeometry(0.0022, 10, 6), m.clone().multiply(translate(0, -h * 0.45, 0.0042)), null, chest);
+}
+
+/** A gold horseshoe, open end down, set with emeralds round its face. */
+function buildHorseshoe(m: THREE.Matrix4, out: Out, chest: number): void {
+  const ro = 0.019;
+  const ri = 0.0118;
+  const gap = 0.5;
+  const s = new THREE.Shape();
+  s.absarc(0, 0, ro, -gap, Math.PI + gap, false);
+  s.absarc(0, 0, ri, Math.PI + gap, -gap, true);
+  const at = m.clone().multiply(translate(0, -0.002, -0.0015));
+  out.metal.add(slab(s, 0.0034, 0.0006), at, GOLD_SOFT, chest);
+  // the heels, a little proud where the shoe ends
+  for (const side of [-1, 1]) {
+    const a = side < 0 ? Math.PI + gap : -gap;
+    const r = (ro + ri) / 2;
+    out.metal.add(new RoundedBoxGeometry(ro - ri + 0.001, 0.003, 0.0042, 1, 0.0008), at.clone().multiply(translate(Math.cos(a) * r, Math.sin(a) * r - 0.001, 0.0017)).multiply(new THREE.Matrix4().makeRotationZ(a)), GOLD_SOFT, chest);
+  }
+  // seven emerald cabochons round the arch, where the nail holes would be
+  const r = (ro + ri) / 2;
+  for (let i = 0; i < 7; i++) {
+    const a = -gap * 0.55 + ((Math.PI + gap * 1.1) * i) / 6;
+    const stone = new THREE.SphereGeometry(0.0021, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2).rotateX(Math.PI / 2).scale(1, 1, 0.75);
+    out.metal.add(stone, at.clone().multiply(translate(Math.cos(a) * r, Math.sin(a) * r, 0.0034)), EMERALD, chest);
+    out.metal.add(new THREE.TorusGeometry(0.0022, 0.0005, 4, 16), at.clone().multiply(translate(Math.cos(a) * r, Math.sin(a) * r, 0.0034)), GOLD, chest);
+  }
+}
+
+/** A capital B, `h` tall, centred on the origin, with its two counters cut out. */
+function bShape(h: number): THREE.Shape {
+  const s = new THREE.Shape();
+  s.moveTo(-0.36 * h, -0.5 * h);
+  s.lineTo(0.1 * h, -0.5 * h);
+  s.absarc(0.1 * h, -0.24 * h, 0.26 * h, -Math.PI / 2, Math.PI / 2, false);
+  s.lineTo(0.08 * h, 0.02 * h);
+  s.absarc(0.08 * h, 0.26 * h, 0.24 * h, -Math.PI / 2, Math.PI / 2, false);
+  s.lineTo(-0.36 * h, 0.5 * h);
+  s.lineTo(-0.36 * h, -0.5 * h);
+  for (const [cy, r] of [
+    [-0.24, 0.1],
+    [0.26, 0.09],
+  ] as const) {
+    const hole = new THREE.Path();
+    hole.moveTo(-0.16 * h, (cy - r) * h);
+    hole.lineTo(0.08 * h, (cy - r) * h);
+    hole.absarc(0.08 * h, cy * h, r * h, -Math.PI / 2, Math.PI / 2, false);
+    hole.lineTo(-0.16 * h, (cy + r) * h);
+    hole.lineTo(-0.16 * h, (cy - r) * h);
+    s.holes.push(hole);
+  }
+  return s;
+}
+
+/** The Billionaire's B: a fist-sized letter paved in diamonds on a gold back, a heavy bail over it. */
+function buildBillion(m: THREE.Matrix4, out: Out, chest: number): void {
+  const h = 0.085;
+  const at = m.clone().multiply(translate(0.004, -0.004, -0.006));
+  out.metal.add(slab(bShape(h * 1.06), 0.006, 0.0012), at, GOLD, chest);
+  out.gem.add(slab(bShape(h), 0.004, 0.0006), at.clone().multiply(translate(0, 0, 0.0055)), null, chest);
+  // the bail: a thick gold loop from the top of the letter up round the rope
+  out.metal.add(new THREE.TorusGeometry(0.011, 0.0034, 8, 24).rotateY(Math.PI / 2), at.clone().multiply(translate(-0.004, h * 0.5 + 0.012, 0.003)), GOLD, chest);
 }
 
 /** Faces of a die (outward normal, pips); opposite faces add to seven. */
@@ -1039,7 +1287,23 @@ function buildGrill(fit: Fit, spec: GrillSpec, out: Out, headBone: number): void
 
 // --- watches -------------------------------------------------------------------------------------
 
-function buildWatch(fit: Fit, iced: boolean, out: Out): void {
+interface WatchSpec {
+  metal: Finish;
+  dial: Finish;
+  hands: Finish;
+  iced?: boolean;
+  /** Hour markers round the dial (a dark dial needs them to read as a watch). */
+  markers?: Finish;
+}
+
+const WATCHES: Record<string, WatchSpec> = {
+  'gold-watch': { metal: GOLD, dial: DIAL, hands: HANDS },
+  'iced-watch': { metal: WHITE_GOLD, dial: DIAL_ICE, hands: HANDS, iced: true },
+  'rose-watch': { metal: ROSE, dial: fin(0.008, 0.008, 0.009, 0.2, 0.18), hands: ROSE, markers: ROSE },
+};
+
+function buildWatch(fit: Fit, spec: WatchSpec, out: Out): void {
+  const iced = !!spec.iced;
   const fore = boneIndex(fit, 'LowerArm.L');
   const wristI = boneIndex(fit, 'Wrist.L');
   if (fore < 0 || wristI < 0) return;
@@ -1061,7 +1325,7 @@ function buildWatch(fit: Fit, iced: boolean, out: Out): void {
   outward.addScaledVector(axis, -outward.dot(axis)).normalize();
   const side = axis.clone().cross(outward).normalize();
   const band = frame(c, outward, side, axis);
-  const metal = iced ? WHITE_GOLD : GOLD;
+  const metal = spec.metal;
   // bracelet: a flat band round the wrist, the case and dial on the back of it
   const bandR = r + 0.0026;
   const ring = new THREE.TorusGeometry(bandR, 0.0017, 6, 40);
@@ -1071,17 +1335,25 @@ function buildWatch(fit: Fit, iced: boolean, out: Out): void {
   const caseAt = c.clone().addScaledVector(outward, bandR + 0.0032);
   const face = frame(caseAt, axis, outward.clone().cross(axis).normalize(), outward);
   out.metal.add(new THREE.CylinderGeometry(0.0165, 0.017, 0.0068, 36).rotateX(Math.PI / 2), face, metal, fore);
-  out.metal.add(new THREE.CylinderGeometry(0.0138, 0.0138, 0.0008, 36).rotateX(Math.PI / 2), face.clone().multiply(translate(0, 0, 0.0034)), iced ? DIAL_ICE : DIAL, fore);
+  out.metal.add(new THREE.CylinderGeometry(0.0138, 0.0138, 0.0008, 36).rotateX(Math.PI / 2), face.clone().multiply(translate(0, 0, 0.0034)), spec.dial, fore);
+  if (spec.markers) {
+    for (let h = 0; h < 12; h++) {
+      const a = (h / 12) * Math.PI * 2;
+      const long = h % 3 === 0;
+      const mark = new THREE.BoxGeometry(long ? 0.0013 : 0.0009, long ? 0.0032 : 0.0022, 0.0004).translate(0, 0.0112, 0);
+      out.metal.add(mark, face.clone().multiply(translate(0, 0, 0.0039)).multiply(new THREE.Matrix4().makeRotationZ(a)), spec.markers, fore);
+    }
+  }
   // the hands at ten past ten: the minute hand on the two, the hour hand just past the ten
   for (const [ang, len] of [
     [-1.05, 0.0105],
     [0.96, 0.0072],
   ] as const) {
     const hand = new THREE.BoxGeometry(0.0011, len, 0.0005).translate(0, len / 2, 0);
-    out.metal.add(hand, face.clone().multiply(translate(0, 0, 0.0041)).multiply(new THREE.Matrix4().makeRotationZ(ang)), HANDS, fore);
+    out.metal.add(hand, face.clone().multiply(translate(0, 0, 0.0041)).multiply(new THREE.Matrix4().makeRotationZ(ang)), spec.hands, fore);
   }
   if (iced) out.gem.add(new THREE.TorusGeometry(0.0153, 0.0017, 6, 40), face.clone().multiply(translate(0, 0, 0.0036)), null, fore);
-  else out.metal.add(new THREE.TorusGeometry(0.0154, 0.0012, 6, 40), face.clone().multiply(translate(0, 0, 0.0035)), GOLD, fore);
+  else out.metal.add(new THREE.TorusGeometry(0.0154, 0.0012, 6, 40), face.clone().multiply(translate(0, 0, 0.0035)), spec.metal === ROSE ? ROSE : GOLD, fore);
 }
 
 // --- shades --------------------------------------------------------------------------------------
@@ -1146,12 +1418,172 @@ function buildShades(fit: Fit, out: Out, headBone: number): void {
   }
 }
 
+/** Frames other than the aviators: the lens's outline, what the rims are, the lens's tint. */
+interface FrameSpec {
+  lens: 'round' | 'shield' | 'wayfarer';
+  rim: 'none' | 'tortoise' | 'gold';
+  /** The lens's colour at its top (it lightens toward the bottom unless `flat`). */
+  tint: [number, number, number];
+  flat?: boolean;
+  /** A row of diamonds along the brow. */
+  brow?: boolean;
+  /** A gold casino chip set in each temple. */
+  chips?: boolean;
+}
+
+const SHADES: Record<string, FrameSpec> = {
+  'round-shades': { lens: 'round', rim: 'tortoise', tint: [0.006, 0.022, 0.012] },
+  'diamond-shades': { lens: 'shield', rim: 'none', tint: [0.024, 0.024, 0.028], brow: true },
+  'high-roller-shades': { lens: 'wayfarer', rim: 'gold', tint: [0.003, 0.003, 0.004], flat: true, chips: true },
+};
+
+/** A lens's outline, `w` wide and `h` tall, its outer side toward +x (side 1) or -x (side -1). */
+function lensShape(kind: FrameSpec['lens'], w: number, h: number, side: number): THREE.Shape {
+  const s = new THREE.Shape();
+  const x = (k: number) => side * k * w;
+  if (kind === 'round') {
+    s.absarc(0, 0, Math.min(w, h) / 2, 0, Math.PI * 2, side < 0);
+    return s;
+  }
+  if (kind === 'shield') {
+    // a straight brow, the outer corner a touch higher, a soft curve below
+    s.moveTo(x(-0.5), 0.36 * h);
+    s.bezierCurveTo(x(-0.2), 0.47 * h, x(0.25), 0.5 * h, x(0.52), 0.46 * h);
+    s.bezierCurveTo(x(0.6), 0.05 * h, x(0.42), -0.5 * h, x(0.08), -0.5 * h);
+    s.bezierCurveTo(x(-0.3), -0.5 * h, x(-0.52), -0.12 * h, x(-0.5), 0.36 * h);
+    return s;
+  }
+  // a wayfarer: wide across the top, the outer corner up, narrowing to the bottom
+  s.moveTo(x(-0.48), 0.4 * h);
+  s.lineTo(x(0.52), 0.5 * h);
+  s.bezierCurveTo(x(0.58), 0.3 * h, x(0.5), -0.38 * h, x(0.34), -0.46 * h);
+  s.bezierCurveTo(x(0.12), -0.56 * h, x(-0.22), -0.54 * h, x(-0.4), -0.42 * h);
+  s.bezierCurveTo(x(-0.54), -0.3 * h, x(-0.54), 0.3 * h, x(-0.48), 0.4 * h);
+  return s;
+}
+
+/** Value noise in [0, 1], for tortoiseshell's mottling. */
+function vnoise(x: number, y: number, z: number): number {
+  const h = (i: number, j: number, k: number) => {
+    let n = (Math.imul(i, 374761393) + Math.imul(j, 668265263) + Math.imul(k, 1274126177)) | 0;
+    n = Math.imul(n ^ (n >>> 13), 1103515245);
+    return ((n ^ (n >>> 16)) >>> 0) / 4294967296;
+  };
+  const xi = Math.floor(x);
+  const yi = Math.floor(y);
+  const zi = Math.floor(z);
+  const f = (t: number) => t * t * (3 - 2 * t);
+  const u = f(x - xi);
+  const v = f(y - yi);
+  const w = f(z - zi);
+  const l = THREE.MathUtils.lerp;
+  return l(
+    l(l(h(xi, yi, zi), h(xi + 1, yi, zi), u), l(h(xi, yi + 1, zi), h(xi + 1, yi + 1, zi), u), v),
+    l(l(h(xi, yi, zi + 1), h(xi + 1, yi, zi + 1), u), l(h(xi, yi + 1, zi + 1), h(xi + 1, yi + 1, zi + 1), u), v),
+    w,
+  );
+}
+
+/** Tortoiseshell acetate: dark brown with amber showing through in drifts. */
+const TORTOISE: Paint = (p) => {
+  const n = vnoise(p.x * 260, p.y * 170, p.z * 260) * 0.65 + vnoise(p.x * 700 + 9, p.y * 700, p.z * 700) * 0.35;
+  const k = THREE.MathUtils.smoothstep(n, 0.42, 0.68);
+  return fin(THREE.MathUtils.lerp(0.03, 0.42, k), THREE.MathUtils.lerp(0.011, 0.15, k), THREE.MathUtils.lerp(0.004, 0.028, k), 0, 0.12);
+};
+
+/**
+ * Round tortoiseshell frames, rimless diamond-browed shields, or bold gold wayfarers with a chip
+ * in each temple, fitted like the aviators: each lens over its eye and turned a little round the
+ * face, temples back over the ears.
+ */
+function buildFrames(fit: Fit, spec: FrameSpec, out: Out, headBone: number): void {
+  const [eyeL, eyeR] = fit.eyes;
+  const mid = eyeL.clone().add(eyeR).multiplyScalar(0.5);
+  const half = Math.max(0.03, Math.abs(eyeL.x - eyeR.x) / 2);
+  const w = half * (spec.lens === 'round' ? 1.3 : 1.4);
+  const h = w * (spec.lens === 'round' ? 1 : spec.lens === 'shield' ? 0.66 : 0.74);
+  const zFace = Math.max(eyeL.z, eyeR.z) + (spec.rim === 'none' ? 0.012 : 0.0135);
+  const rimPaint: Paint = spec.rim === 'tortoise' ? TORTOISE : spec.rim === 'gold' ? GOLD : WHITE_GOLD;
+  const rimR = spec.rim === 'tortoise' ? 0.0021 : spec.rim === 'gold' ? 0.002 : 0.0011;
+  const inner: V3[] = [];
+  const hinges: V3[] = [];
+  for (const side of [1, -1]) {
+    const eye = side > 0 ? eyeL : eyeR;
+    const m = translate(eye.x + side * 0.003, eye.y - 0.003, zFace).multiply(new THREE.Matrix4().makeRotationY(side * 0.17));
+    const top = eye.y + h * 0.5;
+    const [tr, tg, tb] = spec.tint;
+    out.metal.add(
+      new THREE.ShapeGeometry(lensShape(spec.lens, w, h, side), 16),
+      m,
+      (p) => {
+        const k = spec.flat ? 0 : THREE.MathUtils.clamp((top - p.y) / h, 0, 1);
+        const g = 1 + 2.4 * k;
+        return fin(tr * g, tg * g, tb * g, 0.35, 0.04);
+      },
+      headBone,
+    );
+    out.metal.add(new THREE.ShapeGeometry(lensShape(spec.lens, w, h, -side), 16).rotateY(Math.PI), m.clone().multiply(translate(0, 0, -0.0005)), fin(tr * 1.5, tg * 1.5, tb * 1.5, 0.2, 0.2), headBone);
+    const outline = lensShape(spec.lens, w, h, side).getSpacedPoints(64);
+    if (spec.rim !== 'none') {
+      const rim = outline.map((p) => V(p.x, p.y, 0.0004));
+      const tube = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(rim, true), 72, rimR, 6, true);
+      if (spec.rim === 'tortoise') tube.scale(1, 1, 0.8);
+      out.metal.add(tube, m, rimPaint, headBone);
+    }
+    // the brow's highest point either side, in the lens's frame
+    const browAt = (k: number): V3 => {
+      const x = side * k * w;
+      let y = -Infinity;
+      for (const p of outline) if (Math.abs(p.x - x) < w * 0.06 && p.y > y) y = p.y;
+      return V(x, y, 0);
+    };
+    if (spec.brow) {
+      // a white gold bar along the top of the lens, set with a row of brilliants
+      const bar = Array.from({ length: 9 }, (_, i) => browAt(-0.46 + (0.94 * i) / 8).add(V(0, -0.0006, 0.0012)));
+      out.metal.add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(bar), 24, 0.0016, 6, false), m, WHITE_GOLD, headBone);
+      for (let i = 0; i < 7; i++) {
+        const at = browAt(-0.4 + (0.8 * i) / 6).add(V(0, -0.0006, 0.0028));
+        out.gem.add(brilliant(0.0024), m.clone().multiply(translate(at.x, at.y, at.z)), null, headBone);
+      }
+    }
+    inner.push(browAt(-0.47).add(V(0, spec.lens === 'round' ? -h * 0.18 : -0.001, 0.0008)).applyMatrix4(m));
+    hinges.push(browAt(0.5).add(V(side * 0.0012, spec.lens === 'round' ? -h * 0.12 : -0.0015, 0)).applyMatrix4(m));
+  }
+  // the bridge: a keyhole arch in acetate, a straight bar in metal
+  const [a, b] = inner as [V3, V3];
+  const lift = spec.rim === 'tortoise' ? h * 0.12 : 0.001;
+  const bridge = new THREE.QuadraticBezierCurve3(a, V(mid.x, Math.max(a.y, b.y) + lift, Math.max(a.z, b.z) + 0.004), b);
+  out.metal.add(new THREE.TubeGeometry(bridge, 12, rimR * 0.9, 6, false), new THREE.Matrix4(), rimPaint, headBone);
+  // temples, back over the ears
+  hinges.forEach((hinge, i) => {
+    const side = i === 0 ? 1 : -1;
+    const headSide = fit.cx + side * (half + 0.064);
+    const ear = V(headSide, hinge.y - 0.004, fit.zc + 0.02);
+    const temple = new THREE.CatmullRomCurve3([hinge, V(headSide - side * 0.004, hinge.y, hinge.z - 0.03), ear, ear.clone().add(V(0, -0.018, -0.02))]);
+    const r = spec.rim === 'none' ? 0.0011 : rimR * 0.85;
+    out.metal.add(new THREE.TubeGeometry(temple, 20, r, 6, false), new THREE.Matrix4(), rimPaint, headBone);
+    if (!spec.chips) return;
+    // a gold chip on the temple, just behind the hinge, facing out: black spots round its edge
+    const at = temple.getPointAt(0.2).add(V(side * 0.0022, 0, 0));
+    const chip = frame(at, V(0, 0, -side), V(0, 1, 0), V(side, 0, 0));
+    out.metal.add(new THREE.CylinderGeometry(0.0074, 0.0074, 0.0016, 28).rotateX(Math.PI / 2), chip, GOLD, headBone);
+    for (let k = 0; k < 8; k++) {
+      const q = (k / 8) * Math.PI * 2;
+      const spot = new THREE.BoxGeometry(0.0021, 0.0014, 0.0003).translate(0, 0.0062, 0);
+      out.metal.add(spot, chip.clone().multiply(translate(0, 0, 0.00085)).multiply(new THREE.Matrix4().makeRotationZ(q)), ENAMEL, headBone);
+    }
+    out.metal.add(new THREE.TorusGeometry(0.0042, 0.0003, 4, 24), chip.clone().multiply(translate(0, 0, 0.0008)), ENAMEL, headBone);
+  });
+}
+
 // --- hats ----------------------------------------------------------------------------------------
 
-function buildHat(fit: Fit, straw: boolean, out: Out, headBone: number): void {
-  // The hat sits on the skull, not the hair (a crest or a fringe gives): find the height where the
-  // skull, from its crown down, is as wide as the band less the hair under it.
-  const band = fit.female ? 0.104 : 0.1;
+/**
+ * Where a hat sits on the skull, not the hair (a crest or a fringe gives): the height where the
+ * skull, from its crown down, is as wide as a band `band` across less the hair under it; and the
+ * skull's middle there.
+ */
+function hatSeat(fit: Fit, band: number): { x0: number; z0: number; seat: number } {
   let x0 = 0;
   let z0 = 0;
   let k = 0;
@@ -1173,7 +1605,12 @@ function buildHat(fit: Fit, straw: boolean, out: Out, headBone: number): void {
     }
     if (r >= band - 0.018) break;
   }
-  const seat = y + 0.012;
+  return { x0, z0, seat: y + 0.012 };
+}
+
+function buildHat(fit: Fit, straw: boolean, out: Out, headBone: number): void {
+  const band = fit.female ? 0.104 : 0.1;
+  const { x0, z0, seat } = hatSeat(fit, band);
   const felt = straw ? STRAW : FELT;
   // tipped a touch forward and to one side, the way a hat is worn
   const m = new THREE.Matrix4()
@@ -1225,6 +1662,245 @@ function buildHat(fit: Fit, straw: boolean, out: Out, headBone: number): void {
   }
   brim.computeVertexNormals();
   out.metal.add(brim, m, felt, headBone);
+}
+
+const lathe = (pts: [number, number][], segs: number) => new THREE.LatheGeometry(pts.map(([r, y]) => new THREE.Vector2(r, y)), segs);
+
+/** A flat brim from the band out `width`, bent by `lift(t, a)`: t 0 at the band to 1 at the edge, a round from the front. */
+function brim(band: number, width: number, thick: number, lift: (t: number, a: number) => number): THREE.BufferGeometry {
+  const g = lathe(
+    [
+      [band, thick / 2],
+      [band + width - thick / 2, thick / 2],
+      [band + width, 0],
+      [band + width - thick / 2, -thick / 2],
+      [band, -thick / 2],
+    ],
+    64,
+  );
+  const p = g.getAttribute('position');
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i);
+    const z = p.getZ(i);
+    const t = Math.max(0, (Math.hypot(x, z) - band) / width);
+    p.setY(i, p.getY(i) + lift(t, Math.atan2(x, z)));
+  }
+  g.computeVertexNormals();
+  return g;
+}
+
+const SILK = fin(0.011, 0.011, 0.013, 0, 0.28);
+const SATIN = fin(0.004, 0.004, 0.005, 0, 0.16);
+const SILVERBELLY = fin(0.4, 0.36, 0.29, 0, 0.88);
+const HATBAND = fin(0.06, 0.028, 0.012, 0, 0.55);
+const GOLD22 = fin(1.0, 0.7, 0.28, 1, 0.2);
+const RUBY = fin(0.36, 0.004, 0.02, 0.25, 0.04);
+const VELVET_RED = fin(0.16, 0.006, 0.014, 0, 0.95);
+
+/** A hat's frame on the head: set on the skull, tipped a little forward and to one side. */
+function hatFrame(x0: number, seat: number, z0: number, tip: number, cant: number): THREE.Matrix4 {
+  return new THREE.Matrix4()
+    .makeTranslation(x0, seat, z0)
+    .multiply(new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(tip, 0, cant)))
+    .multiply(new THREE.Matrix4().makeScale(0.93, 1, 1.07));
+}
+
+/** Black silk plush, a tall crown flaring a little to its flat top, a satin band, the brim rolled up at the sides. */
+function buildTopHat(fit: Fit, out: Out, headBone: number): void {
+  const band = fit.female ? 0.102 : 0.098;
+  const { x0, z0, seat } = hatSeat(fit, band);
+  const m = hatFrame(x0, seat, z0, 0.05, -0.04);
+  const H = 0.16;
+  out.metal.add(
+    lathe(
+      [
+        [band + 0.002, -0.004],
+        [band + 0.003, 0.03],
+        [band + 0.005, H * 0.7],
+        [band + 0.009, H - 0.004],
+        [band + 0.007, H],
+        [band - 0.01, H + 0.002],
+        [0.001, H + 0.002],
+      ],
+      48,
+    ),
+    m,
+    SILK,
+    headBone,
+  );
+  out.metal.add(new THREE.CylinderGeometry(band + 0.0048, band + 0.0045, 0.034, 48, 1, true).translate(0, 0.017, 0), m, SATIN, headBone);
+  // the band's flat bow on the left side
+  out.metal.add(new RoundedBoxGeometry(0.004, 0.026, 0.03, 1, 0.0015), m.clone().multiply(translate(band + 0.0055, 0.017, -0.01)), SATIN, headBone);
+  out.metal.add(brim(band, 0.052, 0.004, (t, a) => t * t * 0.03 * Math.sin(a) ** 2 - t * 0.004 * Math.cos(a) ** 2), m, SILK, headBone);
+  // a satin binding round the brim's edge
+  const edge = Array.from({ length: 65 }, (_, i) => {
+    const a = (i / 64) * Math.PI * 2;
+    const r = band + 0.051;
+    return V(Math.sin(a) * r, 0.03 * Math.sin(a) ** 2 - 0.004 * Math.cos(a) ** 2, Math.cos(a) * r);
+  });
+  out.metal.add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(edge, true), 96, 0.0026, 5, true), m, SATIN, headBone);
+}
+
+/** Silverbelly felt with a cattleman crease: a long dent down the crown, a dent each side, a wide brim curled up at the sides. */
+function buildCowboyHat(fit: Fit, out: Out, headBone: number): void {
+  const band = fit.female ? 0.104 : 0.1;
+  const { x0, z0, seat } = hatSeat(fit, band);
+  const m = hatFrame(x0, seat, z0, 0.1, -0.05);
+  const crown = lathe(
+    [
+      [band + 0.002, -0.004],
+      [band + 0.004, 0.035],
+      [band - 0.001, 0.085],
+      [band - 0.012, 0.118],
+      [band - 0.034, 0.128],
+      [band - 0.06, 0.125],
+      [0.001, 0.12],
+    ],
+    48,
+  );
+  const pos = crown.getAttribute('position');
+  for (let i = 0; i < pos.count; i++) {
+    const px = pos.getX(i);
+    const pz = pos.getZ(i);
+    const py = pos.getY(i);
+    const up = THREE.MathUtils.smoothstep(py, 0.06, 0.12);
+    // the long crease down the middle, deepest toward the front
+    const crease = 0.034 * Math.exp(-((px / 0.032) ** 2)) * up * (0.8 + 0.2 * Math.max(0, pz / band));
+    // the side dents, pressed in high on each side
+    const side = THREE.MathUtils.smoothstep(Math.abs(px) / band, 0.45, 0.9) * THREE.MathUtils.smoothstep(py, 0.07, 0.11);
+    // the front pinch
+    const pinch = pz > 0 ? 0.16 * Math.min(1, pz / band) * THREE.MathUtils.smoothstep(py, 0.05, 0.11) : 0;
+    pos.setXYZ(i, px * (1 - 0.1 * side - pinch), py - crease, pz);
+  }
+  crown.computeVertexNormals();
+  out.metal.add(crown, m, SILVERBELLY, headBone);
+  out.metal.add(new THREE.CylinderGeometry(band + 0.0048, band + 0.005, 0.02, 48, 1, true).translate(0, 0.01, 0), m, HATBAND, headBone);
+  // a small silver concho on the band, left side
+  out.metal.add(new THREE.CylinderGeometry(0.0085, 0.0085, 0.003, 20).rotateZ(Math.PI / 2), m.clone().multiply(translate(band + 0.0062, 0.01, -0.012)), fin(0.72, 0.72, 0.72, 1, 0.25), headBone);
+  out.metal.add(
+    brim(band, 0.088, 0.0045, (t, a) => t * t * 0.062 * Math.sin(a) ** 2 - t * 0.012 * Math.cos(a) ** 2 * (Math.cos(a) > 0 ? 1 : 0.5)),
+    m,
+    SILVERBELLY,
+    headBone,
+  );
+}
+
+/** Solid 22k gold: a band beaded top and bottom, eight points each tipped with a ball, rubies round it, red velvet inside. */
+function buildCrown(fit: Fit, out: Out, headBone: number): void {
+  const R = fit.female ? 0.098 : 0.094;
+  const { x0, z0, seat } = hatSeat(fit, R + 0.004);
+  const m = hatFrame(x0, seat - 0.004, z0, 0.03, -0.03);
+  const H = 0.038;
+  // the band: a thick ring, flaring very slightly to the top
+  out.metal.add(
+    lathe(
+      [
+        [R - 0.003, 0],
+        [R + 0.002, 0],
+        [R + 0.0035, H],
+        [R - 0.0015, H],
+        [R - 0.003, 0],
+      ],
+      64,
+    ),
+    m,
+    GOLD22,
+    headBone,
+  );
+  for (const [y, r] of [
+    [0.002, R + 0.0026],
+    [H - 0.001, R + 0.0038],
+  ] as const)
+    out.metal.add(new THREE.TorusGeometry(r, 0.0024, 6, 64).rotateX(Math.PI / 2), m.clone().multiply(translate(0, y, 0)), GOLD22, headBone);
+  // eight points, each a tall concave triangle standing on the band, bent to its curve
+  const point = new THREE.Shape();
+  const pw = 0.018;
+  const ph = 0.048;
+  point.moveTo(-pw, 0);
+  point.quadraticCurveTo(-pw * 0.15, ph * 0.35, 0, ph);
+  point.quadraticCurveTo(pw * 0.15, ph * 0.35, pw, 0);
+  point.lineTo(-pw, 0);
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    const g = new THREE.ExtrudeGeometry(point, { depth: 0.003, bevelEnabled: true, bevelThickness: 0.0006, bevelSize: 0.0006, bevelSegments: 1, curveSegments: 10 });
+    // wrap it round the ring: x becomes an angle, z the distance from the axis
+    const p = g.getAttribute('position');
+    const r0 = R + 0.0006;
+    for (let k = 0; k < p.count; k++) {
+      const t = a + p.getX(k) / r0;
+      const rr = r0 + p.getZ(k) - 0.0015;
+      p.setXYZ(k, Math.sin(t) * rr, p.getY(k) + H - 0.002, Math.cos(t) * rr);
+    }
+    g.computeVertexNormals();
+    out.metal.add(g, m, GOLD22, headBone);
+    out.metal.add(new THREE.SphereGeometry(0.0048, 12, 8), m.clone().multiply(translate(Math.sin(a) * (R + 0.0006), H + ph + 0.002, Math.cos(a) * (R + 0.0006))), GOLD22, headBone);
+    // a ruby at the foot of each point, a gold stud between them
+    const stone = new THREE.SphereGeometry(0.0055, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2).rotateX(Math.PI / 2).scale(1, 1.25, 0.6);
+    const face = (q: number, y: number) => frame(V(Math.sin(q) * (R + 0.0028), y, Math.cos(q) * (R + 0.0028)), V(Math.cos(q), 0, -Math.sin(q)), V(0, 1, 0), V(Math.sin(q), 0, Math.cos(q)));
+    out.metal.add(stone, m.clone().multiply(face(a, H / 2)), RUBY, headBone);
+    out.metal.add(new THREE.TorusGeometry(0.0058, 0.0009, 4, 20).scale(1, 1.25, 1), m.clone().multiply(face(a, H / 2)), GOLD22, headBone);
+    out.metal.add(new THREE.SphereGeometry(0.0026, 8, 6), m.clone().multiply(face(a + Math.PI / 8, H / 2)), GOLD22, headBone);
+  }
+  // red velvet cap, domed a little above the band
+  out.metal.add(new THREE.SphereGeometry(R - 0.004, 32, 10, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.62, 1).translate(0, H * 0.5, 0), m, VELVET_RED, headBone);
+}
+
+const PLATINUM = fin(0.84, 0.84, 0.86, 1, 0.14);
+const SAPPHIRE = fin(0.01, 0.05, 0.42, 0.2, 0.04);
+const VELVET_PURPLE = fin(0.05, 0.006, 0.085, 0, 0.95);
+
+/** Ermine: white fur with a black tail tip here and there. */
+const ERMINE: Paint = (p) => (vnoise(p.x * 300, p.y * 180, p.z * 300) > 0.78 ? fin(0.01, 0.01, 0.01, 0, 1) : fin(0.78, 0.76, 0.72, 0, 1));
+
+/**
+ * The Imperial Crown: a platinum circlet paved with diamonds on an ermine rim, four arches paved
+ * the same rising from it and dipping where they cross, an orb and a cross on top, purple velvet
+ * inside, and an egg of a sapphire set in the front.
+ */
+function buildImperialCrown(fit: Fit, out: Out, headBone: number): void {
+  const R = fit.female ? 0.098 : 0.094;
+  const { x0, z0, seat } = hatSeat(fit, R + 0.004);
+  const m = hatFrame(x0, seat - 0.006, z0, 0.03, -0.02);
+  const H = 0.034;
+  out.metal.add(new THREE.TorusGeometry(R + 0.006, 0.0085, 10, 64).rotateX(Math.PI / 2).scale(1, 1.2, 1), m.clone().multiply(translate(0, 0.004, 0)), ERMINE, headBone);
+  out.metal.add(lathe([[R - 0.002, 0.008], [R + 0.004, 0.008], [R + 0.005, H], [R - 0.001, H], [R - 0.002, 0.008]], 64), m, PLATINUM, headBone);
+  out.gem.add(new THREE.CylinderGeometry(R + 0.0056, R + 0.0056, 0.012, 64, 1, true).translate(0, H * 0.62, 0), m, null, headBone);
+  // four arches (eight half-arches), each a platinum band with a row of diamonds along it
+  const top = 0.15;
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    const dir = V(Math.sin(a), 0, Math.cos(a));
+    const pts = [
+      dir.clone().multiplyScalar(R + 0.003).setY(H - 0.002),
+      dir.clone().multiplyScalar(R * 0.96).setY(H + 0.06),
+      dir.clone().multiplyScalar(R * 0.62).setY(top + 0.012),
+      dir.clone().multiplyScalar(R * 0.22).setY(top - 0.004),
+      V(0, top - 0.008, 0),
+    ];
+    const curve = new THREE.CatmullRomCurve3(pts);
+    out.metal.add(new THREE.TubeGeometry(curve, 24, 0.0042, 6, false), m, PLATINUM, headBone);
+    const gems = new THREE.CatmullRomCurve3(pts.map((p) => p.clone().add(dir.clone().multiplyScalar(0.003)).add(V(0, 0.0025, 0))));
+    out.gem.add(new THREE.TubeGeometry(gems, 24, 0.0026, 5, false), m, null, headBone);
+    // a cross pattée on the band between the arches' feet
+    if (i % 2) {
+      const at = m.clone().multiply(translate(dir.x * (R + 0.004), H + 0.012, dir.z * (R + 0.004))).multiply(new THREE.Matrix4().makeRotationY(a));
+      out.metal.add(new RoundedBoxGeometry(0.02, 0.006, 0.004, 1, 0.0015), at, PLATINUM, headBone);
+      out.metal.add(new RoundedBoxGeometry(0.006, 0.022, 0.004, 1, 0.0015), at, PLATINUM, headBone);
+      out.metal.add(new THREE.SphereGeometry(0.0035, 10, 6), at.clone().multiply(translate(0, 0, 0.003)), RUBY, headBone);
+    }
+  }
+  // the orb, paved, and its cross
+  out.metal.add(new THREE.SphereGeometry(0.014, 20, 12), m.clone().multiply(translate(0, top + 0.012, 0)), PLATINUM, headBone);
+  out.gem.add(new THREE.TorusGeometry(0.0142, 0.0022, 6, 32).rotateX(Math.PI / 2), m.clone().multiply(translate(0, top + 0.012, 0)), null, headBone);
+  out.gem.add(new RoundedBoxGeometry(0.006, 0.026, 0.006, 1, 0.0015), m.clone().multiply(translate(0, top + 0.036, 0)), null, headBone);
+  out.gem.add(new RoundedBoxGeometry(0.018, 0.006, 0.006, 1, 0.0015), m.clone().multiply(translate(0, top + 0.04, 0)), null, headBone);
+  // the sapphire at the front, in a platinum collet ringed with diamonds
+  const front = m.clone().multiply(translate(0, H * 0.6 + 0.004, R + 0.008));
+  out.metal.add(new THREE.SphereGeometry(0.0125, 20, 14).scale(0.8, 1.05, 0.55), front, SAPPHIRE, headBone);
+  out.metal.add(new THREE.TorusGeometry(0.0118, 0.0016, 6, 32).scale(0.85, 1.05, 1), front, PLATINUM, headBone);
+  out.gem.add(new THREE.TorusGeometry(0.0145, 0.0018, 6, 32).scale(0.85, 1.05, 1), front.clone().multiply(translate(0, 0, -0.001)), null, headBone);
+  // purple velvet cap under the arches
+  out.metal.add(new THREE.SphereGeometry(R - 0.004, 32, 12, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 1.2, 1).translate(0, H * 0.4, 0), m, VELVET_PURPLE, headBone);
 }
 
 // --- held orders ---------------------------------------------------------------------------------
@@ -1431,10 +2107,22 @@ function buildPieces(fit: Fit, ids: string[], out: Out): void {
     }
     const grill = GRILLS[id];
     if (grill) buildGrill(fit, grill, out, head);
-    else if (id === 'gold-watch' || id === 'iced-watch') buildWatch(fit, id === 'iced-watch', out);
+    else if (WATCHES[id]) buildWatch(fit, WATCHES[id], out);
     else if (id === 'gold-aviators') buildShades(fit, out, head);
+    else if (SHADES[id]) buildFrames(fit, SHADES[id], out, head);
     else if (id === 'black-fedora' || id === 'panama-hat') buildHat(fit, id === 'panama-hat', out, head);
+    else if (id === 'top-hat') buildTopHat(fit, out, head);
+    else if (id === 'cowboy-hat') buildCowboyHat(fit, out, head);
+    else if (id === 'gold-crown') buildCrown(fit, out, head);
+    else if (id === 'imperial-crown') buildImperialCrown(fit, out, head);
   }
+}
+
+const HATS = new Set(['black-fedora', 'panama-hat', 'top-hat', 'cowboy-hat', 'gold-crown', 'imperial-crown']);
+
+/** Whether a worn piece (not a ride: rides.ts) has a model here; every one in the catalog should. */
+export function hasWearModel(id: string): boolean {
+  return !!(CHAINS[id] || GRILLS[id] || WATCHES[id] || SHADES[id] || CLOTHES[id]) || id === 'gold-aviators' || HATS.has(id);
 }
 
 /** The chain as one plain gold rope, for far away. */
@@ -1471,7 +2159,7 @@ interface ClothesSpec {
   top: string;
   bottom: string;
   shoes: string;
-  cloth: 'lame' | 'tux' | 'velvet' | 'fur' | 'studs';
+  cloth: 'lame' | 'tux' | 'velvet' | 'fur' | 'studs' | 'leather' | 'sequins' | 'champion' | 'emperor';
 }
 
 /**
@@ -1490,6 +2178,10 @@ const CLOTHES: Record<string, ClothesSpec> = {
   'velvet-jacket': { outfit: { m: 'suit', f: 'smart' }, top: '#5a0d1c', bottom: '#111114', shoes: '#0b0b0d', cloth: 'velvet' },
   'fur-coat': { outfit: { m: 'suit', f: 'dress' }, top: '#ddd0b8', bottom: '#141416', shoes: '#0b0b0d', cloth: 'fur' },
   'diamond-suit': { outfit: { m: 'suit', f: 'dress' }, top: '#0e0e11', bottom: '#0e0e11', shoes: '#0b0b0d', cloth: 'studs' },
+  'leather-jacket': { outfit: { m: 'suit', f: 'smart' }, top: '#151313', bottom: '#1d2231', shoes: '#0b0b0d', cloth: 'leather' },
+  'sequin-suit': { outfit: { m: 'suit', f: 'smart' }, top: '#b9bdc6', bottom: '#b9bdc6', shoes: '#0b0b0d', cloth: 'sequins' },
+  'champion-jacket': { outfit: { m: 'suit', f: 'smart' }, top: '#0c0c0e', bottom: '#101013', shoes: '#0b0b0d', cloth: 'champion' },
+  'emperor-robe': { outfit: { m: 'suit', f: 'dress' }, top: '#3a1058', bottom: '#241030', shoes: '#0b0b0d', cloth: 'emperor' },
 };
 
 /**
@@ -1554,21 +2246,95 @@ const CLOTH_GLSL: Record<ClothesSpec['cloth'], { color?: string; pbr?: string; n
     normal: `normal = normalize(normal + stud * (viewMatrix * vec4(wFacet(vRest, 1800.0) * 1.2, 0.0)).xyz);`,
     emissive: `totalEmissiveRadiance += stud * (wGlint(vRest, 90.0, uTime) * 6.0 + vec3(0.09));`,
   },
+  // black lambskin, creased, a silver zip up the front and along the lapel, a white tee under it
+  leather: {
+    color: `
+      lap = top * lapel(vRest, vRestN);
+      float tee = step(254.5, vSlot) * step(dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11)), 0.2) * step(0.9, vRest.y) * step(vRest.y, uNeckY) * step(0.2, vRestN.z);
+      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.78, 0.77, 0.74), tee);
+      float dxz = vRest.x - uCx;
+      float edge = mix(uLapel.z, uLapel.w, clamp((vRest.y - uLapel.x) / (uLapel.y - uLapel.x), 0.0, 1.0));
+      float zipAt = vRest.y < uLapel.x ? abs(dxz) : abs(dxz - edge);
+      stripe = top * step(0.3, vRestN.z) * (1.0 - step(0.0032, zipAt)) * step(vRest.y, uLapel.y);
+      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.6) * (0.65 + 0.35 * step(0.5, fract(vRest.y * 650.0))), stripe);`,
+    pbr: `roughnessFactor = mix(roughnessFactor, 0.52, top); roughnessFactor = mix(roughnessFactor, 0.42, lap); roughnessFactor = mix(roughnessFactor, 0.92, bottom); metalnessFactor = mix(metalnessFactor, 1.0, stripe); roughnessFactor = mix(roughnessFactor, 0.22, stripe); roughnessFactor = mix(roughnessFactor, 0.16, shoes);`,
+    normal: `normal = normalize(normal + top * (1.0 - stripe) * (viewMatrix * vec4((vec3(wNoise(vRest * vec3(45.0, 110.0, 45.0)), wNoise(vRest * vec3(45.0, 110.0, 45.0) + 5.3), wNoise(vRest * 45.0 + 2.1)) - 0.5) * 0.16 + wFacet(vRest, 1400.0) * 0.025, 0.0)).xyz);`,
+  },
+  // silver sequins from lapel to cuff: each little disc tilted its own way, catching the light
+  sequins: {
+    color: `
+      diffuseColor.rgb *= mix(vec3(1.0), vec3(0.85 + 0.25 * wHash13(floor(vRest * 220.0) + 5.0)), cloth);`,
+    pbr: `metalnessFactor = mix(metalnessFactor, 0.8, cloth); roughnessFactor = mix(roughnessFactor, 0.3, cloth); roughnessFactor = mix(roughnessFactor, 0.16, shoes);`,
+    normal: `normal = normalize(normal + cloth * (viewMatrix * vec4(wFacet(vRest, 220.0) * 0.45, 0.0)).xyz);`,
+    emissive: `totalEmissiveRadiance += cloth * (wGlint(vRest, 220.0, uTime) * step(0.6, wHash13(floor(vRest * 220.0) + 9.0)) * 2.4 + vec3(0.035, 0.036, 0.04));`,
+  },
+  // black satin, gold embroidery on the lapels and cuffs, a laurel and star across the back, and
+  // a gold stripe down each trouser leg
+  champion: {
+    color: `
+      lap = top * lapel(vRest, vRestN);
+      float cdx = abs(vRest.x - uCx);
+      float cuff = top * step(uWrist.x - 0.06, cdx) * (1.0 - step(uWrist.y + 0.075, vRest.y));
+      vec2 bp = vec2(vRest.x - uCx, vRest.y - (uNeckY - 0.21));
+      float br = length(bp);
+      float ba = atan(bp.x, bp.y);
+      float back = top * step(vRestN.z, -0.4);
+      float wreath = back * step(0.062, br) * step(br, 0.078 + 0.006 * abs(sin(ba * 11.0))) * step(0.42, abs(ba));
+      float seg = 6.2831853 / 5.0;
+      float sa = mod(ba + seg * 0.5, seg) - seg * 0.5;
+      vec2 q = br * vec2(cos(sa), abs(sin(sa)));
+      vec2 A = vec2(0.048, 0.0);
+      vec2 B = 0.019 * vec2(cos(seg * 0.5), sin(seg * 0.5));
+      float star = back * step(0.0, (B.x - A.x) * (q.y - A.y) - (B.y - A.y) * (q.x - A.x));
+      stripe = bottom * step(0.955, abs(vRestN.x)) * step(0.2, vRest.y) * step(vRest.y, 0.95);
+      stud = max(max(lap, cuff), max(max(wreath, star), stripe));
+      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0, 0.74, 0.34) * (0.75 + 0.25 * sin((vRest.x + vRest.y) * 2600.0)), stud);`,
+    pbr: `roughnessFactor = mix(roughnessFactor, 0.5, top); roughnessFactor = mix(roughnessFactor, 0.6, bottom); metalnessFactor = mix(metalnessFactor, 0.85, stud); roughnessFactor = mix(roughnessFactor, 0.38, stud); roughnessFactor = mix(roughnessFactor, 0.16, shoes);`,
+    normal: `normal = normalize(normal + stud * (viewMatrix * vec4(wFacet(vRest, 1200.0) * 0.25, 0.0)).xyz);`,
+    sheen: `material.sheenColor *= top * (1.0 - stud);`,
+  },
+  // purple velvet, ermine down the front and round the cuffs (white fur, black tail tips), a
+  // lattice of gold thread over the velvet, rubies down the front
+  emperor: {
+    color: `
+      lap = top * lapel(vRest, vRestN);
+      float edx = abs(vRest.x - uCx);
+      float ecuff = uSleeves * top * step(uWrist.x - 0.06, edx) * (1.0 - step(uWrist.y + 0.09, vRest.y));
+      float placket = top * step(0.3, vRestN.z) * (1.0 - step(0.062, edx)) * step(0.3, vRest.y);
+      float ermine = max(max(lap, placket), ecuff);
+      vec3 ec = floor(vRest * vec3(38.0, 26.0, 38.0));
+      vec3 ecen = (ec + 0.5 + (wHash33(ec) - 0.5) * 0.5) / vec3(38.0, 26.0, 38.0);
+      float tail = ermine * step(0.72, wHash13(ec + 2.0)) * (1.0 - step(0.0045, length((vRest - ecen) * vec3(1.0, 0.55, 1.0))));
+      vec2 lat = abs(fract(vec2(vRest.x + vRest.y, vRest.x - vRest.y + vRest.z) * 26.0) - 0.5);
+      stripe = top * (1.0 - ermine) * (1.0 - step(0.035, min(lat.x, lat.y)));
+      vec2 rq = vec2(edx, mod(vRest.y, 0.05) - 0.025);
+      stud = top * step(0.3, vRestN.z) * step(vRest.y, uLapel.x) * step(0.2, vRest.y) * (1.0 - step(0.0075, length(rq)));
+      stripe *= 1.0 - ermine;
+      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.86, 0.84, 0.8), ermine);
+      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.01, 0.01, 0.01), tail);
+      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0, 0.74, 0.34), stripe);
+      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.5, 0.01, 0.03), stud);
+      cloth = ermine;`,
+    pbr: `roughnessFactor = mix(roughnessFactor, 0.95, top); roughnessFactor = mix(roughnessFactor, 1.0, cloth); metalnessFactor = mix(metalnessFactor, 0.9, stripe); roughnessFactor = mix(roughnessFactor, 0.38, stripe); metalnessFactor = mix(metalnessFactor, 0.3, stud); roughnessFactor = mix(roughnessFactor, 0.05, stud); roughnessFactor = mix(roughnessFactor, 0.16, shoes);`,
+    normal: `normal = normalize(normal + (viewMatrix * vec4(cloth * (vec3(wNoise(vRest * vec3(700.0, 90.0, 700.0)) - 0.5, -0.3, wNoise(vRest * vec3(700.0, 90.0, 700.0) + 3.0) - 0.5) * 0.9 + wFacet(vRest, 1500.0) * 0.4) + top * (1.0 - cloth) * wFacet(vRest, 900.0) * 0.1 + stud * wFacet(vRest, 2400.0) * 0.8, 0.0)).xyz);`,
+    emissive: `totalEmissiveRadiance += stud * wGlint(vRest, 200.0, uTime) * vec3(2.0, 0.2, 0.3);`,
+    sheen: `material.sheenColor *= top * (1.0 - cloth) * (1.0 - stripe);`,
+  },
 };
 
-/** A special clothes' body material for one outfit model (the lapels depend on the model). */
-function clothesMaterial(id: string, fit: Fit): THREE.MeshPhysicalMaterial | null {
+/** A special clothes' body material for one outfit model (the lapels depend on the model), with the hair tucked under a hat. */
+function clothesMaterial(id: string, fit: Fit, hat: string | null, tuck: Tuck | null): THREE.MeshPhysicalMaterial | null {
   const spec = CLOTHES[id];
   if (!spec) return null;
-  const key = `${id}|${fit.id}`;
+  const key = `${id}|${fit.id}|${tuck ? hat : ''}`;
   const known = clothesMats.get(key);
   if (known) return known;
   const code = CLOTH_GLSL[spec.cloth];
   const m = new THREE.MeshPhysicalMaterial({ vertexColors: true, metalness: 0, roughness: 0.8, envMapIntensity: 1.1 });
   if (code.sheen) {
     m.sheen = 1;
-    m.sheenColor = spec.cloth === 'fur' ? new THREE.Color(1.0, 0.94, 0.84) : new THREE.Color(0.95, 0.35, 0.42);
-    m.sheenRoughness = spec.cloth === 'fur' ? 0.75 : 0.4;
+    m.sheenColor = spec.cloth === 'fur' ? new THREE.Color(1.0, 0.94, 0.84) : spec.cloth === 'champion' ? new THREE.Color(0.32, 0.3, 0.28) : spec.cloth === 'emperor' ? new THREE.Color(0.75, 0.4, 0.95) : new THREE.Color(0.95, 0.35, 0.42);
+    m.sheenRoughness = spec.cloth === 'fur' ? 0.75 : spec.cloth === 'champion' ? 0.3 : 0.4;
   }
   m.name = `clothes:${id}`;
   const time = { value: 0 };
@@ -1576,7 +2342,12 @@ function clothesMaterial(id: string, fit: Fit): THREE.MeshPhysicalMaterial | nul
   const O = OPENING[fit.female ? 'f' : 'm'];
   const cx = fit.cx;
   const neckY = fit.neckY;
+  const wristI = boneIndex(fit, 'Wrist.L');
+  const wrist = wristI >= 0 ? new THREE.Vector2(Math.abs(fit.at[wristI]!.x - cx), fit.at[wristI]!.y) : new THREE.Vector2(0.25, 0.85);
   m.onBeforeCompile = (s) => {
+    s.uniforms.uWrist = { value: wrist };
+    // the dress the women's robe is cut from has no sleeves: nothing at the wrist is a cuff
+    s.uniforms.uSleeves = { value: spec.outfit[fit.female ? 'f' : 'm'] === 'dress' ? 0 : 1 };
     s.uniforms.uTime = time;
     s.uniforms.uCx = { value: cx };
     s.uniforms.uGold = { value: new THREE.Color(spec.top) };
@@ -1585,12 +2356,13 @@ function clothesMaterial(id: string, fit: Fit): THREE.MeshPhysicalMaterial | nul
     s.vertexShader = s.vertexShader
       .replace('#include <common>', '#include <common>\nattribute float wSlot;\nattribute vec3 wRest;\nattribute vec3 wRestN;\nvarying float vSlot;\nvarying vec3 vRest;\nvarying vec3 vRestN;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvSlot = wSlot;\nvRest = wRest;\nvRestN = wRestN;');
+    if (tuck) tuckShader(s, tuck, false);
     s.fragmentShader = s.fragmentShader
       .replace(
         '#include <common>',
         `#include <common>
 varying float vSlot; varying vec3 vRest; varying vec3 vRestN;
-uniform float uTime; uniform float uCx; uniform float uNeckY; uniform vec4 uLapel; uniform vec3 uGold;
+uniform float uTime; uniform float uCx; uniform float uNeckY; uniform vec4 uLapel; uniform vec3 uGold; uniform vec2 uWrist; uniform float uSleeves;
 ${NOISE_GLSL}
 // The jacket's lapels: a band beside the front opening from the button up to the collar, wider
 // at the top, and the collar round the back of the neck.
@@ -1620,10 +2392,109 @@ ${code.color ?? ''}`,
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\n${code.emissive ?? ''}`)
       .replace('#include <lights_physical_fragment>', `#include <lights_physical_fragment>\n${code.sheen ? `#ifdef USE_SHEEN\n${code.sheen}\n#endif` : ''}`);
   };
-  const cacheKey = `wear-clothes-${spec.cloth}-${fit.id}`;
+  const cacheKey = `wear-clothes-${spec.cloth}-${fit.id}${tuck ? '-tuck' : ''}`;
   m.customProgramCacheKey = () => cacheKey;
   reflect(m);
   clothesMats.set(key, m);
+  return m;
+}
+
+// --- hair under a hat -----------------------------------------------------------------------------
+//
+// A hat sits on the skull, and some hair stands far above it (a quiff, a punk's crest). Under a
+// hat that hair is tucked in, in the vertex shader: every hair vertex above the hat's seat is
+// pressed down into the crown's height and drawn in to the band, carried from the character's
+// frame into the head bone's bind space (hair rides the head), so it still moves with the body.
+
+/** Each hat's band (per body) and how much height its crown gives the hair; a crown sits a little lower. */
+const HAT_ROOM: Record<string, { band: (female: boolean) => number; crown: number; lower?: number }> = {
+  'black-fedora': { band: (f) => (f ? 0.104 : 0.1), crown: 0.094 },
+  'panama-hat': { band: (f) => (f ? 0.104 : 0.1), crown: 0.094 },
+  'top-hat': { band: (f) => (f ? 0.102 : 0.098), crown: 0.15 },
+  'cowboy-hat': { band: (f) => (f ? 0.104 : 0.1), crown: 0.084 },
+  'gold-crown': { band: (f) => (f ? 0.102 : 0.098), crown: 0.06, lower: 0.004 },
+  'imperial-crown': { band: (f) => (f ? 0.102 : 0.098), crown: 0.1, lower: 0.006 },
+};
+
+/** How to tuck the hair under one hat on one model. */
+interface Tuck {
+  /** From this height up the hair is pressed down by `k`, and drawn in to the ellipse round `c`. */
+  from: number;
+  k: number;
+  c: THREE.Vector2;
+  r: THREE.Vector2;
+  /** The character frame to the head bone's bind space (rotation and scale only). */
+  toHead: THREE.Matrix3;
+}
+
+const HAIR = [2, 3];
+const tucks = new Map<string, Tuck | null>();
+
+/** The tuck for a hat on a model, or null when the hat is unknown or no hair reaches its seat. */
+function hairTuck(fit: Fit, hat: string): Tuck | null {
+  const key = `${fit.id}|${hat}`;
+  if (tucks.has(key)) return tucks.get(key)!;
+  const room = HAT_ROOM[hat];
+  let tuck: Tuck | null = null;
+  const head = boneIndex(fit, 'Head');
+  if (room && head >= 0) {
+    const band = room.band(fit.female);
+    const { x0, z0, seat } = hatSeat(fit, band);
+    // a little under the seat: a hat tips forward, its front sits lower
+    const from = seat - (room.lower ?? 0) - 0.012;
+    const rest = fit.rest.array as Float32Array;
+    const slot = fit.slot.array as Float32Array;
+    let top = -Infinity;
+    for (let i = 0; i < slot.length; i++) if (HAIR.includes(slot[i]!)) top = Math.max(top, rest[i * 3 + 1]!);
+    if (top > from) {
+      const r = band - 0.01;
+      tuck = {
+        from,
+        k: Math.min(1, Math.max(0.05, room.crown * 0.85 - 0.012) / (top - from)),
+        c: new THREE.Vector2(x0, z0),
+        r: new THREE.Vector2(r * 0.93, r * 1.07),
+        toHead: new THREE.Matrix3().setFromMatrix4(fit.toBind[head]!),
+      };
+    }
+  }
+  tucks.set(key, tuck);
+  return tuck;
+}
+
+/** The tuck in a material's vertex shader (after its own attributes, if it declares them). */
+function tuckShader(s: { uniforms: Record<string, THREE.IUniform>; vertexShader: string }, t: Tuck, declare: boolean): void {
+  s.uniforms.uTuck = { value: new THREE.Vector4(t.from, t.k, 0, 0) };
+  s.uniforms.uTuckC = { value: t.c };
+  s.uniforms.uTuckR = { value: t.r };
+  s.uniforms.uTuckM = { value: t.toHead };
+  s.vertexShader = s.vertexShader
+    .replace('#include <common>', `#include <common>\n${declare ? 'attribute float wSlot;\nattribute vec3 wRest;\n' : ''}uniform vec4 uTuck; uniform vec2 uTuckC; uniform vec2 uTuckR; uniform mat3 uTuckM;`)
+    .replace(
+      '#include <begin_vertex>',
+      `#include <begin_vertex>
+if ((abs(wSlot - 2.0) < 0.5 || abs(wSlot - 3.0) < 0.5) && wRest.y > uTuck.x) {
+  vec3 q = wRest;
+  q.y = uTuck.x + (wRest.y - uTuck.x) * uTuck.y;
+  float l = length((q.xz - uTuckC) / uTuckR);
+  if (l > 1.0) q.xz = uTuckC + (q.xz - uTuckC) / l;
+  transformed += uTuckM * (q - wRest);
+}`,
+    );
+}
+
+const tuckMats = new Map<string, THREE.Material>();
+
+/** A plain body material (the characters', a mannequin's gloss) with the hair tucked under a hat. */
+function tuckMaterial(base: THREE.Material, fit: Fit, hat: string, tuck: Tuck): THREE.Material {
+  const key = `${base.uuid}|${fit.id}|${hat}`;
+  let m = tuckMats.get(key);
+  if (m) return m;
+  m = base.clone();
+  m.name = `${base.name}:tuck`;
+  m.onBeforeCompile = (s) => tuckShader(s, tuck, true);
+  const cacheKey = `wear-tuck-${base.type}-${fit.id}-${hat}`;
+  m.customProgramCacheKey = () => cacheKey;
+  tuckMats.set(key, m);
   return m;
 }
 
@@ -1643,7 +2514,10 @@ export class Wearables {
   private set: Attached | null = null;
   private hand: Attached | null = null;
   private plain: THREE.Material | null = null;
+  /** Special clothes' material, and the hat the hair is tucked under (either makes the body's own material). */
   private suit: THREE.Material | null = null;
+  private tucked: { fit: Fit; hat: string; tuck: Tuck } | null = null;
+  private own: THREE.Material | null = null;
   private carry: THREE.AnimationAction | null = null;
   private carryMixer: THREE.AnimationMixer | null = null;
   private carrying = false;
@@ -1669,23 +2543,29 @@ export class Wearables {
     }
     this.fit = fit;
 
-    // special clothes: their own body material, reading each vertex's slot and rest position
-    if (body.material !== this.suit) this.plain = body.material as THREE.Material;
-    const suit = look.clothes ? clothesMaterial(look.clothes, fit) : null;
-    if (suit) {
+    // special clothes: their own body material, reading each vertex's slot and rest position; a
+    // hat tucks the hair in (in whichever material the body wears)
+    if (body.material !== this.own) this.plain = body.material as THREE.Material;
+    const hat = itemOfKind(look.hat, 'hat') ? look.hat! : null;
+    const tuck = hat ? hairTuck(fit, hat) : null;
+    this.tucked = tuck ? { fit, hat: hat!, tuck } : null;
+    const suit = look.clothes ? clothesMaterial(look.clothes, fit, hat, tuck) : null;
+    this.suit = suit;
+    const own = suit ?? (this.tucked && this.plain ? tuckMaterial(this.plain, fit, this.tucked.hat, tuck!) : null);
+    if (own) {
       const g = body.geometry;
       if (g.getAttribute('wRest') !== fit.rest) {
         g.setAttribute('wRest', fit.rest);
         g.setAttribute('wRestN', fit.restN);
         g.setAttribute('wSlot', fit.slot);
       }
-      body.material = suit;
+      body.material = own;
       // the diamonds' glint keeps time even when nothing else is worn
-      body.onBeforeRender = beforeDraw;
+      if (suit) body.onBeforeRender = beforeDraw;
     } else if (this.plain) {
       body.material = this.plain;
     }
-    this.suit = suit;
+    this.own = own;
 
     // jewellery, watch, shades, hat
     const { big, small } = pieces(look);
@@ -1709,10 +2589,12 @@ export class Wearables {
     this.pose(mixer, model, !!held);
   }
 
-  /** The body material to use now: the special clothes' own, or the plain one given. */
+  /** The body material to use now: the special clothes' own, or the plain one given (hair tucked under a hat). */
   body(m: THREE.Material): THREE.Material {
     this.plain = m;
-    return this.suit ?? m;
+    const t = this.tucked;
+    this.own = this.suit ?? (t ? tuckMaterial(m, t.fit, t.hat, t.tuck) : null);
+    return this.own ?? m;
   }
 
   dispose(): void {

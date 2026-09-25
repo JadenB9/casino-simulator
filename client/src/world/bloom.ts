@@ -21,6 +21,7 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { CopyShader } from 'three/addons/shaders/CopyShader.js';
 import type { Engine3D } from '../render/engine3d.ts';
+import { CALM_BLOOM, calmScale, onCalm } from '../app/comfort.ts';
 
 type Mode = 'probe' | 'hooks' | 'effects' | 'off';
 
@@ -118,6 +119,8 @@ export class Bloom {
 
   private muted = false;
   private strength = 0;
+  // calm (app/comfort.ts): the same glow, a little softer
+  private readonly offCalm = onCalm(() => this.mute(this.muted));
 
   /**
    * Hold the glow at nothing (or give it back) without changing how the frame is drawn: the same
@@ -125,14 +128,14 @@ export class Bloom {
    */
   mute(on: boolean): void {
     this.muted = on;
-    this.pass.strength = on ? 0 : this.strength;
+    this.pass.strength = on ? 0 : this.strength * calmScale(CALM_BLOOM);
   }
 
   /** How the glow looks: FLOOR_BLOOM on the floor, TABLE_BLOOM or MACHINE_BLOOM seated. */
   setLook(l: BloomLook): void {
     this.pass.threshold = l.threshold;
     this.strength = l.strength;
-    this.pass.strength = this.muted ? 0 : l.strength;
+    this.pass.strength = this.muted ? 0 : l.strength * calmScale(CALM_BLOOM);
     this.pass.radius = l.radius;
     (this.pass.highPassUniforms as { smoothWidth: { value: number } }).smoothWidth.value = l.knee;
   }
@@ -180,6 +183,7 @@ export class Bloom {
   }
 
   dispose(): void {
+    this.offCalm();
     this.engine.scene.onBeforeRender = this.prevBefore;
     this.engine.scene.onAfterRender = this.prevAfter;
     if (this.mode === 'effects') this.engine.renderer.setEffects([]);

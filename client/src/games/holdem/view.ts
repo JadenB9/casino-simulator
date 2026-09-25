@@ -22,7 +22,8 @@ import { serverNow } from '../../net/clock.ts';
 import { session } from '../../app/session.ts';
 import { ActionBar } from './actionbar.ts';
 import { advise, bannerOf, estimateEquity, onBoard, positionOf } from './advice.ts';
-import { holdemFelt, dealerButton, slotPoint, slotEdge, slotYaw, boardPoint, BOARD_SCALE, DEALER_POINT, TOP_Y } from './table.ts';
+import { holdemFelt, dealerButton, slotPoint, slotEdge, slotYaw, boardPoint, oval, BOARD_SCALE, DEALER_POINT, TOP_Y } from './table.ts';
+import { around } from '../../table/fit.ts';
 import { hideNearChairs } from './model.ts';
 import './holdem.css';
 
@@ -251,6 +252,15 @@ export function mountHoldem(ctx: TableViewCtx): TableView {
       o.betLabel.position.set(bl.x, bl.y + 0.035, bl.z);
       o.plate.classList.toggle('he-near', k === 0);
     });
+    // What stays in view at any window size (table/fit.ts): the felt, and every player's plate
+    // round it (a plate is a label a hand wide, so its sides count too).
+    stage.board(
+      Array.from({ length: 16 }, (_, i) => {
+        const p = oval(i / 16);
+        return new THREE.Vector3(p.x, TOP_Y, p.z);
+      }),
+      seats.map((_, seat) => around(plateAt(slot(seat)), 0.15, 0.03)),
+    );
   }
 
   // ------------------------------------------------------------------------------------------

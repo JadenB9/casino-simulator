@@ -1,5 +1,6 @@
 // Everyone else on the floor, drawn from FloorLink's tracks: one Character per remote player,
-// placed 200 ms in the past and walking or idling by how fast that drawn position moves. A player
+// placed 200 ms in the past and walking or idling by how fast that drawn position moves (or, on a
+// ride, gliding: their character stands on it and eases through the snapshots' corners). A player
 // sitting at a station is drawn at the seat the scene hands back, or hidden if there is none; one
 // sitting on a floor seat (a stool, a sofa) is drawn sitting on it.
 //
@@ -12,6 +13,7 @@ import type { Character, CharacterFactory } from './contract.ts';
 import { byteToYaw, type FloorLink, type RemotePlayer } from '../net/presence.ts';
 import { serverNow } from '../net/clock.ts';
 import { SKIN_TONES, type Look } from '../../../shared/src/look.ts';
+import { titleOf } from '../../../shared/src/feats.ts';
 import type { EmoteId } from '../../../shared/src/protocol.ts';
 import './remote-players.css';
 
@@ -81,6 +83,8 @@ const ARRIVED_M = 0.9;
 export const MAX_DRAWN = 40;
 /** Someone already drawn counts as this much nearer, so the crowd's edge doesn't flicker. */
 const KEEP_M = 1;
+/** How quickly a rider's drawn position catches up with their snapshots (1/s). */
+const RIDE_EASE = 10;
 
 export class RemotePlayers {
   readonly group = new THREE.Group();
@@ -107,7 +111,11 @@ export class RemotePlayers {
     this.offs = [
       link.on('join', (p) => this.add(p)),
       link.on('leave', (id) => this.remove(id)),
-      link.on('look', (id, look) => this.drawn.get(id)?.ch.setLook(look)),
+      link.on('look', (id, look) => {
+        const ch = this.drawn.get(id)?.ch;
+        ch?.setLook(look);
+        if (ch) showTitle(ch, look); // v6 feats6
+      }),
     ];
   }
 
@@ -196,8 +204,15 @@ export class RemotePlayers {
       d.onFloor = false;
       return false;
     }
-    const x = pose.x / 100;
-    const z = pose.z / 100;
+    let x = pose.x / 100;
+    let z = pose.z / 100;
+    // Someone on a ride glides: the drawn line eases through the corners the snapshots cut (a
+    // position every 200 ms is a metre and more apart at a ride's speed).
+    if (d.onFloor && (d.ch as { riding?: string | null }).riding && Math.hypot(x - d.x, z - d.z) < SNAP_M) {
+      const k = 1 - Math.exp(-dt * RIDE_EASE);
+      x = d.x + (x - d.x) * k;
+      z = d.z + (z - d.z) * k;
+    }
     // Speed from the drawn motion itself, eased so one late snapshot doesn't stutter the walk.
     const step = d.onFloor ? Math.hypot(x - d.x, z - d.z) : 0;
     const v = dt > 0 && step < SNAP_M ? step / dt : 0;
@@ -247,6 +262,7 @@ export class RemotePlayers {
   private add(p: RemotePlayer): void {
     if (this.drawn.has(p.info.id)) return;
     const ch = this.factory.create(p.info.look, p.info.name);
+    showTitle(ch, p.info.look); // v6 feats6
     ch.root.visible = false; // until its first update places it
     this.group.add(ch.root);
     this.drawn.set(p.info.id, { ch, x: 0, z: 0, speed: 0, onFloor: false, placed: false, shown: false, rank: 0 });
@@ -373,4 +389,25 @@ class CapsuleCharacter implements Character {
 
 function cloth(): THREE.MeshStandardMaterial {
   return new THREE.MeshStandardMaterial({ roughness: 0.78, metalness: 0 });
+}
+
+// v6 feats6: the title a player wears (a feat's, shared/src/feats.ts), on a line of its own under
+// the name in their tag. The tag's text is the name (setName writes it), so the title is a child
+// element added after it, and taken off again when they stop wearing one.
+function showTitle(ch: Character, look: Look): void {
+  const tag = (ch as { tag?: { element?: HTMLElement } }).tag?.element ?? (ch as unknown as { label?: HTMLElement }).label;
+  if (!tag) return;
+  const title = titleOf(look.title)?.reward.title ?? null;
+  let line = tag.querySelector<HTMLElement>('.tag-title');
+  tag.classList.toggle('titled', title !== null);
+  if (!title) {
+    line?.remove();
+    return;
+  }
+  if (!line) {
+    line = document.createElement('span');
+    line.className = 'tag-title';
+    tag.append(line);
+  }
+  line.textContent = title;
 }
