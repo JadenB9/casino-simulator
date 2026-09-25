@@ -1349,6 +1349,11 @@ tournaments; where cash games differ, Robert's Rules governs.
   removed during a hand ([Wikipedia][wikibet]). Buy-in: 20 to 100 big blinds, a common convention ("in a $1/2
   No Limit cash game, the minimum stake is often set at $40 while maximum stake is often set at $200"
   [Wikipedia][wikibet]). Players top up only between hands.
+- **The house's money stays off tables with other players.** Chips at a multiplayer table go from player to
+  player, so a buy-in or top-up there must leave on the balance what a transfer would hold back: the
+  cashier's top-ups, bonuses, tips, gift boxes and feat cash from the last three days, and money other
+  players sent in the last day (a new account's starting $50,000 is free to play). Otherwise one account
+  could take top-up after top-up and lose each on purpose to another. The bots' tables take any money.
 
 ### 4.2 Button, blinds and seating
 
