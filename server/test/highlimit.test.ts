@@ -32,6 +32,9 @@ async function player(tag: string): Promise<{ id: number; token: string }> {
 }
 
 const me = async (token: string) => (await (await api('me', token)).json<any>()).profile;
+/** Cash feats have paid (a first big win at a machine can earn one): grants beside the play, never part of it. */
+const featPaid = async (id: number) =>
+  (await env.DB.prepare(`SELECT COALESCE(SUM(amount), 0) AS n FROM casino_ledger WHERE account_id = ?1 AND op_id LIKE 'feat:%'`).bind(id).first<{ n: number }>())!.n;
 
 async function sit(token: string, path: string, amount: number): Promise<[Client, any]> {
   const { client } = await connect(path, token);
@@ -65,6 +68,7 @@ describe('high-limit machines', () => {
     expect(snap.meta.config.limits.default).toEqual({ min: 25, max: 3_000_000, step: 25 });
     expect(snap.meta.config.buyIn.max).toBe(300_000_000);
     const start = (await me(p.token)).balance;
+    const feats0 = await featPaid(p.id);
     let credit = 300_000_000;
     let net = 0;
     for (const [aid, coins, denom] of [['s1', 1, 500_000], ['s2', 3, 1_000_000], ['s3', 2, 500_000]] as const) {
@@ -86,7 +90,7 @@ describe('high-limit machines', () => {
     await c.next<any>((m) => m.t === 'seat' && m.status === 'watching', 5000);
     const after = await me(p.token);
     expect(credit).toBe(300_000_000 + net);
-    expect(after.balance - start).toBe(credit);
+    expect(after.balance - start).toBe(credit + (await featPaid(p.id)) - feats0);
     expect(after.inPlay).toBe(0);
     await books(p.id);
     c.ws.close();
@@ -110,6 +114,7 @@ describe('high-limit machines', () => {
     expect(snap.meta.config.limits.default).toEqual({ min: 100, max: 2_500_000, step: 100 });
     expect(snap.meta.config.buyIn.max).toBe(250_000_000);
     const start = (await me(p.token)).balance;
+    const feats0 = await featPaid(p.id);
     let credit = 250_000_000;
     for (const [n, denom] of [[1, 500_00], [2, 1_000_00], [3, 5_000_00]] as const) {
       c.send({ t: 'act', aid: `d${n}`, a: { type: 'deal', coins: 5, denom } });
@@ -130,7 +135,7 @@ describe('high-limit machines', () => {
     c.send({ t: 'cashout', aid: 'out1' });
     await c.next<any>((m) => m.t === 'seat' && m.status === 'watching', 5000);
     const after = await me(p.token);
-    expect(after.balance - start).toBe(credit);
+    expect(after.balance - start).toBe(credit + (await featPaid(p.id)) - feats0);
     await books(p.id);
     c.ws.close();
   });
