@@ -184,6 +184,12 @@ export class Garage {
     // the back wall: dark oak slats floor to ceiling, the whole width
     add(new THREE.BoxGeometry(WALL, G.height, D).translate(G.x1, G.height / 2, CZ), '#1d140d');
     for (let z = G.z0 + 0.3; z < G.z1 - 0.2; z += 0.22) add(new THREE.BoxGeometry(0.05, G.height - 0.4, 0.1).translate(G.x1 - WALL / 2 - 0.035, (G.height - 0.4) / 2 + 0.1, z), '#6a4a2f', 0.45, 1.05);
+    // outside, the walls are clad in dark stone (the lit plaster is only inside)
+    add(new THREE.BoxGeometry(W + 0.2, G.height, 0.08).translate(CX, G.height / 2, G.z0 - WALL / 2 - 0.05), '#2a2b2f', 0.75, 1);
+    add(new THREE.BoxGeometry(W + 0.2, G.height, 0.08).translate(CX, G.height / 2, G.z1 + WALL / 2 + 0.05), '#2a2b2f', 0.75, 1);
+    add(new THREE.BoxGeometry(0.08, G.height, D + 0.36).translate(G.x1 + WALL / 2 + 0.05, G.height / 2, CZ), '#2a2b2f', 0.75, 1);
+    for (let x = G.x0 + 3; x < G.x1; x += 3)
+      for (const z of [G.z0 - WALL / 2 - 0.12, G.z1 + WALL / 2 + 0.12]) add(new THREE.BoxGeometry(0.04, G.height - 0.4, 0.06).translate(x, (G.height - 0.4) / 2, z), '#3a3b40', 0.8, 1);
     // the glass front's frame over the glass and outside: a dark fascia, the roof's edge
     add(new THREE.BoxGeometry(WALL, 0.9, D).translate(G.x0, G.height - 0.45, CZ), '#17181b');
     add(new THREE.BoxGeometry(0.2, 1.1, D + 0.6).translate(G.x0 - 0.25, G.height - 0.35, CZ), '#1c1d21');
