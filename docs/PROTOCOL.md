@@ -370,6 +370,37 @@ the floor hears about a win before the winner sees it. The words in `what` come 
 the table showed everyone once the round was over: the bet that paid, a hand turned over to be
 paid, a machine's own display. A Hold'em pot won without a showdown is just "Took the pot".
 
+### The law (v6)
+
+`shared/src/law/` has the rules; the floor's side is `server/src/law.ts`.
+
+| t (client) | fields | limit |
+|---|---|---|
+| `punch` | `r` (the way you face, yaw 0-255) | one per 650 ms (extras dropped); never from a table or a floor seat |
+
+| t (server) | fields |
+|---|---|
+| `punch` | `id` (who threw it), `hit: number \| StaffId \| null` (a player, a member of staff, or the air), to everyone |
+| `detour` | `d: Detour` (a guard or the pit boss leaving his loop to go to someone), to everyone |
+| `detours` | `list: Detour[]` (the ones under way, right after `hello`) |
+| `law` | `ev: { k: 'warn' \| 'jail' \| 'free', id, name, staff, why: 'punch' \| 'win' \| null, until? }`, to everyone |
+| `jail` | `jail: { bail, won, at } \| null` (your own time inside: after `hello`, and as it changes) |
+
+The staff aren't sent at all. Where each stands and faces is `poseAt(spec, t, detour)` of the
+server's clock (`shared/src/law/patrol.ts`): the client draws the same function the server decides
+by. A punch lands on the nearest player standing (not at a table, not on a seat) or member of staff
+within 1.2 m in front. A guard who can see the puncher (in range, in his cone, in the same room:
+`sight.ts`) catches it; a table reports a player whose winnings there reach its hot amount in five
+minutes, or who hits a big win, and the pit boss catches it if he can see them then. Caught once
+is a warning; caught again within five minutes of it (15 s later at the earliest: one moment is one
+catch) is jail: bail is a fiftieth of what you had, $1,000 to $25,000, every table you sit at stands
+you up the normal way, and after the guard walks over you get `tp` into the jail and stay confined
+to it (every connect puts you back). Inmates play only the jail's tables (`ws/solo/blackjack` and
+`ws/solo/sicbo` open `solo:<game>:jail:<id>` at $5 to a quarter of the bail; every other table
+socket closes 4005, and `POST /tables` and `/tables/join` answer 403). Each finished round there
+moves `won` by its net, never below zero; at the bail the jail table stands you up (you keep the
+chips) and a moment later `tp` takes you to the casino's doors, strikes cleared.
+
 ### Celebrities and the gift box
 
 Beside the messages above, the floor carries these (`shared/src/celebs.ts`, `server/src/floor/celebs.ts`).

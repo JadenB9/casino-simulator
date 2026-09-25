@@ -30,11 +30,11 @@ import type { Quality } from '../render/engine3d.ts';
 import type { Character, CharacterFactory } from './contract.ts';
 import type { EmoteId } from '../../../shared/src/protocol.ts';
 import { Wearables, dressed } from './wearables.ts';
-import { DOWN, PIVOT, gestureOf, mirror, movesLegs, smooth, type BoneKey, type Foot, type Hand, type HandMix, type Pose, type PropId, type StaffGesture, type Turn, type Vec } from './gestures.ts';
+import { DOWN, PIVOT, gestureOf, mirror, movesLegs, smooth, type BoneKey, type Foot, type Hand, type HandMix, type Pose, type PropId, type StaffGesture, type LawGesture, type Turn, type Vec } from './gestures.ts';
 import { disposeProp, propMesh } from './emote-props.ts';
 import { Ride, kneeFor, rideSpec, stanceYaw, type RideSpec } from './rides.ts';
 
-export { CLAP_RATE, CLAP_S, CLAP_TIMES, gestureSeconds, type StaffGesture } from './gestures.ts';
+export { CLAP_RATE, CLAP_S, CLAP_TIMES, gestureSeconds, type StaffGesture, type LawGesture } from './gestures.ts';
 
 export const MODEL_BASE = `${import.meta.env.BASE_URL}assets/models/`;
 
@@ -261,7 +261,7 @@ export class Person implements Character {
   private readonly posed = new Map<THREE.Object3D, THREE.Quaternion>();
   private readonly spare = new Map<THREE.Object3D, THREE.Quaternion>();
   /** The emote being acted out, how far in, and (walked off) how much of it is left as it fades. */
-  private act: { e: EmoteId | StaffGesture; t: number; fade: number } | null = null;
+  private act: { e: EmoteId | StaffGesture | LawGesture; t: number; fade: number } | null = null;
   /** Room for where the mixer had the bones an emote moves (kept in `moved`, below). */
   private readonly spareAt = new Map<THREE.Object3D, THREE.Vector3>();
   /** The legs as the emotes pose them, and the chest's turn in the idle pose (for Hand.frame). */
@@ -382,7 +382,7 @@ export class Person implements Character {
   }
 
   /** Act out an emote, or one of a dealer's motions (StaffGesture). */
-  gesture(e: EmoteId | StaffGesture): void {
+  gesture(e: EmoteId | StaffGesture | LawGesture): void {
     this.act = { e, t: 0, fade: 1 };
     if (this.prop && gestureOf(e)?.prop !== this.prop.id) this.dropProp();
   }
