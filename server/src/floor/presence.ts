@@ -55,6 +55,8 @@ export interface FloorAtt {
    * waved, opened a lobby list, said `here`); the floor closes a socket IDLE_MS after it.
    */
   active?: number;
+  /** v6: the emotes this account owns beyond the free ones (bought or earned); others are dropped. */
+  emotes?: string[];
 }
 
 type Broadcast = (msg: FloorServerMsg, except?: WebSocket) => void;
@@ -97,7 +99,7 @@ export class Presence {
     }
   }
 
-  onConnect(ws: WebSocket, who: { accountId: number; name: string; look: Look }): void {
+  onConnect(ws: WebSocket, who: { accountId: number; name: string; look: Look; emotes?: string[] }): void {
     const now = Date.now();
     // A newer tab taking over from an older one (index.ts closed the old socket a moment ago, in
     // this same turn) goes on standing where the old one stood, and nobody else hears about it.
@@ -245,6 +247,23 @@ export class Presence {
     a.seat = null;
     this.save(ws, a);
     this.broadcast({ t: 'player', id: a.accountId, seat: null });
+  }
+
+  /** v6: the account owns these emotes now too; the ones it didn't have before come back. */
+  grantEmotes(accountId: number, emotes: readonly string[]): string[] {
+    const fresh = new Set<string>();
+    this.update(accountId, (a) => {
+      const had = new Set(a.emotes ?? []);
+      for (const e of emotes) if (!had.has(e)) fresh.add(e);
+      a.emotes = [...new Set([...had, ...emotes])];
+    });
+    return [...fresh];
+  }
+
+  /** v6: where a player on the floor stands now (cm), and their name; null if they aren't here. */
+  whereIs(accountId: number): { x: number; z: number; name: string } | null {
+    const w = this.walkerOf(accountId);
+    return w ? { x: w.att.x, z: w.att.z, name: w.att.name } : null;
   }
 
   /** Something this player did besides moving (see FloorAtt.active); kept through hibernation. */
