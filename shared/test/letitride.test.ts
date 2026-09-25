@@ -143,7 +143,7 @@ describe('let it ride strategy', () => {
     expect(ride('Ah Kd 9c')).toBe(false);
   });
 
-  it('bet 2: rides a paying hand, four to a flush, an open straight with a high card, four high cards inside', () => {
+  it('bet 2: rides a paying hand, four to a flush, four to an outside straight, four high cards inside', () => {
     const ride = (s: string) => rideSecond(cards(s));
     expect(ride('Qs Qh 4d 2c')).toBe(true);
     expect(ride('4s 4h 2d 2c')).toBe(true); // two pair already pays 2 to 1
@@ -152,9 +152,10 @@ describe('let it ride strategy', () => {
     expect(ride('2s 7s 9s Ks')).toBe(true); // four to a flush
     expect(ride('9s 10h Jd Qc')).toBe(true); // open, high cards
     expect(ride('7s 8h 9d 10c')).toBe(true);
-    expect(ride('4s 5h 6d 7c')).toBe(false); // open, no high card
-    expect(ride('Js Qh Kd Ac')).toBe(false); // one end only
-    expect(ride('10s Jh Qd Ac')).toBe(false); // inside, four high cards: an exact tie, so pull
+    expect(ride('4s 5h 6d 7c')).toBe(true); // outside, no high card: an exact tie, ridden
+    expect(ride('Js Qh Kd Ac')).toBe(true); // one end only, but four high cards
+    expect(ride('10s Jh Qd Ac')).toBe(true); // inside, four high cards: an exact tie, ridden
+    expect(ride('Ah 2d 3c 4s')).toBe(false); // fills one way, no high card
     expect(ride('8s 9h Jd Qc')).toBe(false);
     expect(ride('Ah Kd 9c 2s')).toBe(false);
   });

@@ -14,7 +14,8 @@ import type { Member } from '../../../../shared/src/protocol.ts';
 import type { TableConfig, GameEvent } from '../../../../shared/src/engine.ts';
 import type { Card } from '../../../../shared/src/cards.ts';
 import { type BetLimits, type Cents, BETTING_CHIPS, formatMoney } from '../../../../shared/src/money.ts';
-import { maxBet, type MaxBet } from '../../../../shared/src/limits.ts';
+import { maxBet } from '../../../../shared/src/limits.ts';
+import { unitMax } from './max.ts';
 import { BETTING_MS, DECISION_MS, MAX_SPOTS } from '../../../../shared/src/games/letitride/engine.ts';
 import type { LetItRideEvent, LetItRideView, SeatView } from '../../../../shared/src/games/letitride/protocol.ts';
 import {
@@ -135,11 +136,6 @@ function bonusEdge(pay: Paytable): number {
   let ev = -16_440;
   counts.forEach((n, i) => (ev += pay.bonus[i]! * n));
   return -ev / 22_100;
-}
-
-/** The most one more chip can add to each circle: the three move together. */
-function unitMax(limits: BetLimits, current: Cents, stack: Cents): MaxBet {
-  return maxBet({ limits, current, stack: Math.floor(stack / 3) });
 }
 
 export function mountLetItRide(ctx: TableViewCtx): TableView {
@@ -310,7 +306,7 @@ export function mountLetItRide(ctx: TableViewCtx): TableView {
       p('After seeing your three cards, let bet 1 ride or pull it back. The dealer turns the first community card: let bet 2 ride or pull it back. The $ bet always rides. The second card turns and every bet still riding is paid by the table, or lost below a pair of tens.'),
       table('Each riding bet pays', CATEGORY_NAMES.map((name, i) => [name, `${pay.hand[i]} to 1`] as [string, string]).slice(1).reverse()),
       table('3-Card Bonus, on your first three cards', BONUS_NAMES.map((name, i) => [name, `${pay.bonus[i]} to 1`] as [string, string])),
-      p('Best play, bet 1: ride with a paying pair or three of a kind, three to a royal flush, three suited in a row (not 2-3-4 or A-2-3), three to a straight flush with one gap and a high card, or two gaps and two high cards. Bet 2: ride with a paying hand, four to a flush, or four to an open straight with a high card (ten or better).'),
+      p('Best play, bet 1: ride with a paying pair or three of a kind, three to a royal flush, three suited in a row (not 2-3-4 or A-2-3), three to a straight flush with one gap and a high card, or two gaps and two high cards. Bet 2: ride with a paying hand, four to a flush, four to an outside straight, or four high cards (ten or better) to an inside straight.'),
       p(`${standard ? 'Played that way the house keeps 3.51% of one bet a hand. ' : ''}3-Card Bonus: ${(bonusEdge(pay) * 100).toFixed(2)}%.`),
       el('p', 'lr-keys', '1-8 chips · A max, then click a circle or the bonus · Space deal · L let it ride · P pull back · R rebet · Shift R double · X clear · Backspace undo'),
     );

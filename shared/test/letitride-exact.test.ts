@@ -74,8 +74,8 @@ it('the pull-back strategy is the best play, and the house edge is 1,822,224 / 5
           ride4[k] = rideSecond([CARDS[a]!, CARDS[b]!, CARDS[c]!, CARDS[d]!]) ? 1 : 0;
           if (sum4[k] === 0) {
             ties4++;
-            // a tie is pulled back
-            if (ride4[k]) wrong++;
+            // a tie rides, as the Wizard's strategy has it
+            if (!ride4[k]) wrong++;
           } else if ((sum4[k]! > 0) !== (ride4[k] === 1)) wrong++;
         }
   expect(wrong).toBe(0);
@@ -110,10 +110,10 @@ it('the pull-back strategy is the best play, and the house edge is 1,822,224 / 5
   expect(won).toBe(-1_822_224);
   expect(riding).toBe(RIDING);
   console.log(`let it ride: edge ${((1_822_224 / 51_979_200) * 100).toFixed(4)}% of a unit, ${(riding / deals).toFixed(4)} units ride on average, element of risk ${((1_822_224 / riding) * 100).toFixed(4)}%`);
-});
+}, 120_000);
 
 /** Units left riding over all 51,979,200 deals under the strategy (for the element of risk). */
-const RIDING = 63_607_296;
+const RIDING = 64_042_752;
 
 it('the 3-Card Bonus 50-40-30-6-3-1: -1,568 / 22,100 = 7.0950%', () => {
   const deck = newDeck();

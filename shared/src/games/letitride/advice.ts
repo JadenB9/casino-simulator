@@ -12,7 +12,8 @@ const WHY: Record<RideReason, string> = {
   'one-gap': 'three to a straight flush, one gap, a high card',
   'two-gaps': 'three to a straight flush, two gaps, two high cards',
   'flush-draw': 'four to a flush',
-  'open-straight': 'four to an open straight with a high card',
+  'open-straight': 'four to an outside straight',
+  'inside-high': 'four high cards to an inside straight',
 };
 
 /** "Let it ride: a Pair of Queens pays already" or "Pull it back: King high, no draw worth it". */

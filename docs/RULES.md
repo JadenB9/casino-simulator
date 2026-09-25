@@ -4,7 +4,7 @@ Every game in the casino follows standard Las Vegas Strip rules and pays real od
 is the summary. The full rules, every paytable, the strategy charts and the sources are in:
 
 - [rules/table-games.md](rules/table-games.md): blackjack, roulette, craps, baccarat, Casino War,
-  the Big Six wheel, Sic Bo and the Bandit Wheel
+  the Big Six wheel, Sic Bo, the Bandit Wheel, Let It Ride and Pai Gow Poker
 - [rules/cards-and-machines.md](rules/cards-and-machines.md): Three Card Poker, video poker,
   slots, Texas Hold'em
 - [rules/online-games.md](rules/online-games.md): the online games on the lounge computers
@@ -76,6 +76,10 @@ inside 3. Seeds are fixed, so `npm run test:mc` reproduces these exactly.
 | Casino War | 6 decks, cover card a quarter from the bottom; on a tie surrender half or go to war (raise equal to the bet, burn three); a tie in the war pays the raise 2:1; Tie bet 10:1 | Bet, going to war on every tie | 2.330% | 2.323% (10M rounds, z −0.21) |
 | | | Bet, surrendering every tie | 3.698% | 3.719% (10M rounds, z +0.69) |
 | | | Tie bet | 18.650% | 18.642% (10M rounds, z −0.08) |
+| Let It Ride | one deck, three equal bets (1, 2, $), bets 1 and 2 may be pulled back, pair of tens or better 1:1 up to royal flush 1,000:1 (the Strip table); 3-Card Bonus 50-40-30-6-3-1 | The three bets, pull-back strategy, per unit | 3.506% | LIRMAIN |
+| | | 3-Card Bonus | 7.095% | LIRBONUS |
+| Pai Gow Poker | 53 cards with the joker (a bug), A-2-3-4-5 second-highest straight, dealer banks and sets by the Trump Plaza house way, 5% commission, copies to the dealer; Fortune pay table 2 (8,000 to 2) | The bet, set by the house way | 2.731% | 2.715% (10M hands, z −0.68) |
+| | | Fortune | 7.766% | 7.728% (10M hands, z −0.21) |
 | Video poker | Jacks or Better 9/6, 5 coins, optimal hold list | | 99.544% RTP | 99.447% (20M hands, z −1.00) |
 | Slots | six machines, published reel strips | A "Classic Sevens" (3 reels) | 94.428% RTP | 94.563% (10M spins, z +0.65) |
 | | | B "Neon Nights" (5x3, 20 lines, free spins) | 95.374% RTP | 95.325% (10M spins, z −0.41) |

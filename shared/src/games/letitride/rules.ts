@@ -171,7 +171,7 @@ function straightDraw(ranks: readonly number[]): { gaps: number; highs: number; 
 }
 
 /** Why a bet is worth letting ride, as the strategy card puts it. */
-export type RideReason = 'pays' | 'royal' | 'run' | 'one-gap' | 'two-gaps' | 'flush-draw' | 'open-straight';
+export type RideReason = 'pays' | 'royal' | 'run' | 'one-gap' | 'two-gaps' | 'flush-draw' | 'open-straight' | 'inside-high';
 
 /**
  * Bet 1, on your three cards: let it ride with a paying hand already (a pair of tens or better,
@@ -201,11 +201,12 @@ export function rideFirst(cards: readonly Card[]): boolean {
 
 /**
  * Bet 2, on your three cards and the first community card: let it ride with a paying hand, four
- * to a flush, or four to an open straight with a high card. Pull it back otherwise (null). Every
- * four-card hand of it is the best play by the exact enumeration in letitride-exact.test.ts. A few
- * hands are an exact tie, riding or not (four to an open straight with no high card, like 5-6-7-8,
- * and four high cards to an inside straight, like 10-J-Q-A): some strategy cards ride those, this
- * one pulls them back, and the house edge is the same either way.
+ * to a flush, four to an outside straight, or four high cards to an inside straight. Pull it back
+ * otherwise (null). Wizard of Odds' strategy, and every four-card hand of it is the best play by
+ * the exact enumeration in letitride-exact.test.ts. Two kinds of hand are an exact tie, riding or
+ * not: four to an outside straight with no high card (5-6-7-8) and four high cards to an inside
+ * straight (10-J-Q-A). The Wizard rides them, and so does this; the house edge is the same either
+ * way.
  */
 export function secondReason(cards: readonly Card[]): RideReason | null {
   const { ranks, suited } = shape(cards);
@@ -220,8 +221,10 @@ export function secondReason(cards: readonly Card[]): RideReason | null {
   if (suited) return 'flush-draw';
   const d = straightDraw(ranks);
   if (!d) return null;
-  // open at both ends (A-2-3-4 and J-Q-K-A fill only one way) with a high card to pair
-  return d.gaps === 0 && !ranks.includes(12) && d.highs >= 1 ? 'open-straight' : null;
+  // four in a row that a card at either end fills (A-2-3-4 and J-Q-K-A fill only one way), or
+  // four high cards to fill in the middle
+  if (d.gaps === 0 && !ranks.includes(12)) return 'open-straight';
+  return d.highs === 4 ? 'inside-high' : null;
 }
 
 export function rideSecond(cards: readonly Card[]): boolean {
