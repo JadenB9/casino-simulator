@@ -86,6 +86,8 @@ export class Law {
     this.sql = ctx.storage.sql;
     this.sql.exec(`CREATE TABLE IF NOT EXISTS law_warn (account_id INTEGER PRIMARY KEY, at INTEGER NOT NULL, until INTEGER NOT NULL)`);
     this.sql.exec(`CREATE TABLE IF NOT EXISTS law_jail (account_id INTEGER PRIMARY KEY, bail INTEGER NOT NULL, won INTEGER NOT NULL, at INTEGER NOT NULL)`);
+    // inmates' moves are always checked, from before a restart too
+    for (const r of this.sql.exec<{ account_id: number }>(`SELECT account_id FROM law_jail`)) this.watch.add(r.account_id);
   }
 
   // --- state ---------------------------------------------------------------------------------
