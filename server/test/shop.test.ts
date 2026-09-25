@@ -76,7 +76,7 @@ describe('GET /shop', () => {
     const res = await api('shop', a.token);
     expect(res.status).toBe(200);
     const body = await res.json<any>();
-    expect(body.items.map((i: any) => i.id)).toEqual(SHOP_ITEMS.map((i) => i.id));
+    expect(body.items.map((i: any) => i.id)).toEqual(SHOP_ITEMS.filter((i) => !i.reward).map((i) => i.id));
     expect(body.owned).toEqual([]);
     expect(body.balance).toBe(STARTING_BALANCE);
   });

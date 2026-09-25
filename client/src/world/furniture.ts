@@ -333,7 +333,8 @@ function displayCase(): Part[] {
     box('glass', s.w - 0.04, 0.16, s.d - 0.04, { y: base + 0.1 }),
     box('case-light', s.w - 0.12, 0.012, 0.02, { y: s.h - 0.03, z: -s.d / 2 + 0.06 }),
   ];
-  for (const x of [-1, 1]) for (const z of [-1, 1]) out.push(box('brass', 0.02, 0.18, 0.02, { x: x * (s.w / 2 - 0.02), y: base + 0.09, z: z * (s.d / 2 - 0.02) }));
+  // corner posts standing a little over the glass (flush, their tops would share its plane)
+  for (const x of [-1, 1]) for (const z of [-1, 1]) out.push(box('brass', 0.02, 0.19, 0.02, { x: x * (s.w / 2 - 0.02), y: base + 0.095, z: z * (s.d / 2 - 0.02) }));
   // the pieces on the velvet: chains coiled in rings, grills, watch faces
   for (let i = 0; i < 5; i++) {
     const x = -s.w / 2 + 0.2 + i * ((s.w - 0.4) / 4);
