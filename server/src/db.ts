@@ -7,6 +7,7 @@ import { featOf, titleOf } from '../../shared/src/feats.ts';
 import type { GameId, } from '../../shared/src/engine.ts';
 import type { GameStats, Profile } from '../../shared/src/protocol.ts';
 import { CATALOG, isGameId } from '../../shared/src/games/catalog.ts';
+import { bankSummary } from './bank.ts'; // v6 bank6
 
 export interface AccountRow {
   id: number;
@@ -201,6 +202,7 @@ export async function loadProfile(db: D1Database, id: number, liveStacks: Map<st
     loansTaken: a.loans_taken,
     loans: (loans!.results as { amount: number; created_at: number }[]).map((l) => ({ amount: l.amount, at: l.created_at })),
     stats: { total, games },
+    bank: await bankSummary(db, a.id, a.balance, a.in_play), // v6 bank6
   };
 }
 

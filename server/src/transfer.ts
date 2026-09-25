@@ -8,7 +8,7 @@
 // batch back. applyTransfer() then asks the ledger what actually happened.
 
 import { isCents, type Cents } from '../../shared/src/money.ts';
-import { REFILL_BELOW, REFILL_TO } from '../../shared/src/bank.ts';
+import { REFILL_BELOW, REFILL_TO, SEND } from '../../shared/src/bank.ts';
 import type { GameId } from '../../shared/src/engine.ts';
 
 export type TransferOutcome =
@@ -117,14 +117,37 @@ export interface LoanOp {
   /** What D1 held on tables (casino_accounts.in_play) when those reports were read. */
   inPlay: Cents;
   now: number;
+  /** v6 bank6: the Casino Index's price now (ticks), so the fund counts at what it's worth. */
+  fundPrice?: number;
+}
+
+/**
+ * v6 bank6: what the bank holds for the account in the loan's row (`casino_accounts.id`), read in
+ * the same batch: savings, open deposits, the fund at price ?8, and what it sent other players
+ * since ?9 (shared/src/bank.ts SEND.refillCountsMs). Parked money counts, so parking it can't
+ * bring a top-up.
+ */
+const IN_BANK = `(SELECT COALESCE(SUM(balance), 0) FROM casino_savings WHERE account_id = casino_accounts.id)
+    + (SELECT COALESCE(SUM(principal), 0) FROM casino_deposits WHERE account_id = casino_accounts.id AND closed_at IS NULL)
+    + (SELECT COALESCE(SUM(CAST(units * ?8 / 100000000 AS INTEGER)), 0) FROM casino_holdings WHERE account_id = casino_accounts.id)
+    + (SELECT COALESCE(SUM(amount), 0) FROM casino_transfers WHERE from_id = casino_accounts.id AND at > ?9)`;
+
+/** v6 bank6: IN_BANK on its own, for the cashier's answer when there's no top-up (?1 and ?3-?7 unused). */
+export async function refillCounted(db: D1Database, accountId: number, fundPrice: number, now: number): Promise<Cents> {
+  const row = await db
+    .prepare(`SELECT ${IN_BANK} AS n FROM casino_accounts WHERE id = ?2`)
+    .bind(null, accountId, null, null, null, null, null, fundPrice, now - SEND.refillCountsMs)
+    .first<{ n: number }>();
+  return row?.n ?? 0;
 }
 
 /**
  * The bank's top-up, recorded as a loan: under REFILL_BELOW in all, the balance goes up by
- * exactly what brings the player to REFILL_TO. "In all" is the balance, read inside this batch,
- * plus the chips the tables reported a moment before. `inPlay` pins what D1 held on tables when
- * they were asked: a buy-in, top-up or cash-out landing in between changes it, and then nothing
- * happens rather than a loan worked out from numbers that no longer hold.
+ * exactly what brings the player to REFILL_TO. "In all" is the balance and everything in the bank
+ * (IN_BANK), read inside this batch, plus the chips the tables reported a moment before.
+ * `inPlay` pins what D1 held on tables when they were asked: a buy-in, top-up or cash-out landing
+ * in between changes it, and then nothing happens rather than a loan worked out from numbers that
+ * no longer hold.
  *
  * The first statement decides and records the amount; the other two only follow a loan row with
  * no ledger row yet (the one this batch just wrote), so all three happen or none do, and a
@@ -135,11 +158,11 @@ export function loanStatements(db: D1Database, op: LoanOp): D1PreparedStatement[
     db
       .prepare(
         `INSERT INTO casino_loans (op_id, account_id, amount, created_at)
-         SELECT ?1, id, ?5 - (balance + ?3), ?6 FROM casino_accounts
-          WHERE id = ?2 AND in_play = ?4 AND balance + ?3 < ?7
+         SELECT ?1, id, ?5 - (balance + ?3 + ${IN_BANK}), ?6 FROM casino_accounts
+          WHERE id = ?2 AND in_play = ?4 AND balance + ?3 + ${IN_BANK} < ?7
          RETURNING amount`,
       )
-      .bind(op.opId, op.accountId, op.chips, op.inPlay, REFILL_TO, op.now, REFILL_BELOW),
+      .bind(op.opId, op.accountId, op.chips, op.inPlay, REFILL_TO, op.now, REFILL_BELOW, op.fundPrice ?? 0, op.now - SEND.refillCountsMs),
     db
       .prepare(
         `UPDATE casino_accounts

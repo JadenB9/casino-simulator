@@ -15,7 +15,10 @@ import { signTicket, ticketTarget, verifyTicket } from './tickets.ts';
 import { KeyedBuckets } from './ratelimit.ts';
 import { bumpRate, escrowsOf, getAccount, loadProfile, ownedOf, setLook } from './db.ts';
 import { isFreeEmote, emoteItem } from '../../shared/src/items.ts';
-import { takeLoan } from './transfer.ts';
+import { refillCounted, takeLoan } from './transfer.ts';
+// v6 bank6
+import { bankApi, settleSavings } from './bank.ts';
+import { priceNow } from './market.ts';
 import { shopApi } from './shop.ts';
 import { leaderboard } from './leaderboard.ts';
 // v6 celebs6: the daily bonus, and the dev stack's celebrity trigger
@@ -138,13 +141,17 @@ async function handleApi(request: Request, env: Env, route: string, cors: Record
     if (!(await bumpRate(env.DB, 'casino-loan', `a${claims.a}`, 10, 60_000, now))) return fail(429, 'RATE_LIMITED', 'Give it a minute.', cors);
     const counted = await chipsOnTables(env, claims.a);
     if (!counted) return fail(409, 'BUSY', STILL_MOVING, cors);
-    const loan = await takeLoan(env.DB, { opId: `loan:${claims.a}:${crypto.randomUUID()}`, accountId: claims.a, chips: counted.chips, inPlay: counted.inPlay, now });
+    // v6 bank6: the bank counts too (transfer.ts IN_BANK): savings paid up to now, the fund at today's price
+    await settleSavings(env.DB, claims.a, now);
+    const { price: fundPrice } = await priceNow(env.DB, env.CASINO_TOKEN_SECRET, now);
+    const loan = await takeLoan(env.DB, { opId: `loan:${claims.a}:${crypto.randomUUID()}`, accountId: claims.a, chips: counted.chips, inPlay: counted.inPlay, now, fundPrice });
     const profile = await loadProfile(env.DB, claims.a, counted.stacks);
     if (!profile) return fail(401, 'UNAUTHORIZED', 'That account is gone.', cors);
     if (!loan.granted) {
       // A buy-in or cash-out landed between the count and the loan: the count is stale.
       if (profile.inPlay !== counted.inPlay) return fail(409, 'BUSY', STILL_MOVING, cors);
-      return fail(409, 'NOT_ELIGIBLE', notYet(profile.balance + counted.chips, counted.chips), cors, {
+      const inBank = await refillCounted(env.DB, claims.a, fundPrice, now);
+      return fail(409, 'NOT_ELIGIBLE', notYet(profile.balance + counted.chips + inBank, counted.chips, inBank), cors, {
         balance: profile.balance,
         inPlay: profile.inPlay,
       });
@@ -198,7 +205,11 @@ async function handleApi(request: Request, env: Env, route: string, cors: Record
 
   // v6 celebs6: the daily bonus (daily.ts); on the dev stack only, a celebrity or a gift box on demand
   if (route === 'daily' || route === 'daily/claim') return dailyApi(request, env, route, claims.a, cors);
+  if (route === 'dev/bank/clock') return bankApi(request, env, route, { id: claims.a, name: claims.n }, cors); // v6 bank6
   if (route.startsWith('dev/') && env.CASINO_DEV === '1') return celebsDevApi(request, route, cors, floor(env));
+
+  // v6 bank6: savings, deposits, the Casino Index, transfers and the statement (bank.ts)
+  if (route === 'bank' || route.startsWith('bank/')) return bankApi(request, env, route, { id: claims.a, name: claims.n }, cors);
 
   // The boutique and the bar (shop.ts): paid from the balance, never from chips on tables.
   if (route === 'shop' || route.startsWith('shop/') || route.startsWith('bar/')) return shopApi(request, env, route, claims.a, cors);
