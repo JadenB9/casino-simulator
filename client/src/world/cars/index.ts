@@ -1,6 +1,6 @@
-// The cars on the ground floor: the valet lot out front with its parked cars, the valet's podium
-// and the cars called round to the curb, and the garage across the street showing your own
-// collection. Everything is built into one group that's drawn only while the camera is in the
+// The cars on the ground floor: the valet and the cars called round to the curb, and the garage
+// across the street showing your own collection. The city (world/city/) lays out the ground floor,
+// the podium and the stalls; `lotCars()` fills its stalls with parked cars. Everything is built into one group that's drawn only while the camera is in the
 // ground zone (zones.ts): from the casino or the roof none of it costs a thing.
 //
 //   const cars = new Cars({ engine, world, now: serverNow, me: () => link.you?.id ?? null, onValet });
@@ -17,12 +17,14 @@ import type { Collider } from '../collision.ts';
 import type { CharacterFactoryExt } from '../contract.ts';
 import type { SpotProvider } from '../interact.ts';
 import { CarMaterials } from './materials.ts';
-import { buildLot, type Lot } from './lot.ts';
+import { lotCars, type Lot } from './lot.ts';
+import { stalls } from './layout.ts';
 import { Valet } from './valet.ts';
 import { Garage } from './garage.ts';
 
 export { CarMaterials } from './materials.ts';
 export { carKit } from './models.ts';
+export { lotCars, type Lot } from './lot.ts';
 
 export interface CarsDeps {
   engine: { scene: THREE.Scene; camera: THREE.Camera; renderer: THREE.WebGLRenderer };
@@ -41,6 +43,8 @@ export interface CarsDeps {
   onValet(): void;
   /** Your car pulled up and the valet handed you the keys. */
   onKeys?(call: CarCall): void;
+  /** Stand-ins for what the city draws (the podium, a car park in the stacks): the dev page, before the city is in. */
+  standIns?: boolean;
 }
 
 export class Cars {
@@ -48,7 +52,7 @@ export class Cars {
   readonly mats: CarMaterials;
   readonly valet: Valet;
   readonly garage: Garage;
-  private readonly lot: Lot;
+  private readonly lot: Lot | null;
   private readonly offSpots: () => void;
   private active = false;
 
@@ -58,7 +62,7 @@ export class Cars {
     const aniso = Math.min(8, deps.engine.renderer.capabilities.getMaxAnisotropy());
     this.mats = new CarMaterials(deps.world.quality, env);
     const col = deps.world.collider;
-    this.lot = buildLot(this.mats, col, aniso);
+    this.lot = deps.standIns ? lotCars(stalls(), this.mats, { collider: col }) : null;
     this.valet = new Valet({
       mats: this.mats,
       characters: deps.world.characterFactory,
@@ -68,9 +72,11 @@ export class Cars {
       player: deps.world.player.position,
       onUse: deps.onValet,
       onKeys: deps.onKeys,
+      podium: !!deps.standIns,
     });
     this.garage = new Garage({ mats: this.mats, col, aniso, env });
-    this.group.add(this.lot.group, this.valet.group, this.garage.group);
+    this.group.add(this.valet.group, this.garage.group);
+    if (this.lot) this.group.add(this.lot.group);
     this.group.visible = false;
     deps.engine.scene.add(this.group);
     this.offSpots = deps.world.spots((p) => (this.active ? this.valet.spots(p) : []));
@@ -125,7 +131,7 @@ export class Cars {
     this.offSpots();
     this.valet.dispose();
     this.garage.dispose();
-    this.lot.dispose();
+    this.lot?.dispose();
     this.mats.dispose();
     this.group.removeFromParent();
   }

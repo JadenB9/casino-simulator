@@ -7,23 +7,23 @@ import { describe, expect, it } from 'vitest';
 import { CARS } from '../../shared/src/items.ts';
 import { CURB } from '../../shared/src/valet.ts';
 import { LOTS, inRect } from '../../shared/src/zones.ts';
-import { CURB_LANE, GARAGE, THROUGH_LANE, VALET, along, arrivalPath, bays, collection, departurePath, parked, pathLength, stalls } from '../src/world/cars/layout.ts';
+import { CURB_LANE, GARAGE, STALL_D, STALL_W, THROUGH_LANE, VALET, along, arrivalPath, bays, collection, departurePath, parked, pathLength, stalls } from '../src/world/cars/layout.ts';
 import { CAR_SPECS } from '../src/world/cars/specs.ts';
 import { carKit, mergeCars } from '../src/world/cars/models.ts';
 import * as THREE from 'three';
 
 describe('valet lot', () => {
-  it('lays the stalls inside the lot, apart from each other and clear of the drive', () => {
+  it('lays the stand-in stalls where the city does: inside the lot, apart, and clear of the drive', () => {
     const all = stalls();
-    expect(all.length).toBeGreaterThanOrEqual(24);
+    expect(all.length).toBe(40);
     for (const s of all) {
       expect(inRect(LOTS.valet, s.x * 100, s.z * 100), `${s.x},${s.z}`).toBe(true);
-      // the drive's lanes run up the west side; the porte-cochère's strip stays open
-      expect(s.x - 1.25).toBeGreaterThan(THROUGH_LANE + 1.2);
-      expect(Math.abs(s.z)).toBeGreaterThan(13);
+      // the drive's far lane runs past on the west, the plaza between the stacks stays open
+      expect(s.x - STALL_D / 2).toBeGreaterThan(THROUGH_LANE + 1.1);
+      expect(Math.abs(s.z)).toBeGreaterThan(11.4);
     }
     for (const a of all)
-      for (const b of all) if (a !== b) expect(Math.abs(a.x - b.x) >= 2.49 || Math.abs(a.z - b.z) >= 5.59, `${a.x},${a.z} / ${b.x},${b.z}`).toBe(true);
+      for (const b of all) if (a !== b) expect(Math.abs(a.x - b.x) >= STALL_D - 0.01 || Math.abs(a.z - b.z) >= STALL_W - 0.01, `${a.x},${a.z} / ${b.x},${b.z}`).toBe(true);
   });
 
   it('parks the same cars every time, and only cars that fit a stall', () => {
@@ -31,6 +31,8 @@ describe('valet lot', () => {
     expect(parked()).toEqual(one);
     expect(one.length).toBeGreaterThan(stalls().length / 2);
     for (const p of one) expect(carKit(p.id).length, p.id).toBeLessThan(5.6);
+    // any stalls (the city's): a different seed parks differently
+    expect(parked(stalls(), 7)).not.toEqual(one);
   });
 
   it('brings a called car to its curb space nose south, and takes it off down the street', () => {
@@ -42,9 +44,11 @@ describe('valet lot', () => {
       expect(end.z).toBeCloseTo(c.z);
       // its last leg heads south-ish (nose -z)
       expect(Math.cos(end.yaw)).toBeLessThan(-0.7);
-      // the drive in comes down the through lane, not through the other spaces
-      const lane = path.filter((w) => w.z > c.z + 3 && w.z < 12);
+      // the drive in comes down the far lane, past the other spaces, never back up it
+      const lane = path.filter((w) => w.z > c.z + 3 && w.z < 9.5);
       for (const w of lane) expect(w.x).toBeCloseTo(THROUGH_LANE);
+      for (let i = 1; i < path.length; i++) expect(Math.hypot(path[i]!.x - path[i - 1]!.x, path[i]!.z - path[i - 1]!.z)).toBeGreaterThan(0.5);
+      expect(path.slice(3).every((w, i, a) => i === 0 || w.z <= a[i - 1]!.z)).toBe(true);
       const away = departurePath(slot);
       expect(away[0]).toEqual({ x: CURB_LANE, z: c.z });
       expect(away.at(-1)!.z).toBeLessThan(LOTS.valet.minZ / 100);

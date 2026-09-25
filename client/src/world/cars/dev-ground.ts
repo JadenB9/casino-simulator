@@ -13,7 +13,7 @@ import { GARAGE } from './layout.ts';
 
 const SPOTS: Record<string, [number, number, number]> = {
   stand: [VALET_STAND.x - 1.6, VALET_STAND.z - 0.5, Math.PI / 2],
-  lot: [133, 10, 0.4],
+  lot: [134, 12, 0.6],
   garage: [GARAGE.x0 + 2, GARAGE.doorZ, Math.PI / 2],
   street: [163, GARAGE.doorZ, Math.PI / 2],
   inside: [GARAGE.x0 + 6, GARAGE.doorZ + 0.5, Math.PI / 2 + 0.2],
@@ -38,6 +38,7 @@ export async function runGround(q: URLSearchParams): Promise<void> {
     now: () => Date.now(),
     me: () => me,
     onValet: () => toast('Valet: the panel opens here in the game.'),
+    standIns: true,
     onKeys: (c) => toast(`Your ${CARS.find((x) => x.id === c.car)?.name} is at the curb. The valet hands you the keys.`),
   });
   await cars.load();

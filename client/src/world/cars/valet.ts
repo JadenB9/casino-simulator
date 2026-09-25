@@ -99,6 +99,8 @@ export interface ValetDeps {
   onUse(): void;
   /** Your car is at the curb and the keys are in your hand. */
   onKeys?(call: CarCall): void;
+  /** Build a podium, key box and sign (the city builds the real podium; the dev page wants one). */
+  podium?: boolean;
 }
 
 export class Valet {
@@ -110,20 +112,20 @@ export class Valet {
 
   constructor(private readonly deps: ValetDeps) {
     this.group.name = 'valet';
-    this.buildStand();
+    if (deps.podium) this.buildStand();
     this.staff = deps.characters.create(VALET_LOOKS[0]!, '');
     this.staff.setName('');
-    this.staff.root.position.set(VALET_STAND.x + 0.75, 0, VALET_STAND.z);
+    this.staff.root.position.set(VALET_STAND.x + 0.8, 0, VALET_STAND.z);
     this.staff.root.rotation.y = STAND_YAW;
     this.group.add(this.staff.root);
-    deps.col.post(VALET_STAND.x + 0.75, VALET_STAND.z, 0.3, 1.9, { cam: false });
+    deps.col.post(VALET_STAND.x + 0.8, VALET_STAND.z, 0.3, 1.9, { cam: false });
   }
 
   load(): Promise<unknown> {
     return Promise.all(VALET_LOOKS.map((l) => this.deps.characters.load(l).catch(() => {})));
   }
 
-  /** The podium: walnut and brass, a key box on a post behind it, and a sign on the sidewalk. */
+  /** A podium in walnut and brass, a key box on a post behind it, and a sign on the sidewalk (stand-ins for the city's). */
   private buildStand(): void {
     const { x, z } = VALET_STAND;
     const b = new MatBatch();

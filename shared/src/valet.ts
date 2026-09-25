@@ -5,20 +5,24 @@
 // Positions here are metres in the ground zone (zones.ts has them in centimetres); the server
 // multiplies by 100.
 
-/** The valet's podium, on the sidewalk under the porte-cochère, facing the lobby's doors (-x). */
-export const VALET_STAND = { x: 129.6, z: 5.0 } as const;
+/**
+ * The valet's podium, on the sidewalk under the porte-cochère, facing the lobby's doors (-x): the
+ * city's plan puts it here (client/src/world/city/plan.ts VALET_STAND), and so does the floor's check.
+ */
+export const VALET_STAND = { x: 129.0, z: 4.4 } as const;
 
 /** A call is taken from this close to the stand (metres, the floor's last known position). */
 export const CALL_REACH = 8;
 
 /**
- * The curb's spaces, where a called car stops: in the drive's lane under the porte-cochère,
- * nose north (+z), passenger side to the sidewalk.
+ * The curb's spaces, where a called car stops: in the drive's near lane, nose south (-z), the
+ * driver's door to the sidewalk. The first is the city's pickup point under the porte-cochère;
+ * the others further down the curb, a stretch limousine's length apart.
  */
 export const CURB: readonly { x: number; z: number }[] = [
-  { x: 132.6, z: 0.5 },
-  { x: 132.6, z: -6.5 },
-  { x: 132.6, z: 7.0 },
+  { x: 132.2, z: 2.0 },
+  { x: 132.2, z: -6.0 },
+  { x: 132.2, z: -14.0 },
 ];
 
 /** From the call to the car standing at the curb, and the keys handed over (ms). */
