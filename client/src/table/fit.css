@@ -1,0 +1,8 @@
+/* The table's controls fit the window too (fit.ts keeps the board clear of them). A laptop window
+   at half width is narrower than a chip tray with eight chips, Max and four buttons, which ran off
+   both edges: there the tray wraps its buttons under its chips. Phones have their own layout
+   (ui/mobile.css: under 560 px wide, or 390 px tall on their side). */
+@media (min-width: 561px) and (max-width: 1060px) and (min-height: 500px) {
+  .tray { left: 12px; right: 12px; transform: none; width: fit-content; margin-inline: auto; flex-wrap: wrap; justify-content: center; row-gap: 8px; }
+  .tray .sep { display: none; }
+}

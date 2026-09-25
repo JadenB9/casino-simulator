@@ -4,7 +4,7 @@
 // ride past the other, seen from the other's screen; the ride's speed; the ride parked while
 // sitting; B stepping off and back on.
 //
-// Usage: node scripts/e2e/looks6.mjs [port] [outDir] [checks...]   (checks: wear ride floor; default all)
+// Usage: node scripts/e2e/looks6.mjs [port] [outDir] [checks...]   (checks: wear ride hats floor touch; default all)
 //   --sw          draw with SwiftShader (default: the machine's GPU)
 //   --only=a,b    in `wear` and `ride`, only the cases whose name contains one of these
 // Fixed names looks6_e2e_a and looks6_e2e_b with the dev password; the rides and pieces are put in
@@ -19,7 +19,7 @@ const argv = process.argv.slice(2);
 const flag = (n) => argv.includes(`--${n}`);
 const only = (argv.find((a) => a.startsWith('--only=')) ?? '').slice(7).split(',').filter(Boolean);
 const [port = '6230', out = '/tmp/casino-looks6', ...wanted] = argv.filter((a) => !a.startsWith('--'));
-const checks = wanted.length ? wanted : ['wear', 'ride', 'floor'];
+const checks = wanted.length ? wanted : ['wear', 'ride', 'hats', 'floor', 'touch'];
 mkdirSync(out, { recursive: true });
 
 const browser = await chromium.launch(
@@ -159,6 +159,34 @@ if (checks.includes('ride')) {
   await p.close();
 }
 
+// --- hats over tall hair: the hair is tucked in, nothing pokes through ---------------------------
+
+const HATS = ['black-fedora', 'panama-hat', 'top-hat', 'cowboy-hat', 'gold-crown', 'imperial-crown'];
+
+if (checks.includes('hats')) {
+  const { p, errors } = await showroom();
+  for (const [body, outfit] of [
+    ['m', 'punk'],
+    ['m', 'suit'],
+    ['m', 'hoodie'],
+    ['f', 'punk'],
+    ['f', 'dress'],
+    ['f', 'smart'],
+  ]) {
+    for (const hat of HATS) {
+      const name = `hat-${hat}-${body}-${outfit}`;
+      if (only.length && !only.some((o) => name.includes(o))) continue;
+      await wear(p, { ...(body === 'f' ? F : M), outfit, hat }, 'head', 0.5);
+      const tucked = await p.evaluate(() => String(window.dev.room.character.mesh?.material?.name ?? ''));
+      if (!tucked.endsWith(':tuck')) fail(`${name}: the hair isn't tucked (${tucked})`);
+      if (outfit === 'punk' || hat === 'cowboy-hat') await shot(p, name);
+    }
+  }
+  if (errors.length) fail(`hat page errors: ${errors.slice(0, 5).join(' | ')}`);
+  else pass('every hat tucks the hair in, on every body');
+  await p.close();
+}
+
 // --- on the floor, against the local worker ----------------------------------------------------------
 
 function sql(command) {
@@ -180,8 +208,8 @@ function own(name, items) {
   sql(parts.join(' '));
 }
 
-async function enterAs(name) {
-  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
+async function enterAs(name, phone = false) {
+  const ctx = await browser.newContext(phone ? { viewport: { width: 412, height: 915 }, deviceScaleFactor: 1.5, isMobile: true, hasTouch: true } : { viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
   const p = await ctx.newPage();
   const errors = [];
   p.on('console', (m) => m.type() === 'error' && !m.location()?.url?.endsWith('/favicon.ico') && !m.text().includes('404') && errors.push(m.text()));
@@ -202,6 +230,11 @@ async function enterAs(name) {
   }
   await p.waitForSelector('.hud', { timeout: 30000 });
   await p.waitForTimeout(1500);
+  // the day's bonus sheet may greet you: close whatever is over the floor
+  for (let i = 0; i < 4 && (await p.$('.sheet')); i++) {
+    await p.keyboard.press('Escape');
+    await p.waitForTimeout(400);
+  }
   return { p, ctx, errors };
 }
 
@@ -401,6 +434,35 @@ if (checks.includes('floor')) {
     if (r.errors.length) fail(`floor ${who} errors: ${r.errors.slice(0, 5).join(' | ')}`);
   await a.ctx.close();
   await b.ctx.close();
+}
+
+// --- a phone: the ride button beside the action button ---------------------------------------------
+
+if (checks.includes('touch')) {
+  const t = await enterAs('looks6_e2e_a', true);
+  own('looks6_e2e_a', [['skateboard', 60000]]);
+  await saveLook(t.p, { ride: 'skateboard' });
+  // the login's clicks came from a mouse, which turns the touch controls off; a touch turns them on
+  await t.p.touchscreen.tap(206, 520);
+  const btn = '.touch-ride:not([hidden])';
+  await t.p.waitForSelector(btn, { timeout: 15000 }).catch(() => {});
+  if (!(await t.p.$(btn))) fail('touch: no ride button while riding');
+  else {
+    await shot(t.p, 'touch-riding');
+    await t.p.tap('.touch-ride');
+    await t.p.waitForFunction(() => !window.casino.session.profile.look.ride, null, { timeout: 8000 }).catch(() => {});
+    const off = await t.p.evaluate(() => window.casino.session.profile.look.ride ?? null);
+    await t.p.waitForTimeout(600);
+    await shot(t.p, 'touch-off');
+    await t.p.tap('.touch-ride');
+    await t.p.waitForFunction(() => !!window.casino.session.profile.look.ride, null, { timeout: 8000 }).catch(() => {});
+    const on = await t.p.evaluate(() => window.casino.session.profile.look.ride ?? null);
+    if (off !== null || on !== 'skateboard') fail(`touch: the button stepped off to ${off}, back on to ${on}`);
+    else pass('touch: the ride button steps off and back on');
+  }
+  await saveLook(t.p, { ride: null });
+  if (t.errors.length) fail(`touch errors: ${t.errors.slice(0, 5).join(' | ')}`);
+  await t.ctx.close();
 }
 
 await browser.close();

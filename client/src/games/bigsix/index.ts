@@ -26,7 +26,7 @@ import { celebrate } from '../../table/celebrate.ts';
 import { serverNow } from '../../net/clock.ts';
 import { TOP_Y, TABLE_W, TABLE_D, TABLE_Z, WHEEL_Y, WHEEL_Z, FOOTPRINT, MODEL_FELT, WHEEL_GROUP, tableModel, layoutFelt } from './model.ts';
 import { spotAt, spotRect, chipSpot, SPOT_Z0, FELT_D } from './layout.ts';
-import { ROTOR_NAME, FLAP_NAME, BULBS_NAME, GLOW_NAME, FRAME_OUT, buildWheel } from './wheel.ts';
+import { ROTOR_NAME, FLAP_NAME, BULBS_NAME, GLOW_NAME, FRAME_OUT, FACE_R, BAND_IN, buildWheel } from './wheel.ts';
 import { WheelSpin, chooseEnding, angleFor, flapAngle, stopAt, TAU, SECTOR, G_TOUCH } from './spin.ts';
 import { LayoutChips, Pile, seatColor, CHIP_SCALE, type PileStyle } from './chips.ts';
 import { ClapperSound } from './sound.ts';
@@ -111,6 +111,14 @@ function mountBigSix(ctx: TableViewCtx): TableView {
   const felt = layoutFelt(1400);
   stage.addFelt(felt, FELT_Y);
   felt.mesh.position.z = TABLE_Z;
+  // What stays in view at any window size (table/fit.ts): the layout and the wheel's middle over it
+  // while you bet; the whole face as it spins, and the clapper as it slows.
+  const face = (r: number) => Array.from({ length: 12 }, (_, i) => new THREE.Vector3(r * Math.cos((i / 12) * TAU), WHEEL_Y + r * Math.sin((i / 12) * TAU), WHEEL_Z + 0.05));
+  stage.board(felt, face(BAND_IN));
+  const shots = new Map<Pose, THREE.Vector3[]>([
+    [WHEEL_POSE, face(FACE_R)],
+    [CLAPPER_POSE, [-0.22, 0.22].flatMap((x) => [-0.12, 0.1].map((y) => new THREE.Vector3(x, WHEEL_Y + FACE_R + y, WHEEL_Z + 0.05)))],
+  ]);
 
   // state
   let mode: 'solo' | 'multi' = 'solo';
@@ -195,6 +203,7 @@ function mountBigSix(ctx: TableViewCtx): TableView {
   }
   function glideTo(pose: Pose, ms: number): Promise<void> {
     camHome ??= stage.restPose(camera);
+    stage.shot(pose, shots.get(pose) ?? []);
     const to = stage.worldPose(pose);
     const q = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(to.position, to.target, camera.up));
     return glide(to.position, q, ms);
@@ -202,6 +211,7 @@ function mountBigSix(ctx: TableViewCtx): TableView {
   function glideHome(ms: number): Promise<void> {
     const home = camHome;
     camHome = null;
+    stage.shot(null);
     if (!home) return Promise.resolve();
     if (ms <= 0) {
       camera.position.copy(home.pos);

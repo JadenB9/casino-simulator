@@ -1,7 +1,8 @@
 // Dev page for the leaderboards and the emote wheel, served by Vite in development only:
 //   /casino/src/ui/social/dev.html?screen=<leaderboard|emotes|hud>
 // Options: fixture=1 (canned boards instead of the local worker), fail=1 (with fixture: the
-// request fails), name=<n> (log in as n against the worker), tab=<richest|biggestWin|rounds>.
+// request fails), name=<n> (log in as n against the worker), tab=<richest|biggestWin|rounds>,
+// owned=<emote,emote> (the emotes the player has beyond the free six).
 // It is also a worked example of the wiring app/boot.ts needs: the HUD gets two buttons, G
 // opens the wheel, and a pick goes to the floor link (here, a toast).
 
@@ -44,7 +45,21 @@ async function start(): Promise<void> {
   await ensureSession();
   const hud = mountHud({ root: ui, session, sfx, onMenu: () => {} });
   hud.setOnline(23);
-  const emotes = mountEmotes({ root: ui, send: (e) => toast(`${EMOTE_LABELS[e]} sent`) });
+  const sent: string[] = [];
+  const shopped: string[] = [];
+  const owned = (q.get('owned') ?? '').split(',').filter(Boolean);
+  const emotes = mountEmotes({
+    root: ui,
+    send: (e) => {
+      sent.push(e);
+      toast(`${EMOTE_LABELS[e]} sent`);
+    },
+    owned: () => owned,
+    shop: (e) => {
+      shopped.push(e);
+      toast(`The boutique, at ${EMOTE_LABELS[e]}`);
+    },
+  });
   const openBoards = () => openLeaderboard({ root: ui, api });
   // Where boot.ts puts them: with the HUD's other buttons, left of the tips bulb.
   const bar = hud.root.querySelector('.hud-right')!;
@@ -62,7 +77,7 @@ async function start(): Promise<void> {
   } else if (screen === 'emotes') {
     emotes.open();
   }
-  (window as unknown as { dev: unknown }).dev = { engine, session, hud, emotes, openBoards };
+  (window as unknown as { dev: unknown }).dev = { engine, session, hud, emotes, openBoards, sent, shopped, grant: (ids: string[]) => emotes.grant(ids) };
 }
 
 start().catch((err) => {

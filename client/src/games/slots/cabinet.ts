@@ -645,4 +645,26 @@ export function payGlassPlacement(l: Layout): { matrix: THREE.Matrix4; columns: 
 }
 
 export const FOOTPRINT = { width: 0.8, depth: 0.8 };
+
+/** A cabinet's face as a layout gives it (the classic cabinets' and the skinned ones' alike). */
+interface Face {
+  pay: { bottom: ZY; top: ZY; w: number };
+  plate: { zBack: number; depth: number };
+  window: { w: number; h: number; cy: number };
+  meters: { w: number; h: number; cy: number };
+}
+
+/**
+ * What stays in view at a machine (table/fit.ts): the pay glass, the reels' window and the meters
+ * under it. The deck's buttons are the control bar's too, so the bar may cover them.
+ */
+export function playFace(l: Face): THREE.Vector3[] {
+  const out: THREE.Vector3[] = [];
+  const front = l.plate.zBack + l.plate.depth;
+  for (const s of [-1, 1]) {
+    for (const [z, y] of [l.pay.bottom, l.pay.top]) out.push(new THREE.Vector3((s * l.pay.w) / 2, y, z));
+    for (const r of [l.window, l.meters]) for (const t of [-1, 1]) out.push(new THREE.Vector3((s * r.w) / 2, r.cy + (t * r.h) / 2, front));
+  }
+  return out;
+}
 export { LAYOUTS };

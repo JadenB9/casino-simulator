@@ -77,6 +77,8 @@ export const videopoker: GameClientModule = {
       if (group && lens) buttons.set(spec.id, { group, lens: lens.material as THREE.MeshStandardMaterial, y: group.position.y });
     }
     const pickable = [...buttons.values()].map((b) => b.group);
+    // what stays in view at any window size (table/fit.ts): the screen and the button deck under it
+    ctx.stage.board(corners, pickable);
 
     let phase: VideoPokerView['phase'] = 'idle';
     let round = -1;
