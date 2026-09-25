@@ -21,6 +21,8 @@ import { lotCars, type Lot } from './lot.ts';
 import { GARAGE, stalls } from './layout.ts';
 import { Valet } from './valet.ts';
 import { Garage } from './garage.ts';
+import { Showcase } from './showcase.ts';
+import { CURB } from '../../../../shared/src/valet.ts';
 
 export { CarMaterials, carMaterials } from './materials.ts';
 export { carKit } from './models.ts';
@@ -30,10 +32,11 @@ export interface CarsDeps {
   engine: { scene: THREE.Scene; camera: THREE.Camera; renderer: THREE.WebGLRenderer };
   world: {
     collider: Collider;
-    player: { position: THREE.Vector3 };
     characterFactory: CharacterFactoryExt;
     quality: Quality;
     spots(fn: SpotProvider): () => void;
+    /** Hold the walker still (a camera show), and give it back. */
+    player: { position: THREE.Vector3; setEnabled(on: boolean): void };
     /** The city, for the garage's ceiling (the follow camera stays under it). */
     city?: { addCeiling(fn: (x: number, z: number) => number | null): () => void };
   };
@@ -45,6 +48,8 @@ export interface CarsDeps {
   onValet(): void;
   /** Your car pulled up and the valet handed you the keys. */
   onKeys?(call: CarCall): void;
+  /** Whether you're out walking (not at a table, no panel open): the camera shows only start then. */
+  free?(): boolean;
   /** Stand-ins for what the city draws (the podium, a car park in the stacks): the dev page, before the city is in. */
   standIns?: boolean;
 }
@@ -54,6 +59,10 @@ export class Cars {
   readonly mats: CarMaterials;
   readonly valet: Valet;
   readonly garage: Garage;
+  /** The camera's short shows: your car pulling up, your best car as you walk into the garage. */
+  readonly show: Showcase;
+  private shownCall = '';
+  private wasInGarage = false;
   private readonly lot: Lot | null;
   private readonly offSpots: () => void;
   private readonly offCeiling: () => void;
@@ -78,7 +87,8 @@ export class Cars {
       onKeys: deps.onKeys,
       podium: !!deps.standIns,
     });
-    this.garage = new Garage({ mats: this.mats, col, aniso, env });
+    this.garage = new Garage({ mats: this.mats, col, aniso, renderer: deps.engine.renderer, quality: deps.world.quality });
+    this.show = new Showcase(deps.engine.camera, deps.world.player, () => deps.free?.() ?? true);
     this.group.add(this.valet.group, this.garage.group);
     if (this.lot) this.group.add(this.lot.group);
     this.group.visible = false;
@@ -119,9 +129,47 @@ export class Cars {
     }
     this.valet.update(dt, on);
     if (on) this.garage.update(dt);
+    if (on) this.shows();
+    this.show.update(dt);
   }
 
+  /** Start a show when there's one to see: your car on its way round, or you walking into the garage. */
+  private shows(): void {
+    const p = this.deps.world.player.position;
+    const inGarage = p.x > GARAGE.x0 && p.x < GARAGE.x1 && p.z > GARAGE.z0 && p.z < GARAGE.z1;
+    const entered = inGarage && !this.wasInGarage;
+    this.wasInGarage = inGarage;
+    if (this.show.playing) return;
+    const a = this.valet.arriving();
+    if (a && a.key !== this.shownCall && Math.hypot(p.x - CURB[a.call.slot]!.x, p.z - CURB[a.call.slot]!.z) < 16) {
+      // from the sidewalk up the curb from its space: the car coming down the drive and pulling in
+      const c = CURB[a.call.slot]!;
+      const from = new THREE.Vector3(c.x - 3.4, 2.4, c.z + 9.5);
+      const look = new THREE.Vector3();
+      const at = a.at;
+      const started = this.show.play({
+        from: () => from,
+        at: () => look.lerp(new THREE.Vector3(at.x, 0.7, at.z), 0.12),
+        secs: 16,
+        done: () => this.valet.arriving()?.handed === true && this.handedFor++ > 70,
+      });
+      if (started) {
+        look.set(at.x, 0.7, at.z);
+        this.handedFor = 0;
+        this.shownCall = a.key;
+      }
+      return;
+    }
+    if (entered) {
+      const v = this.garage.bestView();
+      if (v) this.show.play({ from: () => v.from, at: () => v.at, secs: 3.4 });
+    }
+  }
+
+  private handedFor = 0;
+
   setQuality(q: Quality): void {
+    this.garage.setQuality(q);
     const old = this.mats.get('paint');
     this.mats.setQuality(q);
     const now = this.mats.get('paint');
@@ -133,6 +181,7 @@ export class Cars {
   }
 
   dispose(): void {
+    this.show.dispose();
     this.offSpots();
     this.offCeiling();
     this.valet.dispose();

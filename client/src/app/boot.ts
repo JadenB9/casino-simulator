@@ -165,6 +165,7 @@ class App {
       me: () => this.link?.you?.id ?? null,
       onValet: () => this.openValet(),
       onKeys: (c) => toast(`Your ${carItem(c.car)?.name ?? 'car'} is at the curb. The valet hands you the keys.`),
+      free: () => this.hud !== null && this.table === null && this.world.seated === null && overlayCount() === 0,
     });
     void this.cars.load();
     engine.onFrame((dt) => this.cars.update(dt));

@@ -131,9 +131,14 @@ export function pathLength(path: readonly Waypoint[]): number {
 // --- the garage ----------------------------------------------------------------------------
 
 /** The showroom building across the street: its walls (metres) and the door in its glass front. */
-/** The door is at the south end, nearest the crosswalk (the city's ENTRANCES.garage); the turntable in the middle. */
-export const GARAGE = { x0: 169, x1: 197, z0: 8, z1: 42, height: 5.6, doorZ: 12.4, doorW: 3.4 } as const;
-const MIDDLE_Z = (GARAGE.z0 + GARAGE.z1) / 2;
+/**
+ * The door is at the south end of the glass front, nearest the crosswalk (the city's
+ * ENTRANCES.garage). Walk in and the turntable is ahead of you; the rest stand in a grid behind it,
+ * aisles between them to walk among the cars; the corner by the glass has a lounge.
+ */
+export const GARAGE = { x0: 169, x1: 197, z0: 8, z1: 44, height: 5.6, doorZ: 12.4, doorW: 3.4 } as const;
+/** The lounge's corner (sofas round a low table), kept clear of bays. */
+export const LOUNGE = { x0: 186, x1: 196, z0: 9, z1: 18.5 } as const;
 
 export interface Bay {
   /** Where the car stands and faces. */
@@ -144,21 +149,21 @@ export interface Bay {
   hero: boolean;
 }
 
+const COLUMNS = [174.5, 180.5, 186.5, 192.5];
+const ROWS = [24.5, 32, 39.5];
+
 /**
- * The bays: the turntable in the middle, then a row down each side wall facing the aisle (the
- * glass front's row leaves the door clear). As many as there are cars, so a full collection fits.
+ * The bays: the turntable ahead of the door, then a grid of plinths, each car nose to the front
+ * and turned a little towards the middle aisle, so the rows read as a display and not a car park.
+ * As many as there are cars, so a full collection fits.
  */
 export function bays(): Bay[] {
-  const g = GARAGE;
-  const out: Bay[] = [{ x: (g.x0 + g.x1) / 2 + 1, z: MIDDLE_Z, yaw: -Math.PI / 2 + 0.6, hero: true }];
-  const zs = [g.z0 + 3.4, g.z0 + 8.8, g.z0 + 14.2, g.z1 - 14.2, g.z1 - 8.8, g.z1 - 3.4];
-  // the back wall's row: all six, facing the door (-x)
-  for (const z of zs) out.push({ x: g.x1 - 4.2, z, yaw: -Math.PI / 2, hero: false });
-  // the front's row, behind the glass, facing in (+x): the door's aisle stays clear
-  for (const z of zs) if (Math.abs(z - g.doorZ) > 4) out.push({ x: g.x0 + 4.2, z, yaw: Math.PI / 2, hero: false });
-  // and out on the floor either side of the turntable, angled to the door
-  out.push({ x: (g.x0 + g.x1) / 2 - 0.5, z: g.z1 - 6.5, yaw: -Math.PI / 2 + 0.45, hero: false });
-  out.push({ x: (g.x0 + g.x1) / 2 + 1, z: g.z0 + 5, yaw: -Math.PI / 2 - 0.3, hero: false });
+  const out: Bay[] = [{ x: 180, z: 15.5, yaw: -Math.PI / 2 - 0.55, hero: true }];
+  for (const z of ROWS)
+    COLUMNS.forEach((x, i) => {
+      const turn = i < 2 ? -0.22 : 0.22;
+      out.push({ x, z, yaw: Math.PI + turn, hero: false });
+    });
   return out.slice(0, CARS.length);
 }
 

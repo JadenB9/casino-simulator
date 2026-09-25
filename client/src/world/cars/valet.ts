@@ -221,6 +221,15 @@ export class Valet {
   }
 
   /** Your car at the curb (or on its way), for the panel. */
+  /** Your car on its way in: where it is now, and whether the keys are in your hand yet (the camera watches). */
+  arriving(): { key: string; call: CarCall; at: THREE.Vector3; handed: boolean } | null {
+    const id = this.deps.me();
+    const now = this.deps.now();
+    for (const [key, o] of this.out)
+      if (o.call.id === id && o.call.until > now && now - o.call.at < ARRIVE_MS + 4000) return { key, call: o.call, at: o.rig.root.position, handed: !!o.runner?.handed };
+    return null;
+  }
+
   mine(): CarCall | null {
     const id = this.deps.me();
     const now = this.deps.now();
