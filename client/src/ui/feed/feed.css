@@ -9,6 +9,7 @@
 .bigwin-name { overflow: hidden; text-overflow: ellipsis; font-family: var(--serif); font-size: 16px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--brass-hi); }
 .bigwin-won { padding: 0 0.4em; font-size: 16px; color: var(--ink-2); }
 .bigwin-amount { font-size: 19px; font-weight: 600; letter-spacing: 0.02em; color: var(--ink); }
+.bigwin-feat { overflow: hidden; text-overflow: ellipsis; font-size: 17px; font-weight: 600; letter-spacing: 0.04em; color: var(--ink); }
 .bigwin-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; letter-spacing: 0.03em; color: var(--ink-3); }
 @keyframes bigwin-in { from { opacity: 0; transform: translateY(-8px); } }
 
@@ -16,5 +17,6 @@
   .bigwin-toast { min-width: 0; padding: 7px 14px 8px 16px; }
   .bigwin-name, .bigwin-won { font-size: 15px; }
   .bigwin-amount { font-size: 17px; }
-  .bigwin-sub { font-size: 14px; }
+  .bigwin-feat { overflow: hidden; text-overflow: ellipsis; font-size: 17px; font-weight: 600; letter-spacing: 0.04em; color: var(--ink); }
+.bigwin-sub { font-size: 14px; }
 }

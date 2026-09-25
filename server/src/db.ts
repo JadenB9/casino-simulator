@@ -166,13 +166,17 @@ export function gameOfTable(tableId: string): GameId | null {
   return Object.values(CATALOG).find((g) => g.prefix === prefix)?.id ?? null;
 }
 
-/** Everything the profile screen shows, in three reads. */
+/** Everything the profile screen shows: one batch of reads, and what the account owns beside it. */
 export async function loadProfile(db: D1Database, id: number, liveStacks: Map<string, number> = new Map()): Promise<Profile | null> {
-  const [acct, stats, loans, escrows] = await db.batch([
-    db.prepare(`SELECT * FROM casino_accounts WHERE id = ?1`).bind(id),
-    db.prepare(`SELECT game, rounds, wagered, net, biggest_win FROM casino_stats WHERE account_id = ?1`).bind(id),
-    db.prepare(`SELECT amount, created_at FROM casino_loans WHERE account_id = ?1 ORDER BY created_at DESC LIMIT 100`).bind(id),
-    db.prepare(`SELECT table_id, amount FROM casino_escrow WHERE account_id = ?1 ORDER BY opened_at`).bind(id),
+  const [[acct, stats, loans, escrows], owned] = await Promise.all([
+    db.batch([
+      db.prepare(`SELECT * FROM casino_accounts WHERE id = ?1`).bind(id),
+      db.prepare(`SELECT game, rounds, wagered, net, biggest_win FROM casino_stats WHERE account_id = ?1`).bind(id),
+      db.prepare(`SELECT amount, created_at FROM casino_loans WHERE account_id = ?1 ORDER BY created_at DESC LIMIT 100`).bind(id),
+      db.prepare(`SELECT table_id, amount FROM casino_escrow WHERE account_id = ?1 ORDER BY opened_at`).bind(id),
+    ]),
+    // v6: what the account has (bought or earned) and the feats it earned, oldest first
+    ownedOf(db, id),
   ]);
   const a = (acct!.results as unknown as AccountRow[])[0];
   if (!a) return null;
@@ -201,6 +205,8 @@ export async function loadProfile(db: D1Database, id: number, liveStacks: Map<st
     loansTaken: a.loans_taken,
     loans: (loans!.results as { amount: number; created_at: number }[]).map((l) => ({ amount: l.amount, at: l.created_at })),
     stats: { total, games },
+    owned: [...owned.items],
+    feats: [...owned.feats].filter(([feat]) => featOf(feat)).map(([feat, at]) => ({ feat, at })),
   };
 }
 
