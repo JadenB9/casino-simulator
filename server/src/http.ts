@@ -44,14 +44,35 @@ export function fail(status: number, error: ErrorCode, msg: string, headers: Rec
   return json(body, status, headers);
 }
 
-/** Read a JSON body of at most `limit` bytes, or null. */
+/**
+ * Read a JSON body of at most `limit` bytes, or null. A body sent without a Content-Length
+ * (chunked) is read only up to the limit, never buffered whole.
+ */
 export async function readJson(request: Request, limit = 2048): Promise<unknown> {
   const len = Number(request.headers.get('Content-Length') ?? '0');
   if (len > limit) return null;
-  const text = await request.text();
-  if (text.length > limit) return null;
+  if (!request.body) return null;
+  const reader = request.body.getReader();
+  const parts: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > limit) {
+      await reader.cancel().catch(() => {});
+      return null;
+    }
+    parts.push(value);
+  }
+  const bytes = new Uint8Array(size);
+  let at = 0;
+  for (const p of parts) {
+    bytes.set(p, at);
+    at += p.byteLength;
+  }
   try {
-    return JSON.parse(text);
+    return JSON.parse(new TextDecoder().decode(bytes));
   } catch {
     return null;
   }

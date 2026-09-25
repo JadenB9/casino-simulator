@@ -13,6 +13,7 @@ import { INVITE_MAX_TO, INVITE_MS, type ErrorCode, type FloorServerMsg, type Inv
 import { CATALOG, TABLE_ID_RE } from '../../../shared/src/games/catalog.ts';
 import type { GameId } from '../../../shared/src/engine.ts';
 import { ZONES, clampTo, inRect } from '../../../shared/src/zones.ts';
+import { LIFTS } from '../../../shared/src/lifts.ts';
 import type { FloorAtt, Presence } from './presence.ts';
 import type { Directory } from './directory.ts';
 
@@ -198,11 +199,18 @@ export class Invites {
     if (lobby.players >= lobby.max) return no('TABLE_FULL', 'That table is full now.');
     const pin = this.deps.directory.pinOf(row.table_id);
 
-    // Beside the table: where the client asked, if that's near the inviter (or the inviter has
-    // gone); otherwise right where the inviter is. Always on the casino floor.
+    // Beside the table: where the client asked, if that's near the inviter; otherwise right where
+    // the inviter is. With the inviter gone from the casino floor there's nobody to stand beside,
+    // so it's where you are (or the casino's elevator doors if you're elsewhere): never a spot of
+    // your choosing, or an invite from a friend who then leaves is a jump to anywhere.
     let to = clampTo(ZONES.casino, msg.x, msg.z);
     const host = this.deps.presence.positionOf(row.from_id);
-    if (host && inRect(ZONES.casino, host.x, host.z) && Math.hypot(to.x - host.x, to.z - host.z) > NEAR_CM) to = { x: host.x, z: host.z };
+    if (host && inRect(ZONES.casino, host.x, host.z)) {
+      if (Math.hypot(to.x - host.x, to.z - host.z) > NEAR_CM) to = { x: host.x, z: host.z };
+    } else {
+      const here = this.deps.presence.positionOf(me);
+      to = here && inRect(ZONES.casino, here.x, here.z) ? { x: here.x, z: here.z } : { x: LIFTS.casino.arrive.x, z: LIFTS.casino.arrive.z };
+    }
     this.deps.presence.teleport(me, to.x, to.z, msg.r);
     const game = row.game as GameId;
     send(ws, {

@@ -44,6 +44,11 @@ const FLOOR_CONNECT_PER_SEC = 1 / 3;
 /** Per address (a /64 for IPv6): generous, since a household or a campus can share one. */
 const ADDR_CONNECT_BURST = 60;
 const ADDR_CONNECT_PER_SEC = 2;
+/**
+ * Open floor connections from one address (a /64 for IPv6) at once: a household or a campus
+ * fits, while one person with a pile of accounts can't fill the casino for everyone else.
+ */
+export const MAX_FLOOR_PER_ADDR = 20;
 /** Frames of any kind: well above ten moves a second plus the odd watch and emote. */
 const FRAME_BURST = 60;
 const FRAME_PER_SEC = 30;
@@ -147,6 +152,12 @@ export class CasinoFloor extends DurableObject<Env> {
       server.close(CLOSE.FORBIDDEN, 'the casino is full');
       return new Response(null, { status: 101, webSocket: client });
     }
+    const addr = ip ? `ip:${ipKey(ip)}` : null;
+    if (addr && this.ctx.getWebSockets(addr).filter((ws) => !this.ctx.getTags(ws).includes(`a:${accountId}`)).length >= MAX_FLOOR_PER_ADDR) {
+      server.accept();
+      server.close(CLOSE.FORBIDDEN, 'too many players from here');
+      return new Response(null, { status: 101, webSocket: client });
+    }
     // One floor connection per account: the newest tab takes over.
     for (const old of this.ctx.getWebSockets(`a:${accountId}`)) {
       try {
@@ -156,7 +167,7 @@ export class CasinoFloor extends DurableObject<Env> {
       }
       this.presence.onClose(old);
     }
-    this.ctx.acceptWebSocket(server, [`a:${accountId}`]);
+    this.ctx.acceptWebSocket(server, addr ? [`a:${accountId}`, addr] : [`a:${accountId}`]);
     this.presence.onConnect(server, { accountId, name, look, emotes });
     this.chat.join(server);
     this.wins.greet(server); // features: the recent big wins, after hello

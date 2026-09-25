@@ -46,6 +46,14 @@ const STATION_RE = /^[a-z0-9-]{1,24}$/;
  * Kept per isolate: a burst from one client lands on one, and the objects limit connects anyway.
  */
 const ticketLimits = new KeyedBuckets(30, 1);
+/**
+ * Every signed-in request, per account: far above what the client sends (a page load is a dozen),
+ * so only a script hammering the reads (each is several D1 queries, /me asks tables too) meets it.
+ * Kept per isolate like the tickets' limit; the routes that write keep their own limits in D1.
+ */
+export const API_BURST = 60;
+export const API_PER_SEC = 10;
+const apiLimits = new KeyedBuckets(API_BURST, API_PER_SEC);
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -113,6 +121,7 @@ async function handleApi(request: Request, env: Env, route: string, cors: Record
 
   const claims = await verifyToken(env.CASINO_TOKEN_SECRET, bearer(request), now);
   if (!claims) return fail(401, 'UNAUTHORIZED', 'Log in again.', cors);
+  if (!apiLimits.take(`a${claims.a}`)) return fail(429, 'RATE_LIMITED', 'Slow down a little.', cors);
 
   if (route === 'me' && request.method === 'GET') {
     const stacks = await reconcileStale(env, claims.a, now);
