@@ -23,18 +23,35 @@ export interface SeatStats {
   biggestWin: Cents;
 }
 
-/** Buy-in and top-up: balance -> chips at the table. */
-export function buyInStatements(db: D1Database, op: { opId: string; accountId: number; tableId: string; amount: Cents; now: number }): D1PreparedStatement[] {
+/**
+ * Money that may not go to a multiplayer Hold'em table yet, for account ?1 as of ?4: what transfers
+ * hold back (bank.ts sendRules: the house's money from the last few days, other players' from the
+ * last day), less the starting stake. The cashier's top-up has no end, so without this one account
+ * could take top-up after top-up and lose each on purpose to another at a private table. A new
+ * player's first $50,000 can go (sign-ups are limited per address), so friends who just joined can
+ * sit down together.
+ */
+const HELD = `(SELECT COALESCE(SUM(amount), 0) FROM casino_ledger
+       WHERE account_id = ?1 AND kind IN ('grant', 'loan') AND created_at > ?4 - ${SEND.houseHoldMs} AND op_id <> 'grant:' || account_id)
+    + (SELECT COALESCE(SUM(amount), 0) FROM casino_transfers WHERE to_id = ?1 AND at > ?4 - ${SEND.giftHoldMs})`;
+
+/**
+ * Buy-in and top-up: balance -> chips at the table. `held` (a multiplayer Hold'em table, where
+ * chips go from player to player) keeps HELD off the table: the buy-in must leave at least that
+ * much on the balance, or the balance check refuses the batch as it would an overdraft.
+ */
+export function buyInStatements(db: D1Database, op: { opId: string; accountId: number; tableId: string; amount: Cents; now: number; held?: boolean }): D1PreparedStatement[] {
   return [
     db
       .prepare(`INSERT INTO casino_ledger (op_id, account_id, kind, amount, table_id, created_at) VALUES (?1, ?2, 'buyin', ?3, ?4, ?5)`)
       .bind(op.opId, op.accountId, -op.amount, op.tableId, op.now),
     db
       .prepare(
-        `UPDATE casino_accounts SET balance = balance - ?2, in_play = in_play + ?2, rev = rev + 1, last_seen = ?3
+        `UPDATE casino_accounts SET balance = ${op.held ? `CASE WHEN balance - ?2 >= ${HELD} THEN balance - ?2 ELSE -1 END` : 'balance - ?2'},
+                in_play = in_play + ?2, rev = rev + 1, last_seen = ?3
           WHERE id = ?1 RETURNING balance, in_play, rev`,
       )
-      .bind(op.accountId, op.amount, op.now),
+      .bind(op.accountId, op.amount, op.now, ...(op.held ? [op.now] : [])),
     db
       .prepare(
         `INSERT INTO casino_escrow (account_id, table_id, amount, opened_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?4)

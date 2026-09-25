@@ -153,6 +153,10 @@ interface SocketLimits {
   strikes: Bucket;
 }
 
+/** Why a Hold'em buy-in the balance covers was refused (transfer.ts buyInStatements). */
+export const HELD_OFF_POKER =
+  "Top-ups, bonuses, tips and gifts from the last three days, and money players sent you in the last day, can't be taken to a Hold'em table with other players. Play them anywhere else, or against the bots.";
+
 /** A card code as the engines write them ("As", "Td"). */
 const CARD_RE = /^[2-9TJQKA][shdc]$/;
 
@@ -1021,8 +1025,13 @@ export class CasinoTable extends DurableObject<Env> {
     const now = Date.now();
     try {
       if (job.kind === 'buyin' || job.kind === 'topup') {
-        const out = await applyTransfer(db, buyInStatements(db, { opId: job.op_id, accountId: job.account_id, tableId: m.name, amount: job.amount, now }), job.op_id);
-        this.finishBuyIn(job, out.kind === 'applied', Date.now());
+        // Chips at a multiplayer Hold'em table go from player to player, so the house's money
+        // stays off them as it stays out of transfers (transfer.ts buyInStatements).
+        const held = m.game === 'holdem' && m.mode === 'multi';
+        const out = await applyTransfer(db, buyInStatements(db, { opId: job.op_id, accountId: job.account_id, tableId: m.name, amount: job.amount, now, held }), job.op_id);
+        let why: string | undefined;
+        if (out.kind !== 'applied' && held && ((await moneyOf(db, job.account_id))?.balance ?? 0) >= job.amount) why = HELD_OFF_POKER;
+        this.finishBuyIn(job, out.kind === 'applied', Date.now(), why);
         if (out.kind === 'applied') await this.sendBalance(job.account_id, out);
       } else if (job.kind === 'cashout') {
         const stats = job.payload ? (JSON.parse(job.payload) as SeatStats) : null;
@@ -1052,7 +1061,7 @@ export class CasinoTable extends DurableObject<Env> {
     }
   }
 
-  private finishBuyIn(job: OutboxRow, applied: boolean, now: number): void {
+  private finishBuyIn(job: OutboxRow, applied: boolean, now: number, why = "Your balance doesn't cover that."): void {
     const mem = this.members.get(job.account_id);
     const engine = this.engine!;
     this.ctx.storage.transactionSync(() => {
@@ -1074,7 +1083,7 @@ export class CasinoTable extends DurableObject<Env> {
     });
     if (!mem) return;
     if (!applied) {
-      for (const ws of this.ctx.getWebSockets(`a:${mem.account_id}`)) this.err(ws, 'INSUFFICIENT_FUNDS', "Your balance doesn't cover that.");
+      for (const ws of this.ctx.getWebSockets(`a:${mem.account_id}`)) this.err(ws, 'INSUFFICIENT_FUNDS', why);
       // They asked to leave while it was in flight and there are no chips to cash out: go now,
       // rather than staying a member nobody can remove until a grace period runs out (and who
       // can't come back to the table until then).

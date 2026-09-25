@@ -23,7 +23,7 @@
 
 import type { GameEvent, GameId, RoundResult, Step } from '../../shared/src/engine.ts';
 import { CATALOG, isGameId } from '../../shared/src/games/catalog.ts';
-import { DAILY_KEEP_DAYS, FEATS, cashFor, casinoDay, dailyFeats, featOf, isMaxTally, tallyValue, theoOf } from '../../shared/src/feats.ts';
+import { DAILY_KEEP_DAYS, FEATS, GAME_EDGE, cashFor, casinoDay, dailyFeats, featOf, isMaxTally, tallyValue, theoOf } from '../../shared/src/feats.ts';
 import type { EmoteId, TableServerMsg } from '../../shared/src/protocol.ts';
 import { LINEUP, isSlotId } from '../../shared/src/games/slots/lineup.ts';
 import { ROYAL_FLUSH, STRAIGHT_FLUSH as VP_STRAIGHT_FLUSH, FOUR_OF_A_KIND } from '../../shared/src/games/videopoker/hands.ts';
@@ -79,20 +79,28 @@ export function roundFacts(game: GameId, variant: string, step: Pick<Step<unknow
     add('theo', theo);
     if (d) add(`${d}theo`, theo);
   }
+  // Chips won from other players (Hold'em) aren't the house's to reward: they count at their own
+  // game, never toward the amounts won everywhere, or two players passing a pot back and forth
+  // would reach every amount challenge (and the boards) for nothing.
+  const fromHouse = (GAME_EDGE[game] ?? 0) > 0;
   if (profit > 0) {
-    add('won', profit);
+    if (fromHouse) {
+      add('won', profit);
+      out.tally.best = profit;
+    }
     add(`won:${game}`, profit);
     add(`wins:${game}`, 1);
-    out.tally.best = profit;
     if (d) {
-      add(`${d}won`, profit);
+      if (fromHouse) {
+        add(`${d}won`, profit);
+        out.tally[`${d}best`] = profit;
+      }
       add(`${d}wins:${game}`, 1);
-      out.tally[`${d}best`] = profit;
     }
     out.moments.push('first-win');
   }
   // v6 stats6: losses, the worst round, wins in all and rounds per game, for the leaderboards
-  addRoundStats(out.tally, game, profit);
+  addRoundStats(out.tally, game, profit, fromHouse);
   // A solo player's extra spots are named in the events by their spot, not the seat.
   const pos = r.spot ?? r.seat;
   try {
