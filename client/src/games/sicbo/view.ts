@@ -25,8 +25,9 @@ import { CHIP_R, CHIP_H } from '../../table/chips.ts';
 import { celebrate, type Tier } from '../../table/celebrate.ts';
 import { serverNow } from '../../net/clock.ts';
 import { TOP_Y, TABLE_D, TABLE_W, SHAKER_Z, MODEL_FELT, layoutFelt } from './model.ts';
-import { areaOf, anchorOf, spotAt, ZE, type Rect } from './layout.ts';
-import { Shaker, SHAKER_NAME, buildShaker } from './shaker.ts';
+import { areaOf, anchorOf, spotAt, ZA, ZE, X0, type Rect } from './layout.ts';
+import { around, ring } from '../../table/fit.ts';
+import { Shaker, SHAKER_NAME, DOME_R, buildShaker } from './shaker.ts';
 import { LayoutChips, Pile, seatColor, CHIP_SCALE, type PileStyle } from './chips.ts';
 import { History, Meters, Board, Tip, Clock, Players, type PlayerRow } from './hud.ts';
 
@@ -83,6 +84,10 @@ export function mountSicBo(ctx: TableViewCtx): TableView {
   if (modelFelt) modelFelt.visible = false;
   const felt = layoutFelt(1400);
   stage.addFelt(felt, FELT_Y);
+  // What stays in view at any window size (table/fit.ts): the layout and the shaker behind it,
+  // and the dome while the camera is in on the dice.
+  const dome = [...ring([0, TOP_Y, SHAKER_Z], DOME_R + 0.03), ...ring([0, TOP_Y + DOME_R + 0.02, SHAKER_Z], 0.04, 4)];
+  stage.board(around([0, FELT_Y, (ZA + ZE) / 2], -X0, (ZE - ZA) / 2), dome);
 
   // state
   let mode: 'solo' | 'multi' = 'solo';
@@ -150,6 +155,7 @@ export function mountSicBo(ctx: TableViewCtx): TableView {
   }
   function glideToDome(ms: number): Promise<void> {
     camHome ??= stage.restPose(camera);
+    stage.shot(DOME_POSE, dome);
     const to = stage.worldPose(DOME_POSE);
     const q = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(to.position, to.target, camera.up));
     return glide(to.position, q, ms);
@@ -157,6 +163,7 @@ export function mountSicBo(ctx: TableViewCtx): TableView {
   function glideHome(ms: number): Promise<void> {
     const home = camHome;
     camHome = null;
+    stage.shot(null);
     if (!home) return Promise.resolve();
     if (ms <= 0) {
       camera.position.copy(home.pos);

@@ -26,7 +26,7 @@ import { CHIP_R, CHIP_H } from '../../table/chips.ts';
 import { serverNow } from '../../net/clock.ts';
 import { TOP_Y, TABLE_W, TABLE_D, WHEEL_X, WHEEL_Z, MODEL_FELT, tableModel, layoutFelt } from './model.ts';
 import { spotAt, anchorOf, rectsFor, layoutOf, ZE, ZT, XZ, type Rect } from './layout.ts';
-import { ROTOR_NAME, BALL_NAME, DEFLECTORS, pocketAngle, sectorOf, buildWheel } from './wheel.ts';
+import { ROTOR_NAME, BALL_NAME, DEFLECTORS, WHEEL_R, pocketAngle, sectorOf, buildWheel } from './wheel.ts';
 import { Flight, OpenTrack, Rotor, TAU, DIMS, LAUNCH_W, BOUNCE_S } from './spin.ts';
 import { LayoutChips, Pile, seatColor, CHIP_SCALE, type PileStyle } from './chips.ts';
 import { BallSound } from './sound.ts';
@@ -34,6 +34,7 @@ import { History, Meters, Plaque, Tip, Clock, Players, type PlayerRow } from './
 import { rouletteAdvice, rouletteMoment } from './advice.ts';
 import { celebrate } from '../../table/celebrate.ts';
 import { wave } from '../../app/comfort.ts';
+import { around, ring } from '../../table/fit.ts';
 
 const FELT_Y = TOP_Y + 0.0007;
 const CHIP_Y = TOP_Y + 0.0009;
@@ -101,6 +102,11 @@ function mountRoulette(ctx: TableViewCtx): TableView {
   if (modelFelt) modelFelt.visible = false;
   const felt = layoutFelt(variant, 1400, stage.engine.quality);
   stage.addFelt(felt, FELT_Y);
+  // What stays in view at any window size (table/fit.ts): every box of the layout and the wheel
+  // beside it; while the camera is in on the wheel, the wheel.
+  const wheelRim = ring([WHEEL_X, TOP_Y + 0.08, WHEEL_Z], WHEEL_R);
+  const grid = layoutOf(variant);
+  stage.board(wheelRim, [...grid.cells.values(), ...grid.boxes.values()].map((r) => around([r.x, FELT_Y, r.z], r.w / 2, r.d / 2)));
 
   // state
   let mode: 'solo' | 'multi' = 'solo';
@@ -190,6 +196,7 @@ function mountRoulette(ctx: TableViewCtx): TableView {
   }
   function glideToWheel(ms: number): Promise<void> {
     camHome ??= stage.restPose(camera);
+    stage.shot(WHEEL_POSE, wheelRim);
     const to = stage.worldPose(WHEEL_POSE);
     const q = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(to.position, to.target, camera.up));
     return glide(to.position, q, ms);
@@ -197,6 +204,7 @@ function mountRoulette(ctx: TableViewCtx): TableView {
   function glideHome(ms: number): Promise<void> {
     const home = camHome;
     camHome = null;
+    stage.shot(null);
     if (!home) return Promise.resolve();
     if (ms <= 0) {
       camera.position.copy(home.pos);

@@ -21,7 +21,7 @@ import { tween, ease } from '../../table/tween.ts';
 import { celebrate } from '../../table/celebrate.ts';
 import { serverNow } from '../../net/clock.ts';
 import {
-  FOOTPRINT, OVERVIEW_POSE, FLAPPER_POSE, TERMINALS, TERM_R, STOOL_R, TOP_Y, CUP_W,
+  FOOTPRINT, OVERVIEW_POSE, FLAPPER_POSE, TERMINALS, TERM_R, STOOL_R, TOP_Y, CUP_W, HUB_Y, WHEEL_Z, FACE_R, PIVOT_R,
   seatPositions, seatPose, wheelPose, terminalOfSeat, terminalYaw, cupPlace, onArc,
 } from './layout.ts';
 import { wheelModel, WHEEL_GROUP, ROTOR_NAME, GLOW_NAME, LAMPS_NAME, type Flapper, type Screens } from './model.ts';
@@ -192,6 +192,18 @@ function mountBanditWheel(ctx: TableViewCtx): TableView {
   function aimCamera(mode: CamMode): void {
     if (mode !== 'seat' && camHome === null) camHome = { pos: camera.position.clone(), quat: camera.quaternion.clone() };
     camMode = mode;
+    // what each shot must show at any window size (table/fit.ts)
+    if (mode === 'seat') stage.shot(null);
+    else if (mode === 'wheel') stage.shot(wheelPose(mySeat), wheelFace);
+    else stage.shot(FLAPPER_POSE, flapperTop);
+  }
+
+  // What stays in view (table/fit.ts): the wheel's face and its flapper, and your terminal's cups.
+  const wheelFace = Array.from({ length: 12 }, (_, i) => new THREE.Vector3(FACE_R * Math.cos((i / 6) * Math.PI), HUB_Y + FACE_R * Math.sin((i / 6) * Math.PI), WHEEL_Z + 0.05));
+  const flapperTop = [-0.2, 0.2].flatMap((x) => [FACE_R - 0.12, PIVOT_R + 0.08].map((y) => new THREE.Vector3(x, HUB_Y + y, WHEEL_Z + 0.05)));
+  function fitBoard(): void {
+    const t = mySeat === null ? null : terminalOfSeat(mySeat);
+    stage.board(wheelFace, flapperTop, t === null ? [] : NUMBERS.map((_, k) => new THREE.Vector3(...cupPlace(t, k))));
   }
 
   /** Straight back to the seat (a snapshot, leaving the table). */
@@ -708,6 +720,7 @@ function mountBanditWheel(ctx: TableViewCtx): TableView {
       finishAnims();
       mode = snap.meta.mode;
       mySeat = snap.you.seat;
+      fitBoard();
       stack = snap.you.stack;
       pendingStack = null;
       members = snap.members;
@@ -788,6 +801,7 @@ function mountBanditWheel(ctx: TableViewCtx): TableView {
 
     onSeat(msg) {
       if (msg.seat !== null) mySeat = msg.seat;
+      fitBoard();
       if (animating) pendingStack = msg.stack;
       else stack = msg.stack;
       refresh();

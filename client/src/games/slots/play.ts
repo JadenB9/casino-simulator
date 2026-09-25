@@ -21,7 +21,7 @@ import { session } from '../../app/session.ts';
 import { tween, wait, ease } from '../../table/tween.ts';
 import { celebrate } from '../../table/celebrate.ts';
 import type { SpinTiming } from './reels.ts';
-import { bulbMaterial, buttonAtUv, candleColor } from './cabinet.ts';
+import { bulbMaterial, buttonAtUv, candleColor, playFace } from './cabinet.ts';
 import { blink, wave } from '../../app/comfort.ts';
 import { bankMaterial, ReelBank } from './bank.ts';
 import { buildSkinned, payMatrix, skinEntry, winMeterAt, type SkinnedHandle } from './build.ts';
@@ -94,6 +94,8 @@ export function mountSkinned(ctx: TableViewCtx): TableView {
   const rows = skin.layout.reels.rows;
   const l = skin.layout;
   const { handle, owned } = findCabinet(ctx, id);
+  // the face, and whatever moving part the skin adds (the Cherry Wheel over the glass)
+  ctx.stage.board(playFace(handle.skin.layout), Object.values(handle.extra));
   const sound = new MachineSound(ctx.sfx, stepper ? 'stepper' : 'video');
   let disposed = false;
 
