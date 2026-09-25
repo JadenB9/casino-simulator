@@ -284,27 +284,57 @@ export class Garage {
     col.box(G.x0, (doorB + G.z1) / 2, WALL, G.z1 - doorB, 0, G.height);
   }
 
-  /** The spots' beams: a faint cone of light from each fitting down over its bay (one additive mesh). */
+  /**
+   * The spots' beams: a faint cone of light from each fitting down over its bay (one additive
+   * mesh). Each face gives light by how squarely it faces the eye, so a beam is thickest down its
+   * middle and fades out at its edges, like lit haze, instead of a lampshade of light with hard sides.
+   */
   private buildCones(): void {
-    const parts: THREE.BufferGeometry[] = [];
+    const pos: number[] = [];
+    const nor: number[] = [];
+    const tint: number[] = [];
     for (const { bay } of collection([])) {
       const h = G.height - 0.3;
       const cone = new THREE.CylinderGeometry(0.16, bay.hero ? 3.2 : 2.4, h, 24, 1, true).translate(bay.x, h / 2 + 0.05, bay.z);
       const g = cone.toNonIndexed();
-      for (const n of Object.keys(g.attributes)) if (n !== 'position') g.deleteAttribute(n);
       const p = g.getAttribute('position');
-      const c = new Float32Array(p.count * 4);
+      const n = g.getAttribute('normal');
       for (let i = 0; i < p.count; i++) {
+        pos.push(p.getX(i), p.getY(i), p.getZ(i));
+        nor.push(n.getX(i), n.getY(i), n.getZ(i));
         // brightest at the lamp, gone by the floor
-        const a = 0.11 * Math.pow(THREE.MathUtils.clamp(p.getY(i) / G.height, 0, 1), 1.6);
-        c.set([1, 0.93, 0.8, a], i * 4);
+        tint.push(1, 0.93, 0.8, 0.13 * Math.pow(THREE.MathUtils.clamp(p.getY(i) / G.height, 0, 1), 1.6));
       }
-      g.setAttribute('color', new THREE.BufferAttribute(c, 4));
-      parts.push(g);
+      g.dispose();
       cone.dispose();
     }
-    const geo = mergeLit(parts, true);
-    const mat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+    geo.setAttribute('tint', new THREE.Float32BufferAttribute(tint, 4));
+    geo.computeBoundingSphere();
+    const mat = new THREE.ShaderMaterial({
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      vertexShader: /* glsl */ `
+        attribute vec4 tint;
+        varying vec4 vTint;
+        varying float vFacing;
+        void main() {
+          vec4 mv = modelViewMatrix * vec4(position, 1.0);
+          vFacing = abs(dot(normalize(normalMatrix * normal), normalize(-mv.xyz)));
+          vTint = tint;
+          gl_Position = projectionMatrix * mv;
+        }`,
+      fragmentShader: /* glsl */ `
+        varying vec4 vTint;
+        varying float vFacing;
+        void main() {
+          gl_FragColor = vec4(vTint.rgb * vTint.a * vFacing * vFacing, 1.0);
+        }`,
+    });
     const mesh = new THREE.Mesh(geo, mat);
     mesh.renderOrder = 3;
     this.group.add(mesh);
