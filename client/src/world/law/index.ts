@@ -86,6 +86,8 @@ export class Law {
   private heardJail = false;
   private readonly hud = el('div', 'law-hud');
   private readonly fade = el('div', 'law-fade');
+  /** On a touch screen, a fist beside the action button (there's no V key). */
+  private readonly fist = el('button', 'law-punch', 'Punch');
   private readonly ears = new THREE.Vector3();
   private readonly _watch = new THREE.Vector3();
 
@@ -103,7 +105,11 @@ export class Law {
     this.jail.posts.forEach((p, i) => this.staff.addOfficer(p.id, p.x, p.z, p.yaw, [4, 6, 2, 5][i % 4]!));
     this.hud.hidden = true;
     this.fade.hidden = true;
-    deps.ui.append(this.hud, this.fade);
+    this.fist.type = 'button';
+    this.fist.hidden = true;
+    this.fist.setAttribute('aria-label', 'Throw a punch');
+    this.fist.addEventListener('click', () => this.link?.you && deps.canPunch() && this.punch());
+    deps.ui.append(this.hud, this.fade, this.fist);
     this.offs.push(addSpots(world, this.spots));
     this.offs.push(engine.onFrame((dt) => this.update(dt)));
     addEventListener('keydown', this.onKey);
@@ -339,6 +345,13 @@ export class Law {
       cam.position.y += (Math.random() - 0.5) * k;
     }
     if (this.warnUntil && Date.now() % 1000 < 40) this.showState();
+    // inside, the walls keep you in; if anything ever put you past them, back you go
+    if (this.state && !this.moving && !this.deps.world.seated && this.jail.group.visible && !inside(p.x, p.z)) {
+      const r = JAIL.inner;
+      this.deps.world.player.teleport(Math.min(r.x1 - 0.5, Math.max(r.x0 + 0.5, p.x)), Math.min(r.z1 - 0.5, Math.max(r.z0 + 0.5, p.z)), this.deps.world.player.state().yaw);
+    }
+    const fist = document.documentElement.classList.contains('touch-ui') && !!this.link?.you && this.deps.canPunch();
+    if (this.fist.hidden === fist) this.fist.hidden = !fist;
   }
 
   private spots: SpotProvider = (p) => {
@@ -389,6 +402,7 @@ export class Law {
     this.jail.dispose();
     this.hud.remove();
     this.fade.remove();
+    this.fist.remove();
   }
 }
 

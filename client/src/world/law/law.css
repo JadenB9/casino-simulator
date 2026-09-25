@@ -46,3 +46,31 @@
 @media (max-width: 640px) {
   .law-hud { top: calc(var(--below-hud) + 44px); right: 50%; transform: translateX(50%); }
 }
+
+/* The punch on a touch screen: a smaller round button to the left of the action button
+   (world/touch.css .touch-act: 80 px, 22 px from the right, 78 px up). */
+.law-punch {
+  position: fixed;
+  right: 118px;
+  bottom: 90px;
+  z-index: 2;
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  background: var(--glass-2);
+  box-shadow: 0 0 0 4px rgba(14, 12, 10, 0.45), 0 8px 22px rgba(0, 0, 0, 0.45);
+  color: var(--brass-hi);
+  font: 600 13px var(--ui);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.08s;
+}
+.law-punch:active { transform: scale(0.92); }
+.law-punch:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+@media (max-width: 520px) {
+  .law-punch { bottom: 126px; }
+}
