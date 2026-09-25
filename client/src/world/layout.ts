@@ -1249,7 +1249,7 @@ function baseSolids(plan: FloorPlan): Solid[] {
     turned(id, id, m.x + Math.sin(m.ry) * (d / 2), m.z + Math.cos(m.ry) * (d / 2), m.w, d, m.ry, y0, y1, { wall: true });
   };
   plan.moongates.forEach((m, i) => onWall(`moongate-${i + 1}`, m, 0.16, 0, MOONGATE.y + MOONGATE.r + 0.62));
-  plan.lattices.forEach((m, i) => onWall(`lattice-${i + 1}`, m, 0.07, 0.3, 2.62));
+  plan.lattices.forEach((m, i) => onWall(`lattice-${i + 1}`, m, 0.16, 0.3, 2.62));
   plan.drapes.forEach((m, i) => {
     const top = ceilingAt(plan, m.x, m.z) - 0.02;
     for (const e of [-1, 1]) onWall(`drape-${i + 1}-${e > 0 ? 'e' : 'w'}`, { ...m, x: m.x + Math.cos(m.ry) * e * (m.w / 2 + DRAPES.w / 2), z: m.z - Math.sin(m.ry) * e * (m.w / 2 + DRAPES.w / 2), w: DRAPES.w }, DRAPES.d, 0, top - DRAPES.pelmet);

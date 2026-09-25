@@ -115,7 +115,8 @@ export function casingParts(d: PlannedDoor, r: PlannedRoom, m: Mats): CasingPart
     const red = m.get('lacquer-red');
     const post = 0.2;
     for (const a of [in0 - post / 2, in1 + post / 2]) part(red, a, post, 0, h, 0.08, { uv: 1.2 });
-    const head = Math.min(0.22, ceiling - h - 0.12);
+    // (the beam's top kept well under the crown and a cove's strip)
+    const head = Math.min(0.22, ceiling - h - 0.33);
     if (head > 0.06) {
       part(red, mid, w + 2 * post, h, h + head, 0.08, { uv: 1.2 });
       part(m.get('lacquer'), mid, w + 2 * post + 0.28, h + head, h + head + 0.08, 0.12);

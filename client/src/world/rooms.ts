@@ -867,19 +867,35 @@ export const ROUTES: [RoomId | 'pickup', number, number, number?][][] = [
     ['pit', 11.6, -9.4],
     ['pit', 11.8, 0.9],
   ],
-  // the salon, from the pit's north aisle
+  // the salon, from the pit's north aisle, and on up its east side into the Jade Room
   [
     ['pit', 0, -9.6],
     ['salon', 0, 4.6],
     ['salon', -5.6, 1.2, 3],
     ['salon', 5.6, 1.2, 3],
+    ['salon', 7.6, 1.2],
+    ['salon', 7.6, -4.9],
+    ['cardroom', 7.3, 4.6],
+    ['cardroom', 7.3, 0.2],
+    ['cardroom', 0, 0.2, 3],
+    ['cardroom', 7.1, 0.4],
+    ['cardroom', 7.3, 4.4],
+    ['salon', 7.6, -4.8],
+    ['salon', 7.5, 1.5],
     ['salon', 0.6, 4.6],
   ],
-  // the poker room, from the bar's north door, round between its two rows of tables
+  // the poker room, from the bar's north door, round between its two rows of tables, with a
+  // turn through the bingo hall to its snack bar
   [
     ['bar', 0.5, -9.4],
     ['poker', 2.5, 4.9],
     ['poker', 0, 0, 2],
+    ['poker', 0, -4.9],
+    ['bingo', 0, 4.6],
+    ['bingo', 4.2, 2.4, 3],
+    ['bingo', 0.3, 4.4],
+    ['poker', 0.3, -4.8],
+    ['poker', -0.2, 0],
     ['poker', -8.4, 0, 2],
     ['poker', -8.4, 4.9],
     ['poker', 2.3, 5.0],

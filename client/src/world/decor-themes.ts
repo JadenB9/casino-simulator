@@ -62,15 +62,19 @@ export function buildThemes(plan: FloorPlan, b: Batch, m: Mats, glow: GlowMerge,
       const x = e * (L / 2 + ISLAND_CAP / 2);
       box(lacquer, x, y0 / 2, 0, ISLAND_CAP - 0.02, y0, D);
       box(lacquer, x, 0.04, 0, ISLAND_CAP, 0.08, D + 0.02);
-      for (const f of [-1, 1]) box(chrome, x, y0 / 2, f * (D / 2 - 0.02), ISLAND_CAP + 0.004, y0 - 0.1, 0.04);
+      for (const f of [-1, 1]) box(chrome, x, y0 / 2, f * (D / 2 - 0.015), ISLAND_CAP + 0.004, y0 - 0.1, 0.04);
       // a panel in the island's pink on the cap's face, and its light bar
       const face = e * (L / 2 + ISLAND_CAP);
-      box(m.get('prize-0'), face + e * 0.006, 1.02, 0, 0.012, 1.3, D - 0.36);
-      box(chrome, face + e * 0.004, 1.02, 0, 0.008, 1.36, D - 0.3);
-      for (const f of [-1, 1]) box(pink, face + e * 0.014, 1.02, f * (D / 2 - 0.1), 0.006, 1.26, 0.025);
-      for (let k = 0; k < 5; k++) box(new THREE.Color('#fff0f6').multiplyScalar(2.2), face + e * 0.014, 0.52 + k * 0.25, 0, 0.006, 0.05, 0.05);
-      const sign = at(face + e * 0.02, 0);
-      out.signs.push({ kind: 'lit', text: 'SAKURA STORM', color: '#ffc4e0', font: 'Limelight', at: [sign.x, 1.9, sign.z], ry: isl.yaw + (e > 0 ? Math.PI / 2 : -Math.PI / 2), w: D - 0.16, h: 0.24 });
+      // (each layer's faces a few millimetres clear of the one under it)
+      box(chrome, face + e * 0.0045, 1.02, 0, 0.007, 1.36, D - 0.3);
+      box(m.get('prize-0'), face + e * 0.011, 1.02, 0, 0.01, 1.3, D - 0.36);
+      for (const f of [-1, 1]) box(pink, face + e * 0.021, 1.02, f * (D / 2 - 0.1), 0.006, 1.26, 0.025);
+      for (let k = 0; k < 3; k++) box(new THREE.Color('#fff0f6').multiplyScalar(2.2), face + e * 0.021, 0.52 + k * 0.06, 0, 0.006, 0.03, D - 0.5);
+      const sign = at(face + e * 0.03, 0);
+      const ry = isl.yaw + (e > 0 ? Math.PI / 2 : -Math.PI / 2);
+      out.signs.push({ kind: 'lit', text: 'SAKURA STORM', color: '#ffc4e0', font: 'Limelight', at: [sign.x, 1.9, sign.z], ry, w: D - 0.16, h: 0.24 });
+      // the island's number, big on its panel, the way a parlour's islands are found
+      out.signs.push({ kind: 'neon', text: String(isl.n), color: '#fff2f8', font: 'Tilt Neon', at: [sign.x, 1.2, sign.z], ry, w: 0.5, h: 0.62 });
     }
     out.pools.push({ x: isl.x, z: isl.z, r: Math.max(L, D) * 0.6 + 1.4, room: isl.room });
   }
@@ -105,7 +109,8 @@ export function buildThemes(plan: FloorPlan, b: Batch, m: Mats, glow: GlowMerge,
       bx(m.get('glass'), 0, 0.96, 0, depth - 0.02, 0.1, len - 0.02);
       bx(chrome, 0, H - 0.006, 0, depth + 0.02, 0.012, len + 0.02);
       bx(GLOW.shelf, -depth / 2 - 0.006, 0.84, 0, 0.012, 0.012, len - 0.1);
-      for (let t = -len / 2 + 0.25; t < len / 2 - 0.2; t += 0.32) bx(prizeMats[Math.round((t + 5) * 3) % prizeMats.length]!, 0.05, 0.94, t, 0.14, 0.06, 0.1);
+      // under the glass, the special prizes: little gold plates in rows, what the balls are traded for
+      for (let t = -len / 2 + 0.2; t < len / 2 - 0.15; t += 0.12) for (const a of [-0.12, 0.05]) bx(m.get('lacquer-gold'), a, 0.918, t, 0.08, 0.016, 0.05);
       // the wall of prizes: an open lacquer case against the wall, four lit shelves of boxes
       const S = WALL_COUNTER.shelf;
       const run = len + 0.6;
@@ -118,8 +123,25 @@ export function buildThemes(plan: FloorPlan, b: Batch, m: Mats, glow: GlowMerge,
         bx(chrome, shelfA - 0.02, y, 0, S - 0.04, 0.02, run - 0.08);
         bx(GLOW.shelf, shelfA - S / 2 + 0.01, y - 0.018, 0, 0.012, 0.012, run - 0.1);
         for (let t = -run / 2 + 0.2; t < run / 2 - 0.15; t += 0.26) {
-          const hgt = 0.16 + ((n * 37) % 5) * 0.05;
-          bx(prizeMats[n++ % prizeMats.length]!, shelfA - 0.02, y + 0.01 + hgt / 2, t, 0.24, hgt, 0.2);
+          const mat = prizeMats[n % prizeMats.length]!;
+          const kind = (n * 7) % 5;
+          const hgt = 0.14 + ((n * 37) % 5) * 0.045;
+          n++;
+          if (kind === 1) {
+            // a tin of sweets
+            const p = pt(shelfA - 0.02, t);
+            b.add(new THREE.CylinderGeometry(0.09, 0.09, 0.16, 16), mat, { x: p.x, y: y + 0.09, z: p.z });
+            b.add(new THREE.CylinderGeometry(0.1, 0.1, 0.02, 16), m.get('lacquer-gold'), { x: p.x, y: y + 0.17, z: p.z });
+          } else if (kind === 3) {
+            // a stuffed toy, round and sitting up
+            const p = pt(shelfA - 0.03, t);
+            b.add(new THREE.SphereGeometry(0.09, 12, 8), mat, { x: p.x, y: y + 0.1, z: p.z });
+            b.add(new THREE.SphereGeometry(0.065, 12, 8), mat, { x: p.x, y: y + 0.24, z: p.z });
+          } else {
+            // a boxed prize with a ribbon round it
+            bx(mat, shelfA - 0.02, y + 0.01 + hgt / 2, t, 0.24, hgt, 0.2);
+            bx(m.get('enamel'), shelfA - 0.02, y + 0.01 + hgt / 2, t, 0.25, hgt + 0.01, 0.03);
+          }
         }
       }
       const sign = pt(wallA - 0.03, 0);
@@ -248,25 +270,34 @@ export function buildThemes(plan: FloorPlan, b: Batch, m: Mats, glow: GlowMerge,
     // the lit paper, then the fretwork in front of it, then the frame round both
     const paper = wallPoint(l, 0.085);
     glow.box(new THREE.Color('#e8a860').multiplyScalar(0.62), paper.x, ym, paper.z, w - 0.16, h - 0.16, 0.01, l.ry);
-    const bars: [number, number, number, number][] = [];
-    const cols = Math.max(3, Math.round((w - 0.16) / 0.22));
-    const rows = Math.max(4, Math.round((h - 0.16) / 0.22));
-    for (let i = 1; i < cols; i++) bars.push([-w / 2 + 0.08 + (i * (w - 0.16)) / cols, ym, 0.034, h - 0.16]);
-    for (let j = 1; j < rows; j++) bars.push([0, y0 + 0.08 + (j * (h - 0.16)) / rows, w - 0.16, 0.034]);
-    // a smaller square set into every other cell: the fret
-    for (let i = 0; i < cols; i++) {
-      for (let j = 0; j < rows; j++) {
-        if ((i + j) % 2) continue;
-        const cx = -w / 2 + 0.08 + ((i + 0.5) * (w - 0.16)) / cols;
-        const cy = y0 + 0.08 + ((j + 0.5) * (h - 0.16)) / rows;
-        const q = 0.05;
-        bars.push([cx, cy + q, 2 * q + 0.022, 0.022], [cx, cy - q, 2 * q + 0.022, 0.022], [cx - q, cy, 0.022, 2 * q - 0.022], [cx + q, cy, 0.022, 2 * q - 0.022]);
+    // the fretwork: two sets of bars on the diagonals, a diamond lattice, each cut to the frame
+    const iw = w - 0.16;
+    const ih = h - 0.16;
+    const pitch = 0.2;
+    for (const dir of [1, -1]) {
+      // lines a·dir - (y - ym) = c across the panel, clipped to its rect
+      for (let c = -(iw + ih) / 2; c <= (iw + ih) / 2; c += pitch) {
+        const pts: [number, number][] = [];
+        for (const a of [-iw / 2, iw / 2]) {
+          const v = a * dir - c;
+          if (Math.abs(v) <= ih / 2) pts.push([a, v]);
+        }
+        for (const v of [-ih / 2, ih / 2]) {
+          const a = (v + c) * dir;
+          if (Math.abs(a) <= iw / 2) pts.push([a, v]);
+        }
+        if (pts.length < 2) continue;
+        const [[a0, v0], [a1, v1]] = pts as [[number, number], [number, number]];
+        const len = Math.hypot(a1 - a0, v1 - v0);
+        if (len < 0.05) continue;
+        const p = wallPoint(l, 0.105, (a0 + a1) / 2);
+        b.add(new THREE.BoxGeometry(len, 0.026, 0.03), lacquer, { x: p.x, y: ym + (v0 + v1) / 2, z: p.z, ry: l.ry, rz: Math.atan2(v1 - v0, a1 - a0) });
       }
     }
-    for (const [a, y, bw, bh] of bars) {
-      const p = wallPoint(l, 0.105, a);
-      b.box(lacquer, p.x, y, p.z, bw, bh, 0.03, undefined, l.ry);
-    }
+    // a round medallion in the middle: a lacquer ring over the diamonds, a gold ring inside it
+    const mid = wallPlace(l, 0.125, ym + 0.2);
+    b.add(new THREE.TorusGeometry(Math.min(iw, ih) * 0.28, 0.03, 8, 40), red, mid);
+    b.add(new THREE.TorusGeometry(Math.min(iw, ih) * 0.28 - 0.05, 0.012, 6, 40), m.get('lacquer-gold'), wallPlace(l, 0.13, ym + 0.2));
     for (const [a, y, bw, bh] of [
       [-w / 2 + 0.04, ym, 0.08, h],
       [w / 2 - 0.04, ym, 0.08, h],
@@ -337,7 +368,7 @@ export function buildThemes(plan: FloorPlan, b: Batch, m: Mats, glow: GlowMerge,
     const pel = wallPoint(d, (DRAPES.d + 0.08) / 2 + 0.004);
     b.box(m.get('velvet'), pel.x, top - DRAPES.pelmet / 2, pel.z, pw, DRAPES.pelmet, DRAPES.d + 0.08 - 0.008, 1.2, d.ry);
     const fringe = wallPoint(d, DRAPES.d + 0.084);
-    b.box(m.get('lacquer-gold'), fringe.x, top - DRAPES.pelmet + 0.03, fringe.z, pw + 0.01, 0.06, 0.012, undefined, d.ry);
+    b.box(m.get('lacquer-gold'), fringe.x, top - DRAPES.pelmet - 0.02, fringe.z, pw + 0.01, 0.06, 0.012, undefined, d.ry);
     b.box(m.get('lacquer-gold'), fringe.x, top - 0.03, fringe.z, pw + 0.01, 0.025, 0.012, undefined, d.ry);
   }
 
