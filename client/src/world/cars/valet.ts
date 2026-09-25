@@ -180,7 +180,7 @@ export class Valet {
     const face = new THREE.PlaneGeometry(0.58, 0.58);
     for (const side of [-1, 1]) {
       const m = new THREE.Mesh(face, mat);
-      m.position.set(sx + side * 0.027, 0.95, sz);
+      m.position.set(sx + side * 0.029, 0.95, sz);
       m.rotation.y = side * Math.PI / 2;
       this.group.add(m);
     }

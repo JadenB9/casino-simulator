@@ -84,6 +84,16 @@ if (checks.includes('zfight')) {
     if (zone !== 'casino') {
       const a = LF.LIFTS[zone].arrive;
       world.teleport(a.x / 100, a.z / 100, 0);
+      if (zone === 'ground') {
+        // the game adds the valet, the parked cars, your garage (a few cars in it) and the jail (app/boot.ts)
+        const { Cars } = await import('/casino/src/world/cars/index.ts');
+        const { buildJail } = await import('/casino/src/world/law/jail.ts');
+        const cars = new Cars({ engine, world, now: () => Date.now(), me: () => 1, onValet() {}, onKeys() {}, standIns: true });
+        await cars.load();
+        cars.setOwned(['halden-roadster', 'raffica-v10', 'ombra-oro', 'solenne-cabriolet'], 'Zed');
+        cars.group.visible = true;
+        engine.scene.add(buildJail({ quality: world.quality, collider: world.collider }).group);
+      }
       for (let i = 0; i < 20; i++) await new Promise((r) => requestAnimationFrame(r));
     }
     world.rooms.showAll(true);

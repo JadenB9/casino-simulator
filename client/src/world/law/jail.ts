@@ -318,7 +318,7 @@ interface SignSpec {
 }
 
 const SIGNS: SignSpec[] = [
-  { text: 'COUNTY DETENTION CENTER', sub: 'VISITORS ENTRANCE', bg: '#20242a', fg: '#e8e2cf', x: B.x0 - 0.02, y: 3.35, z: -25, w: 6.4, h: 0.95, face: '-x' },
+  { text: 'COUNTY DETENTION CENTER', sub: 'VISITORS ENTRANCE', bg: '#20242a', fg: '#e8e2cf', x: B.x0 - 0.026, y: 3.35, z: -25, w: 6.4, h: 0.95, face: '-x' },
   { text: 'NO CONTACT', sub: 'BEYOND THE BARS', bg: '#c9a227', fg: '#16181b', x: 168.9, y: 3.25, z: -20.17, w: 2.6, h: 0.7, face: '-z' },
   { text: 'BOOKING', sub: 'COMMISSARY  ·  BANK', bg: '#2a3a33', fg: '#e7e3d6', x: 175.1, y: 3.15, z: YARD_Z + 0.17, w: 3.0, h: 0.7, face: '+z' },
   { text: 'YARD', bg: '#2a3a33', fg: '#e7e3d6', x: (YARD_DOOR.x0 + YARD_DOOR.x1) / 2, y: 3.2, z: YARD_Z + 0.17, w: 1.6, h: 0.55, face: '+z' },
