@@ -23,7 +23,7 @@ Stake's published tables for the online originals.
 
 | Game | Bet | Published (edge or RTP) | Real casinos | Exact proof | MC | Verdict |
 |---|---|---|---|---|---|---|
-| Blackjack | basic strategy, 6D S17 DAS LS, cut card 75% | 0.354% edge | 0.26-0.6% on the Strip | Wizard of Odds calculator for exactly these rules (rules.ts and the strategy chart cell-by-cell in blackjack.strategy.test.ts) | blackjack.mc (12M rounds), blackjack-spots.mc (3 and 5 spots), fresh-shoe 0.3336% | Realistic. **See 1.1: card counting beats this shoe.** |
+| Blackjack | basic strategy, 6D S17 DAS LS, continuous shuffler | 0.334% edge (0.3336%) | 0.26-0.6% on the Strip | Wizard of Odds calculator for exactly these rules (rules.ts and the strategy chart cell-by-cell in blackjack.strategy.test.ts); blackjack.test "the table and the Monte Carlo loop play identical rounds" ties the engine to the rule functions | blackjack.mc fresh shoe (12M rounds, z −0.23), blackjack-spots.mc (3 spots z −0.80, 5 spots z −1.77) | Realistic. **Fixed (1.1): a continuous shuffler, so counting gains nothing** |
 | Roulette | American, every bet except top line | 5.263% | 5.26% | roulette.test "has the published edge for every bet, by exact enumeration" | roulette.mc | Realistic |
 | | American top line | 7.895% | 7.89% | same | same | Realistic |
 | | European | 2.703% | 2.70% | same | same | Realistic |
@@ -44,7 +44,7 @@ Stake's published tables for the online originals.
 | Slots D Diamond Line | | 94.983% | same | slots-diamonds.test 248,992 / 262,144 | slots-diamonds.mc | Realistic |
 | Slots E Lucky Cherries | | 94.028% | same | slots-cherries.test (30^5 windows + wheel) | slots-cherries.mc | Realistic |
 | Slots F Gold Rush | | 92.994% | same | slots-goldrush.test (32^5 windows + free games) | slots-goldrush.mc | Realistic |
-| Texas Hold'em | multiplayer, no rake | no house edge | real rooms rake 5-10% of each pot, capped | holdem.mc (every seat breaks even; 133,784,560 hands; uniform deals) | holdem.mc | Player to player, so no rake is fine (a friends' game). **Solo against the bots: see 1.2** |
+| Texas Hold'em | multiplayer, no rake | no house edge | real rooms rake 5-10% of each pot, capped | holdem.mc (every seat breaks even; 133,784,560 hands; uniform deals) | holdem.mc | Player to player, so no rake is fine (a friends' game). **Against the bots: a rake (1.2, poker6)** |
 | Plinko | 27 boards | 98.906% to 99.160% | Stake 98.9-99.2% | plinko.test "every board returns ..., as published" | plinko.mc | Realistic |
 | Dice | multiplier 99/chance, floored to the cent | 99.0% (98.03% at worst; 97.06% chance at $1) | Stake 99% | dice.test (every roll of every target at $1) | dice.mc | Realistic; the cent floor only bites at $1 bets |
 | Limbo | every target | 99.0% | Stake 99% | limbo.test (switch points exact) | limbo.mc | Realistic |
@@ -65,9 +65,9 @@ No paytable is clearly wrong: nothing returns more than 100%, and nothing is sti
 real casino's version of the same game. The low end (5x Wild 89.8%, Big Six 24%, Sic Bo
 specific triples) is where real casinos sit too.
 
-### 1.1 Card counting beats blackjack (decision for the owner)
+### 1.1 Card counting beat blackjack (fixed: a continuous shuffler)
 
-The shoe is dealt to a 75% cut card and a custom table allows $1 to $1,000,000. Counting beats
+The shoe was dealt to a 75% cut card and a custom table allows $1 to $1,000,000. Counting beat
 that, as it would in Vegas, and a script counts perfectly. Hi-Lo with basic strategy only (no
 index plays), simulated through the game's own rule functions (`openShoe`, `startRound`,
 `play`), 4M rounds each:
@@ -78,23 +78,27 @@ index plays), simulated through the game's own rule functions (`openShoe`, `star
 | 1-12 spread by true count | +0.0134 (SE 0.0019) | +0.57% (player) |
 | 1-100 spread | +0.207 (SE 0.018) | +1.38% (player) |
 
-Real casinos answer this by backing counters off or dealing from continuous shufflers. The
-options: (a) a fresh shoe every round (the continuous-shuffler figure, 0.3336%, is already
-measured); (b) the dealer shuffles up when a seat's bet jumps mid-shoe; (c) keep it and
-document it. Recommended: (a). Waiting on the orchestrator.
+Real casinos answer this by backing counters off or dealing from continuous shufflers. Decided
+(the owner: "no way to cheese anything"): a continuous shuffling machine, as on many Strip tables
+and at every online casino. After each round the dealer feeds its cards into the machine beside
+the table (it replaces the discard holder), and the next round is dealt from all six decks freshly
+shuffled, so nothing seen tells anything about what comes next. The edge is the fresh-shoe
+figure, 0.3336%. blackjack.test checks that every round starts at the top of a new shoe and that
+the table deals exactly what the Monte Carlo's rule loop deals with a fresh shoe each round; the
+shoe game's 0.354% is kept only as a reference test.
 
-Every other card game is safe: Three Card Poker, Let It Ride and Pai Gow deal one fresh deck a
+Every other card game was already safe: Three Card Poker, Let It Ride and Pai Gow deal one fresh deck a
 round, Hi-Lo draws with replacement, and counting baccarat or the War tie bet is worth
 hundredths of a percent at most.
 
-### 1.2 Hold'em against the bots (decision for poker6 and the owner)
+### 1.2 Hold'em against the bots (given to poker6)
 
 At a single-player Hold'em table the other five seats are bots playing the house's chips, with
 no rake. A player who beats the bots (a real poker player, or a script tuned against
 rule-based play) takes money from the house with no edge against them, at stakes up to
-$100K/$200K. Suggested: a standard rake at bot tables (5% of the pot, capped at three big
-blinds, no flop no drop), or a stakes cap at bot tables. Multiplayer tables stay rake-free
-(player to player).
+$100K/$200K. Decided: a standard rake at tables with bots (5% of the pot, capped at three big
+blinds, no flop no drop), which poker6 builds with its new bots and stakes. Multiplayer
+human-only tables stay rake-free (player to player).
 
 ### 1.3 Comps and feats
 
@@ -115,7 +119,7 @@ with worker tests in `server/test/audit6.test.ts`.
 
 | Path | Attack | Result | Test |
 |---|---|---|---|
-| **Hold'em chip dumping** | alt takes the cashier's top-up, sits at a private Hold'em table with the main account and loses on purpose; repeat (the top-up has no end) | **Fixed.** Top-ups, bonuses, tips, gift boxes and feat cash from the last 3 days, and transfers received in the last day (the same money transfers hold back), can't be bought into a multiplayer Hold'em table. Checked atomically inside the buy-in batch (a race can't pass it) with a clear message. The starting $50,000 is exempt so friends who just joined can play together (sign-ups are limited to 10 an hour per address, the same limit transfers rely on). Solo Hold'em against bots and every other game take the money as before | audit6 "the cashier's top-up can't be taken...", "only what is held stays off" |
+| **Hold'em chip dumping** | alt takes the cashier's top-up, sits at a private Hold'em table with the main account and loses on purpose; repeat (the top-up has no end) | **Fixed.** Top-ups, bonuses, tips, gift boxes and feat cash from the last 3 days, and transfers received in the last day (the same money transfers hold back), can't be bought into a multiplayer Hold'em table. Checked atomically inside the buy-in batch (a race can't pass it) with a clear message. A new account may bring $5,000 of its starting $50,000 in its first three days (so friends who just joined can sit down together); the rest is held like other house money. Solo Hold'em against bots and every other game take the money as before | audit6 "the cashier's top-up can't be taken...", "only what is held stays off", "brings $5,000 of it..." |
 | **Amount challenges through Hold'em** | two players pass a pot back and forth: every pot won adds to `won` and `best` → won-100m ($1M cash), won-10m, round-1m and the rest at zero cost; the global boards too | **Fixed.** Hold'em rounds count only toward Hold'em's own tallies (`won:holdem`, `wins:holdem`, `lost:holdem`), never toward the everywhere tallies (`won`, `best`, `wins`, `lost`, `worst`, day and week nets, win streaks). The personal stats page sums its totals from the games' own rows, so it still shows Hold'em | audit6 "a pot won from other players counts at Hold'em only"; feats-rounds updated |
 | **Test fixture game in production** | open `ws/solo/highcard` (a 0% edge game hidden from the floor): no house edge, rounds count in stats | **Fixed.** Opens only when `CASINO_DEV=1` (dev stack and tests), like its lobbies | audit6 "High Card ... opens only on the dev stack" |
 | **Bail** | put everything in savings before getting caught: bail is a fiftieth of balance + chips only, so it drops to the $1,000 floor | **Fixed.** Bail counts the bank too (balance + in play + banked) | audit6 "bail counts the bank too" |
@@ -151,8 +155,8 @@ with worker tests in `server/test/audit6.test.ts`.
 ### Known limits, accepted
 
 - **Alt accounts' starting stakes.** Each new account brings $50,000. It can be sent on after
-  3 days, or lost at a Hold'em table at once; sign-ups are the limit (10 an hour per address,
-  per /64 for IPv6).
+  3 days (and $5,000 of it lost at a Hold'em table at once); sign-ups are the limit (10 an hour
+  per address, per /64 for IPv6).
 - **Hold'em boards between friends.** Two players can still pass pots to each other to raise
   their own Hold'em rows (won:holdem, the "Rounder" title). No cash and no everywhere board.
 - **Bank yields.** Savings at 0.5% a day on $100,000, deposits at 3.5% a week, and the Index
