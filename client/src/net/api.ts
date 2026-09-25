@@ -3,6 +3,7 @@
 // a one-click "Continue as ...".
 
 import type {
+  CheckAnswerResponse, CheckResponse, // v6 bot6
   CreateTableResponse, HttpError, JoinByPinResponse, LoanResponse, LoginResponse, MeResponse, Profile, TicketResponse,
 } from '../../../shared/src/protocol.ts';
 import type { GameId } from '../../../shared/src/engine.ts';
@@ -47,9 +48,18 @@ async function call<T>(path: string, init: RequestInit & { token?: string | null
   if (token) headers.Authorization = `Bearer ${token}`;
   const res = await fetch(`${API_ORIGIN}/casino/api/${path}`, { ...init, headers });
   const body = (await res.json().catch(() => ({ error: 'INTERNAL', msg: 'The casino is not answering.' }))) as T & HttpError;
-  if (!res.ok) throw new ApiError(res.status, body);
+  if (!res.ok) {
+    // v6 bot6: refused while the Quick check waits: open it (ui/check)
+    if (body.check) dispatchEvent(new Event('casino:check'));
+    throw new ApiError(res.status, body);
+  }
   return body;
 }
+
+// v6 bot6: the Quick check (server/src/fair.ts)
+export const getCheck = (kind?: 'chip'): Promise<CheckResponse> => call<CheckResponse>(kind ? `check?kind=${kind}` : 'check');
+export const answerCheck = (answer: { id: string; x?: number; y?: number; token?: string }): Promise<CheckAnswerResponse> =>
+  call<CheckAnswerResponse>('check', { method: 'POST', body: JSON.stringify(answer) });
 
 /**
  * What the dev pages and the headless scripts log in with, so the fixed names they use stay
