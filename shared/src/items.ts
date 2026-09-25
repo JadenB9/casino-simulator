@@ -263,12 +263,50 @@ export const STATUE: StatueItem = {
 };
 export const STATUES = 3;
 
+// ---------------------------------------------------------------------------------------------
+// v6 cars6: cars, bought at the valet stand and kept in your garage across the street. Bought
+// once and kept, like a worn item (a casino_items row), but never worn: POST /shop/buy sells them
+// and the garage shows what you own. Every marque and model here is made up.
+
+export interface CarItem {
+  id: string;
+  kind: 'car';
+  name: string;
+  price: Cents;
+  /** One line for the valet's card: what it is, the way a dealer's window sticker says it. */
+  about: string;
+}
+
+/** Cheapest first. */
+export const CARS: readonly CarItem[] = [
+  { id: 'halden-roadster', kind: 'car', name: "Halden Roadster '58", price: 250_000 * DOLLAR, about: 'Two seats, wire wheels and a straight six, in racing green.' },
+  { id: 'brenner-rally', kind: 'car', name: 'Brenner Rally S', price: 400_000 * DOLLAR, about: 'A gravel-spec hatch with a roll cage and four roof lamps.' },
+  { id: 'stallard-440', kind: 'car', name: 'Stallard 440', price: 650_000 * DOLLAR, about: 'Big-block V8, twin bonnet stripes and a four-speed stick.' },
+  { id: 'solenne-cabriolet', kind: 'car', name: 'Solenne Cabriolet', price: 900_000 * DOLLAR, about: 'A 1961 drop-top in cream, whitewall tyres, red leather.' },
+  { id: 'ardent-overland', kind: 'car', name: 'Ardent Overland', price: 1_200_000 * DOLLAR, about: 'A full-size SUV in black on black, with armoured glass.' },
+  { id: 'aurelian-saloon', kind: 'car', name: 'Aurelian Saloon', price: 2_000_000 * DOLLAR, about: 'Long-wheelbase V12 saloon with reclining rear seats.' },
+  { id: 'aurelian-stretch', kind: 'car', name: 'Aurelian Stretch', price: 3_500_000 * DOLLAR, about: 'Twenty-two feet of saloon, a bar and a starlit ceiling.' },
+  { id: 'raffica-v10', kind: 'car', name: 'Raffica V10', price: 8_000_000 * DOLLAR, about: 'Mid-engined V10, scissor doors, 211 mph flat out.' },
+  { id: 'strale-gt', kind: 'car', name: "Strale GT '63", price: 45_000_000 * DOLLAR, about: 'An aluminium-bodied grand tourer, one of 36 ever built.' },
+  { id: 'ombra-hyper', kind: 'car', name: 'Ombra Hyper', price: 90_000_000 * DOLLAR, about: 'Carbon tub, hybrid V8, 1,500 horsepower, 12 made.' },
+  { id: 'halden-boattail', kind: 'car', name: 'Halden Boattail', price: 250_000_000 * DOLLAR, about: 'A coachbuilt one-off with a teak rear deck and a champagne chest.' },
+  { id: 'ombra-oro', kind: 'car', name: 'Ombra Oro', price: 2_000_000_000 * DOLLAR, about: 'The Ombra plated in 24k gold, down to the wheel nuts.' },
+];
+
+const CAR_BY_ID = new Map(CARS.map((c) => [c.id, c]));
+
+/** A car the valet sells, or null. */
+export function carItem(id: unknown): CarItem | null {
+  return typeof id === 'string' ? (CAR_BY_ID.get(id) ?? null) : null;
+}
+// v6 cars6: end
+
 
 // ---------------------------------------------------------------------------------------------
 // The bar
 
 /** The model an order is held as: what the waiter brings and your right hand carries. */
-export type BarModel = 'bottle' | 'martini' | 'flute' | 'magnum' | 'rocks' | 'wine' | 'cup' | 'plate';
+export type BarModel = 'bottle' | 'martini' | 'flute' | 'magnum' | 'rocks' | 'wine' | 'cup' | 'plate' | 'margarita' | 'can' | 'cake';
 
 export interface BarItem {
   id: string;
@@ -293,6 +331,12 @@ export const BAR_MENU: readonly BarItem[] = [
   { id: 'shrimp-cocktail', kind: 'food', name: 'Shrimp Cocktail', price: 28 * DOLLAR, about: 'Five jumbo prawns on ice.', model: 'plate' },
   { id: 'lobster', kind: 'food', name: 'Lobster', price: 95 * DOLLAR, about: 'A whole Maine lobster with drawn butter.', model: 'plate' },
   { id: 'caviar', kind: 'food', name: 'Caviar', price: 350 * DOLLAR, about: 'Ossetra, with blinis and crème fraîche.', model: 'plate' },
+  // v6: more on the menu
+  { id: 'margarita', kind: 'drink', name: 'Margarita', price: 19 * DOLLAR, about: 'Blanco tequila and fresh lime, a salted rim.', model: 'margarita' },
+  { id: 'energy-drink', kind: 'drink', name: 'Energy Drink', price: 8 * DOLLAR, about: 'An ice-cold can, for the all-nighters.', model: 'can' },
+  { id: 'ribeye', kind: 'food', name: 'Sliced Ribeye', price: 78 * DOLLAR, about: 'Prime ribeye, sliced, with flaky salt and chimichurri.', model: 'plate' },
+  { id: 'macarons', kind: 'food', name: 'Macarons', price: 16 * DOLLAR, about: 'Six Parisian macarons, pistachio to raspberry.', model: 'plate' },
+  { id: 'birthday-cake', kind: 'food', name: 'Birthday Cake', price: 60 * DOLLAR, about: 'Chocolate layer cake, brought out with its candles lit.', model: 'cake' },
 ];
 
 const BAR_BY_ID = new Map(BAR_MENU.map((i) => [i.id, i]));

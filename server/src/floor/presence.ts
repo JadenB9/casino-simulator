@@ -140,10 +140,12 @@ export class Presence {
     if (!w) return;
     const a = w.att;
     const now = Date.now();
-    let { x, z } = clampTo(bounds(a), msg.x, msg.z);
+    const placing = a.fresh === true;
+    // v6 city6: the first position on a connection may be in any zone (a dropped connection on the
+    // roof comes back on the roof, not clamped to the casino's wall); the jail still holds.
+    let { x, z } = clampTo(placing ? (a.confine ?? ZONES[zoneOf(msg.x, msg.z) ?? zoneOf(a.x, a.z) ?? 'casino']) : bounds(a), msg.x, msg.z);
     // Walking off a seat gets you up from it, even if the stand itself went missing.
     if (a.seat && Math.hypot(x - a.seat.x, z - a.seat.z) > SEAT_KEEP_CM) this.unseat(ws, a);
-    const placing = a.fresh === true;
     if (placing) {
       // The first position on a connection places the player. After a dropped connection the
       // client kept walking on its own and knows where it is; a first visit echoes the spawn.
@@ -311,6 +313,24 @@ export class Presence {
   whereIs(accountId: number): { x: number; z: number; name: string } | null {
     const w = this.walkerOf(accountId);
     return w ? { x: w.att.x, z: w.att.z, name: w.att.name } : null;
+  }
+
+  /** v6 law6: whose socket this is (null for one that isn't a player's). */
+  accountOf(ws: WebSocket): number | null {
+    return this.live.get(ws)?.att.accountId ?? null;
+  }
+
+  /** v6 law6: everyone on the floor, once each: where they are (cm) and whether they sit (at a table, or on a seat). */
+  standing(): { accountId: number; name: string; x: number; z: number; at: boolean; seat: boolean }[] {
+    const seen = new Set<number>();
+    const out: { accountId: number; name: string; x: number; z: number; at: boolean; seat: boolean }[] = [];
+    for (const [ws, w] of this.live) {
+      const a = w.att;
+      if (seen.has(a.accountId) || ws.readyState !== WebSocket.OPEN) continue;
+      seen.add(a.accountId);
+      out.push({ accountId: a.accountId, name: a.name, x: a.x, z: a.z, at: a.at !== null, seat: !!a.seat });
+    }
+    return out;
   }
 
   /** Something this player did besides moving (see FloorAtt.active); kept through hibernation. */

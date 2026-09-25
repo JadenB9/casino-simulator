@@ -50,7 +50,7 @@ describe('the building', () => {
         expect(overlap, `${a.id} and ${b.id} overlap`).toBe(false);
       }
     }
-    expect(ROOMS.map((r) => r.id).sort()).toEqual(['bank', 'bar', 'boutique', 'lobby', 'lounge', 'online', 'pit', 'poker', 'salon', 'slots', 'yard']);
+    expect(ROOMS.map((r) => r.id).sort()).toEqual(['bank', 'bar', 'bingo', 'boutique', 'cardroom', 'lobby', 'lounge', 'online', 'parlour', 'pit', 'poker', 'salon', 'slots', 'yard']);
   });
 
   it('puts the spawn in the lobby, just inside the entrance', () => {
@@ -86,7 +86,7 @@ describe('the building', () => {
     for (const r of ROOMS) expect(p.doors.some((d) => d.a === r.id || d.b === r.id), r.id).toBe(true);
   });
 
-  it('places every game: the pit, the salon, poker, twelve slot islands, sixteen desks, the wheel', () => {
+  it('places every game: the pit, the salon, poker, twelve slot islands, twenty-four desks, the wheel, the north wing', () => {
     const p = plan();
     const count = (f: (s: Placement) => boolean) => p.stations.filter(f).length;
     expect(count((s) => s.room === 'pit')).toBe(10);
@@ -94,8 +94,14 @@ describe('the building', () => {
     expect(count((s) => s.game === 'holdem')).toBe(4);
     expect(p.banks).toHaveLength(12);
     expect(count((s) => s.game === 'slots')).toBe(48);
-    expect(count((s) => s.zone === 'online')).toBe(16);
-    for (const g of ['plinko', 'tower', 'mines', 'dice', 'limbo', 'keno', 'hilo', 'crash'] as GameId[]) expect(count((s) => s.game === g), g).toBe(2);
+    expect(count((s) => s.zone === 'online')).toBe(24);
+    for (const g of ['plinko', 'tower', 'mines', 'dice', 'limbo', 'keno', 'hilo', 'crash', 'coinflip', 'wheel', 'cases', 'diamonds'] as GameId[]) expect(count((s) => s.game === g), g).toBe(2);
+    // the north wing: twelve pachinko machines in two islands, two of each card game, one bingo hall
+    expect(count((s) => s.game === 'pachinko' && s.room === 'parlour')).toBe(12);
+    expect(p.machineIslands).toHaveLength(2);
+    expect(count((s) => s.game === 'letitride' && s.room === 'cardroom')).toBe(2);
+    expect(count((s) => s.game === 'paigow' && s.room === 'cardroom')).toBe(2);
+    expect(count((s) => s.game === 'bingo' && s.room === 'bingo')).toBe(1);
     expect(count((s) => s.game === 'banditwheel')).toBe(1);
     expect(count((s) => s.game === 'videopoker')).toBe(4);
     // ids are unique and fit the server's station pattern
@@ -104,12 +110,14 @@ describe('the building', () => {
     for (const id of ids) expect(id).toMatch(/^[a-z0-9-]{1,24}$/);
     // stations keep the ids they had before the building grew
     for (const id of ['bj-1', 'bj-2', 'bc-1', 'wr-1', 'tc-1', 'rl-us', 'rl-eu', 'cr-1', 'sb-1', 'b6-1', 'he-1', 'he-2', 'vp-1', 'slots-sevens-1']) expect(ids).toContain(id);
+    // and the online desks keep theirs: the first eight games' desks are where they were numbered
+    for (const id of ['pk-1', 'pk-2', 'tw-1', 'cs-2', 'cf-1', 'wh-2', 'ca-1', 'dm-2', 'pa-1', 'pa-12', 'lr-1', 'pg-2', 'bg-1']) expect(ids).toContain(id);
   });
 
   it('seats every table game: a chair or stool at each seat, tops a sitter can be measured on', () => {
     const p = plan();
     for (const s of p.stations) {
-      const want = ['blackjack', 'baccarat', 'threecard', 'war', 'roulette', 'sicbo', 'bigsix', 'slots'].includes(s.game) ? GAMES[s.game].seats(s.variant).length : 0;
+      const want = ['blackjack', 'baccarat', 'threecard', 'war', 'roulette', 'sicbo', 'bigsix', 'slots', 'letitride', 'paigow', 'bingo', 'pachinko'].includes(s.game) ? GAMES[s.game].seats(s.variant).length : 0;
       expect(p.chairs.filter((c) => c.station === s.id), s.id).toHaveLength(want);
     }
     for (const c of p.chairs) {
@@ -169,7 +177,7 @@ describe('the building', () => {
     stool.x = p.bar.front - 0.1;
     // a sign hung too high goes through the ceiling
     const sign = p.solids.find((s) => s.id === 'sign-table-games')!;
-    sign.y1 = 3.5;
+    sign.y1 = 4.5;
     // a plant in a table
     const bj = p.stations.find((s) => s.id === 'bj-1')!;
     p.solids.push({ id: 'stray-plant', group: 'stray', x: bj.x, z: bj.z, w: 1.2, d: 1.2, yaw: 0, y0: 0.4, y1: 1.5, round: true });

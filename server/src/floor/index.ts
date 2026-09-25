@@ -4,6 +4,7 @@
 //   directory.ts  the lobby list and private-lobby PINs
 //   chat.ts       the floor's chat room
 //   fx.ts         effects bought in the shop, and the lobby's statues
+//   invites.ts    invites to a lobby table (v6 invite6)
 // Each keeps anything that must survive hibernation in this object's SQLite storage or in the
 // sockets' attachments; memory is only a cache. The object's one alarm closes idle sockets.
 
@@ -18,8 +19,13 @@ import { Directory, ipKey } from './directory.ts';
 import { FloorChat } from './chat.ts';
 import { Wins, type BigWinReport } from './wins.ts';
 import { Effects, Statues, fxKey, type Reserve } from './fx.ts';
+import { Valet, type CallResult } from './valet.ts'; // v6 cars6
+import { ride } from './lift.ts'; // v6 city6
 import { Bucket, KeyedBuckets } from '../ratelimit.ts';
 import { spendTicket } from '../tickets.ts';
+import { Invites } from './invites.ts'; // v6 invite6
+import type { CasinoTable } from '../table/host.ts'; // v6 invite6
+import { Law, type HotReport, type StrikeResult } from '../law.ts'; // v6 law6
 // v6 celebs6: celebrities and the gift box
 import { Celebs } from './celebs.ts';
 import { parseCelebMsg, type CelebServerMsg, type GiftBox, type Visit } from '../../../shared/src/celebs.ts';
@@ -61,6 +67,12 @@ export class CasinoFloor extends DurableObject<Env> {
   /** v6: effects bought in the shop, and the lobby's statues (fx.ts) */
   readonly fx: Effects;
   readonly statues: Statues;
+  /** v6 invite6: invites to a lobby table (invites.ts) */
+  readonly invites: Invites;
+  /** v6 law6: punches, the staff's catches, jail (server/src/law.ts) */
+  readonly law: Law;
+  /** v6 cars6: the valet's curb (valet.ts) */
+  readonly valet: Valet;
   /** v6 celebs6: celebrity visits and the gift box (celebs.ts) */
   readonly celebs: Celebs;
   private buckets = new Map<WebSocket, FloorLimits>();
@@ -76,6 +88,19 @@ export class CasinoFloor extends DurableObject<Env> {
     this.wins = new Wins(ctx, (msg) => this.broadcast(msg));
     this.fx = new Effects(ctx, (msg) => this.broadcast(msg));
     this.statues = new Statues(ctx, (msg) => this.broadcast(msg));
+    // v6 invite6: a table's own list row is how an invite checks the table is open and has room
+    this.invites = new Invites(ctx, {
+      presence: this.presence,
+      directory: this.directory,
+      summary: (tableId) => {
+        const ns = env.TABLE as unknown as DurableObjectNamespace<CasinoTable>;
+        return ns.get(ns.idFromName(tableId)).summary();
+      },
+      socketsOf: (accountId) => this.ctx.getWebSockets(`a:${accountId}`),
+      sockets: () => this.ctx.getWebSockets(),
+    });
+    this.law = new Law(ctx, env, this.presence, (msg) => this.broadcast(msg), (id, msg) => this.sendTo(id, msg));
+    this.valet = new Valet((msg) => this.broadcast(msg)); // v6 cars6
     // v6 celebs6
     this.celebs = new Celebs({
       sql: ctx.storage.sql,
@@ -131,6 +156,8 @@ export class CasinoFloor extends DurableObject<Env> {
     this.chat.join(server);
     this.wins.greet(server); // features: the recent big wins, after hello
     this.fx.greet(server, Date.now()); // v6: effects playing or queued
+    this.law.greet(accountId, Date.now()); // v6 law6: the detours under way; an inmate back inside
+    this.valet.greet(server, Date.now()); // v6 cars6: the cars at the valet's curb
     this.celebs.greet(server, Date.now()); // v6 celebs6: the visit and the gift box, after hello
     // Everyone already here is due for the idle sweep no later than this newcomer, so a sweep
     // already set comes first; with none set (nobody here, or a floor from before idling), set one.
@@ -204,11 +231,26 @@ export class CasinoFloor extends DurableObject<Env> {
     } else if (msg.t === 'stand') {
       this.presence.stand(ws);
       this.presence.touch(ws, Date.now());
+    } else if (msg.t === 'invite' || msg.t === 'invite.take' || msg.t === 'invite.dnd') {
+      // v6 invite6: sending, joining with and turning off invites (invites.ts)
+      if (msg.t !== 'invite.dnd') this.presence.touch(ws, Date.now());
+      await this.invites.onMessage(ws, msg);
     } else if (msg.t === 'lift') {
-      // v6 contract: the city slice checks you're at an elevator and moves you (presence.teleport)
+      // v6 city6: the elevator (lift.ts): from beside its doors, not at a table, not while held
       this.presence.touch(ws, Date.now());
+      const att = ws.deserializeAttachment() as FloorAtt | null;
+      const no = att ? ride(this.presence, att, msg.to) : null;
+      if (no) this.send(ws, { t: 'lift.no', to: msg.to, msg: no });
+    } else if (msg.t === 'punch') {
+      // v6 law6
+      const id = this.presence.accountOf(ws);
+      this.presence.touch(ws, Date.now());
+      if (id !== null) this.law.punch(id, msg.r, Date.now());
     } else {
       this.presence.onMessage(ws, msg);
+      // v6 law6: an inmate stays inside, a free player isn't left in there
+      const id = this.presence.accountOf(ws);
+      if (id !== null) this.law.afterMove(id, Date.now());
     }
   }
 
@@ -275,6 +317,11 @@ export class CasinoFloor extends DurableObject<Env> {
   playerLook(accountId: number, look: Look): void {
     this.presence.setLook(accountId, look);
     this.statues.lookChanged(accountId, look);
+  }
+
+  /** v6 cars6: bring a player's car round to the valet's curb (the Worker checked they own it), or send it back (null). */
+  valetCall(accountId: number, name: string, car: string | null): CallResult {
+    return this.valet.call({ id: accountId, name }, car, this.presence.positionOf(accountId), Date.now());
   }
 
   online(): number {
@@ -376,6 +423,33 @@ export class CasinoFloor extends DurableObject<Env> {
     this.broadcast({ t: 'feat', id: accountId, name, feat });
   }
 
+  /** v6 bank6: another player sent this account money (bank.ts): its own sockets hear it. */
+  bankNote(accountId: number, msg: Extract<FloorServerMsg, { t: 'bank.in' }>): void {
+    const data = JSON.stringify(msg);
+    for (const ws of this.ctx.getWebSockets(`a:${accountId}`)) {
+      try {
+        ws.send(data);
+      } catch {
+        /* closing */
+      }
+    }
+  }
+
+  /** v6 law6: a table says this player is winning too much there; the pit boss may be watching. */
+  lawHot(r: HotReport): Promise<StrikeResult> {
+    return this.law.hot(r, Date.now());
+  }
+
+  /** v6 law6: a round finished at this inmate's jail table, won or lost `net` (cents). */
+  jailRound(accountId: number, net: number): Promise<void> {
+    return this.law.progress(accountId, net, Date.now());
+  }
+
+  /** v6 law6: the dev stack's catch (index.ts, CASINO_DEV only): the pit boss, whether or not he can see you. */
+  lawDevCatch(accountId: number, name: string): Promise<StrikeResult> {
+    return this.law.strike(accountId, name, 'boss', 'win', Date.now());
+  }
+
   /** v6 celebs6: the dev stack's celebrity and gift box on demand (celebs.ts celebsDevApi). */
   celebDev(kind: 'celeb' | 'gift' | 'happy', arg?: string | number, from?: number): Visit | GiftBox | HappyHour {
     return this.celebs.force(kind, Date.now(), arg, from);
@@ -420,6 +494,27 @@ export class CasinoFloor extends DurableObject<Env> {
     const data = JSON.stringify(msg);
     for (const ws of this.ctx.getWebSockets()) {
       if (ws === except) continue;
+      try {
+        ws.send(data);
+      } catch {
+        /* closing */
+      }
+    }
+  }
+
+  // v6 city6: one message to one socket
+  private send(ws: WebSocket, msg: FloorServerMsg): void {
+    try {
+      ws.send(JSON.stringify(msg));
+    } catch {
+      /* closing */
+    }
+  }
+
+  /** v6 law6: a message for one account's sockets. */
+  private sendTo(accountId: number, msg: FloorServerMsg): void {
+    const data = JSON.stringify(msg);
+    for (const ws of this.ctx.getWebSockets(`a:${accountId}`)) {
       try {
         ws.send(data);
       } catch {

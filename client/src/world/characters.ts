@@ -30,11 +30,11 @@ import type { Quality } from '../render/engine3d.ts';
 import type { Character, CharacterFactory } from './contract.ts';
 import type { EmoteId } from '../../../shared/src/protocol.ts';
 import { Wearables, dressed } from './wearables.ts';
-import { DOWN, PIVOT, gestureOf, mirror, movesLegs, smooth, type BoneKey, type Foot, type Hand, type HandMix, type Pose, type PropId, type StaffGesture, type Turn, type Vec } from './gestures.ts';
+import { DOWN, PIVOT, gestureOf, mirror, movesLegs, smooth, type BoneKey, type Foot, type Hand, type HandMix, type Pose, type PropId, type StaffGesture, type LawGesture, type Turn, type Vec } from './gestures.ts';
 import { disposeProp, propMesh } from './emote-props.ts';
-import { Ride, kneeFor, rideSpec, stanceYaw } from './rides.ts';
+import { Ride, kneeFor, rideSpec, stanceYaw, type RideSpec } from './rides.ts';
 
-export { CLAP_RATE, CLAP_S, CLAP_TIMES, gestureSeconds, type StaffGesture } from './gestures.ts';
+export { CLAP_RATE, CLAP_S, CLAP_TIMES, gestureSeconds, type StaffGesture, type LawGesture } from './gestures.ts';
 
 export const MODEL_BASE = `${import.meta.env.BASE_URL}assets/models/`;
 
@@ -261,7 +261,7 @@ export class Person implements Character {
   private readonly posed = new Map<THREE.Object3D, THREE.Quaternion>();
   private readonly spare = new Map<THREE.Object3D, THREE.Quaternion>();
   /** The emote being acted out, how far in, and (walked off) how much of it is left as it fades. */
-  private act: { e: EmoteId | StaffGesture; t: number; fade: number } | null = null;
+  private act: { e: EmoteId | StaffGesture | LawGesture; t: number; fade: number } | null = null;
   /** Room for where the mixer had the bones an emote moves (kept in `moved`, below). */
   private readonly spareAt = new Map<THREE.Object3D, THREE.Vector3>();
   /** The legs as the emotes pose them, and the chest's turn in the idle pose (for Hand.frame). */
@@ -382,7 +382,7 @@ export class Person implements Character {
   }
 
   /** Act out an emote, or one of a dealer's motions (StaffGesture). */
-  gesture(e: EmoteId | StaffGesture): void {
+  gesture(e: EmoteId | StaffGesture | LawGesture): void {
     this.act = { e, t: 0, fade: 1 };
     if (this.prop && gestureOf(e)?.prop !== this.prop.id) this.dropProp();
   }
@@ -817,7 +817,11 @@ export class Person implements Character {
         });
       }
     }
-    if (h.thumb) {
+    if (h.thumb === 'tuck') {
+      // v6 law6: folded across the front of the curled fingers, from the index side toward the little finger's
+      const across = _dir.crossVectors(along, palm).multiplyScalar(-m).addScaledVector(palm, 0.6).addScaledVector(along, 0.15).normalize();
+      for (const bone of arm.thumb) this.point(bone, across);
+    } else if (h.thumb) {
       // the index finger's side of the hand
       const up = _dir.crossVectors(along, palm).multiplyScalar(m).addScaledVector(along, 0.12).normalize();
       for (const bone of arm.thumb) this.point(bone, up);
@@ -1161,8 +1165,8 @@ export class Person implements Character {
       this.rideSpeed += (v - this.rideSpeed) * k;
       this.rideYaw += (w - this.rideYaw) * k;
       ride.update(dt, this.rideSpeed, this.rideYaw);
-    } else if (this.model && this.model.rotation.y + this.model.rotation.x + this.model.rotation.z !== 0) {
-      this.model.rotation.set(0, 0, 0);
+    } else if (this.tag.position.y !== NAME_Y) {
+      // (the model's own turn is put back every frame in update())
       this.tag.position.y = NAME_Y;
     }
     return on;
@@ -1183,17 +1187,26 @@ export class Person implements Character {
     const side = spec.stance === 'side';
     const lift = spec.deck + ride.bob;
     model.position.y = this.modelAt.y + lift;
-    model.rotation.set(side ? ride.lean : ride.pitch, stanceYaw(spec), side ? 0 : ride.lean, 'YXZ');
+    model.quaternion.copy(this.modelQ).multiply(_rq.setFromEuler(_reu.set(side ? ride.lean : ride.pitch, stanceYaw(spec), side ? 0 : ride.lean, 'YXZ')));
     model.updateMatrixWorld(true);
     model.getWorldQuaternion(_rootQ).invert();
     _rootInv.copy(model.matrixWorld).invert();
     this.tag.position.y = NAME_Y + lift;
     if (spec.stance === 'seat') {
-      // a throne: sat on as on any chair, the seat's height over the footrest the feet are on
+      // A throne: sat on as on any chair (thighs, torso), the seat's height over the footrest.
+      // The model comes down onto the seat, and so would the feet (targets of their own, under
+      // the floor); they go onto the footrest instead, the legs solved to them, and the forearms
+      // rest along the arms with the hands over their scrolls.
+      // the shin's length to the foot, measured standing (sitting moves the knee off the line)
+      const shin = this.bones.shinR;
+      const foot = model.getObjectByName('FootR') ?? model.getObjectByName('Foot.R');
+      const shinTo = shin && foot ? local(shin, _rk).distanceTo(local(foot, _ra)) : undefined;
       const was = this.seatTop;
       this.seatTop = spec.seat ?? 0.45;
       const drop = this.sitPose();
       this.seatTop = was;
+      this.rideLegs(spec, drop, 1, shinTo);
+      this.rideHands(ride, { palm: [0, -1, 0.1], fingers: [0.05, -0.15, 1], fist: 0.35, elbow: [-1, -0.8, -0.6] });
       return lift - drop;
     }
     const find = (n: string) => model.getObjectByName(n.replace('.', '')) ?? model.getObjectByName(n);
@@ -1205,35 +1218,7 @@ export class Person implements Character {
       body.position.copy(body.parent.worldToLocal(at));
       body.updateMatrixWorld(true);
     }
-    for (const [i, s] of [
-      ['L', 1],
-      ['R', -1],
-    ] as const) {
-      const thigh = this.bones[s === 1 ? 'thighL' : 'thighR'];
-      const shin = this.bones[s === 1 ? 'shinL' : 'shinR'];
-      const foot = find(`Foot.${i}`);
-      if (!thigh || !shin || !foot?.parent) continue;
-      const H = local(thigh, _rh);
-      const K0 = local(shin, _rk);
-      const A0 = local(foot, _ra);
-      const a = H.distanceTo(K0);
-      const b = K0.distanceTo(A0);
-      // where the shin ends, in its own frame: it stays that way as the leg turns
-      const end = shin.worldToLocal(foot.getWorldPosition(_re));
-      const [fx, fz] = spec.feet[s === 1 ? 0 : 1];
-      const want = _rv.set(fx, A0.y, fz);
-      const reached = kneeFor(H, want, a, b, _rw.set(0.25 * s, 0, 1), _rn);
-      const knee = _rn;
-      this.rotate(thigh, _rq.setFromUnitVectors(_rd.subVectors(K0, H).normalize(), _rd2.subVectors(knee, H).normalize()));
-      const K = local(shin, _rk);
-      const E = shin.localToWorld(end.clone()).applyMatrix4(_rootInv);
-      this.rotate(shin, _rq.setFromUnitVectors(_rd.subVectors(E, K).normalize(), _rd2.subVectors(reached, K).normalize()));
-      // the foot (a target of its own, not the shin's child) onto the deck, toes turned
-      this.moved.set(foot, foot.position.clone());
-      foot.position.copy(foot.parent.worldToLocal(reached.clone().applyMatrix4(model.matrixWorld)));
-      foot.updateMatrixWorld(true);
-      this.rotate(foot, _rq.setFromAxisAngle(_rw.set(0, 1, 0), spec.toes[s === 1 ? 0 : 1] * s));
-    }
+    this.rideLegs(spec, 0, 0);
     this.turn('torso', [side ? 0.12 : 0.06, side ? 0.12 : 0, 0]);
     if (side) {
       // looking along the board, arms out a little for balance
@@ -1247,9 +1232,56 @@ export class Person implements Character {
       return lift;
     }
     // both hands on the bar
+    this.rideHands(ride, { palm: [0, -1, 0.25], fingers: [0.15, -0.2, 1], fist: 0.75, elbow: [-1, -0.6, -0.5] });
+    return lift;
+  }
+
+  /**
+   * Each foot to its place on the deck (the ride's `feet`), `up` over where the animation has it
+   * (a seated rider's model has come down that far), the leg solved to reach it: the thigh turned
+   * to where the knee must be, the shin to the foot, the foot moved there (it is a target of its
+   * own, not the shin's child) and its toes turned. The knees bend forward, and `rise` tips them
+   * up (a seated rider's knees point ahead and up); `shinTo` is the shin's length to the foot when
+   * the pose before this one has already moved the knee.
+   */
+  private rideLegs(spec: RideSpec, up: number, rise: number, shinTo?: number): void {
+    const model = this.model!;
+    const find = (n: string) => model.getObjectByName(n.replace('.', '')) ?? model.getObjectByName(n);
+    for (const [i, s] of [
+      ['L', 1],
+      ['R', -1],
+    ] as const) {
+      const thigh = this.bones[s === 1 ? 'thighL' : 'thighR'];
+      const shin = this.bones[s === 1 ? 'shinL' : 'shinR'];
+      const foot = find(`Foot.${i}`);
+      if (!thigh || !shin || !foot?.parent) continue;
+      const H = local(thigh, _rh);
+      const K0 = local(shin, _rk);
+      const A0 = local(foot, _ra);
+      const a = H.distanceTo(K0);
+      const b = shinTo ?? K0.distanceTo(A0);
+      // where the shin ends, in its own frame: it stays that way as the leg turns
+      const end = shin.worldToLocal(foot.getWorldPosition(_re));
+      const [fx, fz] = spec.feet[s === 1 ? 0 : 1];
+      const want = _rv.set(fx, A0.y + up, fz);
+      const reached = kneeFor(H, want, a, b, _rw.set(0.25 * s, rise, 1), _rn);
+      const knee = _rn;
+      this.rotate(thigh, _rq.setFromUnitVectors(_rd.subVectors(K0, H).normalize(), _rd2.subVectors(knee, H).normalize()));
+      const K = local(shin, _rk);
+      const E = shin.localToWorld(end.clone()).applyMatrix4(_rootInv);
+      this.rotate(shin, _rq.setFromUnitVectors(_rd.subVectors(E, K).normalize(), _rd2.subVectors(reached, K).normalize()));
+      this.moved.set(foot, foot.position.clone());
+      foot.position.copy(foot.parent.worldToLocal(reached.clone().applyMatrix4(model.matrixWorld)));
+      foot.updateMatrixWorld(true);
+      this.rotate(foot, _rq.setFromAxisAngle(_rw.set(0, 1, 0), spec.toes[s === 1 ? 0 : 1] * s));
+    }
+  }
+
+  /** Both hands to the ride's grips (a bar, a throne's arms), shaped by `hand` (given for the right; the left mirrors). */
+  private rideHands(ride: Ride, hand: Omit<Hand, 'at'>): void {
     const r = this.arms.R;
     const l = this.arms.L;
-    if (!r || !l) return lift;
+    if (!r || !l) return;
     const right = local(r.upper, _sh);
     const mid = local(l.upper, _mid).add(right).multiplyScalar(0.5);
     const len = right.distanceTo(local(r.lower, _el)) + _el.distanceTo(local(r.wrist, _wr));
@@ -1260,9 +1292,8 @@ export class Person implements Character {
       const g = ride.grip(m === 1 ? 1 : -1, _rg);
       if (!g) continue;
       g.applyMatrix4(_rootInv).sub(mid).divideScalar(len);
-      this.arm(arm, m, { at: [g.x * m, g.y, g.z], elbow: [-1, -0.6, -0.5], palm: [0, -1, 0.25], fingers: [0.15, -0.2, 1], fist: 0.75 }, mid, len, 1);
+      this.arm(arm, m, { ...hand, at: [g.x * m, g.y, g.z] }, mid, len, 1);
     }
-    return lift;
   }
 }
 
@@ -1277,6 +1308,7 @@ const _rd = new THREE.Vector3();
 const _rd2 = new THREE.Vector3();
 const _rg = new THREE.Vector3();
 const _rq = new THREE.Quaternion();
+const _reu = new THREE.Euler();
 
 // --- gestures ---------------------------------------------------------------------------------
 

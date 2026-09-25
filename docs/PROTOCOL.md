@@ -106,10 +106,21 @@ every request).
 | POST | `/tables` | `{ game, variant?, visibility, limits?: { min, max } }` | `{ tableId, pin? }` | 400, 429 |
 | POST | `/tables/join` | `{ pin }` | `{ tableId, game, lobby?: LobbySummary }` | 404 `BAD_PIN`, 429 |
 | POST | `/ticket` | `{ target }` | `{ ticket, exp }` | 400 (not a socket path), 401, 429 |
-| GET | `/leaderboard` | | `LeaderboardResponse` | 401 |
+| GET | `/leaderboard` | `?game=<id>` (optional) | `LeaderboardResponse` | 400 (not a game on the floor), 401 |
+| GET | `/stats` | | `StatsResponse` | 401 |
+| GET | `/feats` | | `FeatsResponse` | 401 |
 | GET | `/shop` | | `ShopResponse` | 401 |
 | POST | `/shop/buy` | `{ item, op }` | `BuyResponse` | 400 (op), 404 `NOT_FOUND`, 409 `INSUFFICIENT_FUNDS {balance, inPlay}`, 409 `NOT_ELIGIBLE` (already yours), 429 |
 | POST | `/bar/order` | `{ item, op }` | `OrderResponse` | 400 (op), 404 `NOT_FOUND`, 409 `INSUFFICIENT_FUNDS {balance, inPlay}`, 429 |
+| GET | `/bank` | | `BankState` | 401 |
+| GET | `/bank/market?range=1d\|7d\|30d` | | `MarketResponse` | 401 |
+| GET | `/bank/statement?before=` | | `StatementResponse` | 401 |
+| POST | `/bank/savings` | `{ op, dir: 'in'\|'out', amount }` | `{ state: BankState }` | 400, 409 `INSUFFICIENT_FUNDS`, 409 `BUSY`, 429 |
+| POST | `/bank/deposit` | `{ op, term: '1h'\|'24h'\|'7d', amount }` | `{ state }` | 400, 409 `INSUFFICIENT_FUNDS`, 409 `LIMIT`, 429 |
+| POST | `/bank/deposit/close` | `{ op, id }` | `{ state }` | 404, 409 `NOT_ELIGIBLE` (closed), 429 |
+| POST | `/bank/fund` | `{ op, side: 'buy', amount }` or `{ op, side: 'sell', amount \| all: true }` | `{ state }` | 400, 409 `INSUFFICIENT_FUNDS`, 409 `LIMIT`, 409 `NOT_ELIGIBLE` (nothing held), 429 |
+| POST | `/bank/send` | `{ op, to, amount, note?, confirm? }` | `{ state }` | 400, 404 (no such player), 409 `NOT_ELIGIBLE`, 409 `LIMIT`, 409 `INSUFFICIENT_FUNDS`, 429 |
+| POST | `/bank/seen` | `{ at }` | `{ ok }` | 400 |
 | GET | `/health` | | `ok` | |
 
 **Logging in.** Names are first come, first served (3-16 of `A-Z a-z 0-9 _`, any case the same
@@ -129,6 +140,23 @@ $50,000 and records the difference as a loan: `loan.amount` is that difference, 
 whose `msg` says what the bank counted; `balance` and `inPlay` are the profile's. While chips
 are moving between a table and D1 (a buy-in, top-up or cash-out in flight) it is `409 BUSY`:
 ask again in a moment.
+
+**Achievements and challenges** (`shared/src/feats.ts`). The tables decide them from the rounds
+they settle (`server/src/feats.ts`); each is earned once per account and paid once, in one D1
+batch: the `casino_feats` row and, for a cash reward, a `'grant'` ledger row with op id
+`feat:<account>:<feat>` and the balance change. The cash is never more than the play that earns
+it costs on average (the EV rule at the top of `shared/src/feats.ts`): an achievement's scales
+with the stake of the round that earned it, up to its listed amount; count challenges and
+dailies are comps, half the house's edge on play so far less comps already paid; amount
+challenges pay as listed. The player hears `{ t: 'feat', feat, at, paid, balance? }` on the
+table's socket (`paid` the cash, the balance after it) and everyone on the floor
+`{ t: 'feat', id, name, feat }`. Reward pieces, emotes and titles need no row of their own: they
+come with the feat (`profile.owned`, and `look.title` may name a feat whose reward has a
+title). `GET /feats` is `{ feats: [{ feat, at, paid? }], tally }`: the tallies challenges are
+measured on (`won`, `best`, `rounds`, `won:<game>`, `wins:<game>`, `bj:naturals`, `theo`, `comp`,
+and the day's `d:<day>:*` copies), as D1 has them. Tables
+send their tallies now and then (two minutes after the first unsent one, when the player stands
+up, and before paying a feat), so the numbers can trail a table still in play.
 
 ```ts
 type Profile = {
@@ -172,22 +200,45 @@ type OrderResponse = { order: BarOrder; balance: number; inPlay: number; rev: nu
 ```
 
 ```ts
-type LeaderboardId = "richest" | "biggestWin" | "rounds";       // LEADERBOARDS, in tab order
-type LeaderboardRow = { rank: number; name: string; value: number; you?: true };
+type LeaderboardId =                                            // LEADERBOARDS, in the sheet's order
+  | "richest" | "netUp" | "netDown" | "won" | "lost" | "wagered" | "biggestWin" | "biggestLoss"
+  | "rounds" | "winRate" | "streak" | "feats" | "celebs" | "collection"
+  | "today" | "todayDown" | "week" | "weekDown";
+// GAME_LEADERBOARDS, one game's: netUp netDown won lost biggestWin biggestLoss rounds winRate
+type LeaderboardRow = { rank: number; name: string; value: number; of?: number; you?: true };
 type Leaderboard = {
   top: LeaderboardRow[];                                       // at most LEADERBOARD_TOP (10), best first
-  you: { rank: number | null; name: string; value: number } | null;  // only when you're not in top
+  you: { rank: number | null; name: string; value: number; of?: number } | null;  // only when you're not in top
 };
-type LeaderboardResponse = { boards: Record<LeaderboardId, Leaderboard>; age: number };
+type LeaderboardResponse = { boards: Partial<Record<LeaderboardId, Leaderboard>>; game?: GameId; age: number };
+type StatLine = { rounds; wagered; net; biggestWin;             // lifetime, from the cash-outs
+                  counted; wins; won; lost; biggestLoss };      // from the round tallies (v6 on)
+type StatsResponse = { name; createdAt; worth: { balance; inPlay; total }; total: StatLine;
+                       games: Partial<Record<GameId, StatLine>>;
+                       days: { day: string; net: number }[];    // STATS_DAYS (14) Las Vegas days, oldest first
+                       streak; feats; celebs; collection };
 ```
 
-Leaderboards. `richest` is balance plus chips taken to tables (`inPlay`, what the buy-ins took;
-a stack's wins count once it cashes out), in cents. `biggestWin` is the largest single-round
-profit in any one game, in cents. `rounds` is rounds played over every game, a count. Places
-are shared on a tie (1, 2, 2, 4), and ties are listed oldest account first. `you.rank` is null
-when there's nothing to rank yet (no money, no win, no rounds). Names only: no account ids.
-Each Worker isolate reads the boards from D1 at most once a minute and `age` says how old they
-are (ms); a player outside a top ten has their own place read once per such read.
+Leaderboards (`server/src/leaderboard.ts`; what each counts is `shared/src/stats.ts`). Money in
+cents, counts as counts, `winRate` in basis points (5234 = 52.34%) with `of` the rounds it's out
+of. `richest` is balance plus chips taken to tables (`inPlay`, what the buy-ins took; a stack's
+wins count once it cashes out). `netUp` / `netDown` are lifetime net over every game (the losers'
+board holds only players who are down, most down first, values negative), `wagered` everything
+bet, `rounds` rounds played, all from the cash-outs. `biggestWin` is the largest single-round
+profit in any one game. From the round tallies, which begin with v6 and reach D1 with the feats'
+flush (every couple of minutes at a table, and at cash-out): `won` / `lost` (the profit of winning
+rounds, what losing rounds cost), `biggestLoss` (most lost on one round), `winRate` (rounds that
+made a profit, out of `WIN_RATE_MIN` = 100 or more; a push is not a win), `streak` (winning rounds
+in a row at one table; a push keeps it), `today` / `week` and their `Down` twins (net since
+midnight / Monday midnight, Las Vegas time). `feats` counts achievements earned, `celebs` the
+different celebrities met, `collection` what the kept items cost. `?game=<id>` answers that game's
+eight boards instead (win rate over `WIN_RATE_MIN_GAME` = 50 rounds). Places are shared on a tie
+(1, 2, 2, 4), ties listed oldest account first (newest first on the losers' boards). `you.rank`
+is null when there's nothing to rank yet. Names only: no account ids. Each Worker isolate reads a
+set of boards from D1 at most once a minute (each game's are a set of their own) and `age` says
+how old they are (ms); a player outside a top ten has their own places read once per such read.
+
+`GET /stats` is the asker's own record for the stats sheet, and nobody else's is ever sent.
 
 **The daily bonus** (`server/src/daily.ts`, `shared/src/celebs.ts`). `GET /daily` says where your
 streak stands; `POST /daily/claim` takes today's. Days are Las Vegas days. The first claim pays
@@ -210,6 +261,43 @@ type DailyClaimResponse = { amount: number; streak: number; balance: number; inP
 On the dev stack only (`CASINO_DEV` in `server/wrangler.toml`; production never sets it),
 `POST /dev/celeb {celeb?}` starts a celebrity's visit a moment from now and `POST /dev/gift
 {spot?}` leaves a gift box at once, for the headless checks. Elsewhere both are `404`.
+
+**The private bank** (v6: `server/src/bank.ts`, `shared/src/bank.ts`, migration 0007). Amounts are
+cents. Every POST carries an `op` (8-40 of `A-Z a-z 0-9 _ -`) chosen by the client: a retry with the
+same op is the same operation, done once and answered with the bank as it stands; the same op for a
+different operation is `400`. 30 operations a minute per account, 10 transfers.
+- *Savings*: simple interest by the millisecond, 0.5% a day on the first $100,000 and 0.1% a day up
+  to $1,000,000, nothing above; exact to a fraction of a cent (carried, never rounded up) and paid in
+  at each midnight UTC, so asking often or moving money in and out earns nothing extra.
+- *Term deposits*: 1 hour at 0.015%, 24 hours at 0.4%, 7 days at 3.5%, fixed at opening and paid
+  with the principal at maturity; breaking one early pays the principal less 0.5% and no interest.
+  $100 at least, five open and $1,000,000 in all at most.
+- *The Casino Index*: one price for everyone, a step every five minutes (about +0.1% a day of drift,
+  about 2% a day of swing). Each step comes from an HMAC under the server's secret and is written only
+  once it's due, so no client can know the next price. Bought and sold at the price now, rounded down;
+  $10,000,000 at cost per player at most.
+- *Transfers* by name, with an optional one-line note (80 characters): from $1; $10,000 and up need
+  `confirm: true`; a new account waits a day; money from the house (the opening balance, top-ups,
+  bonuses, tips, gift boxes, feat cash) can't be sent for three days, money from other players for a
+  day; $250,000 per sender in any 24 hours and $100,000 to any one receiver; nothing from jail. The
+  receiver hears `bank.in` on the floor and finds it in `BankState.inbox` until `POST /bank/seen`.
+- *The cashier's top-up* (`/bank/loan`) counts savings, open deposits, the fund at today's price and
+  what you sent other players in the last three days as well as the balance and the tables.
+- The statement is every movement of the account's money (ledger, purchases, the bank), newest first,
+  40 a page, each with the balance after it; `next` is the cursor for the page after.
+- On the dev stack only, `POST /dev/bank/clock { ms }` runs this account's bank `ms` ahead.
+
+```ts
+type BankState = { now: number; balance: number; inPlay: number; rev: number; banked: number;
+                   savings: { balance: number; accrued: number; frac: number; since: number; earned: number };
+                   deposits: { id: string; term: TermId; principal: number; interest: number; openedAt: number;
+                               maturesAt: number; closedAt?: number; paid?: number }[];
+                   fund: { id: string; name: string; price: number /* ten-thousandths of a dollar */; step: number;
+                           dayAgo: number; units: number /* millionths */; cost: number; value: number };
+                   send: { sendable: number; held: number; sentToday: number; newUntil: number; jailed: boolean };
+                   inbox: { id: string; from: string; amount: number; note: string | null; at: number }[];
+                   worth: number; gain: number };
+```
 
 ## Socket tickets
 
@@ -309,6 +397,7 @@ Server to client:
 | `emote` | `id, e` (to everyone on the floor, the sender included) |
 | `bigwins` | `list: BigWin[]` (newest first, at most 20), `today: WinsToday` (right after `hello`) |
 | `bigwin` | `...BigWin, today: WinsToday` (to everyone on the floor) |
+| `bank.in` | `id, from, amount, note, at` (to the receiver only: another player sent you money) |
 
 ```ts
 type PlayerInfo = { id: number; name: string; look: Look; x: number; z: number; r: number;
@@ -332,6 +421,37 @@ ball lands, the reels and any free games stop): clients hold the news until then
 the floor hears about a win before the winner sees it. The words in `what` come only from what
 the table showed everyone once the round was over: the bet that paid, a hand turned over to be
 paid, a machine's own display. A Hold'em pot won without a showdown is just "Took the pot".
+
+### The law (v6)
+
+`shared/src/law/` has the rules; the floor's side is `server/src/law.ts`.
+
+| t (client) | fields | limit |
+|---|---|---|
+| `punch` | `r` (the way you face, yaw 0-255) | one per 650 ms (extras dropped); never from a table or a floor seat |
+
+| t (server) | fields |
+|---|---|
+| `punch` | `id` (who threw it), `hit: number \| StaffId \| null` (a player, a member of staff, or the air), to everyone |
+| `detour` | `d: Detour` (a guard or the pit boss leaving his loop to go to someone), to everyone |
+| `detours` | `list: Detour[]` (the ones under way, right after `hello`) |
+| `law` | `ev: { k: 'warn' \| 'jail' \| 'free', id, name, staff, why: 'punch' \| 'win' \| null, until? }`, to everyone |
+| `jail` | `jail: { bail, won, at } \| null` (your own time inside: after `hello`, and as it changes) |
+
+The staff aren't sent at all. Where each stands and faces is `poseAt(spec, t, detour)` of the
+server's clock (`shared/src/law/patrol.ts`): the client draws the same function the server decides
+by. A punch lands on the nearest player standing (not at a table, not on a seat) or member of staff
+within 1.2 m in front. A guard who can see the puncher (in range, in his cone, in the same room:
+`sight.ts`) catches it; a table reports a player whose winnings there reach its hot amount in five
+minutes, or who hits a big win, and the pit boss catches it if he can see them then. Caught once
+is a warning; caught again within five minutes of it (15 s later at the earliest: one moment is one
+catch) is jail: bail is a fiftieth of what you had, $1,000 to $25,000, every table you sit at stands
+you up the normal way, and after the guard walks over you get `tp` into the jail and stay confined
+to it (every connect puts you back). Inmates play only the jail's tables (`ws/solo/blackjack` and
+`ws/solo/sicbo` open `solo:<game>:jail:<id>` at $5 to a quarter of the bail; every other table
+socket closes 4005, and `POST /tables` and `/tables/join` answer 403). Each finished round there
+moves `won` by its net, never below zero; at the bail the jail table stands you up (you keep the
+chips) and a moment later `tp` takes you to the casino's doors, strikes cleared.
 
 ### Celebrities and the gift box
 

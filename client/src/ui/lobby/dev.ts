@@ -65,7 +65,7 @@ async function approach(floor: LobbyFloor): Promise<void> {
     toast(`The solo table opens here in the game${at}.`);
     return pressE(floor);
   }
-  sit(choice.tableId!, floor);
+  sit(choice.tableId!, floor, choice.pin);
 }
 
 function pressE(floor: LobbyFloor): void {
@@ -82,14 +82,14 @@ function pressE(floor: LobbyFloor): void {
   addEventListener('keydown', onKey);
 }
 
-/** At a lobby table: a table socket feeding the party panel. */
-function sit(tableId: string, floor: LobbyFloor): void {
+/** At a lobby table: a table socket feeding the party panel. A private table wants its PIN from everyone, its creator too. */
+function sit(tableId: string, floor: LobbyFloor, pin?: string): void {
   dev.tableId = tableId;
   let snap: TableSnapshot | null = null;
   let aid = 0;
   let party: PartyPanel | null = null;
   const socket = new Socket({
-    url: () => socketUrl(`table/${tableId}`),
+    url: () => socketUrl(`table/${tableId}`, pin ? { pin } : {}),
     onMessage: (m) => {
       if (m.t === 'table') {
         snap = m;

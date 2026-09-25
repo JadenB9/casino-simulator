@@ -139,6 +139,15 @@ export class Seating {
     return s ? { x: s.x, z: s.z, yaw: s.yaw, sit: s.top } : null;
   }
 
+  /** v6 city6: more places to sit (the ground floor's and the roof's, added when first built). */
+  add(seats: readonly Seatable[]): void {
+    for (const s of seats) {
+      if (this.byId.has(s.id)) continue;
+      this.seats.push(s);
+      this.byId.set(s.id, s);
+    }
+  }
+
   sit(s: Seatable): void {
     if (this.mine) return;
     const me = this.link?.you?.id ?? null;

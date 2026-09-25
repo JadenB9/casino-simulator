@@ -1,11 +1,11 @@
 // Who has the keyboard. Sheets (profile, cashier, settings), the character editor and the kit's
 // dialogs each hold it while they're up: Esc goes to the top one, Tab stays inside it, and other
 // keys don't reach the floor or the table behind it, so W doesn't walk you away while you read
-// and Space doesn't deal behind a buy-in prompt. M and ? stay global so mute and the shortcut
-// list work from anywhere.
+// and Space doesn't deal behind a buy-in prompt. M, ? and J stay global so mute, the shortcut
+// list and the achievements work from anywhere.
 
 /** Keys that keep working while something holds the keyboard. */
-export const GLOBAL_KEYS: ReadonlySet<string> = new Set(['m', 'M', '?']);
+export const GLOBAL_KEYS: ReadonlySet<string> = new Set(['m', 'M', '?', 'j', 'J']);
 
 interface Layer {
   readonly panel: HTMLElement;

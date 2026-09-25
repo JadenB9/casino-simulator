@@ -16,6 +16,7 @@ import { el, toast } from '../ui/kit.ts';
 import { DEFAULT_LOOK, OUTFITS, type Body, type Look } from '../../../shared/src/look.ts';
 import { createWorld, type FloorWorld } from './index.ts';
 import { checkLayout } from './layout.ts';
+import { LIFTS } from '../../../shared/src/lifts.ts';
 import { fxDev } from './fx/dev.ts';
 
 interface View {
@@ -49,6 +50,10 @@ function views(w: FloorWorld): Record<string, View | 'walk'> {
     yard: inRoom(w, 'yard', [1.6, 1.8, -5.2], [0.6, 1.6, 3.8]),
     cashier: inRoom(w, 'bank', [4.4, 1.7, 0.5], [0, 1.4, -5]),
     boutique: inRoom(w, 'boutique', [-4.4, 1.7, 0.5], [3, 1.2, 0.5]),
+    // the north wing, each from its door off the room below it
+    parlour: inRoom(w, 'parlour', [0, 1.7, 5.3], [0, 1.3, -3]),
+    cardroom: inRoom(w, 'cardroom', [7.3, 1.8, 5.3], [-1, 1.0, -2]),
+    bingo: inRoom(w, 'bingo', [0, 1.9, 5.3], [0, 1.4, -3]),
     // in front of the wheel, where its players stand
     bigsix: { pos: [wheel.x + 5.2, 1.9, wheel.z + 1.4], at: [wheel.x, 1.5, wheel.z] },
   };
@@ -92,6 +97,12 @@ export async function runDevFloor(params: URLSearchParams): Promise<FloorWorld> 
     ui.append(el('div', 'panel world-help', 'WASD or arrows to walk · Shift to run · click to look with the mouse, Esc to let go · or drag to look · E to sit'));
   }
 
+  // v6 city6: &zone=ground|roof starts out of the elevator there (no server: the ride is local)
+  const zone = params.get('zone');
+  if (zone === 'ground' || zone === 'roof') {
+    const a = LIFTS[zone].arrive;
+    world.teleport(a.x / 100, a.z / 100, (a.r / 256) * Math.PI * 2);
+  }
   if (params.get('lineup')) lineup(world, engine);
   if (params.get('stats')) {
     const box = el('div', 'panel world-stats');

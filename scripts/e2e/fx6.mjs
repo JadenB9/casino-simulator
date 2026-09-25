@@ -6,6 +6,7 @@
 //            best moment from a fixed camera, High and Low (QUALITY=high|low|both, default both)
 //   statues  three sample statues in the lobby: shot from the doors, their collision, walking
 //            round them, the directory's face kept clear
+//   calm     "Reduce flashing & motion" off and on: the disco and Own the Night's opening, side by side
 //   perf     several effects at once: frame time and draw calls against the floor without them
 //   live     the real stack (PORT_BASE=<port> npm run dev): two players, A buys effects through the
 //            shop's endpoint and B sees them (needs the shop's /shop/effect; skipped if it 404s)
@@ -31,8 +32,10 @@ const fail = (what) => {
 };
 const ok = (what) => console.log(`ok   ${what}`);
 
-async function openFloor(quality, extra = '') {
+async function openFloor(quality, extra = '', calm = false) {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
+  // "Reduce flashing & motion" is read as the page starts (app/comfort.ts)
+  await page.addInitScript((c) => localStorage.setItem('casino.calm', c ? '1' : '0'), calm);
   page.setDefaultTimeout(300000);
   const errors = [];
   page.on('console', (m) => m.type() === 'error' && !/favicon|404 \(Not Found\)/.test(m.text()) && errors.push(m.text()));
@@ -158,6 +161,33 @@ async function statues(quality) {
   await page.close();
 }
 
+async function calmShots(quality) {
+  for (const on of [false, true]) {
+    const opened = await openFloor(quality, '', on);
+    const p = opened.page;
+    const tag = on ? 'calm' : 'normal';
+    if ((await p.evaluate(() => document.body.classList.contains('calm'))) !== on) fail(`${quality}: the page didn't come up ${tag}`);
+    await stand(p, 0, 1.4, Math.PI);
+    await place(p, [4.2, 2.0, 2.6], [-1, 1.5, -4]);
+    await p.evaluate(() => window.casino.fx.play('fx-disco'));
+    await wait(p, 7);
+    await shot(p, `calm-${quality}-${tag}-disco`);
+    await p.evaluate(() => {
+      for (const ev of window.casino.world.fx.known) ev.until = Date.now();
+    });
+    await wait(p, 3.5);
+    await stand(p, 0.2, 8.6, Math.PI);
+    await place(p, [0.4, 1.8, 14.2], [0, 2.2, 5]);
+    await p.evaluate(() => window.casino.fx.play('fx-takeover'));
+    for (const [t, name] of [[1.1, 'dark'], [1.9, 'reveal'], [3.2, 'show']]) {
+      await wait(p, t - (name === 'dark' ? 0 : name === 'reveal' ? 1.1 : 1.9));
+      await shot(p, `calm-${quality}-${tag}-takeover-${name}`);
+    }
+    if (opened.errors.length) fail(`${quality} ${tag} console errors: ${opened.errors.slice(0, 4).join(' | ')}`);
+    await p.close();
+  }
+}
+
 async function perf(quality) {
   const { page, errors } = await openFloor(quality);
   await stand(page, 0.2, 1.4, Math.PI);
@@ -222,6 +252,7 @@ try {
   for (const q of qualities) {
     if (checks.includes('preview')) await preview(q);
     if (checks.includes('statues')) await statues(q);
+    if (checks.includes('calm')) await calmShots(q);
     if (checks.includes('perf')) await perf(q);
   }
   if (checks.includes('live')) {

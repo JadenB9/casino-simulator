@@ -14,13 +14,14 @@
 import * as THREE from 'three';
 import type { FxEvent } from '../../../../shared/src/items.ts';
 import type { Marquee } from '../marquee.ts';
-import { ceilingAt, inRect, roomAt } from '../layout.ts';
+import { ceilingAt, inRect, roomAt, type FloorPlan, type PlannedRoom } from '../layout.ts';
 import { Bits, Sparks, stepPaper } from './particles.ts';
 import type { Stock } from './stock.ts';
 import type { Effect, FxWorld } from './types.ts';
 import { envelope } from './timing.ts';
 import { golden } from './golden.ts';
 import { headline } from './headline.ts';
+import type { Hanger } from './disco.ts';
 import { calm, calmScale, flashAllowed, wave } from '../../app/comfort.ts';
 
 /** Stars in a shell, and seconds between shells on average. */
@@ -33,7 +34,7 @@ const CURTAIN = { high: 520, low: 240 };
 const PAPER = ['#f0c14e', '#f7dc95', '#f6f1e6', '#d9a43a'].map((c) => new THREE.Color(c));
 const STAR_COLORS = ['#ffc34a', '#ffe9b8', '#d8263a', '#ffb02e'].map((c) => new THREE.Color(c));
 
-export function takeover(w: FxWorld, stock: Stock, ev: FxEvent, late: boolean, sign: () => Marquee | null): Effect {
+export function takeover(w: FxWorld, stock: Stock, ev: FxEvent, late: boolean, sign: () => Marquee | null, hangers: readonly Hanger[]): Effect {
   const q = w.quality();
   // the Headline's own fanfare gives way to the show's
   const parts = [headline(w, ev, true, sign), golden(w, stock, ev, late)];
@@ -59,15 +60,17 @@ export function takeover(w: FxWorld, stock: Stock, ev: FxEvent, late: boolean, s
     // somewhere ahead of you in the room you're in, not right over your head
     w.camera.getWorldDirection(ahead);
     const look = Math.atan2(ahead.z, ahead.x);
-    for (let tries = 0; tries < 8; tries++) {
+    for (let tries = 0; tries < 12; tries++) {
       const a = look + (Math.random() - 0.5) * 1.8;
       const d = 3 + Math.random() * 5;
       const x = e.x + Math.cos(a) * d;
       const z = e.z + Math.sin(a) * d;
-      if (!inRect(room.inner, x, z, -1)) continue;
-      const y = Math.max(2.4, Math.min(3.9, ceilingAt(w.plan, x, z) - 0.8));
+      const shell = shellAt(w.plan, room, hangers, x, z);
+      if (!shell) continue;
+      const { y, r } = shell;
       tint.copy(STAR_COLORS[Math.floor(Math.random() * STAR_COLORS.length)]!);
-      const speed = 3.4 + Math.random() * 1.2;
+      // the stars travel about speed / drag (2.6) before the air stops them
+      const speed = (r / SHELL_R) * (3.4 + Math.random() * 0.6);
       for (let i = 0; i < STARS[q]; i++) {
         // evenly round a sphere, a little ragged
         const u = Math.random() * 2 - 1;
@@ -125,7 +128,8 @@ export function takeover(w: FxWorld, stock: Stock, ev: FxEvent, late: boolean, s
         // now and then a second shell a beat later
         if (flashAllowed() && Math.random() < 0.3) setTimeout(() => !gone && burst(), 180);
       }
-      // the stars hang and drift down, the way a willow shell's do
+      // the stars hang and drift down, the way a willow shell's do (calm: soft glows, not flashes)
+      stars.uniforms.uGain.value = (q === 'high' ? 5 : 2.2) * calmScale(0.4);
       stars.step(dt, 2.2, 2.6);
       stars.commit();
       stepPaper(curtain, dt, { fall: 0.6, sway: 0.45, drag: 2, size: 0.03 });
@@ -157,6 +161,27 @@ export function takeover(w: FxWorld, stock: Stock, ev: FxEvent, late: boolean, s
       m.dispose();
     },
   };
+}
+
+/** How far a shell's stars travel at the most (m), and the room they're given all round. */
+export const SHELL_R = 1.5;
+const SHELL_CLEAR = 0.3;
+
+/**
+ * Where a shell may burst over (x, z) in a room, and how wide: sized to the room so its stars
+ * stop short of the ceiling, the walls and whatever hangs there (chandeliers, signs). Null if
+ * there's no room for one.
+ */
+export function shellAt(plan: FloorPlan, room: PlannedRoom, hangers: readonly Hanger[], x: number, z: number): { y: number; r: number } | null {
+  // the lowest ceiling the stars could reach (the pit's coffers stand higher than round them)
+  let top = ceilingAt(plan, x, z);
+  for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) top = Math.min(top, ceilingAt(plan, x + dx * SHELL_R, z + dz * SHELL_R));
+  const y = Math.min(4.2, Math.max(2.2, top - 1.4));
+  const r = Math.min(SHELL_R, top - y - SHELL_CLEAR);
+  if (r < 0.6) return null;
+  if (!inRect(room.inner, x, z, -(r + SHELL_CLEAR))) return null;
+  if (hangers.some((h) => Math.hypot(h.x - x, h.z - z) < h.r + r + SHELL_CLEAR)) return null;
+  return { y, r };
 }
 
 /**
