@@ -3,7 +3,9 @@
 // breaks into the full chase for a couple of seconds now and then; a band of light climbs each
 // machine's glass (topper, pay glass, belly) every few seconds, rolling across the island from
 // machine to machine. A machine someone is sitting at goes steady. The machine that just paid a
-// big win runs the fast win chase with its candle flashing, for everyone on the floor.
+// big win runs the fast win chase with its candle flashing, for everyone on the floor. Calm
+// (app/comfort.ts) keeps only the slow breath: no chases, the band a third as bright, a party's
+// machine lit bright and steady.
 //
 // It costs no draw calls and no per-machine materials: the cabinets of one machine share their
 // idle materials (slots/cabinet.ts, slots/build.ts), and this adds a little to those shaders. Each
@@ -13,6 +15,7 @@
 
 import * as THREE from 'three';
 import type { WorldStation } from './stations.ts';
+import { calmUniform } from '../app/comfort.ts';
 
 /** Machines marked busy at once (players sitting at slots); more than this is a very full floor. */
 const BUSY_MAX = 24;
@@ -141,6 +144,7 @@ export class Attract {
       shader.uniforms.uBusy = shared.uBusy;
       shader.uniforms.uParty = shared.uParty;
       shader.uniforms.uPartyCandle = shared.uPartyCandle;
+      shader.uniforms.uCalm = calmUniform;
     };
     mat.customProgramCacheKey = () => `${beforeKey.call(mat)}|${key}`;
     mat.needsUpdate = true;
@@ -154,7 +158,8 @@ export class Attract {
  */
 function patchBulbs(shader: THREE.WebGLProgramParametersWithUniforms): boolean {
   const hook = 'vLit = uMode < 0.5 ? 0.3 + 0.7 * chase :';
-  if (!shader.vertexShader.includes(hook)) return false;
+  const calmHook = 'float calmIdle = 0.72;';
+  if (!shader.vertexShader.includes(hook) || !shader.vertexShader.includes(calmHook)) return false;
   shader.vertexShader = shader.vertexShader
     .replace('#include <common>', `#include <common>\n${PARS}`)
     .replace(
@@ -166,8 +171,11 @@ function patchBulbs(shader: THREE.WebGLProgramParametersWithUniforms): boolean {
         float attractIdle = mix(attractGentle, 0.3 + 0.7 * chase, step(fract(attractT / 19.0), 0.1));
         attractIdle = mix(attractIdle, 0.78, attractBusy(attractAt));
         attractIdle = mix(attractIdle, comet * 1.2, attractParty(attractAt));
+        // calm: only the slow breath; steady while someone plays, steady and bright at a party
+        float attractCalm = mix(mix(0.3 + 0.1 * sin(attractT * 0.37), 0.78, attractBusy(attractAt)), 1.05, attractParty(attractAt));
         vLit = uMode < 0.5 ? attractIdle :`,
-    );
+    )
+    .replace(calmHook, 'float calmIdle = attractCalm;');
   return true;
 }
 
@@ -186,7 +194,7 @@ function patchGlass(shader: THREE.WebGLProgramParametersWithUniforms): boolean {
       vAttractState = vec4(attractBusy(attractAt), attractParty(attractAt), attractPhase(attractAt) * 40.0 + attractAt.x * 0.35, 0.0);`,
     );
   shader.fragmentShader = shader.fragmentShader
-    .replace('#include <common>', '#include <common>\nuniform float uFloorT;\nvarying vec3 vAttractLocal;\nvarying vec4 vAttractState;')
+    .replace('#include <common>', '#include <common>\nuniform float uFloorT;\nuniform float uCalm;\nvarying vec3 vAttractLocal;\nvarying vec4 vAttractState;')
     .replace(
       hook,
       `${hook}
@@ -194,9 +202,10 @@ function patchGlass(shader: THREE.WebGLProgramParametersWithUniforms): boolean {
       float busy = vAttractState.x;
       float party = vAttractState.y;
       float t = uFloorT + vAttractState.z;
-      float sweep = fract(t / mix(8.0, 1.4, party)) * 4.2 - 0.7;
+      // calm: the band keeps its slow pace at a party too, at a third of the light
+      float sweep = fract(t / mix(8.0, 1.4, party * (1.0 - uCalm))) * 4.2 - 0.7;
       float d = vAttractLocal.y + vAttractLocal.x * 0.55 - sweep;
-      float band = exp(-d * d * 55.0);
+      float band = exp(-d * d * 55.0) * (1.0 - 0.67 * uCalm);
       float idle = 0.95 + 0.05 * sin(t * 1.1) + band * 0.85;
       totalEmissiveRadiance *= mix(mix(idle, 1.0, busy), 1.15 + band * 1.6, party);
     }`,
@@ -214,14 +223,15 @@ function patchCandle(shader: THREE.WebGLProgramParametersWithUniforms): boolean 
   shader.vertexShader = shader.vertexShader
     .replace('#include <common>', '#include <common>\nvarying vec3 vCandleAt;')
     .replace('#include <begin_vertex>', '#include <begin_vertex>\nvCandleAt = vec3(modelMatrix[3]);');
-  shader.fragmentShader = shader.fragmentShader.replace('#include <common>', `#include <common>\n${PARS}\nvarying vec3 vCandleAt;`).replace(
+  shader.fragmentShader = shader.fragmentShader.replace('#include <common>', `#include <common>\n${PARS}\nuniform float uCalm;\nvarying vec3 vCandleAt;`).replace(
     hook,
     `${hook}
     {
       vec3 dc = vCandleAt - uPartyCandle.xyz;
       float mine = uPartyCandle.w * step(length(dc.xz), 0.05) * step(abs(dc.y), 0.12);
       float on = step(0.5, fract(uFloorT * 3.0 + vCandleAt.y * 6.67));
-      diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * (0.25 + 2.6 * on), mine);
+      // calm: both halves lit and steady
+      diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * mix(0.25 + 2.6 * on, 1.8, uCalm), mine);
     }`,
   );
   return true;

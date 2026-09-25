@@ -15,6 +15,7 @@ import {
 import { stickCall } from '../../../../shared/src/games/craps/calls.ts';
 import { formatMoney, type Cents } from '../../../../shared/src/money.ts';
 import { Felt } from '../../table/felt.ts';
+import { around, regionPoints } from '../../table/fit.ts';
 import { ChipStack, slideStack, CHIP_H } from '../../table/chips.ts';
 import { Die, throwDie } from '../../table/dice.ts';
 import { tween, wait, ease } from '../../table/tween.ts';
@@ -170,6 +171,16 @@ export class CrapsTable implements TableView {
 
   private at([x, z]: [number, number], lift = 0): [number, number, number] {
     return [x, SURFACE + lift, z];
+  }
+
+  /**
+   * What stays in view at any window size (table/fit.ts): your end of the layout, the props in the
+   * middle, and where the dice come to rest at your end.
+   */
+  private fitBoard(): void {
+    const end = this.myEnd === 1 ? 'R|' : 'L|';
+    const y = SURFACE;
+    this.ctx.stage.board(regionPoints(this.felt, (id) => id.startsWith(end) || id.startsWith('C|'), y), around([DICE_REST[0] * this.myEnd, y, DICE_REST[1]], 0.08));
   }
 
   private get myEnd(): 1 | -1 {
@@ -697,6 +708,7 @@ export class CrapsTable implements TableView {
     this.tray.setChipMax(Math.max(...lims.map((l) => l.max)), Math.min(...lims.map((l) => l.min)));
     this.solo = snap.meta.mode === 'solo';
     this.mySeat = snap.you.status === 'watching' ? null : snap.you.seat;
+    this.fitBoard();
     this.names = new Map(snap.members.filter((m) => m.seat !== null).map((m) => [m.seat!, m.name]));
     this.placed = [];
     this.draw(snap.view as View);
@@ -730,6 +742,7 @@ export class CrapsTable implements TableView {
 
   onSeat(msg: Parameters<TableView['onSeat']>[0]): void {
     this.mySeat = msg.status === 'watching' ? null : msg.seat;
+    this.fitBoard();
     this.stack = msg.stack;
     this.refreshControls();
   }

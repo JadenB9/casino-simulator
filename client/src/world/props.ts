@@ -12,6 +12,7 @@ import type { Chandelier } from './room.ts';
 import { hdr } from './materials.ts';
 import { MODEL_BASE } from './characters.ts';
 import { modelBytes } from '../render/model-bytes.ts';
+import { calmUniform } from '../app/comfort.ts';
 
 /**
  * Each prop's file and what its size measures. `foot`: stood on the middle of its foot (a palm's
@@ -65,7 +66,7 @@ export class Props {
   private loader = new GLTFLoader();
   private highChandeliers: THREE.Object3D | null = null;
   private sparkle: THREE.Points | null = null;
-  private readonly sparkleUniforms = { uTime: { value: 0 }, uScale: { value: 400 }, uColor: { value: hdr('#fff1d6', 3.4) } };
+  private readonly sparkleUniforms = { uTime: { value: 0 }, uScale: { value: 400 }, uColor: { value: hdr('#fff1d6', 3.4) }, uCalm: calmUniform };
   private lowChandeliers: THREE.Object3D | null = null;
   private lambert = new Map<THREE.Material, THREE.Material>();
   private standard = new Map<THREE.Material, THREE.Material>();
@@ -412,13 +413,15 @@ function proud(g: THREE.BufferGeometry, k: number): THREE.BufferGeometry {
 const GLINT_VERTEX = /* glsl */ `
 uniform float uTime;
 uniform float uScale;
+uniform float uCalm;
 attribute float aPhase;
 attribute float aSpeed;
 varying float vGlint;
 void main() {
   vec4 mv = modelViewMatrix * vec4(position, 1.0);
-  // mostly dark, now and then a sharp flash
-  vGlint = pow(max(sin(uTime * aSpeed + aPhase), 0.0), 28.0);
+  // mostly dark, now and then a sharp flash; calm (app/comfort.ts): a slow, soft shimmer instead
+  float at = uTime * aSpeed + aPhase;
+  vGlint = mix(pow(max(sin(at), 0.0), 28.0), 0.35 * pow(max(sin(at / 3.0), 0.0), 6.0), uCalm);
   gl_PointSize = max(1.0, 0.075 * uScale / -mv.z) * (0.35 + 0.65 * vGlint);
   gl_Position = projectionMatrix * mv;
 }`;

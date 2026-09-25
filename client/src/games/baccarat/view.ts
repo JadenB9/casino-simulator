@@ -33,7 +33,7 @@ import { setDiscardHeight } from './model.ts';
 import { Scoreboard } from './scoreboard.ts';
 import {
   BANDS, BURN_SPOT, CUT_SPOT, CZ, DISCARD_TOP, HAND_BOX, HAND_CARD_SCALE, NUMBER_R, PAIR_RADIUS, RACK_POINT, SHOE_MOUTH, TOP_Y,
-  commissionBox, handSlot, parseRegion, polar, regionId, seatAngle, sectorPoints, spotCentre,
+  boardPoints, commissionBox, handSlot, parseRegion, polar, regionId, seatAngle, sectorPoints, spotCentre,
 } from './layout.ts';
 import './baccarat.css';
 
@@ -188,6 +188,7 @@ export class BaccaratTable implements TableView {
     // the rack: chips up to the Player and Banker maximum, from what the smallest bet (a pair) needs
     this.tray.setChipMax(limitsFor(this.config, 'banker').max, limitsFor(this.config, 'playerPair').min);
     this.mySeat = snap.you.seat;
+    this.fitBoard();
     this.stack = snap.you.stack;
     this.members = snap.members;
     this.draw(snap.view as BaccaratView);
@@ -301,9 +302,15 @@ export class BaccaratTable implements TableView {
     this.lastEnd = performance.now();
   }
 
+  /** Your seat's boxes and the dealer's side stay in view at any window size (table/fit.ts). */
+  private fitBoard(): void {
+    this.ctx.stage.board(boardPoints(this.mySeat === null ? null : seatNumber(this.mySeat)));
+  }
+
   onSeat(msg: SeatMsg): void {
     this.stack = msg.stack;
     if (msg.seat !== null) this.mySeat = msg.seat;
+    this.fitBoard();
     this.drawMeters();
     this.renderTip();
   }

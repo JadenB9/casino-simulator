@@ -8,6 +8,8 @@
 // champagne and crimson stars falling slowly and crackling, now and then two at once; and the
 // gold of Golden Hour (the warm light, the shafts, the coins) everywhere under it all. Everyone
 // sees it, in every room. The signs and screens get their own faces back at the end.
+// Calm (app/comfort.ts): the lights dip only halfway and come back up without the flash; shells
+// burst less often, never two at once, and the gobo holds steady.
 
 import * as THREE from 'three';
 import type { FxEvent } from '../../../../shared/src/items.ts';
@@ -19,6 +21,7 @@ import type { Effect, FxWorld } from './types.ts';
 import { envelope } from './timing.ts';
 import { golden } from './golden.ts';
 import { headline } from './headline.ts';
+import { calm, calmScale, flashAllowed, wave } from '../../app/comfort.ts';
 
 /** Stars in a shell, and seconds between shells on average. */
 const STARS = { high: 180, low: 80 };
@@ -101,8 +104,8 @@ export function takeover(w: FxWorld, stock: Stock, ev: FxEvent, late: boolean, s
       }
       if (!revealed) {
         // the blackout: every room's light drops away, then the show
-        const k = Math.min(1, t / 0.5);
-        w.lighting.setTint(id, { color: '#150c18', k: 0.7 * k, dim: 1 - 0.85 * k });
+        const k = Math.min(1, t / (calm() ? 1.2 : 0.5));
+        w.lighting.setTint(id, { color: '#150c18', k: 0.7 * k, dim: 1 - (calm() ? 0.5 : 0.85) * k });
         if (t < REVEAL) return true;
         revealed = true;
         w.sounds?.firework(null, 1.5);
@@ -110,16 +113,17 @@ export function takeover(w: FxWorld, stock: Stock, ev: FxEvent, late: boolean, s
         dropCurtain();
         next = 0.1;
       }
-      // the flash as the lights come up, fading into the gold
-      const flash = Math.max(0, 1 - (t - REVEAL) / 0.8);
-      w.lighting.setTint(id, left > 0 && flash > 0 ? { color: '#ffd27a', k: 0.5 * flash, dim: 1 + 1.4 * flash } : null);
+      // the flash as the lights come up, fading into the gold (calm: the dark lifts over a second)
+      const flash = Math.max(0, 1 - (t - REVEAL) / (calm() ? 1.2 : 0.8));
+      if (calm()) w.lighting.setTint(id, left > 0 && flash > 0 ? { color: '#150c18', k: 0.7 * flash, dim: 1 - 0.5 * flash } : null);
+      else w.lighting.setTint(id, left > 0 && flash > 0 ? { color: '#ffd27a', k: 0.5 * flash, dim: 1 + 1.4 * flash } : null);
       let alive = false;
       for (const p of parts) alive = p.update(dt, Math.max(0, t - REVEAL), left, view) || alive;
       if (left > 2 && (next -= dt) <= 0) {
-        next = EVERY * (0.6 + Math.random() * 0.8);
+        next = EVERY * calmScale(2.5) * (0.6 + Math.random() * 0.8);
         burst();
         // now and then a second shell a beat later
-        if (Math.random() < 0.3) setTimeout(() => !gone && burst(), 180);
+        if (flashAllowed() && Math.random() < 0.3) setTimeout(() => !gone && burst(), 180);
       }
       // the stars hang and drift down, the way a willow shell's do
       stars.step(dt, 2.2, 2.6);
@@ -133,7 +137,7 @@ export function takeover(w: FxWorld, stock: Stock, ev: FxEvent, late: boolean, s
       }
       gobo.rotation.y = t * 0.12;
       const k = envelope(Math.max(0, t - REVEAL), left, 1, 2);
-      ((gobo.material as THREE.MeshBasicMaterial).color as THREE.Color).setRGB(1, 0.78, 0.36).multiplyScalar(0.9 * k * (0.9 + 0.1 * Math.sin(t * 2.3)));
+      ((gobo.material as THREE.MeshBasicMaterial).color as THREE.Color).setRGB(1, 0.78, 0.36).multiplyScalar(0.9 * k * (0.9 + 0.1 * wave(t * 2.3)));
       if (left > 0) screens.on();
       else screens.off();
       return alive || left > 0 || stars.n > 0;
