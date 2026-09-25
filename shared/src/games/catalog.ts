@@ -99,7 +99,7 @@ export function variantOf(id: GameId, asked: unknown): string {
 }
 
 /** Lobby tables: game prefix + 10 base-36 characters (about 52 bits), so they can't be guessed. */
-export const TABLE_ID_RE = /^(bj|rl|cr|bc|sl|vp|tc|he|hc|wr|b6|sb|pk|tw|mn|dc|lb|kn|hl|cs|bw)-[a-z0-9]{10}$/;
+export const TABLE_ID_RE = /^(bj|rl|cr|bc|sl|vp|tc|he|hc|wr|b6|sb|pk|tw|mn|dc|lb|kn|hl|cs|bw|cf|wh|ca|dm|lr|pg|bg|pa)-[a-z0-9]{10}$/;
 
 /** Solo sessions are named by the server from the player's token, never by the client. */
 export function soloTableName(game: GameId, variant: string, accountId: number): string {

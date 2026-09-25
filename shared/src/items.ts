@@ -43,6 +43,7 @@ export const SHOP_ITEMS: readonly ShopItem[] = [
   { id: 'iced-cuban', kind: 'chain', name: 'Iced Cuban', price: 2_500_000 * DOLLAR, about: 'Cuban links in 18k, every link set with pavé diamonds.' },
   { id: 'dice-pendant', kind: 'chain', name: 'Diamond Dice', price: 5_000_000 * DOLLAR, about: 'A pair of pavé diamond dice with black pips, on a Cuban link.' },
   { id: 'ace-pendant', kind: 'chain', name: 'Ace of Spades', price: 5_000_000 * DOLLAR, about: 'An 18k medallion with the ace in black enamel, ringed in diamonds.' },
+  { id: 'billionaire-chain', kind: 'chain', name: 'The Billionaire', price: 1_000_000_000 * DOLLAR, about: 'Solid gold rope as thick as a thumb, a diamond B the size of a fist.' },
   // grills
   { id: 'gold-top-six', kind: 'grill', name: 'Gold Top Six', price: 150_000 * DOLLAR, about: 'Six 14k caps across the top front teeth.' },
   { id: 'full-gold', kind: 'grill', name: 'Full Gold', price: 400_000 * DOLLAR, about: 'Top and bottom rows in solid 18k.' },
@@ -56,6 +57,7 @@ export const SHOP_ITEMS: readonly ShopItem[] = [
   { id: 'sequin-suit', kind: 'clothes', name: 'Sequin Suit', price: 900_000 * DOLLAR, about: 'Silver sequins from lapel to cuff. A stage suit.' },
   { id: 'fur-coat', kind: 'clothes', name: 'Fur Coat', price: 1_250_000 * DOLLAR, about: 'Long cream fur, worn open over black.' },
   { id: 'diamond-suit', kind: 'clothes', name: 'Diamond-Studded Suit', price: 10_000_000 * DOLLAR, about: 'Black wool with thousands of diamonds sewn into it.' },
+  { id: 'emperor-robe', kind: 'clothes', name: "Emperor's Robe", price: 1_500_000_000 * DOLLAR, about: 'Purple velvet, ermine trim, gold thread, rubies down the front.' },
   // watches, shades and hats
   { id: 'gold-watch', kind: 'watch', name: 'Gold Dress Watch', price: 85_000 * DOLLAR, about: '18k case and bracelet, champagne dial.' },
   { id: 'iced-watch', kind: 'watch', name: 'Iced Watch', price: 450_000 * DOLLAR, about: 'Diamond bezel, diamond bracelet, white gold.' },
@@ -69,11 +71,13 @@ export const SHOP_ITEMS: readonly ShopItem[] = [
   { id: 'top-hat', kind: 'hat', name: 'Top Hat', price: 90_000 * DOLLAR, about: 'Black silk plush, a satin band.' },
   { id: 'cowboy-hat', kind: 'hat', name: 'Cowboy Hat', price: 70_000 * DOLLAR, about: 'Silverbelly felt, a cattleman crease.' },
   { id: 'gold-crown', kind: 'hat', name: 'Gold Crown', price: 3_000_000 * DOLLAR, about: 'Solid 22k gold, eight points, set with rubies.' },
+  { id: 'imperial-crown', kind: 'hat', name: 'Imperial Crown', price: 5_000_000_000 * DOLLAR, about: 'Platinum arches, 2,868 diamonds, a sapphire the size of an egg.' },
   // rides: worn like the rest, and you ride it about the floor (faster than walking)
   { id: 'skateboard', kind: 'ride', name: 'Skateboard', price: 60_000 * DOLLAR, about: 'Maple deck, black grip, red wheels.' },
   { id: 'e-scooter', kind: 'ride', name: 'Electric Scooter', price: 120_000 * DOLLAR, about: 'Folding aluminium frame, a quiet hub motor.' },
   { id: 'hoverboard', kind: 'ride', name: 'Hoverboard', price: 250_000 * DOLLAR, about: 'Floats a hand above the carpet on a blue glow.' },
   { id: 'segway', kind: 'ride', name: 'Segway', price: 400_000 * DOLLAR, about: 'Two wheels, a handlebar, and perfect balance.' },
+  { id: 'hover-throne', kind: 'ride', name: 'Hover Throne', price: 2_500_000_000 * DOLLAR, about: 'A gold throne on red velvet that floats you about the floor.' },
   // rewards: never sold (feats.ts gives them)
   { id: 'twentyone-pendant', kind: 'chain', name: 'Twenty-One Pendant', price: 1_000_000 * DOLLAR, about: 'An ace and a jack in enamel on gold, for a blackjack hand.', reward: true },
   { id: 'royal-pendant', kind: 'chain', name: 'Royal Flush Pendant', price: 4_000_000 * DOLLAR, about: 'Five spades fanned in gold, for a royal flush.', reward: true },
@@ -213,6 +217,7 @@ export const EFFECTS: readonly EffectItem[] = [
   { id: 'fx-disco', name: 'Disco Night', price: 100_000 * DOLLAR, about: 'A mirror ball comes down and the room goes disco.', secs: 60, reach: 'room' },
   { id: 'fx-marquee', name: 'Headline', price: 250_000 * DOLLAR, about: 'Your name up on the LED sign over the pit.', secs: 120, reach: 'casino' },
   { id: 'fx-goldenhour', name: 'Golden Hour', price: 1_000_000 * DOLLAR, about: 'Gold light and falling gold coins in every room.', secs: 30, reach: 'casino' },
+  { id: 'fx-takeover', name: 'Own the Night', price: 1_000_000_000 * DOLLAR, about: 'Your name on every sign and screen, fireworks and gold in every room.', secs: 60, reach: 'casino' },
 ];
 
 const FX_BY_ID = new Map(EFFECTS.map((i) => [i.id, i]));
