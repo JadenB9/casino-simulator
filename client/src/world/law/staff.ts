@@ -69,7 +69,7 @@ export class LawStaff {
       gear.push(hangOn(person, 'Head', earpiece(), (at) => at.add(new THREE.Vector3(-0.078, 0.07, 0.0))));
       gear.push(hangOn(person, 'Wrist.L', tablet(), (at) => at.add(new THREE.Vector3(0.035, -0.12, 0.03))));
     } else {
-      gear.push(hangOn(person, 'Head', guardCap(), (at) => at.add(new THREE.Vector3(0, 0.205, 0.005))));
+      gear.push(hangOn(person, 'Head', guardCap(), (at) => at.add(new THREE.Vector3(0, 0.222, 0.005))));
       gear.push(hangOn(person, 'Chest', radio(), (at) => at.add(new THREE.Vector3(0.1, 0.1, 0.125)), new THREE.Euler(-0.15, 0, 0)));
     }
     const m: StaffMember = { id, kind, person, gear, yaw: post?.yaw ?? 0, post };

@@ -58,12 +58,21 @@ const BOARD = { x: 189.2, y: 2.25, w: 3.2, h: 1.8 };
 
 /** How much light a face gets, by the way it faces: from above, and a little more from +x and +z. */
 function faceLight(nx: number, ny: number, nz: number): number {
-  return 0.66 + 0.34 * Math.max(0, ny) - 0.2 * Math.max(0, -ny) + 0.08 * nx + 0.1 * nz;
+  return 0.66 + 0.34 * Math.max(0, ny) + 0.06 * Math.max(0, -ny) + 0.08 * nx + 0.1 * nz;
 }
 
+/**
+ * Merged, vertex-lit geometry drawn with one texture, laid on in world space: a face takes the
+ * texture across its own plane, one repeat every `repeat` metres, so blocks line up across walls.
+ */
 class Solid {
   private readonly parts: THREE.BufferGeometry[] = [];
   private readonly _c = new THREE.Color();
+
+  constructor(
+    private readonly name: string,
+    private readonly repeat: number,
+  ) {}
 
   /**
    * Add a geometry (already placed) in one colour. `lit`: bake light by facing and height;
@@ -76,8 +85,15 @@ class Solid {
     const pos = geo.getAttribute('position');
     const nor = geo.getAttribute('normal');
     const col = new Float32Array(pos.count * 3);
+    const uv = new Float32Array(pos.count * 2);
     const base = this._c.set(hex);
     for (let i = 0; i < pos.count; i++) {
+      const ax = Math.abs(nor.getX(i));
+      const ay = Math.abs(nor.getY(i));
+      const az = Math.abs(nor.getZ(i));
+      const [u, v] = ay >= ax && ay >= az ? [pos.getX(i), pos.getZ(i)] : ax >= az ? [pos.getZ(i), pos.getY(i)] : [pos.getX(i), pos.getY(i)];
+      uv[i * 2] = u / this.repeat;
+      uv[i * 2 + 1] = v / this.repeat;
       let k = 1;
       if (lit) {
         // darker toward the floor, as if the room's light fell off (and corners gathered dirt)
@@ -89,6 +105,7 @@ class Solid {
       col[i * 3 + 2] = base.b * k;
     }
     geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
     this.parts.push(geo);
   }
 
@@ -97,15 +114,101 @@ class Solid {
     this.add(new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0).translate((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2), hex, lit);
   }
 
-  build(): THREE.Mesh {
+  build(map: THREE.Texture): THREE.Mesh {
     const g = mergeGeometries(this.parts, false)!;
     for (const p of this.parts) p.dispose();
     g.computeBoundingSphere();
-    const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, name: 'jail' }));
-    m.name = 'jail-solid';
+    const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, map, name: this.name }));
+    m.name = this.name;
     return m;
   }
 }
+
+// --- the surfaces: painted concrete block, and cast concrete's grain -------------------------------
+
+function canvasTexture(draw: (g: CanvasRenderingContext2D, n: number) => void): THREE.CanvasTexture {
+  const n = 256;
+  const c = document.createElement('canvas');
+  c.width = n;
+  c.height = n;
+  draw(c.getContext('2d')!, n);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  return t;
+}
+
+/** A small deterministic generator, so the jail looks the same for everyone and every visit. */
+function rng(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = Math.imul(a ^ (a >>> 15), a | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** Painted block, 0.4 x 0.2 m in running bond: 0.8 m square per repeat (BLOCK_REPEAT). */
+function blockTexture(): THREE.CanvasTexture {
+  return canvasTexture((g, n) => {
+    const r = rng(11);
+    const rowH = n / 4;
+    const w = n / 2;
+    g.fillStyle = '#b7b4ad';
+    g.fillRect(0, 0, n, n);
+    for (let row = 0; row < 4; row++) {
+      const off = row % 2 ? w / 2 : 0;
+      for (let k = -1; k < 3; k++) {
+        const x = k * w + off;
+        const tone = 236 + Math.floor(r() * 14);
+        g.fillStyle = `rgb(${tone},${tone - 1},${tone - 4})`;
+        g.fillRect(x + 3, row * rowH + 3, w - 6, rowH - 6);
+      }
+    }
+    // the paint's orange peel
+    for (let i = 0; i < 2600; i++) {
+      const a = r() * 0.07;
+      g.fillStyle = r() < 0.5 ? `rgba(0,0,0,${a})` : `rgba(255,255,255,${a})`;
+      g.fillRect(r() * n, r() * n, 1 + r() * 2, 1 + r() * 2);
+    }
+  });
+}
+const BLOCK_REPEAT = 0.8;
+
+/** Cast concrete: a fine grain and a few soft blotches, 2 m per repeat. */
+function grainTexture(): THREE.CanvasTexture {
+  return canvasTexture((g, n) => {
+    const r = rng(5);
+    g.fillStyle = '#efefef';
+    g.fillRect(0, 0, n, n);
+    // everything drawn again a tile over wherever it crosses an edge, so the repeats meet unseen
+    const wrapped = (x: number, y: number, rad: number, paint: (x: number, y: number) => void) => {
+      for (const dx of [-n, 0, n]) for (const dy of [-n, 0, n]) if (x + dx + rad > 0 && x + dx - rad < n && y + dy + rad > 0 && y + dy - rad < n) paint(x + dx, y + dy);
+    };
+    for (let i = 0; i < 26; i++) {
+      const x = r() * n;
+      const y = r() * n;
+      const rad = 14 + r() * 36;
+      const a = 0.012 + r() * 0.03;
+      const tone = r() < 0.5 ? '0,0,0' : '255,255,255';
+      wrapped(x, y, rad, (px, py) => {
+        const grad = g.createRadialGradient(px, py, 0, px, py, rad);
+        grad.addColorStop(0, `rgba(${tone},${a})`);
+        grad.addColorStop(1, `rgba(${tone},0)`);
+        g.fillStyle = grad;
+        g.fillRect(px - rad, py - rad, rad * 2, rad * 2);
+      });
+    }
+    for (let i = 0; i < 5000; i++) {
+      const a = r() * 0.06;
+      g.fillStyle = r() < 0.55 ? `rgba(0,0,0,${a})` : `rgba(255,255,255,${a})`;
+      g.fillRect(r() * n, r() * n, 1, 1);
+    }
+  });
+}
+const GRAIN_REPEAT = 2;
 
 // --- colours -------------------------------------------------------------------------------------
 
@@ -329,13 +432,14 @@ export interface Jail {
 
 export function buildJail(opts: { quality: Quality; collider: Collider }): Jail {
   const col = opts.collider;
-  const s = new Solid();
+  const s = new Solid('jail-solid', GRAIN_REPEAT);
+  const blocks = new Solid('jail-blocks', BLOCK_REPEAT);
   const group = new THREE.Group();
   group.name = 'jail';
 
-  /** A wall: a box that the walker and the camera bump into. */
+  /** A wall: a box that the walker and the camera bump into; inside walls are painted block. */
   const wall = (x0: number, x1: number, z0: number, z1: number, y1: number, hex: string, y0 = 0) => {
-    s.box(x0, x1, y0, y1, z0, z1, hex);
+    (hex === C.inner ? blocks : s).box(x0, x1, y0, y1, z0, z1, hex);
     if (y0 < 1.8) col.box((x0 + x1) / 2, (z0 + z1) / 2, x1 - x0, z1 - z0, 0, y1, { cam: true });
   };
 
@@ -363,7 +467,7 @@ export function buildJail(opts: { quality: Quality; collider: Collider }): Jail 
   // the yard wall: with the day room behind it, a doorway through it
   wall(B.x0 + T, YARD_DOOR.x0, YARD_Z - 0.15, YARD_Z + 0.15, TOP, C.inner);
   wall(YARD_DOOR.x1, B.x1 - T, YARD_Z - 0.15, YARD_Z + 0.15, TOP, C.inner);
-  s.box(YARD_DOOR.x0, YARD_DOOR.x1, 2.6, TOP, YARD_Z - 0.15, YARD_Z + 0.15, C.inner);
+  blocks.box(YARD_DOOR.x0, YARD_DOOR.x1, 2.6, TOP, YARD_Z - 0.15, YARD_Z + 0.15, C.inner);
   // the hall's far wall (toward the cells) and the offices' walls on the bars' line
   wall(B.x0 + T, BARS_X - 0.15, -20.15, -19.85, CEIL, C.inner);
   wall(BARS_X - 0.15, BARS_X + 0.15, B.z0 + T, YARD_Z - 0.15, TOP, C.inner);
@@ -394,7 +498,7 @@ export function buildJail(opts: { quality: Quality; collider: Collider }): Jail 
 
   // --- the visitors' hall
   // the bars between the hall and the prison, a steel header over them
-  bars(s, col, 'x', BARS_X, -29.85, -20.15, 2.8);
+  bars(s, col, 'z', BARS_X, -29.85, -20.15, 2.8);
   s.box(BARS_X - 0.08, BARS_X + 0.08, 2.8, CEIL, -29.85, -20.15, C.header);
   // benches along the side walls, a yellow line not to cross
   bench(s, col, B.x0 + 0.9, -29.4, 2.4, 'x');
@@ -434,7 +538,7 @@ export function buildJail(opts: { quality: Quality; collider: Collider }): Jail 
   ]);
 
   // --- the cells
-  bars(s, col, 'z', CELLS_Z, BARS_X + 0.15, B.x1 - T, 2.6, (x) => CELL_X.slice(0, 5).some((c0) => x > c0 + 0.35 && x < c0 + 1.35));
+  bars(s, col, 'x', CELLS_Z, BARS_X + 0.15, B.x1 - T, 2.6, (x) => CELL_X.slice(0, 5).some((c0) => x > c0 + 0.35 && x < c0 + 1.35));
   s.box(BARS_X + 0.15, B.x1 - T, 2.6, CEIL, CELLS_Z - 0.08, CELLS_Z + 0.08, C.header);
   for (let i = 1; i < CELL_X.length - 1; i++) wall(CELL_X[i]! - 0.1, CELL_X[i]! + 0.1, CELLS_Z + 0.08, B.z1 - T, CEIL, C.inner);
   for (let i = 0; i < 5; i++) {
@@ -442,9 +546,7 @@ export function buildJail(opts: { quality: Quality; collider: Collider }): Jail 
     const c1 = CELL_X[i + 1]! - (i === 4 ? 0 : 0.1);
     cell(s, col, c0, c1, i);
     // the door, slid open behind the bars beside the doorway
-    bars(s, null, 'z', CELLS_Z - 0.12, c0 + 1.4, c0 + 2.4, 2.3);
-    // cell number over the door
-    s.box(c0 + 0.55, c0 + 1.15, 2.72, 2.95, CELLS_Z - 0.1, CELLS_Z - 0.09, C.white);
+    bars(s, null, 'x', CELLS_Z - 0.12, c0 + 1.4, c0 + 2.4, 2.3);
   }
 
   // --- the yard
@@ -473,7 +575,8 @@ export function buildJail(opts: { quality: Quality; collider: Collider }): Jail 
     group.add(anchor);
     const fp = mod.footprint;
     col.box(at.x, at.z, fp.width, fp.depth, 0, 1.0, { cam: false });
-    for (const seat of mod.seats(variant)) stool(s, at.x + seat.position[0], at.z + seat.position[2]);
+    // blackjack's players sit; Sic Bo's stand at the rail
+    if (g.game === 'blackjack') for (const seat of mod.seats(variant)) stool(s, at.x + seat.position[0], at.z + seat.position[2]);
     stations.push({
       id: g.station,
       game: g.game,
@@ -492,9 +595,14 @@ export function buildJail(opts: { quality: Quality; collider: Collider }): Jail 
   posts.push({ id: 'officer-booking', x: 175.1, z: -29.15, yaw: 0 });
   posts.push({ id: 'officer-yard', x: YARD_DOOR.x1 + 0.55, z: YARD_Z + 0.65, yaw: 0.35 });
 
-  const solid = s.build();
-  group.add(solid);
-  const signs = signMesh(SIGNS);
+  const grain = grainTexture();
+  const block = blockTexture();
+  const solid = s.build(grain);
+  const blockMesh = blocks.build(block);
+  group.add(solid, blockMesh);
+  // each cell's number over its door
+  const numbers: SignSpec[] = CELL_X.slice(0, 5).map((c0, i) => ({ text: String(i + 1), bg: '#dcd9d0', fg: '#1d211e', x: c0 + 0.85 + (i === 0 ? 0 : 0.1), y: 2.84, z: CELLS_Z - 0.09, w: 0.34, h: 0.26, face: '-z' }));
+  const signs = signMesh([...SIGNS, ...numbers]);
   group.add(signs.mesh);
   const board = new BailBoard();
   group.add(board.mesh);
@@ -505,8 +613,12 @@ export function buildJail(opts: { quality: Quality; collider: Collider }): Jail 
     board,
     posts,
     dispose() {
-      solid.geometry.dispose();
-      (solid.material as THREE.Material).dispose();
+      for (const m of [solid, blockMesh]) {
+        m.geometry.dispose();
+        (m.material as THREE.Material).dispose();
+      }
+      grain.dispose();
+      block.dispose();
       signs.mesh.geometry.dispose();
       (signs.mesh.material as THREE.Material).dispose();
       signs.texture.dispose();

@@ -42,7 +42,7 @@ function merged(parts: THREE.BufferGeometry[]): THREE.Mesh {
 
 /** A security guard's peaked cap: navy crown, black peak, a brass badge; centred on the crown of the head. */
 export function guardCap(): THREE.Mesh {
-  const crown = paint(new THREE.CylinderGeometry(0.118, 0.102, 0.075, 18, 1).translate(0, 0.02, 0), '#1a2030');
+  const crown = paint(new THREE.CylinderGeometry(0.128, 0.106, 0.085, 18, 1).translate(0, 0.025, 0), '#1c2438');
   const band = paint(new THREE.CylinderGeometry(0.104, 0.104, 0.028, 18, 1, true).translate(0, -0.012, 0), '#0c0e14');
   const peak = paint(new THREE.CylinderGeometry(0.1, 0.1, 0.01, 16, 1, false, -Math.PI / 2, Math.PI).scale(1, 1, 0.75).rotateX(-0.12).translate(0, -0.03, 0.07), '#0a0a0c');
   const badge = box(0.03, 0.024, 0.008, 0, 0.012, 0.113, '#c29a45');
