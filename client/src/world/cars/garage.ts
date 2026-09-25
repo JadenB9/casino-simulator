@@ -120,7 +120,7 @@ export class Garage {
     for (let i = 0; i < 6; i++) {
       const z = G.z0 + 3 + (i * (D - 6)) / 5;
       // a light strip let into the ceiling
-      basic.add('lamp', new THREE.BoxGeometry(W - 4, 0.012, 0.3).translate(cx, G.height - 0.124, z), '#fff4e2');
+      basic.add('glow', new THREE.BoxGeometry(W - 4, 0.012, 0.3).translate(cx, G.height - 0.124, z), '#fff4e2');
     }
     // the glass front: mullions every 2.4 m, the door's gap, its two leaves slid open
     const doorA = G.doorZ - G.doorW / 2;
@@ -200,7 +200,7 @@ export class Garage {
     const W = G.x1 - G.x0;
     const D = G.z1 - G.z0;
     tex.repeat.set(W / 2.4, D / 2.4);
-    const mat = new THREE.MeshStandardMaterial({ map: tex, emissiveMap: tex, emissive: '#ffffff', emissiveIntensity: 0.55, roughness: 0.32, metalness: 0, envMap: this.deps.env, envMapIntensity: 0.3 });
+    const mat = new THREE.MeshStandardMaterial({ map: tex, emissiveMap: tex, emissive: '#ffffff', emissiveIntensity: 0.55, roughness: 0.32, metalness: 0, envMap: this.deps.env, envMapIntensity: 0.14 });
     const floor = new THREE.Mesh(new THREE.PlaneGeometry(W, D).rotateX(-Math.PI / 2), mat);
     floor.position.set((G.x0 + G.x1) / 2, 0.015, (G.z0 + G.z1) / 2);
     this.group.add(floor);

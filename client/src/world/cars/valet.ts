@@ -44,7 +44,8 @@ class Rig {
     const kit = carKit(car);
     this.radius = kit.wheels[0]!.y;
     this.half = kit.width / 2;
-    for (const [m, gs] of bodyGeometries(car)) for (const g of gs) this.mesh(this.root, g, mats.get(m));
+    // driven: its lamps are on
+    for (const [m, gs] of bodyGeometries(car)) for (const g of gs) this.mesh(this.root, g, mats.get(m === 'lamp' ? 'glow' : m));
     const wheel = wheelGeometries(car);
     for (let i = 0; i < 4; i++) {
       const w = new THREE.Group();
@@ -134,7 +135,7 @@ export class Valet {
     for (const d of [-0.24, 0.24]) b.add('metal', new THREE.BoxGeometry(0.02, 0.76, 0.025).translate(x - 0.315, 0.55, z + d), brass);
     // a reading lamp on the desk
     b.add('metal', new THREE.CylinderGeometry(0.008, 0.008, 0.22, 6).translate(x + 0.2, 1.23, z + 0.18), brass);
-    b.add('lamp', new THREE.CylinderGeometry(0.06, 0.035, 0.05, 12).translate(x + 0.16, 1.34, z + 0.18), '#ffe7b8');
+    b.add('glow', new THREE.CylinderGeometry(0.06, 0.035, 0.05, 12).translate(x + 0.16, 1.34, z + 0.18), '#ffe7b8');
     // the key box: a cabinet on a post, rows of hooks
     const kx = x + 1.5;
     const kz = z + 0.9;

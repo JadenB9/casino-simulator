@@ -27,7 +27,7 @@ export const STREET_X = 158;
 
 /** The parking: two blocks either side of the porte-cochère, rows of stalls across them. */
 export const STALL_W = 2.5;
-export const STALL_D = 5.4;
+export const STALL_D = 5.6;
 export const BLOCKS = [
   { z0: 13, z1: 39.5, north: true },
   { z0: -39.5, z1: -13, north: false },
@@ -132,7 +132,7 @@ export function along(path: readonly Waypoint[], d: number): { x: number; z: num
     const len = Math.hypot(b.x - a.x, b.z - a.z);
     if (left <= len || i === path.length - 2) {
       const k = len > 0 ? Math.min(1, left / len) : 1;
-      return { x: a.x + (b.x - a.x) * k, z: a.z + (b.z - a.z) * k, yaw: Math.atan2(b.x - a.x, b.z - a.z), done: left >= len && i === path.length - 2 };
+      return { x: a.x + (b.x - a.x) * k, z: a.z + (b.z - a.z) * k, yaw: Math.atan2(b.x - a.x, b.z - a.z), done: left >= len - 1e-6 && i === path.length - 2 };
     }
     left -= len;
   }

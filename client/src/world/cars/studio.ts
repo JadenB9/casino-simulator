@@ -102,10 +102,10 @@ export class CarStudio {
       this.pivot.add(new THREE.Mesh(g, this.opts.mats.get(m)));
     }
     // light: a big soft key above, a rim from behind, a low fill; short reach, so nothing up on the floor
-    const key = new THREE.SpotLight('#fff3e4', 90, 16, 0.75, 0.8, 1.2);
-    key.position.set(2.5, 7.5, 4.5);
+    const key = new THREE.SpotLight('#fff3e4', 42, 18, 0.8, 0.85, 1.2);
+    key.position.set(3.5, 8, 5.5);
     key.target.position.set(0, 0.5, 0);
-    const rim = new THREE.SpotLight('#dfe8ff', 70, 16, 0.7, 0.8, 1.2);
+    const rim = new THREE.SpotLight('#dfe8ff', 40, 18, 0.7, 0.8, 1.2);
     rim.position.set(-4, 5, -6);
     rim.target.position.set(0, 0.6, 0);
     const fill = new THREE.PointLight('#f0e2cf', 10, 12, 1.4);
@@ -161,11 +161,12 @@ export class CarStudio {
     const half = Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2);
     const fracW = Math.max(0.2, (a.x1 - a.x0) / vw);
     const fracH = Math.max(0.2, (a.y1 - a.y0) / vh);
-    // fit the car's longest extent (it turns) across the free width, and its height up the free height
-    const needW = this.length * 1.05;
-    const dW = needW / (2 * half * (vw / vh) * fracW);
-    const dH = (this.height * 2.2) / (2 * half * fracH);
-    const d = Math.max(dW, dH, 4);
+    // the car turns: fit the circle it sweeps across the free width (measured at its near edge,
+    // half a length closer than the middle), and its height up the free height
+    const r = this.length / 2;
+    const dW = (2 * r * 1.08) / (2 * half * (vw / vh) * fracW) + r;
+    const dH = (this.height * 2.4) / (2 * half * fracH) + r;
+    const d = Math.max(dW, dH, 5);
     const cx = ((a.x0 + a.x1) / 2 / vw) * 2 - 1;
     const cy = -(((a.y0 + a.y1) / 2 / vh) * 2 - 1);
     const focus = this.group.position.clone().add(new THREE.Vector3(0, this.height * 0.42, 0));

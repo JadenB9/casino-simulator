@@ -15,12 +15,12 @@ import * as THREE from 'three';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { CAR_SPECS, type CarSpec } from './specs.ts';
 
-/** The materials a car is drawn with (materials.ts makes them). */
-export type CarMat = 'paint' | 'trim' | 'metal' | 'glass' | 'lamp' | 'gold';
-export const CAR_MATS: readonly CarMat[] = ['paint', 'trim', 'metal', 'glass', 'lamp', 'gold'];
+/** The materials a car is drawn with (materials.ts makes them); `glow` is a lamp switched on. */
+export type CarMat = 'paint' | 'trim' | 'metal' | 'glass' | 'lamp' | 'glow' | 'gold';
+export const CAR_MATS: readonly CarMat[] = ['paint', 'trim', 'metal', 'glass', 'lamp', 'glow', 'gold'];
 
 /** Where a piece goes: `paint` takes the car's colour; `accent` is paint that keeps its own (stripes). */
-type Part = Exclude<CarMat, 'gold'> | 'accent';
+type Part = Exclude<CarMat, 'gold' | 'glow'> | 'accent';
 
 /** The rounded edge, all round the body. */
 const B = 0.045;

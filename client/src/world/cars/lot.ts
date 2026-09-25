@@ -126,5 +126,5 @@ function lampPost(b: MatBatch, x: number, z: number, arm: 1 | -1): void {
   b.add('trim', new THREE.CylinderGeometry(0.2, 0.24, 0.3, 8).translate(x, 0.15, z), '#8b8a86');
   b.add('trim', new THREE.BoxGeometry(1.2, 0.08, 0.08).translate(x + arm * 0.6, 5.95, z), '#2d2f33');
   b.add('trim', new THREE.BoxGeometry(0.7, 0.12, 0.34).translate(x + arm * 1.15, 5.9, z), '#2d2f33');
-  b.add('lamp', new THREE.BoxGeometry(0.6, 0.02, 0.26).translate(x + arm * 1.15, 5.83, z), '#fff1d6');
+  b.add('glow', new THREE.BoxGeometry(0.6, 0.02, 0.26).translate(x + arm * 1.15, 5.83, z), '#fff1d6');
 }
