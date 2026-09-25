@@ -47,6 +47,15 @@ const PROUD: Record<string, number> = { LightBrown: 1.02 };
  */
 const TINT: Record<string, string> = { 'palm.glb': '#b4c09a' };
 
+/**
+ * A model's part lit from inside: the floor lamp's shade is plain white in the model, and in a dim
+ * lounge an unlit white drum reads as grey plastic; lit, it's warm cloth with the bulb behind it
+ * (under the bloom's threshold, so it doesn't haze).
+ */
+const LIT: Record<string, Record<string, () => THREE.Material>> = {
+  'lamp-floor.glb': { White: () => new THREE.MeshLambertMaterial({ color: '#f2e0c4', emissive: '#c08a48', side: THREE.DoubleSide }) },
+};
+
 /** Materials that should glow: lamp shades and bulbs. */
 const GLOWS: Record<string, THREE.Color> = {
   Light: hdr('#ffe2b0', 2.4),
@@ -283,7 +292,8 @@ export class Props {
           // where their edges still touch the part under them it never shows through
           const decal = glow || (PROUD[src.name] && file.startsWith('bottle'));
           const tint = TINT[file];
-          const material = glow ? new THREE.MeshBasicMaterial({ color: glow, map: src.map }) : decal || tint ? src.clone() : src;
+          const lit = LIT[file]?.[src.name];
+          const material = lit ? lit() : glow ? new THREE.MeshBasicMaterial({ color: glow, map: src.map }) : decal || tint ? src.clone() : src;
           if (tint) (material as THREE.MeshStandardMaterial).color.multiply(new THREE.Color(tint));
           if (decal) Object.assign(material, { polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4 });
           material.name = src.name;
