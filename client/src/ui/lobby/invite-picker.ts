@@ -152,8 +152,9 @@ export class InvitePicker {
         else {
           this.states.set(id, { kind: 'invited', until: this.opts.now() + INVITE_MS });
           names.push(this.asked.names.get(id) ?? '');
-          this.picked.delete(id);
         }
+        // answered either way: the row says how, and the next invite starts from nobody
+        this.picked.delete(id);
       }
     }
     this.say(sentSummary(msg, names.filter(Boolean)), false);

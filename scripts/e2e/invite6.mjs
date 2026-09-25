@@ -55,6 +55,12 @@ async function player(name) {
     await page.click('.menu-item >> nth=0');
   }
   await page.waitForSelector('.hud', { timeout: 20_000 });
+  // the day's first visit opens the daily bonus sheet over the floor: close it
+  if (await page.waitForSelector('.daily-sheet', { timeout: 8000 }).catch(() => null)) {
+    await page.waitForTimeout(500);
+    await page.keyboard.press('Escape');
+    await page.waitForSelector('.sheet-scrim', { state: 'detached', timeout: 5000 }).catch(() => {});
+  }
   const id = await page.evaluate(() => window.casino.session.profile.id);
   return { page, name, id };
 }
@@ -149,6 +155,9 @@ try {
   await c.page.waitForFunction(() => window.casino.app.table?.session.snapshot, null, { timeout: 20_000 });
   await c.page.evaluate(() => window.casino.app.table.session.link.buyIn(50_000));
   await c.page.waitForFunction(() => window.casino.app.table?.seated, null, { timeout: 15_000 });
+  // bought in from the script: put away the buy-in prompt the table opened on its own
+  const cancel = await c.page.waitForSelector('.modal .btn:has-text("Cancel")', { timeout: 3000 }).catch(() => null);
+  if (cancel) await cancel.click();
   const cBefore = await me(c);
   log(`${c.name} bought in at roulette: balance $${cBefore.balance / 100}, on tables $${cBefore.inPlay / 100}`);
 
