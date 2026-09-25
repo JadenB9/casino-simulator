@@ -59,38 +59,49 @@ interface Move {
   peer?: number;
   ref?: string;
   at: number;
+  /** Set on a batch's first row only: the batch's own random mark (see Lead). */
+  nonce?: string;
 }
 
 /**
- * A casino_bank row, written only `where` (SQL whose own values start at ?13). Its gain is what
+ * A batch's first row, as the rest of the batch finds it: its key and a random mark only this
+ * batch knows. A key alone isn't enough: a request running alongside can have written the same
+ * key (a retry of the same operation, a day's interest), and then this batch's first insert
+ * writes nothing while the row is there all the same.
+ */
+interface Lead {
+  id: string;
+  nonce: string;
+}
+
+const lead = (id: string): Lead => ({ id, nonce: crypto.randomUUID() });
+
+/** SQL: the batch's first row is there, and it's this batch's. */
+const ours = (id: number, nonce: number) => `EXISTS (SELECT 1 FROM casino_bank WHERE op_id = ?${id} AND nonce = ?${nonce})`;
+
+/**
+ * A casino_bank row, written only `where` (SQL whose own values start at ?14). Its gain is what
  * it moves in all, which the migration's bank_balanced check holds it to.
  */
 function journal(db: D1Database, m: Move, where: string, ...args: unknown[]): D1PreparedStatement {
   const [cash, saved, locked, cost] = [m.cash ?? 0, m.saved ?? 0, m.locked ?? 0, m.cost ?? 0];
   return db
     .prepare(
-      `INSERT INTO casino_bank (op_id, account_id, kind, cash, saved, locked, cost, units, gain, peer, ref, at)
-       SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12 WHERE ${where}`,
+      `INSERT INTO casino_bank (op_id, account_id, kind, cash, saved, locked, cost, units, gain, peer, ref, at, nonce)
+       SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13 WHERE ${where}`,
     )
-    .bind(m.opId, m.accountId, m.kind, cash, saved, locked, cost, m.units ?? 0, cash + saved + locked + cost, m.peer ?? null, m.ref ?? null, m.at, ...args);
+    .bind(m.opId, m.accountId, m.kind, cash, saved, locked, cost, m.units ?? 0, cash + saved + locked + cost, m.peer ?? null, m.ref ?? null, m.at, m.nonce ?? null, ...args);
 }
 
-const LED = `EXISTS (SELECT 1 FROM casino_bank WHERE op_id = ?13)`;
-
-/** A row that follows the batch's first (keyed `lead`). */
-function after(db: D1Database, m: Move, lead: string): D1PreparedStatement {
-  return journal(db, m, LED, lead);
-}
-
-/** The balance and banked moved by one operation, if its first row landed. */
-function moveMoney(db: D1Database, accountId: number, cash: Cents, banked: Cents, lead: string, now: number): D1PreparedStatement {
+/** The balance and banked moved by one operation, if this batch's first row landed. */
+function moveMoney(db: D1Database, accountId: number, cash: Cents, banked: Cents, l: Lead, now: number): D1PreparedStatement {
   return db
     .prepare(
       `UPDATE casino_accounts SET balance = balance + ?2, banked = banked + ?3, rev = rev + 1, last_seen = ?5
-        WHERE id = ?1 AND EXISTS (SELECT 1 FROM casino_bank WHERE op_id = ?4)
+        WHERE id = ?1 AND ${ours(4, 6)}
         RETURNING balance, in_play, rev, banked`,
     )
-    .bind(accountId, cash, banked, lead, now);
+    .bind(accountId, cash, banked, l.id, now, l.nonce);
 }
 
 type Ran = 'done' | 'dup' | 'raced' | 'short' | 'short-savings';
@@ -150,18 +161,20 @@ function dayRef(day: number): string {
   return new Date(day * DAY_MS).toISOString().slice(0, 10);
 }
 
-/** The interest rows, the money and the savings row after the batch's first row (`lead`). */
-function savingsTail(db: D1Database, accountId: number, lead: string, paid: InterestPayment[], state: SavingsState, moved: Cents, cash: Cents, now: number, skipFirst = false): D1PreparedStatement[] {
+/** The interest rows, the money and the savings row after the batch's first row, `l`. */
+function savingsTail(db: D1Database, accountId: number, l: Lead, since: number, paid: InterestPayment[], state: SavingsState, moved: Cents, cash: Cents, now: number, skipFirst = false): D1PreparedStatement[] {
   const interest = paid.reduce((s, p) => s + p.amount, 0);
   return [
-    ...paid.slice(skipFirst ? 1 : 0).map((p) => after(db, { opId: interestId(accountId, p.day), accountId, kind: 'interest', saved: p.amount, ref: dayRef(p.day), at: (p.day + 1) * DAY_MS }, lead)),
-    moveMoney(db, accountId, cash, moved + interest, lead, now),
+    ...paid
+      .slice(skipFirst ? 1 : 0)
+      .map((p) => journal(db, { opId: interestId(accountId, p.day), accountId, kind: 'interest', saved: p.amount, ref: dayRef(p.day), at: (p.day + 1) * DAY_MS }, ours(14, 15), l.id, l.nonce)),
+    moveMoney(db, accountId, cash, moved + interest, l, now),
     db
       .prepare(
         `UPDATE casino_savings SET balance = balance + ?2, accrued = ?3, frac = ?4, since = ?5, earned = earned + ?6
-          WHERE account_id = ?1 AND EXISTS (SELECT 1 FROM casino_bank WHERE op_id = ?7)`,
+          WHERE account_id = ?1 AND since = ?9 AND ${ours(7, 8)}`,
       )
-      .bind(accountId, moved + interest, state.accrued, state.frac, state.since, interest, lead),
+      .bind(accountId, moved + interest, state.accrued, state.frac, state.since, interest, l.id, l.nonce, since),
   ];
 }
 
@@ -176,10 +189,10 @@ export async function settleSavings(db: D1Database, accountId: number, now: numb
     const { state, paid } = accrue(row, now);
     if (paid.length === 0) return;
     const first = paid[0]!;
-    const lead = interestId(accountId, first.day);
+    const l = lead(interestId(accountId, first.day));
     const stmts = [
-      journal(db, { opId: lead, accountId, kind: 'interest', saved: first.amount, ref: dayRef(first.day), at: (first.day + 1) * DAY_MS }, `(SELECT since FROM casino_savings WHERE account_id = ?13) = ?14`, accountId, row.since),
-      ...savingsTail(db, accountId, lead, paid, state, 0, 0, now, true),
+      journal(db, { opId: l.id, nonce: l.nonce, accountId, kind: 'interest', saved: first.amount, ref: dayRef(first.day), at: (first.day + 1) * DAY_MS }, `(SELECT since FROM casino_savings WHERE account_id = ?14) = ?15`, accountId, row.since),
+      ...savingsTail(db, accountId, l, row.since, paid, state, 0, 0, now, true),
     ];
     const r = await run(db, stmts, async () => false);
     if (r === 'done') return;
@@ -198,9 +211,10 @@ export async function moveSavings(db: D1Database, accountId: number, op: string,
       return refuse(409, 'INSUFFICIENT_FUNDS', `Your savings hold ${formatMoney(state.balance)}.`);
     }
     const x = dir === 'in' ? amount : -amount;
+    const l = lead(opId);
     const stmts = [
-      journal(db, { opId, accountId, kind: dir === 'in' ? 'save' : 'unsave', cash: -x, saved: x, at: now }, `(SELECT since FROM casino_savings WHERE account_id = ?13) = ?14`, accountId, row!.since),
-      ...savingsTail(db, accountId, opId, paid, state, x, -x, now),
+      journal(db, { opId, nonce: l.nonce, accountId, kind: dir === 'in' ? 'save' : 'unsave', cash: -x, saved: x, at: now }, `(SELECT since FROM casino_savings WHERE account_id = ?14) = ?15`, accountId, row!.since),
+      ...savingsTail(db, accountId, l, row!.since, paid, state, x, -x, now),
     ];
     const r = await run(db, stmts, () => opLanded(db, opId));
     if (r === 'done') return null;
@@ -229,12 +243,13 @@ interface DepositRow {
 export async function openDeposit(db: D1Database, accountId: number, op: string, term: Term, amount: Cents, now: number): Promise<Refusal | null> {
   const opId = `bank:${accountId}:${op}`;
   const depId = `dep:${accountId}:${op}`;
+  const l = lead(opId);
   const stmts = [
     journal(
       db,
-      { opId, accountId, kind: 'lock', cash: -amount, locked: amount, ref: depId, at: now },
-      `(SELECT COALESCE(SUM(principal), 0) FROM casino_deposits WHERE account_id = ?13 AND closed_at IS NULL) + ?14 <= ?15
-       AND (SELECT COUNT(*) FROM casino_deposits WHERE account_id = ?13 AND closed_at IS NULL) < ?16`,
+      { opId, nonce: l.nonce, accountId, kind: 'lock', cash: -amount, locked: amount, ref: depId, at: now },
+      `(SELECT COALESCE(SUM(principal), 0) FROM casino_deposits WHERE account_id = ?14 AND closed_at IS NULL) + ?15 <= ?16
+       AND (SELECT COUNT(*) FROM casino_deposits WHERE account_id = ?14 AND closed_at IS NULL) < ?17`,
       accountId,
       amount,
       DEPOSIT_CAP,
@@ -243,10 +258,10 @@ export async function openDeposit(db: D1Database, accountId: number, op: string,
     db
       .prepare(
         `INSERT INTO casino_deposits (op_id, account_id, term, principal, interest, opened_at, matures_at)
-         SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7 WHERE EXISTS (SELECT 1 FROM casino_bank WHERE op_id = ?8)`,
+         SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7 WHERE ${ours(8, 9)}`,
       )
-      .bind(depId, accountId, term.id, amount, depositInterest(amount, term), now, now + term.ms, opId),
-    moveMoney(db, accountId, -amount, amount, opId, now),
+      .bind(depId, accountId, term.id, amount, depositInterest(amount, term), now, now + term.ms, l.id, l.nonce),
+    moveMoney(db, accountId, -amount, amount, l, now),
   ];
   const r = await run(db, stmts, () => opLanded(db, opId));
   if (r === 'done') return null;
@@ -268,20 +283,21 @@ export async function closeDeposit(db: D1Database, accountId: number, op: string
     if (!d) return refuse(404, 'NOT_FOUND', 'No such deposit.');
     if (d.closed_at !== null) return d.close_op === opId ? null : refuse(409, 'NOT_ELIGIBLE', 'That deposit is already closed.');
     const out = depositPayout({ principal: d.principal, interest: d.interest, maturesAt: d.matures_at }, now);
+    const l = lead(opId);
     const stmts = [
       journal(
         db,
-        { opId, accountId, kind: 'unlock', cash: out.paid, locked: -d.principal, ref: depId, at: now },
-        `EXISTS (SELECT 1 FROM casino_deposits WHERE op_id = ?13 AND account_id = ?14 AND closed_at IS NULL AND (matures_at <= ?15) = ?16)`,
+        { opId, nonce: l.nonce, accountId, kind: 'unlock', cash: out.paid, locked: -d.principal, ref: depId, at: now },
+        `EXISTS (SELECT 1 FROM casino_deposits WHERE op_id = ?14 AND account_id = ?15 AND closed_at IS NULL AND (matures_at <= ?16) = ?17)`,
         depId,
         accountId,
         now,
         out.matured ? 1 : 0,
       ),
       db
-        .prepare(`UPDATE casino_deposits SET closed_at = ?2, close_op = ?3, paid = ?4 WHERE op_id = ?1 AND EXISTS (SELECT 1 FROM casino_bank WHERE op_id = ?3)`)
-        .bind(depId, now, opId, out.paid),
-      moveMoney(db, accountId, out.paid, -d.principal, opId, now),
+        .prepare(`UPDATE casino_deposits SET closed_at = ?2, close_op = ?3, paid = ?4 WHERE op_id = ?1 AND ${ours(3, 5)}`)
+        .bind(depId, now, opId, out.paid, l.nonce),
+      moveMoney(db, accountId, out.paid, -d.principal, l, now),
     ];
     const r = await run(db, stmts, () => opLanded(db, opId));
     if (r === 'done') return null;
@@ -307,11 +323,12 @@ export async function buyFund(db: D1Database, secret: string, accountId: number,
   if (await opLanded(db, opId)) return sameOp(db, opId, ['buy']);
   const { step, price } = await priceNow(db, secret, now);
   const units = unitsFor(amount, price);
+  const l = lead(opId);
   const stmts = [
     journal(
       db,
-      { opId, accountId, kind: 'buy', cash: -amount, cost: amount, units, ref: `${step}:${price}`, at: now },
-      `COALESCE((SELECT cost FROM casino_holdings WHERE account_id = ?13 AND fund = ?14), 0) + ?15 <= ?16`,
+      { opId, nonce: l.nonce, accountId, kind: 'buy', cash: -amount, cost: amount, units, ref: `${step}:${price}`, at: now },
+      `COALESCE((SELECT cost FROM casino_holdings WHERE account_id = ?14 AND fund = ?15), 0) + ?16 <= ?17`,
       accountId,
       FUND_ID,
       amount,
@@ -320,11 +337,11 @@ export async function buyFund(db: D1Database, secret: string, accountId: number,
     db
       .prepare(
         `INSERT INTO casino_holdings (account_id, fund, units, cost)
-         SELECT ?1, ?2, ?3, ?4 WHERE EXISTS (SELECT 1 FROM casino_bank WHERE op_id = ?5)
+         SELECT ?1, ?2, ?3, ?4 WHERE ${ours(5, 6)}
          ON CONFLICT (account_id, fund) DO UPDATE SET units = units + excluded.units, cost = cost + excluded.cost`,
       )
-      .bind(accountId, FUND_ID, units, amount, opId),
-    moveMoney(db, accountId, -amount, amount, opId, now),
+      .bind(accountId, FUND_ID, units, amount, l.id, l.nonce),
+    moveMoney(db, accountId, -amount, amount, l, now),
   ];
   const r = await run(db, stmts, () => opLanded(db, opId));
   if (r === 'done') return null;
@@ -350,20 +367,21 @@ export async function sellFund(db: D1Database, secret: string, accountId: number
     }
     const proceeds = valueOf(units, price);
     const cost = costOf(units, h);
+    const l = lead(opId);
     const stmts = [
       journal(
         db,
-        { opId, accountId, kind: 'sell', cash: proceeds, cost: -cost, units: -units, ref: `${step}:${price}`, at: now },
-        `EXISTS (SELECT 1 FROM casino_holdings WHERE account_id = ?13 AND fund = ?14 AND units = ?15 AND cost = ?16)`,
+        { opId, nonce: l.nonce, accountId, kind: 'sell', cash: proceeds, cost: -cost, units: -units, ref: `${step}:${price}`, at: now },
+        `EXISTS (SELECT 1 FROM casino_holdings WHERE account_id = ?14 AND fund = ?15 AND units = ?16 AND cost = ?17)`,
         accountId,
         FUND_ID,
         h.units,
         h.cost,
       ),
       db
-        .prepare(`UPDATE casino_holdings SET units = units - ?3, cost = cost - ?4 WHERE account_id = ?1 AND fund = ?2 AND EXISTS (SELECT 1 FROM casino_bank WHERE op_id = ?5)`)
-        .bind(accountId, FUND_ID, units, cost, opId),
-      moveMoney(db, accountId, proceeds, -cost, opId, now),
+        .prepare(`UPDATE casino_holdings SET units = units - ?3, cost = cost - ?4 WHERE account_id = ?1 AND fund = ?2 AND ${ours(5, 6)}`)
+        .bind(accountId, FUND_ID, units, cost, l.id, l.nonce),
+      moveMoney(db, accountId, proceeds, -cost, l, now),
     ];
     const r = await run(db, stmts, () => opLanded(db, opId));
     if (r === 'done') return null;
@@ -462,7 +480,7 @@ export async function sendMoney(
       return refuse(409, 'LIMIT', `One player can receive ${formatMoney(SEND.pairCap)} from you in any 24 hours; ${formatMoney(Math.max(0, SEND.pairCap - pair))} is left for ${target.name}.`);
     }
     // Every rule again inside the batch, so two sends at once can't both fit under one limit.
-    const lead = db
+    const first = db
       .prepare(
         `INSERT INTO casino_transfers (op_id, from_id, to_id, amount, note, at)
          SELECT ?1, ?2, ?3, ?4, ?5, ?6 FROM casino_accounts s
@@ -474,15 +492,19 @@ export async function sendMoney(
                 - (SELECT COALESCE(SUM(amount), 0) FROM casino_transfers WHERE to_id = ?2 AND at > ?12) >= ?4`,
       )
       .bind(id, from.id, target.id, req.amount, req.note, now, now - SEND.newAccountMs, now - DAY_MS, SEND.dayCap, SEND.pairCap, now - SEND.houseHoldMs, now - SEND.giftHoldMs);
-    const sent = `EXISTS (SELECT 1 FROM casino_transfers WHERE op_id = ?13)`;
+    // The two sides follow the transfer row; their keys are the transfer's, so a request running
+    // alongside with the same op collides on them and nothing here lands twice.
+    const sent = `EXISTS (SELECT 1 FROM casino_transfers WHERE op_id = ?14)`;
+    const nonce = crypto.randomUUID();
+    const out: Lead = { id: `${id}:out`, nonce };
     const stmts = [
-      lead,
-      journal(db, { opId: `${id}:out`, accountId: from.id, kind: 'send', cash: -req.amount, peer: target.id, ref: id, at: now }, sent, id),
-      journal(db, { opId: `${id}:in`, accountId: target.id, kind: 'receive', cash: req.amount, peer: from.id, ref: id, at: now }, sent, id),
-      moveMoney(db, from.id, -req.amount, 0, `${id}:out`, now),
+      first,
+      journal(db, { opId: out.id, nonce, accountId: from.id, kind: 'send', cash: -req.amount, peer: target.id, ref: id, at: now }, sent, id),
+      journal(db, { opId: `${id}:in`, nonce, accountId: target.id, kind: 'receive', cash: req.amount, peer: from.id, ref: id, at: now }, sent, id),
+      moveMoney(db, from.id, -req.amount, 0, out, now),
       db
-        .prepare(`UPDATE casino_accounts SET balance = balance + ?2, rev = rev + 1 WHERE id = ?1 AND EXISTS (SELECT 1 FROM casino_bank WHERE op_id = ?3)`)
-        .bind(target.id, req.amount, `${id}:in`),
+        .prepare(`UPDATE casino_accounts SET balance = balance + ?2, rev = rev + 1 WHERE id = ?1 AND ${ours(3, 4)}`)
+        .bind(target.id, req.amount, `${id}:in`, nonce),
     ];
     const r = await run(db, stmts, () => opLanded(db, id, 'casino_transfers'));
     if (r === 'done') return { id, to: { id: target.id, name: target.name }, from: from.name, amount: req.amount, note: req.note, at: now };

@@ -62,6 +62,7 @@ CREATE TABLE IF NOT EXISTS casino_bank (
     peer        INTEGER REFERENCES casino_accounts(id),         -- the other player of a transfer
     ref         TEXT,                                           -- deposit id, transfer id, fund price, interest day
     at          INTEGER NOT NULL,                               -- unix ms
+    nonce       TEXT,                                           -- the writing batch's own mark (server/src/bank.ts Lead)
     CONSTRAINT bank_balanced CHECK (cash + saved + locked + cost = gain)
 ) WITHOUT ROWID;
 

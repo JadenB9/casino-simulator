@@ -110,6 +110,15 @@ every request).
 | GET | `/shop` | | `ShopResponse` | 401 |
 | POST | `/shop/buy` | `{ item, op }` | `BuyResponse` | 400 (op), 404 `NOT_FOUND`, 409 `INSUFFICIENT_FUNDS {balance, inPlay}`, 409 `NOT_ELIGIBLE` (already yours), 429 |
 | POST | `/bar/order` | `{ item, op }` | `OrderResponse` | 400 (op), 404 `NOT_FOUND`, 409 `INSUFFICIENT_FUNDS {balance, inPlay}`, 429 |
+| GET | `/bank` | | `BankState` | 401 |
+| GET | `/bank/market?range=1d\|7d\|30d` | | `MarketResponse` | 401 |
+| GET | `/bank/statement?before=` | | `StatementResponse` | 401 |
+| POST | `/bank/savings` | `{ op, dir: 'in'\|'out', amount }` | `{ state: BankState }` | 400, 409 `INSUFFICIENT_FUNDS`, 409 `BUSY`, 429 |
+| POST | `/bank/deposit` | `{ op, term: '1h'\|'24h'\|'7d', amount }` | `{ state }` | 400, 409 `INSUFFICIENT_FUNDS`, 409 `LIMIT`, 429 |
+| POST | `/bank/deposit/close` | `{ op, id }` | `{ state }` | 404, 409 `NOT_ELIGIBLE` (closed), 429 |
+| POST | `/bank/fund` | `{ op, side: 'buy', amount }` or `{ op, side: 'sell', amount \| all: true }` | `{ state }` | 400, 409 `INSUFFICIENT_FUNDS`, 409 `LIMIT`, 409 `NOT_ELIGIBLE` (nothing held), 429 |
+| POST | `/bank/send` | `{ op, to, amount, note?, confirm? }` | `{ state }` | 400, 404 (no such player), 409 `NOT_ELIGIBLE`, 409 `LIMIT`, 409 `INSUFFICIENT_FUNDS`, 429 |
+| POST | `/bank/seen` | `{ at }` | `{ ok }` | 400 |
 | GET | `/health` | | `ok` | |
 
 **Logging in.** Names are first come, first served (3-16 of `A-Z a-z 0-9 _`, any case the same
@@ -211,6 +220,43 @@ On the dev stack only (`CASINO_DEV` in `server/wrangler.toml`; production never 
 `POST /dev/celeb {celeb?}` starts a celebrity's visit a moment from now and `POST /dev/gift
 {spot?}` leaves a gift box at once, for the headless checks. Elsewhere both are `404`.
 
+**The private bank** (v6: `server/src/bank.ts`, `shared/src/bank.ts`, migration 0007). Amounts are
+cents. Every POST carries an `op` (8-40 of `A-Z a-z 0-9 _ -`) chosen by the client: a retry with the
+same op is the same operation, done once and answered with the bank as it stands; the same op for a
+different operation is `400`. 30 operations a minute per account, 10 transfers.
+- *Savings*: simple interest by the millisecond, 0.5% a day on the first $100,000 and 0.1% a day up
+  to $1,000,000, nothing above; exact to a fraction of a cent (carried, never rounded up) and paid in
+  at each midnight UTC, so asking often or moving money in and out earns nothing extra.
+- *Term deposits*: 1 hour at 0.015%, 24 hours at 0.4%, 7 days at 3.5%, fixed at opening and paid
+  with the principal at maturity; breaking one early pays the principal less 0.5% and no interest.
+  $100 at least, five open and $1,000,000 in all at most.
+- *The Casino Index*: one price for everyone, a step every five minutes (about +0.1% a day of drift,
+  about 2% a day of swing). Each step comes from an HMAC under the server's secret and is written only
+  once it's due, so no client can know the next price. Bought and sold at the price now, rounded down;
+  $10,000,000 at cost per player at most.
+- *Transfers* by name, with an optional one-line note (80 characters): from $1; $10,000 and up need
+  `confirm: true`; a new account waits a day; money from the house (the opening balance, top-ups,
+  bonuses, tips, gift boxes, feat cash) can't be sent for three days, money from other players for a
+  day; $250,000 per sender in any 24 hours and $100,000 to any one receiver; nothing from jail. The
+  receiver hears `bank.in` on the floor and finds it in `BankState.inbox` until `POST /bank/seen`.
+- *The cashier's top-up* (`/bank/loan`) counts savings, open deposits, the fund at today's price and
+  what you sent other players in the last three days as well as the balance and the tables.
+- The statement is every movement of the account's money (ledger, purchases, the bank), newest first,
+  40 a page, each with the balance after it; `next` is the cursor for the page after.
+- On the dev stack only, `POST /dev/bank/clock { ms }` runs this account's bank `ms` ahead.
+
+```ts
+type BankState = { now: number; balance: number; inPlay: number; rev: number; banked: number;
+                   savings: { balance: number; accrued: number; frac: number; since: number; earned: number };
+                   deposits: { id: string; term: TermId; principal: number; interest: number; openedAt: number;
+                               maturesAt: number; closedAt?: number; paid?: number }[];
+                   fund: { id: string; name: string; price: number /* ten-thousandths of a dollar */; step: number;
+                           dayAgo: number; units: number /* millionths */; cost: number; value: number };
+                   send: { sendable: number; held: number; sentToday: number; newUntil: number; jailed: boolean };
+                   inbox: { id: string; from: string; amount: number; note: string | null; at: number }[];
+                   worth: number; gain: number };
+```
+
 ## Socket tickets
 
 Sockets never carry the 30-day token. Right before each connection attempt the client asks for a
@@ -309,6 +355,7 @@ Server to client:
 | `emote` | `id, e` (to everyone on the floor, the sender included) |
 | `bigwins` | `list: BigWin[]` (newest first, at most 20), `today: WinsToday` (right after `hello`) |
 | `bigwin` | `...BigWin, today: WinsToday` (to everyone on the floor) |
+| `bank.in` | `id, from, amount, note, at` (to the receiver only: another player sent you money) |
 
 ```ts
 type PlayerInfo = { id: number; name: string; look: Look; x: number; z: number; r: number;

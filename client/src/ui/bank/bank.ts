@@ -508,6 +508,7 @@ export function openBank(deps: BankDeps): Closable {
         [no, yes],
         () => m.close(),
       );
+      m.root.parentElement?.classList.add('bank-over');
       no.addEventListener('click', () => m.close());
       yes.addEventListener('click', () => {
         m.close();
@@ -699,6 +700,7 @@ export function openBank(deps: BankDeps): Closable {
       const no = btn('Cancel', 'ghost');
       const who = to.input.value.trim();
       const m = modal('Confirm the transfer', [`${formatMoney(amount)} to ${who}${note.input.value.trim() ? `, "${note.input.value.trim()}"` : ''}. Transfers can't be taken back.`], [no, yes], () => m.close());
+      m.root.parentElement?.classList.add('bank-over');
       no.addEventListener('click', () => m.close());
       yes.addEventListener('click', () => {
         m.close();

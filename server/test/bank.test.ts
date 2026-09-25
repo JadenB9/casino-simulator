@@ -176,6 +176,7 @@ describe('savings', () => {
     expect(a.savings.balance).toBe(150_000 * DOLLAR + expected);
     expect(b.savings.balance).toBe(150_000 * DOLLAR + expected);
     expect(expected).toBeGreaterThan(130 * DOLLAR);
+    // and the money moved once: the identity below catches a second payment into the balance
     const rows = (await env.DB.prepare(`SELECT op_id, saved, gain, at FROM casino_bank WHERE account_id = ?1 AND kind = 'interest'`).bind(p.id).all<any>()).results;
     expect(rows).toEqual([{ op_id: `int:${p.id}:${midnight / DAY_MS - 1}`, saved: expected, gain: expected, at: midnight }]);
     await expectBalanced(p.id);
@@ -468,6 +469,46 @@ describe('transfers', () => {
     expect((await state(a)).send).toMatchObject({ jailed: true, sendable: 0 });
     await env.DB.prepare(`UPDATE casino_jail SET released_at = ?2 WHERE account_id = ?1`).bind(a.id, Date.now()).run();
     await ok(await send(a, b.name, 10 * DOLLAR));
+  });
+});
+
+describe('the same operation fired many times at once', () => {
+  const times = <T>(n: number, f: () => Promise<T>) => Promise.all(Array.from({ length: n }, f));
+
+  it('lands once, for every kind, with the identity after', async () => {
+    const [s, d, c, f, x, to] = await Promise.all(['burs', 'burd', 'burc', 'burf', 'burx', 'burto'].map((t) => veteran(t, 100_000 * DOLLAR)));
+    // savings (after a first move, so every copy races on the same `since`)
+    await ok(await save(s, 'in', 1_000 * DOLLAR));
+    const sid = op();
+    await times(8, () => save(s, 'in', 2_000 * DOLLAR, sid));
+    expect((await state(s)).savings.balance).toBe(3_000 * DOLLAR);
+    // a deposit opened, then closed early
+    const did = op();
+    await times(8, () => deposit(d, '7d', 90_000 * DOLLAR, did));
+    const dep = (await state(d)).deposits;
+    expect(dep.length).toBe(1);
+    const cid = op();
+    await times(8, () => closeDep(d, dep[0].id, cid));
+    expect((await acct(d.id)).balance).toBe(150_000 * DOLLAR - earlyFee(90_000 * DOLLAR));
+    // up to the cap: the first copy fills it, the rest would find it full
+    await win(c.id, 900_000 * DOLLAR);
+    await ok(await deposit(c, '7d', DEPOSIT_CAP - 50_000 * DOLLAR - 1 * DOLLAR));
+    const capId = op();
+    await times(8, () => deposit(c, '7d', 50_000 * DOLLAR, capId));
+    expect(await n(`SELECT COALESCE(SUM(principal), 0) AS n FROM casino_deposits WHERE account_id = ?1`, c.id)).toBe(DEPOSIT_CAP - 1 * DOLLAR);
+    // the fund: a buy, then a sale
+    const bid = op();
+    await times(8, () => buy(f, 20_000 * DOLLAR, bid));
+    expect((await state(f)).fund.cost).toBe(20_000 * DOLLAR);
+    const sellId = op();
+    await times(8, () => sell(f, { amount: 5_000 * DOLLAR }, sellId));
+    expect(await n(`SELECT COUNT(*) AS n FROM casino_bank WHERE account_id = ?1 AND kind = 'sell'`, f.id)).toBe(1);
+    // a transfer
+    const xid = op();
+    await times(8, () => send(x, to.name, 60_000 * DOLLAR, {}, xid));
+    expect((await acct(to.id)).balance).toBe(210_000 * DOLLAR);
+    for (const p of [s, d, c, f, x, to]) await expectBalanced(p.id);
+    await expectTransfersCancel();
   });
 });
 

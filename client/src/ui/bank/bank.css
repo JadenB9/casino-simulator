@@ -116,3 +116,6 @@
   .bank-line-amt { grid-column: 2; grid-row: 1; }
   .bank-line-bal { grid-column: 2; grid-row: 2; font-size: 13px; color: var(--ink-3); }
 }
+
+/* The bank's own questions (break a deposit, confirm a transfer) come up over the bank's sheet. */
+.scrim.bank-over { z-index: 36; }
