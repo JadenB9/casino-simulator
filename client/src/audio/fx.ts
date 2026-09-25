@@ -11,6 +11,7 @@
 //   disco      a four-on-the-floor groove for as long as it plays (muffled outside the room)
 //   marquee    a short brass fanfare
 //   golden     a harp's run up, a shimmer, and coins ringing as they land
+//   firework   a shell bursting under the ceiling and its stars crackling as they fall (Own the Night)
 
 import type { Sfx } from './sfx.ts';
 
@@ -311,6 +312,21 @@ export class FxSounds {
         o.done();
       }, 1200);
     };
+  }
+
+  /** A shell bursting at `at`: the boom, then its stars crackling on the way down. */
+  firework(at: At, level = 1): void {
+    const ctx = this.ready;
+    if (!ctx) return;
+    const o = this.out(ctx, at, 0.45 * level, 4);
+    const t = ctx.currentTime + 0.02;
+    this.thump(ctx, o.node, t, 80, 34, 0.5, 0.9);
+    this.hit(ctx, o.node, t, { f: 700, q: 0.5, decay: 0.3, level: 0.7 });
+    for (let i = 0; i < 26; i++) {
+      const c = t + 0.25 + Math.random() * Math.random() * 1.2;
+      this.hit(ctx, o.node, c, { f: 2000 + Math.random() * 5000, q: 2.5, decay: 0.012 + Math.random() * 0.02, level: 0.15 + Math.random() * 0.25 });
+    }
+    setTimeout(o.done, 2200);
   }
 
   // --- the instruments -------------------------------------------------------------------------

@@ -51,7 +51,7 @@ describe('when an effect plays', () => {
   });
 
   it('knows every effect in the catalogue and how far each reaches', () => {
-    expect(EFFECTS.map((e) => reachOf(e.id))).toEqual(['you', 'you', 'room', 'you', 'you', 'room', 'casino', 'casino']);
+    expect(EFFECTS.map((e) => reachOf(e.id))).toEqual(['you', 'you', 'room', 'you', 'you', 'room', 'casino', 'casino', 'casino']);
   });
 
   it('only plays events that make sense', () => {

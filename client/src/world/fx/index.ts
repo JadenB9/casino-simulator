@@ -7,7 +7,8 @@
 //
 //   fx-confetti    confetti.ts    fx-spotlight   spotlight.ts   fx-round      round.ts
 //   fx-rain        rain.ts        fx-sparklers   sparklers.ts   fx-disco      disco.ts
-//   fx-marquee     the pit's LED sign (marquee.ts headline)     fx-goldenhour golden.ts
+//   fx-marquee     headline.ts (the pit's LED sign)             fx-goldenhour golden.ts
+//   fx-takeover    takeover.ts (all of the Headline and Golden Hour, a gobo and fireworks)
 //
 // Each effect gets a group of its own, drawn only while the room it's in can be seen. Everything
 // an effect makes is let go when it ends; what they share (stock.ts) stays with the floor.
@@ -24,7 +25,7 @@ import type { Lighting } from '../lighting.ts';
 import type { Mats } from '../materials.ts';
 import type { FloorPlan } from '../layout.ts';
 import type { CharacterSource } from '../emotes.ts';
-import { marqueePlacement, type Marquee } from '../marquee.ts';
+import type { Marquee } from '../marquee.ts';
 import { FxBook, fxKey, phaseOf } from './timing.ts';
 import { fxRoom, seenFrom } from './scope.ts';
 import { FxCaption, captionOf } from './caption.ts';
@@ -37,6 +38,8 @@ import { rain } from './rain.ts';
 import { sparklers } from './sparklers.ts';
 import { disco, type Hanger } from './disco.ts';
 import { golden } from './golden.ts';
+import { headline } from './headline.ts';
+import { takeover } from './takeover.ts';
 import type { Effect, FxView, FxWorld } from './types.ts';
 import './fx.css';
 
@@ -258,6 +261,9 @@ export class FxPlayer {
         case 'fx-goldenhour':
           effect = golden(w, s, ev, late);
           break;
+        case 'fx-takeover':
+          effect = takeover(w, s, ev, late, () => this.marquee);
+          break;
       }
     } catch (err) {
       console.error(`effect ${ev.fx} failed to start`, err);
@@ -268,34 +274,4 @@ export class FxPlayer {
     }
     this.playing.set(fxKey(ev), { ev, effect, group, room: fxRoom(this.o.plan, ev)?.id ?? null });
   }
-}
-
-/** The Headline: the buyer's name on the pit's LED sign for as long as it plays, and a fanfare. */
-function headline(w: FxWorld, ev: FxEvent, late: boolean, sign: () => Marquee | null): Effect {
-  let up: Marquee | null = null;
-  let heard = late;
-  const at = marqueePlacement(w.plan);
-  return {
-    update(_dt, _t, left, view) {
-      const m = sign();
-      if (m !== up && left > 0) {
-        up?.headline(null);
-        m?.headline(ev.name, left);
-        up = m;
-      }
-      if (!heard) {
-        heard = true;
-        // loud in the pit where the sign hangs, a distant flourish everywhere else
-        w.sounds?.marquee({ x: at.x, y: 3.5, z: at.z }, view.here === 'pit' ? 1 : 0.5);
-      }
-      if (left <= 0) {
-        if (up?.headlining === ev.name) up.headline(null);
-        up = null;
-      }
-      return left > 0;
-    },
-    dispose() {
-      if (up?.headlining === ev.name) up.headline(null);
-    },
-  };
 }

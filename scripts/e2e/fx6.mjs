@@ -74,6 +74,7 @@ const PREVIEW = [
   { fx: 'fx-disco', ...PIT, when: [6, 14], wide: { cam: [9, 2.2, 1.8], look: [-2, 1.6, -5] } },
   { fx: 'fx-marquee', at: [0, 1.4], sign: true, when: [1.1, 3.6, 7.5] },
   { fx: 'fx-goldenhour', ...LOBBY, when: [4, 10] },
+  { fx: 'fx-takeover', ...LOBBY, when: [3, 8], wide: { cam: [0.4, 1.9, 13.8], look: [0, 1.2, 6.5] } },
 ];
 
 async function preview(quality) {

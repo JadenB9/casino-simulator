@@ -201,11 +201,14 @@ const SPARK_VERTEX = /* glsl */ `
   attribute vec3 aPos;
   attribute vec3 aVel;
   attribute float aHeat;
+  attribute vec3 aTint;
   uniform float uLen;
   uniform float uWidth;
   varying float vHeat;
   varying vec2 vQ;
+  varying vec3 vTint;
   void main() {
+    vTint = aTint;
     vec4 a = modelViewMatrix * vec4(aPos, 1.0);
     vec4 b = modelViewMatrix * vec4(aPos - aVel * uLen, 1.0);
     vec2 d = b.xy - a.xy;
@@ -228,10 +231,12 @@ const SPARK_FRAGMENT = /* glsl */ `
   uniform float uGain;
   varying float vHeat;
   varying vec2 vQ;
+  varying vec3 vTint;
   void main() {
     float across = 1.0 - abs(vQ.x);
     float m = across * across * (1.0 - vQ.y * 0.85);
-    vec3 c = mix(uCool, uHot, vHeat * vHeat) * uGain * m * smoothstep(0.0, 0.2, vHeat);
+    // hot white at birth, cooling to the spark's own colour
+    vec3 c = mix(uCool * vTint, uHot, vHeat * vHeat) * uGain * m * smoothstep(0.0, 0.2, vHeat);
     gl_FragColor = vec4(c, 1.0);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
@@ -246,6 +251,7 @@ export class Sparks {
   private readonly pos: THREE.InstancedBufferAttribute;
   private readonly vel: THREE.InstancedBufferAttribute;
   private readonly heat: THREE.InstancedBufferAttribute;
+  private readonly tint: THREE.InstancedBufferAttribute;
   private readonly age: Float32Array;
   private readonly life: Float32Array;
   readonly uniforms: { uLen: { value: number }; uWidth: { value: number }; uHot: { value: THREE.Color }; uCool: { value: THREE.Color }; uGain: { value: number } };
@@ -259,9 +265,11 @@ export class Sparks {
     this.pos = new THREE.InstancedBufferAttribute(new Float32Array(max * 3), 3).setUsage(THREE.DynamicDrawUsage);
     this.vel = new THREE.InstancedBufferAttribute(new Float32Array(max * 3), 3).setUsage(THREE.DynamicDrawUsage);
     this.heat = new THREE.InstancedBufferAttribute(new Float32Array(max), 1).setUsage(THREE.DynamicDrawUsage);
+    this.tint = new THREE.InstancedBufferAttribute(new Float32Array(max * 3).fill(1), 3).setUsage(THREE.DynamicDrawUsage);
     g.setAttribute('aPos', this.pos);
     g.setAttribute('aVel', this.vel);
     g.setAttribute('aHeat', this.heat);
+    g.setAttribute('aTint', this.tint);
     g.instanceCount = 0;
     this.geometry = g;
     this.age = new Float32Array(max);
@@ -289,11 +297,13 @@ export class Sparks {
     this.mesh.frustumCulled = false;
   }
 
-  spawn(x: number, y: number, z: number, vx: number, vy: number, vz: number, life: number): void {
+  /** A spark; `tint` colours it as it cools (white: the material's own colours). */
+  spawn(x: number, y: number, z: number, vx: number, vy: number, vz: number, life: number, tint?: THREE.Color): void {
     if (this.n >= this.max) return;
     const i = this.n++;
     (this.pos.array as Float32Array).set([x, y, z], i * 3);
     (this.vel.array as Float32Array).set([vx, vy, vz], i * 3);
+    (this.tint.array as Float32Array).set(tint ? [tint.r, tint.g, tint.b] : [1, 1, 1], i * 3);
     this.age[i] = 0;
     this.life[i] = life;
     (this.heat.array as Float32Array)[i] = 1;
@@ -337,6 +347,7 @@ export class Sparks {
     const v = this.vel.array as Float32Array;
     p.copyWithin(i * 3, j * 3, j * 3 + 3);
     v.copyWithin(i * 3, j * 3, j * 3 + 3);
+    (this.tint.array as Float32Array).copyWithin(i * 3, j * 3, j * 3 + 3);
     this.age[i] = this.age[j]!;
     this.life[i] = this.life[j]!;
     (this.heat.array as Float32Array)[i] = (this.heat.array as Float32Array)[j]!;
@@ -348,6 +359,7 @@ export class Sparks {
       [this.pos, 3],
       [this.vel, 3],
       [this.heat, 1],
+      [this.tint, 3],
     ] as const) {
       a.clearUpdateRanges();
       a.addUpdateRange(0, this.n * size);
