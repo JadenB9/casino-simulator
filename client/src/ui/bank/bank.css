@@ -21,6 +21,8 @@
 .bank-rail-item.has-news .bank-rail-label::after { content: ''; display: inline-block; width: 6px; height: 6px; margin-left: 8px; border-radius: 50%; background: var(--win); vertical-align: 2px; }
 
 .bank-main { min-width: 0; padding: 18px 24px 22px; overflow: auto; overscroll-behavior: contain; }
+.bank-loading { margin: 0 0 12px; }
+.bank-loading.err { color: var(--lose); }
 .bank-pane { display: grid; gap: 12px; align-content: start; }
 .bank-pane > .stats { margin: 0; }
 .bank-sub { margin-top: 4px; font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-3); }

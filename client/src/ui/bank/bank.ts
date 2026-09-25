@@ -221,17 +221,16 @@ export function openBank(deps: BankDeps): Closable {
   const main = el('div', 'bank-main');
   const wrap = el('div', 'bank-wrap');
   wrap.append(rail, main);
-  const loading = status();
+  // until the bank answers (a class of its own: the panes' lines are .bank-status)
+  const loading = el('p', 'bank-loading quiet', 'Opening your accounts.');
   sheet.body.append(wrap);
-  main.append(loading.root);
-  loading.show({ text: 'Opening your accounts.', kind: '' });
 
   const now = () => Date.now() + skew;
 
   const setState = (s: BankState) => {
     state = s;
     skew = s.now - Date.now();
-    loading.show(null);
+    loading.remove();
     const p = deps.session.profile;
     if (p && (p.balance !== s.balance || p.rev !== s.rev || p.bank?.worth !== s.worth || p.bank?.gain !== s.gain)) {
       deps.session.set({ ...p, balance: s.balance, inPlay: s.inPlay, rev: Math.max(p.rev, s.rev), bank: profileBank(s) });
@@ -251,7 +250,11 @@ export function openBank(deps: BankDeps): Closable {
     bank
       .bank()
       .then((s) => !sheet.closed && setState(s))
-      .catch((err) => !state && loading.show({ text: problemText(err), kind: 'err' }));
+      .catch((err) => {
+        if (state) return;
+        loading.textContent = problemText(err);
+        loading.classList.add('err');
+      });
 
   /** Run a bank operation from a button: the button waits, the pane's line says how it went. */
   const act = async (button: HTMLButtonElement, line: ReturnType<typeof status>, run: () => Promise<BankState>, done: (s: BankState) => string) => {
@@ -801,7 +804,7 @@ export function openBank(deps: BankDeps): Closable {
       if (state) pane.paint(state);
     }
     main.replaceChildren(pane.root);
-    if (!state) main.prepend(loading.root);
+    if (!state) main.prepend(loading);
     pane.shown?.();
   };
 

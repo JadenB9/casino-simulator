@@ -679,7 +679,7 @@ export async function bankApi(request: Request, env: Env, route: string, account
   if (route === 'dev/bank/clock') {
     if (env.CASINO_DEV !== '1') return fail(404, 'NOT_FOUND', 'Not here.', cors);
     const ms = body?.ms;
-    if (typeof ms !== 'number' || !Number.isSafeInteger(ms) || ms < 0 || ms > 60 * DAY_MS) return fail(400, 'BAD_REQUEST', 'ms: 0 to 60 days.', cors);
+    if (typeof ms !== 'number' || !Number.isSafeInteger(ms) || ms < 0 || ms > 400 * DAY_MS) return fail(400, 'BAD_REQUEST', 'ms: 0 to 400 days.', cors);
     await db
       .prepare(`INSERT INTO casino_tally (account_id, key, n) VALUES (?1, ?2, ?3) ON CONFLICT (account_id, key) DO UPDATE SET n = excluded.n`)
       .bind(a, CLOCK_KEY, ms)
