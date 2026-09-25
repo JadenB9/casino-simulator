@@ -90,7 +90,7 @@
 /* ---------------------------------------------------------------- the unlock card */
 
 /* Under the HUD's right-hand buttons (and a lobby's party panel), above the table's panels. */
-.ft-cards { position: fixed; top: calc(var(--below-party) + 6px); right: 16px; z-index: 41; display: grid; justify-items: end; }
+.ft-cards { position: fixed; top: calc(var(--below-party) + 6px); right: 16px; z-index: 24; display: grid; justify-items: end; }
 .ft-card { position: relative; display: flex; align-items: center; gap: 14px; width: min(360px, calc(100vw - 32px)); padding: 12px 18px 13px 16px; border-color: var(--line-strong); color: var(--ink); text-align: left; cursor: pointer; overflow: hidden; animation: ft-in 0.42s var(--ease); }
 .ft-card::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: linear-gradient(var(--brass-hi), var(--brass)); }
 .ft-card:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }

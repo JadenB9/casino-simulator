@@ -2,7 +2,8 @@
    the "on the floor" card at the right, the photo you get with a celebrity, and the camera flash.
    The house's look: glass panels, a brass edge, the serif for names. */
 
-.celeb-notices { position: fixed; top: calc(var(--below-hud) + 58px); left: 50%; transform: translateX(-50%); z-index: 41; display: grid; justify-items: center; width: max-content; max-width: calc(100vw - 32px); pointer-events: none; }
+/* v6 qa6: passing notices (these, the feed's big wins, feat cards) sit over the HUD and under the boutique (25), modals (30) and sheets (35) */
+.celeb-notices { position: fixed; top: calc(var(--below-hud) + 58px); left: 50%; transform: translateX(-50%); z-index: 24; display: grid; justify-items: center; width: max-content; max-width: calc(100vw - 32px); pointer-events: none; }
 .celeb-notice { position: relative; display: grid; gap: 2px; min-width: 280px; max-width: min(560px, calc(100vw - 32px)); padding: 9px 20px 10px 22px; border-color: var(--line-strong); overflow: hidden; animation: celeb-in 0.34s var(--ease); }
 .celeb-notice::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: linear-gradient(var(--brass-hi), var(--brass)); }
 .celeb-notice.out { opacity: 0; transform: translateY(-6px); transition: opacity 0.38s var(--ease), transform 0.38s var(--ease); }
