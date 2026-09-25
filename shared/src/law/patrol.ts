@@ -103,7 +103,7 @@ export const STAFF: readonly StaffSpec[] = [
     ],
   },
   {
-    // The front of house: the lobby, down the middle of the pit and along its open south half.
+    // The front of house: the lobby (round the fountain), down into the pit and along its open south half.
     id: 'g1',
     kind: 'guard',
     name: 'security',
@@ -112,12 +112,17 @@ export const STAFF: readonly StaffSpec[] = [
     range: 11,
     half: 0.95,
     route: [
-      { x: 0, z: 12.5, wait: 6, face: N, sweep: 0.7 },
+      { x: -1.4, z: 13.2, wait: 6, face: N, sweep: 0.7 },
+      { x: -2, z: 9.3 },
+      { x: -1.9, z: 6.4 },
+      { x: -1.5, z: 5.6 },
       { x: 0, z: -2, wait: 4, face: N, sweep: 0.6 },
       { x: -10, z: -6.5, wait: 6, face: E, sweep: 0.7 },
       { x: 10, z: -6.5, wait: 6, face: W, sweep: 0.7 },
-      { x: 6.7, z: -2.8 },
-      { x: 3.6, z: 2.6 },
+      { x: 6.7, z: -2.9 },
+      { x: -1.8, z: 8 },
+      { x: -2, z: 8.6 },
+      { x: -1.8, z: 12.8 },
     ],
   },
   {
@@ -178,7 +183,7 @@ export const STAFF: readonly StaffSpec[] = [
     ],
   },
   {
-    // The lobby's sides: the bank and the boutique.
+    // The lobby's sides: the bank and the boutique, between the fountain and the statues.
     id: 'g4',
     kind: 'guard',
     name: 'security',
@@ -187,12 +192,16 @@ export const STAFF: readonly StaffSpec[] = [
     range: 10,
     half: 0.95,
     route: [
-      { x: 0, z: 8, wait: 5, face: S, sweep: 0.8 },
-      { x: -3.4, z: 7.6 },
-      { x: -6.7, z: 8.7 },
+      { x: -1.4, z: 6.4, wait: 5, face: S, sweep: 0.8 },
+      { x: -6.7, z: 8.8 },
       { x: -12, z: 9.5, wait: 5, face: N, sweep: 0.7 },
-      { x: -2.6, z: 9.8 },
+      { x: -0.2, z: 11 },
+      { x: 6.2, z: 10.6 },
+      { x: 6.7, z: 10.1 },
       { x: 12, z: 9.5, wait: 5, face: N, sweep: 0.7 },
+      { x: 2.3, z: 8.4 },
+      { x: 1.3, z: 7.4 },
+      { x: 0.8, z: 7.1 },
     ],
   },
 ];

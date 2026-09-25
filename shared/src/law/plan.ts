@@ -8,7 +8,8 @@
 // whenever a room changes, for the rare case of being caught from next door.
 //
 // These are the room bounds of client/src/world/rooms.ts (the wall centre lines), in metres;
-// client/test/law-plan.test.ts fails if the two drift apart.
+// client/test/law-plan.test.ts fails if the two drift apart. (A room here the floor doesn't have
+// yet is fine as long as it overlaps none it does: the north wing, before it's built.)
 
 export interface Box {
   x0: number;
@@ -29,6 +30,10 @@ export const ROOMS: Readonly<Record<string, Box>> = {
   yard: { x0: -31, z0: 3, x1: -17, z1: 15 },
   bank: { x0: -17, z0: 3, x1: -7, z1: 15 },
   boutique: { x0: 7, z0: 3, x1: 17, z1: 15 },
+  // the north wing (v6 rooms6): the pachinko parlour, the card room, the bingo hall
+  parlour: { x0: -31, z0: -43, x1: -9, z1: -31 },
+  cardroom: { x0: -9, z0: -43, x1: 9, z1: -31 },
+  bingo: { x0: 9, z0: -43, x1: 31, z1: -31 },
 };
 
 /** The room (x, z) is in (metres), or null outside the building. On a wall line, the first listed wins. */

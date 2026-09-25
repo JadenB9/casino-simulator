@@ -51,6 +51,14 @@ async function enterAs(name) {
     await p.click('.menu-item >> nth=0');
   }
   await p.waitForSelector('.hud', { timeout: 30000 });
+  // anything that greets you on arrival (the daily bonus) is put away unclaimed: it holds the keyboard
+  await p.waitForTimeout(1500);
+  for (let i = 0; i < 3; i++) {
+    const held = await p.evaluate(async () => (await import('/casino/src/ui/keyboard.ts')).overlayCount());
+    if (!held) break;
+    await p.keyboard.press('Escape');
+    await p.waitForTimeout(400);
+  }
   await p.waitForTimeout(2500);
   await p.evaluate(() => {
     window.heard = [];

@@ -14,7 +14,12 @@ import { STAFF } from '../../shared/src/law/patrol.ts';
 describe('the law and the floor plan', () => {
   it('knows every room by its real bounds', () => {
     const real = Object.fromEntries(FLOOR_ROOMS.map((r) => [r.id, { x0: r.x0, z0: r.z0, x1: r.x1, z1: r.z1 }]));
-    expect(ROOMS).toEqual(real);
+    for (const [id, b] of Object.entries(real)) expect(ROOMS[id], id).toEqual(b);
+    // one the floor doesn't have yet overlaps none it does
+    for (const [id, b] of Object.entries(ROOMS)) {
+      if (real[id]) continue;
+      for (const r of Object.values(real)) expect(Math.min(b.x1, r.x1) - Math.max(b.x0, r.x0) > 0 && Math.min(b.z1, r.z1) - Math.max(b.z0, r.z0) > 0, id).toBe(false);
+    }
   });
 
   it('walks the staff only where people can walk', () => {
