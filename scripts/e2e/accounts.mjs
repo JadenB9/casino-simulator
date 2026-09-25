@@ -113,7 +113,7 @@ const selected = (p) => p.getAttribute('.menu-item.sel', 'data-id');
   await p.waitForTimeout(900);
   await shot(p, '07-profile');
   check('profile lists two loans', (await p.$$('.profile-sheet .loans tbody tr')).length === 2);
-  check('profile says Loans taken: 2', (await text(p, '.profile-side')).includes('Loans taken: 2'));
+  check('profile says Loans taken: 2', (await text(p, '.pf-lower')).includes('Loans taken: 2')); // qa6: stats6's lower row
   await p.context().close();
 }
 

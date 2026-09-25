@@ -38,6 +38,8 @@ async function open(url, { viewport = { width: 1280, height: 800 }, last = null 
     localStorage.setItem('casino.quality', 'low');
     if (n) localStorage.setItem('casino.lastName', n);
   }, last);
+  // qa6: the GPU's headless Chrome asks for /favicon.ico, which the dev server doesn't have
+  await ctx.route('**/favicon.ico', (r) => r.fulfill({ status: 204 }));
   const p = await ctx.newPage();
   // A refused login is an expected 401/429 on the network; anything else is an error.
   p.on('console', (m) => m.type() === 'error' && !/status of 40[01]|status of 429/.test(m.text()) && errors.push(`${url}: ${m.text()}`));
