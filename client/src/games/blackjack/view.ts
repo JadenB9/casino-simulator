@@ -35,6 +35,7 @@ import { SpotPicker } from '../multihand/picker.ts';
 import { glideTo, setSpotsInPlay } from '../multihand/frame.ts';
 import { oneAtATime } from '../multihand/turns.ts';
 import './blackjack.css';
+import { wave } from '../../app/comfort.ts';
 
 const SVG = 'http://www.w3.org/2000/svg';
 
@@ -764,7 +765,7 @@ export class BlackjackTable implements TableView {
 
   update(): void {
     // The lit circle breathes, so the hand being played is found at a glance.
-    this.litMat.opacity = 0.62 + 0.3 * Math.sin(performance.now() / 260);
+    this.litMat.opacity = 0.62 + 0.3 * wave(performance.now() / 260);
     const v = this.v;
     if (this.timerObj && v?.deadline) {
       const left = Math.max(0, v.deadline - serverNow());

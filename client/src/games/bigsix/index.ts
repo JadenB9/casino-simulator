@@ -31,6 +31,7 @@ import { WheelSpin, chooseEnding, angleFor, flapAngle, stopAt, TAU, SECTOR, G_TO
 import { LayoutChips, Pile, seatColor, CHIP_SCALE, type PileStyle } from './chips.ts';
 import { ClapperSound } from './sound.ts';
 import { History, Meters, Plaque, Tooltip, Clock, Players, type PlayerRow } from './hud.ts';
+import { calm, wave } from '../../app/comfort.ts';
 
 const FELT_Y = TOP_Y + 0.0007;
 const CHIP_Y = TOP_Y + 0.0009;
@@ -479,7 +480,10 @@ function mountBigSix(ctx: TableViewCtx): TableView {
     const now = performance.now();
     for (let k = 0; k < n; k++) {
       let on: number;
-      if (bulbMode === 'spin') {
+      if (calm()) {
+        // calm (app/comfort.ts): the marquee lit evenly, brighter while it spins and for a win
+        on = bulbMode === 'idle' ? 0.6 : 1;
+      } else if (bulbMode === 'spin') {
         // a pair of lit runs chasing round with the wheel
         const phase = ((theta / TAU) * 2 - k / n) * 2;
         on = Math.max(0, Math.cos(Math.PI * (phase - Math.round(phase)))) ** 6;
@@ -796,7 +800,7 @@ function mountBigSix(ctx: TableViewCtx): TableView {
       clapperSounds();
       lightBulbs();
       updateClock();
-      const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 260);
+      const pulse = 0.5 + 0.5 * wave(performance.now() / 260);
       if (winGroup.children.length) winMat.opacity = 0.2 + 0.12 * pulse;
       if (glow.visible) glow.material.opacity = 0.2 + 0.16 * pulse;
     },

@@ -202,6 +202,28 @@ when there's nothing to rank yet (no money, no win, no rounds). Names only: no a
 Each Worker isolate reads the boards from D1 at most once a minute and `age` says how old they
 are (ms); a player outside a top ten has their own place read once per such read.
 
+**The daily bonus** (`server/src/daily.ts`, `shared/src/celebs.ts`). `GET /daily` says where your
+streak stands; `POST /daily/claim` takes today's. Days are Las Vegas days. The first claim pays
+$2,500, then $5,000, $7,500, $10,000, $15,000, $20,000 and $50,000 on seven days in a row, and
+$50,000 every day after; a missed day starts again at $2,500. A claim is a `grant` in the ledger
+keyed `daily:<account>:<yyyy-mm-dd>`, so a second claim the same day (another tab, a retry, a race)
+is `409 NOT_ELIGIBLE` with the balance, never a second payment. 20 claims a minute per account.
+`met` counts the celebrities you've said hello to.
+
+```ts
+type DailyStatus = { day: string; streak: number; claimed: boolean;
+                     next: number;            // which of the seven days the next claim is (1-7)
+                     amount: number;          // what it pays: today's if unclaimed, else tomorrow's
+                     amounts: number[];       // the seven days' amounts, cents
+                     resetAt: number;         // server time the Las Vegas day ends
+                     met: Partial<Record<CelebId, number>> };
+type DailyClaimResponse = { amount: number; streak: number; balance: number; inPlay: number; rev: number; status: DailyStatus };
+```
+
+On the dev stack only (`CASINO_DEV` in `server/wrangler.toml`; production never sets it),
+`POST /dev/celeb {celeb?}` starts a celebrity's visit a moment from now and `POST /dev/gift
+{spot?}` leaves a gift box at once, for the headless checks. Elsewhere both are `404`.
+
 ## Socket tickets
 
 Sockets never carry the 30-day token. Right before each connection attempt the client asks for a
@@ -323,6 +345,40 @@ ball lands, the reels and any free games stop): clients hold the news until then
 the floor hears about a win before the winner sees it. The words in `what` come only from what
 the table showed everyone once the round was over: the bet that paid, a hand turned over to be
 paid, a machine's own display. A Hold'em pot won without a showdown is just "Took the pot".
+
+### Celebrities and the gift box
+
+Beside the messages above, the floor carries these (`shared/src/celebs.ts`, `server/src/floor/celebs.ts`).
+A visit is planned ahead (every 20 to 40 minutes while people are on the floor, 4 to 10 minutes
+after the floor fills up again) and told to everyone at once; clients draw the whole visit from
+it and the server clock: the route (`ROUTES`, walked at 1.1 m/s with its stops) is the same
+function on the server, which checks a player asking for a word is within 3.5 m of where it puts
+the celebrity at that moment. One tip per account per visit, $500 to $10,000 in hundreds (mostly
+under $2,000), a `grant` keyed `celeb:<account>:<visit>`. A gift box's place is only sent when it
+appears; the first to open it within 2.6 m keeps $1,000 to $5,000 (`gift:<box>`, one payment per
+box). Asking is limited to three in a burst, then one every two seconds (`SLOW`).
+
+| From the client | Fields |
+|---|---|
+| `celeb.talk` | `visit` (a word with the celebrity, for a tip) |
+| `gift.open` | `id` |
+
+| From the floor | Fields |
+|---|---|
+| `celebs` | `visit: Visit \| null, gift: GiftBox \| null` (right after `hello`) |
+| `celeb` | `visit: Visit` (a visit planned, or replacing one) |
+| `celeb.talk` | `visit, id, line` (to everyone: the celebrity turns to player `id` and says `lines.hello[line]`) |
+| `celeb.tip` | `visit, line, amount, balance, inPlay, rev, met` (to the one who asked: paid) |
+| `celeb.no` | `visit, code: 'FAR' \| 'MET' \| 'GONE' \| 'SLOW', msg` |
+| `gift` | `gift: GiftBox` (a box appears) |
+| `gift.gone` | `id, name` (found by `name`, or run out when null) |
+| `gift.won` | `id, amount, balance, inPlay, rev` (to the finder; asking again says it again) |
+| `gift.no` | `id, code, msg` |
+
+```ts
+type Visit = { id: number; celeb: CelebId; start: number; seed: number };   // id = start (ms)
+type GiftBox = { id: number; x: number; z: number; until: number };         // metres; id = when it was left
+```
 
 ## Table socket
 

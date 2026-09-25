@@ -16,6 +16,7 @@ import * as THREE from 'three';
 import type { TableStage } from './stage.ts';
 import type { Sfx } from '../audio/sfx.ts';
 import { el } from '../ui/kit.ts';
+import { calmScale, fewer, wave } from '../app/comfort.ts';
 
 export type Tier = 'nice' | 'big' | 'huge';
 
@@ -371,10 +372,10 @@ function rings(stage: TableStage, prints: Footprint[], tier: Tier, ms: number): 
     if (done) return;
     const t = performance.now() - start;
     if (t >= ms || !meshes.some((m) => m.parent)) return stop();
-    // In over a fifth of a second, a slow breath, out over the last half second.
+    // In over a fifth of a second, a slow breath (slower still when calm), out over the last half second.
     const fadeIn = Math.min(1, t / 220);
     const fadeOut = Math.min(1, (ms - t) / 550);
-    mats.solid.opacity = mats.outline.opacity = PEAK[tier] * fadeIn * fadeOut * (0.86 + 0.14 * Math.sin(t / 210));
+    mats.solid.opacity = mats.outline.opacity = PEAK[tier] * fadeIn * fadeOut * (0.86 + 0.14 * wave(t / 210));
     requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);
@@ -423,7 +424,9 @@ export function landing(at: THREE.Vector3, keepClear: Footprint[], random: () =>
  * down round the lit things, never on them, so the cards that made the moment stay readable.
  */
 function shower(stage: TableStage, at: THREE.Vector3, keepClear: Footprint[]): void {
-  const n = 28;
+  // calm (app/comfort.ts): a third as many, tumbling slowly
+  const n = fewer(28);
+  const tumble = calmScale(0.35);
   const geo = new THREE.CylinderGeometry(CHIP_R, CHIP_R, 0.0035, 20);
   const mat = new THREE.MeshStandardMaterial({ roughness: 0.45, metalness: 0.05, transparent: true });
   const mesh = new THREE.InstancedMesh(geo, mat, n);
@@ -440,7 +443,7 @@ function shower(stage: TableStage, at: THREE.Vector3, keepClear: Footprint[]): v
       p,
       v: new THREE.Vector3((tx - p.x) / t, vy, (tz - p.z) / t),
       spin: new THREE.Euler(Math.random() * 6, Math.random() * 6, Math.random() * 6),
-      w: new THREE.Vector3((Math.random() - 0.5) * 18, (Math.random() - 0.5) * 18, (Math.random() - 0.5) * 18),
+      w: new THREE.Vector3((Math.random() - 0.5) * 18, (Math.random() - 0.5) * 18, (Math.random() - 0.5) * 18).multiplyScalar(tumble),
       rest: false,
     };
   });

@@ -97,6 +97,9 @@ export const LIMITS: Partial<Record<GameId, LimitSpec>> = {
     max: { ratio: 2, ratioMax: 3, ceiling: 10_000 * D, step: D },
   },
   banditwheel: ONLINE(),
+  // v6 parlor6: a bingo card, a pachinko batch of 25 balls
+  bingo: ONLINE(),
+  pachinko: ONLINE(),
   plinko: ONLINE(),
   tower: ONLINE(),
   mines: ONLINE(),
