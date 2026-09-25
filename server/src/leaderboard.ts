@@ -12,7 +12,7 @@
 //            entries above you, through the index the query names (INDEXED BY, so a missing
 //            migration fails this route loudly instead of quietly scanning; leaderboard.test.ts
 //            checks the plans).
-//              richest              balance + in_play          idx_casino_accounts_worth
+//              richest              net worth (WORTH)          WORTH_INDEX
 //              biggestWin           a prefix of WIN_ROWS rows  idx_casino_stats_biggest_win
 //              won, lost, biggestLoss, streak, feats, today(Down), week(Down), and a game's
 //              won, lost, biggestLoss: one casino_tally key   idx_casino_tally_key_n
@@ -61,6 +61,16 @@ export const WIN_ROWS = LEADERBOARD_TOP * GAMES;
 
 const TALLY = 'casino_tally INDEXED BY idx_casino_tally_key_n';
 
+/**
+ * Net worth, spelled exactly as its expression index is (SQLite only uses the index for the same
+ * expression). When the bank's column lands (bank6's migration 0007: casino_accounts.banked and
+ * idx_casino_accounts_networth), these two become 'balance + in_play + banked' and that index.
+ */
+const WORTH = 'balance + in_play';
+const WORTH_INDEX = 'idx_casino_accounts_worth';
+/** The same, on a named row ("me.balance + me.in_play"). */
+const worthOf = (row: string) => WORTH.split(' + ').map((col) => `${row}.${col}`).join(' + ');
+
 /** One board read through an index: the top rows, and one player's value and how many are ahead. */
 const gameStats = (col: 'net' | 'biggest_win' | 'rounds', index: string, down = false) => ({
   top: `
@@ -76,15 +86,15 @@ const gameStats = (col: 'net' | 'biggest_win' | 'rounds', index: string, down = 
 
 export const SQL = {
   richestTop: `
-    SELECT id, balance + in_play AS v
-      FROM casino_accounts INDEXED BY idx_casino_accounts_worth
-     WHERE balance + in_play > 0
-     ORDER BY balance + in_play DESC, id
+    SELECT id, ${WORTH} AS v
+      FROM casino_accounts INDEXED BY ${WORTH_INDEX}
+     WHERE ${WORTH} > 0
+     ORDER BY ${WORTH} DESC, id
      LIMIT ?1`,
   richestPlace: `
-    SELECT me.balance + me.in_play AS v,
-           (SELECT COUNT(*) FROM casino_accounts AS o INDEXED BY idx_casino_accounts_worth
-             WHERE o.balance + o.in_play > me.balance + me.in_play) AS ahead
+    SELECT ${worthOf('me')} AS v,
+           (SELECT COUNT(*) FROM casino_accounts AS o INDEXED BY ${WORTH_INDEX}
+             WHERE ${worthOf('o')} > ${worthOf('me')}) AS ahead
       FROM casino_accounts AS me
      WHERE me.id = ?1`,
   biggestWinTop: `

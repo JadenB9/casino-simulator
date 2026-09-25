@@ -90,6 +90,7 @@ export async function statsOf(db: D1Database, accountId: number, now: number): P
   return {
     name: a.name,
     createdAt: a.created_at,
+    // net worth as the richest board ranks it (leaderboard.ts WORTH: + banked once the bank's column lands)
     worth: { balance: a.balance, inPlay: a.in_play, total: a.balance + a.in_play },
     total,
     games,

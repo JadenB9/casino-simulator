@@ -326,7 +326,7 @@ export function openProfile(deps: ProfileDeps): Closable {
     if (net.cls) netTile.value.classList.add(net.cls);
     const rate = stats && stats.total.counted > 0 ? formatRate(winRateBp(stats.total.wins, stats.total.counted)) : DASH;
     strip.append(
-      statTile('Net worth', formatMoney(p.balance + p.inPlay), 'lead').tile,
+      statTile('Net worth', formatMoney(stats?.worth.total ?? p.balance + p.inPlay), 'lead').tile,
       statTile('Balance', formatMoney(p.balance)).tile,
       statTile('On tables', formatMoney(p.inPlay)).tile,
       netTile.tile,
