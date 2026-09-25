@@ -7,6 +7,9 @@
 // celebrity at that moment. Each account gets one tip per visit, decided here: an amount rolled
 // within the band and a line to go with it, paid as a 'grant' keyed celeb:<account>:<visit>.
 //
+// Happy hour (shared/src/happyhour.ts) rides along: newcomers hear when the one going on or the
+// next is, and everyone hears the next when one is over.
+//
 // A gift box is different: where it is stays here until it appears (someone could otherwise wait
 // on the spot), and whoever opens it first keeps what's in it (gift:<box>, one payment per box
 // whoever asks).
@@ -23,9 +26,11 @@ import {
   type CelebClientMsg, type CelebId, type CelebNo, type CelebServerMsg, type GiftBox, type Visit,
 } from '../../../shared/src/celebs.ts';
 import type { Cents } from '../../../shared/src/money.ts';
+import { HAPPY_MS, nextHappyHour, type HappyHour } from '../../../shared/src/happyhour.ts';
 import { KeyedBuckets } from '../ratelimit.ts';
 import { fail, json, readJson } from '../http.ts';
 import { grant, tallyStatement } from '../daily.ts';
+import { startDevHappy } from '../happy.ts';
 
 /** A box whose moment passed this long ago with nobody here to see it is put off, not left late. */
 const GIFT_LATE_MS = 2 * 60_000;
@@ -74,6 +79,9 @@ export class Celebs {
   /** Payments on their way to D1, by op id: a second ask for the same one waits for it. */
   private readonly paying = new Map<string, Promise<void>>();
   private readonly random: () => number;
+  /** The happy hour the floor last told everyone about (the schedule's, or a dev one). */
+  private happy: HappyHour | null = null;
+  private devHappy: HappyHour | null = null;
 
   constructor(private readonly deps: CelebsDeps) {
     this.random = deps.random ?? Math.random;
@@ -133,14 +141,27 @@ export class Celebs {
       changed = true;
     }
     if (changed) this.save();
-    this.due = Math.min(s.visit ? visitEnd(s.visit) : now, s.gift ? s.gift.until : Infinity, s.giftAt ?? Infinity);
+    // happy hour: when one is over, everyone hears when the next is
+    const happy = this.happyAt(now);
+    if (!this.happy || happy.start !== this.happy.start) {
+      const told = this.happy !== null;
+      this.happy = happy;
+      if (told) this.deps.broadcast({ t: 'happy', happy });
+    }
+    this.due = Math.min(s.visit ? visitEnd(s.visit) : now, s.gift ? s.gift.until : Infinity, s.giftAt ?? Infinity, happy.end);
+  }
+
+  /** The happy hour going on, or next: a dev one while it lasts, else the schedule's. */
+  private happyAt(now: number): HappyHour {
+    const dev = this.devHappy && now < this.devHappy.end ? this.devHappy : null;
+    return dev ?? nextHappyHour(now);
   }
 
   /** Right after hello: the visit and the box, if any. */
   greet(ws: WebSocket, now: number): void {
     this.tick(now);
     const g = this.s.gift;
-    send(ws, { t: 'celebs', visit: this.s.visit, gift: g ? box(g) : null });
+    send(ws, { t: 'celebs', visit: this.s.visit, gift: g ? box(g) : null, happy: this.happyAt(now) });
   }
 
   /** A player asked for a word with the celebrity, or opened the box. */
@@ -158,7 +179,15 @@ export class Celebs {
    * The dev stack's trigger (never in production: see celebsDevApi): a visit starting in a
    * moment, or a box on the floor now, at a spot if given.
    */
-  force(kind: 'celeb' | 'gift', now: number, arg?: string | number): Visit | (GiftBox & { amount: Cents }) {
+  force(kind: 'celeb' | 'gift' | 'happy', now: number, arg?: string | number): Visit | (GiftBox & { amount: Cents }) | HappyHour {
+    if (kind === 'happy') {
+      // (the Worker prices orders from its own copy of this: happy.ts startDevHappy)
+      const end = typeof arg === 'number' ? arg : now;
+      this.devHappy = { start: now, end };
+      this.due = 0;
+      this.tick(now);
+      return this.devHappy;
+    }
     if (kind === 'celeb') {
       const c = celebOf(arg) ?? CELEBS[Math.floor(this.random() * CELEBS.length)]!;
       if (this.s.visit && now >= this.s.visit.start) {
@@ -315,13 +344,18 @@ function send(ws: WebSocket, msg: CelebServerMsg): void {
 }
 
 /**
- * POST /api/dev/celeb {celeb?} and POST /api/dev/gift {spot?}: a celebrity walks in, or a box is
- * left, right now. Only on the dev stack (CASINO_DEV in server/wrangler.toml, which production
+ * POST /api/dev/celeb {celeb?}, POST /api/dev/gift {spot?} and POST /api/dev/happy {ms?}: a
+ * celebrity walks in, a box is left, or happy hour starts, right now. Only on the dev stack (CASINO_DEV in server/wrangler.toml, which production
  * never sets), for the headless checks.
  */
-export async function celebsDevApi(request: Request, route: string, cors: Record<string, string>, floor: { celebDev(kind: 'celeb' | 'gift', arg?: string | number): Promise<unknown> | unknown }): Promise<Response> {
+export async function celebsDevApi(request: Request, env: Env, route: string, cors: Record<string, string>, floor: { celebDev(kind: 'celeb' | 'gift' | 'happy', arg?: string | number): Promise<unknown> | unknown }): Promise<Response> {
   if (request.method !== 'POST') return fail(404, 'NOT_FOUND', 'Not here.', cors);
-  const body = (await readJson(request)) as { celeb?: unknown; spot?: unknown } | null;
+  const body = (await readJson(request)) as { celeb?: unknown; spot?: unknown; ms?: unknown } | null;
+  // a happy hour from now: the Worker's price (a row every isolate reads) and the floor's news
+  if (route === 'dev/happy') {
+    const h = await startDevHappy(env.DB, Date.now(), typeof body?.ms === 'number' && body.ms > 0 ? Math.min(body.ms, HAPPY_MS) : HAPPY_MS);
+    return json({ happy: await floor.celebDev('happy', h.end) }, 200, cors);
+  }
   if (route === 'dev/celeb') return json({ visit: await floor.celebDev('celeb', typeof body?.celeb === 'string' ? body.celeb : undefined) }, 200, cors);
   if (route === 'dev/gift') return json({ gift: await floor.celebDev('gift', typeof body?.spot === 'number' ? body.spot : undefined) }, 200, cors);
   return fail(404, 'NOT_FOUND', 'Not here.', cors);
