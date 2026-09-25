@@ -145,9 +145,8 @@
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 @keyframes emote-out { to { opacity: 0; transform: translateY(-14px) scale(0.92); } }
-@media (prefers-reduced-motion: reduce) {
-  .emote-bubble { animation: emote-fade-in 0.2s both; }
-  .emote-bubble.leaving { animation: emote-out-still 0.4s ease-in forwards; }
-  @keyframes emote-fade-in { from { opacity: 0; } }
-  @keyframes emote-out-still { to { opacity: 0; } }
-}
+/* Reduce flashing & motion (app/comfort.ts) */
+body.calm .emote-bubble { animation: emote-fade-in 0.2s both; }
+body.calm .emote-bubble.leaving { animation: emote-out-still 0.4s ease-in forwards; }
+@keyframes emote-fade-in { from { opacity: 0; } }
+@keyframes emote-out-still { to { opacity: 0; } }

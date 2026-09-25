@@ -163,7 +163,7 @@ if (checks.includes('layout')) {
       const kind = mesh.name.split(':')[1];
       (byKind[kind] ??= []).push(mesh);
     }
-    const furPattern = (kind) => (['chair', 'plush', 'stool', 'velvet-stool'].includes(kind) ? /^chair-/ : kind === 'directory' ? /-directory-/ : new RegExp(`-${kind}-\\d+$`));
+    const furPattern = (kind) => (['chair', 'plush', 'stool', 'velvet-stool', 'folding', 'parlour-stool'].includes(kind) ? /^chair-/ : kind === 'directory' ? /-directory-/ : new RegExp(`-${kind}-\\d+$`));
     for (const [kind, meshes] of Object.entries(byKind)) audit(`furniture ${kind}`, meshes, furPattern(kind), meshes[0].count);
     // stations: the model inside its footprint (in the station's own frame) and under its height
     const stations = [];

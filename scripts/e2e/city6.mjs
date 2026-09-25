@@ -3,6 +3,9 @@
 //   dev    (dev floor, no server) each zone from its natural views on High and Low with its draw
 //          calls; a ride from the casino's lobby to the roof and back played through (the doors
 //          close, the dark counts the floors, the doors open on the other zone)
+//   zfight (dev floor) every face of both zones and the casino's elevator through zfight.ts: no two
+//          differently dressed faces in one plane where anyone can look (props' own models listed)
+//   phone  (dev floor, a phone) the action button in the car opens the panel; a tap on a floor rides
 //   game   logged in, two players: A walks up to the casino's elevator, calls it, steps in, E opens
 //          the panel, G rides down; B, still in the casino, stops drawing A. A walks out through
 //          the valet lobby's doors to the valet stand, over the drive and the plaza, across the
@@ -19,7 +22,7 @@ import { execFileSync } from 'node:child_process';
 
 const [port = '6350', out = '/tmp/city6', ...wanted] = process.argv.slice(2);
 mkdirSync(out, { recursive: true });
-const checks = wanted.length ? wanted : ['dev', 'game'];
+const checks = wanted.length ? wanted : ['dev', 'zfight', 'phone', 'game'];
 const gpu = process.env.GPU === '1';
 const browser = await chromium.launch(gpu ? { channel: 'chromium', args: ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'] } : { args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 let failed = 0;
@@ -62,8 +65,11 @@ const camera = (p, pose) =>
     });
   }, pose);
 
-/** Wait for a ride to finish (the doors open on the other floor), up to `ms`. */
-const ridden = (p, ms = 15000) => p.waitForFunction(() => !window.casino.world.city.riding, null, { timeout: ms });
+/** Wait for a ride to start (if it hasn't) and finish (the doors open on the other floor), up to `ms`. */
+async function ridden(p, ms = 15000) {
+  await p.waitForFunction(() => window.casino.world.city.riding || window.casino.world.city.lastRide, null, { timeout: 4000 });
+  await p.waitForFunction(() => !window.casino.world.city.riding, null, { timeout: ms });
+}
 
 /** Walk to (x, z) the way the floor allows (a few metres a second), facing `yaw` at the end. */
 async function travelTo(p, x, z, yaw) {
@@ -147,6 +153,7 @@ if (checks.includes('dev')) {
     await p.evaluate(() => window.casino.world.teleport(-112.05, 0.95, -Math.PI / 2));
     await frames(p, 10);
     const went = await p.evaluate(() => window.casino.world.city.go('casino'));
+    await p.evaluate(() => (window.casino.world.city.lastRide = null));
     ok(went, `${quality}: the roof's car takes a ride`);
     await p.waitForTimeout(900);
     await shot(p, `${quality}-ride-closing`);
@@ -170,6 +177,142 @@ if (checks.includes('dev')) {
     if (errors.length) fail(`${quality} dev floor errors: ${errors.slice(0, 4).join(' | ')}`);
     await ctx.close();
   }
+}
+
+// --- z-fighting --------------------------------------------------------------------------------------
+
+if (checks.includes('zfight')) {
+  const { p, ctx, errors } = await devFloor('high');
+  for (const zone of ['ground', 'roof', 'casino']) {
+    const r = await p.evaluate(async (zone) => {
+      const Z = await import('/casino/src/world/zfight.ts');
+      const { THREE, world, engine } = window.casino;
+      const city = world.city;
+      if (zone !== 'casino') await city.prepare(zone);
+      engine.scene.updateMatrixWorld(true);
+      const surfaces = [];
+      const m = new THREE.Matrix4();
+      const w = new THREE.Matrix4();
+      const v = new THREE.Vector3();
+      const matName = (mat) => mat.name || mat.type;
+      const push = (name, mat, geo, matrix, group) => {
+        const pos = geo.attributes.position;
+        if (!pos) return;
+        const idx = geo.index;
+        const start = group ? group.start : 0;
+        const count = group ? group.count : idx ? idx.count : pos.count;
+        const out = new Float32Array(Math.floor(count / 3) * 9);
+        for (let k = 0; k < Math.floor(count / 3) * 3; k++) {
+          const i = idx ? idx.getX(start + k) : start + k;
+          v.fromBufferAttribute(pos, i).applyMatrix4(matrix);
+          out[k * 3] = v.x;
+          out[k * 3 + 1] = v.y;
+          out[k * 3 + 2] = v.z;
+        }
+        surfaces.push({ name, mat, pos: out });
+      };
+      const meshSurfaces = (o, label) => {
+        if (o.isBatchedMesh) {
+          for (let i = 0; i < o.instanceCount; i++) {
+            let gid;
+            try {
+              gid = o.getGeometryIdAt(i);
+            } catch {
+              continue;
+            }
+            if (gid === undefined || gid < 0) continue;
+            const range = o.getGeometryRangeAt(gid);
+            o.getMatrixAt(i, m);
+            w.multiplyMatrices(o.matrixWorld, m);
+            const idx = o.geometry.index;
+            push(`${label}#${i}`, matName(o.material), o.geometry, w, idx ? { start: range.indexStart, count: range.indexCount } : { start: range.vertexStart, count: range.vertexCount });
+          }
+          return;
+        }
+        if (o.isInstancedMesh) {
+          for (let i = 0; i < o.count; i++) {
+            o.getMatrixAt(i, m);
+            w.multiplyMatrices(o.matrixWorld, m);
+            push(`${label}#${i}`, matName(o.material), o.geometry, w, null);
+          }
+          return;
+        }
+        push(label, matName(o.material), o.geometry, o.matrixWorld, null);
+      };
+      // the zone's own group, or (in the casino) the lobby's part of the floor's batch and the bank
+      if (zone === 'casino') {
+        city.casinoBank.group.traverse((o) => o.isMesh && meshSurfaces(o, o.name));
+        const lobby = world.plan.rooms.find((r) => r.id === 'lobby').bounds;
+        engine.scene.getObjectByName('floor').children.filter((o) => o.isBatchedMesh).forEach((o) => meshSurfaces(o, o.name));
+        for (let i = surfaces.length - 1; i >= 0; i--) {
+          const s = surfaces[i];
+          let keep = false;
+          for (let k = 0; k < s.pos.length && !keep; k += 3) keep = s.pos[k] > lobby.x0 - 0.5 && s.pos[k] < lobby.x1 + 0.5 && s.pos[k + 2] > lobby.z0 - 0.5 && s.pos[k + 2] < lobby.z1 + 0.5;
+          if (!keep) surfaces.splice(i, 1);
+        }
+      } else {
+        const g = city['zones'].get(zone).group;
+        g.traverse((o) => {
+          if (!o.isMesh || o.isSkinnedMesh || o.isPoints) return;
+          // the sky, the skyline rings and the far city are backdrops, not surfaces anyone stands by
+          if (/^(sky|skyline|city-below|towers)/.test(o.name)) return;
+          meshSurfaces(o, o.name || o.parent?.name || 'mesh');
+        });
+      }
+      // nobody sees the underside of what stands on the ground, or anything below it
+      const unseen = ([, y], [, ny]) => y < -0.005 || (ny < -0.99 && y < 0.02);
+      const fights = Z.findFights(surfaces, { unseen });
+      const thing = (x) => x.replace(/#\d+$/, '');
+      return {
+        surfaces: surfaces.length,
+        ours: fights.filter((f) => !/^prop:/.test(thing(f.a)) || !/^prop:/.test(thing(f.b)) || thing(f.a) !== thing(f.b)).map(Z.describeFight),
+        own: fights.filter((f) => /^prop:/.test(thing(f.a)) && thing(f.a) === thing(f.b)).length,
+      };
+    }, zone);
+    console.log(`zfight ${zone}: ${r.surfaces} surfaces${r.own ? `, ${r.own} inside props' own models` : ''}`);
+    for (const f of r.ours.slice(0, 30)) fail(`z-fight ${zone}: ${f}`);
+  }
+  if (errors.length) fail(`zfight errors: ${errors.slice(0, 3).join(' | ')}`);
+  await ctx.close();
+}
+
+// --- a phone --------------------------------------------------------------------------------------
+
+if (checks.includes('phone')) {
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  const p = await ctx.newPage();
+  const errors = [];
+  watch(p, errors);
+  await p.goto(`http://localhost:${port}/casino/src/world/dev-floor.html?quality=low`, { timeout: 300_000 });
+  await p.waitForFunction(() => document.getElementById('boot')?.classList.contains('done'), null, { timeout: 600_000 });
+  await frames(p, 20);
+  const car = await p.evaluate(() => {
+    const L = window.casino.world.city.casinoBank;
+    return { c: L.centre(0), yaw: L.yaw };
+  });
+  await p.evaluate(([x, z, y]) => window.casino.world.teleport(x, z, y), [car.c.x, car.c.z, car.yaw + Math.PI]);
+  await p.waitForTimeout(800);
+  // the action button says what E would
+  const act = await p.evaluate(() => document.querySelector('.touch-act:not([hidden])')?.textContent ?? '');
+  ok(/Choose/.test(act), `in the car the action button reads "${act.trim()}"`);
+  await p.tap('.touch-act');
+  await p.waitForSelector('.lift-panel', { timeout: 3000 });
+  await p.waitForTimeout(300);
+  await shot(p, 'phone-panel');
+  const box = await p.evaluate(() => {
+    const r = document.querySelector('.lift-panel').getBoundingClientRect();
+    return { l: r.left, r: r.right, t: r.top, b: r.bottom };
+  });
+  ok(box.l >= 0 && box.r <= 390 && box.t >= 0 && box.b <= 844, `the panel fits the phone (${Math.round(box.l)}..${Math.round(box.r)} x ${Math.round(box.t)}..${Math.round(box.b)})`);
+  await p.evaluate(() => (window.casino.world.city.lastRide = null));
+  await p.tap('.lift-btn[data-zone="roof"]');
+  await ridden(p, 20000);
+  const up = await where(p);
+  ok(up.zone === 'roof', `a tap on Sky Terrace rides up (${up.x.toFixed(1)}, ${up.z.toFixed(1)})`);
+  await p.waitForTimeout(900);
+  await shot(p, 'phone-roof');
+  if (errors.length) fail(`phone errors: ${errors.slice(0, 3).join(' | ')}`);
+  await ctx.close();
 }
 
 // --- the game --------------------------------------------------------------------------------------
@@ -242,6 +385,7 @@ if (checks.includes('game')) {
   await A.waitForSelector('.lift-panel', { timeout: 4000 });
   await A.waitForTimeout(300);
   await shot(A, 'game-panel');
+  await A.evaluate(() => (window.casino.world.city.lastRide = null));
   await A.keyboard.press('KeyG');
   await A.waitForTimeout(1000);
   await shot(A, 'game-closing');
@@ -300,6 +444,7 @@ if (checks.includes('game')) {
   await A.waitForTimeout(400);
   await A.keyboard.press('KeyE');
   await A.waitForSelector('.lift-panel', { timeout: 4000 });
+  await A.evaluate(() => (window.casino.world.city.lastRide = null));
   await A.keyboard.press('KeyR');
   await ridden(A, 20000);
   const up = await where(A);
@@ -340,6 +485,7 @@ if (checks.includes('game')) {
   await A.waitForTimeout(400);
   await A.keyboard.press('KeyE');
   await A.waitForSelector('.lift-panel', { timeout: 4000 });
+  await A.evaluate(() => (window.casino.world.city.lastRide = null));
   await A.keyboard.press('KeyC');
   await ridden(A, 20000);
   const home = await where(A);

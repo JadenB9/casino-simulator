@@ -1,12 +1,12 @@
 // The city beyond the casino floor: the elevators and the two places they go (the ground floor
-// with the valet and the street, the roof terrace), and the switching between them. See README.md
-// ("The city").
+// with the valet and the street, the roof terrace), and the switching between them.
 //
 // The world is one scene; the casino, the ground floor and the roof are patches of it far apart
 // (shared/src/zones.ts). Only the zone you're in is drawn: the casino's pieces are hidden while
 // you're elsewhere, and the other zones are built the first time you go there and hidden when you
 // leave. Other players in another zone aren't drawn either. You move between zones only by the
-// server's word (`tp`: the elevator, or the law taking you to jail and letting you out).
+// server's word (`tp`: the elevator, or the law taking you to jail and letting you out). README.md
+// here has the rest.
 
 import * as THREE from 'three';
 import type { Quality } from '../../render/engine3d.ts';
@@ -71,7 +71,7 @@ export interface CityFloor {
 
 type Ride =
   | { phase: 'closing'; to: ZoneId; car: number; t: number }
-  | { phase: 'riding'; from: ZoneId; to: ZoneId; t: number; screen: RideScreen; tp: { x: number; z: number; r: number } | null; ready: boolean; placed: boolean }
+  | { phase: 'riding'; from: ZoneId; to: ZoneId; t: number; screen: RideScreen; tp: { x: number; z: number; r: number } | null; building: boolean; ready: boolean; placed: boolean }
   | { phase: 'arriving'; to: ZoneId; car: number; t: number };
 
 /** The zones' own light while you're out there: the hemisphere's sky, ground and strength, and the sun. */
@@ -96,6 +96,8 @@ export class City {
   zone: ZoneId = 'casino';
   readonly casinoBank: Bank;
   private readonly zones = new Map<ZoneId, ZoneBuild>();
+  private readonly preparing = new Map<ZoneId, Promise<void>>();
+  private readonly ceilings = new Set<(x: number, z: number) => number | null>();
   private floor: CityFloor | null = null;
   private link: CityLink | null = null;
   private offLink: (() => void) | null = null;
@@ -173,6 +175,10 @@ export class City {
     if (!zone) return null;
     const bank = zone === 'casino' ? this.casinoBank : this.zones.get(zone)?.bank;
     if (bank && bank.carAt(x, z, 0.02) >= 0) return CAR_H;
+    for (const fn of this.ceilings) {
+      const c = fn(x, z);
+      if (c !== null) return c;
+    }
     if (zone === 'casino') return null;
     return this.zones.get(zone)?.ceilingAt(x, z) ?? 6;
   }
@@ -239,8 +245,17 @@ export class City {
   }
 
   /** Build a zone now if it isn't yet (the ride does it behind the dark), and compile its shaders. */
-  async prepare(zone: ZoneId): Promise<void> {
-    if (zone === 'casino' || this.zones.has(zone)) return;
+  prepare(zone: ZoneId): Promise<void> {
+    if (zone === 'casino') return Promise.resolve();
+    let p = this.preparing.get(zone);
+    if (!p) {
+      p = this.compile(zone);
+      this.preparing.set(zone, p);
+    }
+    return p;
+  }
+
+  private async compile(zone: Exclude<ZoneId, 'casino'>): Promise<void> {
     const z = this.build(zone);
     // shown for the compile only (it's dark, or you're about to be there)
     const shown = z.group.visible;
@@ -251,6 +266,15 @@ export class City {
       /* compiled when first drawn instead */
     }
     z.group.visible = shown || this.zone === zone;
+  }
+
+  /**
+   * Another slice's roof over part of a zone (the garage's, the jail's): the follow camera keeps
+   * under it. The returned function takes it back.
+   */
+  addCeiling(fn: (x: number, z: number) => number | null): () => void {
+    this.ceilings.add(fn);
+    return () => this.ceilings.delete(fn);
   }
 
   /** Call a car in this zone, as E does in front of the doors. */
@@ -358,7 +382,8 @@ export class City {
     const n = bank.nearest(p.x, p.z);
     if (n.d > CALL_REACH || bank.isOpen(n.car)) return [];
     const w = bank.doorway(n.car);
-    return [{ key: `lift:call:${this.zone}:${n.car}`, x: w.x, z: w.z, d: Math.max(0, n.d - 0.5), label: 'Call the elevator', use: () => bank.call(n.car) }];
+    // (the doorway's middle stands in for the whole portal: anywhere in front of it is close enough)
+    return [{ key: `lift:call:${this.zone}:${n.car}`, x: w.x, z: w.z, d: Math.max(0, n.d - 1.2), label: 'Call the elevator', use: () => bank.call(n.car) }];
   }
 
   private openPanel(car: number): void {
@@ -393,8 +418,6 @@ export class City {
     this.ride = { phase: 'closing', to, car, t: 0 };
     this.lastRide = null;
     this.placeRideCamera(this.bank, car);
-    // start on the far end's build now, a frame at a time behind the closing doors
-    void this.prepare(to);
   }
 
   private step(dt: number): void {
@@ -408,7 +431,7 @@ export class City {
       // shut: ask the floor, and ride while it answers
       const screen = new RideScreen(this.deps.ui, this.zone, r.to);
       this.sounds.ride(screen.secs + 0.6);
-      this.ride = { phase: 'riding', from: this.zone, to: r.to, t: 0, screen, tp: null, ready: false, placed: false };
+      this.ride = { phase: 'riding', from: this.zone, to: r.to, t: 0, screen, tp: null, building: false, ready: false, placed: false };
       if (this.link) {
         if (!this.link.send({ t: 'lift', to: r.to })) this.refused('The elevator can’t reach the floor right now. Try again.');
       } else {
@@ -416,13 +439,17 @@ export class City {
         const a = LIFTS[r.to].arrive;
         (this.ride as Extract<Ride, { phase: 'riding' }>).tp = { x: a.x / 100, z: a.z / 100, r: a.r };
       }
-      void this.prepare(r.to).then(() => {
-        if (this.ride?.phase === 'riding') this.ride.ready = true;
-      });
       return;
     }
     if (r.phase === 'riding') {
       const counted = r.screen.update(dt);
+      // once it's dark: build the other zone (the first time) and compile it, out of sight
+      if (!r.building && r.t > 0.42) {
+        r.building = true;
+        void this.prepare(r.to).then(() => {
+          if (this.ride === r) r.ready = true;
+        });
+      }
       // dark enough: the move happens out of sight
       if (r.tp && r.ready && !r.placed && r.t > 0.4) {
         r.placed = true;

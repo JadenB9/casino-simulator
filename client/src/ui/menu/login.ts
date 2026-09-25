@@ -12,6 +12,7 @@ import { el } from '../kit.ts';
 import type { AccountApi, Closable, SessionLike, SfxLike } from './deps.ts';
 import { frontShell } from './front.ts';
 import { keycap, problemText } from './parts.ts';
+import { calm, setCalm } from '../../app/comfort.ts';
 
 export interface LoginDeps {
   root: HTMLElement;
@@ -90,7 +91,18 @@ export function mountLogin(deps: LoginDeps): Closable {
     el('span', 'login-note-lead', 'New name? Pick a password and this name is yours.'),
     document.createTextNode(' Played here before passwords? The first one you pick claims your name.'),
   );
-  form.append(cont, label, row, rule, passLabel, passRow, passRule, enter, note);
+  // Before the floor's lights are ever seen: the switch for anyone who needs them steady.
+  const steady = el('button', 'calm-switch');
+  steady.type = 'button';
+  steady.setAttribute('role', 'switch');
+  steady.append(el('span', 'calm-box'), document.createTextNode('Reduce flashing & motion'));
+  const paintSteady = () => steady.setAttribute('aria-checked', String(calm()));
+  steady.addEventListener('click', () => {
+    setCalm(!calm());
+    paintSteady();
+  });
+  paintSteady();
+  form.append(cont, label, row, rule, passLabel, passRow, passRule, enter, note, steady);
   shell.col.append(form);
 
   let busy = false;

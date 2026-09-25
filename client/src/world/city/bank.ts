@@ -105,12 +105,13 @@ export class Bank {
       const g = new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0);
       batch.add(g, mat, new THREE.Matrix4().makeTranslation((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2).premultiply(L), uv);
     };
-    const back = -DEPTH - 0.1;
+    // the cars' back wall; the end piers reach a little further, so no two backs share a plane
+    const back = -DEPTH - 0.05;
     // car i's middle along the front, in bank space (+x is to the left looking out)
     const cx = (i: number) => -(i - (N - 1) / 2) * PITCH;
     // the ends: solid piers the full depth
-    box(clad, span / 2 - END, span / 2, 0, H, back, 0, 1.2);
-    box(clad, -span / 2, -span / 2 + END, 0, H, back, 0, 1.2);
+    box(clad, span / 2 - END, span / 2, 0, H, back - 0.03, 0, 1.2);
+    box(clad, -span / 2, -span / 2 + END, 0, H, back - 0.03, 0, 1.2);
     // the piers between the openings, and the lintel over them
     for (let i = 0; i <= N; i++) {
       const a = i === 0 ? -span / 2 + END : cx(N - i) + DOOR_W / 2;

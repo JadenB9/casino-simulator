@@ -3,12 +3,19 @@
 // every cent still accounted for:
 //   SUM(ledger) - SUM(items.price) - SUM(orders.price) = balance + in_play.
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { env, exports } from 'cloudflare:workers';
 import { DEFAULT_LOOK } from '../../shared/src/look.ts';
 import { DOLLAR, STARTING_BALANCE } from '../../shared/src/money.ts';
 import { HOLD_MS, SHOP_ITEMS, barItem, shopItem } from '../../shared/src/items.ts';
 import { ORIGIN, TEST_PASSWORD, api, connect } from './helpers.ts';
+import { awayFromHappyHour } from './quiet-bar.ts';
+
+// v6 celebs6: these check full prices at the bar, so never inside a happy hour (happyhour.ts)
+beforeEach(awayFromHappyHour);
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 let ipSeq = 0;
 let opSeq = 0;

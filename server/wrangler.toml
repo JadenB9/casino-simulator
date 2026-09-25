@@ -7,6 +7,9 @@ compatibility_date = "2026-09-01"
 [vars]
 # comma-separated; a trailing :* matches any port
 ALLOWED_ORIGINS = "http://localhost:*,http://127.0.0.1:*"
+# Dev-only routes (POST /api/dev/celeb, /api/dev/gift: a celebrity or a gift box on demand for the
+# headless checks). Production's config never sets it.
+CASINO_DEV = "1"
 
 [[d1_databases]]
 binding = "DB"

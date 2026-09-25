@@ -14,13 +14,15 @@ import { Props } from '../props.ts';
 import { LIFTS } from '../../../../shared/src/lifts.ts';
 import { Bank, panelTexture } from './bank.ts';
 import { Kit, signAtlas, signMesh } from './kit.ts';
-import { AISLES, GROUND, STALL, SURFACE, VALET_STAND, stalls } from './plan.ts';
+import { AISLES, ENTRANCES, GROUND, STALL, SURFACE, VALET_STAND, stalls } from './plan.ts';
 import { parkedCars, Traffic } from './parking.ts';
 import { Beacons, skyDome, skylineRing, towers, rng, type Tower } from './sky.ts';
 import { SlidingDoors } from './doors.ts';
 import type { ZoneBuild } from './zone.ts';
 
 const G = GROUND;
+/** The second crosswalk, to the jail's front door (plan.ts ENTRANCES.jail). */
+const JAIL_WALK = ENTRANCES.jail.z;
 
 export function buildGround(mats: Mats, col: Collider, quality: Quality): ZoneBuild {
   const kit = new Kit('ground', mats, col);
@@ -85,9 +87,9 @@ export function buildGround(mats: Mats, col: Collider, quality: Quality): ZoneBu
   // columns: black marble drums with bronze rings, two rows down the hall
   for (const x of [113.4, 120.6]) {
     for (const z of [-6.4, 6.4]) {
-      kit.cylinder('marble-black', x, z, 0.42, 0, HH - 0.5, 28);
+      kit.cylinder('marble-black', x, z, 0.42, 0, HH, 28);
       kit.cylinder('brass', x, z, 0.47, 0, 0.16, 28);
-      kit.cylinder('brass', x, z, 0.47, HH - 0.72, HH - 0.5, 28);
+      kit.cylinder('brass', x, z, 0.47, HH - 0.74, HH - 0.54, 28);
       kit.post(x, z, 0.46, HH);
     }
   }
@@ -279,9 +281,22 @@ export function buildGround(mats: Mats, col: Collider, quality: Quality): ZoneBu
   const WE = G.walkEast;
   const z0 = G.zone.z0;
   const z1 = G.zone.z1;
-  kit.box('concrete', WW.x0, WW.x1, -0.1, 0.006, z0, z1, 2.4);
-  kit.box('concrete', WE.x0, WE.x1, -0.1, 0.006, z0, z1, 2.4);
-  kit.box('curb', WW.x1 - 0.22, WW.x1, -0.1, 0.01, z0, z1);
+  // (the west sidewalk is cut where the drive's two driveways cross it to the street)
+  const cuts = [-45.5, -40.5, 40.5, 45.5];
+  for (const [a, b] of [
+    [z0, cuts[0]!],
+    [cuts[1]!, cuts[2]!],
+    [cuts[3]!, z1],
+  ] as const) {
+    kit.box('sidewalk', WW.x0, WW.x1, -0.1, 0.006, a, b, 2.4);
+    kit.box('curb', WW.x1 - 0.22, WW.x1, -0.1, 0.01, a, b);
+  }
+  for (const side of [-1, 1] as const) {
+    const za = side * 40.5;
+    const zb = side * 45.5;
+    kit.box('asphalt', G.drive.x0, WW.x1, -0.1, 0, Math.min(za, zb), Math.max(za, zb), 6);
+  }
+  kit.box('sidewalk', WE.x0, WE.x1, -0.1, 0.006, z0, z1, 2.4);
   kit.box('curb', WE.x0, WE.x0 + 0.22, -0.1, 0.01, z0, z1);
   kit.box('asphalt', R.x0, R.x1, -0.1, 0, z0, z1, 6);
   // the double yellow down the middle, dashed lane lines, the crosswalk's zebra and stop lines
@@ -292,7 +307,7 @@ export function buildGround(mats: Mats, col: Collider, quality: Quality): ZoneBu
       const a = z;
       const b = Math.min(z1, z + dash);
       // (the markings stop at the crosswalk)
-      if (b > cw.z0 - 2.2 && a < cw.z1 + 2.2) continue;
+      if ((b > cw.z0 - 2.2 && a < cw.z1 + 2.2) || (b > JAIL_WALK - 4.2 && a < JAIL_WALK + 4.2)) continue;
       kit.flat(mat, x0, x1, a, b, 0.003);
     }
   };
@@ -300,7 +315,8 @@ export function buildGround(mats: Mats, col: Collider, quality: Quality): ZoneBu
   along(mid + 0.08, mid + 0.2, 'paint-yellow', 200, 0);
   along(R.x0 + 2.45, R.x0 + 2.57, 'paint-white', 3, 6);
   along(R.x1 - 2.57, R.x1 - 2.45, 'paint-white', 3, 6);
-  for (let x = R.x0 + 0.3; x < R.x1 - 0.4; x += 0.9) kit.flat('paint-white', x, x + 0.5, cw.z0, cw.z1, 0.003);
+  // the crosswalks: from the plaza's walk, and to the jail's door
+  for (const zc of [(cw.z0 + cw.z1) / 2, JAIL_WALK]) for (let x = R.x0 + 0.3; x < R.x1 - 0.4; x += 0.9) kit.flat('paint-white', x, x + 0.5, zc - 2, zc + 2, 0.003);
   kit.flat('paint-white', R.x0, mid - 0.3, cw.z0 - 1.6, cw.z0 - 1.2, 0.003);
   kit.flat('paint-white', mid + 0.3, R.x1, cw.z1 + 1.2, cw.z1 + 1.6, 0.003);
   // street lamps along both sides, arms over the road; traffic signals at the crosswalk
@@ -436,10 +452,10 @@ export function buildGround(mats: Mats, col: Collider, quality: Quality): ZoneBu
       if (x >= C.x0 && x <= C.x1 && z >= C.z0 && z <= C.z1) return cy;
       return null;
     },
-    update(dt, people, calm) {
+    update(dt, people) {
       doors.update(dt, people);
       traffic.update(dt, people);
-      beacons.update(dt, calm);
+      beacons.update(dt);
     },
     setQuality(q) {
       void props.setQuality(q);

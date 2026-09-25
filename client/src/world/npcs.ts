@@ -27,6 +27,7 @@ import { uniformOutfit, type Characters, type Person, type StaffGesture, type Un
 import type { Collider, Post as CollisionPost } from './collision.ts';
 import { roomAt, type FloorPlan } from './layout.ts';
 import type { WorldStation } from './stations.ts';
+import { PODIUM as BINGO_PODIUM, STAGE_H as BINGO_STAGE_H } from '../games/bingo/layout.ts';
 
 export type { StaffGesture } from './characters.ts';
 export type StaffRole = 'dealer' | 'stickman' | 'bartender' | 'cashier';
@@ -39,6 +40,8 @@ export interface StaffPost {
   x: number;
   z: number;
   yaw: number;
+  /** What they stand on, when it isn't the floor (the bingo caller's stage). */
+  y?: number;
   /** The room they work in (hidden with it). */
   room: string;
 }
@@ -159,10 +162,14 @@ function localBox(s: WorldStation, name: string): THREE.Box3 | null {
   return box;
 }
 
-const TABLES: GameId[] = ['blackjack', 'roulette', 'craps', 'baccarat', 'threecard', 'war', 'sicbo', 'bigsix', 'holdem'];
+const TABLES: GameId[] = ['blackjack', 'roulette', 'craps', 'baccarat', 'threecard', 'war', 'sicbo', 'bigsix', 'holdem', 'letitride', 'paigow', 'bingo'];
 
-/** A dealer's spot in the station's frame: x, z and a turn from facing the players (+z). */
-function dealerSpot(s: WorldStation, points: Float32Array): { x: number; z: number; turn: number } {
+/** A dealer's spot in the station's frame: x, z and a turn from facing the players (+z); y when up on a stage. */
+function dealerSpot(s: WorldStation, points: Float32Array): { x: number; z: number; turn: number; y?: number } {
+  if (s.game === 'bingo') {
+    // the caller, up on the stage behind the podium, turned a little toward the middle of the hall
+    return { x: BINGO_PODIUM.x, z: BINGO_PODIUM.z - BINGO_PODIUM.d / 2 - bodyFront(1) - CLEAR, turn: -0.18, y: BINGO_STAGE_H };
+  }
   if (s.game === 'bigsix') {
     // beside the wheel on its left (as the players see it), turned a little toward the layout
     const wheel = localBox(s, 'bigsix-wheel');
@@ -194,7 +201,7 @@ export function staffPosts(stations: WorldStation[], plan: FloorPlan): StaffPost
     const spot = dealerSpot(s, modelPoints(s));
     s.anchor.updateWorldMatrix(true, false);
     s.anchor.localToWorld(at.set(spot.x, 0, spot.z));
-    posts.push({ role: s.game === 'craps' ? 'stickman' : 'dealer', station: s.id, x: at.x, z: at.z, yaw: s.yaw + spot.turn, room: s.room });
+    posts.push({ role: s.game === 'craps' ? 'stickman' : 'dealer', station: s.id, x: at.x, z: at.z, yaw: s.yaw + spot.turn, room: s.room, ...(spot.y ? { y: spot.y } : {}) });
   }
   // behind the bar, a little way back from the counter, facing the stools (-x)
   const bar = plan.bar;
@@ -355,7 +362,7 @@ export class Staff {
     this.posts.forEach((post, i) => {
       const { look, scale } = looks[i]!;
       const ch = characters.create(look, '', { blob: false, staff: true });
-      ch.root.position.set(post.x, 0, post.z);
+      ch.root.position.set(post.x, post.y ?? 0, post.z);
       ch.root.rotation.y = post.yaw;
       ch.root.scale.setScalar(scale);
       ch.root.visible = false;
@@ -643,7 +650,7 @@ export class Staff {
         return;
       }
       const p = m.ch.root.position;
-      mat.makeScale(m.scale, 1, m.scale).setPosition(p.x, 0.012, p.z);
+      mat.makeScale(m.scale, 1, m.scale).setPosition(p.x, p.y + 0.012, p.z);
       this.blobs.setMatrixAt(i, mat);
     });
     this.blobs.instanceMatrix.needsUpdate = true;

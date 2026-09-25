@@ -24,6 +24,13 @@ describe('the HUD session net', () => {
     expect(sessionNet(profile({ balance: 49_000 * D, inPlay: 1_000 * D }), start, { stack: 1_250 * D, escrow: 1_000 * D }, 0)).toBe(250 * D);
   });
 
+  it("leaves an achievement's cash out, and counts only what was earned since", () => {
+    const start = netStart(profile({ feats: [{ feat: 'first-win', at: 1 }] }), 0);
+    // won $100 at play; Long Odds paid $1,000 beside it
+    const now = profile({ balance: 51_100 * D, feats: [{ feat: 'first-win', at: 1 }, { feat: 'dc-long', at: 2 }] });
+    expect(sessionNet(now, start, null, 0)).toBe(100 * D);
+  });
+
   it("leaves the bank's top-ups out", () => {
     const start = netStart(profile({ balance: 9_000 * D }), 0);
     const now = profile({ balance: 50_000 * D, loansTaken: 1, loans: [{ amount: 41_000 * D, at: 1 }] });

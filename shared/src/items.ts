@@ -89,6 +89,16 @@ export const SHOP_ITEMS: readonly ShopItem[] = [
 
 const BY_ID = new Map(SHOP_ITEMS.map((i) => [i.id, i]));
 
+/**
+ * A piece's name as a sentence says it: "the Rope Chain", "the Griddy" (never "the The Griddy"),
+ * "your statue"; `start` for the first word of a sentence. Effects read better bare ("Own the
+ * Night starts in 0:40"), so they don't go through here.
+ */
+export function theName(name: string, start = false): string {
+  const said = name.startsWith('Your ') ? `your ${name.slice(5).toLowerCase()}` : `the ${name.replace(/^The /, '')}`;
+  return start ? said[0]!.toUpperCase() + said.slice(1) : said;
+}
+
 /** An item the boutique sells (never a reward), or null. */
 export function shopItem(id: unknown): ShopItem | null {
   const item = typeof id === 'string' ? BY_ID.get(id) : undefined;

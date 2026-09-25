@@ -9,7 +9,8 @@
 
 import * as THREE from 'three';
 import { spotOf } from '../../../../shared/src/games/blackjack/rules.ts';
-import { CARD_W } from '../../table/cards.ts';
+import { CARD_H, CARD_W } from '../../table/cards.ts';
+import { around } from '../../table/fit.ts';
 import { fitWidth } from '../multihand/frame.ts';
 
 export const TOP_Y = 0.78;
@@ -166,4 +167,20 @@ export function spotsPose(spots: readonly number[], aspect?: number): { position
   const target = mid.clone().lerp(DEALER_HAND, 0.47);
   // wide enough for the outer circles and the split hands beside them, on any screen
   return fitWidth({ position: [eye.x, eye.y, eye.z], target: [target.x, target.y, target.z] }, span / 2 + 0.16, aspect);
+}
+
+/**
+ * What must stay in view at this table (table/fit.ts): the circles you play with their cards (split
+ * hands and a few hits) and insurance bets, and the dealer's side: the cards and the chip rack.
+ */
+export function boardPoints(spots: readonly number[]): THREE.Vector3[] {
+  const out: THREE.Vector3[] = [];
+  const card = Math.hypot(CARD_W, CARD_H) / 2;
+  for (const seat of spots) {
+    out.push(...around(spotAt(seat), SPOT_R + 0.012), ...around(insuranceChips(seat), 0.03));
+    for (const [hand, hands] of [[0, 1], [0, 2], [1, 2]] as const) for (const i of [0, 4]) out.push(...around(handCard(seat, hand, hands, i, false).pos, card));
+  }
+  for (const i of [0, 5]) out.push(...around(dealerCard(i).pos, card * DEALER_CARD_SCALE));
+  out.push(...around(RACK, 0.34, 0.06));
+  return out;
 }

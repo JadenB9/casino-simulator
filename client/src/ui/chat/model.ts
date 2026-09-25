@@ -90,3 +90,16 @@ export function nameHue(name: string): number {
 export function sayFor(text: string): number {
   return Math.min(9, Math.max(4, 3 + [...text].length * 0.06));
 }
+
+/**
+ * What the chat's corner shows: nothing (off the floor), the dock alone, the whole box (typing,
+ * or opened for a moment and not pinned), or `idle`: pinned open while you walk, look round, sit
+ * and play, the log left up where clicks and drags go through it to the game.
+ */
+export type ChatLook = 'hidden' | 'dock' | 'box' | 'idle';
+
+export function chatLook(s: { visible: boolean; open: boolean; pinned: boolean; typing: boolean }): ChatLook {
+  if (!s.visible) return 'hidden';
+  if (!s.open) return 'dock';
+  return s.pinned && !s.typing ? 'idle' : 'box';
+}

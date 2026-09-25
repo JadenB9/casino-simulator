@@ -21,7 +21,7 @@ import { tween, ease } from '../../table/tween.ts';
 import { celebrate } from '../../table/celebrate.ts';
 import { serverNow } from '../../net/clock.ts';
 import {
-  FOOTPRINT, OVERVIEW_POSE, FLAPPER_POSE, TERMINALS, TERM_R, STOOL_R, TOP_Y, CUP_W,
+  FOOTPRINT, OVERVIEW_POSE, FLAPPER_POSE, TERMINALS, TERM_R, STOOL_R, TOP_Y, CUP_W, HUB_Y, WHEEL_Z, FACE_R, PIVOT_R,
   seatPositions, seatPose, wheelPose, terminalOfSeat, terminalYaw, cupPlace, onArc,
 } from './layout.ts';
 import { wheelModel, WHEEL_GROUP, ROTOR_NAME, GLOW_NAME, LAMPS_NAME, type Flapper, type Screens } from './model.ts';
@@ -30,6 +30,7 @@ import { CupChips, Pile } from './chips.ts';
 import { WheelSound } from './sound.ts';
 import { Panel, History, Players, TerminalTag, type PlayerRow } from './hud.ts';
 import { drawScreen, type ScreenState } from './art.ts';
+import { blink, wave } from '../../app/comfort.ts';
 
 const SEATS = seatPositions();
 /** Clicks are handed to the audio clock this far ahead. */
@@ -191,6 +192,18 @@ function mountBanditWheel(ctx: TableViewCtx): TableView {
   function aimCamera(mode: CamMode): void {
     if (mode !== 'seat' && camHome === null) camHome = { pos: camera.position.clone(), quat: camera.quaternion.clone() };
     camMode = mode;
+    // what each shot must show at any window size (table/fit.ts)
+    if (mode === 'seat') stage.shot(null);
+    else if (mode === 'wheel') stage.shot(wheelPose(mySeat), wheelFace);
+    else stage.shot(FLAPPER_POSE, flapperTop);
+  }
+
+  // What stays in view (table/fit.ts): the wheel's face and its flapper, and your terminal's cups.
+  const wheelFace = Array.from({ length: 12 }, (_, i) => new THREE.Vector3(FACE_R * Math.cos((i / 6) * Math.PI), HUB_Y + FACE_R * Math.sin((i / 6) * Math.PI), WHEEL_Z + 0.05));
+  const flapperTop = [-0.2, 0.2].flatMap((x) => [FACE_R - 0.12, PIVOT_R + 0.08].map((y) => new THREE.Vector3(x, HUB_Y + y, WHEEL_Z + 0.05)));
+  function fitBoard(): void {
+    const t = mySeat === null ? null : terminalOfSeat(mySeat);
+    stage.board(wheelFace, flapperTop, t === null ? [] : NUMBERS.map((_, k) => new THREE.Vector3(...cupPlace(t, k))));
   }
 
   /** Straight back to the seat (a snapshot, leaving the table). */
@@ -486,7 +499,8 @@ function mountBanditWheel(ctx: TableViewCtx): TableView {
   function lamps(): void {
     if (!bulbs) return;
     const now = performance.now();
-    const on = now > flashUntil || Math.floor(now / 140) % 2 === 0;
+    // calm (app/comfort.ts): lit and steady instead of flashing
+    const on = blink(now > flashUntil || Math.floor(now / 140) % 2 === 0);
     bulbs.material.color.copy(bulbLit).multiplyScalar(on ? 1 : 0.18);
   }
 
@@ -706,6 +720,7 @@ function mountBanditWheel(ctx: TableViewCtx): TableView {
       finishAnims();
       mode = snap.meta.mode;
       mySeat = snap.you.seat;
+      fitBoard();
       stack = snap.you.stack;
       pendingStack = null;
       members = snap.members;
@@ -786,6 +801,7 @@ function mountBanditWheel(ctx: TableViewCtx): TableView {
 
     onSeat(msg) {
       if (msg.seat !== null) mySeat = msg.seat;
+      fitBoard();
       if (animating) pendingStack = msg.stack;
       else stack = msg.stack;
       refresh();
@@ -830,7 +846,7 @@ function mountBanditWheel(ctx: TableViewCtx): TableView {
       clicks();
       updateTime();
       lamps();
-      const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 240);
+      const pulse = 0.5 + 0.5 * wave(performance.now() / 240);
       if (glow.visible) glow.material.opacity = 0.18 + 0.2 * pulse;
       if (winGroup.children.length) winMat.opacity = 0.25 + 0.3 * pulse;
     },

@@ -7,7 +7,8 @@
 // yard|cashier|boutique|bigsix|table
 // (a fixed camera for screenshots), &stats=1 (draw calls and frame time), &lineup=1 (every outfit
 // side by side in debug colours, to check outfits.json), &slots=sevens,neon,... (the slot islands
-// to lay out, instead of the catalogue's variants).
+// to lay out, instead of the catalogue's variants), &fx=fx-disco,... (play the shop's effects round
+// you as the floor opens), &statues=3 (sample statues in the lobby; fx/dev.ts has the console hooks).
 
 import * as THREE from 'three';
 import { Engine3D, savedQuality, type Quality } from '../render/engine3d.ts';
@@ -16,6 +17,7 @@ import { DEFAULT_LOOK, OUTFITS, type Body, type Look } from '../../../shared/src
 import { createWorld, type FloorWorld } from './index.ts';
 import { checkLayout } from './layout.ts';
 import { LIFTS } from '../../../shared/src/lifts.ts';
+import { fxDev } from './fx/dev.ts';
 
 interface View {
   pos: [number, number, number];
@@ -48,6 +50,10 @@ function views(w: FloorWorld): Record<string, View | 'walk'> {
     yard: inRoom(w, 'yard', [1.6, 1.8, -5.2], [0.6, 1.6, 3.8]),
     cashier: inRoom(w, 'bank', [4.4, 1.7, 0.5], [0, 1.4, -5]),
     boutique: inRoom(w, 'boutique', [-4.4, 1.7, 0.5], [3, 1.2, 0.5]),
+    // the north wing, each from its door off the room below it
+    parlour: inRoom(w, 'parlour', [0, 1.7, 5.3], [0, 1.3, -3]),
+    cardroom: inRoom(w, 'cardroom', [7.3, 1.8, 5.3], [-1, 1.0, -2]),
+    bingo: inRoom(w, 'bingo', [0, 1.9, 5.3], [0, 1.4, -3]),
     // in front of the wheel, where its players stand
     bigsix: { pos: [wheel.x + 5.2, 1.9, wheel.z + 1.4], at: [wheel.x, 1.5, wheel.z] },
   };
@@ -106,7 +112,9 @@ export async function runDevFloor(params: URLSearchParams): Promise<FloorWorld> 
       box.textContent = `${engine.frameMs().toFixed(1)} ms · ${s.calls} calls · ${Math.round(s.triangles / 1000)}k tris · ${s.programs} programs · pr ${s.pixelRatio}`;
     }, 500);
   }
-  (window as unknown as { casino: unknown }).casino = { engine, world, THREE };
+  // the shop's effects and the lobby's statues without a server (fx/dev.ts)
+  const fx = fxDev(world, engine, params);
+  (window as unknown as { casino: unknown }).casino = { engine, world, THREE, fx };
   return world;
 }
 

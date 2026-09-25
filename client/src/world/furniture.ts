@@ -10,7 +10,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { Mats } from './materials.ts';
-import { FURNITURE, type ChairKind } from './furniture-spec.ts';
+import { CHAIRS, FURNITURE, type ChairKind } from './furniture-spec.ts';
 import type { FloorPlan } from './layout.ts';
 import type { FurnitureKind } from './rooms.ts';
 
@@ -23,7 +23,7 @@ interface Part {
 }
 
 /** The seat height each chair kind's geometry is built for; instances are scaled to their own. */
-const BUILT_TOP: Record<ChairKind, number> = { chair: 0.58, plush: 0.55, stool: 0.62, 'velvet-stool': 0.62 };
+const BUILT_TOP: Record<ChairKind, number> = { chair: 0.58, plush: 0.55, stool: 0.62, 'velvet-stool': 0.62, folding: 0.48, 'parlour-stool': 0.6 };
 
 interface Inst {
   matrix: THREE.Matrix4;
@@ -437,6 +437,93 @@ function podium(): Part[] {
   ];
 }
 
+/** The bingo hall's stacking chair: a padded seat and back on a chrome tube frame. */
+function foldingChair(): Part[] {
+  const t = BUILT_TOP.folding;
+  const s = CHAIRS.folding;
+  const out: Part[] = [
+    box('vinyl', s.w - 0.04, 0.05, 0.38, { y: t - 0.025, z: 0.02 }),
+    box('vinyl', s.w - 0.06, 0.2, 0.04, { y: t + 0.24, z: -0.19, rx: -0.1 }),
+  ];
+  // the frame: four legs, the back's two uprights, a rail under the seat's front
+  for (const x of [-(s.w / 2 - 0.03), s.w / 2 - 0.03]) {
+    out.push(cyl('chrome', 0.011, 0.011, t - 0.05, { x, y: (t - 0.05) / 2, z: 0.18 }, 8));
+    out.push(cyl('chrome', 0.011, 0.011, s.h - 0.02, { x, y: (s.h - 0.02) / 2, z: -0.19, rx: -0.1 }, 8));
+  }
+  out.push(cyl('chrome', 0.009, 0.009, s.w - 0.06, { y: t - 0.08, z: 0.18, rz: Math.PI / 2 }, 8));
+  out.push(cyl('chrome', 0.009, 0.009, s.w - 0.06, { y: 0.16, z: -0.02, rz: Math.PI / 2 }, 8));
+  return out;
+}
+
+/** A pachinko stool: a round red cushion with a low curved back, on a chrome post bolted down. */
+function parlourStool(): Part[] {
+  const t = BUILT_TOP['parlour-stool'];
+  const back = new THREE.CylinderGeometry(0.17, 0.17, 0.2, 20, 1, true, Math.PI * 0.62, Math.PI * 0.76);
+  addInside(back);
+  return [
+    cyl('velvet', 0.17, 0.16, 0.08, { y: t - 0.04 }, 24),
+    cyl('chrome', 0.175, 0.175, 0.016, { y: t - 0.088 }, 24),
+    { geo: placed(back, { y: t + 0.16 }), mat: 'velvet' },
+    ...[-1, 1].map((e) => cyl('chrome', 0.01, 0.01, 0.18, { x: e * 0.12, y: t + 0.02, z: -0.12 }, 6)),
+    cyl('chrome', 0.03, 0.035, t - 0.1, { y: (t - 0.1) / 2 + 0.01 }, 12),
+    cyl('chrome', 0.13, 0.14, 0.02, { y: 0.01 }, 20),
+    ring('chrome', 0.13, 0.01, { y: 0.26 }),
+  ];
+}
+
+/** A drinks machine: an enamel cabinet, the lit window of cans, the buttons and the drop. */
+function vending(): Part[] {
+  const s = FURNITURE.vending;
+  // the cabinet a little shallower than the spec: its front's buttons and trims stand proud of it
+  const d = s.d - 0.06;
+  const f = d / 2;
+  return [
+    box('enamel', s.w, s.h - 0.06, d, { y: 0.06 + (s.h - 0.06) / 2 }),
+    box('lacquer', s.w - 0.04, 0.06, d - 0.04, { y: 0.03 }),
+    // the window (its picture of cans), a hand's width proud of the cabinet's face, and the frame round it
+    box('vending-face', s.w - 0.2, 1.06, 0.01, { y: 1.22, z: f + 0.008 }),
+    box('chrome', s.w - 0.16, 0.02, 0.02, { y: 1.76, z: f + 0.012 }),
+    box('chrome', s.w - 0.16, 0.02, 0.02, { y: 0.68, z: f + 0.012 }),
+    // the button strip and the coin panel down the right, the dark drop at the foot
+    box('lacquer', 0.12, 0.44, 0.012, { x: s.w / 2 - 0.09, y: 0.4, z: f + 0.008 }),
+    box('case-light', 0.05, 0.05, 0.006, { x: s.w / 2 - 0.09, y: 0.54, z: f + 0.017 }),
+    box('lacquer', s.w - 0.4, 0.16, 0.03, { x: -0.1, y: 0.24, z: f + 0.017 }),
+  ];
+}
+
+/** The Jade Room's sideboard: red lacquer with brass pulls, a black top, porcelain vases on it. */
+function cabinet(): Part[] {
+  const s = FURNITURE.cabinet;
+  const top = 0.86;
+  const vase = (r: number, h: number) =>
+    new THREE.LatheGeometry(
+      [
+        [0.001, 0],
+        [r * 0.55, 0],
+        [r * 0.62, h * 0.08],
+        [r, h * 0.42],
+        [r * 0.9, h * 0.7],
+        [r * 0.34, h * 0.86],
+        [r * 0.3, h * 0.94],
+        [r * 0.42, h],
+      ].map(([x, y]) => new THREE.Vector2(x, y)),
+      20,
+    );
+  const out: Part[] = [
+    box('lacquer-red', s.w - 0.04, top - 0.12, s.d - 0.04, { y: 0.12 + (top - 0.12) / 2 }),
+    box('marble-black', s.w, 0.04, s.d, { y: top + 0.02 }),
+    box('lacquer', s.w - 0.1, 0.1, s.d - 0.1, { y: 0.06 }),
+    // the doors' seams and their round brass pulls
+    ...[-0.45, 0, 0.45].map((x) => box('brass', 0.012, top - 0.22, 0.008, { x, y: 0.12 + (top - 0.12) / 2, z: s.d / 2 - 0.014 })),
+    ...[-0.1, 0.1].map((x) => cyl('brass', 0.03, 0.03, 0.02, { x, y: 0.52, z: s.d / 2 - 0.01, rx: Math.PI / 2 }, 12)),
+    { geo: placed(vase(0.14, 0.44), { x: -0.55, y: top + 0.04 }), mat: 'porcelain' },
+    { geo: placed(vase(0.11, 0.34), { x: 0.52, y: top + 0.04 }), mat: 'porcelain' },
+    cyl('jade', 0.09, 0.08, 0.16, { x: 0.08, y: top + 0.12 }, 16),
+    cyl('jade', 0.05, 0.09, 0.05, { x: 0.08, y: top + 0.225 }, 16),
+  ];
+  return out;
+}
+
 /** The directory's stand: two brass posts and a lacquer frame (its face is drawn by wayfinding.ts). */
 function directoryStand(): Part[] {
   const s = FURNITURE.directory;
@@ -471,5 +558,9 @@ const BUILDERS: Partial<Record<Kind, () => Part[]>> = {
   'plank-bench': plankBench,
   podium,
   directory: directoryStand,
+  folding: foldingChair,
+  'parlour-stool': parlourStool,
+  vending,
+  cabinet,
 };
 

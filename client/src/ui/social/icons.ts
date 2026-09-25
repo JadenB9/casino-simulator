@@ -6,10 +6,13 @@
 // The HUD icons are line drawings in the menu icons' style (menu/icons.ts).
 
 import type { EmoteId } from '../../../../shared/src/protocol.ts';
+import { EMOTE_ITEMS } from '../../../../shared/src/items.ts';
 
 const NS = 'http://www.w3.org/2000/svg';
 
-export const EMOTE_LABELS: Partial<Record<EmoteId, string>> = {
+/** Each emote's name on the wheel: the free six as they've always read, the rest as the boutique names them. */
+export const EMOTE_LABELS: Record<EmoteId, string> = {
+  ...(Object.fromEntries(EMOTE_ITEMS.map((i) => [i.id, i.name])) as Record<EmoteId, string>),
   wave: 'Wave',
   cheer: 'Cheer',
   clap: 'Clap',
@@ -116,7 +119,121 @@ export function emoteGlyph(e: EmoteId): SVGSVGElement {
       add(s, 'path', { d: 'M3.25 15.3C3.25 9.4 5.5 5 9.7 4.4', 'stroke-width': 2.6 });
       add(s, 'path', { d: 'M13.3 4.6H20.9L15.3 19.5', 'stroke-width': 2.6 });
       break;
+    case 'throwback':
+      // Side on, bent over with the hands on the knees, the hips pushed back and moving.
+      dot(s, 18.4, 7.6, 2.4);
+      bar(s, 15.4, 10.4, 8.6, 11.2, 4.4);
+      bar(s, 8.4, 12.6, 12.4, 16.4, 2.9);
+      bar(s, 12.4, 16.4, 10.4, 21.4, 2.4);
+      bar(s, 15.2, 11.6, 12.8, 15.8, 2.1);
+      line(s, 'M4.7 8.2c-1 1.3-1.2 3-.5 4.5');
+      line(s, 'M2.4 6.6c-1.6 1.9-1.9 4.6-.8 6.9');
+      break;
+    case 'griddy':
+      // Side on: a heel kicked out with the toes up, a hand made into goggles at the eye.
+      dot(s, 12.2, 5.2, 2.4);
+      bar(s, 11.8, 9.6, 11, 14.4, 4.2);
+      bar(s, 12.2, 9.8, 16.2, 9.4, 2.1);
+      bar(s, 16.2, 9.4, 15.2, 6.2, 2.1);
+      add(s, 'circle', { cx: 15.3, cy: 4.7, r: 1.35, 'stroke-width': 1.3 });
+      bar(s, 10.6, 15, 9, 21.4, 2.5);
+      bar(s, 11.8, 15, 16.2, 19.6, 2.5);
+      bar(s, 16.4, 19.8, 17.6, 17.8, 1.9);
+      break;
+    case 'floss':
+      // Both straight arms swung out to one side, the hips kicked out to the other.
+      dot(s, 12, 4.8, 2.4);
+      bar(s, 12, 9.2, 12.7, 13.8, 4.4);
+      bar(s, 10.5, 9.4, 5.2, 15.2, 2.2);
+      bar(s, 13.4, 9.6, 7.9, 17.2, 2.2);
+      bar(s, 12, 14.8, 10.4, 21.3, 2.4);
+      bar(s, 14.1, 14.6, 15.2, 21.3, 2.4);
+      line(s, 'M17.8 11.8c1.2 1 1.8 2.5 1.6 4');
+      line(s, 'M20.2 10.2c1.7 1.5 2.5 3.6 2.2 5.8');
+      break;
+    case 'dab':
+      // The face down in the crook of one elbow, the other arm flung out and up the same way.
+      dot(s, 9.2, 8.6, 2.4);
+      bar(s, 12, 11.6, 12.4, 16.2, 4.4);
+      bar(s, 13.8, 10.8, 20.6, 4.2, 2.2);
+      bar(s, 10.4, 10.8, 5.6, 7.6, 2.2);
+      bar(s, 5.6, 7.6, 11.6, 5.4, 2.2);
+      bar(s, 11.2, 16.8, 10.2, 21.5, 2.4);
+      bar(s, 13.4, 16.8, 14.6, 21.5, 2.4);
+      break;
+    case 'robot':
+      // A boxy head and body, arms bent square: one up, one down.
+      blob(s, 9, 2.4, 6, 5, 1.2);
+      bar(s, 12, 1.2, 12, 2.4, 1.2);
+      blob(s, 8.5, 8.6, 7, 7.6, 1.2);
+      add(s, 'path', { d: 'M8 10.4H4.6V6.6', 'stroke-width': 2.1 });
+      add(s, 'path', { d: 'M16 10.4H19.4V14.2', 'stroke-width': 2.1 });
+      bar(s, 10.4, 17, 10.4, 21.6, 2.4);
+      bar(s, 13.6, 17, 13.6, 21.6, 2.4);
+      break;
+    case 'backflip':
+      // Tucked into a ball inside the arc of the turn, going over backwards.
+      dot(s, 10.4, 9.8, 2.2);
+      bar(s, 12.6, 11.8, 13.2, 14.4, 4);
+      bar(s, 13.6, 15.2, 16.4, 12.8, 2.5);
+      bar(s, 16.4, 12.8, 14.6, 10.2, 2.2);
+      add(s, 'path', { d: 'M18.8 17.6A8.6 8.6 0 1 1 20.2 8.4', 'stroke-width': 1.7 });
+      add(s, 'path', { d: 'M21.9 5.6L21.2 10.4L16.9 8.6Z', class: 'fill' });
+      break;
+    case 'moneyfan':
+      // A fan of notes spread from the hand, each with its portrait oval.
+      for (const a of [-42, -14, 14, 42]) {
+        add(s, 'path', {
+          d: 'M9.6 6.2a1.3 1.3 0 0 1 1.3-1.3h2.2a1.3 1.3 0 0 1 1.3 1.3v11.4a1.3 1.3 0 0 1-1.3 1.3h-2.2a1.3 1.3 0 0 1-1.3-1.3zM12 9.6a1.1 1.6 0 1 0 0 3.2a1.1 1.6 0 1 0 0-3.2z',
+          class: 'fill',
+          'fill-rule': 'evenodd',
+          transform: `rotate(${a} 12 20)`,
+        });
+      }
+      dot(s, 12, 20, 2.2);
+      break;
+    case 'bow':
+      // Side on, folded forward from the hips with a hand to the chest.
+      dot(s, 19.4, 13.2, 2.3);
+      bar(s, 10.6, 12, 16.8, 11.8, 4.4);
+      bar(s, 15.8, 13.4, 14.2, 16.2, 2.1);
+      bar(s, 9.8, 13.4, 10.2, 21.5, 2.5);
+      bar(s, 11.4, 13.4, 12.8, 21.5, 2.5);
+      bar(s, 12.8, 21.5, 14.6, 21.5, 1.8);
+      break;
+    case 'trophy':
+      // A cup with two handles on a stem and a stepped foot.
+      add(s, 'path', { d: 'M6.6 3.2H17.4V8.2A5.4 5.4 0 0 1 6.6 8.2Z', class: 'fill' });
+      add(s, 'path', { d: 'M6.8 4.8H4.3V6.6A3.4 3.4 0 0 0 7.6 10', 'stroke-width': 1.6 });
+      add(s, 'path', { d: 'M17.2 4.8H19.7V6.6A3.4 3.4 0 0 1 16.4 10', 'stroke-width': 1.6 });
+      bar(s, 12, 13.4, 12, 17, 2.2);
+      blob(s, 8.2, 17, 7.6, 2.4, 0.8);
+      blob(s, 6.8, 19.6, 10.4, 2.6, 0.8);
+      break;
+    case 'moonwalk':
+      // Side on in a hat, one foot flat and one on its toes, sliding away from its own trail.
+      blob(s, 10.4, 0.9, 4, 2.9, 0.9);
+      bar(s, 8.8, 3.9, 16, 3.9, 1.4);
+      dot(s, 12.6, 6.4, 2.2);
+      bar(s, 12.4, 10.2, 11.8, 14.6, 4);
+      bar(s, 12.8, 10.4, 14.8, 13.8, 2);
+      bar(s, 11.2, 15.2, 10.2, 21.4, 2.4);
+      bar(s, 10.2, 21.4, 12.8, 21.4, 1.8);
+      bar(s, 12.6, 15.2, 14.8, 18.2, 2.3);
+      bar(s, 14.8, 18.2, 14, 21.2, 2.2);
+      line(s, 'M17.6 15.6h3.6');
+      line(s, 'M18.6 18.4h3.8');
+      line(s, 'M17.8 21.2h4.4');
+      break;
   }
+  return s;
+}
+
+/** A small padlock for an emote you don't have yet (class "emo-lock"). */
+export function lockGlyph(): SVGSVGElement {
+  const s = svg('emo-lock');
+  add(s, 'path', { d: 'M8.4 11V8a3.6 3.6 0 0 1 7.2 0v3', 'stroke-width': 2.2 });
+  blob(s, 6, 10.4, 12, 10, 2);
   return s;
 }
 
