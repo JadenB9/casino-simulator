@@ -68,6 +68,8 @@
 
 /* The two hands in a label: the high hand over the low. */
 .pg-hand .low { color: var(--ink-2); font-size: 0.86em; }
+.pg-hand .won { color: var(--win); }
+.pg-hand .lost { color: var(--lose); }
 .pg-hand.pg-dealer { gap: 9px; padding: 4px 12px 5px; background: rgba(4, 20, 15, 0.88); border-color: var(--line-strong); }
 .pg-dealer-word { font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-2); }
 .pg-dealer-hand { font-size: 18px; color: var(--ink); }

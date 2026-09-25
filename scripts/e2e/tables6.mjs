@@ -252,6 +252,11 @@ async function player(name) {
     await page.click('.menu-item >> nth=0');
   }
   await page.waitForSelector('.hud', { timeout: 30_000 });
+  // the daily bonus sheet opens on arrival: leave it unclaimed (the money check below counts on it)
+  if (await page.waitForSelector('.daily-sheet', { timeout: 5000 }).catch(() => null)) {
+    await page.keyboard.press('Escape');
+    await page.waitForSelector('.daily-sheet', { state: 'hidden', timeout: 5000 }).catch(() => {});
+  }
   return { page, name };
 }
 
@@ -441,6 +446,9 @@ try {
   if (which.includes('mp-lr')) await shared('letitride');
   if (which.includes('mp-pg')) await shared('paigow');
 } catch (err) {
+  // every page still open, as it stood
+  let i = 0;
+  for (const c of browser.contexts()) for (const p of c.pages()) await shot(p, `failed-${i++}`).catch(() => {});
   console.log(JSON.stringify({ failed: String(err).split('\n')[0], shots, errors: errors.slice(0, 10) }, null, 1));
   await browser.close();
   process.exit(1);

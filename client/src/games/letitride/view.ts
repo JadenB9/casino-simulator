@@ -50,7 +50,6 @@ import {
   SEAT_COUNT,
   CIRCLE_RADIUS,
   BONUS_RADIUS,
-  CIRCLE_NAMES,
   type Circle,
   boardPoints,
   boardSlot,
@@ -89,11 +88,6 @@ function money(n: Cents): string {
 
 function signed(n: Cents): string {
   return n === 0 ? '$0' : formatMoney(n, { sign: true });
-}
-
-/** "a Pair of Kings", "Three Fives", "King high". */
-function withArticle(name: string): string {
-  return name.startsWith('Pair') || name === 'Flush' || name === 'Straight' ? `a ${name}` : name;
 }
 
 /** The limits sign on its little stand by the rack, painted from the table's config. */
@@ -510,8 +504,7 @@ export function mountLetItRide(ctx: TableViewCtx): TableView {
     const n = mode === 'solo' ? Math.max(1, spots.length) : 1;
     setSpotsInPlay('letitride', n);
     // the hands I play and the middle of the table stay in view at any window size (every seat's while watching)
-    const fit = (ctx.stage as { board?: (...parts: THREE.Vector3[][]) => void }).board;
-    fit?.call(ctx.stage, boardPoints(spots.length ? spots : Array.from({ length: SEAT_COUNT }, (_, i) => i)));
+    ctx.stage.board(boardPoints(spots.length ? spots : Array.from({ length: SEAT_COUNT }, (_, i) => i)));
     if (framed !== null && framed !== n && !disposed) void glideTo(ctx.stage, n > 1 ? spotsPose(spots, ctx.stage.engine.camera.aspect) : cameraPose(me ?? 0));
     framed = n;
   };

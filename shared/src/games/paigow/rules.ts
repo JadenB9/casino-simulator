@@ -619,8 +619,3 @@ export function lowName(score: number): string {
   const d = tiebreak(score);
   return category(score) === PAIR ? `Pair of ${PLURALS[d[0]!]}` : `${SHORT[d[0]!]}-${SHORT[d[1]!]}`;
 }
-
-/** A seven-card hand with no pair, straight or flush in it, and the dealer's is at most this: "pai gow". */
-export function isPaiGow(score: number): boolean {
-  return category(score) === HIGH_CARD;
-}
