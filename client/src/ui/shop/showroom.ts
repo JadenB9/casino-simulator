@@ -169,7 +169,7 @@ function room(at: THREE.Vector3): { group: THREE.Group; pivot: THREE.Group; vitr
   // cap, and a streak of reflected light down the glass so it reads as glass from every side
   const vitrine = new THREE.Group();
   const brass = new THREE.MeshStandardMaterial({ color: '#c9a24b', metalness: 1, roughness: 0.28 });
-  const glassMat = new THREE.MeshStandardMaterial({ color: '#d6e6ec', transparent: true, opacity: 0.09, roughness: 0.04, metalness: 0.2, depthWrite: false, side: THREE.DoubleSide });
+  const glassMat = new THREE.MeshStandardMaterial({ color: '#9fb6be', transparent: true, opacity: 0.05, roughness: 0.04, metalness: 0.2, depthWrite: false, side: THREE.DoubleSide });
   const H = 2.3;
   const R = 0.6;
   const glass = new THREE.Mesh(new THREE.CylinderGeometry(R, R, H, 72, 1, true), glassMat);
