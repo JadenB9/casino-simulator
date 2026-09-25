@@ -1,11 +1,12 @@
 // A table in the scene: a group placed at a floor station, with helpers the game views share:
-// raycast picking against the felt, projecting a table point to the screen for DOM labels, and
-// the camera pose to play from.
+// raycast picking against the felt, projecting a table point to the screen for DOM labels, the
+// camera pose to play from, and the board that must stay in view (fit.ts).
 
 import * as THREE from 'three';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import type { Engine3D } from '../render/engine3d.ts';
 import type { Felt } from './felt.ts';
+import { BoardFit, type BoardPart } from './fit.ts';
 
 export interface Pose {
   position: [number, number, number];
@@ -33,10 +34,29 @@ export class TableStage {
   private gestureEnds = 0;
   private gestureNext: DealerGesture | null = null;
   private gestureTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Keeps the board in view whatever the window's size and the controls over it (fit.ts). */
+  readonly fit: BoardFit;
 
   constructor(readonly engine: Engine3D, readonly anchor: THREE.Object3D) {
     this.root.name = 'stage';
     anchor.add(this.root);
+    this.fit = new BoardFit(this.root, engine.camera, () => this.felts, () => this.restPose(engine.camera));
+  }
+
+  /**
+   * The playing surface to keep in view, in table-local parts (points, boxes, objects, felts); it
+   * replaces the default, which is every felt's regions. Name the felt too to keep its regions.
+   */
+  board(...parts: BoardPart[]): void {
+    this.fit.setBoard(parts);
+  }
+
+  /**
+   * The camera is going to another shot (table-local pose) where these parts must show (the
+   * wheel as the ball drops); `shot(null)` when it comes back to the resting pose.
+   */
+  shot(pose: Pose | null, ...parts: BoardPart[]): void {
+    this.fit.setShot(pose, parts);
   }
 
   addFelt(felt: Felt, y: number): void {
@@ -129,6 +149,7 @@ export class TableStage {
 
   dispose(): void {
     clearTimeout(this.gestureTimer);
+    this.fit.dispose(this.engine);
     this.dealer = null;
     this.root.traverse((o) => {
       if (o instanceof CSS2DObject) o.element.remove();
