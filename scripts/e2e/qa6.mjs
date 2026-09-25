@@ -71,6 +71,7 @@ if (checks.includes('floor')) {
     v.push({ name: 'lobby-fountain', at: home, eye: [0, 1.7, 14.2], look: [0, 1.0, 8] });
     v.push({ name: 'lobby-from-fountain', at: home, eye: [-2.5, 1.7, 7], look: [3.5, 1.5, 13.5] });
     for (const [i, s] of plan.statues.entries()) v.push({ name: `lobby-statue-${i + 1}`, at: home, eye: [s.x + Math.sin(s.yaw) * 3, 1.6, s.z + Math.cos(s.yaw) * 3], look: [s.x, 1.5, s.z] });
+    for (const [i, f] of plan.fountains.entries()) v.push({ name: `fountain-${i + 1}-${f.room}`, at: home, eye: [f.x - 3.2, 1.8, f.z + 3.2], look: [f.x, 1.0, f.z] });
     const pit = room('pit');
     const b = pit.bounds;
     v.push({ name: 'pit-ceiling', at: home, eye: [pit.cx, 1.7, b.z1 - 1.5], look: [pit.cx, 4.6, pit.cz - 2] });
@@ -177,6 +178,20 @@ if (checks.includes('game')) {
   if (await p.$('.modal .btn.primary')) await p.click('.modal .btn.primary');
   await p.waitForFunction(() => !window.casino.app.table, null, { timeout: 15_000 }).catch(() => ok(false, 'left the table'));
   await p.waitForTimeout(1000);
+
+  // the fountain is solid: walking straight at it from 3 m out stops at its rim
+  const fountains = await p.evaluate(() => window.casino.world.plan.fountains);
+  for (const f of fountains) {
+    await p.evaluate(([x, z]) => window.casino.world.teleport(x, z + 3, Math.PI), [f.x, f.z]); // heading pi faces -z (as at the doors), at the fountain
+    await p.waitForTimeout(600);
+    await p.keyboard.down('KeyW');
+    await p.waitForTimeout(2500);
+    await p.keyboard.up('KeyW');
+    const at = await p.evaluate(() => ({ x: window.casino.world.player.position.x, z: window.casino.world.player.position.z }));
+    const d = Math.hypot(at.x - f.x, at.z - f.z);
+    await p.screenshot({ path: `${out}/game-fountain-${f.room}.png` });
+    ok(d > 1.5, `walking into the ${f.room}'s fountain stops at its rim (${d.toFixed(2)} m from its middle)`);
+  }
 
   // down to the ground floor, then a celebrity walks into the casino
   const bank = await p.evaluate(() => {
