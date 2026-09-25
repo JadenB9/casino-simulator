@@ -22,7 +22,9 @@ import { holdemBuyIn, holdemStep } from '../../limits.ts';
 import { type Rng, shuffle, randInt, randUnit } from '../../rng.ts';
 import * as R from './rules.ts';
 import { evaluate, handName, bestFive, intCard, cardText } from './eval.ts';
-import { decide, PERSONAS, PERSONA_IDS, type BotSituation, type Position } from './bots.ts';
+import { decide, drawBot, botStackBBs, PERSONAS, type BotSituation } from './bots.ts';
+import { observe, type Act, type Reads } from './reads.ts';
+import { situationOf } from './situation.ts';
 import type {
   HoldemAction,
   HoldemEvent,
@@ -71,6 +73,10 @@ export interface SeatState {
   name: string;
   /** Bots: which personality (bots.ts). */
   persona: string | null;
+  /** Bots: how well it plays at these stakes, 0..1 (the persona's own when missing). */
+  skill?: number;
+  /** Bots: how tilted it is after a big loss, 0..1, fading hand by hand. */
+  tilt?: number;
   accountId: number | null;
   /** Chips behind. For people this mirrors the host's stack; for bots it is the only record. */
   stack: Cents;
@@ -119,6 +125,10 @@ export interface HoldemState {
   prevAggressor: number | null;
   /** Chips the house has put in front of bots (buy-ins and rebuys): the one source of new chips. */
   house: Cents;
+  /** The public actions of the hand in play, for the bots. */
+  acts?: Act[];
+  /** What the table has seen each player do, by name (reads.ts). */
+  reads?: Reads;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -257,9 +267,9 @@ function person(s: HoldemState, seat: number, name: string, accountId: number, s
   };
 }
 
-function botBuyIn(s: HoldemState, rng: Rng): Cents {
+function botBuyIn(s: HoldemState, rng: Rng, persona: string | null): Cents {
   const { bb } = blinds(s.cfg);
-  return (60 + randInt(rng, 41)) * bb;
+  return botStackBBs(persona ?? 'reg', rng) * bb;
 }
 
 /** Single player: fill the other five seats with bots, each with its own name and style. */
@@ -267,18 +277,22 @@ function seatBots(s: HoldemState, rng: Rng): void {
   if (s.cfg.mode !== 'solo') return;
   const taken = new Set(Object.values(s.seats).map((st) => st.name));
   const names = shuffle(rng, BOT_NAMES.filter((n) => !taken.has(n)));
-  const styles = shuffle(rng, [...PERSONA_IDS]);
+  const { bb } = blinds(s.cfg);
   let k = 0;
   // Seat 0 is the player's: the host seats the first (and only) person there.
   for (let seat = 1; seat < s.cfg.maxSeats; seat++) {
     if (s.seats[seat]) continue;
-    const stack = botBuyIn(s, rng);
+    // Who sits down depends on the stakes: fish at the micros, regulars at the nosebleeds.
+    const bot = drawBot(bb, rng);
+    const stack = botBuyIn(s, rng, bot.persona);
     s.house += stack;
     s.seats[seat] = {
       seat,
       bot: true,
       name: names[k] ?? `Player ${seat + 1}`,
-      persona: styles[k % styles.length]!,
+      persona: bot.persona,
+      skill: bot.skill,
+      tilt: 0,
       accountId: null,
       stack,
       sittingOut: false,
@@ -350,6 +364,7 @@ function startHand(s: HoldemState, ctx: EngineCtx, out: Out): boolean {
   s.pre = { raises: 0, limpers: 0, raisers: [] };
   s.streetRaises = 0;
   s.prevAggressor = null;
+  s.acts = [];
   for (const seat of pos.dealt) {
     const st = s.seats[seat]!;
     st.waiting = false;
@@ -403,6 +418,16 @@ function useBank(s: HoldemState, seat: number, now: number): void {
   if (now > t.bankFrom) st.bank = Math.max(0, st.bank - (now - t.bankFrom));
 }
 
+/** Add a move to the hand's public actions (what the bots read ranges from). */
+function noteAct(s: HoldemState, seat: number, mv: string, raised: boolean, prevBet: Cents, added: Cents): void {
+  const h = s.hand!;
+  const p = R.player(h, seat)!;
+  const kind = mv === 'fold' ? 'f' : mv === 'check' ? 'x' : raised ? (prevBet === 0 ? 'b' : 'r') : 'c';
+  const before = R.potTotal(h) - added;
+  const size = raised ? (p.street - prevBet) / Math.max(1, before) : 0;
+  (s.acts ??= []).push({ seat, street: h.street, kind, to: p.street, size: Math.round(size * 100) / 100, allIn: p.allIn });
+}
+
 const MOVE_WORDS: Record<string, string> = { fold: 'folds', check: 'checks', call: 'calls', bet: 'bets', raise: 'raises to', allin: 'is all-in' };
 
 /** Everything that follows a decision: chips, the event, the log, and whose turn it is now. */
@@ -413,6 +438,7 @@ function afterMove(s: HoldemState, ctx: EngineCtx, out: Out, seat: number, r: { 
   const mv = r.move as 'fold' | 'check' | 'call' | 'bet' | 'raise' | 'allin';
   out.events.push({ type: 'act', seat, move: mv, added: r.added, total: p.street, ...(auto ? { auto } : {}) });
   const raised = h.bet > prevBet;
+  noteAct(s, seat, mv, raised, prevBet, r.added);
   const amount = mv === 'call' ? ` ${money(r.added)}` : mv === 'bet' || mv === 'raise' ? ` ${money(p.street)}` : mv === 'allin' ? ` (${money(p.street)})` : '';
   const why = auto === 'timeout' ? ' (out of time)' : auto === 'leave' ? ' (left the table)' : '';
   say(s, `${nameOf(s, seat)} ${MOVE_WORDS[mv]}${amount}${why}`);
@@ -580,10 +606,11 @@ function finishHand(s: HoldemState, ctx: EngineCtx, out: Out): void {
   out.events.push({ type: 'handEnd', id: h.id });
   s.history.unshift({ id: h.id, board: h.board.map(intCard), lines: [...s.log] });
   s.history.length = Math.min(s.history.length, HISTORY);
+  learn(s, h);
   // Busted bots buy back in with the house's money; people are cashed out by the host.
   for (const st of Object.values(s.seats)) {
     if (st.bot && st.stack === 0) {
-      const amount = botBuyIn(s, ctx.rng);
+      const amount = botBuyIn(s, ctx.rng, st.persona);
       st.stack = amount;
       s.house += amount;
       out.events.push({ type: 'rebuy', seat: st.seat, amount });
@@ -600,38 +627,34 @@ function finishHand(s: HoldemState, ctx: EngineCtx, out: Out): void {
 // ---------------------------------------------------------------------------------------------
 // Bots
 
-function positionOf(h: R.Hand, seat: number): Position {
-  if (seat === h.button) return 'late';
-  if (seat === h.sbSeat) return 'sb';
-  if (seat === h.bbSeat) return 'bb';
-  const seats = h.players.map((p) => p.seat);
-  const order: number[] = [];
-  for (let x = R.after(seats, h.bbSeat); x !== h.button; x = R.after(seats, x)) order.push(x);
-  const i = order.indexOf(seat);
-  const f = order.length <= 1 ? 1 : i / order.length;
-  return f < 1 / 3 ? 'early' : f < 2 / 3 ? 'middle' : 'late';
+/**
+ * After a hand: what everyone at the table did goes into the reads, and a bot that just lost a
+ * big pot tilts (by its persona), while tilt fades a little every hand.
+ */
+function learn(s: HoldemState, h: R.Hand): void {
+  const names: Record<number, string> = {};
+  for (const p of h.players) {
+    const st = s.seats[p.seat];
+    if (st) names[p.seat] = st.name;
+  }
+  const seated = new Set(Object.values(s.seats).map((st) => st.name));
+  s.reads = observe(s.reads ?? {}, names, s.acts ?? [], seated);
+  for (const p of h.players) {
+    const st = s.seats[p.seat];
+    if (!st?.bot) continue;
+    const lost = (p.start - st.stack) / h.bb;
+    const persona = PERSONAS[st.persona ?? 'reg'] ?? PERSONAS.reg!;
+    let tilt = (st.tilt ?? 0) * 0.85;
+    if (lost >= 25) tilt += persona.tilt * Math.min(1, lost / 80);
+    st.tilt = Math.round(Math.min(1, tilt) * 1000) / 1000;
+  }
 }
 
 /** What the bot in `seat` can see: its own cards and the public table, nothing else. */
 export function botSituation(s: HoldemState, seat: number): BotSituation {
-  const h = s.hand!;
-  const p = R.player(h, seat)!;
-  return {
-    hole: [p.hole[0]!, p.hole[1]!],
-    board: [...h.board],
-    street: h.street,
-    bb: h.bb,
-    step: stepOf(s.cfg),
-    pot: R.potTotal(h),
-    bet: h.bet,
-    legal: R.legal(h, p, stepOf(s.cfg)),
-    position: positionOf(h, seat),
-    opponents: h.players.filter((o) => o.seat !== seat && !o.folded).map((o) => ({ strong: s.pre.raisers.includes(o.seat) })),
-    preRaises: s.pre.raises,
-    limpers: s.pre.limpers,
-    streetRaises: s.streetRaises,
-    aggressor: s.prevAggressor === seat,
-  };
+  const names: Record<number, string> = {};
+  for (const st of Object.values(s.seats)) names[st.seat] = st.name;
+  return situationOf(s.hand!, seat, { acts: s.acts ?? [], pre: s.pre, streetRaises: s.streetRaises, prevAggressor: s.prevAggressor }, s.reads ?? {}, names, stepOf(s.cfg));
 }
 
 /** Counts bot decisions the rules refused (the tests require zero). */
@@ -642,7 +665,7 @@ function botAct(s: HoldemState, ctx: EngineCtx, out: Out, seat: number): void {
   const st = s.seats[seat]!;
   const p = R.player(h, seat)!;
   const persona = PERSONAS[st.persona ?? 'reg'] ?? PERSONAS.reg!;
-  const d = decide(botSituation(s, seat), persona, ctx.rng);
+  const d = decide(botSituation(s, seat), persona, ctx.rng, { skill: st.skill ?? persona.skill, tilt: st.tilt ?? 0 });
   const prevBet = h.bet;
   botStats.decisions++;
   let r = R.applyMove(h, p, d.kind, d.to, stepOf(s.cfg));
@@ -835,6 +858,8 @@ export const engine: GameEngine<HoldemState, HoldemAction, HoldemView> = {
       streetRaises: 0,
       prevAggressor: null,
       house: 0,
+      acts: [],
+      reads: {},
     };
     sync(s, ctx);
     seatBots(s, ctx.rng);
@@ -938,6 +963,7 @@ export const engine: GameEngine<HoldemState, HoldemAction, HoldemView> = {
       if (s.phase === 'playing' && !p.allIn && !h.closed) {
         // Leaving mid-hand folds the hand, even out of turn. Chips already in stay in the pot.
         R.fold(p);
+        noteAct(s, seat, 'fold', false, h.bet, 0);
         if (h.toAct === seat) useBank(s, seat, ctx.now);
         out.events.push({ type: 'act', seat, move: 'fold', added: 0, total: p.street, auto: 'leave' });
         say(s, `${st.name} folds (left the table)`);

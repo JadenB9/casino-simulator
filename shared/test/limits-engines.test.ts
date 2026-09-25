@@ -147,7 +147,7 @@ describe('the online games at custom limits', () => {
 });
 
 describe("Hold'em at custom blinds", () => {
-  it('deals at the blinds it was given, with bots bought in for 60 to 100 of them', () => {
+  it('deals at the blinds it was given, with bots bought in for 60 to 250 of them', () => {
     const blinds = { min: 25 * D, max: 60 * D };
     const sim = at('holdem', blinds, 3_000 * D);
     expect(limitsOf(sim.state.cfg)).toEqual(blinds);
@@ -155,12 +155,34 @@ describe("Hold'em at custom blinds", () => {
     for (const st of Object.values(sim.state.seats) as { bot: boolean; stack: number }[]) {
       if (!st.bot) continue;
       expect(st.stack).toBeGreaterThanOrEqual(60 * 60 * D);
-      expect(st.stack).toBeLessThanOrEqual(100 * 60 * D);
+      expect(st.stack).toBeLessThanOrEqual(250 * 60 * D);
     }
     // the first hand posts them
     for (let i = 0; i < 20 && !sim.state.hand; i++) sim.advance(Math.max(0, (sim.engine.deadline(sim.state) ?? sim.now) - sim.now));
     const hand = sim.state.hand!;
     const posted = hand.players.map((p: { put: number }) => p.put).sort((a: number, b: number) => a - b);
     expect(posted.filter((x: number) => x > 0)).toEqual([25 * D, 60 * D]);
+  });
+});
+
+describe("Hold'em at $0.50/$1", () => {
+  it('bets and raises go in half dollars, and a quarter is refused', () => {
+    const sim = at('holdem', { min: 50, max: D }, 250 * D);
+    for (let i = 0; i < 400; i++) {
+      if (sim.state.phase === 'playing' && sim.state.hand?.toAct === 0) break;
+      sim.advance(Math.max(0, (sim.engine.deadline(sim.state) ?? sim.now) - sim.now));
+    }
+    const v = sim.view(0) as HoldemView;
+    const l = v.you!.legal!;
+    expect(l.step).toBe(50);
+    const range = l.bet ?? l.raise!;
+    expect(range.min % 50).toBe(0);
+    const kind = l.bet ? 'bet' : 'raise';
+    const off = range.min + 25;
+    const offAction = kind === 'bet' ? { type: 'bet', amount: off } : { type: 'raise', to: off };
+    expect(sim.engine.act(sim.state, 0, offAction, sim.ctx())).toMatchObject({ refuse: 'LIMIT' });
+    const on = range.min + 50;
+    const onAction = kind === 'bet' ? { type: 'bet', amount: on } : { type: 'raise', to: on };
+    expect(sim.engine.act(sim.state, 0, onAction, sim.ctx())).not.toHaveProperty('refuse');
   });
 });
