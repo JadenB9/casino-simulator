@@ -105,7 +105,7 @@ export const LIMITS: Partial<Record<GameId, LimitSpec>> = {
   keno: ONLINE(),
   hilo: ONLINE(),
   crash: ONLINE(),
-  // v6 online6
+  // v6 online6:
   coinflip: ONLINE(),
   wheel: ONLINE(),
   cases: ONLINE(),
