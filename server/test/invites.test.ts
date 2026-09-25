@@ -87,9 +87,11 @@ async function nothing(c: Client, t: string, ms = 150): Promise<void> {
   expect(c.msgs.filter((m) => m.t === t)).toEqual([]);
 }
 
-afterEach(() => {
+afterEach(async () => {
   vi.useRealTimers();
   for (const c of open.splice(0)) if (!c.closed) c.ws.close(1000, 'bye');
+  // the tables tell the floor who left (waitUntil); let that land before the next test or teardown
+  await new Promise((r) => setTimeout(r, 250));
 });
 
 describe('invites', () => {
@@ -195,8 +197,8 @@ describe('invites', () => {
     const t = await lobby(a, 'public');
     a.floor.send({ t: 'invite', table: t.tableId, to: [b.id] });
     const inv = (await invited(b.floor)).invite;
-    await runInDurableObject(table(t.tableId), (host: any) => {
-      host.meta.closed = true;
+    await runInDurableObject(table(t.tableId) as DurableObjectStub, (host) => {
+      (host as unknown as { meta: { closed: boolean } }).meta.closed = true;
     });
     b.floor.send({ t: 'invite.take', id: inv.id, x: 0, z: 0, r: 0 });
     expect(await joined(b.floor)).toMatchObject({ t: 'invite.no', code: 'NOT_FOUND', msg: 'That table has closed.' });
