@@ -148,7 +148,8 @@ if (checks.includes('dev')) {
     const closedAtSpawn = await p.evaluate(async () => {
       const w = window.casino.world;
       w.teleport(0, 12.8, Math.PI);
-      await new Promise((r) => setTimeout(r, 5200));
+      // (after the call above has run out: four seconds, the dwell, the close)
+      await new Promise((r) => setTimeout(r, 9000));
       return w.city.casinoBank.isShut(0);
     });
     ok(closedAtSpawn, `${quality}: standing where new players arrive leaves the doors shut`);
@@ -282,6 +283,8 @@ if (checks.includes('zfight')) {
           if (!o.isMesh || o.isSkinnedMesh || o.isPoints) return;
           // the sky, the skyline rings and the far city are backdrops, not surfaces anyone stands by
           if (/^(sky|skyline|city-below|towers)/.test(o.name)) return;
+          // the cars' own models (the cars slice's lot and fleet) are theirs to check
+          if (/^(lot-|fleet-)/.test(o.name || o.parent?.name || "")) return;
           meshSurfaces(o, o.name || o.parent?.name || 'mesh');
         });
       }

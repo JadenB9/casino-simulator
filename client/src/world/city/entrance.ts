@@ -108,18 +108,36 @@ export class EntranceLift implements Lift {
       const mesh = o as THREE.Mesh;
       if (!mesh.isMesh) return;
       const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-      const src = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry.clone();
-      src.applyMatrix4(mesh.matrixWorld);
-      const groups = src.groups.length ? src.groups : [{ start: 0, count: src.getAttribute('position').count, materialIndex: 0 }];
+      // read everything out as plain floats first: the model's positions are quantized (normalized
+      // shorts), and a matrix applied to them in place would overflow
+      const geo = mesh.geometry;
+      const index = geo.index;
+      const total = index ? index.count : geo.getAttribute('position').count;
+      const groups = geo.groups.length ? geo.groups : [{ start: 0, count: total, materialIndex: 0 }];
+      const normalM = new THREE.Matrix3().getNormalMatrix(mesh.matrixWorld);
+      const v = new THREE.Vector3();
       for (const g of groups) {
         const part = new THREE.BufferGeometry();
-        for (const name of ['position', 'normal', 'uv']) {
-          const a = src.getAttribute(name);
-          if (!a) continue;
-          const arr = new Float32Array(g.count * a.itemSize);
-          for (let i = 0; i < g.count; i++) for (let k = 0; k < a.itemSize; k++) arr[i * a.itemSize + k] = a.getComponent(g.start + i, k);
-          part.setAttribute(name, new THREE.BufferAttribute(arr, a.itemSize));
+        const pos = new Float32Array(g.count * 3);
+        const nor = new Float32Array(g.count * 3);
+        const uvs = new Float32Array(g.count * 2);
+        const P = geo.getAttribute('position');
+        const N = geo.getAttribute('normal');
+        const U = geo.getAttribute('uv');
+        for (let i = 0; i < g.count; i++) {
+          const k = index ? index.getX(g.start + i) : g.start + i;
+          v.set(P.getX(k), P.getY(k), P.getZ(k)).applyMatrix4(mesh.matrixWorld);
+          pos.set([v.x, v.y, v.z], i * 3);
+          if (N) {
+            v.set(N.getX(k), N.getY(k), N.getZ(k)).applyMatrix3(normalM).normalize();
+            nor.set([v.x, v.y, v.z], i * 3);
+          }
+          if (U) uvs.set([U.getX(k), U.getY(k)], i * 2);
         }
+        part.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+        if (N) part.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+        else part.computeVertexNormals();
+        if (U) part.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
         parts.push({ geo: part, mat: mats[g.materialIndex ?? 0]! });
       }
     });
