@@ -6,6 +6,13 @@ import type { GameId } from '../../shared/src/engine.ts';
 import { LIFTS, bankAxes, CAR_PITCH_CM, CAR_DEPTH_CM } from '../../shared/src/lifts.ts';
 import { FLOOR_BOUNDS } from '../../shared/src/protocol.ts';
 import { LOTS, ZONES } from '../../shared/src/zones.ts';
+import * as THREE from 'three';
+import { Collider } from '../src/world/collision.ts';
+import { collide } from '../src/world/collide.ts';
+import { EntranceLift, doorwayBox } from '../src/world/city/entrance.ts';
+import type { Batch } from '../src/world/batch.ts';
+import type { GlowMerge } from '../src/world/lighting.ts';
+import type { Mats } from '../src/world/materials.ts';
 import { ENTRANCES, GROUND, PICKUP, ROOF, STALL, VALET_STAND, stalls, type Area } from '../src/world/city/plan.ts';
 
 // The city's plan against the casino's and against itself: the casino's elevator stands in the
@@ -59,6 +66,66 @@ describe('the casino elevator', () => {
     expect(reached(g, seen, x, z)).toBe(true);
     // (the doors open for someone within 1.3 m of their lobby side: a new arrival stands further off)
     expect(Math.hypot(SPAWN.x - m(b.x), SPAWN.z - (m(b.z) - 0.25))).toBeGreaterThan(1.6);
+  });
+});
+
+describe('walking into the casino elevator', () => {
+  // The lobby's doors are the car's: the plan's box in the doorway keeps them shut, and the lift
+  // opens it with the leaves. Over the doors the wall's lintel has the same footprint (and comes
+  // first); the doors once opened that instead, and nobody could walk in (v6 live).
+  const plan = planFloor(footprint, undefined, { seats });
+  const door = { x: (plan.door.x0 + plan.door.x1) / 2, z: plan.door.z, width: plan.door.x1 - plan.door.x0, height: plan.door.height };
+  const build = () => {
+    const col = new Collider();
+    collide(plan, col);
+    const none = () => undefined;
+    const lift = new EntranceLift(LIFTS.casino, door, { box: none } as unknown as Batch, { add: none } as unknown as GlowMerge, { get: none } as unknown as Mats, col, new THREE.Texture(), 'high');
+    return { col, lift };
+  };
+  /** Walk straight from where everyone arrives to the middle of the car, the doors sensing you; where you end up. */
+  const walkIn = (col: Collider, lift: EntranceLift) => {
+    const to = lift.centre();
+    const p = { x: SPAWN.x, z: SPAWN.z };
+    for (let i = 0; i < 400; i++) {
+      lift.update(1 / 30, [p]);
+      const dx = to.x - p.x;
+      const dz = to.z - p.z;
+      const d = Math.hypot(dx, dz);
+      if (d < 0.02) break;
+      const s = Math.min(d, 0.05);
+      p.x += (dx / d) * s;
+      p.z += (dz / d) * s;
+      col.resolve(p, 0.3);
+    }
+    return p;
+  };
+
+  it('finds the box standing in the doorway, not the lintel over it', () => {
+    const { col } = build();
+    const lintel = col.boxes.find((b) => Math.abs(b.cx - door.x) < 0.05 && Math.abs(b.cz - door.z) < 0.25 && b.bottom > 0);
+    expect(lintel).toBeTruthy();
+    const box = doorwayBox(col, door)!;
+    expect(box).toBeTruthy();
+    expect(box).not.toBe(lintel);
+    expect(box.bottom).toBe(0);
+    expect(box.top).toBeGreaterThanOrEqual(door.height - 0.05);
+    expect(box.walk).toBe(true);
+  });
+
+  it('lets someone walk from the spawn through the open doors to the middle of the car', () => {
+    const { col, lift } = build();
+    const p = walkIn(col, lift);
+    expect(lift.isOpen()).toBe(true);
+    expect(lift.carAt(p.x, p.z)).toBe(0);
+    expect(Math.hypot(p.x - lift.centre().x, p.z - lift.centre().z)).toBeLessThan(0.05);
+  });
+
+  it('keeps the doors solid while they are shut', () => {
+    const { col, lift } = build();
+    lift.held = 0;
+    const p = walkIn(col, lift);
+    expect(lift.isShut()).toBe(true);
+    expect(p.z).toBeLessThan(door.z - 0.2);
   });
 });
 
