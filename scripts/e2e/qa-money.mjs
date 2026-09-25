@@ -922,7 +922,10 @@ if (wanted('money')) {
     const rich = boards.boards.richest;
     const wp = await me(whale);
     const top = rich.top.find((x) => x.name === 'qm_whale');
-    check(top && top.rank === 1 && top.value === wp.balance + wp.inPlay, `the whale leads Richest at balance + chips on tables (${money(top?.value ?? 0)}; age ${boards.age} ms)`);
+    // qa6: Richest is net worth now (balance + chips on tables + the bank: stats6/bank6), and on a
+    // database the other scripts share someone may be richer than the whale
+    const worth = wp.bank?.worth ?? wp.balance + wp.inPlay;
+    check(top && top.value === worth && rich.top.filter((x) => x.value > worth).length === top.rank - 1, `the whale is on Richest at its net worth, ranked by it (${money(top?.value ?? 0)}, #${top?.rank}; age ${boards.age} ms)`);
     await audit(names, 'money');
   } catch (err) {
     failed('money', err);
