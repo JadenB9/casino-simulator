@@ -90,14 +90,14 @@
 
 /* Under the HUD's right-hand buttons (and a lobby's party panel), above the table's panels. */
 .ft-cards { position: fixed; top: calc(var(--below-party) + 6px); right: 16px; z-index: 41; display: grid; justify-items: end; }
-.ft-card { position: relative; display: flex; align-items: center; gap: 14px; width: min(340px, calc(100vw - 32px)); padding: 12px 18px 13px 16px; border-color: var(--line-strong); color: var(--ink); text-align: left; cursor: pointer; overflow: hidden; animation: ft-in 0.42s var(--ease); }
+.ft-card { position: relative; display: flex; align-items: center; gap: 14px; width: min(360px, calc(100vw - 32px)); padding: 12px 18px 13px 16px; border-color: var(--line-strong); color: var(--ink); text-align: left; cursor: pointer; overflow: hidden; animation: ft-in 0.42s var(--ease); }
 .ft-card::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: linear-gradient(var(--brass-hi), var(--brass)); }
 .ft-card:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .ft-card .ft-medal { flex: none; width: 40px; height: 40px; margin: 0; stroke-width: 1.2; animation: ft-medal 0.9s var(--ease) 0.15s both; }
 .ft-card-text { min-width: 0; }
 .ft-card-kind { font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--brass); }
 .ft-card-name { margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--serif); font-size: 18px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--brass-hi); }
-.ft-card-sub { margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; letter-spacing: 0.03em; color: var(--ink-2); }
+.ft-card-sub { margin-top: 2px; font-size: 15px; line-height: 1.25; letter-spacing: 0.03em; color: var(--ink-2); }
 .ft-card.out { opacity: 0; transform: translateX(14px); transition: opacity 0.38s var(--ease), transform 0.38s var(--ease); }
 
 @keyframes ft-in { from { opacity: 0; transform: translateX(24px); } }

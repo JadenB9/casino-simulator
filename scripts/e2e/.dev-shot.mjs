@@ -1,0 +1,12 @@
+import { chromium } from 'playwright';
+const [url, out, w = '1440', h = '900', wait = '1500'] = process.argv.slice(2);
+const browser = await chromium.launch({ args: ['--ignore-gpu-blocklist'] });
+const ctx = await browser.newContext({ viewport: { width: +w, height: +h } });
+await ctx.addInitScript(() => localStorage.setItem('casino.quality', 'low'));
+const page = await ctx.newPage();
+page.on('pageerror', (e) => console.log('pageerror', String(e)));
+page.on('console', (m) => m.type() === 'error' && console.log('console', m.text()));
+await page.goto(url);
+await page.waitForTimeout(+wait);
+await page.screenshot({ path: out });
+await browser.close();
