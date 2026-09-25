@@ -11,6 +11,7 @@ import type { Quality } from '../../render/engine3d.ts';
 import type { Sfx } from '../../audio/sfx.ts';
 import { tween, ease } from '../../table/tween.ts';
 import { SicBoDie, DIE_SIZE, restQuaternion } from './art.ts';
+import { calm, calmScale } from '../../app/comfort.ts';
 
 export const SHAKER_NAME = 'sicbo-shaker';
 /** Inside radius of the dome, and the height of the bed the dice rest on (shaker-local). */
@@ -186,9 +187,11 @@ export class Shaker {
         p.die.position.set(Math.cos(a) * rad, BED_Y + DIE_SIZE / 2 + h, Math.sin(a) * rad);
         p.die.quaternion.copy(p.q0).multiply(turn.setFromAxisAngle(p.axis, p.spin * t));
       }
-      this.dome.position.y = 0.0012 * env * Math.sin(t * Math.PI * 2 * 15);
-      this.dome.rotation.z = 0.006 * env * Math.sin(t * Math.PI * 2 * 9);
-      this.leds.emissiveIntensity = 0.25 + 1.1 * env * (0.75 + 0.25 * Math.sin(t * 40));
+      // calm (app/comfort.ts): the dome barely trembles, and its lights come up steady
+      const buzz = env * calmScale(0.2);
+      this.dome.position.y = 0.0012 * buzz * Math.sin(t * Math.PI * 2 * 15);
+      this.dome.rotation.z = 0.006 * buzz * Math.sin(t * Math.PI * 2 * 9);
+      this.leds.emissiveIntensity = 0.25 + 1.1 * env * (calm() ? 0.75 : 0.75 + 0.25 * Math.sin(t * 40));
     }, ease.linear);
     this.dome.position.set(0, 0, 0);
     this.dome.rotation.set(0, 0, 0);

@@ -23,6 +23,7 @@ import { spendTicket } from '../tickets.ts';
 // v6 celebs6: celebrities and the gift box
 import { Celebs } from './celebs.ts';
 import { parseCelebMsg, type CelebServerMsg, type GiftBox, type Visit } from '../../../shared/src/celebs.ts';
+import type { HappyHour } from '../../../shared/src/happyhour.ts';
 
 /** A hard cap on floor connections; a busy night past this gets a polite "casino is full". */
 export const MAX_FLOOR = 150;
@@ -376,8 +377,8 @@ export class CasinoFloor extends DurableObject<Env> {
   }
 
   /** v6 celebs6: the dev stack's celebrity and gift box on demand (celebs.ts celebsDevApi). */
-  celebDev(kind: 'celeb' | 'gift', arg?: string | number): Visit | GiftBox {
-    return this.celebs.force(kind, Date.now(), arg);
+  celebDev(kind: 'celeb' | 'gift' | 'happy', arg?: string | number, from?: number): Visit | GiftBox | HappyHour {
+    return this.celebs.force(kind, Date.now(), arg, from);
   }
 
   /** Everyone on the floor sees the gesture over this player's head. */

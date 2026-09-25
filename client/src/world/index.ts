@@ -160,9 +160,10 @@ export interface FloorWorld extends World {
   setStatues(list: Statue[]): Promise<void>;
   /**
    * What the effects need from the app: your floor id (effects follow their buyer, yours follow
-   * you) and the pit's LED sign (the Headline puts a name on it). Null forgets the sign.
+   * you), the pit's LED sign (the Headline puts a name on it) and the slots hall's win meter (Own
+   * the Night borrows its face). Null forgets a sign.
    */
-  useFx(o: { self?: () => number | null; marquee?: Marquee | null }): void;
+  useFx(o: { self?: () => number | null; marquee?: Marquee | null; tally?: { mesh: THREE.Mesh } | null }): void;
   /** The effects and statues themselves (for the dev floor and the checks). */
   readonly fx: FxPlayer;
 }
@@ -266,7 +267,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
     ...plan.hanging.map((h) => ({ x: h.x, z: h.z, r: h.w / 2 })),
     { x: sign.x, z: sign.z, r: sign.length / 2 },
   ];
-  const fx = new FxPlayer({ root, plan, camera: engine.camera, quality: () => quality, lighting, collider: col, characters, mats, me: character, ui, sfx: opts.sfx, hangers, env: () => reflections?.texture ?? null });
+  const fx = new FxPlayer({ root, plan, camera: engine.camera, quality: () => quality, lighting, collider: col, characters, mats, me: character, ui, sfx: opts.sfx, hangers, env: () => reflections?.texture ?? null, stations: stationRoot });
   const interact = new Interact(stations, cashier, player, engine.camera, ui, opts.onEscape);
   // Rooms nobody can see from where the camera is aren't drawn: their walls and ceilings, their
   // furniture and props, their stations and staff.
@@ -511,6 +512,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
     useFx(o) {
       if (o.self) fx.useSelf(o.self);
       if (o.marquee !== undefined) fx.useMarquee(o.marquee);
+      if (o.tally !== undefined) fx.useTally(o.tally?.mesh ?? null);
     },
     fx,
     dispose() {

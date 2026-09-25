@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import type { Region } from '../../table/felt.ts';
 import { REGIONS } from './layout.ts';
+import { wave } from '../../app/comfort.ts';
 
 export class SpotRing {
   readonly root = new THREE.Group();
@@ -38,7 +39,7 @@ export class SpotRing {
     if (!this.key) return;
     this.t += dt;
     // fade in, then breathe between faint and clear
-    this.mat.opacity = Math.min(1, this.t * 3) * (0.16 + 0.1 * (0.5 + 0.5 * Math.sin(this.t * 2.6)));
+    this.mat.opacity = Math.min(1, this.t * 3) * (0.16 + 0.1 * (0.5 + 0.5 * wave(this.t * 2.6)));
   }
 
   dispose(): void {

@@ -12,6 +12,7 @@ import { MACHINES, type MachineId } from '../../../../shared/src/games/slots/mac
 import { ATLAS_H, ATLAS_W, BUTTONS, COIN_COLUMNS, REGIONS, paintAtlas, paintMeters, paintOverlay, type DeckButton, type Rect } from './glass.ts';
 import { stripArt, type StripArt } from './symbols.ts';
 import { reelGeometry, reelMaterial, stripTexture, type ReelLook, type ReelMaterial } from './reels.ts';
+import { calmUniform } from '../../app/comfort.ts';
 
 type ZY = [z: number, y: number];
 
@@ -237,8 +238,9 @@ export function bulbMaterial(time: { value: number }, mode: { value: number }): 
   m.onBeforeCompile = (shader) => {
     shader.uniforms.uTime = time;
     shader.uniforms.uMode = mode;
+    shader.uniforms.uCalm = calmUniform;
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nuniform float uTime;\nuniform float uMode;\nvarying float vLit;')
+      .replace('#include <common>', '#include <common>\nuniform float uTime;\nuniform float uMode;\nuniform float uCalm;\nvarying float vLit;')
       .replace(
         '#include <color_vertex>',
         `#include <color_vertex>
@@ -248,7 +250,10 @@ export function bulbMaterial(time: { value: number }, mode: { value: number }): 
         float pulse = 0.5 + 0.5 * cos(uTime * 3.14159);
         float run = fract(bulbId / 7.0 - uTime * 4.2);
         float comet = 0.12 + 1.25 * run * run * run;
-        vLit = uMode < 0.5 ? 0.3 + 0.7 * chase : (uMode < 1.5 ? 0.22 + 0.78 * flash : (uMode < 2.5 ? 0.15 + 0.85 * pulse : comet));`,
+        vLit = uMode < 0.5 ? 0.3 + 0.7 * chase : (uMode < 1.5 ? 0.22 + 0.78 * flash : (uMode < 2.5 ? 0.15 + 0.85 * pulse : comet));
+        // calm (app/comfort.ts): the ring lights evenly, brighter for a win, and a slow breath for the pulse
+        float calmIdle = 0.72;
+        vLit = mix(vLit, uMode < 0.5 ? calmIdle : (uMode < 1.5 ? 0.9 : (uMode < 2.5 ? 0.5 + 0.2 * cos(uTime * 1.05) : 1.05)), uCalm);`,
       );
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', '#include <common>\nvarying float vLit;')

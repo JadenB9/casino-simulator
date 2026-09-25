@@ -70,6 +70,7 @@ import { SpotPicker } from '../multihand/picker.ts';
 import { glideTo, setSpotsInPlay } from '../multihand/frame.ts';
 import { oneAtATime } from '../multihand/turns.ts';
 import './threecard.css';
+import { wave } from '../../app/comfort.ts';
 
 const KINDS: SpotKind[] = ['pairPlus', 'ante', 'play'];
 const SPOT_NAMES: Record<SpotKind, string> = { pairPlus: 'PAIR PLUS', ante: 'ANTE', play: 'PLAY' };
@@ -1159,7 +1160,7 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
     update() {
       tickClock();
       // the ring round the hand being decided breathes, so it's found at a glance
-      litMat.opacity = 0.62 + 0.3 * Math.sin(performance.now() / 260);
+      litMat.opacity = 0.62 + 0.3 * wave(performance.now() / 260);
     },
 
     dispose() {

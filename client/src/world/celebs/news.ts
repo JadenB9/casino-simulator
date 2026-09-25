@@ -67,6 +67,16 @@ export class Notices {
   }
 }
 
+/** Where the cards at the right go, one under the other (a celebrity on the floor, happy hour). */
+function stack(root: HTMLElement): HTMLElement {
+  let s = root.querySelector<HTMLElement>(':scope > .celeb-stack');
+  if (!s) {
+    s = el('div', 'celeb-stack');
+    root.append(s);
+  }
+  return s;
+}
+
 /** The card while a celebrity is on the floor: who, and where they are now. */
 export class Sighting {
   private card: HTMLElement | null = null;
@@ -89,13 +99,44 @@ export class Sighting {
       c.append(el('div', 'celeb-sighting-tag', 'On the floor'), el('div', 'celeb-sighting-name', s.name), el('div', 'celeb-sighting-known', s.known));
       this.where = el('div', 'celeb-sighting-where');
       c.append(this.where);
-      this.root.append(c);
+      stack(this.root).prepend(c);
       this.card = c;
       this.shown = s.name;
     }
     const near = s.metres < 4 ? 'right here' : `${Math.round(s.metres)} m away`;
     this.where!.textContent = s.met ? `${s.room} · met tonight` : `${s.room} · ${near}`;
     this.card.classList.toggle('met', s.met);
+  }
+
+  dispose(): void {
+    this.set(null);
+  }
+}
+
+/** Happy hour's card: half price at the bar, and the minutes left. */
+export class HappyCard {
+  private card: HTMLElement | null = null;
+  private clock: HTMLElement | null = null;
+
+  constructor(private readonly root: HTMLElement) {}
+
+  /** Show the time left (`left` like "11:42"); null takes the card down. */
+  set(left: string | null): void {
+    if (left === null) {
+      this.card?.remove();
+      this.card = null;
+      return;
+    }
+    if (!this.card) {
+      const c = el('div', 'happy-card panel');
+      const row = el('div', 'happy-card-left');
+      this.clock = el('span', 'happy-card-clock');
+      row.append(el('span', '', 'Everything on the menu'), this.clock);
+      c.append(el('div', 'happy-card-tag', 'Happy hour'), el('div', 'happy-card-title', 'Half price at the bar'), row);
+      stack(this.root).append(c);
+      this.card = c;
+    }
+    this.clock!.textContent = left;
   }
 
   dispose(): void {

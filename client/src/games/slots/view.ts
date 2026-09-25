@@ -18,6 +18,7 @@ import { session } from '../../app/session.ts';
 import { tween, wait, ease } from '../../table/tween.ts';
 import { ReelSet, reelMaterial, type SpinTiming } from './reels.ts';
 import { buildCabinet, bulbMaterial, buttonAtUv, candleColor, payGlassPlacement, type CabinetHandle } from './cabinet.ts';
+import { blink, wave } from '../../app/comfort.ts';
 import { lineColor, paintMeters, paintOverlay, COIN_COLUMNS, type MeterValues } from './glass.ts';
 import { MachineSound } from './sound.ts';
 import { openPays } from './pays.ts';
@@ -681,15 +682,15 @@ export function mountSlots(ctx: TableViewCtx): TableView {
       }
       // steppers: the reels that paid pulse behind the glass and the payline glows
       if (hitReels.length) {
-        const pulse = 1.12 + 0.18 * Math.sin(flashT * 7);
+        const pulse = 1.12 + 0.18 * wave(flashT * 7);
         hitReels.forEach((hit, i) => reels.bright(i, hit ? pulse : 0.8));
       }
       if (handle.payline) {
-        const k = paylineGlow ? 0.5 + 0.5 * Math.sin(flashT * 7) : 0;
+        const k = paylineGlow ? 0.5 + 0.5 * wave(flashT * 7) : 0;
         paylineMat.color.setRGB(1, 0.2 + 0.7 * k, 0.15 + 0.7 * k);
       }
       if (candleFlash) {
-        const on = candleFlash === 1 ? Math.sin(flashT * 18) > 0 : Math.cos(flashT * Math.PI) > 0;
+        const on = blink(candleFlash === 1 ? Math.sin(flashT * 18) > 0 : Math.cos(flashT * Math.PI) > 0);
         whiteMat.color.set(on ? '#ffffff' : '#3a3632');
         tintMat.color.set(candleColor(m.denoms[denomIdx]!)).multiplyScalar(on ? 1.2 : 0.35);
       } else {
