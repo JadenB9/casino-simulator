@@ -5,6 +5,9 @@
 //          close, the dark counts the floors, the doors open on the other zone)
 //   zfight (dev floor) every face of both zones and the casino's elevator through zfight.ts: no two
 //          differently dressed faces in one plane where anyone can look (props' own models listed)
+//   camera (dev floor) the follow camera from behind the walker at every place people stop out
+//          there (the valet stand, the lobby's doors both ways, the crosswalks, the lots' doors,
+//          between the parked cars, the roof's bar and rail): it keeps its distance, not in your back
 //   phone  (dev floor, a phone) the action button in the car opens the panel; a tap on a floor rides
 //   game   logged in, two players: A walks up to the casino's elevator, calls it, steps in, E opens
 //          the panel, G rides down; B, still in the casino, stops drawing A. A walks out through
@@ -22,7 +25,7 @@ import { execFileSync } from 'node:child_process';
 
 const [port = '6350', out = '/tmp/city6', ...wanted] = process.argv.slice(2);
 mkdirSync(out, { recursive: true });
-const checks = wanted.length ? wanted : ['dev', 'zfight', 'phone', 'game'];
+const checks = wanted.length ? wanted : ['dev', 'zfight', 'camera', 'phone', 'game'];
 const gpu = process.env.GPU === '1';
 const browser = await chromium.launch(gpu ? { channel: 'chromium', args: ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'] } : { args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 let failed = 0;
@@ -277,6 +280,55 @@ if (checks.includes('zfight')) {
     for (const f of r.ours.slice(0, 30)) fail(`z-fight ${zone}: ${f}`);
   }
   if (errors.length) fail(`zfight errors: ${errors.slice(0, 3).join(' | ')}`);
+  await ctx.close();
+}
+
+// --- the follow camera out there -------------------------------------------------------------------
+
+if (checks.includes('camera')) {
+  const { p, ctx, errors } = await devFloor('high');
+  await p.evaluate(() => window.casino.world.setMouse({ view: 'third' }));
+  const places = await p.evaluate(async () => {
+    const P = await import('/casino/src/world/city/plan.ts');
+    const V = P.VALET_STAND;
+    const face = (from, to) => Math.atan2(to.x - from.x, to.z - from.z);
+    const E = Math.PI / 2;
+    return [
+      ['valet-guest', V.guest.x, V.guest.z, face(V.guest, V)],
+      ['lobby-doors-in', 126.2, 0, E],
+      ['lobby-doors-out', 129.2, 0, -E],
+      ['under-canopy', 134, 3, -E],
+      ['plaza-walk', 140, 0, E],
+      ['crosswalk-west', 152.8, 0, E],
+      ['crosswalk-east', 164.2, 0, -E],
+      ['garage-door', P.ENTRANCES.garage.x - 0.9, P.ENTRANCES.garage.z, E],
+      ['jail-door', P.ENTRANCES.jail.x - 0.9, P.ENTRANCES.jail.z, E],
+      ['lot-aisle', 116, 25.5, E],
+      ['stack-rows', 143.8, 18, Math.PI],
+      ['ground-lifts', 107.2, 0, -E],
+      ['roof-arrival', -115.2, 0, -E],
+      ['roof-bar', -123.2, -9.3, Math.PI],
+      ['roof-rail', -145.6, 0, -E],
+    ];
+  });
+  for (const [name, x, z, yaw] of places) {
+    await p.evaluate(async ([x, z, yaw]) => {
+      const w = window.casino.world;
+      w.teleport(x, z, yaw);
+      await w.city.prepare(w.zone);
+      w.teleport(x, z, yaw);
+    }, [x, z, yaw]);
+    await frames(p, 40);
+    const d = await p.evaluate(() => {
+      const { world, engine } = window.casino;
+      const c = engine.camera.position;
+      const q = world.player.position;
+      return Math.hypot(c.x - q.x, c.z - q.z);
+    });
+    ok(d > 1.8, `${name}: the camera stands ${d.toFixed(2)} m behind`);
+    await shot(p, `camera-${name}`);
+  }
+  if (errors.length) fail(`camera errors: ${errors.slice(0, 3).join(' | ')}`);
   await ctx.close();
 }
 
