@@ -371,6 +371,7 @@ class App {
     // The floor's life: seats arbitrated on this socket, orders made by the bartender and brought
     // by the waiters, and the staff's greetings by name.
     this.world.life.useLink(link);
+    this.world.useFloor(link); // v6 city6: the elevator and the server's moves
     this.world.life.useBar(this.bar);
     this.invites = this.inviteHub(link); // v6 invite6
     this.world.life.useApp({
@@ -394,6 +395,7 @@ class App {
     this.world.life.useApp(null);
     this.world.life.useBar(null);
     this.world.life.useLink(null);
+    this.world.useFloor(null); // v6 city6
     this.world.useBar(null);
     if (!keepBar) {
       this.bar?.dispose();

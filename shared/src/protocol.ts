@@ -385,6 +385,8 @@ export type FloorServerMsg =
   // v6: the server moved you (the elevator, jail, release): go there at once (cm, yaw byte)
   | { t: 'tp'; x: number; z: number; r: number }
   | InviteServerMsg // v6 invite6
+  // v6 city6: the elevator won't go (not at its doors, at a table, held): why, in words
+  | { t: 'lift.no'; to: ZoneId; msg: string }
   | { t: 'err'; code: ErrorCode; msg: string }
   | ChatServerMsg;
 
