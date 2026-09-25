@@ -82,7 +82,8 @@ export function roundFacts(game: GameId, variant: string, step: Pick<Step<unknow
   return out;
 }
 
-type Settled = [key: string, amount: number, returned: number][];
+/** Settled bets as the wheel and dice games send them (the Bandit Wheel's keys are numbers). */
+type Settled = [key: string | number, amount: number, returned: number][];
 
 /** A seat's settled bets from a wheel or dice game's settle event. */
 function settledBets(events: readonly GameEvent[], pos: number): Settled {
@@ -94,8 +95,8 @@ function settledBets(events: readonly GameEvent[], pos: number): Settled {
 /** Keys of the bets that paid (returned more than nothing). */
 function paid(events: readonly GameEvent[], pos: number): string[] {
   return settledBets(events, pos)
-    .filter((b) => Array.isArray(b) && typeof b[0] === 'string' && typeof b[2] === 'number' && b[2] > 0)
-    .map((b) => b[0]);
+    .filter((b) => Array.isArray(b) && (typeof b[0] === 'string' || typeof b[0] === 'number') && typeof b[2] === 'number' && b[2] > 0)
+    .map((b) => String(b[0]));
 }
 
 const num = (x: unknown): number => (typeof x === 'number' && Number.isFinite(x) ? x : NaN);
@@ -113,7 +114,7 @@ function topAward(variant: string): { combo: string } | { symbol: string } | nul
   return best ? { symbol: best[0] } : null;
 }
 
-/** A blackjack spot's hands as the engine left them once the round was settled. */
+/** A blackjack spot's hands as the engine holds them once the round is settled (BlackjackState.deal). */
 function blackjackHands(state: unknown, pos: number): { doubled?: boolean; outcome?: string | null }[] {
   const spots = (state as { deal?: { spots?: { seat?: number; hands?: unknown[] }[] } } | null)?.deal?.spots;
   const spot = Array.isArray(spots) ? spots.find((s) => s?.seat === pos) : undefined;
@@ -135,16 +136,18 @@ function momentsAt(
   const any = (type: string) => events.filter((e) => e.type === type);
   switch (game) {
     case 'blackjack': {
-      const results = mine('result');
-      const naturals = results.filter((e) => e.outcome === 'blackjack' || e.outcome === 'evenmoney').length;
+      // A blackjack, a bust or a surrender is settled (and its result sent) the moment it
+      // happens, rounds before the round itself ends, so the hands come from the engine's state
+      // as it stands at the end: every hand of the spot with its outcome.
+      const hands = blackjackHands(state, pos);
+      const naturals = hands.filter((h) => h?.outcome === 'blackjack' || h?.outcome === 'evenmoney').length;
       if (naturals > 0) {
         moments.push('bj-blackjack');
         counts['bj:naturals'] = naturals;
       }
-      const hands = blackjackHands(state, pos);
       if (hands.some((h) => h?.doubled === true && h.outcome === 'win')) moments.push('bj-double');
       // two hands or more on the spot means it split; every one of them won
-      if (results.length >= 2 && results.every((e) => e.outcome === 'win')) moments.push('bj-split');
+      if (hands.length >= 2 && hands.every((h) => h?.outcome === 'win')) moments.push('bj-split');
       break;
     }
     case 'roulette': {
