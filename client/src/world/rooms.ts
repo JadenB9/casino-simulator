@@ -172,7 +172,9 @@ export type FixtureItem =
   /** Bingo pattern boards on a wall: lit 5 x 5 grids of the patterns that pay (room-local middles on the face). */
   | { kind: 'patterns'; at: [number, number][]; ry: number }
   /** Stage drapes on a wall: velvet curtains either side of a stage `w` wide, a pelmet across (room-local middle on the face). */
-  | { kind: 'drapes'; x: number; z: number; ry: number; w: number };
+  | { kind: 'drapes'; x: number; z: number; ry: number; w: number }
+  /** A tiered fountain on the floor (room-local middle). */
+  | { kind: 'fountain'; x: number; z: number };
 
 /** A sign box hung from the ceiling: its text (or wayfinding segments), both faces. */
 export interface HangItem {
@@ -224,6 +226,10 @@ export interface RoomSpec {
   aisles: { x0: number; z0: number; x1: number; z1: number }[];
   /** Plants for the corners, where they fit (room-local points, pushed against the walls). */
   plants: [number, number][];
+  /** Floor kept clear of everything the plan places, but not drawn as a runner (room-local). */
+  keep?: { x0: number; z0: number; x1: number; z1: number }[];
+  /** Places for statues on plinths (room-local x, z and the way each faces), best first. */
+  statues?: [number, number, number][];
 }
 
 export type DoorKind = 'entrance' | 'grand' | 'portal' | 'arch' | 'shopfront' | 'industrial' | 'lacquer';
@@ -244,7 +250,7 @@ export interface DoorSpec {
 
 const WARM = { sky: '#ffd6a6', ground: '#3a1810', k: 1.35 };
 
-const PIT: RoomStyle = { floor: 'carpet', floorUv: 3.2, wall: 'wall', wainscot: 'wainscot', rail: 'brass', ceiling: 3.4, ceilingMat: 'ceiling', kind: 'coffer', downlights: 2.4, cove: 'warm', ambient: WARM };
+const PIT: RoomStyle = { floor: 'carpet', floorUv: 3.2, wall: 'wall', wainscot: 'wainscot', rail: 'brass', ceiling: 4.4, ceilingMat: 'ceiling', kind: 'coffer', downlights: 2.4, cove: 'warm', ambient: WARM };
 
 export const ROOMS: RoomSpec[] = [
   // --- the lobby: the doors, marble, the directory, and the grand opening to the pit ---------------
@@ -264,22 +270,29 @@ export const ROOMS: RoomSpec[] = [
       // view as you come in, clear of the palms' fronds and of anyone's path
       { kind: 'directory', x: -3.6, z: -0.3, yaw: 0.72 },
       { kind: 'bench', x: -6.2, z: -3.3, yaw: Math.PI / 2 },
-      { kind: 'bench', x: 6.2, z: -3.3, yaw: -Math.PI / 2 },
-      { kind: 'palm', x: -3.6, z: 4.8, yaw: 0 },
-      { kind: 'palm', x: 3.6, z: 4.8, yaw: 0 },
+      // two palms flank the way on from the fountain to the pit
+      { kind: 'palm', x: -3.0, z: -3.6, yaw: 0 },
+      { kind: 'palm', x: 3.0, z: -3.6, yaw: 0 },
     ],
-    fixtures: [],
+    // the fountain in the middle of the marble, under the tray and its chandelier
+    fixtures: [{ kind: 'fountain', x: 0, z: 0 }],
     hanging: [],
-    spots: [],
-    // the runner from the doors to the compass rose, and on from it to the pit
+    spots: [{ x: 0, z: 2.6, tx: 0, tz: 0, k: 20, angle: 0.8 }],
+    // the runner from the doors to the fountain, and on from it to the pit; then kept clear: the lift
+    // bank on the south wall east of the doors and the way up to it (city6's, shared/src/lifts.ts)
     aisles: [
       { x0: -2.2, z0: -5.85, x1: 2.2, z1: -1.7 },
       { x0: -2.2, z0: 1.7, x1: 2.2, z1: 5.85 },
     ],
-    plants: [
-      [-6.4, 5.4],
-      [6.4, 5.4],
+    keep: [{ x0: 1.9, z0: 2.5, x1: 6.5, z1: 5.85 }],
+    // where the lobby's statues stand (the shop's, fx6): each plinth with a clear walk round it,
+    // clear of the doors' approaches, the directory, the palms and the lift bank; best first
+    statues: [
+      [3.4, -1.4, -0.62],
+      [-4.0, 3.6, 2.33],
+      [5.7, -3.0, -1.14],
     ],
+    plants: [[-6.4, 5.4]],
   },
 
   // --- the pit: table games in two rows round the staff area, under the coffered ceiling ------------
@@ -826,7 +839,7 @@ export const ROOMS: RoomSpec[] = [
 
 export const DOORS: DoorSpec[] = [
   { id: 'entrance', a: 'lobby', b: 'outside', at: 0, width: 2.6, height: 2.9, kind: 'entrance' },
-  { id: 'lobby-pit', a: 'lobby', b: 'pit', at: 0, width: 8, height: 3.2, kind: 'grand' },
+  { id: 'lobby-pit', a: 'lobby', b: 'pit', at: 0, width: 8, height: 3.7, kind: 'grand' },
   { id: 'lobby-bank', a: 'lobby', b: 'bank', at: 9.5, width: 2.4, height: 2.8, kind: 'portal' },
   { id: 'lobby-boutique', a: 'lobby', b: 'boutique', at: 9.5, width: 2.2, height: 2.7, kind: 'shopfront' },
   { id: 'pit-slots', a: 'pit', b: 'slots', at: -6.4, width: 4.2, height: 3.1, kind: 'arch' },
