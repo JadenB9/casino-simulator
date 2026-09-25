@@ -91,4 +91,29 @@ describe("Hold'em at any stakes", () => {
     expect(snap.meta.config.buyIn).toEqual({ min: 100_000_000, max: 1_250_000_000 });
     client!.ws.close();
   });
+
+  it('a bot table rakes its pots, and the rake leaves the table without upsetting the escrow', { timeout: 150_000 }, async () => {
+    const { token, profile } = await login('poker6_rake');
+    const { client } = await connect('solo/holdem', token, '&limits=100-200');
+    const c = client!;
+    await c.next<any>((m) => m.t === 'table');
+    c.send({ t: 'buyin', aid: 'in', amount: 40_000 });
+    await c.next((m) => m.t === 'seat' && m.status === 'seated');
+    // call every bet to the end, so pots see flops, until one is raked
+    let rake: any = null;
+    for (let i = 0; i < 400 && !rake; i++) {
+      const m = await c.next<any>((x) => x.t === 'ev' || x.t === 'table', 20_000);
+      if (m.view?.you?.legal) c.send({ t: 'act', aid: `r${i}`, a: m.view.you.legal.check ? { type: 'check' } : { type: 'call' } });
+      rake = m.t === 'ev' ? m.events.find((e: any) => e.type === 'rake') : null;
+      if (rake) {
+        expect(rake.amount).toBeGreaterThan(0);
+        expect(rake.amount).toBeLessThanOrEqual(600);
+        expect(m.view.log.some((l: string) => l.startsWith('Rake $'))).toBe(true);
+      }
+    }
+    expect(rake).not.toBeNull();
+    const after = await leaveAndSettle(c, profile.id);
+    expect(await ledger(profile.id)).toBe(after.balance);
+    c.ws.close();
+  });
 });

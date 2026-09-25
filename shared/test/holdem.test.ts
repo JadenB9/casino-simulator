@@ -144,7 +144,8 @@ describe('holdem engine: single player against bots', () => {
       if (sim.state.phase === 'results') hands = Math.max(hands, sim.state.hand!.id);
       // Nothing is made or lost: the player, the bots and the pot hold what the player and the
       // house brought.
-      expect(sim.stack(0) + botStacks(sim.state) + inPot(sim.state)).toBe(buyIns + sim.state.house);
+      // (less the house's rake, which leaves the table)
+      expect(sim.stack(0) + botStacks(sim.state) + inPot(sim.state) + (sim.state.raked ?? 0)).toBe(buyIns + sim.state.house);
       if (sim.stack(0) === 0 && engine.liveBets(sim.state, 0) === 0) {
         // busted: the host cashes the player out, and they buy back in
         sim.apply(engine.seatLeaving(sim.state, 0, sim.ctx()));
@@ -154,6 +155,7 @@ describe('holdem engine: single player against bots', () => {
       }
     }
     expect(hands).toBeGreaterThanOrEqual(300);
+    expect(sim.state.raked).toBeGreaterThan(0);
     expect(botStats.decisions - before.decisions).toBeGreaterThan(1_000);
     expect(botStats.refused - before.refused).toBe(0);
   });

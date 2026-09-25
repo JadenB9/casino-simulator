@@ -443,6 +443,22 @@ export function potTotal(h: Hand): Cents {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Rake
+
+/** The house's share of a raked pot, and the most it takes from one hand, in big blinds. */
+export const RAKE_RATE = 0.05;
+export const RAKE_CAP_BBS = 3;
+
+/**
+ * The rake on this hand's pot: 5% to the cent below, at most three big blinds, and nothing when
+ * the hand ended before the flop ("no flop, no drop"). Call once the last bets are swept in.
+ */
+export function rakeOf(h: Hand): Cents {
+  if (h.board.length < 3) return 0;
+  return Math.min(Math.floor(potTotal(h) * RAKE_RATE), RAKE_CAP_BBS * h.bb);
+}
+
+// ---------------------------------------------------------------------------------------------
 // Showdown
 
 /**
@@ -481,8 +497,19 @@ export function leftOfButton(seats: number[], button: number): number[] {
  * go one each to the winners in seat order starting left of the button (4.6, TDA 21-A).
  * `values` holds each live player's hand value; mucked players have given up their claim.
  */
-export function awardPots(h: Hand, values: ReadonlyMap<number, number>, mucked: ReadonlySet<number> = new Set()): Award[] {
+export function awardPots(h: Hand, values: ReadonlyMap<number, number>, mucked: ReadonlySet<number> = new Set(), rake: Cents = 0): Award[] {
   const pots = computePots(h.players);
+  // The house's rake comes out of the pots in proportion, the odd cents from the main pot.
+  if (rake > 0) {
+    const total = pots.reduce((a, p) => a + p.amount, 0);
+    let left = rake;
+    for (let i = pots.length - 1; i >= 1; i--) {
+      const take = Math.floor((pots[i]!.amount * rake) / total);
+      pots[i]!.amount -= take;
+      left -= take;
+    }
+    if (pots[0]) pots[0].amount -= left;
+  }
   const awards: Award[] = [];
   pots.forEach((pot, i) => {
     let claim = pot.eligible.filter((s) => !mucked.has(s));

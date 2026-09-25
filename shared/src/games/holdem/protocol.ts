@@ -51,6 +51,8 @@ export type HoldemEvent =
   | { type: 'reveal'; seat: number; cards: Card[]; hand: string | null }
   | { type: 'muck'; seat: number }
   | { type: 'win'; pot: number; label: string; amount: Cents; winners: { seat: number; amount: Cents }[]; hand: string | null; best: Card[] | null }
+  /** The house's rake out of the pot, before it is paid (tables with bots only). */
+  | { type: 'rake'; amount: Cents }
   | { type: 'rebuy'; seat: number; amount: Cents }
   | { type: 'sitout'; seat: number; on: boolean }
   | { type: 'handEnd'; id: number };
@@ -143,6 +145,8 @@ export interface HoldemView {
   pots: HoldemPotView[];
   /** Everything committed this hand, pots and bets. */
   total: Cents;
+  /** The rake this pot pays as it stands (0 before the flop and at tables of people only). */
+  rake?: Cents;
   /** The bet to match on this street. */
   bet: Cents;
   turn: HoldemTurnView | null;

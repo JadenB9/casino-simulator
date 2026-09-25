@@ -1345,7 +1345,13 @@ tournaments; where cash games differ, Robert's Rules governs.
 - 2 to 9 seats. One 52-card deck, shuffled for every hand. Two blinds, small (SB) and big (BB), chosen when
   the table is started: fourteen stakes from $0.50/$1 to $100,000/$200,000, or any custom blinds in between
   (a $0.50 small blind or whole dollars up to $100,000, the big blind two to three times it;
-  [limits.md](limits.md)); $5/$10 at Standard. No antes, no straddles, no rake. Bets and raises are whole
+  [limits.md](limits.md)); $5/$10 at Standard. No antes, no straddles.
+- **Rake:** a table with bots rakes each pot 5%, to the cent below, capped at three big blinds per hand,
+  and takes nothing from a hand that ends before the flop ("no flop, no drop", the usual card-room
+  structure). The rake comes out of the pots (side pots in proportion) before they are paid, is shown
+  beside the pot once the flop is out, and is a line in the hand history. The bots play with the house's
+  chips, so without a rake a player (or a script) who beats them would farm the house; with it, no trivial
+  strategy wins (4.9). Tables of people only are rake-free. Bets and raises are whole
   dollars, or half dollars at a table whose blinds are on the half dollar ($0.50/$1), so every bet is made
   of real chips.
 - **Table stakes:** only chips on the table when the hand starts can be bet, and chips cannot be added or
@@ -1622,7 +1628,7 @@ unchanged.
 so each player holds every seat's cards; 100 big blinds, topped up each hand): bots drawn for high stakes
 beat bots drawn for micro stakes; a professional beats a station, a fish, a maniac and a rock heads-up;
 and no trivial strategy (always call, always raise the pot, min-raise every street, all-in every hand)
-wins against the tables the engine seats at high stakes. A decision takes well under a millisecond on
+wins against the tables the engine seats at any stakes, rake included. A decision takes well under a millisecond on
 average (the Monte Carlo is bounded at 220 deals).
 
 ### 4.10 Testing Hold'em

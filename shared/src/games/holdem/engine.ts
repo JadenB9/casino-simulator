@@ -125,6 +125,8 @@ export interface HoldemState {
   prevAggressor: number | null;
   /** Chips the house has put in front of bots (buy-ins and rebuys): the one source of new chips. */
   house: Cents;
+  /** The house's rake taken at this table so far (bot tables only): chips that left the table. */
+  raked?: Cents;
   /** The public actions of the hand in play, for the bots. */
   acts?: Act[];
   /** What the table has seen each player do, by name (reads.ts). */
@@ -558,7 +560,7 @@ function showdown(s: HoldemState, ctx: EngineCtx, out: Out): void {
       say(s, `${nameOf(s, seat)} mucks`);
     }
   }
-  pay(s, out, R.awardPots(h, values, mucked));
+  pay(s, out, R.awardPots(h, values, mucked, takeRake(s, out)));
   finishHand(s, ctx, out);
 }
 
@@ -566,8 +568,28 @@ function winUncontested(s: HoldemState, ctx: EngineCtx, out: Out): void {
   const h = s.hand!;
   sweep(s, out);
   h.closed = true;
-  pay(s, out, R.awardPots(h, new Map()));
+  pay(s, out, R.awardPots(h, new Map(), new Set(), takeRake(s, out)));
   finishHand(s, ctx, out);
+}
+
+/**
+ * A table with bots rakes its pots (5%, at most three big blinds, no flop no drop): bots play
+ * with the house's chips, so without it a player who beats them would farm the house. Tables of
+ * people only are rake-free.
+ */
+function raked(s: HoldemState): boolean {
+  return !!s.hand?.players.some((p) => s.seats[p.seat]?.bot);
+}
+
+function takeRake(s: HoldemState, out: Out): Cents {
+  const h = s.hand!;
+  const rake = raked(s) ? R.rakeOf(h) : 0;
+  if (rake > 0) {
+    s.raked = (s.raked ?? 0) + rake;
+    out.events.push({ type: 'rake', amount: rake });
+    say(s, `Rake ${money(rake)}`);
+  }
+  return rake;
 }
 
 /** Side pots first, then the main pot (RRP showdown rule 7). */
@@ -810,6 +832,7 @@ function view(s: HoldemState, viewer: number | null): HoldemView {
     board: h ? h.board.map(intCard) : [],
     pots: pots.map((p, i) => ({ amount: p.amount, label: i === 0 ? 'Main pot' : pots.length > 2 ? `Side pot ${i}` : 'Side pot', eligible: p.eligible })),
     total: h && live ? R.potTotal(h) : 0,
+    rake: h && live && raked(s) ? R.rakeOf(h) : 0,
     bet: h && live ? h.bet : 0,
     turn: s.phase === 'playing' && s.turn ? { ...s.turn } : null,
     nextAt: s.phase === 'results' || s.phase === 'waiting' ? s.due : null,

@@ -1,6 +1,7 @@
 // Bots against bots, many hands, fast: the rules' hand (rules.ts), the engine's own situation
 // builder (situation.ts) and reads (reads.ts), and the bots' decide(), without the table around
-// them. Hands are cash-game hands at 100 big blinds, every stack topped back up between hands.
+// them. Hands are cash-game hands at 100 big blinds, every stack topped back up between hands,
+// raked as every table with bots is.
 //
 // Duplicate format: each deal is played once per seating, the players rotated round the table
 // with the same cards in the same seats, so every player holds every seat's cards once. Luck in
@@ -96,7 +97,7 @@ export function playHand(
   reads: Reads,
   rng: Rng,
   stats: ArenaStats,
-  opts: { bb?: number; stackBB?: number } = {},
+  opts: { bb?: number; stackBB?: number; rake?: boolean } = {},
 ): number[] {
   const bb = opts.bb ?? 200;
   const step = Math.min(100, bb / 2);
@@ -166,7 +167,9 @@ export function playHand(
   const live = R.livePlayers(h);
   if (live.length > 1) for (const p of live) values.set(p.seat, R.handValue(h, p));
   const net = h.players.map((p) => -p.put);
-  for (const a of R.awardPots(h, values)) for (const w of a.winners) net[w.seat]! += w.amount;
+  // the rake every table with bots pays (5%, capped at three big blinds, no flop no drop)
+  const rake = opts.rake === false ? 0 : R.rakeOf(h);
+  for (const a of R.awardPots(h, values, new Set(), rake)) for (const w of a.winners) net[w.seat]! += w.amount;
   observe(reads, names, pub.acts, new Set(order.map((p) => p.name)));
   // tilt, as the engine does it
   h.players.forEach((_, seat) => {
@@ -197,7 +200,7 @@ export function duplicateMatch(
   deals: number,
   seed: number,
   stats: ArenaStats,
-  opts: { bb?: number; stackBB?: number; reads?: Reads; teams?: readonly string[] } = {},
+  opts: { bb?: number; stackBB?: number; rake?: boolean; reads?: Reads; teams?: readonly string[] } = {},
 ): MatchResult[] {
   const n = players.length;
   const deckRng = seededRng(seed);

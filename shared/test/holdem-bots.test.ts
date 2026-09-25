@@ -388,3 +388,57 @@ describe('speed', () => {
     expect(mean).toBeLessThan(15);
   });
 });
+
+describe('the rake', () => {
+  const hand = (board: string, puts: number[]) => {
+    const h = R.newHand({ id: 1, sb: 100, bb: 200, button: 0, sbSeat: 1, bbSeat: 2, players: puts.map((_, seat) => ({ seat, stack: 100_000 })), deck: Array.from({ length: 52 }, (_, i) => i) });
+    h.board = board ? c(board) : [];
+    h.players.forEach((p, i) => (p.put = puts[i]!));
+    return h;
+  };
+
+  it('is 5% of the pot to the cent, at most three big blinds, and nothing without a flop', () => {
+    expect(R.rakeOf(hand('Kc 7s 2d', [1_000, 1_000, 1_000]))).toBe(150);
+    expect(R.rakeOf(hand('Kc 7s 2d', [2_001, 2_000, 0]))).toBe(200);
+    expect(R.rakeOf(hand('Kc 7s 2d', [50_000, 50_000, 0]))).toBe(600);
+    expect(R.rakeOf(hand('', [50_000, 50_000, 0]))).toBe(0);
+  });
+
+  it('comes out of the pots before they are paid, side pots in proportion', () => {
+    const h = hand('Kc 7s 2d 9h 4c', [1_000, 3_000, 3_000]);
+    const v = new Map([[0, 9], [1, 5], [2, 1]]);
+    const plain = R.awardPots(h, v).reduce((a, x) => a + x.amount, 0);
+    const awards = R.awardPots(h, v, new Set(), 350);
+    expect(awards.reduce((a, x) => a + x.amount, 0)).toBe(plain - 350);
+    expect(awards.flatMap((a) => a.winners).reduce((a, w) => a + w.amount, 0)).toBe(plain - 350);
+  });
+
+  it('is taken at bot tables and never at a table of people', () => {
+    const solo = soloAt(21);
+    for (let i = 0; i < 3_000 && !(solo.state.raked ?? 0); i++) {
+      if (solo.state.phase === 'playing' && solo.state.hand?.toAct === 0) {
+        const l = (solo.view(0) as HoldemView).you!.legal!;
+        solo.act(0, l.check ? { type: 'check' } : { type: 'call' });
+      } else {
+        const d = engine.deadline(solo.state);
+        solo.advance(d === null ? 0 : Math.max(0, d - solo.now));
+      }
+    }
+    expect(solo.state.raked).toBeGreaterThan(0);
+    expect(solo.state.history.some((x) => x.lines.some((l) => l.startsWith('Rake $')))).toBe(true);
+    const multi = new TableSim(engine, seededRng(22), 'multi', [0, 1, 2].map((seat) => ({ seat, stack: 100_000 })));
+    multi.started = true;
+    for (let i = 0; i < 3_000 && multi.state.handNo < 30; i++) {
+      const t = multi.state.phase === 'playing' ? multi.state.hand?.toAct : null;
+      if (t !== null && t !== undefined) {
+        const l = (multi.view(t) as HoldemView).you!.legal!;
+        multi.act(t, l.check ? { type: 'check' } : { type: 'call' });
+      } else {
+        const d = engine.deadline(multi.state);
+        multi.advance(d === null ? 0 : Math.max(0, d - multi.now));
+      }
+    }
+    expect(multi.state.handNo).toBeGreaterThanOrEqual(30);
+    expect(multi.state.raked ?? 0).toBe(0);
+  });
+});

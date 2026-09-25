@@ -2,7 +2,7 @@
 // for high stakes beat bots drawn for micro stakes, a professional beats the loose players
 // heads-up, and none of the trivial strategies a player might try to farm the bots with
 // (always call, always raise, min-raise every street, all-in every hand) wins against the tables
-// the engine seats at high stakes. Win rates are big blinds per 100 hands with their standard
+// the engine seats, from $1 to $200,000 big blinds. Every table pays the rake bot tables do. Win rates are big blinds per 100 hands with their standard
 // errors, printed for the record. MC_ROUNDS scales the number of deals.
 
 import { it, expect } from 'vitest';
@@ -62,7 +62,7 @@ it('a professional beats a calling station, a fish and a maniac heads-up', () =>
   }
 });
 
-it('no trivial strategy wins against the tables the engine seats at high stakes', () => {
+it('no trivial strategy wins against the tables the engine seats, at any stakes, rake included', () => {
   const deals = mcRounds(600);
   const strategies = [
     ['always call', alwaysCall],
@@ -70,7 +70,7 @@ it('no trivial strategy wins against the tables the engine seats at high stakes'
     ['always min-raise', alwaysMinRaise],
     ['always all-in', alwaysShove],
   ] as const;
-  for (const bb of [100_000, 10_000_000]) {
+  for (const bb of [100, 10_000, 1_000_000, 20_000_000]) {
     for (const [i, [label, make]] of strategies.entries()) {
       const seed = 31 + i + bb;
       const r = duplicateMatch([make(label), ...drawnTable(bb, 5, seed)], deals, seed, stats);
