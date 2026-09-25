@@ -78,6 +78,8 @@ const TEASE_MIN_MS = 12_000;
 /** An ask with no answer for this long can be asked again. */
 const ASK_MS = 5_000;
 const HEAD_Y = 1.62;
+/** A line's bubble: as high as a player's emote bubble (emotes.ts), clear of the name tag under it. */
+const BUBBLE_Y = 2.46;
 const WALK_CYCLE = 1.75;
 
 interface Actor {
@@ -489,9 +491,9 @@ export class Celebs {
     }
   }
 
-  /** A line in a bubble over the head, clear of the name tag (characters.ts NAME_Y) under it. */
+  /** A line in a bubble over the head, where players' emote bubbles go: clear of the name tag under it. */
   private say(a: Actor, text: string): void {
-    this.deps.speech.say(a.ch.root, text, this.celeb?.name ?? '', 2.3);
+    this.deps.speech.say(a.ch.root, text, this.celeb?.name ?? '', BUBBLE_Y);
   }
 
   /** The floor says the celebrity had a word with someone (maybe you). */

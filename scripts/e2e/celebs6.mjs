@@ -7,6 +7,7 @@
 //           seeing the selfie, already met, and the stops after (photos, a table played for show)
 //   gift    a gift box left in the lobby: seen by both, opened by one, gone for the other
 //   phone   a visit on a phone's screen: the notice and the card clear of the HUD
+//   lineup  each celebrity in turn at the lobby stop, close up (not run by default)
 //
 // Usage: node scripts/e2e/celebs6.mjs [port] [outDir] [checks...]   (default: daily celeb gift)
 //   --sw     SwiftShader instead of the machine's GPU
@@ -340,6 +341,25 @@ if (checks.includes('gift')) {
   for (const [who, r] of [['a', a], ['b', b]]) for (const e of r.errors) fail(`${who} error: ${e}`);
   await a.ctx.close();
   await b.ctx.close();
+}
+
+// --- every celebrity, as they greet the lobby ---------------------------------------------------------
+
+if (checks.includes('lineup')) {
+  const a = await enterAs(A);
+  await a.p.keyboard.press('Escape');
+  await travel(a.p, 3.2, 4.4, 0);
+  await hold(a.p);
+  for (const id of ['nightjar', 'maddox', 'vale', 'castellan', 'quill', 'harlow']) {
+    const v = (await api(a.p, 'dev/celeb', 'POST', { celeb: id })).body.visit;
+    await a.p.waitForFunction((st) => Date.now() - st > 9_000, v.start, { timeout: 30000 });
+    // in front of them (they face the doors), a little to one side
+    await followStar(a.p, [0.9, 1.6, 2.6, 1.1]);
+    await a.p.waitForTimeout(1200);
+    await shot(a.p, `lineup-${id}`, { x: 340, y: 60, width: 600, height: 620 });
+  }
+  for (const e of a.errors) fail(`lineup error: ${e}`);
+  await a.ctx.close();
 }
 
 // --- on a phone: the notice, the on-the-floor card and the prompt clear of the HUD ------------------
