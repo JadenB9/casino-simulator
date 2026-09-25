@@ -371,6 +371,112 @@ statistical test checks the crypto source itself.
   most once a minute and once more after the last input, so the servers' own idle close (the
   backstop for a page that slept or was frozen) never comes first. 4010 never reconnects by itself.
 
+## v6
+
+### Zones
+
+`shared/src/zones.ts` splits the world into three zones: `casino` (the floor, `FLOOR_BOUNDS`),
+`ground` (x 100 to 220 m: the valet lobby, the valet stand and parking, the street, and across it
+the jail and the garage, each a fixed lot in `LOTS`) and `roof` (the terrace, x −160 to −110 m).
+They are patches of one world far enough apart that none shows in another, so positions stay
+plain (x, z) centimetres and presence works unchanged; the client builds and draws only the zone
+you're in (`client/src/world/city/`).
+
+You walk inside a zone: presence clamps every move to the zone you're in, or to `confine` (the
+jail) when the law has set one. Only the server moves you between zones, with
+`presence.teleport()` (heard as `tp`): the elevator (`server/src/floor/lift.ts`, from within 3.6 m
+of your zone's doors, never from a table and never while confined), being taken to jail, and being
+let out. Elevator banks, their cars and arrival points are `shared/src/lifts.ts`.
+
+### The law
+
+The rules are `shared/src/law/rules.ts`, the guards' and the pit boss's routes `patrol.ts`, what
+they can see `sight.ts`. The floor's side is `server/src/law.ts`:
+
+- A punch (V) lands on whoever is nearest in reach and in front; any guard who can see the
+  puncher catches it. A table (`server/src/law-table.ts`) reports a player whose net winnings
+  there in five minutes reach the table's hot amount (four maximum bets, a hundred minimums, at
+  least $1,000) or who hits a big win, at most every 20 seconds; the pit boss catches it only if
+  he can see them then. Streak windows live in memory: a restart forgets them.
+- A catch is a warning; a second within five minutes is jail. After a catch the same moment can't
+  catch again for 15 seconds (two guards seeing one punch).
+- A stay in jail is a `casino_jail` row (0006), at most one open per account (a partial unique
+  index). The Worker refuses an inmate every table but the jail's, on every socket and on
+  `POST /tables`; presence confines them to `JAIL_RECT`, re-applied on every connect; the lift
+  refuses them.
+- Jail tables are solo tables named `solo:<game>:jail:<account>` (blackjack and Sic Bo), so the
+  bank and profile read them as ordinary solo tables: buy-ins and cash-outs go through the escrow
+  and ledger as always, and no money moves through the jail row. Limits are $5 to a quarter of
+  the bail. Bail is a fiftieth of balance + in play + banked when locked up, to $100, between
+  $1,000 and $25,000; each finished round adds its net to `won`, floored at zero, and the floor
+  lets them out when it reaches the bail.
+
+### The bank's money identity
+
+0007 adds the bank: `casino_savings`, `casino_deposits`, `casino_holdings`, `casino_market`
+(the Index's steps), `casino_transfers`, a `banked` column on `casino_accounts`, and
+`casino_bank`, the bank's journal of every movement, with signed columns for each place money
+sits (`cash` the balance, `saved`, `locked`, `units`/`cost`) and `gain`. Per account:
+
+```
+balance            = SUM(ledger.amount) - SUM(items.price) - SUM(orders.price) + SUM(bank.cash)
+savings.balance    = SUM(bank.saved)
+open principal     = SUM(bank.locked)
+holdings.units/cost = SUM(bank.units) / SUM(bank.cost)
+banked             = savings + open principal + holdings.cost
+every bank row:      cash + saved + locked + cost = gain       (a CHECK)
+```
+
+so `balance + banked = SUM(ledger) - SUM(items) - SUM(orders) + SUM(bank.gain)`, and a player's
+money in all is balance + in_play + banked (the fund at cost). `gain` is the only column that
+makes or destroys money: `interest` (savings, paid at midnight UTC, exact to fractions of a cent
+so splitting a span pays nothing extra), `unlock` (a deposit's fixed interest, or the early fee),
+`sell` (the fund's realized gain or loss), and `send`/`receive` pairs, which cancel.
+
+Every bank operation is one D1 batch whose first statement inserts its `casino_bank` (or
+`casino_transfers`) row only if the precondition holds, read in the same transaction; every later
+statement runs only if that row exists. A precondition that changed in between writes nothing and
+the caller reads again; a retry collides on the op id and is answered with the bank as it stands.
+The Index's steps come from `HMAC-SHA256(secret, "<fund>:<step>")` (`server/src/market.ts`),
+written as they come due and never ahead. Transfers hold house money (starting stake, top-ups,
+bonuses, tips, gift boxes, feat cash) three days and player money one, cap $250,000 a day and
+$100,000 per pair, and check both again inside the batch. The cashier's top-up counts banked and
+what was sent in the last three days, so parking money in the bank or an alt earns nothing.
+
+### Feats and tallies
+
+`shared/src/feats.ts` lists the feats; `server/src/feats.ts` earns them at the tables.
+`roundFacts()` is pure: from a committed step it reads what the round added to the tallies and
+which moments it had (a blackjack, a royal). Each table's `FeatBook` keeps tallies and unpaid
+feats in its own SQLite and flushes tallies to `casino_tally` (one row per account and key) two
+minutes after the first unsent one, when the player leaves, and before paying a feat. One flush
+per account is in flight, with a sequence number that D1 applies only if the account's
+`flush:<table incarnation>` marker is below it, raising the marker in the same batch, so a flush
+whose answer was lost never counts twice.
+
+A feat is paid in one batch: the `casino_feats` row, and for cash a `grant` ledger row keyed
+`feat:<account>:<feat>` with the balance change; the feat row's primary key refuses a second
+payment from another table. Cash for a moment is `min(listed, rate × stake)`, the rate at most
+half the game's lowest edge; count challenges and dailies are comps of at most half of theo. Hold'em
+rounds count only toward Hold'em's own keys (`won:holdem`...), never the casino-wide ones.
+Keys: `won`, `rounds`, `best`, `won:<game>`, `wins:<game>`, `theo`, `comp`; stats adds `lost`,
+`worst`, `wins`, `rounds:<game>`, `streak`, `feats` and the day and week nets (`n:<day>`,
+`w:<monday>:net`, kept 35 days); dailies read `d:<day>:...` rows, kept three days. The
+leaderboards read `casino_tally` and `casino_stats` through 0008's indexes.
+
+### Migrations 0005 to 0008
+
+All additive: new tables, columns and indexes, nothing rebuilt, because the site's staging
+environment shares the database and a live Worker writes the ledger while they run. Each ships in
+the site repo under the next number there, and all four go on before the Worker that reads them.
+
+| Here | Site | Adds |
+|---|---|---|
+| `0005_feats.sql` | `018_casino_feats.sql` | `casino_feats` (one row per earned feat), `casino_tally` |
+| `0006_law.sql` | `019_casino_law.sql` | `casino_jail` and its one-open-stay index |
+| `0007_bank.sql` | `020_casino_bank.sql` | the bank's tables, `casino_accounts.banked`, the net-worth index |
+| `0008_stats.sql` | `021_casino_stats.sql` | four board indexes; backfills each account's `feats` tally |
+
 ## Deploys
 
 A deploy restarts every Durable Object and drops every socket. So the casino Worker has its own
