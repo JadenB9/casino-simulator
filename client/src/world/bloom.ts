@@ -46,7 +46,7 @@ export const FLOOR_BLOOM: BloomLook = { threshold: 1.75, knee: 0.3, strength: 0.
  */
 export const TABLE_BLOOM: BloomLook = { threshold: 4.2, knee: 0.5, strength: 0.35, radius: 0.12 };
 /** Seated at a machine: its bulbs, candle and glass are the point, and glow a little. */
-export const MACHINE_BLOOM: BloomLook = { threshold: 2.2, knee: 0.4, strength: 0.45, radius: 0.14 };
+export const MACHINE_BLOOM: BloomLook = { threshold: 2.6, knee: 0.4, strength: 0.3, radius: 0.12 };
 /**
  * The dressing rooms under the floor (the look editor's, the boutique's): a white tuxedo or shirt
  * under their key and rim lights reaches two or so and must stay cloth; the podium's brass catches

@@ -56,6 +56,10 @@ export function fovFor(aspect: number): number {
   return THREE.MathUtils.radToDeg(2 * Math.atan(half));
 }
 
+/** The studio room's light panels, as a share of three's, and the environment's strength. */
+const ENV_PANELS = 0.3;
+const ENV_INTENSITY = 0.45;
+
 export class Engine3D {
   readonly renderer: THREE.WebGLRenderer;
   readonly labels: Labels;
@@ -94,8 +98,15 @@ export class Engine3D {
     this.renderer.toneMappingExposure = 1;
     this.renderer.shadowMap.enabled = false;
     const pmrem = new THREE.PMREMGenerator(this.renderer);
-    this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-    this.scene.environmentIntensity = 0.35;
+    // three's studio room with its light panels dimmed: at full strength a chrome trim or a brass
+    // foot ring catches a panel as a white-hot line that blooms like a light tube
+    const room = new RoomEnvironment();
+    room.traverse((o) => {
+      const m = (o as THREE.Mesh).material as THREE.MeshLambertMaterial | undefined;
+      if (m && m.emissiveIntensity > 1) m.emissiveIntensity *= ENV_PANELS;
+    });
+    this.scene.environment = pmrem.fromScene(room, 0.04).texture;
+    this.scene.environmentIntensity = ENV_INTENSITY;
     pmrem.dispose();
     this.scene.background = new THREE.Color('#0b0908');
 
