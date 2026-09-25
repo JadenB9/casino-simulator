@@ -36,13 +36,17 @@ is the summary. The full rules, every paytable, the strategy charts and the sour
 
 Alone at blackjack (up to five circles), Three Card Poker, Let It Ride or Pai Gow Poker (up to
 three hands each) or Casino War (up to three spots), a player can play several hands from one
-stack, each with its own bets and its own decisions, dealt exactly as a full table deals them. Every hand plays by the same rules, so the
-figures below are per hand either way; sharing the shoe or deck changes nothing measurable (Three
-Card Poker exactly nothing). The Monte Carlo runs with several hands, their standard errors taken
+stack, each with its own bets and its own decisions, dealt exactly as a full table deals them.
+Every hand plays by the same rules, so the figures below are per hand either way; sharing the
+shoe or deck changes nothing measurable (Three Card Poker, Let It Ride and Pai Gow Poker exactly
+nothing). The Monte Carlo runs with several hands, their standard errors taken
 from each round's average since the hands share the dealer's cards, are in rules/table-games.md
 §1.7 and §7.6 and rules/cards-and-machines.md §1.9: blackjack on three spots to the cut card
 0.3499% per hand (36M hands, z −0.16), Three Card Poker on three hands 3.3801% (30M hands,
-z +0.20), Casino War on three spots 2.3315% (30M spots, z +0.06).
+z +0.20), Casino War on three spots 2.3315% (30M spots, z +0.06); and in rules/table-games.md
+(Let It Ride, Pai Gow Poker): Let It Ride on three hands against one board 3.2225% per unit
+(10M hands, z −1.58), Pai Gow Poker on three hands against the dealer's one 2.8401% (3M hands,
+z +1.96).
 
 ## Summary
 

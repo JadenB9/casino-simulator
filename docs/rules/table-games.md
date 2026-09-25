@@ -1519,6 +1519,7 @@ which the test adds to its allowance.
 | Win both / push / lose both | 28.61% / 41.48% / 29.91% | 28.613% / 41.490% / 29.897% | 0.014% / 0.016% / 0.014% | +0.2 / +0.6 / −0.9 | the same hands |
 | Fortune, pay table 2 | 7.7656% | 7.7275% | 0.1850% | −0.21 | the same hands (SD 5.85) |
 | Bet and Fortune through the table engine, the player setting by the house way through the table's own action | 10.4961% | 10.1142% | 0.8229% | −0.46 | 200,000 hands |
+| Three hands a round against the dealer's one, per hand (each hand's deal is exchangeable with a two-player deal, so the edge is exactly the same) | 2.7305% | 2.8401% | 0.0559% | +1.96 | 1M rounds, 3M hands |
 
 ### Where sources disagree
 
