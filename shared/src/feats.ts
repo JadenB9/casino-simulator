@@ -105,15 +105,6 @@ const GAME_WON_NAMES: Record<GameId, string> = {
   highcard: 'High Card',
 };
 
-/** Games still without moments of their own: a big multiple stands in until they have some. */
-const TEN_X: Partial<Record<GameId, string>> = {
-  letitride: 'Rode It Home',
-  paigow: 'Dragon Hand',
-};
-
-/** A round that paid back this many times its stake earns the stand-in above. */
-export const TEN_X_MULTIPLE = 10;
-
 const A = (id: string, game: GameId | undefined, name: string, about: string, reward: Reward): Feat => ({ id, kind: 'achievement', ...(game ? { game } : {}), name, about, reward });
 const C = (id: string, game: GameId | undefined, name: string, about: string, tally: string, goal: number, reward: Reward): Feat => ({
   id,
@@ -228,10 +219,11 @@ export const FEATS: readonly Feat[] = [
   A('pa-jackpot', 'pachinko', 'Fever', 'Hit a jackpot on the reels.', { cash: $(750) }),
   A('pa-chain', 'pachinko', 'Eight in a Chain', 'Chain eight jackpots from one ball.', { cash: $(10_000) }),
 
-  // --- the newest games: a big multiple until they have moments of their own -------------------
-  ...(Object.entries(TEN_X) as [GameId, string][]).map(([g, name]) =>
-    A(`${CATALOG[g].prefix}-10x`, g, name, `Win ${TEN_X_MULTIPLE} times your stake in one round of ${CATALOG[g].name}.`, { cash: $(1_000) }),
-  ),
+  // --- let it ride and pai gow -----------------------------------------------------------------
+  A('lr-ride', 'letitride', 'Let It Ride', 'Win with all three bets left riding.', { cash: $(1_000) }),
+  A('lr-straight-flush', 'letitride', 'Rode a Straight Flush', 'Make a straight flush or better at Let It Ride.', { cash: $(10_000) }),
+  A('pg-fortune', 'paigow', 'Fortune', 'Hit four of a kind or better on the Fortune bonus.', { cash: $(5_000) }),
+  A('pg-aces', 'paigow', 'Five Aces', 'Hit five aces (the joker one of them) on the Fortune bonus.', { cash: $(10_000), title: 'Dragon' }),
 
   // --- each game's amount won ------------------------------------------------------------------
   ...FEAT_GAMES.map((g) => C(`won-${g}`, g, GAME_WON_NAMES[g], `Win $50,000 at ${CATALOG[g].name}.`, `won:${g}`, GAME_WON_GOAL, { cash: $(2_500) })),
