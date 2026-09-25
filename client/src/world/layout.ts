@@ -832,9 +832,9 @@ export function planFloor(footprint: (game: GameId) => Footprint, slots: readonl
 
   // --- aisles: each room's walkways, then the approach to every door on both sides -----------------
   const aisles: Rect[] = [];
+  const statues: FloorPlan['statues'] = [];
   const pitSpec = ROOMS.find((r) => r.id === 'pit');
   const ordered = pitSpec ? [pitSpec, ...ROOMS.filter((r) => r !== pitSpec)] : ROOMS;
-  const statues: FloorPlan['statues'] = [];
   for (const spec of ordered) {
     const r = room(spec.id);
     for (const a of [...spec.aisles, ...(spec.keep ?? [])]) aisles.push({ x0: r.cx + a.x0, z0: r.cz + a.z0, x1: r.cx + a.x1, z1: r.cz + a.z1 });
