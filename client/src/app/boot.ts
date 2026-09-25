@@ -27,7 +27,7 @@ import { openEffects } from '../ui/shop/index.ts'; // v6 shop6: effects from any
 import { button, modal, toast } from '../ui/kit.ts';
 import { showAway, showIdleWarning, type AwayHandle, type WarningHandle } from '../ui/away/away.ts';
 import { IdleWatch } from './idle.ts';
-import { rideKey } from '../world/rides.ts';
+import { RideSound, rideKey } from '../world/rides.ts';
 import { ENGINES } from '../../../shared/src/games/index.ts';
 import { mountDaily, dailyApi, type DailyHandle } from '../ui/daily/index.ts'; // v6 celebs6
 import { CLOSE, type Profile } from '../../../shared/src/protocol.ts';
@@ -158,6 +158,8 @@ class App {
       allowed: (e) => !isTyping(e) && overlayCount() === 0 && this.hud !== null && this.table === null && this.world.seated === null,
       say: (text) => toast(text),
     });
+    const rideSound = new RideSound(sfx);
+    engine.onFrame((dt) => rideSound.update(dt, world.player.character, this.hud !== null && this.table === null && this.world.seated === null && !this.away));
     this.idle = new IdleWatch({
       showWarning: (at) => {
         this.idleWarning?.close();
