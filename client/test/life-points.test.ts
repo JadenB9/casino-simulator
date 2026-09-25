@@ -43,14 +43,14 @@ describe('life points', () => {
     expect(new Set(ids).size).toBe(ids.length);
     for (const id of ids) expect(id).toMatch(/^[a-z0-9._:-]{1,40}$/);
     const rooms = new Set(pts.seats.map((s) => s.room));
-    for (const r of ['bar', 'lounge', 'lobby', 'bank', 'salon', 'poker', 'online', 'yard', 'pit', 'boutique']) expect(rooms.has(r), r).toBe(true);
+    for (const r of ['bar', 'lounge', 'lobby', 'bank', 'salon', 'poker', 'online', 'yard', 'pit', 'boutique', 'parlour', 'cardroom', 'bingo']) expect(rooms.has(r), r).toBe(true);
     const kinds = new Set(pts.seats.map((s) => s.kind));
     for (const k of ['chair', 'stool', 'sofa', 'bench']) expect(kinds.has(k as 'chair'), k).toBe(true);
   });
 
   it('lists every online desk chair with its station', () => {
     const desks = pts.seats.filter((s) => s.station);
-    expect(desks).toHaveLength(16);
+    expect(desks).toHaveLength(24);
     for (const d of desks) {
       expect(plan.stations.find((s) => s.id === d.station)?.zone).toBe('online');
       expect(d.top).toBe(SEAT_TOPS.desk);

@@ -78,6 +78,30 @@ export const PALETTES = {
     spark: '#d4a050',
     cream: '#e2c898',
   },
+  /** The pachinko parlour: lacquer red on near-black, gold and a sakura pink. */
+  parlour: {
+    ground: '#3a0a10',
+    groundDark: '#22060a',
+    groundLight: '#4a0e16',
+    gold: '#d6a94a',
+    goldDark: '#8e6a28',
+    accent: '#171a3c',
+    accentDark: '#0c0e24',
+    spark: '#f07ab0',
+    cream: '#f2dcae',
+  },
+  /** The Jade Room: deep jade with gold, a lacquer-red accent. */
+  jade: {
+    ground: '#0b3a30',
+    groundDark: '#062520',
+    groundLight: '#0f4a3c',
+    gold: '#d4aa50',
+    goldDark: '#8c6a2a',
+    accent: '#7a1418',
+    accentDark: '#4a0a0e',
+    spark: '#e6c46e',
+    cream: '#f0e0b0',
+  },
 } satisfies Record<string, CarpetPalette>;
 
 /** Small, fast, seeded PRNG (mulberry32): the same carpet on every visit. */

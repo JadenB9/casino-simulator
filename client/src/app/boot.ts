@@ -28,6 +28,7 @@ import { button, modal, toast } from '../ui/kit.ts';
 import { showAway, showIdleWarning, type AwayHandle, type WarningHandle } from '../ui/away/away.ts';
 import { IdleWatch } from './idle.ts';
 import { RideSound, rideKey } from '../world/rides.ts';
+import { mountFeats, type FeatsUi } from '../ui/feats/index.ts'; // v6 feats6
 import { ENGINES } from '../../../shared/src/games/index.ts';
 import { mountDaily, dailyApi, type DailyHandle } from '../ui/daily/index.ts'; // v6 celebs6
 import { CLOSE, type Profile } from '../../../shared/src/protocol.ts';
@@ -109,6 +110,8 @@ class App {
   private daily: DailyHandle | null = null;
   /** Where each station's n-th seated player is drawn; stations never move. */
   private readonly seatCache = new Map<string, SeatPose | null>();
+  /** v6 feats6: the achievements (HUD cup, J, the sheet, the card when you earn one). */
+  private feats: FeatsUi | null = null;
 
   constructor(
     private readonly engine: Engine3D,
@@ -313,6 +316,13 @@ class App {
     // Big wins are announced to people out on the floor, never to the winner at their table.
     this.lifeOff = this.life.connect(link, { onFloor: () => this.hud !== null && this.table === null && this.world.seated === null });
     link.on('emote', (id, e) => void this.world.showEmote(id === link.you?.id ? 'me' : id, e));
+    // v6 emotes6: an emote bought or earned while you're on the floor is yours at once: in the
+    // profile (the wheel reads it there next time) and unlocked on a wheel that's up now
+    link.on('owned', (emotes) => {
+      const p = session.profile;
+      if (p) session.set({ ...p, owned: [...new Set([...(p.owned ?? []), ...emotes])] });
+      this.emotes?.grant(emotes);
+    });
     // v6 fx6: the shop's effects and the lobby's statues, for everyone on the floor (world/fx/)
     this.world.useFx({ self: () => link.you?.id ?? null, marquee: this.life.marquee, tally: this.life.tally });
     link.on('fx', (ev) => this.world.playFx(ev));
@@ -329,6 +339,8 @@ class App {
       this.menu?.setOnline(n);
     });
     link.on('state', (_s, code) => void this.endsSession(code));
+    // v6 feats6: a feat of yours the floor heard of before any table said (earned as you left)
+    link.subscribe((m) => m.t === 'feat' && this.feats?.floorFeat(m));
     // Kept through away and back, with whatever is paid for and on its way.
     this.bar ??= new Bar({
       session,
@@ -410,7 +422,8 @@ class App {
     });
     this.hud.setOnline(this.link?.onlineCount ?? null);
     // Emotes (G) and the leaderboards, in the HUD's right-hand bar ahead of the tips bulb.
-    this.emotes = mountEmotes({ root: this.ui, send: (e) => void this.link?.emote(e) });
+    // v6 emotes6: the wheel shows what you own; a locked one opens the boutique at it
+    this.emotes = mountEmotes({ root: this.ui, send: (e) => void this.link?.emote(e), owned: () => session.profile?.owned, shop: (e) => this.openShop(e) });
     const bar = this.hud.root.querySelector('.hud-right')!;
     const first = bar.querySelector('.hud-btn');
     bar.insertBefore(socialButton('emotes', 'Emotes (G)', () => this.emotes?.toggle()), first);
@@ -420,6 +433,11 @@ class App {
     bar.insertBefore(shopButton('bar', 'Bar', () => this.openBarMenu()), first);
     // v6 celebs6: the daily bonus (its button, and its sheet on arrival while today's is waiting)
     this.daily = mountDaily({ root: this.ui, bar, before: first, api: dailyApi, money: (m) => session.balance(m.balance, m.inPlay, m.rev), sfx: this.sfx });
+    // v6 feats6: the achievements, their cup in the bar and your title under your name
+    this.feats?.dispose();
+    this.feats = mountFeats({ root: this.ui, session, sfx: this.sfx, game: () => this.table?.station.game ?? null });
+    bar.insertBefore(this.feats.button, first);
+    this.feats.useHud(this.hud.root);
     this.chat?.setVisible(true);
   }
 
@@ -430,6 +448,8 @@ class App {
     this.emotes = null;
     this.daily?.dispose(); // v6 celebs6
     this.daily = null;
+    this.feats?.dispose(); // v6 feats6
+    this.feats = null;
     this.chat?.setVisible(false);
     this.hud?.close();
     this.hud = null;
@@ -599,6 +619,8 @@ class App {
           if (seated) this.poseForSeat(m.seat);
         },
         onChat: (m) => current() && this.chat?.tableMessage(m),
+        // v6 feats6: earned here; shown once the round behind it has played out
+        onFeat: (m) => this.feats?.tableFeat(m, current() ? (fn) => table!.afterShown(fn) : undefined),
       },
     );
     this.table = { station, session: table, party, seated: false, posed: null };
@@ -727,6 +749,8 @@ class App {
     this.table?.session.close();
     this.emotes?.dispose();
     this.emotes = null;
+    this.feats?.dispose(); // v6 feats6
+    this.feats = null;
     this.disconnectFloor();
     this.world.player.setEnabled(false);
     modal(title, [text], [button('Reload', () => location.reload(), { cls: 'primary' })]);

@@ -230,6 +230,13 @@ if (checks.includes('floor')) {
   const cut = await state(p);
   ok(dist(cut.cam, cut.eye) < 0.05, 'walking during an emote brings the eyes straight back');
 
+  // a punch (world/law/'s 'punch' gesture) keeps the eyes where they are: no swing out
+  await p.evaluate(() => window.casino.world.player.character.gesture('punch'));
+  await p.waitForTimeout(300);
+  const jab = await state(p);
+  ok(dist(jab.cam, jab.eye) < 0.02, 'a punch thrown in first person keeps the eyes put');
+  await p.waitForTimeout(500);
+
   // a table: E flies in from the eyes, F there is the game's, Esc flies back to the eyes
   await p.evaluate(() => {
     const w = window.casino.world;

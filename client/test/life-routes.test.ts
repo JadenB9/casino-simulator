@@ -18,6 +18,8 @@ const TODAY: Record<GameId, Footprint> = {
   plinko: { width: 1.2, depth: 1.6 }, tower: { width: 1.2, depth: 1.6 }, mines: { width: 1.2, depth: 1.6 }, dice: { width: 1.2, depth: 1.6 },
   limbo: { width: 1.2, depth: 1.6 }, keno: { width: 1.2, depth: 1.6 }, hilo: { width: 1.2, depth: 1.6 }, crash: { width: 1.2, depth: 1.6 },
   banditwheel: { width: 4.0, depth: 3.0 },
+  coinflip: { width: 1.2, depth: 1.6 }, wheel: { width: 1.2, depth: 1.6 }, cases: { width: 1.2, depth: 1.6 }, diamonds: { width: 1.2, depth: 1.6 },
+  letitride: { width: 2.72, depth: 1.4 }, paigow: { width: 2.72, depth: 1.4 }, bingo: { width: 4.8, depth: 6.6 }, pachinko: { width: 0.6, depth: 0.52 },
 };
 
 describe("the waiters' rounds on today's floor", () => {

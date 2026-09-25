@@ -157,7 +157,7 @@ export class StationLod {
       copy.updateWorldMatrix(true, false);
       place.multiplyMatrices(toParent, copy.matrixWorld);
       s.anchor.getWorldPosition(at);
-      const machine = s.zone === 'slots' || s.zone === 'bar' || s.zone === 'online';
+      const machine = s.zone === 'slots' || s.zone === 'bar' || s.zone === 'online' || s.zone === 'parlour';
       const far = machine ? MACHINE_FAR_M : FAR_M;
       const near = machine ? MACHINE_NEAR_M : NEAR_M;
       const sphere = new THREE.Box3().setFromObject(s.model).getBoundingSphere(new THREE.Sphere());

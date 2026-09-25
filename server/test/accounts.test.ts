@@ -140,7 +140,7 @@ describe('profile', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('Cache-Control')).toBe('no-store');
     const p = (await res.json<any>()).profile;
-    expect(Object.keys(p).sort()).toEqual(['balance', 'createdAt', 'id', 'inPlay', 'loans', 'loansTaken', 'look', 'name', 'rev', 'stats', 'tables']);
+    expect(Object.keys(p).sort()).toEqual(['balance', 'createdAt', 'feats', 'id', 'inPlay', 'loans', 'loansTaken', 'look', 'name', 'owned', 'rev', 'stats', 'tables']);
     expect(p.id).toBe(profile.id);
     expect(p.stats).toEqual({ total: { rounds: 0, wagered: 0, net: 0, biggestWin: 0 }, games: {} });
   });

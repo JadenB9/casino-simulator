@@ -18,6 +18,7 @@ import { FURNITURE } from './furniture-spec.ts';
 import type { WorldStation } from './stations.ts';
 import { CATALOG } from '../../../shared/src/games/catalog.ts';
 import type { SignSpec } from './signs.ts';
+import { buildThemes } from './decor-themes.ts';
 
 export type PropKind = 'stool' | 'couch' | 'palm' | 'plant-a' | 'plant-b' | 'lamp-floor' | 'bottle-tall' | 'bottle-red' | 'bottle-white' | 'glass-cocktail' | 'door' | 'chandelier';
 
@@ -315,7 +316,7 @@ export function buildDecor(plan: FloorPlan, stations: WorldStation[], b: Batch, 
     b.add(new THREE.CylinderGeometry(0.012, 0.012, 0.36, 8), brass, { x: cx + 0.45, y: 1.26, z: cz });
     b.add(new THREE.CylinderGeometry(0.09, 0.11, 0.1, 16, 1, true), m.get('shade'), { x: cx + 0.45, y: 1.44, z: cz });
     for (const s of stations) {
-      if (s.zone === 'pit' || s.zone === 'poker' || s.zone === 'feature' || s.zone === 'wheel') out.pools.push({ x: s.anchor.position.x, z: s.anchor.position.z, r: Math.max(s.footprint.width, s.footprint.depth) * 0.6 + 0.4, room: s.room });
+      if (s.zone === 'pit' || s.zone === 'poker' || s.zone === 'feature' || s.zone === 'wheel' || s.zone === 'hall') out.pools.push({ x: s.anchor.position.x, z: s.anchor.position.z, r: Math.max(s.footprint.width, s.footprint.depth) * 0.6 + 0.4, room: s.room });
     }
   }
 
@@ -387,12 +388,13 @@ export function buildDecor(plan: FloorPlan, stations: WorldStation[], b: Batch, 
     const top = ceilingAt(plan, isl.x, isl.z);
     b.box(lacquer, isl.x, 1.0, isl.z, isl.w - 0.1, 0.52, 0.05);
     glow.box(hdr('#35d8ff', 2.4), isl.x, 1.265, isl.z, isl.w - 0.11, 0.012, 0.03);
-    // the north row holds the first two games (two desks each), the south row the next two
+    // the north row holds the first half of its games (two desks each), the south row the rest
+    const perRow = Math.max(1, Math.ceil(isl.games.length / 2));
     isl.games.forEach((g, i) => {
       const color = hdr(accents[Object.keys(CATALOG).indexOf(g) % accents.length]!, 2.6);
-      const side = i < 2 ? -1 : 1;
-      const x = isl.x - isl.w / 2 + ((i % 2) + 0.5) * (isl.w / 2);
-      glow.box(color, x, 0.015, isl.z + side * 0.7, isl.w / 2 - 0.25, 0.012, 0.04);
+      const side = i < perRow ? -1 : 1;
+      const x = isl.x - isl.w / 2 + ((i % perRow) + 0.5) * (isl.w / perRow);
+      glow.box(color, x, 0.015, isl.z + side * 0.7, isl.w / perRow - 0.25, 0.012, 0.04);
     });
     for (const [side, c] of [
       [-1, '#35d8ff'],
@@ -443,6 +445,9 @@ export function buildDecor(plan: FloorPlan, stations: WorldStation[], b: Batch, 
     }
     if (f.kind === 'banquette' || f.kind === 'mannequin' || f.kind === 'case' || f.kind === 'drum-fire') out.pools.push({ x: f.x, z: f.z, r: f.kind === 'banquette' ? 2.4 : 1.2, room: f.room });
   }
+
+  // --- the north wing: the parlour's islands and prizes, lanterns, the moon gate, the snack bar ------
+  buildThemes(plan, b, m, glow, out);
 
   // --- the entrance doors ----------------------------------------------------------------------
   out.props.push({ kind: 'door', x: (plan.door.x0 + plan.door.x1) / 2, y: 0, z: plan.door.z + 0.05, ry: Math.PI, size: plan.door.height, room: 'lobby' });

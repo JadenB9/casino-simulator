@@ -107,6 +107,7 @@ every request).
 | POST | `/tables/join` | `{ pin }` | `{ tableId, game, lobby?: LobbySummary }` | 404 `BAD_PIN`, 429 |
 | POST | `/ticket` | `{ target }` | `{ ticket, exp }` | 400 (not a socket path), 401, 429 |
 | GET | `/leaderboard` | | `LeaderboardResponse` | 401 |
+| GET | `/feats` | | `FeatsResponse` | 401 |
 | GET | `/shop` | | `ShopResponse` | 401 |
 | POST | `/shop/buy` | `{ item, op }` | `BuyResponse` | 400 (op), 404 `NOT_FOUND`, 409 `INSUFFICIENT_FUNDS {balance, inPlay}`, 409 `NOT_ELIGIBLE` (already yours), 429 |
 | POST | `/bar/order` | `{ item, op }` | `OrderResponse` | 400 (op), 404 `NOT_FOUND`, 409 `INSUFFICIENT_FUNDS {balance, inPlay}`, 429 |
@@ -129,6 +130,18 @@ $50,000 and records the difference as a loan: `loan.amount` is that difference, 
 whose `msg` says what the bank counted; `balance` and `inPlay` are the profile's. While chips
 are moving between a table and D1 (a buy-in, top-up or cash-out in flight) it is `409 BUSY`:
 ask again in a moment.
+
+**Achievements and challenges** (`shared/src/feats.ts`). The tables decide them from the rounds
+they settle (`server/src/feats.ts`); each is earned once per account and paid once, in one D1
+batch: the `casino_feats` row and, for a cash reward, a `'grant'` ledger row with op id
+`feat:<account>:<feat>` and the balance change. The player hears `{ t: 'feat', feat, at,
+balance? }` on the table's socket (the balance after a cash reward) and everyone on the floor
+`{ t: 'feat', id, name, feat }`. Reward pieces, emotes and titles need no row of their own: they
+come with the feat (`profile.owned`, and `look.title` may name a feat whose reward has a
+title). `GET /feats` is `{ feats: [{ feat, at }], tally }`: the tallies challenges are measured on
+(`won`, `best`, `rounds`, `won:<game>`, `wins:<game>`, `bj:naturals`), as D1 has them. Tables
+send their tallies now and then (two minutes after the first unsent one, when the player stands
+up, and before paying a feat), so the numbers can trail a table still in play.
 
 ```ts
 type Profile = {
@@ -475,8 +488,10 @@ folder documents the final shapes):
 | threecard | `bet {ante, pairPlus, spot?}`, `deal` (solo), `spots {n}` (solo, 1-3), `play {spot?}`, `fold {spot?}` |
 | war | `bet {bet, tie, spot?}`, `deal` (solo), `spots {n}` (solo, 1-3), `war {spot?}`, `surrender {spot?}` |
 | holdem | `fold`, `check`, `call`, `bet {amount}`, `raise {to}`, `allin`, `sitout {on}` |
+| letitride | `bet {unit, bonus, spot?}` (unit on each of the three bets), `deal` (solo), `spots {n}` (solo, 1-3), `ride {spot?}`, `pull {spot?}` (the bet up now: 1, then 2) |
+| paigow | `bet {bet, fortune, spot?}`, `deal` (solo), `spots {n}` (solo, 1-3), `set {low: [i, j], spot?}` (the two of the seven that make the low hand) |
 
-Several hands (blackjack, Three Card Poker, Casino War): a hand is played at a spot numbered like
+Several hands (blackjack, Three Card Poker, Casino War, Let It Ride, Pai Gow Poker): a hand is played at a spot numbered like
 the seats, and in these games' events and views every `seat` is a spot. At a shared table a
 player's spot is their seat; a solo player can play spots 0 to n - 1 (`spots {n}`), and `spot`
 in an action says which of them it's for. Each view's `mine` lists the viewer's spots.
