@@ -139,7 +139,7 @@ export class Diner {
     const live = held && barItem(held.item) && held.until > t ? held : null;
     if (live?.order !== this.mine?.order) {
       this.mine = live
-        ? { order: live.order, item: live.item, plan: planFor(live.item, live.order, live.until, firstSeen(live.order, t)), counted: 0, finished: false, clearAt: 0, asked: 0, handedBack: false }
+        ? { order: live.order, item: live.item, plan: planFor(live.item, live.order, live.until, firstSeen(`${live.order}|${live.item}`, t)), counted: 0, finished: false, clearAt: 0, asked: 0, handedBack: false }
         : null;
       setMyOrder(live?.order ?? null);
     }

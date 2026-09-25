@@ -14,7 +14,7 @@ import { mkdirSync } from 'node:fs';
 const args = process.argv.slice(2).filter((a) => !a.startsWith('--'));
 const flag = (n) => process.argv.includes(`--${n}`);
 const [port = '6270', out = '/tmp/dine6-shots', ...wanted] = args;
-const checks = wanted.length ? wanted : ['menu', 'drinks', 'food', 'phone'];
+const checks = wanted.length ? wanted : ['menu', 'drinks', 'food', 'poses', 'phone'];
 mkdirSync(out, { recursive: true });
 
 const browser = await chromium.launch(flag('sw') ? { args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] } : { channel: 'chromium', args: ['--ignore-gpu-blocklist'] });
@@ -379,6 +379,58 @@ if (checks.includes('food')) {
   const chips = await a.p.$$eval('.dine-chip', (els) => els.map((e) => e.textContent));
   check(chips.some((c) => c.startsWith('Well fed')), `a well fed chip (${chips.join(', ')})`);
   if (a.errors.length) fail(`food errors: ${a.errors.slice(0, 5).join(' | ')}`);
+  await a.ctx.close();
+}
+
+// --- through your own eyes, and sitting on a sofa -------------------------------------------------
+
+if (checks.includes('poses')) {
+  const a = await enterAs('dine6_e2e_a');
+  const wine = await order(a.p, 'Red Wine');
+  // first person: the glass comes up into view
+  await a.p.evaluate(() => window.casino.world.setMouse({ view: 'first' }));
+  await a.p.evaluate(() => window.casino.world.player.teleport(0, 11, 0));
+  await a.p.waitForTimeout(1200);
+  for (const [name, phase] of [['carry', -1], ['sip', 0.5]]) {
+    if (phase < 0) await pose(a.p, wine.order, 0, 0);
+    else await pose(a.p, wine.order, 1, phase);
+    await a.p.waitForTimeout(700);
+    await shot(a.p, `first-person-${name}`);
+  }
+  await pin(a.p);
+  await a.p.evaluate(() => window.casino.world.setMouse({ view: 'third' }));
+  // a bench: sit, and the arm still brings the glass up (walked there in hops the floor believes)
+  const seat = await a.p.evaluate(() => {
+    const s = window.casino.world.life.seating.byId.get('lobby.bench.1.1');
+    return s ? { ...s } : null;
+  });
+  check(!!seat, `a seat to sit on (${seat?.id})`);
+  if (seat) {
+    const to = [seat.x + Math.sin(seat.yaw) * 0.8, seat.z + Math.cos(seat.yaw) * 0.8];
+    const from = await a.p.evaluate(() => ({ x: window.casino.world.player.position.x, z: window.casino.world.player.position.z }));
+    const n = Math.max(1, Math.ceil(Math.hypot(to[0] - from.x, to[1] - from.z) / 7));
+    for (let i = 1; i <= n; i++) {
+      await a.p.evaluate(([x, z, y]) => window.casino.world.player.teleport(x, z, y), [from.x + ((to[0] - from.x) * i) / n, from.z + ((to[1] - from.z) * i) / n, seat.yaw + Math.PI]);
+      await a.p.waitForTimeout(1100);
+    }
+    await a.p.keyboard.press('KeyE');
+    await a.p.waitForFunction(() => window.casino.world.life.seating.seated, null, { timeout: 8000 }).catch(() => {});
+    check(await a.p.evaluate(() => !!window.casino.world.life.seating.seated), 'sat down on the sofa, the glass still in hand');
+    await a.p.waitForTimeout(1500);
+    await hold(a.p);
+    const f = [Math.sin(seat.yaw), Math.cos(seat.yaw)];
+    const eye = [seat.x + f[0] * 1.6 + f[1] * 0.6, 1.3, seat.z + f[1] * 1.6 - f[0] * 0.6];
+    for (const [name, phase] of [['carry', -1], ['sip', 0.5]]) {
+      if (phase < 0) await pose(a.p, wine.order, 0, 0);
+      else await pose(a.p, wine.order, 1, phase);
+      await aim(a.p, eye, [seat.x, 0.95, seat.z]);
+      await a.p.waitForTimeout(700);
+      await shot(a.p, `sofa-${name}`);
+    }
+    await pin(a.p);
+    await free(a.p);
+  }
+  if (a.errors.length) fail(`poses errors: ${a.errors.slice(0, 5).join(' | ')}`);
   await a.ctx.close();
 }
 

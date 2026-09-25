@@ -86,7 +86,7 @@ export class HeldOrder {
     this.order = held.order;
     this.item = held.item;
     this.model = heldModel(held.item)!;
-    this.plan = planFor(held.item, held.order, held.until, firstSeen(held.order));
+    this.plan = planFor(held.item, held.order, held.until, firstSeen(`${held.order}|${held.item}`));
     this.poses = posesFor(tpl, view, this.model);
     const bones = body.skeleton.bones;
     const wristR = bones.find((b) => strip(b.name) === 'WristR');

@@ -32,7 +32,7 @@ export function setClock(fn: (() => number) | null): void {
   clock = fn ?? serverNow;
 }
 
-/** When this screen first saw the order in a hand (the first call decides). */
+/** When this screen first saw an order in a hand (keyed by order and item; the first call decides). */
 export function firstSeen(order: string, at = now()): number {
   let t = seen.get(order);
   if (t === undefined) {
