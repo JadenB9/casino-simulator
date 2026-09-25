@@ -398,9 +398,13 @@ function shade(hex: string, k: number): string {
   return `#${tmpColor.set(hex).multiplyScalar(k).getHexString()}`;
 }
 
-/** A piece set on the nose or the tail at height y, facing the way the panel faces there. */
-function onFace(o: Outline, end: 'front' | 'rear', y: number, geo: THREE.BufferGeometry, x: number, out = 0): THREE.BufferGeometry {
+/**
+ * A piece set on the nose or the tail at height y, facing the way the panel faces there; `up`
+ * moves it along the panel from that point (so a grille's bars share the grille's own plane).
+ */
+function onFace(o: Outline, end: 'front' | 'rear', y: number, geo: THREE.BufferGeometry, x: number, out = 0, up = 0): THREE.BufferGeometry {
   const f = o.face(end, y);
+  if (up) geo.translate(0, up, 0);
   const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, f.ny, f.nz).normalize());
   geo.applyQuaternion(q);
   // (pieces are deep enough that their backs sink well into the panel and their faces stand well
@@ -424,7 +428,7 @@ function buildLamps(s: CarSpec, o: Outline, geos: Geos): void {
       const spots = s.lamps === 'quad' ? [hx + 0.1, hx - 0.1] : [hx];
       const r = s.lamps === 'quad' ? 0.07 : 0.095;
       for (const lx of spots) {
-        add(geos, 'lamp', onFace(o, 'front', s.lampY, lens(r, 0.05), side * lx, 0.03), HEAD);
+        add(geos, 'lamp', onFace(o, 'front', s.lampY, lens(r, 0.09), side * lx, 0.03), HEAD);
         add(geos, 'metal', onFace(o, 'front', s.lampY, new THREE.TorusGeometry(r + 0.014, 0.013, 4, 12), side * lx, 0.085), s.chrome ? CHROME : DARK);
       }
     } else {
@@ -450,9 +454,10 @@ function buildNose(s: CarSpec, o: Outline, geos: Geos): void {
     : [2 * s.half * taper(s, o, gz) - 0.5, 0.13];
   const gyAt = s.grille === 'upright' ? gy + 0.02 : gy;
   add(geos, 'trim', onFace(o, 'front', gyAt, box(w, h, 0.05), 0, 0.006), '#0e0f11');
+  // (the chrome is set in the grille's own plane, above and below it and across it)
   if (s.chrome || s.grille === 'upright') {
-    add(geos, 'metal', onFace(o, 'front', gyAt + h / 2, box(w + 0.04, 0.025, 0.02), 0, 0.058), CHROME);
-    add(geos, 'metal', onFace(o, 'front', gyAt - h / 2, box(w + 0.04, 0.025, 0.02), 0, 0.058), CHROME);
+    add(geos, 'metal', onFace(o, 'front', gyAt, box(w + 0.04, 0.025, 0.02), 0, 0.058, h / 2), CHROME);
+    add(geos, 'metal', onFace(o, 'front', gyAt, box(w + 0.04, 0.025, 0.02), 0, 0.058, -h / 2), CHROME);
     if (s.grille === 'upright') for (let i = -3; i <= 3; i++) add(geos, 'metal', onFace(o, 'front', gyAt, box(0.012, h - 0.06, 0.02), (i * w) / 8, 0.045), CHROME);
   }
   // bumpers: chrome bars on the old cars; a dark lip and a diffuser on the new
@@ -586,7 +591,7 @@ function buildWheel(s: CarSpec, geos: Geos, lite: boolean): void {
   const disc = (r: number, d: number, at: number) => new THREE.CylinderGeometry(r, r, d, 14).rotateZ(Math.PI / 2).translate(at, 0, 0);
   const rim = s.gold ? '#e0b84a' : (s.rimColor ?? CHROME);
   if (s.whitewall) add(geos, 'trim', new THREE.RingGeometry(ri + 0.015, ri + 0.085, 24).rotateY(Math.PI / 2).translate(w / 2 + 0.002, 0, 0), '#f1eee6');
-  add(geos, 'metal', new THREE.TorusGeometry(ri, 0.022, 4, 16).rotateY(Math.PI / 2).translate(face, 0, 0), rim);
+  add(geos, 'metal', new THREE.TorusGeometry(ri - 0.012, 0.02, 4, 16).rotateY(Math.PI / 2).translate(face + 0.006, 0, 0), rim);
   const spokes = (n: number, width: number, color: string, part: Part, twist = 0) => {
     for (let i = 0; i < n; i++) {
       const a = (i / n) * Math.PI * 2;
@@ -678,7 +683,7 @@ export function carKit(id: string, lite = false): CarKit {
   buildExtras(s, o, body, roof);
   const wheel: Geos = new Map();
   buildWheel(s, wheel, lite);
-  const wx = s.half * Math.min(taper(s, o, s.front), taper(s, o, s.rear)) + B - s.wheelW / 2 + 0.05;
+  const wx = s.half * Math.min(taper(s, o, s.front), taper(s, o, s.rear)) + B - s.wheelW / 2 + 0.07;
   const kit: CarKit = {
     body: mergeAll(body),
     wheel: mergeAll(wheel),
