@@ -244,9 +244,10 @@ export interface Weights {
   raise: number;
   aim: number;
   chin: number;
+  belly: number;
 }
 
-const NONE: Weights = { lift: 0, tip: 0, reach: 0, eat: 0, raise: 0, aim: 0, chin: 0 };
+const NONE: Weights = { lift: 0, tip: 0, reach: 0, eat: 0, raise: 0, aim: 0, chin: 0, belly: 0 };
 
 /** Up over [a, b], held, down over [c, d]. */
 function env(t: number, a: number, b: number, c: number, d: number): number {
@@ -275,10 +276,22 @@ export function weights(kind: Act, t: number): Weights {
       // up in front, shaken hard, then tipped up and sprayed
       const raise = env(t, 0, 0.12, 0.38, 0.5);
       const aim = env(t, 0.38, 0.46, 0.86, 1);
-      const shake = t > 0.12 && t < 0.38 ? Math.sin(t * 150) * 0.22 : 0;
-      return { ...NONE, raise: Math.max(0, raise + shake * raise), aim };
+      const shake = t > 0.12 && t < 0.38 ? 0.5 + 0.5 * Math.sin(t * 150) : 0;
+      return { ...NONE, raise: raise * (1 - 0.3 * shake), aim };
     }
     case 'blow':
       return { ...NONE, chin: env(t, 0, 0.3, 0.62, 1) };
+  }
+}
+
+/** The gestures that aren't portions: a toast (the glass up in front), handing the empty back, a pat on the belly. */
+export function extraWeights(kind: 'toast' | 'give' | 'pat', t: number): Weights {
+  switch (kind) {
+    case 'toast':
+      return { ...NONE, raise: env(t, 0, 0.3, 0.7, 1) };
+    case 'give':
+      return { ...NONE, raise: env(t, 0, 0.4, 0.62, 1) };
+    case 'pat':
+      return { ...NONE, belly: env(t, 0, 0.22, 0.78, 1) * (0.82 + 0.18 * Math.cos(t * Math.PI * 2 * 3.5)) };
   }
 }

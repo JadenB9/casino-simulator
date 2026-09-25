@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { BAR_MENU, HOLD_MS, barItem } from '../../shared/src/items.ts';
-import { ACT_SECS, END_MS, FIRST_MS, GAP_MS, LATE_MS, PROFILES, acts, planFor, profileOf, stateAt, weights, type Act } from '../src/world/consumables/schedule.ts';
+import { ACT_SECS, END_MS, FIRST_MS, GAP_MS, LATE_MS, PROFILES, acts, extraWeights, planFor, profileOf, stateAt, weights, type Act } from '../src/world/consumables/schedule.ts';
 import { Effects, ITEM_EFFECTS, PACE_CAP, SOBER_MS, TIPSY_MAX } from '../src/world/consumables/effects.ts';
 
 const T0 = 1_700_000_000_000;
@@ -158,9 +158,13 @@ describe('arm weights', () => {
         const w = weights(kind, t);
         for (const [k, v] of Object.entries(w)) {
           expect(v, `${kind} ${k} ${t}`).toBeGreaterThanOrEqual(0);
-          expect(v, `${kind} ${k} ${t}`).toBeLessThanOrEqual(1.25);
+          expect(v, `${kind} ${k} ${t}`).toBeLessThanOrEqual(1);
         }
       }
+    }
+    for (const kind of ['toast', 'give', 'pat'] as const) {
+      for (const t of [0, 1]) for (const v of Object.values(extraWeights(kind, t))) expect(v, `${kind} ${t}`).toBe(0);
+      for (let t = 0; t <= 1; t += 0.01) for (const v of Object.values(extraWeights(kind, t))) expect(v).toBeLessThanOrEqual(1);
     }
   });
 
