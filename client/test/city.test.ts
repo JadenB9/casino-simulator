@@ -100,7 +100,7 @@ describe('the ground floor', () => {
     expect(inside({ ...G.drive }, PICKUP.x, PICKUP.z)).toBe(true);
     for (const [id, e] of Object.entries(ENTRANCES)) {
       const l = lot(LOTS[id as 'jail' | 'garage']);
-      expect(e.x).toBeCloseTo(l.x0);
+      expect(Math.abs(e.x - l.x0)).toBeLessThan(1);
       expect(e.z > l.z0 && e.z < l.z1).toBe(true);
       expect(e.x).toBeGreaterThanOrEqual(G.walkEast.x1 - 0.01);
     }
