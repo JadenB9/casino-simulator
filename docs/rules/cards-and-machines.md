@@ -1352,8 +1352,9 @@ tournaments; where cash games differ, Robert's Rules governs.
 - **The house's money stays off tables with other players.** Chips at a multiplayer table go from player to
   player, so a buy-in or top-up there must leave on the balance what a transfer would hold back: the
   cashier's top-ups, bonuses, tips, gift boxes and feat cash from the last three days, and money other
-  players sent in the last day (a new account's starting $50,000 is free to play). Otherwise one account
-  could take top-up after top-up and lose each on purpose to another. The bots' tables take any money.
+  players sent in the last day. A new account may bring $5,000 of its starting $50,000, so friends who just
+  joined can sit down together. Otherwise one account could take top-up after top-up (or one new account
+  after another) and lose each on purpose to another. The bots' tables take any money.
 
 ### 4.2 Button, blinds and seating
 

@@ -23,16 +23,18 @@ export interface SeatStats {
   biggestWin: Cents;
 }
 
+/** Of a new account's starting stake, what it may take to a multiplayer Hold'em table in its first days. */
+export const START_TO_POKER: Cents = 5_000 * 100;
+
 /**
  * Money that may not go to a multiplayer Hold'em table yet, for account ?1 as of ?4: what transfers
  * hold back (bank.ts sendRules: the house's money from the last few days, other players' from the
- * last day), less the starting stake. The cashier's top-up has no end, so without this one account
- * could take top-up after top-up and lose each on purpose to another at a private table. A new
- * player's first $50,000 can go (sign-ups are limited per address), so friends who just joined can
- * sit down together.
+ * last day), except START_TO_POKER of the starting stake, so friends who just joined can sit down
+ * together. The cashier's top-up has no end, so without this one account could take top-up after
+ * top-up (or new account after new account) and lose each on purpose to another at a private table.
  */
-const HELD = `(SELECT COALESCE(SUM(amount), 0) FROM casino_ledger
-       WHERE account_id = ?1 AND kind IN ('grant', 'loan') AND created_at > ?4 - ${SEND.houseHoldMs} AND op_id <> 'grant:' || account_id)
+const HELD = `(SELECT COALESCE(SUM(CASE WHEN op_id = 'grant:' || account_id THEN MAX(amount - ${START_TO_POKER}, 0) ELSE amount END), 0)
+       FROM casino_ledger WHERE account_id = ?1 AND kind IN ('grant', 'loan') AND created_at > ?4 - ${SEND.houseHoldMs})
     + (SELECT COALESCE(SUM(amount), 0) FROM casino_transfers WHERE to_id = ?1 AND at > ?4 - ${SEND.giftHoldMs})`;
 
 /**

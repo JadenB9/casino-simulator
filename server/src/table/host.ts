@@ -155,7 +155,7 @@ interface SocketLimits {
 
 /** Why a Hold'em buy-in the balance covers was refused (transfer.ts buyInStatements). */
 export const HELD_OFF_POKER =
-  "Top-ups, bonuses, tips and gifts from the last three days, and money players sent you in the last day, can't be taken to a Hold'em table with other players. Play them anywhere else, or against the bots.";
+  "The house's money from the last three days (past $5,000 of your starting stake: top-ups, bonuses, tips and gifts too), and money players sent you in the last day, can't be taken to a Hold'em table with other players. Play it anywhere else, or against the bots.";
 
 /** A card code as the engines write them ("As", "Td"). */
 const CARD_RE = /^[2-9TJQKA][shdc]$/;

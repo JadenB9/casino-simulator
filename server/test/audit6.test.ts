@@ -10,7 +10,7 @@ import { STRIKE_QUIET_MS, bailFor } from '../../shared/src/law/rules.ts';
 import type { CasinoFloor } from '../src/floor/index.ts';
 import { HELD_OFF_POKER } from '../src/table/host.ts';
 import { Client, ORIGIN, api, connect, ticketFor } from './helpers.ts';
-import { buyIn, closedWith, enter, floor, makeLobby, money, player, sleep } from './party.ts';
+import { buyIn, closedWith, enter, floor, makeLobby, money, player, sleep, table } from './party.ts';
 
 const DAY = 86_400_000;
 let tries = 0;
@@ -86,6 +86,8 @@ describe("Hold'em chip dumping", () => {
     // a balance of its own, then a $2,500 daily bonus on top (held for three days)
     const sit = async (balance: number): Promise<string> => {
       const p = await player('aud_part');
+      // (an account past its first three days, so only the bonus is held)
+      await env.DB.prepare(`UPDATE casino_ledger SET created_at = created_at - ?2 WHERE account_id = ?1`).bind(p.id, 3 * DAY + 1).run();
       await env.DB.prepare(`UPDATE casino_accounts SET balance = ?2 WHERE id = ?1`).bind(p.id, balance).run();
       expect((await api('daily/claim', p.token, { method: 'POST' })).status).toBe(200);
       const made = await makeLobby(p, 'holdem');
@@ -96,6 +98,27 @@ describe("Hold'em chip dumping", () => {
     expect(await sit(100_000)).toBe('seated');
     // ...and with $100 less it doesn't, though the balance ($3,400) covers it
     expect(await sit(90_000)).toBe(HELD_OFF_POKER);
+  }, 30_000);
+});
+
+describe("a new account's starting stake at Hold'em", () => {
+  it('brings $5,000 of it to a table with other players in its first three days, all of it after', async () => {
+    const host = await player('aud_host');
+    const made = await floor().createLobby({ game: 'holdem', visibility: 'public', accountId: host.id, ip: host.ip });
+    if ('error' in made) throw new Error(made.error);
+    // $50/$100 blinds: the table takes $2,000 to $10,000
+    await table(made.tableId).init({ name: made.tableId, game: 'holdem', variant: '', mode: 'multi', visibility: 'public', pin: null, limits: { min: 5_000, max: 10_000 } });
+    const sit = async (p: Awaited<ReturnType<typeof player>>, amount: number) => {
+      const [c] = await enter(p, made.tableId);
+      const r = await tryBuyIn(c, amount);
+      c.ws.close();
+      return r;
+    };
+    expect(await sit(await player('aud_new'), 500_000)).toBe('seated');
+    const over = await player('aud_new');
+    expect(await sit(over, 510_000)).toBe(HELD_OFF_POKER);
+    await env.DB.prepare(`UPDATE casino_ledger SET created_at = created_at - ?2 WHERE account_id = ?1`).bind(over.id, 3 * DAY + 1).run();
+    expect(await sit(over, 1_000_000)).toBe('seated');
   }, 30_000);
 });
 
