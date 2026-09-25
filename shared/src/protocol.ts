@@ -11,6 +11,7 @@ import type { Cents } from './money.ts';
 import type { GameId, TableMode, TableConfig } from './engine.ts';
 import type { Look } from './look.ts';
 import type { FxEvent, Statue } from './items.ts';
+import type { ZoneId } from './zones.ts';
 import { isSeatId } from './seats.ts';
 import type { TableLimits } from './limits.ts';
 
@@ -296,7 +297,9 @@ export type FloorClientMsg =
   | { t: 'sit'; seat: string; x: number; z: number; r: number }
   | { t: 'stand' }
   /** The player is at the keyboard (see HERE_MS); keeps the socket from going idle. */
-  | { t: 'here' };
+  | { t: 'here' }
+  // v6: take the elevator to another zone (zones.ts); only from beside an elevator door
+  | { t: 'lift'; to: ZoneId };
 
 export type FloorServerMsg =
   | { t: 'hello'; v: number; you: PlayerInfo; players: PlayerInfo[]; online: number; now: number }
@@ -324,6 +327,8 @@ export type FloorServerMsg =
   | { t: 'feat'; id: number; name: string; feat: string }
   // v6: you own an emote now (bought or earned while connected): the wheel adds it
   | { t: 'owned'; emotes: EmoteId[] }
+  // v6: the server moved you (the elevator, jail, release): go there at once (cm, yaw byte)
+  | { t: 'tp'; x: number; z: number; r: number }
   | { t: 'err'; code: ErrorCode; msg: string }
   | ChatServerMsg;
 
@@ -344,6 +349,9 @@ export function parseFloorMsg(raw: unknown, isGame: (g: unknown) => g is GameId)
     case 'watch':
       if (raw.game !== null && !isGame(raw.game)) return null;
       return { t: 'watch', game: raw.game as GameId | null };
+    case 'lift':
+      if (raw.to !== 'casino' && raw.to !== 'ground' && raw.to !== 'roof') return null;
+      return { t: 'lift', to: raw.to };
     case 'emote':
       if (!isOneOf(raw.e, EMOTES)) return null;
       return { t: 'emote', e: raw.e };

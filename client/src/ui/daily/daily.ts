@@ -11,6 +11,7 @@ import { formatMoney } from '../../../../shared/src/money.ts';
 import { CELEBS, type DailyStatus } from '../../../../shared/src/celebs.ts';
 import type { DailyApi } from './api.ts';
 import type { Sfx } from '../../audio/sfx.ts';
+import { calm } from '../../app/comfort.ts';
 
 export interface DailyDeps {
   root: HTMLElement;
@@ -77,6 +78,7 @@ export function mountDaily(deps: DailyDeps): DailyHandle {
   const mark = () => {
     const waiting = status !== null && !status.claimed;
     btn.classList.toggle('waiting', waiting);
+    btn.classList.toggle('calm', calm());
     btn.title = waiting ? `Daily bonus: ${whole(status!.amount)} waiting` : 'Daily bonus';
     btn.setAttribute('aria-label', btn.title);
   };

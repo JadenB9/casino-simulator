@@ -39,10 +39,13 @@
 @keyframes celeb-flash { 0% { opacity: 0.92; } 100% { opacity: 0; } }
 @keyframes celeb-live { 50% { opacity: 0.45; } }
 
+/* Reduce flashing & motion (app/comfort.ts), or the system's reduced motion: a soft glow, a still dot */
+.celeb-flash.calm { animation-name: celeb-flash-soft; }
+.celeb-sighting.calm .celeb-sighting-tag::before { animation: none; }
+@keyframes celeb-flash-soft { 0% { opacity: 0.22; } 100% { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) {
   .celeb-flash { animation-name: celeb-flash-soft; }
   .celeb-sighting-tag::before { animation: none; }
-  @keyframes celeb-flash-soft { 0% { opacity: 0.25; } 100% { opacity: 0; } }
 }
 
 @media (max-width: 720px) {

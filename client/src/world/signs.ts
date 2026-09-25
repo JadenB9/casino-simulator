@@ -109,7 +109,9 @@ export function floorSigns(plan: FloorPlan, b: Batch, m: Mats): SignSpec[] {
       // as wide as its words want, a little over the doorway at least, never wider than the wall allows
       const w = Math.min(Math.max(text.length * (style.kind === 'neon' ? 0.3 : 0.26) + 0.7, Math.min(span + 0.6, 2.4)), d.kind === 'shopfront' ? 5.2 : span + 2.6, 6.2);
       const y = Math.min(d.height + 0.36 + h / 2, r.style.ceiling - h / 2 - 0.12);
-      const off = WALL / 2 + (d.kind === 'grand' || d.kind === 'arch' ? 0.14 : 0.1);
+      // in front of everything on the wall there (the crown at 0.1, the rail at 0.12, a keystone or
+      // an entablature's band at 0.13): in any of their planes it would flicker against them
+      const off = WALL / 2 + 0.14;
       const mid = (d.a0 + d.a1) / 2;
       const at: [number, number, number] = d.axis === 'x' ? [mid, y, d.c + n * off] : [d.c + n * off, y, mid];
       // facing into the room: +z is ry 0, -z is PI, +x is PI/2, -x is -PI/2

@@ -13,7 +13,8 @@ import { closeWith, corsHeaders, fail, json, originAllowed, readJson } from './h
 import { bearer, logIn, signToken, verifyToken } from './auth.ts';
 import { signTicket, ticketTarget, verifyTicket } from './tickets.ts';
 import { KeyedBuckets } from './ratelimit.ts';
-import { bumpRate, escrowsOf, getAccount, loadProfile, setLook } from './db.ts';
+import { bumpRate, escrowsOf, getAccount, loadProfile, ownedOf, setLook } from './db.ts';
+import { isFreeEmote, emoteItem } from '../../shared/src/items.ts';
 import { takeLoan } from './transfer.ts';
 import { shopApi } from './shop.ts';
 import { leaderboard } from './leaderboard.ts';
@@ -292,7 +293,12 @@ async function handleSocket(request: Request, env: Env, url: URL, route: string,
   headers.set('x-casino-ticket', ticket.j);
   headers.set('x-casino-ticket-exp', String(ticket.exp));
 
-  if (route === 'floor') return floorStub(env).fetch(forward(request, headers));
+  if (route === 'floor') {
+    // v6: the emotes this account may send besides the free six (the floor drops the rest)
+    const owned = await ownedOf(env.DB, ticket.a);
+    headers.set('x-casino-emotes', [...owned.items].filter((id) => emoteItem(id) && !isFreeEmote(id)).join(','));
+    return floorStub(env).fetch(forward(request, headers));
+  }
 
   const lobby = route.match(/^table\/([a-z0-9-]+)$/);
   if (lobby) {

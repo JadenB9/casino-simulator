@@ -3,19 +3,21 @@
 //   presence.ts   who is here, where they are, who is sitting where, the online count
 //   directory.ts  the lobby list and private-lobby PINs
 //   chat.ts       the floor's chat room
+//   fx.ts         effects bought in the shop, and the lobby's statues
 // Each keeps anything that must survive hibernation in this object's SQLite storage or in the
 // sockets' attachments; memory is only a cache. The object's one alarm closes idle sockets.
 
 import { DurableObject } from 'cloudflare:workers';
-import { CLOSE, IDLE_MS, MAX_FLOOR_FRAME, PROTOCOL_VERSION, parseFloorMsg, parseSay, type EmoteId, type FloorServerMsg, type LobbySummary } from '../../../shared/src/protocol.ts';
+import { CLOSE, EMOTES, IDLE_MS, MAX_FLOOR_FRAME, PROTOCOL_VERSION, parseFloorMsg, parseSay, type EmoteId, type FloorServerMsg, type LobbySummary } from '../../../shared/src/protocol.ts';
 import { isGameId } from '../../../shared/src/games/catalog.ts';
 import type { GameId } from '../../../shared/src/engine.ts';
 import { lookFromJson, type Look } from '../../../shared/src/look.ts';
-import { isFreeEmote } from '../../../shared/src/items.ts';
+import { effectItem, isFreeEmote, type FxEvent, type Statue } from '../../../shared/src/items.ts';
 import { Presence, type FloorAtt } from './presence.ts';
 import { Directory, ipKey } from './directory.ts';
 import { FloorChat } from './chat.ts';
 import { Wins, type BigWinReport } from './wins.ts';
+import { Effects, Statues, fxKey, type Reserve } from './fx.ts';
 import { Bucket, KeyedBuckets } from '../ratelimit.ts';
 import { spendTicket } from '../tickets.ts';
 // v6 celebs6: celebrities and the gift box
@@ -55,6 +57,9 @@ export class CasinoFloor extends DurableObject<Env> {
   readonly chat: FloorChat;
   /** features: big-win announcements (wins.ts) */
   readonly wins: Wins;
+  /** v6: effects bought in the shop, and the lobby's statues (fx.ts) */
+  readonly fx: Effects;
+  readonly statues: Statues;
   /** v6 celebs6: celebrity visits and the gift box (celebs.ts) */
   readonly celebs: Celebs;
   private buckets = new Map<WebSocket, FloorLimits>();
@@ -68,11 +73,17 @@ export class CasinoFloor extends DurableObject<Env> {
     this.directory = new Directory(ctx, (msg, game) => this.toWatchers(msg, game));
     this.chat = new FloorChat(ctx, (msg) => this.broadcast(msg));
     this.wins = new Wins(ctx, (msg) => this.broadcast(msg));
+    this.fx = new Effects(ctx, (msg) => this.broadcast(msg));
+    this.statues = new Statues(ctx, (msg) => this.broadcast(msg));
     // v6 celebs6
     this.celebs = new Celebs({
       sql: ctx.storage.sql,
       db: () => env.DB,
-      where: (ws) => this.presence.where(ws),
+      where: (ws) => {
+        const att = ws.deserializeAttachment() as FloorAtt | null;
+        const at = att ? this.presence.whereIs(att.accountId) : null;
+        return att && at ? { accountId: att.accountId, ...at } : null;
+      },
       broadcast: (msg: CelebServerMsg) => this.broadcast(msg as unknown as FloorServerMsg),
     });
   }
@@ -83,6 +94,8 @@ export class CasinoFloor extends DurableObject<Env> {
     const name = request.headers.get('x-casino-name') ?? '';
     const look = lookFromJson(request.headers.get('x-casino-look'));
     const ip = request.headers.get('x-casino-ip') ?? '';
+    // v6: the emotes this account owns beyond the free six, as the Worker read them from D1
+    const emotes = ownedEmotes(request.headers.get('x-casino-emotes'));
     const pair = new WebSocketPair();
     const client = pair[0];
     const server = pair[1];
@@ -113,13 +126,20 @@ export class CasinoFloor extends DurableObject<Env> {
       this.presence.onClose(old);
     }
     this.ctx.acceptWebSocket(server, [`a:${accountId}`]);
-    this.presence.onConnect(server, { accountId, name, look });
+    this.presence.onConnect(server, { accountId, name, look, emotes });
     this.chat.join(server);
     this.wins.greet(server); // features: the recent big wins, after hello
+    this.fx.greet(server, Date.now()); // v6: effects playing or queued
     this.celebs.greet(server, Date.now()); // v6 celebs6: the visit and the gift box, after hello
     // Everyone already here is due for the idle sweep no later than this newcomer, so a sweep
     // already set comes first; with none set (nobody here, or a floor from before idling), set one.
     if ((await this.ctx.storage.getAlarm()) === null) await this.ctx.storage.setAlarm(Date.now() + IDLE_MS);
+    // v6: the lobby's statues (the floor's copy, or D1 when it has none)
+    try {
+      await this.statues.greet(server, this.env.DB, Date.now());
+    } catch (err) {
+      console.error('statues failed', err);
+    }
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -183,6 +203,9 @@ export class CasinoFloor extends DurableObject<Env> {
     } else if (msg.t === 'stand') {
       this.presence.stand(ws);
       this.presence.touch(ws, Date.now());
+    } else if (msg.t === 'lift') {
+      // v6 contract: the city slice checks you're at an elevator and moves you (presence.teleport)
+      this.presence.touch(ws, Date.now());
     } else {
       this.presence.onMessage(ws, msg);
     }
@@ -195,7 +218,13 @@ export class CasinoFloor extends DurableObject<Env> {
    */
   async alarm(): Promise<void> {
     const now = Date.now();
-    let next = Infinity;
+    // v6: effects whose purchase the Worker never finished are settled against D1 (fx.ts)
+    try {
+      await this.fx.settle(this.env.DB, now);
+    } catch (err) {
+      console.error('fx settle failed', err);
+    }
+    let next = this.fx.due() ?? Infinity;
     for (const ws of this.ctx.getWebSockets()) {
       const active = this.presence.activeAt(ws);
       if (active === null) continue;
@@ -244,6 +273,7 @@ export class CasinoFloor extends DurableObject<Env> {
   /** A player changed their look in the menu. */
   playerLook(accountId: number, look: Look): void {
     this.presence.setLook(accountId, look);
+    this.statues.lookChanged(accountId, look);
   }
 
   online(): number {
@@ -282,12 +312,62 @@ export class CasinoFloor extends DurableObject<Env> {
 
   /**
    * v6: an account now owns these emotes (bought in the shop, or given by a feat): its sockets may
-   * send them from now on, and hear `owned` so the wheel adds them. Called by the Worker (shop.ts)
-   * and by tables (feats) over RPC. The shop slice fills this in.
+   * send them from now on (kept in their attachments, so it outlasts hibernation), and hear `owned`
+   * with the ones that are new to it so the wheel adds them. Called by the Worker (shop.ts) and by
+   * tables (feats) over RPC. An account not on the floor gets them with its next connect instead.
    */
   grant(accountId: number, emotes: EmoteId[]): void {
-    void accountId;
-    void emotes;
+    const fresh = this.presence.grantEmotes(accountId, ownedEmotes(emotes.join(',')));
+    if (fresh.length === 0) return;
+    const data = JSON.stringify({ t: 'owned', emotes: fresh as EmoteId[] } satisfies FloorServerMsg);
+    for (const ws of this.ctx.getWebSockets(`a:${accountId}`)) {
+      try {
+        ws.send(data);
+      } catch {
+        /* closing */
+      }
+    }
+  }
+
+  /**
+   * v6: hold a slot for an effect this player is buying (fx.ts), where they stand now. Called by
+   * the Worker (shop.ts) before it charges; AWAY if they aren't on the floor.
+   */
+  async fxReserve(accountId: number, fx: string, op: string): Promise<Reserve | { error: 'AWAY' | 'NOT_FOUND' }> {
+    const item = effectItem(fx);
+    if (!item) return { error: 'NOT_FOUND' };
+    const now = Date.now();
+    const key = fxKey(accountId, op);
+    const had = this.fx.of(key);
+    if (had) return { event: had };
+    const who = this.presence.whereIs(accountId);
+    if (!who) return { error: 'AWAY' };
+    const r = this.fx.reserve(key, { accountId, ...who }, item, now);
+    // The alarm settles a reservation left unconfirmed; make sure one comes round in time.
+    const due = this.fx.due();
+    const alarm = await this.ctx.storage.getAlarm();
+    if (due !== null && (alarm === null || alarm > due)) await this.ctx.storage.setAlarm(due);
+    return r;
+  }
+
+  /** v6: the charge for this effect landed: it plays for everyone. Null if it isn't held. */
+  fxConfirm(accountId: number, op: string): FxEvent | null {
+    return this.fx.confirm(fxKey(accountId, op));
+  }
+
+  /** v6: the charge was refused; the slot goes back. */
+  fxCancel(accountId: number, op: string): void {
+    this.fx.cancel(fxKey(accountId, op));
+  }
+
+  /** v6: the effect this purchase bought, if the floor still has it. */
+  fxOf(accountId: number, op: string): FxEvent | null {
+    return this.fx.of(fxKey(accountId, op));
+  }
+
+  /** v6: someone bought a statue: read the line-up again and show everyone. */
+  async statueBought(): Promise<Statue[]> {
+    return this.statues.refresh(this.env.DB, Date.now());
   }
 
   /** v6: someone earned a feat (feats.ts): a line in everyone's feed. Called by tables over RPC. */
@@ -303,8 +383,8 @@ export class CasinoFloor extends DurableObject<Env> {
   /** Everyone on the floor sees the gesture over this player's head. */
   private emote(ws: WebSocket, e: EmoteId): void {
     const att = ws.deserializeAttachment() as FloorAtt | null;
-    // v6 contract: only the free six until the shop slice checks what the account owns
-    if (att && isFreeEmote(e)) this.broadcast({ t: 'emote', id: att.accountId, e });
+    // v6: the free six, or one the account owns; anything else is dropped quietly (an old wheel)
+    if (att && (isFreeEmote(e) || att.emotes?.includes(e))) this.broadcast({ t: 'emote', id: att.accountId, e });
   }
 
   // --- plumbing ------------------------------------------------------------------------------
@@ -364,3 +444,10 @@ export class CasinoFloor extends DurableObject<Env> {
 }
 
 export { PROTOCOL_VERSION };
+
+/** Emote ids from a comma list (the Worker's header): known, not free, each once. */
+function ownedEmotes(raw: string | null): string[] {
+  if (!raw) return [];
+  const known = new Set<string>(EMOTES);
+  return [...new Set(raw.split(',').filter((e) => known.has(e) && !isFreeEmote(e)))];
+}

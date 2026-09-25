@@ -18,6 +18,8 @@ import { lerpAngle, smooth } from './rounds.ts';
 
 /** A window's prompt shows within this of where its customer stands (m). */
 const REACH = 1.3;
+/** How much of the counter's front each window answers for (the windows are 2.6 m apart). */
+const WINDOW = 1.6;
 /** The banker's body turns at most this far toward you (rad); the head does the rest. */
 const TURN = 0.55;
 /** Seconds between the greeting and the sheet (long enough to see who's talking). */
@@ -32,6 +34,8 @@ interface Teller {
   m: Member;
   home: { x: number; z: number; yaw: number };
   customer: { x: number; z: number; yaw: number };
+  /** The window on the counter's front. */
+  front?: { x: number; z: number };
   /** Seconds until they next count the drawer. */
   idle: number;
 }
@@ -53,18 +57,24 @@ export class Bankers {
   ) {
     for (const [i, w] of ctx.points.bank.windows.slice(0, 3).entries()) {
       const m = ctx.crew.add('banker', w.banker.x, w.banker.z, w.banker.yaw);
-      this.tellers.push({ m, home: w.banker, customer: w.customer, idle: 9 + i * 7 });
+      this.tellers.push({ m, home: w.banker, customer: w.customer, front: w.front, idle: 9 + i * 7 });
     }
   }
 
-  /** "Bank" at each window with a banker. */
+  /**
+   * "Bank" at each window with a banker: anywhere in front of the window's stretch of the counter
+   * (its nearest point), so walking up to the cage anywhere near a window finds it.
+   */
   spots = (p: { x: number; z: number }): Spot[] => {
     const out: Spot[] = [];
     for (const [i, t] of this.tellers.entries()) {
-      const d = Math.max(0, Math.hypot(t.customer.x - p.x, t.customer.z - p.z) - 0.35);
+      const f = t.front ?? { x: (t.customer.x + t.home.x) / 2, z: (t.customer.z + t.home.z) / 2 };
+      // the customers' side of the counter only (the cage runs along the north wall)
+      if (p.z < f.z - 0.05) continue;
+      const x = Math.max(f.x - WINDOW / 2, Math.min(f.x + WINDOW / 2, p.x));
+      const d = Math.max(0, Math.hypot(x - p.x, f.z - p.z) - 0.45);
       if (d > REACH) continue;
-      // the prompt points at the window itself
-      out.push({ key: `bank:${i}`, x: (t.customer.x + t.home.x) / 2, z: (t.customer.z + t.home.z) / 2, d, label: 'Bank', use: () => this.visit(t) });
+      out.push({ key: `bank:${i}`, x, z: f.z, d, label: 'Bank', use: () => this.visit(t) });
     }
     return out;
   };

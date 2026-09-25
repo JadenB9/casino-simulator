@@ -5,6 +5,7 @@
 
 import { el } from '../../ui/kit.ts';
 import { formatMoney, type Cents } from '../../../../shared/src/money.ts';
+import { calm } from '../../app/comfort.ts';
 
 const SHOW_MS = 5200;
 const OUT_MS = 380;
@@ -84,7 +85,7 @@ export class Sighting {
     }
     if (!this.card || this.shown !== s.name) {
       this.card?.remove();
-      const c = el('div', 'celeb-sighting panel');
+      const c = el('div', calm() ? 'celeb-sighting panel calm' : 'celeb-sighting panel');
       c.append(el('div', 'celeb-sighting-tag', 'On the floor'), el('div', 'celeb-sighting-name', s.name), el('div', 'celeb-sighting-known', s.known));
       this.where = el('div', 'celeb-sighting-where');
       c.append(this.where);

@@ -37,6 +37,7 @@ import { GiftModel } from './gift.ts';
 import { Notices, Sighting, photoCard } from './news.ts';
 import { chime, shutter } from './sound.ts';
 import { selfieCamera, takeSelfie, type Snapper } from './selfie.ts';
+import { calm } from '../../app/comfort.ts';
 import './celebs.css';
 
 /** What this needs from the floor socket (FloorLink has all of it). */
@@ -449,7 +450,8 @@ export class Celebs {
         a.cue = 5 + Math.random() * 6;
       }
       a.flash -= dt;
-      if (a.flash <= 0 && stop.kind !== 'bye') {
+      // (no phones going off with Reduce flashing & motion on)
+      if (a.flash <= 0 && stop.kind !== 'bye' && !calm()) {
         a.flash = stop.kind === 'pose' || stop.kind === 'sign' ? 1.2 + Math.random() * 2.5 : 3 + Math.random() * 5;
         const hx = a.x + Math.sin(a.yaw) * 0.35;
         const hz = a.z + Math.cos(a.yaw) * 0.35;
@@ -487,7 +489,7 @@ export class Celebs {
         break;
       default:
         star.act = { m: CELEB_MOTIONS[b.do], t: 0 };
-        if (b.do === 'selfie') this.flashes.pop(star.x + Math.sin(star.yaw) * 0.5, 2.1 * star.scale, star.z + Math.cos(star.yaw) * 0.5, 0.3);
+        if (b.do === 'selfie' && !calm()) this.flashes.pop(star.x + Math.sin(star.yaw) * 0.5, 2.1 * star.scale, star.z + Math.cos(star.yaw) * 0.5, 0.3);
     }
   }
 
@@ -513,7 +515,7 @@ export class Celebs {
     }
     setTimeout(() => {
       const who = this.whereIs(id);
-      if (who) this.flashes.pop(who.x, HEAD_Y + 0.35, who.z, 0.5);
+      if (who && !calm()) this.flashes.pop(who.x, HEAD_Y + 0.35, who.z, 0.5);
     }, 1300);
   }
 
@@ -533,7 +535,7 @@ export class Celebs {
         const cam = this.deps.camera.position;
         this.picture = takeSelfie(snapper, selfieCamera({ x: star.x, z: star.z }, { x: me.x, z: me.z }, { x: cam.x, z: cam.z }));
       }
-      this.flashes.pop(me.x, HEAD_Y + 0.35, me.z, 0.5);
+      if (!calm()) this.flashes.pop(me.x, HEAD_Y + 0.35, me.z, 0.5);
       screenFlash(this.ui());
       shutter(this.app?.sfx);
       this.showPhoto();
@@ -639,7 +641,7 @@ export class Celebs {
       return;
     }
     const p = m.root.position;
-    for (let i = 0; i < 4; i++) setTimeout(() => this.flashes.pop(p.x + (Math.random() - 0.5) * 0.6, 0.4 + Math.random() * 0.5, p.z + (Math.random() - 0.5) * 0.6, 0.3), i * 90);
+    if (!calm()) for (let i = 0; i < 4; i++) setTimeout(() => this.flashes.pop(p.x + (Math.random() - 0.5) * 0.6, 0.4 + Math.random() * 0.5, p.z + (Math.random() - 0.5) * 0.6, 0.3), i * 90);
     // it goes on turning while it opens, then it's gone
     this.opening = m;
     m.open(() => {

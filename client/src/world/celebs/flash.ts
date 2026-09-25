@@ -2,6 +2,7 @@
 // bright enough for the bloom to catch), and the screen's own flash when your photo is taken.
 
 import * as THREE from 'three';
+import { calm } from '../../app/comfort.ts';
 
 const POOL = 8;
 /** Seconds a burst lasts. */
@@ -69,10 +70,10 @@ export class Flashes {
   }
 }
 
-/** The whole screen flashes white for a moment (much softer when motion is reduced). */
+/** The whole screen flashes white for a moment (a soft glow with Reduce flashing & motion on). */
 export function screenFlash(root: HTMLElement): void {
   const f = document.createElement('div');
-  f.className = 'celeb-flash';
+  f.className = calm() ? 'celeb-flash calm' : 'celeb-flash';
   f.setAttribute('aria-hidden', 'true');
   root.append(f);
   setTimeout(() => f.remove(), 700);
