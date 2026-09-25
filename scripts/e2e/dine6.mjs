@@ -54,11 +54,21 @@ async function enterAs(name, phone = false) {
   }
   await p.waitForSelector('.hud', { timeout: 30000 });
   await p.waitForTimeout(1500);
+  // anything the floor opens on arrival (the daily visit's sheet) is closed first
+  for (let i = 0; i < 3 && (await p.$('.sheet-scrim')); i++) {
+    await p.keyboard.press('Escape');
+    await p.waitForTimeout(400);
+  }
+  // and what's still in hand from an earlier run is put down
+  await p.evaluate(() => window.casino.world.dropHeld());
+  await p.waitForFunction(() => !window.casino.session.profile?.look.held, null, { timeout: 10000 });
   return { p, ctx, errors };
 }
 
 /** Order through the menu; `walk` waits for a waiter to bring it, otherwise it's handed straight over. */
 async function order(p, name, walk = false) {
+  // (an order still in hand from an earlier run doesn't count)
+  const prev = await p.evaluate(() => window.casino.session.profile?.look.held?.order ?? null);
   await p.evaluate(() => window.casino.app.openBarMenu());
   await p.waitForSelector('.dine-sheet .bar-item');
   await p.click(`.bar-order[aria-label^="Order ${name},"]`);
@@ -72,10 +82,10 @@ async function order(p, name, walk = false) {
       if (o) window.casino.world.holdItem(o.id);
     });
   }
-  await p.waitForFunction((n) => {
+  await p.waitForFunction(([n, old]) => {
     const h = window.casino.session.profile?.look.held;
-    return h && window.casino.app.diner.current?.order === h.order && document.querySelector('.dine-card-name')?.textContent === n;
-  }, name, { timeout: walk ? 150000 : 15000 });
+    return h && h.order !== old && window.casino.app.diner.current?.order === h.order && document.querySelector('.dine-card-name')?.textContent === n;
+  }, [name, prev], { timeout: walk ? 150000 : 15000 });
   return p.evaluate(() => window.casino.session.profile.look.held);
 }
 

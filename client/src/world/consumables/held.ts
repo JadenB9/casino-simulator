@@ -481,8 +481,9 @@ function findToasts(): void {
     for (let j = i + 1; j < drinks.length; j++) {
       const b = drinks[j]!;
       if (taken.has(b)) continue;
+      // (two copies of the same person, a preview say, never toast each other)
       const key = `${a.order}|${b.order}`;
-      if (toasted.has(key)) continue;
+      if (a.order === b.order || toasted.has(key)) continue;
       const pb = b.where(new THREE.Vector3());
       const d = Math.hypot(pb.x - pa.x, pb.z - pa.z);
       if (d > TOAST_NEAR || d < 0.5) continue;
