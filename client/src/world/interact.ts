@@ -1,6 +1,7 @@
 // Walking up to things. The nearest station within 1.6 m in front of the player gets a prompt
 // ("Press E · Blackjack · $5–$5,000"); E sits down there: the camera flies to the game's play pose
-// and onEnter fires. Leaving (Esc, or exitTable() from the app) flies back behind the player.
+// and onEnter fires. Leaving (Esc, or exitTable() from the app) flies back behind the player (or,
+// in first person, to their eyes).
 // The cashier works the same way but only fires onCashier; the app opens the bank over the floor.
 // Other things to walk up to (a seat, a waiter, a teller window) come from spot providers (the
 // floor's life, world/life/): the nearest of everything gets the prompt, and E uses it.
@@ -153,11 +154,16 @@ export class Interact {
     this.flyTo(pose.position, pose.target, AIM, () => {});
   }
 
-  /** Leave the table: fly back behind the player and hand the controls back. */
+  /**
+   * Leave the table: fly back behind the player, or in first person to their eyes, and hand the
+   * controls back. Flying to the eyes the camera would meet the character face on, so it stays
+   * out of sight until the camera is in its head.
+   */
   exit(): Promise<void> {
     if (!this.seated) return Promise.resolve();
     this.seated = null;
-    this.player.character.root.visible = true;
+    const eyes = this.player.view === 'first';
+    this.player.character.root.visible = !eyes;
     const back = this.player.followPose();
     return new Promise((resolve) =>
       this.flyTo(
@@ -165,6 +171,7 @@ export class Interact {
         back.target,
         FLY_OUT,
         () => {
+          this.player.character.root.visible = true;
           this.player.setEnabled(true);
           resolve();
         },
