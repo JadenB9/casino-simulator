@@ -283,7 +283,7 @@ function solveAll(rig: Rig, view: HandView, held: HeldModel): Poses | null {
 
   if (held.plate && plateAt) {
     // the plate up under the chin (candles, and a little for every bite), and held out in front
-    const chinAt = mouth.clone().add(V(0, -0.15, 0.2));
+    const chinAt = mouth.clone().add(V(0, -0.16, 0.16));
     trackR('chin', place(held.plate, chinAt, Q(), 0.6));
     const front = shoulderR.clone().addScaledVector(inward, 0.1).add(V(0, -0.05, 0)).addScaledVector(forward, 0.45);
     trackR('raise', place(held.plate, front, Q(), 0.8));
@@ -326,24 +326,25 @@ function solveAll(rig: Rig, view: HandView, held: HeldModel): Poses | null {
   const pinchW = tipA && tipB ? at(tipA).add(at(tipB)).multiplyScalar(0.5) : at(L.wrist);
   const pinch = L.wrist.matrixWorld.clone().invert().multiply(new THREE.Matrix4().makeTranslation(pinchW.x, pinchW.y, pinchW.z));
   const pinchLocal = V().setFromMatrixPosition(pinch);
-  /** The left hand's pinch at `target`, the hand as the forearm carries it, bent `bend` at the wrist. */
-  const reachL = (target: V3, bend: THREE.Quaternion): Solved => {
+  // the way the fingers point, at the idle
+  const mid = rig.bone('Middle3.L') ?? rig.bone('Middle2.L');
+  const fingers0 = mid ? at(mid).sub(at(L.wrist)).normalize() : V(0, -1, 0);
+  const wrist0 = wq(L.wrist);
+  /**
+   * The left hand's pinch at `target`, the fingers pointing along `dir`; the search rolls the hand
+   * about its fingers and swings the elbow for the least bent wrist.
+   */
+  const reachL = (target: V3, dir: V3): Solved => {
     rig.pose(new Map());
     const start = new Map<THREE.Object3D, THREE.Quaternion>([[L.wrist, L.wrist.quaternion.clone()]]);
-    // the wrist's place depends on the hand's turn, which follows the forearm: a few rounds settle it
-    let wP = target.clone();
-    let best: Solved | null = null;
-    for (let k = 0; k < 6; k++) {
-      const s = reachArm(L, wP, Q(), 0, start);
-      const lowerW = wq(L.upper.parent!).multiply(s.upper).multiply(s.lower);
-      const wQ = lowerW.clone().multiply(rig.idle.get(L.wrist)!).multiply(bend);
-      const [sw] = search2([-1, -0.01], [0.6, 0.01], (sw2) => reachArm(L, wP, wQ, sw2, start).cost);
-      best = reachArm(L, wP, wQ, sw, start);
-      // the pinch where it lands with this turn, and the wrist moved to bring it onto the target
-      const off = pinchLocal.clone().applyQuaternion(wQ);
-      wP = target.clone().sub(off);
-    }
-    return best!;
+    const point = Q().setFromUnitVectors(fingers0, dir.clone().normalize()).multiply(wrist0);
+    const run = (roll: number, swing: number) => {
+      const wQ = Q().setFromAxisAngle(dir.clone().normalize(), roll).multiply(point);
+      const wP = target.clone().sub(pinchLocal.clone().applyQuaternion(wQ).multiply(L.wrist.getWorldScale(V())));
+      return reachArm(L, wP, wQ, swing, start);
+    };
+    const [roll, swing] = search2([-Math.PI, -1], [Math.PI, 0.8], (r2, s2) => run(r2, s2).cost);
+    return run(roll, swing);
   };
   const trackL = (name: ArmPose, s: Solved, extra: [THREE.Object3D, THREE.Quaternion][] = []) => {
     clips[name] = clip(name, [
@@ -353,17 +354,20 @@ function solveAll(rig: Rig, view: HandView, held: HeldModel): Poses | null {
       ...extra,
     ]);
   };
-  const palmDown = Q().setFromAxisAngle(V(0, 0, 1), 0.2 * leftX);
+  const shoulderL = at(L.upper);
   if (plateAt) {
-    trackL('reach', reachL(plateAt.clone().add(V(0, 0.03, 0)), palmDown));
-    rig.pose(new Map());
-    trackL('eat', reachL(mouth.clone().add(V(0, -0.01, 0.04)), Q().setFromAxisAngle(V(1, 0, 0), -0.5)), [headTurn(head, 0.08)]);
+    // down onto the plate from above and across; then the piece up to the mouth, fingers toward it
+    const onto = plateAt.clone().add(V(0, 0.035, 0));
+    trackL('reach', reachL(onto, onto.clone().sub(shoulderL).setY(0).normalize().add(V(0, -0.9, 0))));
+    trackL('eat', reachL(mouth.clone().add(V(-leftX * 0.005, -0.02, 0.045)), V(-leftX * 0.25, 0.85, -0.5)), [headTurn(head, 0.1)]);
   }
   rig.pose(new Map());
-  const torso = rig.bone('Abdomen') ?? rig.bone('Torso') ?? rig.bone('Hips');
-  if (torso) {
-    const belly = at(torso).add(V(leftX * 0.05, 0.02, 0.14));
-    trackL('belly', reachL(belly, Q().setFromAxisAngle(V(0, 1, 0), -0.6 * leftX)));
+  const hips = rig.bone('Hips');
+  const chest = rig.bone('Chest');
+  if (hips && chest) {
+    // flat on the stomach, fingers across it
+    const belly = at(hips).lerp(at(chest), 0.62).add(V(leftX * 0.02, 0, 0.15));
+    trackL('belly', reachL(belly, V(-leftX, 0.1, 0.05)));
   }
 
   const carryClip = clip(

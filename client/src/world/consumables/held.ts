@@ -149,7 +149,7 @@ export class HeldOrder {
       }
     }
     if (m.flames.length) {
-      const parts = m.flames.map((p) => new THREE.ConeGeometry(0.0035, 0.012, 8).translate(p.x, p.y + 0.004, p.z));
+      const parts = m.flames.map((p) => new THREE.ConeGeometry(0.0045, 0.017, 8).translate(p.x, p.y + 0.006, p.z));
       this.flames = add(new THREE.Mesh(mergeFlames(parts), flameMaterial())) as THREE.Mesh;
       for (const p of parts) p.dispose();
     }
