@@ -159,6 +159,7 @@ export class Celebs {
   /** Your selfie: when the phone goes off (performance.now()), the picture once taken, and the tip it goes with. */
   private snap: { at: number; id: number } | null = null;
   private picture: HTMLCanvasElement | null = null;
+  private giftShot: { at: number; x: number | null; z: number | null; amount: number } | null = null;
   private photo: { title: string; amount: number; line: string; foot: string; until: number } | null = null;
   private readonly head = new THREE.Vector3();
   private readonly frustum = new THREE.Frustum();
@@ -293,13 +294,16 @@ export class Celebs {
         if (this.gift?.id === m.id) this.removeGift(m.name !== null);
         if (m.name && m.name !== this.youName() && this.onFloor()) this.news().show({ tag: 'Gift box', title: `${m.name} found the gift box` });
         break;
-      case 'gift.won':
+      case 'gift.won': {
         this.asking = null;
         this.app?.money(m);
         chime(this.app?.sfx);
-        if (this.gift?.id === m.id) this.removeGift(true);
-        photoCard(this.ui(), { tag: 'You found', title: 'The gift box', amount: m.amount, foot: 'Another one turns up within the hour.' });
+        const g = this.gift?.id === m.id ? this.gift : null;
+        if (g) this.removeGift(true);
+        // a picture of it popping open, from where you stand
+        this.giftShot = { at: performance.now() + 280, x: g?.x ?? null, z: g?.z ?? null, amount: m.amount };
         break;
+      }
       case 'gift.no':
         this.asking = null;
         this.news().show({ tag: 'Gift box', title: m.msg });
@@ -533,6 +537,22 @@ export class Celebs {
     }
     // the tip came but the moment didn't (the celebrity out of sight on this screen): the card anyway
     if (this.photo && !this.snap && t >= this.photo.until) this.showPhoto();
+    const g = this.giftShot;
+    if (g && t >= g.at) {
+      this.giftShot = null;
+      const snapper = this.app?.snapper;
+      let picture: HTMLCanvasElement | null = null;
+      if (snapper && g.x !== null && g.z !== null) {
+        const me = this.deps.player.position;
+        const d = Math.hypot(me.x - g.x, me.z - g.z) || 1;
+        const cam = new THREE.PerspectiveCamera(46, 4 / 3, 0.05, 40);
+        cam.position.set(g.x + ((me.x - g.x) / d) * 1.05, 0.95, g.z + ((me.z - g.z) / d) * 1.05);
+        cam.lookAt(g.x, 0.42, g.z);
+        cam.updateMatrixWorld();
+        picture = takeSelfie(snapper, cam);
+      }
+      photoCard(this.ui(), { tag: 'You found', title: 'The gift box', amount: g.amount, foot: 'Another one turns up within the hour.', picture });
+    }
   }
 
   private showPhoto(): void {

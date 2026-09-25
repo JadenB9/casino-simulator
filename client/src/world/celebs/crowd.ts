@@ -42,6 +42,8 @@ const OUT_S = 1.6;
 /** How far off a fan walks up from, and how long it takes. */
 const JOIN_M = 5;
 const JOIN_S = 4.5;
+/** How close behind the celebrity someone steps up the route before crossing to their place. */
+const CLOSE_M = 0.7;
 
 /** A small deterministic generator (the same on every client for the same seed). */
 export function seeded(seed: number): () => number {
@@ -72,27 +74,34 @@ export function followersOf(v: Visit, tl: Timeline): Follower[] {
   return out;
 }
 
-/** A place at a stop, relative to the celebrity there: guards at the shoulders, fans in an arc in front. */
-export function slotOf(f: Follower, present: readonly Follower[], sx: number, sz: number, face: number, grid: NavGrid): { x: number; z: number; yaw: number } | null {
+/**
+ * A place at a stop, relative to the celebrity there: guards at the shoulders, fans in an arc in
+ * front (behind, at a table they're playing: the fans watch over their shoulder).
+ */
+export function slotOf(f: Follower, present: readonly Follower[], sx: number, sz: number, face: number, grid: NavGrid, behind = false): { x: number; z: number; yaw: number } | null {
   const fx = Math.sin(face);
   const fz = Math.cos(face);
   // the celebrity's right hand is on -x when they face +z
   const rx = -Math.cos(face);
   const rz = Math.sin(face);
+  const star = { x: sx, z: sz };
   if (f.role === 'guard') {
     const s = f.k === 0 ? 1 : -1;
     const want = { x: sx + rx * 1.05 * s - fx * 0.45, z: sz + rz * 1.05 * s - fz * 0.45 };
     const at = clearNear(grid, want.x, want.z, 0.6);
-    return at ? { ...at, yaw: face + s * 0.55 } : null;
+    return at && grid.lineClear(star, at) ? { ...at, yaw: face + s * 0.55 } : null;
   }
   const fans = present.filter((p) => p.role === 'fan');
   const i = fans.indexOf(f);
   const n = fans.length;
-  const a = face + (i - (n - 1) / 2) * 0.42;
-  const r = 2.1 + (i % 2) * 0.6;
-  const at = clearNear(grid, sx + Math.sin(a) * r, sz + Math.cos(a) * r, 0.5);
-  if (!at || Math.hypot(at.x - sx, at.z - sz) < 1.3) return null;
-  return { ...at, yaw: Math.atan2(sx - at.x, sz - at.z) };
+  // their place in the arc, or a little nearer or further if something stands there
+  for (const dr of [0, -0.4, 0.4]) {
+    const a = face + (behind ? Math.PI : 0) + (i - (n - 1) / 2) * (behind ? 0.5 : 0.42);
+    const r = (behind ? 1.7 : 2.1) + (i % 2) * 0.6 + dr;
+    const at = clearNear(grid, sx + Math.sin(a) * r, sz + Math.cos(a) * r, 0.5);
+    if (at && Math.hypot(at.x - sx, at.z - sz) >= 1.3 && grid.lineClear(star, at)) return { ...at, yaw: Math.atan2(sx - at.x, sz - at.z) };
+  }
+  return null;
 }
 
 /** Where a follower is, `t` seconds into the visit. */
@@ -107,7 +116,7 @@ export function placeFollower(f: Follower, all: readonly Follower[], tl: Timelin
   const len = seg.t1 - seg.t0;
   const present = all.filter((p) => p.joins <= star.stop);
   const [sx, sz] = tl.route.pts[stop.at]!;
-  const slot = slotOf(f, present, sx, sz, faceYaw(stop.face), grid);
+  const slot = slotOf(f, present, sx, sz, faceYaw(stop.face), grid, stop.kind === 'table');
   // a fan joining here walks up from a few metres off, straight to their place
   if (f.role === 'fan' && f.joins === star.stop && slot && star.stopT < JOIN_S) {
     const from = entryFor(slot, sx, sz, grid);
@@ -119,7 +128,18 @@ export function placeFollower(f: Follower, all: readonly Follower[], tl: Timelin
   }
   if (!slot) return { ...follow, here: true, settled: 0 };
   const w = Math.min(smooth(star.stopT / IN_S), smooth((len - star.stopT) / OUT_S));
-  return { x: follow.x + (slot.x - follow.x) * w, z: follow.z + (slot.z - follow.z) * w, yaw: lerpAngle(follow.yaw, slot.yaw, w), here: true, settled: w };
+  // into their place: straight across where nothing stands in the way, else up the route to just
+  // behind the celebrity first and across from there
+  if (grid.lineClear(follow, slot)) return { x: follow.x + (slot.x - follow.x) * w, z: follow.z + (slot.z - follow.z) * w, yaw: lerpAngle(follow.yaw, slot.yaw, w), here: true, settled: w };
+  const near = followPoint(tl, star.arc, { ...f, lag: CLOSE_M, side: 0 }, grid);
+  if (!grid.lineClear(near, slot)) return { ...follow, here: true, settled: 0 };
+  if (w < 0.5) {
+    const k = w * 2;
+    const p = followPoint(tl, star.arc, { ...f, lag: f.lag + (CLOSE_M - f.lag) * k, side: f.side * (1 - k) }, grid);
+    return { ...p, here: true, settled: w };
+  }
+  const k = (w - 0.5) * 2;
+  return { x: near.x + (slot.x - near.x) * k, z: near.z + (slot.z - near.z) * k, yaw: lerpAngle(near.yaw, slot.yaw, k), here: true, settled: w };
 }
 
 /** Seconds into the visit that a stop begins. */
