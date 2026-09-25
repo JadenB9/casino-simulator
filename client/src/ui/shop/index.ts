@@ -1,7 +1,8 @@
-// The boutique and the bar, in one place for app/boot.ts: the two screens, the bar's orders, the
+// The boutique, the effects and the bar, in one place for app/boot.ts: the screens, the bar's orders, the
 // HUD buttons, the showroom, and the HTTP calls.
 
-export { openShop, type ShopApi, type ShopDeps } from './boutique.ts';
+export { openShop, type FloorView, type ShopApi, type ShopDeps } from './boutique.ts';
+export { openEffects, type EffectsDeps } from './effects.ts';
 export { openBarMenu, type BarMenuDeps } from './barmenu.ts';
 export { Bar, DELIVERY_MS, applyMoney, type BarDeps } from './bar.ts';
 export { shopButton, shopIcon, type ShopIconName } from './icons.ts';

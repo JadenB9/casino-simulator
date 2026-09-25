@@ -23,6 +23,7 @@ import { mountEmotes, openLeaderboard, socialApi, socialButton, type EmoteWheel 
 import { createChat, type Chat } from '../ui/chat/index.ts';
 import { mountFloorLife, type FloorLife } from '../ui/feed/index.ts';
 import { Bar, openBarMenu, openShop, shopApi, shopButton } from '../ui/shop/index.ts';
+import { openEffects } from '../ui/shop/index.ts'; // v6 shop6: effects from anywhere on the floor
 import { button, modal, toast } from '../ui/kit.ts';
 import { showAway, showIdleWarning, type AwayHandle, type WarningHandle } from '../ui/away/away.ts';
 import { IdleWatch } from './idle.ts';
@@ -398,6 +399,7 @@ class App {
     bar.insertBefore(socialButton('emotes', 'Emotes (G)', () => this.emotes?.toggle()), first);
     bar.insertBefore(socialButton('leaderboard', 'Leaderboards', () => openLeaderboard({ root: this.ui, api: socialApi })), first);
     bar.insertBefore(shopButton('boutique', 'Boutique', () => this.openShop()), first);
+    bar.insertBefore(shopButton('effects', 'Effects', () => this.openEffects()), first); // v6 shop6
     bar.insertBefore(shopButton('bar', 'Bar', () => this.openBarMenu()), first);
     this.chat?.setVisible(true);
   }
@@ -426,14 +428,41 @@ class App {
     this.world.player.setEnabled(false);
     openShop({
       root: this.ui,
-      api: { shop: shopApi.shop, buy: shopApi.buy, saveLook: api.saveLook },
+      api: { shop: shopApi.shop, buy: shopApi.buy, fx: shopApi.fx, saveLook: api.saveLook },
       session,
       engine: this.engine,
       characters: this.world.characterFactory,
       sfx: this.sfx,
       item,
+      // v6 shop6: what's playing on the floor and where you stand, for the effects
+      floor: this.link,
+      where: () => this.whereOnFloor(),
       onClose: () => this.world.player.setEnabled(true),
     });
+  }
+
+  // v6 shop6: effects bought from the HUD, anywhere on the floor (ui/shop/effects.ts)
+  openEffects(): void {
+    if (!this.hud) return;
+    const walking = this.table === null && this.world.seated === null;
+    if (walking) this.world.player.setEnabled(false);
+    openEffects({
+      root: this.ui,
+      api: { fx: shopApi.fx },
+      session,
+      floor: this.link,
+      where: () => this.whereOnFloor(),
+      sfx: this.sfx,
+      openBoutique: walking ? () => this.openShop('fx-confetti') : undefined,
+      onClose: () => walking && this.world.player.setEnabled(true),
+    });
+  }
+
+  /** v6 shop6: where you stand (metres) while the floor socket is up; effects play there. */
+  private whereOnFloor(): { x: number; z: number } | null {
+    if (!this.link?.you) return null;
+    const p = this.world.player.position;
+    return { x: p.x, z: p.z };
   }
 
   /** The bar's menu, from the HUD for now (a waiter's, later). */

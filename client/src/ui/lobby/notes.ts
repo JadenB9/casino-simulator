@@ -15,6 +15,9 @@ const SOLO_NOTE: Partial<Record<GameId, string>> = {
   sicbo: 'You and the dealer. Shake when you are ready.',
   banditwheel: 'You and the wheel. Spin when you are ready, or it spins when the clock runs out.',
   crash: 'Rounds of your own, one after another: bet in the window, cash out before it crashes.',
+  letitride: 'You and the dealer. Deal when you are ready.',
+  paigow: 'You and the dealer. Deal when you are ready.',
+  bingo: 'Games of your own, one after another: buy cards, then the balls are called.',
 };
 
 export function soloNote(game: GameId): string {

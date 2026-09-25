@@ -21,6 +21,14 @@ import { engine as keno } from './keno/engine.ts';
 import { engine as hilo } from './hilo/engine.ts';
 import { engine as crash } from './crash/engine.ts';
 import { engine as banditwheel } from './banditwheel/engine.ts';
+import { engine as coinflip } from './coinflip/engine.ts';
+import { engine as wheel } from './wheel/engine.ts';
+import { engine as cases } from './cases/engine.ts';
+import { engine as diamonds } from './diamonds/engine.ts';
+import { engine as letitride } from './letitride/engine.ts';
+import { engine as paigow } from './paigow/engine.ts';
+import { engine as bingo } from './bingo/engine.ts';
+import { engine as pachinko } from './pachinko/engine.ts';
 import { engine as highcard } from './highcard/engine.ts';
 
 // Each engine keeps its own state/action/view types; the host only ever handles them opaquely.
@@ -48,6 +56,14 @@ export const ENGINES: Record<GameId, AnyEngine> = {
   hilo,
   crash,
   banditwheel,
+  coinflip,
+  wheel,
+  cases,
+  diamonds,
+  letitride,
+  paigow,
+  bingo,
+  pachinko,
   highcard,
 };
 
