@@ -5,7 +5,8 @@
 // officers in olive. Only the ones the camera could see are posed and drawn.
 
 import * as THREE from 'three';
-import { STAFF, detourOf, poseAt, type Detour, type StaffId } from '../../../../shared/src/law/patrol.ts';
+import { STAFF, detourOf, loopPose, poseAt, type Detour, type Pose, type StaffId, type StaffSpec } from '../../../../shared/src/law/patrol.ts';
+import { pathLength, type NavGrid, type Pt } from '../life/nav.ts';
 import { DEFAULT_LOOK, type Look } from '../../../../shared/src/look.ts';
 import { uniformOutfit, type Characters, type LawGesture, type Person } from '../characters.ts';
 import { earpiece, guardCap, hangOn, radio, tablet } from './gear.ts';
@@ -35,10 +36,20 @@ export interface StaffMember {
   post: { x: number; z: number; yaw: number } | null;
 }
 
+/** A detour's walks as drawn: around the tables and through the doors rather than straight. */
+interface Walks {
+  go: Pt[];
+  back: Pt[];
+  at: Pt;
+}
+
 export class LawStaff {
   readonly group = new THREE.Group();
   readonly members: StaffMember[] = [];
   private detours: Detour[] = [];
+  private readonly walks = new WeakMap<Detour, Walks>();
+  /** The floor's walkable grid (world/life), for detours; straight lines without it. */
+  nav: NavGrid | null = null;
   private readonly _p = new THREE.Vector3();
 
   constructor(
@@ -121,7 +132,8 @@ export class LawStaff {
         ({ x, z, yaw } = m.post);
       } else {
         const spec = STAFF.find((s) => s.id === m.id)!;
-        const p = poseAt(spec, now, detourOf(this.detours, m.id as StaffId, now));
+        const d = detourOf(this.detours, m.id as StaffId, now);
+        const p = d ? this.walked(spec, d, now) : poseAt(spec, now, null);
         x = p.x;
         z = p.z;
         yaw = p.yaw;
@@ -150,8 +162,52 @@ export class LawStaff {
     }
   }
 
+  /**
+   * Where he is on a detour, as drawn: the same moments as the server's (patrol.ts poseAt), but
+   * walking the floor's paths, and standing on open floor beside the player, not in a table.
+   */
+  private walked(spec: StaffSpec, d: Detour, now: number): Pose {
+    const nav = this.nav;
+    if (!nav) return poseAt(spec, now, d);
+    let w = this.walks.get(d);
+    if (!w) {
+      const from = loopPose(spec, d.at);
+      const home = loopPose(spec, d.until);
+      const at = nav.nearestClear(d.x, d.z) ?? { x: d.x, z: d.z };
+      w = { go: nav.path(from, at) ?? [from, at], back: nav.path(at, home) ?? [at, home], at };
+      this.walks.set(d, w);
+    }
+    if (now < d.at + d.go) return along(w.go, (now - d.at) / d.go);
+    const leave = d.until - d.back;
+    if (now < leave) {
+      // the player stands 0.9 m on from the server's spot, the way it faces
+      const px = d.x + Math.sin(d.face) * 0.9;
+      const pz = d.z + Math.cos(d.face) * 0.9;
+      const yaw = Math.hypot(px - w.at.x, pz - w.at.z) > 0.2 ? Math.atan2(px - w.at.x, pz - w.at.z) : d.face;
+      return { x: w.at.x, z: w.at.z, yaw, moving: false, busy: true };
+    }
+    return along(w.back, (now - leave) / d.back);
+  }
+
   dispose(): void {
     for (const m of this.members) m.person.dispose();
     this.group.removeFromParent();
   }
+}
+
+/** The point `k` (0-1) of the way along a path, facing along it. */
+function along(pts: readonly Pt[], k: number): Pose {
+  let left = Math.min(1, Math.max(0, k)) * pathLength(pts);
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1]!;
+    const b = pts[i]!;
+    const seg = Math.hypot(b.x - a.x, b.z - a.z);
+    if (left <= seg || i === pts.length - 1) {
+      const t = seg > 0 ? Math.min(1, left / seg) : 1;
+      return { x: a.x + (b.x - a.x) * t, z: a.z + (b.z - a.z) * t, yaw: Math.atan2(b.x - a.x, b.z - a.z), moving: true, busy: true };
+    }
+    left -= seg;
+  }
+  const p = pts[pts.length - 1]!;
+  return { x: p.x, z: p.z, yaw: 0, moving: false, busy: true };
 }

@@ -96,6 +96,7 @@ export class Law {
     this.speech = new Speech(engine.camera);
     this.sounds = new LawSounds(deps.sfx);
     this.staff = new LawStaff(world.characterFactory, (x, z) => this.canSee(x, z));
+    this.staff.nav = world.life.grid;
     engine.scene.add(this.staff.group);
     this.jail = buildJail({ quality: world.quality, collider: world.collider });
     this.jail.group.visible = false;
