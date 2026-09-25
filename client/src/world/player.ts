@@ -57,6 +57,9 @@ const EYES_PITCH_MAX = 1.4;
  * 0.09 m across) never reach past.
  */
 export const HEAD_Y = 1.55;
+/** A head drawn outside these (m over the feet) isn't one: a model not drawn yet. */
+const HEAD_MIN = 0.6;
+const HEAD_MAX = 3;
 const HEAD_AHEAD = 0.06;
 const EYES_OVER_HEAD = 0.11;
 const EYES_AHEAD = 0.1;
@@ -483,8 +486,9 @@ export class Player {
   /** Where the eyes are this frame: from the head bone as last drawn, the way you look. */
   private computeEyes(dt: number): void {
     const bone = this.headBone();
+    // (a model just put on hasn't been drawn yet: its bones are all still at the floor)
     const drawn = bone ? bone.matrixWorld.elements[13]! - this.floorY : Number.NaN;
-    const y = headHeight(Number.isFinite(drawn) ? drawn : null, this.position.y);
+    const y = headHeight(drawn > HEAD_MIN && drawn < HEAD_MAX ? drawn : null, this.position.y);
     // eased (a walk's bob, getting onto a seat), snapped after a jump
     if (!(Math.abs(y - this.headY) < 0.5) || dt <= 0) this.headY = y;
     else this.headY += (y - this.headY) * (1 - Math.exp(-dt * 12));
