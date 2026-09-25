@@ -279,8 +279,8 @@ export function buildGround(mats: Mats, col: Collider, quality: Quality): ZoneBu
   const WE = G.walkEast;
   const z0 = G.zone.z0;
   const z1 = G.zone.z1;
-  kit.box('concrete', WW.x0, WW.x1, -0.1, 0.006, z0, z1, 2.4);
-  kit.box('concrete', WE.x0, WE.x1, -0.1, 0.006, z0, z1, 2.4);
+  kit.box('sidewalk', WW.x0, WW.x1, -0.1, 0.006, z0, z1, 2.4);
+  kit.box('sidewalk', WE.x0, WE.x1, -0.1, 0.006, z0, z1, 2.4);
   kit.box('curb', WW.x1 - 0.22, WW.x1, -0.1, 0.01, z0, z1);
   kit.box('curb', WE.x0, WE.x0 + 0.22, -0.1, 0.01, z0, z1);
   kit.box('asphalt', R.x0, R.x1, -0.1, 0, z0, z1, 6);

@@ -144,16 +144,19 @@ export function defineCityMats(mats: Mats): void {
   mats.define1('paint-yellow', () => new THREE.MeshLambertMaterial({ color: '#d9a52a' }));
   mats.define1('hedge', () => new THREE.MeshLambertMaterial({ map: hedge(), color: '#6a8a5a' }));
   mats.define1('car-glass', (q) => (hi(q) ? new THREE.MeshStandardMaterial({ color: '#0e1218', roughness: 0.1, metalness: 0.5 }) : new THREE.MeshLambertMaterial({ color: '#10141a' })));
-  mats.define1('teak', (q) => (hi(q) ? new THREE.MeshStandardMaterial({ map: mats.textures.woodDark ?? null, color: '#b98a60', roughness: 0.6 }) : new THREE.MeshLambertMaterial({ map: mats.textures.woodDark ?? null, color: '#b98a60' })));
+  mats.define1('sidewalk', () => new THREE.MeshLambertMaterial({ map: sidewalk() }));
   mats.define1('cushion', () => new THREE.MeshLambertMaterial({ color: '#e6ddcc' }));
   mats.define1('cushion-dark', () => new THREE.MeshLambertMaterial({ color: '#3a3f4a' }));
   mats.define1('stone-warm', (q) => (hi(q) ? new THREE.MeshStandardMaterial({ map: mats.textures.marbleTiles ?? null, color: '#d8c6a8', roughness: 0.45 }) : new THREE.MeshLambertMaterial({ map: mats.textures.marbleTiles ?? null, color: '#d8c6a8' })));
   const limestone = lazy(() => drawLimestone(512, 83));
   const granite = lazy(() => drawGranite(256, 89));
   const deck = lazy(() => drawDeck(512, 97));
+  const sidewalk = lazy(() => drawSlabs(256, 101));
   mats.define1('limestone', () => new THREE.MeshLambertMaterial({ map: limestone() }));
   mats.define1('granite', (q) => (hi(q) ? new THREE.MeshStandardMaterial({ map: granite(), roughness: 0.5 }) : new THREE.MeshLambertMaterial({ map: granite() })));
   mats.define1('deck', () => new THREE.MeshLambertMaterial({ map: deck() }));
+  // the loungers' and rails' teak: the deck's boards, oiled a shade darker
+  mats.define1('teak', () => new THREE.MeshLambertMaterial({ map: deck(), color: '#c89a78' }));
   mats.define1('lift-door', (q) => (hi(q) ? new THREE.MeshStandardMaterial({ color: '#b9b5ae', metalness: 0.85, roughness: 0.38 }) : new THREE.MeshLambertMaterial({ color: '#8e8b86', emissive: '#141312' })));
   mats.define1('water', (q) => (hi(q) ? new THREE.MeshStandardMaterial({ color: '#1a3a48', roughness: 0.05, metalness: 0.2 }) : new THREE.MeshLambertMaterial({ color: '#1a3440' })));
 }
@@ -218,6 +221,31 @@ function drawDeck(size: number, seed: number): HTMLCanvasElement {
         g.fillRect(sx, r * bh + bh * 0.62, 2, 2);
       }
       x += len;
+    }
+  }
+  return c;
+}
+
+/** Sidewalk slabs, 1.2 m square at 2.4 m a repeat, each a slightly different grey, with joints. */
+function drawSlabs(size: number, seed: number): HTMLCanvasElement {
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const g = c.getContext('2d')!;
+  const rnd = rng(seed);
+  const n = 2;
+  const s = size / n;
+  for (let j = 0; j < n; j++) {
+    for (let i = 0; i < n; i++) {
+      const v = 0.92 + rnd() * 0.1;
+      g.fillStyle = `rgb(${Math.round(150 * v)},${Math.round(146 * v)},${Math.round(140 * v)})`;
+      g.fillRect(i * s, j * s, s, s);
+      for (let k = 0; k < 900; k++) {
+        g.fillStyle = rnd() < 0.5 ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.05)';
+        g.fillRect(i * s + rnd() * s, j * s + rnd() * s, 1, 1);
+      }
+      g.fillStyle = 'rgba(40,38,36,0.55)';
+      g.fillRect(i * s, j * s, s, 2);
+      g.fillRect(i * s, j * s, 2, s);
     }
   }
   return c;

@@ -1,12 +1,12 @@
 // The city beyond the casino floor: the elevators and the two places they go (the ground floor
-// with the valet and the street, the roof terrace), and the switching between them. See README.md
-// ("The city").
+// with the valet and the street, the roof terrace), and the switching between them.
 //
 // The world is one scene; the casino, the ground floor and the roof are patches of it far apart
 // (shared/src/zones.ts). Only the zone you're in is drawn: the casino's pieces are hidden while
 // you're elsewhere, and the other zones are built the first time you go there and hidden when you
 // leave. Other players in another zone aren't drawn either. You move between zones only by the
-// server's word (`tp`: the elevator, or the law taking you to jail and letting you out).
+// server's word (`tp`: the elevator, or the law taking you to jail and letting you out). README.md
+// here has the rest.
 
 import * as THREE from 'three';
 import type { Quality } from '../../render/engine3d.ts';
@@ -358,7 +358,8 @@ export class City {
     const n = bank.nearest(p.x, p.z);
     if (n.d > CALL_REACH || bank.isOpen(n.car)) return [];
     const w = bank.doorway(n.car);
-    return [{ key: `lift:call:${this.zone}:${n.car}`, x: w.x, z: w.z, d: Math.max(0, n.d - 0.5), label: 'Call the elevator', use: () => bank.call(n.car) }];
+    // (the doorway's middle stands in for the whole portal: anywhere in front of it is close enough)
+    return [{ key: `lift:call:${this.zone}:${n.car}`, x: w.x, z: w.z, d: Math.max(0, n.d - 1.2), label: 'Call the elevator', use: () => bank.call(n.car) }];
   }
 
   private openPanel(car: number): void {
