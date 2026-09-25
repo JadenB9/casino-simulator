@@ -811,7 +811,7 @@ export function planFloor(footprint: (game: GameId) => Footprint, slots: readonl
   const ordered = pitSpec ? [pitSpec, ...ROOMS.filter((r) => r !== pitSpec)] : ROOMS;
   for (const spec of ordered) {
     const r = room(spec.id);
-    for (const a of spec.aisles) aisles.push({ x0: r.cx + a.x0, z0: r.cz + a.z0, x1: r.cx + a.x1, z1: r.cz + a.z1 });
+    for (const a of [...spec.aisles, ...(spec.keep ?? [])]) aisles.push({ x0: r.cx + a.x0, z0: r.cz + a.z0, x1: r.cx + a.x1, z1: r.cz + a.z1 });
   }
   for (const d of doors) {
     if (d.b === 'outside') continue;
