@@ -29,9 +29,17 @@ async function open(game, name, viewport = { width: 1280, height: 800 }) {
   page.on('console', (m) => m.type() === 'error' && !/404|Failed to load resource/.test(m.text()) && errors.push(`${game}: ${m.text()}`));
   page.on('pageerror', (e) => errors.push(`${game}: ${e}`));
   await page.goto(`http://localhost:${port}/casino/?dev=table&game=${game}&name=${name}`);
-  await page.waitForSelector('.modal input[type=number]', { timeout: 180_000 });
-  await page.fill('.modal input[type=number]', '5000');
-  await page.click('.modal .btn.primary');
+  // a name still seated from an earlier run comes back to its chips instead of the buy-in
+  const meters = game === 'letitride' ? '.lr-meters' : '.pg-meters';
+  await page.waitForFunction((m) => document.querySelector('.modal input[type=number]') || /Chips\$[1-9]/.test(document.querySelector(m)?.textContent ?? ''), meters, { timeout: 180_000 });
+  if (await page.$('.modal input[type=number]')) {
+    await page.fill('.modal input[type=number]', '5000');
+    await page.click('.modal .btn.primary');
+  }
+  await page.waitForFunction((m) => /Chips\$[1-9]/.test(document.querySelector(m)?.textContent ?? ''), meters, { timeout: 30_000 });
+  await page.waitForTimeout(800);
+  // nothing left on the layout from before
+  await page.keyboard.press('x');
   return page;
 }
 
@@ -70,8 +78,6 @@ const lrPoint = (angleDeg, r, side = 0) => {
 
 async function letItRide() {
   const page = await open('letitride', 'tables6_e2e_lr');
-  await waitFor(page, () => /Chips\$5,000/.test(document.querySelector('.lr-meters')?.textContent ?? ''));
-  await page.waitForTimeout(600);
   const circle = await onScreen(page, lrPoint(0, 0.97, 0.08));
   const bonus = await onScreen(page, lrPoint(0, 0.825));
   // Hand 1: two $25 chips a circle ($50 x 3) and a $5 bonus, clicked onto the felt
@@ -147,15 +153,13 @@ async function letItRide() {
 
 async function paiGow() {
   const page = await open('paigow', 'tables6_e2e_pg');
-  await waitFor(page, () => /Chips\$5,000/.test(document.querySelector('.pg-meters')?.textContent ?? ''));
-  await page.waitForTimeout(600);
-  const PG = { cz: -0.64, top: 0.76 };
+  const PG = { cz: -0.72, top: 0.76 };
   const pgPoint = (deg, r) => {
     const a = (deg * Math.PI) / 180;
     return [Math.sin(a) * r, PG.top, PG.cz + Math.cos(a) * r];
   };
-  const betSpot = await onScreen(page, pgPoint(10, 0.975));
-  const fortune = await onScreen(page, pgPoint(10, 0.86));
+  const betSpot = await onScreen(page, pgPoint(9, 0.975));
+  const fortune = await onScreen(page, pgPoint(9, 0.862));
   await page.mouse.click(betSpot.x, betSpot.y);
   await page.mouse.click(betSpot.x, betSpot.y);
   await page.keyboard.press('2');
@@ -193,7 +197,7 @@ async function paiGow() {
   // two hands at once
   await page.click('.mh-picker .mh-n >> nth=1');
   await page.waitForTimeout(1200);
-  for (const deg of [10, -10]) {
+  for (const deg of [9, -9]) {
     const p = await onScreen(page, pgPoint(deg, 0.975));
     await page.keyboard.press('3');
     await page.mouse.click(p.x, p.y);

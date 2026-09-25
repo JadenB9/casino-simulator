@@ -469,3 +469,13 @@ describe('pai gow poker deck', () => {
     expect(settingOf(cards('As Ah Kd Qc 9h 5s 2c'), [2, 3])).toEqual({ high: cards('As Ah 9h 5s 2c'), low: cards('Kd Qc') });
   });
 });
+
+describe('pai gow poker tips', () => {
+  it('names the house way setting', async () => {
+    const { houseWayAdvice } = await import('../src/games/paigow/advice.ts');
+    const a = houseWayAdvice(cards('As Ah Kd Qc 9h 5s 2c'));
+    expect(a.text).toBe('House way: Pair of Aces behind, K-Q in front');
+    expect(a.low).toEqual(cards('Kd Qc'));
+    expect(houseWayAdvice(cards('5s 5h 3c 3d Kh 9s 2c')).text).toBe('House way: Fives and Threes behind, K-9 in front');
+  });
+});
