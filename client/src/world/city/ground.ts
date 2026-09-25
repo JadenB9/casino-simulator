@@ -148,8 +148,10 @@ export function buildGround(mats: Mats, col: Collider, quality: Quality): ZoneBu
   kit.box('glass', gx - 0.02, gx + 0.02, 3.2, 6.4, G.doors.z0 - 0.11, G.doors.z1 + 0.11);
   kit.box('brass', gx - 0.08, gx + 0.08, 3.1, 3.24, G.doors.z0 - 0.11, G.doors.z1 + 0.11);
   kit.box('marble-black', gx - 0.1, gx + 0.2, 6.4, 6.8, H.z0 - 0.4, H.z1 + 0.4, 1.2);
-  kit.solid(gx - 0.1, gx + 0.1, H.z0, G.doors.z0 - 0.1, 6.4);
-  kit.solid(gx - 0.1, gx + 0.1, G.doors.z1 + 0.1, H.z1, 6.4);
+  // v6 cars6: the glass stops the walker, not the camera: at the valet's podium, just outside it,
+  // the follow camera would otherwise be pushed into your back
+  kit.solid(gx - 0.1, gx + 0.1, H.z0, G.doors.z0 - 0.1, 6.4, { cam: false });
+  kit.solid(gx - 0.1, gx + 0.1, G.doors.z1 + 0.1, H.z1, 6.4, { cam: false });
   kit.solid(gx - 0.1, gx + 0.1, G.doors.z0 - 0.1, G.doors.z1 + 0.1, 6.4, { walk: false, bottom: 3.1 });
   const doors = new SlidingDoors({ x: gx, z0: G.doors.z0 - 0.1, z1: G.doors.z1 + 0.1, height: 3.1 }, mats, col);
   group.add(doors.group);
@@ -198,11 +200,12 @@ export function buildGround(mats: Mats, col: Collider, quality: Quality): ZoneBu
   kit.flat('paint-white', G.drive.x0 + 0.1, G.drive.x0 + 0.22, G.drive.z0 + 0.02, G.drive.z1 - 0.02, 0.003);
   // the valet stand: a lacquered podium with a brass top and a lamp
   const V = VALET_STAND;
-  kit.box('lacquer', V.x - 0.28, V.x + 0.28, 0, 1.12, V.z - 0.42, V.z + 0.42);
-  kit.box('brass', V.x - 0.32, V.x + 0.32, 1.12, 1.16, V.z - 0.46, V.z + 0.46);
-  kit.box('brass', V.x - 0.285, V.x - 0.28, 0.2, 0.9, V.z - 0.3, V.z + 0.3);
-  kit.light(GLOW.shelf, V.x - 0.29, 1.02, V.z, 0.01, 0.04, 0.6);
-  kit.solid(V.x - 0.3, V.x + 0.3, V.z - 0.45, V.z + 0.45, 1.16);
+  // (its front, the guest's side, faces +z: south along the sidewalk)
+  kit.box('lacquer', V.x - 0.42, V.x + 0.42, 0, 1.12, V.z - 0.28, V.z + 0.28);
+  kit.box('brass', V.x - 0.46, V.x + 0.46, 1.12, 1.16, V.z - 0.32, V.z + 0.32);
+  kit.box('brass', V.x - 0.3, V.x + 0.3, 0.2, 0.9, V.z + 0.28, V.z + 0.285);
+  kit.light(GLOW.shelf, V.x, 1.02, V.z + 0.29, 0.6, 0.04, 0.01);
+  kit.solid(V.x - 0.45, V.x + 0.45, V.z - 0.31, V.z + 0.31, 1.16);
   // big planters along the lobby's glass, either side of the doors
   for (const z of [-7.4, 7.4]) {
     kit.box('granite', 127.95, 129.2, 0, 0.62, z - 1.2, z + 1.2, 1.2);

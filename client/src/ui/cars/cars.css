@@ -1,0 +1,4 @@
+/* The valet's panel: the boutique's layout (shop.css), with a second button for sending a car back. */
+.valet .vl-buttons { display: grid; grid-template-columns: 1fr; gap: 8px; }
+.valet .vl-buttons:has(.vl-back:not([hidden])) { grid-template-columns: 1fr auto; }
+.valet .vl-back { height: 42px; padding: 0 16px; font-size: 15px; white-space: nowrap; }
