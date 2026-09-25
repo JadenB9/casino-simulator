@@ -182,21 +182,55 @@ if (!alreadyIn) {
   check(await A.p.evaluate(() => !document.querySelector('.law-hud')?.hidden && /warning/i.test(document.querySelector('.law-hud')?.textContent ?? '')), "A's HUD says A is on warning");
   await shot(B.p, 'guard-has-a-word', { pos: [g1.them[0] + Math.cos(g1.face) * 3, 2.0, g1.them[1] - Math.sin(g1.face) * 3], at: [g1.me[0], 1.5, g1.me[1]] });
 
-  // --- the second punch, within the window: jail -------------------------------------------------
-  // after the talk (the same moment can't count twice), in front of whichever guard is free
+  // --- the second catch, within the window, while A plays a slot machine: jail ------------------
+  // (the pit boss's catch on the dev stack's trigger: a real one needs a lucky streak in his sight)
   await sleep(16000);
-  await lineUp(A, B, 12000);
-  await A.p.keyboard.press('v');
+  const machine = await A.p.evaluate(() => {
+    const s = window.casino.world.stations.find((x) => x.id === 'slots-sevens-1');
+    const a = s.anchor.position;
+    return { x: a.x + Math.sin(s.yaw) * 1.0, z: a.z + Math.cos(s.yaw) * 1.0, yaw: s.yaw + Math.PI };
+  });
+  await walkTo(A, machine.x, machine.z, machine.yaw);
+  await A.p.evaluate(() => {
+    const w = window.casino.world;
+    w.enter(w.stations.find((x) => x.id === 'slots-sevens-1'));
+  });
+  await A.p.waitForFunction(() => window.casino.app.table?.session, null, { timeout: 15000 });
+  await sleep(2000);
+  await A.p.evaluate(() => window.casino.app.table.session.link.buyIn(50000));
+  await A.p.waitForFunction(() => window.casino.app.table?.seated, null, { timeout: 15000 }).catch(() => fail('A sat down and bought in at a slot machine'));
+  const beforeCatch = await A.p.evaluate(async () => {
+    const t = sessionStorage.getItem('casino.token');
+    return (await (await fetch('/casino/api/me', { headers: { Authorization: `Bearer ${t}` } })).json()).profile;
+  });
+  check(beforeCatch.inPlay === 50000, `A has $${beforeCatch.inPlay / 100} on the machine`);
+  const caught = await A.p.evaluate(async () => {
+    const t = sessionStorage.getItem('casino.token');
+    return (await (await fetch('/casino/api/dev/law/catch', { method: 'POST', headers: { Authorization: `Bearer ${t}` } })).json()).result;
+  });
+  check(caught === 'jailed', `caught again inside five minutes, at the machine: ${caught}`);
   await waitHeard(A.p, (m) => m.t === 'jail' && m.jail).then(
-    () => check(true, 'caught again inside five minutes: A goes to jail'),
-    () => fail('caught again inside five minutes: A goes to jail'),
+    () => check(true, 'A goes to jail'),
+    () => fail('A goes to jail'),
   );
+  // stood up from the machine before the move: off the table, the camera back on the floor
+  await A.p.waitForFunction(() => window.casino.app.table === null && window.casino.world.seated === null, null, { timeout: 6000 }).then(
+    () => check(true, 'A is stood up from the machine first'),
+    () => fail('A is stood up from the machine first'),
+  );
+  check(!(await heard(A.p, (m) => m.t === 'tp')).length, 'and only then moved (no tp yet)');
   await waitHeard(B.p, (m) => m.t === 'law' && m.ev.k === 'jail' && m.ev.id === A.id).then(
     () => check(true, 'B hears A was taken away'),
     () => fail('B hears A was taken away'),
   );
   await waitHeard(A.p, (m) => m.t === 'tp', 15000).catch(() => fail('A is moved across the street'));
   await sleep(2500);
+  const afterCatch = await A.p.evaluate(async () => {
+    const t = sessionStorage.getItem('casino.token');
+    return (await (await fetch('/casino/api/me', { headers: { Authorization: `Bearer ${t}` } })).json()).profile;
+  });
+  check(afterCatch.inPlay === 0 && afterCatch.balance === beforeCatch.balance + 50000, `the machine cashed out: nothing in play, balance $${afterCatch.balance / 100}`);
+  await shot(A.p, 'jailed-after-machine');
 }
 
 // --- inside --------------------------------------------------------------------------------------
@@ -207,6 +241,9 @@ const inside = await A.p.evaluate(() => {
 check(inside.x > 172 && inside.x < 195 && inside.z > -41 && inside.z < -9, `A is inside the jail (${inside.x.toFixed(1)}, ${inside.z.toFixed(1)})`);
 check(!!inside.jail && inside.jail.bail >= 100000, `A's bail is set (${inside.jail?.bail / 100})`);
 await shot(A.p, 'jailed-a');
+await shot(A.p, 'jail-yard-sky', { pos: [177, 2.2, -31.4], at: [186, 4.2, -40] });
+check(await A.p.evaluate(() => window.casino.world.zone === 'ground'), 'the world is in the ground zone (the city\'s sky over the yard)');
+await A.p.evaluate(() => (window.casino.shot = null));
 // trying to walk out: the walls hold, and the floor keeps A inside
 await A.p.evaluate(() => window.casino.world.player.teleport(160, -25, -Math.PI / 2));
 await sleep(1500);

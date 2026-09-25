@@ -27,7 +27,7 @@ import type { Person } from '../characters.ts';
 import type { SpotProvider } from '../interact.ts';
 import { Speech } from '../life/speech.ts';
 import { LawStaff } from './staff.ts';
-import { BANK_SPOT, buildJail, type Jail } from './jail.ts';
+import { BANK_SPOT, buildJail, jailCeiling, type Jail } from './jail.ts';
 import { LawSounds } from './sound.ts';
 import './law.css';
 
@@ -113,6 +113,8 @@ export class Law {
     this.fist.addEventListener('click', () => this.link?.you && deps.canPunch() && this.punch());
     deps.ui.append(this.hud, this.fade, this.fist);
     this.offs.push(world.spots(this.spots));
+    // under the jail's roof the follow camera keeps below it (the city's ceilings)
+    this.offs.push(world.city.addCeiling(jailCeiling));
     this.offs.push(engine.onFrame((dt) => this.update(dt)));
     addEventListener('keydown', this.onKey);
     this.showState();
