@@ -351,6 +351,8 @@ export interface FloorPlan {
   patternBoards: WallMount[];
   /** Stage drapes: `w` is the stage's width between the two curtains. */
   drapes: WallMount[];
+  /** LED grids across ceilings (the parlour's): the room's inner rect, its ceiling, the pitch and colours. */
+  ledGrids: { rect: Rect; y: number; pitch: number; colors: [string, string]; room: RoomId }[];
   /** Tiered fountains standing on the floor (the lobby's). */
   fountains: { x: number; z: number; room: RoomId }[];
   /**
@@ -700,6 +702,7 @@ export function planFloor(footprint: (game: GameId) => Footprint, slots: readonl
   const patternBoards: WallMount[] = [];
   const drapes: WallMount[] = [];
   const fountains: FloorPlan['fountains'] = [];
+  const ledGrids: FloorPlan['ledGrids'] = [];
   for (const spec of ROOMS) {
     const r = room(spec.id);
     for (const fx of spec.fixtures) fixture(fx, r);
@@ -789,6 +792,9 @@ export function planFloor(footprint: (game: GameId) => Footprint, slots: readonl
         break;
       case 'lattice':
         for (const [x, z] of fx.at) lattices.push({ x: r.cx + x, z: r.cz + z, ry: fx.ry, w: fx.w, room: r.id });
+        break;
+      case 'ledgrid':
+        ledGrids.push({ rect: r.inner, y: r.style.ceiling, pitch: fx.pitch, colors: fx.colors, room: r.id });
         break;
       case 'fountain':
         fountains.push({ x: r.cx + fx.x, z: r.cz + fx.z, room: r.id });
@@ -910,6 +916,7 @@ export function planFloor(footprint: (game: GameId) => Footprint, slots: readonl
     patternBoards,
     drapes,
     fountains,
+    ledGrids,
     statues,
     deskIslands,
     columns,

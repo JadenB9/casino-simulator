@@ -174,7 +174,9 @@ export type FixtureItem =
   /** Stage drapes on a wall: velvet curtains either side of a stage `w` wide, a pelmet across (room-local middle on the face). */
   | { kind: 'drapes'; x: number; z: number; ry: number; w: number }
   /** A tiered fountain on the floor (room-local middle). */
-  | { kind: 'fountain'; x: number; z: number };
+  | { kind: 'fountain'; x: number; z: number }
+  /** LED lines across the ceiling on a grid, `pitch` apart, in two colours (along x, along z). */
+  | { kind: 'ledgrid'; pitch: number; colors: [string, string] };
 
 /** A sign box hung from the ceiling: its text (or wayfinding segments), both faces. */
 export interface HangItem {
@@ -710,7 +712,7 @@ export const ROOMS: RoomSpec[] = [
     x1: -9,
     z1: -31,
     // bright, loud and mirrored: a white ceiling thick with downlights, pink neon along the walls
-    style: { floor: 'carpet-parlour', floorUv: 2.4, wall: 'wall-parlour', wainscot: null, rail: 'chrome', ceiling: 3.4, ceilingMat: 'ceiling-parlour', kind: 'panels', downlights: 1.5, cove: 'neon', ambient: { sky: '#ffe6f2', ground: '#3a1426', k: 1.55 } },
+    style: { floor: 'carpet-parlour', floorUv: 2.4, wall: 'wall-parlour', wainscot: null, rail: 'chrome', ceiling: 3.4, ceilingMat: 'ceiling-dark', kind: 'panels', downlights: 1.5, cove: 'neon', ambient: { sky: '#ffe6f2', ground: '#3a1426', k: 1.55 } },
     stations: [
       {
         kind: 'machines',
@@ -732,6 +734,8 @@ export const ROOMS: RoomSpec[] = [
     fixtures: [
       { kind: 'prizes', x0: -9.75, x1: -9.05, z0: -3.4, z1: 1.8 },
       { kind: 'neon', text: 'PACHINKO', color: '#ff4fa8', x: 0, y: 2.5, z: -5.85, ry: 0, w: 4.4, h: 0.74, font: 'Tilt Neon' },
+      // a loud ceiling, as a parlour's is: black, ruled in pink and ice-blue light
+      { kind: 'ledgrid', pitch: 3.0, colors: ['#ff4fa8', '#7fe0ff'] },
       // strung across the room, over the islands and the aisles between them
       { kind: 'lanterns', from: [-8.2, -3.6], to: [8.2, -3.6], n: 9, color: '#e8352c' },
       { kind: 'lanterns', from: [-8.2, 0.4], to: [8.2, 0.4], n: 9, color: '#e8352c' },

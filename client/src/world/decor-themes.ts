@@ -372,6 +372,30 @@ export function buildThemes(plan: FloorPlan, b: Batch, m: Mats, glow: GlowMerge,
     b.box(m.get('lacquer-gold'), fringe.x, top - 0.03, fringe.z, pw + 0.01, 0.025, 0.012, undefined, d.ry);
   }
 
+  // --- LED grids across a ceiling: a black channel with a strip of light in it, each way ------------
+  for (const g of plan.ledGrids) {
+    into(g.room);
+    const R = g.rect;
+    const w = R.x1 - R.x0 - 0.5;
+    const d = R.z1 - R.z0 - 0.5;
+    const cx = (R.x0 + R.x1) / 2;
+    const cz = (R.z0 + R.z1) / 2;
+    const nx = Math.max(1, Math.round(w / g.pitch));
+    const nz = Math.max(1, Math.round(d / g.pitch));
+    const [ca, cb] = [hdr(g.colors[0], 2.4), hdr(g.colors[1], 2.2)];
+    // the lines one way sit a few millimetres under the other way's, so where they cross nothing shares a plane
+    for (let j = 0; j <= nz; j++) {
+      const z = R.z0 + 0.25 + (j * d) / nz;
+      b.box(lacquer, cx, g.y - 0.004, z, w, 0.008, 0.09);
+      glow.box(ca, cx, g.y - 0.012, z, w - 0.02, 0.008, 0.04);
+    }
+    for (let i = 0; i <= nx; i++) {
+      const x = R.x0 + 0.25 + (i * w) / nx;
+      b.box(lacquer, x, g.y - 0.018, cz, 0.09, 0.008, d);
+      glow.box(cb, x, g.y - 0.026, cz, 0.04, 0.008, d - 0.02);
+    }
+  }
+
   // --- fountains: a travertine basin, two bowls on a baluster, water sheeting off each lip ----------
   if (plan.fountains.length) fountains(plan, b, m, glow, out);
 
