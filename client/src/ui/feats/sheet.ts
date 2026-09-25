@@ -193,7 +193,7 @@ export function openFeats(deps: FeatsSheetDeps): FeatsSheet {
     r.append(medal(got, prog?.k ?? 0));
     const text = el('div', 'ft-text');
     const top = el('div', 'ft-top');
-    top.append(el('h4', 'ft-name', f.name), el('span', 'ft-kind', f.kind === 'challenge' ? 'Challenge' : 'Achievement'));
+    top.append(el('h4', 'ft-name', f.name), el('span', 'ft-kind', f.daily ? 'Daily' : f.kind === 'challenge' ? 'Challenge' : 'Achievement'));
     text.append(top, el('p', 'ft-about', f.about));
     if (f.kind === 'challenge' && !got) {
       const bar = el('div', 'ft-bar');
