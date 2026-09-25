@@ -41,6 +41,12 @@ const FILES: Record<Exclude<PropKind, 'chandelier'>, { file: string; fit: 'heigh
  */
 const PROUD: Record<string, number> = { LightBrown: 1.02 };
 
+/**
+ * Models whose colours are toned down under the floor's warm light: the palm's atlas is a toy's
+ * lime and tan, multiplied here toward a real potted palm's deeper green and bark.
+ */
+const TINT: Record<string, string> = { 'palm.glb': '#b4c09a' };
+
 /** Materials that should glow: lamp shades and bulbs. */
 const GLOWS: Record<string, THREE.Color> = {
   Light: hdr('#ffe2b0', 2.4),
@@ -276,7 +282,9 @@ export class Props {
           // a bulb sits in its cup and a label on its glass: drawn pulled toward the eye as well, so
           // where their edges still touch the part under them it never shows through
           const decal = glow || (PROUD[src.name] && file.startsWith('bottle'));
-          const material = glow ? new THREE.MeshBasicMaterial({ color: glow, map: src.map }) : decal ? src.clone() : src;
+          const tint = TINT[file];
+          const material = glow ? new THREE.MeshBasicMaterial({ color: glow, map: src.map }) : decal || tint ? src.clone() : src;
+          if (tint) (material as THREE.MeshStandardMaterial).color.multiply(new THREE.Color(tint));
           if (decal) Object.assign(material, { polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4 });
           material.name = src.name;
           parts.push({ geometry: PROUD[src.name] && file.startsWith('bottle') ? proud(mesh.geometry, PROUD[src.name]!) : mesh.geometry, material, matrix: mesh.matrixWorld.clone() });

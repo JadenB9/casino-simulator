@@ -190,13 +190,15 @@ const NO_ROOMS = new Set<string>();
  * (roughness) for some. The metals keep the bright studio light (brass reads as brass by it).
  */
 const REFLECTIVE: [string, number, number?][] = [
-  ['marble-floor', 0.55, 0.15],
+  ['marble-floor', 0.35, 0.3],
   ['marble-black', 0.8],
   ['mirror', 1.0],
   ['lacquer', 0.8],
   ['lacquer-red', 0.6],
   ['wood', 0.45],
   ['wainscot', 0.35],
+  // the bar's boards: the room's warm light at a low angle, not the studio's grey
+  ['floor-wood', 0.3],
 ];
 
 export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Promise<FloorWorld> {

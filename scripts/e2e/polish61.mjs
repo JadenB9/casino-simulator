@@ -24,6 +24,8 @@ async function tour(quality) {
   page.on('pageerror', (e) => errors.push(String(e)));
   await page.goto(`http://localhost:${port}/casino/src/world/dev-floor.html?quality=${quality}`, { timeout: 300000 });
   await page.waitForFunction(() => document.getElementById('boot')?.classList.contains('done'), null, { timeout: 600000 });
+  // the loading screen's fade
+  await page.waitForTimeout(700);
   const poses = await page.evaluate(() => {
     const { world } = window.casino;
     const out = [];
