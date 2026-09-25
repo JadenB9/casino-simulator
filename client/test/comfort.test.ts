@@ -169,6 +169,26 @@ describe('the helpers', () => {
   });
 });
 
+describe("the shop's effects thin out on their own", () => {
+  it('Bits and Sparks keep one piece in three while calm, every piece otherwise', async () => {
+    const { mod } = await load();
+    const THREE = await import('three');
+    const { Bits, Sparks } = await import('../src/world/fx/particles.ts');
+    const count = (on: boolean) => {
+      mod.setCalm(on);
+      const bits = new Bits(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial(), 600, 'test');
+      const sparks = new Sparks(600, { hot: '#fff', cool: '#f80', gain: 1, width: 0.02, len: 0.03, name: 'test' });
+      for (let i = 0; i < 300; i++) {
+        bits.spawn(0, 1, 0, 0, 0, 0, 0.1, new THREE.Color(1, 1, 1), 10);
+        sparks.spawn(0, 1, 0, 0, 1, 0, 1);
+      }
+      return [bits.n, sparks.n];
+    };
+    expect(count(false)).toEqual([300, 300]);
+    expect(count(true)).toEqual([100, 100]);
+  });
+});
+
 // Every module that flashes, chases, pulses or throws particles today, and what reads calm in
 // it. A new effect in one of these that forgets the switch still passes this; the point is that
 // none of them can drop it without a test going red.
@@ -194,6 +214,14 @@ const FLASHING = [
   'games/plinko/board.ts',
   'ui/shop/showroom.ts',
   'ui/hud/hud.ts',
+  // v6's own: the shop's effects, the parlor's machines, the celebrities' camera flashes
+  'world/fx/particles.ts',
+  'world/fx/disco.ts',
+  'world/fx/takeover.ts',
+  'world/fx/sparklers.ts',
+  'games/bingo/view.ts',
+  'games/pachinko/view.ts',
+  'world/celebs/flash.ts',
 ];
 
 describe('every module known to flash reads the switch', () => {

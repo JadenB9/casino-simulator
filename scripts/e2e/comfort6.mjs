@@ -8,8 +8,10 @@
 //            and its candle flashes; calm, frame to frame the machine barely changes
 //   pit      (table harness) a huge blackjack celebration: the banner, the light round the cards
 //            and a shower of 28 chips; calm, the banner and light stay and 9 chips fall
+//   fx       (dev floor) the shop's effects: confetti throws a third of the paper when calm; Disco
+//            Night's ball turns slower and its points stop twinkling, measured frame to frame
 // Usage: node scripts/e2e/comfort6.mjs [port] [outDir] [checks...]   (default: all)
-//   marquee and slots need Vite only; switch and pit the local worker too (PORT_BASE=<port> npm run dev).
+//   marquee, slots and fx need Vite only; switch and pit the local worker too (PORT_BASE=<port> npm run dev).
 //   GPU=1 draws on the machine's GPU. Fixed names (comfort6_e2e_*) with the dev password.
 
 import { chromium } from 'playwright';
@@ -18,7 +20,7 @@ import { execFileSync } from 'node:child_process';
 
 const [port = '6380', out = '/tmp/comfort6', ...wanted] = process.argv.slice(2);
 mkdirSync(out, { recursive: true });
-const checks = wanted.length ? wanted : ['switch', 'marquee', 'slots', 'pit'];
+const checks = wanted.length ? wanted : ['switch', 'marquee', 'slots', 'pit', 'fx'];
 const browser = await chromium.launch(process.env.GPU === '1' ? { channel: 'chromium', args: ['--ignore-gpu-blocklist'] } : { args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 let failed = 0;
 const fail = (what) => {
@@ -271,6 +273,61 @@ if (checks.includes('pit')) {
     ok(errors.length === 0, `pit (${tag}): no errors (${errors.slice(0, 2).join(' | ')})`);
     await ctx.close();
   }
+}
+
+// --- the shop's effects on the floor ----------------------------------------------------------------
+
+/** The most pieces the named particle mesh shows over `ms`. */
+const peak = (p, name, ms) =>
+  p.evaluate(
+    async ([n, dur]) => {
+      let most = 0;
+      const end = performance.now() + dur;
+      while (performance.now() < end) {
+        window.casino.engine.scene.traverse((o) => {
+          if (o.name === n && o.isInstancedMesh) most = Math.max(most, o.count);
+        });
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      return most;
+    },
+    [name, ms],
+  );
+
+if (checks.includes('fx')) {
+  const { p, ctx, errors } = await page('/casino/src/world/dev-floor.html?quality=high', { calm: false });
+  await p.waitForFunction(() => document.getElementById('boot')?.classList.contains('done') && window.casino?.fx, null, { timeout: 300_000 });
+  await p.waitForTimeout(1500);
+  await p.evaluate(() => window.casino.fx.play('fx-confetti'));
+  const full = await peak(p, 'fx-confetti', 3000);
+  await shot(p, 'confetti-full');
+  await p.waitForTimeout(6000);
+  await setCalm(p, true);
+  await p.evaluate(() => window.casino.fx.play('fx-confetti'));
+  const calm = await peak(p, 'fx-confetti', 3000);
+  await shot(p, 'confetti-calm');
+  ok(full > 0 && calm > 0 && calm <= Math.ceil(full / 3) + 2, `fx: confetti throws ${full} pieces, ${calm} when calm`);
+  await p.waitForTimeout(8000);
+
+  // Disco Night: the ball down and turning, then calm turned on while it plays
+  await setCalm(p, false);
+  await p.evaluate(() => window.casino.fx.play('fx-disco', { secs: 40 }));
+  await p.waitForTimeout(6500);
+  const centre = await p.evaluate(() => {
+    const { engine, THREE } = window.casino;
+    const v = new THREE.Vector3(0, 0, -1).applyQuaternion(engine.camera.quaternion).multiplyScalar(4).add(engine.camera.position);
+    return [v.x, v.y, v.z];
+  });
+  const discoFull = await flicker(p, centre, 240, 12, 80);
+  await shot(p, 'disco-full');
+  await setCalm(p, true);
+  await p.waitForTimeout(300);
+  const discoCalm = await flicker(p, centre, 240, 12, 80);
+  await shot(p, 'disco-calm');
+  console.log(`     frame-to-frame change in the middle of the view: full ${discoFull.mean.toFixed(2)} (most ${discoFull.most.toFixed(2)}), calm ${discoCalm.mean.toFixed(2)} (most ${discoCalm.most.toFixed(2)})`);
+  ok(discoCalm.mean < discoFull.mean / 2, 'fx: Disco Night is at least twice as steady when calm');
+  ok(errors.length === 0, `fx: no errors (${errors.slice(0, 2).join(' | ')})`);
+  await ctx.close();
 }
 
 await browser.close();
