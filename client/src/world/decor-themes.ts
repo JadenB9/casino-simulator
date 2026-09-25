@@ -504,6 +504,21 @@ function lathe(pts: [number, number][], seg = 48): THREE.LatheGeometry {
   return new THREE.LatheGeometry(pts.map(([x, y]) => new THREE.Vector2(x, y)), seg);
 }
 
+/**
+ * A sheet of water pouring over a round lip at (r0, y0) into the pool at y1, landing at r1: it
+ * leaves the lip moving outward and falls, so it bows out at the top and drops nearly straight
+ * (radius with the square root of the drop), not the straight cone of a glass shade.
+ */
+function sheet(r0: number, y0: number, r1: number, y1: number, segments: number): THREE.BufferGeometry {
+  const pts: THREE.Vector2[] = [];
+  // from the pool up to the lip, as a cylinder's sides run, so the falling threads scroll the same way
+  for (let i = 8; i >= 0; i--) {
+    const s = i / 8;
+    pts.push(new THREE.Vector2(r0 + (r1 - r0) * Math.sqrt(s), y0 - s * (y0 - y1)));
+  }
+  return new THREE.LatheGeometry(pts, segments);
+}
+
 function fountains(plan: FloorPlan, b: Batch, m: Mats, glow: GlowMerge, out: Decor): void {
   m.define1('water-pool', () => {
     ripples ??= canvasTexture(drawRipples(256), 4);
@@ -511,7 +526,7 @@ function fountains(plan: FloorPlan, b: Batch, m: Mats, glow: GlowMerge, out: Dec
   });
   m.define1('water-fall', () => {
     falls ??= canvasTexture(drawFalls(128, 256, 107), 4);
-    return new THREE.MeshBasicMaterial({ map: falls, color: new THREE.Color(1, 1, 1).multiplyScalar(1.3), transparent: true, depthWrite: false, side: THREE.DoubleSide });
+    return new THREE.MeshBasicMaterial({ map: falls, color: new THREE.Color(1, 1, 1).multiplyScalar(1.15), transparent: true, opacity: 0.8, depthWrite: false, side: THREE.DoubleSide });
   });
   m.define1('pool-tile', () => new THREE.MeshLambertMaterial({ color: '#0f3a40' }));
   const stone = m.get('marble-light');
@@ -552,8 +567,8 @@ function fountains(plan: FloorPlan, b: Batch, m: Mats, glow: GlowMerge, out: Dec
     // the water in each bowl, and the sheets pouring over their lips into the one below
     b.add(new THREE.CircleGeometry(mid.r - 0.075, 40).rotateX(-Math.PI / 2), pool, at(midWater));
     b.add(new THREE.CircleGeometry(top.r - 0.055, 28).rotateX(-Math.PI / 2), pool, at(topWater));
-    b.add(new THREE.CylinderGeometry(mid.r + 0.035, mid.r + 0.2, mid.y - 0.01 - (rim - 0.08), 48, 1, true), fall, at((mid.y - 0.01 + rim - 0.08) / 2));
-    b.add(new THREE.CylinderGeometry(top.r + 0.03, top.r + 0.12, top.y - 0.01 - midWater, 32, 1, true), fall, at((top.y - 0.01 + midWater) / 2));
+    b.add(sheet(mid.r + 0.035, mid.y - 0.01, mid.r + 0.2, rim - 0.08, 48), fall, at());
+    b.add(sheet(top.r + 0.03, top.y - 0.01, top.r + 0.12, midWater, 32), fall, at());
     out.pools.push({ x: f.x, z: f.z, r: R + 1.4, room: f.room });
   }
 }
