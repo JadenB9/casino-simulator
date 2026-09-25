@@ -54,7 +54,7 @@ export function categoryOfCodes(a: number, b: number, c: number, d: number, e: n
   let distinct = 0;
   let mask = 0;
   for (const x of r) {
-    if (counts[x]++ === 0) distinct++;
+    if (counts[x]!++ === 0) distinct++;
     mask |= 1 << x;
   }
   if (distinct === 5) {

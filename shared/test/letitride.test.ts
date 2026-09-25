@@ -25,6 +25,7 @@ import {
   rideFirst,
   rideSecond,
   settle,
+  type Category,
 } from '../src/games/letitride/rules.ts';
 import type { LetItRideEvent, LetItRideView } from '../src/games/letitride/protocol.ts';
 import { newDeck } from '../src/cards.ts';
@@ -84,7 +85,7 @@ describe('let it ride hand ranks', () => {
 
 describe('let it ride pay tables', () => {
   it('pays every cell of the standard table, and nothing below a pair of tens', () => {
-    const pays = [ROYAL, STRAIGHT_FLUSH, QUADS, FULL_HOUSE, FLUSH, STRAIGHT, TRIPS, TWO_PAIR, HIGH_PAIR, NOTHING].map((c) => handPays(c, DEFAULT_PAYTABLE));
+    const pays = [ROYAL, STRAIGHT_FLUSH, QUADS, FULL_HOUSE, FLUSH, STRAIGHT, TRIPS, TWO_PAIR, HIGH_PAIR, NOTHING].map((c) => handPays(c as Category, DEFAULT_PAYTABLE));
     expect(pays).toEqual([1000, 200, 50, 11, 8, 5, 3, 2, 1, 0]);
   });
 
@@ -445,5 +446,26 @@ describe('let it ride engine: multiplayer', () => {
     const sim = table();
     const d = engine.deadline(sim.state)!;
     expect(engine.deadline(engine.shiftDeadlines(sim.state, 5_000))).toBe(d + 5_000);
+  });
+});
+
+describe('let it ride and pai gow at chosen limits', () => {
+  it('take a bet at the chosen maximum and refuse a dollar more, side bets scaled with them', async () => {
+    const { applyLimits, clampLimits } = await import('../src/limits.ts');
+    const { engine: paigow } = await import('../src/games/paigow/engine.ts');
+    const L = { min: 30 * 100, max: 3_000 * 100 };
+    expect(clampLimits('letitride', L)).toEqual(L);
+    const cfg = applyLimits(engine.config('', 'solo'), L);
+    expect(cfg.limits.bet).toEqual({ min: 3_000, max: 300_000, step: 100 });
+    const sim = new TableSim(engine, seededRng(1), 'solo', [{ seat: 0, stack: 10_000_000 }], cfg) as Sim;
+    expect(sim.act(0, { type: 'bet', unit: 300_100, bonus: 0 }, { allowRefusal: true }).refused).toBe('LIMIT');
+    expect(sim.act(0, { type: 'bet', unit: 2_900, bonus: 0 }, { allowRefusal: true }).refused).toBe('LIMIT');
+    expect(sim.act(0, { type: 'bet', unit: 300_000, bonus: cfg.limits.bonus!.max }, { allowRefusal: true }).refused).toBeUndefined();
+    const pcfg = applyLimits(paigow.config('', 'solo'), L);
+    expect(pcfg.limits.bet).toEqual({ min: 3_000, max: 300_000, step: 100 });
+    expect(pcfg.limits.fortune!.max).toBe(30_000);
+    const p = new TableSim(paigow, seededRng(1), 'solo', [{ seat: 0, stack: 10_000_000 }], pcfg);
+    expect(p.act(0, { type: 'bet', bet: 300_100, fortune: 0 }, { allowRefusal: true }).refused).toBe('LIMIT');
+    expect(p.act(0, { type: 'bet', bet: 300_000, fortune: 30_000 }, { allowRefusal: true }).refused).toBeUndefined();
   });
 });

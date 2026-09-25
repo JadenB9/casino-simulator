@@ -48,8 +48,8 @@ it('the pull-back strategy is the best play, and the house edge is 1,822,224 / 5
         for (h[1] = 1; h[1] < h[2]; h[1]++)
           for (h[0] = 0; h[0] < h[1]; h[0]++) {
             const v = value(h[0], h[1], h[2], h[3], h[4]);
-            for (const f of FOURS) sum4[rank4(h[f[0]!]!, h[f[1]!]!, h[f[2]!]!, h[f[3]!]!)] += v;
-            for (const f of THREES) sum3[rank3(h[f[0]!]!, h[f[1]!]!, h[f[2]!]!)] += v;
+            for (const f of FOURS) sum4[rank4(h[f[0]!]!, h[f[1]!]!, h[f[2]!]!, h[f[3]!]!)]! += v;
+            for (const f of THREES) sum3[rank3(h[f[0]!]!, h[f[1]!]!, h[f[2]!]!)]! += v;
           }
 
   // The strategy against the best play, subset by subset.
