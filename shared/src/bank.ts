@@ -341,8 +341,10 @@ export interface BankState {
   send: SendRules;
   /** Transfers received since you last looked. */
   inbox: Received[];
-  /** Balance, chips on tables, savings (with interest earned so far), deposits and the fund at today's price. */
+  /** Balance, chips on tables, savings, deposits and the fund at today's price. */
   worth: Cents;
+  /** What the bank has made or taken in all (SUM of casino_bank.gain): interest, the fund, transfers in less out. */
+  gain: Cents;
 }
 
 /** Every POST answers with the bank as it now stands. */

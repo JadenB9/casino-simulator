@@ -320,7 +320,7 @@ describe('the Casino Index', () => {
     const m = await (await api('bank/market?range=1d', p.token)).json<any>();
     const now = stepOf(Date.now());
     expect(m.points.at(-1)[0]).toBe(now);
-    expect(m.points.every(([s]: number[]) => s <= now)).toBe(true);
+    expect(m.points.every((pt: number[]) => pt[0]! <= now)).toBe(true);
     // nothing is written ahead of the time asked about (a fund of its own: other tests move the clock)
     await priceNow(env.DB, 'test-secret-not-for-production', Date.now() - 3 * DAY_MS, 'ahead-test');
     await priceNow(env.DB, 'test-secret-not-for-production', Date.now(), 'ahead-test');

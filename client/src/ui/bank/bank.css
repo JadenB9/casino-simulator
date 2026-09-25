@@ -1,12 +1,94 @@
-/* Cashier: the three numbers that decide a top-up, the bank's rule set like the sign over a cage
-   window (the question, then the answer), then one calm line saying where you stand. */
+/* The bank: accounts down a rail on the left with what's in each, the chosen one on the right.
+   Dense like a private bank's app: figures in tabular numerals, hairline rules, one brass accent
+   for where you are. The cashier's rule keeps its sign-over-the-window setting on Checking. */
 
-.bank-sheet { width: min(540px, 100%); }
-.bank-stats { margin-bottom: 20px; }
-.bank-rule { margin: 0; font-family: var(--serif); font-size: 17px; font-weight: 500; line-height: 1.5; letter-spacing: 0.03em; color: var(--ink); }
+.bank-sheet { width: min(820px, 100%); }
+.bank-sheet .sheet-body { padding: 0; display: flex; min-height: 0; }
+.bank-sheet .sheet-sub { font-variant-numeric: tabular-nums; color: var(--ink-2); }
+.bank-wrap { display: grid; grid-template-columns: 200px minmax(0, 1fr); width: 100%; min-height: min(560px, calc(100vh - 140px)); }
+
+.bank-rail { display: flex; flex-direction: column; padding: 14px 0; border-right: 1px solid var(--line); background: rgba(255, 255, 255, 0.012); }
+.bank-rail-head { padding: 10px 18px 6px; font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-3); }
+.bank-rail-head:not(:first-child) { margin-top: 10px; border-top: 1px solid rgba(214, 178, 110, 0.09); padding-top: 16px; }
+.bank-rail-item { position: relative; display: grid; gap: 1px; width: 100%; padding: 8px 18px 9px; border: 0; background: transparent; color: var(--ink-2); text-align: left; cursor: pointer; font: inherit; transition: background 0.12s, color 0.12s; }
+.bank-rail-item:hover { background: rgba(226, 190, 118, 0.05); color: var(--ink); }
+.bank-rail-item.on { background: rgba(226, 190, 118, 0.1); color: var(--ink); }
+.bank-rail-item.on::before { content: ''; position: absolute; left: 0; top: 6px; bottom: 6px; width: 2px; background: var(--brass-hi); }
+.bank-rail-item:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.bank-rail-label { font-size: 16px; font-weight: 600; letter-spacing: 0.03em; }
+.bank-rail-amount { font-size: 14px; color: var(--ink-3); }
+.bank-rail-item.on .bank-rail-amount { color: var(--brass-hi); }
+.bank-rail-item.has-news .bank-rail-label::after { content: ''; display: inline-block; width: 6px; height: 6px; margin-left: 8px; border-radius: 50%; background: var(--win); vertical-align: 2px; }
+
+.bank-main { min-width: 0; padding: 18px 24px 22px; overflow: auto; overscroll-behavior: contain; }
+.bank-pane { display: grid; gap: 12px; align-content: start; }
+.bank-pane > .stats { margin: 0; }
+.bank-sub { margin-top: 4px; font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-3); }
+.bank-big { font-size: 34px; line-height: 1.05; font-weight: 600; letter-spacing: 0.01em; color: var(--ink); }
+.bank-earning { margin: 0; font-size: 15px; color: var(--ink-2); }
+.bank-ticking { color: var(--win); }
+
+.bank-field { display: grid; gap: 4px; max-width: 360px; }
+.bank-input-box { display: flex; align-items: center; height: 40px; padding: 0 12px; border: 1px solid var(--line-strong); border-radius: 4px; background: #120f0c; }
+.bank-input-box:focus-within { border-color: var(--brass-hi); }
+.bank-dollar { color: var(--ink-3); margin-right: 4px; font-size: 18px; }
+.bank-input { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: transparent; color: var(--ink); font: inherit; font-size: 18px; caret-color: var(--brass-hi); }
+.bank-fills { display: flex; flex-wrap: wrap; gap: 6px; margin-top: -4px; }
+.bank-fill { display: inline-flex; gap: 8px; height: 26px; align-items: center; padding: 0 10px; border: 1px solid var(--line); border-radius: 13px; background: transparent; color: var(--ink-3); font: inherit; font-size: 13px; letter-spacing: 0.03em; cursor: pointer; }
+.bank-fill .money { color: var(--ink-2); }
+.bank-fill:hover { border-color: var(--line-strong); color: var(--ink-2); }
+.bank-fill:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.bank-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.bank-actions .btn { min-width: 112px; }
+.bank-preview { margin: 0; font-size: 15px; color: var(--ink-2); }
+.bank-terms { margin: 0; line-height: 1.45; }
+.bank-seg { justify-self: start; }
+.bank-seg .seg-btn { font-size: 14px; padding: 0 12px; }
+.bank-small { height: 28px; padding: 0 10px; font-size: 13px; }
+
+.bank-tiers { display: grid; border-top: 1px solid rgba(214, 178, 110, 0.09); }
+.bank-tier { display: flex; justify-content: space-between; gap: 16px; padding: 6px 0; border-bottom: 1px solid rgba(214, 178, 110, 0.09); font-size: 15px; color: var(--ink-2); }
+
+.bank-deposits { display: grid; gap: 8px; }
+.bank-deposit { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 6px; background: rgba(255, 255, 255, 0.015); }
+.bank-deposit.closed { opacity: 0.55; }
+.bank-deposit-head { display: flex; align-items: baseline; gap: 14px; font-size: 16px; }
+.bank-deposit-term { flex: 1; font-weight: 600; letter-spacing: 0.03em; color: var(--ink); }
+.bank-deposit-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.bank-bar { height: 3px; border-radius: 2px; background: rgba(214, 178, 110, 0.14); overflow: hidden; }
+.bank-bar i { display: block; height: 100%; width: 0; background: var(--brass); transition: width 0.9s linear; }
+.bank-when { margin: 0; font-size: 13px; }
+
+.bank-price { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 14px; }
+.bank-change { font-size: 15px; color: var(--ink-2); }
+.bank-change.win { color: var(--win); }
+.bank-change.lose { color: var(--lose); }
+.bank-chart { position: relative; height: 190px; border: 1px solid var(--line); border-radius: 6px; background: rgba(0, 0, 0, 0.18); }
+.bank-chart-canvas { position: absolute; inset: 0; display: block; touch-action: none; cursor: crosshair; }
+.bank-chart-tip { position: absolute; top: 6px; padding: 2px 8px; border: 1px solid var(--line); border-radius: 3px; background: rgba(17, 14, 11, 0.94); color: var(--ink); font-size: 13px; white-space: nowrap; pointer-events: none; }
+.bank-range { margin-bottom: -4px; }
+
+.bank-inbox { display: grid; gap: 4px; }
+.bank-inbox:empty { display: none; }
+.bank-inbox-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 14px; align-items: baseline; padding: 8px 12px; border-left: 2px solid var(--win); background: rgba(127, 209, 139, 0.05); font-size: 15px; }
+.bank-inbox-who { color: var(--ink); min-width: 0; overflow-wrap: anywhere; }
+.bank-note { display: block; margin-top: 1px; font-size: 13px; font-style: italic; color: var(--ink-3); overflow-wrap: anywhere; }
+.bank-rules { margin: 0; padding-left: 18px; display: grid; gap: 4px; color: var(--ink-3); font-size: 14px; line-height: 1.4; }
+
+.bank-statement { display: grid; font-size: 14px; }
+.bank-line { display: grid; grid-template-columns: 128px minmax(0, 1fr) 96px 104px 110px; gap: 10px; align-items: baseline; padding: 6px 0; border-bottom: 1px solid rgba(214, 178, 110, 0.09); color: var(--ink-2); }
+.bank-line-head { position: sticky; top: -18px; z-index: 1; padding-top: 4px; background: rgba(17, 14, 11, 0.98); font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-3); border-bottom-color: var(--line); }
+.bank-line-head span:nth-child(n + 4), .bank-line-amt, .bank-line-bal { text-align: right; }
+.bank-line-date { color: var(--ink-3); font-size: 13px; }
+.bank-line-text { color: var(--ink); min-width: 0; overflow-wrap: anywhere; }
+.bank-line-acct { color: var(--ink-3); font-size: 13px; }
+.bank-line-amt.win { color: var(--win); }
+
+/* The cashier's window, on Checking. */
+.bank-stats { margin-bottom: 4px; }
+.bank-rule { margin: 4px 0 0; font-family: var(--serif); font-size: 17px; font-weight: 500; line-height: 1.5; letter-spacing: 0.03em; color: var(--ink); }
 .bank-rule span { display: block; }
-.bank-terms { margin: 6px 0 16px; }
-.bank-where { display: grid; margin: 0 0 14px; }
+.bank-where { display: grid; }
 .bank-where:empty { display: none; }
 .bank-table { display: flex; justify-content: space-between; gap: 16px; padding: 7px 0; border-bottom: 1px solid rgba(214, 178, 110, 0.09); font-size: 15px; color: var(--ink-2); }
 .bank-table:first-child { border-top: 1px solid rgba(214, 178, 110, 0.09); }
@@ -14,3 +96,21 @@
 .bank-status.ok { border-left-color: var(--brass-hi); color: var(--ink); }
 .bank-status.err { border-left-color: var(--lose); color: var(--lose); }
 .bank-take { min-width: 220px; }
+.bank-pane .sheet-foot { margin-top: 2px; }
+
+@media (max-width: 700px) {
+  .bank-wrap { grid-template-columns: 1fr; min-height: 0; }
+  .bank-rail { flex-direction: row; overflow-x: auto; padding: 0; border-right: 0; border-bottom: 1px solid var(--line); scrollbar-width: none; }
+  .bank-rail-head { display: none; }
+  .bank-rail-item { flex: none; width: auto; padding: 8px 14px; }
+  .bank-rail-item.on::before { left: 8px; right: 8px; top: auto; bottom: 0; width: auto; height: 2px; }
+  .bank-main { padding: 14px 16px 18px; }
+  .bank-big { font-size: 28px; }
+  .bank-line { grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; }
+  .bank-line-head { display: none; }
+  .bank-line-date { grid-column: 1; grid-row: 2; }
+  .bank-line-text { grid-column: 1; grid-row: 1; }
+  .bank-line-acct { display: none; }
+  .bank-line-amt { grid-column: 2; grid-row: 1; }
+  .bank-line-bal { grid-column: 2; grid-row: 2; font-size: 13px; color: var(--ink-3); }
+}

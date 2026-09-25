@@ -501,7 +501,7 @@ const SEEN_KEY = 'bank-seen';
 export async function bankState(db: D1Database, secret: string, accountId: number, now: number): Promise<BankState> {
   await settleSavings(db, accountId, now);
   const { step, price } = await priceNow(db, secret, now);
-  const [[acct, sav, deps, hold, seen], rules, dayAgo] = await Promise.all([
+  const [[acct, sav, deps, hold, seen, gain], rules, dayAgo] = await Promise.all([
     db.batch([
       db.prepare(`SELECT balance, in_play, rev, banked FROM casino_accounts WHERE id = ?1`).bind(accountId),
       db.prepare(`SELECT balance, accrued, frac, since, earned FROM casino_savings WHERE account_id = ?1`).bind(accountId),
@@ -510,6 +510,7 @@ export async function bankState(db: D1Database, secret: string, accountId: numbe
         .bind(accountId, now - DAY_MS),
       db.prepare(`SELECT units, cost FROM casino_holdings WHERE account_id = ?1 AND fund = ?2`).bind(accountId, FUND_ID),
       db.prepare(`SELECT n FROM casino_tally WHERE account_id = ?1 AND key = ?2`).bind(accountId, SEEN_KEY),
+      db.prepare(`SELECT COALESCE(SUM(gain), 0) AS n FROM casino_bank WHERE account_id = ?1`).bind(accountId),
     ]),
     sendRules(db, accountId, now),
     priceDayAgo(db, step),
@@ -543,6 +544,7 @@ export async function bankState(db: D1Database, secret: string, accountId: numbe
     send,
     inbox,
     worth: a.balance + a.in_play + savings.balance + locked + value,
+    gain: (gain!.results[0] as { n: number } | undefined)?.n ?? 0,
   };
 }
 

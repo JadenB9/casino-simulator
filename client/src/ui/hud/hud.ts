@@ -99,8 +99,11 @@ export function mountHud(deps: HudDeps): Hud {
   const balance = stat('Balance', 'hud-balance');
   const table = stat('At table', 'hud-table');
   table.tile.hidden = true;
+  // v6 bank6: net worth, once there's more than the balance (chips on tables, the bank)
+  const worth = stat('Net worth', 'hud-worth');
+  worth.tile.hidden = true;
   const sessionTile = stat('Session', 'hud-session');
-  left.append(who, balance.tile, table.tile, sessionTile.tile);
+  left.append(who, balance.tile, worth.tile, table.tile, sessionTile.tile);
 
   // right: the room and the controls
   const right = el('div', 'hud-right');
@@ -127,6 +130,7 @@ export function mountHud(deps: HudDeps): Hud {
 
   const rollBalance = roller(balance.value);
   const rollTable = roller(table.value);
+  const rollWorth = roller(worth.value);
 
   // Session net: won or lost at play since the HUD came up (ui/hud/net.ts): the bank's top-ups
   // aren't winnings and the boutique's and the bar's prices aren't losses.
@@ -154,6 +158,9 @@ export function mountHud(deps: HudDeps): Hud {
   const paint = (p: Profile) => {
     who.textContent = p.name;
     rollBalance(p.balance);
+    const w = p.bank?.worth ?? p.balance + p.inPlay;
+    worth.tile.hidden = w === p.balance;
+    if (!worth.tile.hidden) rollWorth(w);
     scheduleSession();
   };
 

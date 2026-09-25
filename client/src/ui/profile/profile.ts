@@ -135,8 +135,11 @@ export function openProfile(deps: ProfileDeps): Closable {
     const netTile = statTile('Net, all games', net.text);
     if (net.cls) netTile.value.classList.add(net.cls);
     summary.append(
+      // v6 bank6: net worth (balance, chips on tables and the bank) and what's in the bank
+      ...(p.bank ? [statTile('Net worth', formatMoney(p.bank.worth)).tile] : []),
       statTile('Balance', formatMoney(p.balance)).tile,
       statTile('Chips on tables', formatMoney(p.inPlay)).tile,
+      ...(p.bank && p.bank.worth !== p.balance + p.inPlay ? [statTile('In the bank', formatMoney(p.bank.worth - p.balance - p.inPlay)).tile] : []),
       netTile.tile,
       statTile('Rounds', tot.rounds.toLocaleString('en-US')).tile,
       statTile('Loans taken', String(p.loansTaken)).tile,
