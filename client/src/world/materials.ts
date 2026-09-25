@@ -178,6 +178,8 @@ export class Mats {
     this.makers.set('ceiling-dark', () => lambert({ color: '#0c0c10' }));
     this.makers.set('ceiling-light', () => lambert({ color: '#c8b69a', emissive: '#1e1710' }));
     this.makers.set('steel', (q) => (hi(q) ? std({ color: '#3a3c40', metalness: 0.8, roughness: 0.45 }) : lambert({ color: '#34363a' })));
+    // the earth in the planters, under the palms and plants
+    this.makers.set('soil', () => lambert({ map: concreteTex(), color: '#4a3020' }));
     this.makers.set('rust', (q) => (hi(q) ? std({ map: rustTex(), color: '#b8a090', metalness: 0.4, roughness: 0.7 }) : lambert({ map: rustTex(), color: '#b8a090' })));
     this.makers.set('glass', (q) =>
       hi(q)

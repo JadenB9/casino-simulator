@@ -10,13 +10,24 @@
 // not a spin. Wheel zooms.
 // The walker is a circle pushed out of the floor's boxes and posts; the camera backs off the
 // player's head along a ray and pulls in wherever that ray would enter a wall, column or bank.
+//
+// First person (F on the floor, or Settings): the camera is at the character's eyes, over its head
+// bone as last drawn, so it stands as tall as the body, sinks onto a seat with it and rises with
+// anything that lifts it; the eyes sit a little ahead of the walker's middle, well inside its
+// circle, so no wall or column comes nearer than the camera's near plane. The body turns with the
+// look (a seat holds it still), the look reaches from the chandeliers down to your own shoes, and
+// your own head, hair and hat are shrunk away while the camera is inside them. Emoting swings the
+// camera out in front for as long as the bubble is up so you see yourself do it; walking or looking
+// brings it straight back. The same yaw and pitch serve both views (pitch > 0 looks down), so the
+// seats' and tables' camera moves, the stick and the drags work the same in either.
 
 import * as THREE from 'three';
 import { isTyping, onOverlayChange, overlayCount } from '../ui/keyboard.ts';
 import type { Character } from './contract.ts';
 import type { Collider } from './collision.ts';
 
-import { loadMouse, onMouseChange, setMouseSettings, type MouseSettings } from './mouse.ts';
+import { loadMouse, onMouseChange, setMouseSettings, type MouseSettings, type View } from './mouse.ts';
+import { EMOTE_S } from './emotes.ts';
 
 const RADIUS = 0.3;
 // A brisk default pace (the floor is 40 m across), and Shift for a run.
@@ -34,6 +45,45 @@ const LOCK_RATE = 0.0024;
 /** Camera pitch: a little below the head (to look up at the wheel and the chandeliers) to high above. */
 const PITCH_MIN = -0.3;
 const PITCH_MAX = 1.1;
+/** Through your own eyes the look goes further: up at the chandeliers, down at your shoes or the felt. */
+const EYES_PITCH_MIN = -1.35;
+const EYES_PITCH_MAX = 1.4;
+/**
+ * The head bone's joint (the top of the neck) over the feet: 1.55 m on both bodies as they stand
+ * (measured), used until the model has loaded; it stands a little ahead of the walker's middle.
+ * Looking level the eyes are this much over it and ahead of it, about where the face is. The
+ * head nods with the look (NECK of it): the camera never gets more than 0.21 m ahead of the
+ * walker's middle, 0.09 m inside its circle, which the near plane's corners (0.05 m out, under
+ * 0.09 m across) never reach past.
+ */
+export const HEAD_Y = 1.55;
+/** A head drawn outside these (m over the feet) isn't one: a model not drawn yet. */
+const HEAD_MIN = 0.6;
+const HEAD_MAX = 3;
+const HEAD_AHEAD = 0.06;
+const EYES_OVER_HEAD = 0.11;
+const EYES_AHEAD = 0.1;
+const NECK = 0.85;
+/** Seconds to swing between the two views. */
+const SWITCH_S = 0.45;
+/** Your own head is left out while the camera is this close to the eyes. */
+const HEADLESS_NEAR = 0.32;
+/** A bone this small draws its vertices (and a hat, shades, hair) into its joint. */
+const SHRUNK = 1e-3;
+/**
+ * Showing yourself an emote in first person: the camera stands this far out in front, a little
+ * above, at a three-quarter angle with room enough (the ways round to try, nearest first), for as
+ * long as the bubble is up.
+ */
+const SHOW_DIST = 2.8;
+const SHOW_PITCH = 0.14;
+/** The emote view looks at this share of the head's height. */
+const SHOW_AT = 0.74;
+const SHOW_ROOM = 1.8;
+const SHOW_TRIES = [0.55, -0.55, 0.95, -0.95, 0.2, -0.2, 1.4, -1.4, 1.9, -1.9];
+const SHOW_S = EMOTE_S + 0.2;
+/** Looking this far (radians) while an emote is shown brings the eyes back. */
+const SHOW_CANCEL = 0.03;
 /** Seconds without mouse input before the follow camera swings back behind the walker. */
 const RECENTER_AFTER = 3;
 /** A press that travels less than this (px) is a click, which takes the mouse. */
@@ -68,6 +118,26 @@ export class Player {
   private readonly target = new THREE.Vector3();
   private readonly want = new THREE.Vector3();
   private readonly dir = new THREE.Vector3();
+  // --- first person ---
+  /** 0 behind you .. 1 at your eyes, swung between over SWITCH_S. */
+  private eyesK = 0;
+  /** The eyes this frame, and the head joint's eased height over the floor (NaN: snap to it). */
+  private readonly eye = new THREE.Vector3();
+  private headY = Number.NaN;
+  /** The walker's own height last frame (the floor the head was drawn over). */
+  private floorY = 0;
+  /** The head bone (found again when a new outfit brings new bones), and the one shrunk now. */
+  private head: THREE.Object3D | null = null;
+  private shrunk: THREE.Object3D | null = null;
+  /** An emote being shown from out in front: the camera's yaw, and until when. */
+  private showing: { yaw: number; until: number } | null = null;
+  private showLook = 0;
+  /** A seat holds the body (the character was sat down): the look doesn't turn it. */
+  private sitting = false;
+  private readonly posQ = new THREE.Quaternion();
+  private readonly eyeQ = new THREE.Quaternion();
+  private readonly lookM = new THREE.Matrix4();
+  private readonly lookAt = new THREE.Vector3();
 
   constructor(
     readonly character: Character,
@@ -97,12 +167,46 @@ export class Player {
     document.addEventListener('focusout', this.onFocus);
     // the Settings sheet changes these while the floor is up
     this.offMouse = onMouseChange((m) => {
+      const was = this.mouse.view;
       this.mouse = m;
       if (!m.capture) {
         this.lent = false;
         this.release();
       }
+      if (m.view !== was) this.viewChanged();
     });
+    this.hear(character);
+  }
+
+  /**
+   * The walker hears two things others tell the character: an emote (world/emotes.ts), which in
+   * first person swings the camera out to show it, and sitting down on a floor seat
+   * (world/life/sitting.ts), after which the seat, not the look, turns the body.
+   */
+  private hear(ch: Character): void {
+    const gesture = ch.gesture?.bind(ch);
+    if (gesture) {
+      ch.gesture = (e) => {
+        gesture(e);
+        this.showEmote();
+      };
+    }
+    const sit = ch.sit?.bind(ch);
+    if (sit) {
+      ch.sit = (top) => {
+        sit(top);
+        this.sitting = top !== null;
+      };
+    }
+  }
+
+  /** First or third person; F toggles it on the floor, Settings sets it, and it's kept for next time. */
+  get view(): View {
+    return this.mouse.view;
+  }
+
+  setView(view: View): void {
+    setMouseSettings({ view });
   }
 
   /** True while the mouse is held for looking around. */
@@ -154,6 +258,8 @@ export class Player {
     this.camYaw = heading + Math.PI;
     this.vel.set(0, 0);
     this.dist = this.camDist;
+    this.headY = Number.NaN;
+    this.showing = null;
     this.syncCharacter();
     // While the controls are lent out (the look editor, the shop, a table) the camera is theirs:
     // the floor's first hello lands during a new player's "Pick your look" and used to pull the
@@ -177,17 +283,28 @@ export class Player {
     this.speed = 0;
     this.drag = null;
     this.character.setMotion(0);
+    this.showing = null;
     if (!on) {
       this.lent = false;
       this.release();
+      // the dressing room, the showroom and the tables show the whole character
+      this.shrinkHead(false);
     } else if (!was) {
+      // back from a table (the fly-out ended at followPose()) or the menu: no swing
+      this.eyesK = this.mouse.view === 'first' ? 1 : 0;
+      this.headY = Number.NaN;
       this.capture();
     }
   }
 
-  /** Where the follow camera would be right now (for flying back from a table). */
+  /** Where the camera would be right now, behind you or at your eyes (for flying back from a table). */
   followPose(): { position: THREE.Vector3; target: THREE.Vector3 } {
-    this.computeCamera();
+    if (this.mouse.view === 'first') {
+      this.computeEyes(0);
+      const d = this.lookDir(this.lookAt);
+      return { position: this.eye.clone(), target: this.eye.clone().addScaledVector(d, 3) };
+    }
+    this.computeCamera(this.camYaw, clampPitch(this.camPitch, 'third'), this.camDist);
     return { position: this.want.clone(), target: this.target.clone() };
   }
 
@@ -216,6 +333,8 @@ export class Player {
     let mx = -s * iz + c * ix;
     let mz = -c * iz - s * ix;
     const len = Math.hypot(mx, mz);
+    // walking off brings the eyes back from showing an emote
+    if (this.showing && (len > 0 || this.clock > this.showing.until)) this.showing = null;
     const speed = len > 0 ? (run ? RUN : WALK * pace) : 0;
     if (len > 0) {
       mx /= len;
@@ -230,18 +349,22 @@ export class Player {
     const moved = Math.hypot(p.x - this.position.x, p.z - this.position.z) / Math.max(dt, 1e-4);
     this.position.x = p.x;
     this.position.z = p.z;
-    if (len > 0) {
+    if (this.mouse.view === 'first' && !this.showing) {
+      // through your eyes the body faces where you look, walking or not, unless a seat holds it
+      if (!this.sitting) this.heading = turn(this.heading, this.camYaw + Math.PI, 1 - Math.exp(-dt * 20));
+    } else if (len > 0) {
       const want = Math.atan2(mx, mz);
       this.heading = turn(this.heading, want, 1 - Math.exp(-dt * 12));
       // The camera drifts round behind the walker only once the mouse has been left alone for a
       // while, and never while it's held: then the mouse alone steers.
-      if (!this.locked && this.clock - this.manualAt > RECENTER_AFTER && iz >= 0) this.camYaw = turn(this.camYaw, this.heading + Math.PI, 1 - Math.exp(-dt * 1.4));
+      if (!this.locked && this.mouse.view === 'third' && this.clock - this.manualAt > RECENTER_AFTER && iz >= 0) this.camYaw = turn(this.camYaw, this.heading + Math.PI, 1 - Math.exp(-dt * 1.4));
     }
     this.speed = moved;
     const motion = moved < 0.05 ? 0 : moved <= WALK_CYCLE ? moved / WALK_CYCLE : Math.min(2, 1 + (moved - WALK_CYCLE) / (RUN_CYCLE - WALK_CYCLE));
     this.character.setMotion(motion);
     this.syncCharacter();
     this.placeCamera(dt);
+    this.floorY = this.position.y;
   }
 
   // --- input API for the touch controls (world/touch.ts) ----------------------------------------
@@ -280,6 +403,7 @@ export class Player {
 
   dispose(): void {
     this.release();
+    this.shrinkHead(false);
     this.offOverlay();
     this.offMouse();
     clearTimeout(this.focusTimer);
@@ -302,13 +426,18 @@ export class Player {
     this.character.root.rotation.y = this.heading;
   }
 
-  private computeCamera(): void {
-    this.target.set(this.position.x, EYE, this.position.z);
-    const cp = Math.cos(this.camPitch);
-    this.dir.set(Math.sin(this.camYaw) * cp, Math.sin(this.camPitch), Math.cos(this.camYaw) * cp);
+  /**
+   * The follow camera looking at a point over the walker (the head, unless `at` says how high) from
+   * `yaw` and `pitch`, `far` away or nearer where something's in the way.
+   */
+  private computeCamera(yaw: number, pitch: number, far: number, at = EYE): void {
+    // (a ride lifts the walker, and the head with it)
+    this.target.set(this.position.x, at + this.position.y, this.position.z);
+    const cp = Math.cos(pitch);
+    this.dir.set(Math.sin(yaw) * cp, Math.sin(pitch), Math.cos(yaw) * cp);
     // back off along the ray until something solid is in the way
-    const hit = this.col.raycast(this.target, this.dir, this.camDist + 0.3) - 0.3;
-    const allowed = Math.max(0.45, Math.min(this.camDist, hit));
+    const hit = this.col.raycast(this.target, this.dir, far + 0.3) - 0.3;
+    const allowed = Math.max(0.45, Math.min(far, hit));
     this.want.copy(this.target).addScaledVector(this.dir, allowed);
     const ceiling = Math.min(this.ceilingAt(this.want.x, this.want.z), this.ceilingAt(this.target.x, this.target.z));
     this.want.y = Math.max(CAM_FLOOR, Math.min(this.want.y, ceiling - 0.2));
@@ -318,14 +447,114 @@ export class Player {
   private lastAllowed = 3.3;
 
   private placeCamera(dt: number): void {
-    this.computeCamera();
-    // pull in fast when blocked, ease back out when clear
-    const d = this.lastAllowed;
-    this.dist += (d - this.dist) * (1 - Math.exp(-dt * (d < this.dist ? 22 : 3)));
-    const pos = this.target.clone().addScaledVector(this.dir, this.dist);
-    pos.y = Math.max(CAM_FLOOR, Math.min(pos.y, this.want.y));
-    this.camera.position.copy(pos);
-    this.camera.lookAt(this.target.x, this.target.y - 0.12, this.target.z);
+    const cam = this.camera;
+    const first = this.mouse.view === 'first';
+    // where the camera was drawn last frame, after anyone else moved it (a banker's window does)
+    const drawnNear = first && cam.position.distanceTo(this.eye) < HEADLESS_NEAR;
+    const toEyes = first && !this.showing ? 1 : 0;
+    this.eyesK = stepToward(this.eyesK, toEyes, dt / SWITCH_S);
+    const k = smooth(this.eyesK);
+    if (k < 1) {
+      // behind you, or out in front while an emote is shown
+      const s = this.showing;
+      if (s) this.computeCamera(s.yaw, SHOW_PITCH, SHOW_DIST, this.showAt());
+      else this.computeCamera(this.camYaw, clampPitch(this.camPitch, 'third'), this.camDist);
+      // pull in fast when blocked, ease back out when clear
+      const d = this.lastAllowed;
+      this.dist += (d - this.dist) * (1 - Math.exp(-dt * (d < this.dist ? 22 : 3)));
+      cam.position.copy(this.target).addScaledVector(this.dir, this.dist);
+      cam.position.y = Math.max(CAM_FLOOR, Math.min(cam.position.y, this.want.y));
+      cam.lookAt(this.target.x, this.target.y - 0.12, this.target.z);
+    }
+    if (first || k > 0) this.computeEyes(dt);
+    if (k > 0) {
+      this.lookM.lookAt(this.eye, this.lookDir(this.lookAt).add(this.eye), cam.up);
+      this.eyeQ.setFromRotationMatrix(this.lookM);
+      if (k >= 1) {
+        cam.position.copy(this.eye);
+        cam.quaternion.copy(this.eyeQ);
+      } else {
+        this.posQ.copy(cam.quaternion);
+        cam.position.lerp(this.eye, k);
+        cam.quaternion.slerpQuaternions(this.posQ, this.eyeQ, k);
+      }
+    }
+    // the head goes once the camera is in it, and comes back the moment it leaves
+    this.shrinkHead(drawnNear && cam.position.distanceTo(this.eye) < HEADLESS_NEAR);
+  }
+
+  /** Where the eyes are this frame: from the head bone as last drawn, the way you look. */
+  private computeEyes(dt: number): void {
+    const bone = this.headBone();
+    // (a model just put on hasn't been drawn yet: its bones are all still at the floor)
+    const drawn = bone ? bone.matrixWorld.elements[13]! - this.floorY : Number.NaN;
+    const y = headHeight(drawn > HEAD_MIN && drawn < HEAD_MAX ? drawn : null, this.position.y);
+    // eased (a walk's bob, getting onto a seat), snapped after a jump
+    if (!(Math.abs(y - this.headY) < 0.5) || dt <= 0) this.headY = y;
+    else this.headY += (y - this.headY) * (1 - Math.exp(-dt * 12));
+    const o = eyeOffset(this.camPitch);
+    this.eye.set(this.position.x - Math.sin(this.camYaw) * o.ahead, this.headY + o.up, this.position.z - Math.cos(this.camYaw) * o.ahead);
+  }
+
+  /** Which way the eyes look (unit length): straight away from where the follow camera would be. */
+  private lookDir(out: THREE.Vector3): THREE.Vector3 {
+    const p = clampPitch(this.camPitch, 'first');
+    const cp = Math.cos(p);
+    return out.set(-Math.sin(this.camYaw) * cp, -Math.sin(p), -Math.cos(this.camYaw) * cp);
+  }
+
+  /** The character's head bone, found again when a new outfit's model brings bones of its own. */
+  private headBone(): THREE.Object3D | null {
+    let o = this.head;
+    while (o && o !== this.character.root) o = o.parent;
+    if (!o) this.head = this.character.root.getObjectByName('Head') ?? null;
+    return this.head;
+  }
+
+  /** Shrink your own head away (the camera is inside it), or give it back. */
+  private shrinkHead(on: boolean): void {
+    const bone = on ? this.headBone() : null;
+    if (bone === this.shrunk) return;
+    this.shrunk?.scale.setScalar(1);
+    bone?.scale.setScalar(SHRUNK);
+    this.shrunk = bone;
+  }
+
+  /** The view changed (F, or Settings): swing to it; the follow camera keeps to its own pitch range. */
+  private viewChanged(): void {
+    this.showing = null;
+    if (this.mouse.view === 'third') this.camPitch = clampPitch(this.camPitch, 'third');
+    if (!this.enabled) this.eyesK = this.mouse.view === 'first' ? 1 : 0;
+  }
+
+  /** You emoted: in first person, the camera goes out in front to show you doing it. */
+  private showEmote(): void {
+    if (this.mouse.view !== 'first' || !this.enabled) return;
+    this.showing = { yaw: this.showYaw(), until: this.clock + SHOW_S };
+    this.showLook = 0;
+  }
+
+  /** Where an emote is framed: the middle of the body, from the feet to hands thrown up, standing or seated. */
+  private showAt(): number {
+    return (Number.isFinite(this.headY) ? this.headY - this.position.y : HEAD_Y) * SHOW_AT;
+  }
+
+  /** Out in front for an emote: a three-quarter view with room to stand back, or the roomiest way round. */
+  private showYaw(): number {
+    const o = { x: this.position.x, y: this.showAt() + this.position.y, z: this.position.z };
+    const cp = Math.cos(SHOW_PITCH);
+    let best = this.heading;
+    let most = -Infinity;
+    for (const off of SHOW_TRIES) {
+      const yaw = this.heading + off;
+      const room = this.col.raycast(o, { x: Math.sin(yaw) * cp, y: Math.sin(SHOW_PITCH), z: Math.cos(yaw) * cp }, SHOW_DIST + 0.3) - 0.3;
+      if (room >= SHOW_ROOM) return yaw;
+      if (room > most + 0.05) {
+        most = room;
+        best = yaw;
+      }
+    }
+    return best;
   }
 
   private onKey = (e: KeyboardEvent): void => {
@@ -337,6 +566,9 @@ export class Player {
       if (MOVE_KEYS.has(e.code)) {
         this.keys.add(e.code);
         if (e.code.startsWith('Arrow')) e.preventDefault();
+      } else if (e.code === 'KeyF' && !e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        // (at a table the controls are lent out and F is the game's: Fold)
+        this.setView(this.mouse.view === 'first' ? 'third' : 'first');
       }
     } else {
       this.keys.delete(e.code);
@@ -379,11 +611,13 @@ export class Player {
     if (e.type === 'pointerup' && !d.moved && d.mouse) this.capture();
   };
 
-  /** Turn the camera: yaw right for +dx, look down for +dy, pitch clamped. */
+  /** Turn the camera: yaw right for +dx, look down for +dy, pitch clamped to the view's range. */
   private look(dx: number, dy: number): void {
     this.camYaw -= dx;
-    this.camPitch = Math.max(PITCH_MIN, Math.min(PITCH_MAX, this.camPitch + dy));
+    this.camPitch = clampPitch(this.camPitch + dy, this.mouse.view);
     this.manualAt = this.clock;
+    // looking about while an emote is shown: back to the eyes
+    if (this.showing && (this.showLook += Math.abs(dx) + Math.abs(dy)) > SHOW_CANCEL) this.showing = null;
   }
 
   private canCapture(): boolean {
@@ -444,9 +678,49 @@ export class Player {
   };
 
   private onWheel = (e: WheelEvent): void => {
-    if (!this.enabled) return;
+    if (!this.enabled || this.mouse.view === 'first') return;
     this.camDist = Math.max(1.6, Math.min(6, this.camDist + Math.sign(e.deltaY) * 0.35));
   };
+}
+
+/** The pitch a view allows: through the eyes you look further up and down than the follow camera swings. */
+export function clampPitch(pitch: number, view: View): number {
+  const [lo, hi] = view === 'first' ? [EYES_PITCH_MIN, EYES_PITCH_MAX] : [PITCH_MIN, PITCH_MAX];
+  return Number.isFinite(pitch) ? Math.max(lo, Math.min(hi, pitch)) : Math.max(lo, Math.min(hi, 0.26));
+}
+
+/**
+ * The head bone's joint over the ground for a walker whose feet are at `floor`: drawn `head` over
+ * them (the body's own height, lower on a seat, higher on a ride), or before the model is in,
+ * where a standing head is.
+ */
+export function headHeight(head: number | null, floor: number): number {
+  return floor + (head ?? HEAD_Y);
+}
+
+/**
+ * The eyes from the head joint, looking `pitch` down (negative: up): ahead of the walker's middle
+ * and up. Level, they're over the joint and a little ahead, where the face is; looking down the
+ * head tips forward over the chest, as a neck lets it (so a shirt collar isn't all you see), and
+ * looking up it tips back.
+ */
+export function eyeOffset(pitch: number): { ahead: number; up: number } {
+  const a = clampPitch(pitch, 'first') * NECK;
+  const c = Math.cos(a);
+  const s = Math.sin(a);
+  return { ahead: HEAD_AHEAD + EYES_AHEAD * c + EYES_OVER_HEAD * s, up: EYES_OVER_HEAD * c - EYES_AHEAD * s };
+}
+
+/** Move `a` toward `b` by at most `step`. */
+export function stepToward(a: number, b: number, step: number): number {
+  if (!(step > 0)) return a;
+  return a < b ? Math.min(b, a + step) : Math.max(b, a - step);
+}
+
+/** Ease in and out over 0..1. */
+function smooth(x: number): number {
+  const t = Math.max(0, Math.min(1, x));
+  return t * t * (3 - 2 * t);
 }
 
 const MOVE_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ShiftRight']);

@@ -1,5 +1,6 @@
-// Settings: graphics quality and sound. Quality picks how the one renderer is built, so a change
-// is saved now and used from the next load; sound changes are heard straight away.
+// Settings: table tips, graphics quality, sound, and the camera and mouse (menu/controls.ts).
+// Quality picks how the one renderer is built, so a change is saved now and used from the next
+// load; everything else applies straight away.
 
 import './hud.css';
 import { tips } from '../../app/tips.ts';
@@ -9,7 +10,7 @@ import type { Closable, SfxLike } from '../menu/deps.ts';
 import { openSheet } from '../menu/sheet.ts';
 import { segmented } from '../menu/parts.ts';
 import { bigWinSettings } from '../feed/settings.ts'; // features: big-win toasts
-import { controlSettings } from '../menu/controls.ts'; // world: mouse look
+import { controlSettings } from '../menu/controls.ts'; // world: the camera and mouse look
 
 export interface SettingsDeps {
   root: HTMLElement;
@@ -99,7 +100,7 @@ export function openSettings(deps: SettingsDeps): Closable {
     el('h3', 'section-label', 'Audio'),
     row('Sound', sound.root, el('p', 'set-note', 'M mutes and unmutes anywhere.')),
     row('Volume', volWrap),
-    ...controlSettings(row), // world: mouse look
+    ...controlSettings(row), // world: the camera and mouse look
   );
   return { root: sheet.root, close: () => sheet.close() };
 }
