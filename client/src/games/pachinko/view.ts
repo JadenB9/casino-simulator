@@ -17,9 +17,9 @@ import { BATCH, POCKET_PAYS, JACKPOT_BALLS, ROUNDS, ROUND_BALLS, MAX_CHAIN, PUBL
 import type { BallView, LaunchEvent, PachinkoView, MachineData } from '../../../../shared/src/games/pachinko/engine.ts';
 import { el, button, maxButton } from '../../ui/kit.ts';
 import { celebrate } from '../../table/celebrate.ts';
-import { FlightPools, bucketOf, flightAt, flightSeconds, type Catch, type Flight, ATTACKER, OUT_V } from './board.ts';
+import { FlightPools, bucketOf, flightAt, flightSeconds, type Catch, type Flight, ATTACKER, OUT_V, BOARD_W, BOARD_H } from './board.ts';
 import { paintScreen, paintData, paintLeds, LED_COUNT, type ScreenState, type LedPattern } from './art.ts';
-import { machineModel, sharedLit, ballGeometry, ballMaterial, boardPoint, MACHINE, type MachineHandle } from './model.ts';
+import { machineModel, sharedLit, ballGeometry, ballMaterial, boardPoint, MACHINE, GLASS_Z, type MachineHandle } from './model.ts';
 import { PachinkoSound } from './sound.ts';
 import { calm as reduceFlashing } from '../../app/comfort.ts';
 
@@ -116,6 +116,8 @@ function reelPos(t: number, ts: number, target: number, speed: number): number {
 export function mountPachinko(ctx: TableViewCtx): TableView {
   const { root, owned } = findMachine(ctx);
   const handle = root.userData.pachinko as MachineHandle;
+  // the board behind the glass is what must stay in view (table/fit.ts)
+  ctx.stage.board(...[0, BOARD_H].flatMap((v) => [-BOARD_W / 2, BOARD_W / 2].map((u) => boardPoint(u, v, GLASS_Z))));
   const sound = new PachinkoSound(ctx.sfx);
   const pools = new FlightPools((Date.now() & 0xffff) + 1);
   let disposed = false;

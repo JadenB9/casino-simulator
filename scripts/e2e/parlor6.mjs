@@ -11,8 +11,12 @@
 // prizes against the server's), then (--multi) two players at one hall through the real table
 // host: no Start, both buy cards, the clock calls the balls, both settle.
 //
-// Usage: node scripts/e2e/parlor6.mjs [port] [outDir] [--pachinko] [--bingo] [--multi] [--quick]
-// GPU=1 uses the Mac's GPU. Fixed names parlor6_e2e_*.
+// Fit (--fit): both games mid-play (bingo with four cards on the screen, pachinko mid-batch) at
+// 1280x600, 1024x640 and 900x1000: every corner of the board on the screen and clear of the
+// controls (table/fit.ts), and every control on the screen.
+//
+// Usage: node scripts/e2e/parlor6.mjs [port] [outDir] [--pachinko] [--bingo] [--multi] [--fit] [--quick]
+// GPU=1 uses the Mac's GPU; CALM=1 turns Reduce flashing & motion on. Fixed names parlor6_e2e_*.
 
 import { chromium } from 'playwright';
 import { mkdirSync } from 'node:fs';
@@ -33,7 +37,11 @@ let failed = false;
 
 async function newPage(viewport = { width: 1440, height: 900 }) {
   const page = await browser.newPage({ viewport });
-  await page.addInitScript(() => localStorage.setItem('casino.tips', '0'));
+  await page.addInitScript((calm) => {
+    localStorage.setItem('casino.tips', '0');
+    // CALM=1: Reduce flashing & motion on
+    localStorage.setItem('casino.calm', calm ? '1' : '0');
+  }, process.env.CALM === '1');
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
   page.on('pageerror', (e) => errors.push(String(e)));
   return page;
@@ -58,6 +66,7 @@ const shot = async (page, name) => {
 if (flag('--pachinko') || !(flag('--bingo') || flag('--multi'))) await pachinko();
 if (flag('--bingo')) await bingoSolo();
 if (flag('--multi')) await bingoMulti();
+if (flag('--fit')) await fits();
 
 console.log(JSON.stringify({ results, errors: errors.slice(0, 12) }, null, 1));
 await browser.close();
@@ -346,5 +355,76 @@ async function bingoMulti() {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(800);
   await shot(page, 'bg-5-phone');
+  await page.close();
+}
+
+/** Where the board's corners land on the screen, and the controls' boxes, as scripts/e2e/fit6.mjs measures them. */
+function measureFit(page) {
+  return page.evaluate(() => {
+    const W = innerWidth;
+    const H = innerHeight;
+    const stage = window.casino.table.stage;
+    const cam = stage.engine.camera;
+    cam.updateMatrixWorld();
+    const pts = stage.fit.keyPoints().map((p) => {
+      const v = p.clone().applyMatrix4(cam.matrixWorldInverse);
+      const behind = v.z > -0.01;
+      v.applyMatrix4(cam.projectionMatrix);
+      return { x: ((v.x + 1) / 2) * W, y: ((1 - v.y) / 2) * H, behind };
+    });
+    const ui = [];
+    const skip = ['modal', 'scrim', 'toasts', 'toast', 'celebrate'];
+    for (const e of document.getElementById('ui').children) {
+      if (e.hidden || skip.some((c) => e.classList.contains(c)) || e.dataset.fit === 'ignore' || e.classList.contains('pass')) continue;
+      const cs = getComputedStyle(e);
+      if (cs.display === 'none' || cs.visibility === 'hidden') continue;
+      const r = e.getBoundingClientRect();
+      if (r.width < 2 || r.height < 2 || r.width * r.height > 0.45 * W * H) continue;
+      ui.push({ cls: [...e.classList].join('.'), left: r.left, top: r.top, right: r.right, bottom: r.bottom });
+    }
+    return { W, H, pts, ui, zoom: stage.fit.debug().lens.zoom };
+  });
+}
+
+async function fitSweep(page, game) {
+  for (const [w, h] of [[1280, 600], [1024, 640], [900, 1000]]) {
+    await page.setViewportSize({ width: w, height: h });
+    await page.waitForTimeout(1500);
+    const m = await measureFit(page);
+    const bad = [];
+    for (const p of m.pts) {
+      if (p.behind || p.x < -1 || p.y < -1 || p.x > m.W + 1 || p.y > m.H + 1) bad.push(`(${p.x.toFixed(0)},${p.y.toFixed(0)}) off screen`);
+      else {
+        const under = m.ui.find((r) => p.x > r.left + 1 && p.x < r.right - 1 && p.y > r.top + 1 && p.y < r.bottom - 1);
+        if (under) bad.push(`(${p.x.toFixed(0)},${p.y.toFixed(0)}) under ${under.cls}`);
+      }
+    }
+    for (const r of m.ui) if (r.left < -1 || r.right > m.W + 1 || r.bottom > m.H + 1) bad.push(`${r.cls} runs off the edge`);
+    (results.fit ??= []).push({ game, size: `${w}x${h}`, points: m.pts.length, zoom: +m.zoom.toFixed(2), bad });
+    if (bad.length || !m.pts.length) failed = true;
+    await shot(page, `fit-${game}-${w}x${h}`);
+  }
+}
+
+async function fits() {
+  const page = await newPage();
+  await page.goto(`${base}/casino/?dev=table&game=bingo&name=parlor6_e2e_fit`);
+  await sitDown(page, '1000');
+  await page.waitForFunction(() => document.getElementById('boot')?.classList.contains('done'), null, { timeout: 90000 });
+  await page.waitForFunction(() => window.casino.table.view.debug.state().phase === 'buying', null, { timeout: 120000, polling: 100 });
+  await page.keyboard.press('4');
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => window.casino.table.view.debug.state().cards.length === 4, null, { timeout: 15000 });
+  await page.keyboard.press('Space');
+  await page.waitForFunction(() => window.casino.table.view.debug.state().called.length >= 3, null, { timeout: 30000 });
+  await fitSweep(page, 'bingo');
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(`${base}/casino/?dev=table&game=pachinko&name=parlor6_e2e_fit`);
+  await sitDown(page, '1000');
+  await page.waitForFunction(() => document.getElementById('boot')?.classList.contains('done'), null, { timeout: 90000 });
+  await page.waitForTimeout(800);
+  await page.keyboard.press('Space');
+  await page.waitForFunction(() => window.casino.table.view.debug.state().flying > 2, null, { timeout: 20000 });
+  await fitSweep(page, 'pachinko');
   await page.close();
 }

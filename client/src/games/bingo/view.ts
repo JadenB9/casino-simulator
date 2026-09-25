@@ -20,7 +20,7 @@ import { tween, ease } from '../../table/tween.ts';
 import { CardEl } from './cards.ts';
 import { COLUMN_COLOURS, paintBoard, paintBallFace, multText, nowPays, type BoardState } from './art.ts';
 import { hallModel, chutePath, domeRest, HALL, DOME_COUNT, DOME_Y, BALL_R, type HallHandle } from './model.ts';
-import { BLOWER } from './layout.ts';
+import { BLOWER, BOARD } from './layout.ts';
 import { BingoVoice } from './voice.ts';
 import { calm } from '../../app/comfort.ts';
 
@@ -60,6 +60,8 @@ export function mountBingo(ctx: TableViewCtx): TableView {
     hall = own;
   }
   const handle = hall.userData.bingo as HallHandle;
+  // the flashboard is what must stay in view (table/fit.ts); the cards are controls over it
+  stage.board(...[-1, 1].flatMap((sx) => [-1, 1].map((sy) => new THREE.Vector3((sx * BOARD.w) / 2, BOARD.y + (sy * BOARD.h) / 2, BOARD.z))));
   const voice = new BingoVoice(ctx.sfx);
   let disposed = false;
 
