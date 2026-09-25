@@ -18,7 +18,7 @@ import type { CharacterFactoryExt } from '../contract.ts';
 import type { SpotProvider } from '../interact.ts';
 import { carMaterials, type CarMaterials } from './materials.ts';
 import { lotCars, type Lot } from './lot.ts';
-import { stalls } from './layout.ts';
+import { GARAGE, stalls } from './layout.ts';
 import { Valet } from './valet.ts';
 import { Garage } from './garage.ts';
 
@@ -34,6 +34,8 @@ export interface CarsDeps {
     characterFactory: CharacterFactoryExt;
     quality: Quality;
     spots(fn: SpotProvider): () => void;
+    /** The city, for the garage's ceiling (the follow camera stays under it). */
+    city?: { addCeiling(fn: (x: number, z: number) => number | null): () => void };
   };
   /** Server time (ms): calls play out on the floor's clock. */
   now(): number;
@@ -54,6 +56,7 @@ export class Cars {
   readonly garage: Garage;
   private readonly lot: Lot | null;
   private readonly offSpots: () => void;
+  private readonly offCeiling: () => void;
   private active = false;
 
   constructor(private readonly deps: CarsDeps) {
@@ -81,6 +84,7 @@ export class Cars {
     this.group.visible = false;
     deps.engine.scene.add(this.group);
     this.offSpots = deps.world.spots((p) => (this.active ? this.valet.spots(p) : []));
+    this.offCeiling = deps.world.city?.addCeiling((x, z) => (x > GARAGE.x0 && x < GARAGE.x1 && z > GARAGE.z0 && z < GARAGE.z1 ? GARAGE.height - 0.1 : null)) ?? (() => {});
   }
 
   /** The valets' models (call once, behind the loading screen or after). */
@@ -130,6 +134,7 @@ export class Cars {
 
   dispose(): void {
     this.offSpots();
+    this.offCeiling();
     this.valet.dispose();
     this.garage.dispose();
     this.lot?.dispose();
