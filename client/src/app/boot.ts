@@ -726,6 +726,9 @@ class App {
         else if (closeTableFlows() || this.world.seated) await this.world.exitTable();
         this.world.life.seating.stand({ walk: true });
       },
+      hold: (on) => {
+        if (!this.table && !this.world.seated) this.world.player.setEnabled(!on);
+      },
       sitAt: (station, x, z, heading) => {
         this.world.player.teleport(x, z, heading);
         this.world.enter(station);

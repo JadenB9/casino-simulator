@@ -43,6 +43,8 @@ export interface InviteApp {
   atTable(): { tableId: string | null; seated: boolean; game: GameId } | null;
   /** Get up from wherever you are: leave the table (chips home), close a lobby panel, stand up. */
   standUp(): Promise<void>;
+  /** Hold a walking player still (true) and let them go again (false). */
+  hold(on: boolean): void;
   /** Stand at (x, z) facing `heading` and sit down at this station as if E were pressed. */
   sitAt(station: WorldStation, x: number, z: number, heading: number): void;
   sfx?: { play(name: string, opts?: { volume?: number }): void; readonly muted: boolean };
@@ -136,10 +138,6 @@ export class InviteHub {
     if (this.picker && (!tableId || this.picker.table.tableId === tableId)) this.picker.close();
   }
 
-  get pickerOpen(): boolean {
-    return this.picker !== null;
-  }
-
   /** People you sat down with: the picker offers them first next time. */
   noteMet(people: { id: number; name: string }[]): void {
     const me = this.app.floor.you?.id;
@@ -181,10 +179,12 @@ export class InviteHub {
       return;
     }
     if (at?.seated && !(await this.confirmLeave(inv, at.game))) return;
-    // no walking off while the floor answers: it is about to move us
-    const spot = this.spotBy(station);
-    const answer = await this.take(inv.id, spot);
+    // no walking off while the floor answers: it is about to move us, and a step sent meanwhile
+    // would drag the floor's idea of where we are back toward where we were
+    this.app.hold(true);
+    const answer = await this.take(inv.id, this.spotBy(station));
     if (!answer || answer.t === 'invite.no') {
+      this.app.hold(false);
       this.fail(id, answer?.msg ?? "Couldn't reach the casino. Try again.");
       return;
     }
