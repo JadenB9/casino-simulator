@@ -16,6 +16,7 @@
 
 import { DOLLAR, type Cents } from './money.ts';
 import type { Look } from './look.ts';
+import type { HappyHour } from './happyhour.ts';
 
 // ---------------------------------------------------------------------------------------------
 // Routes
@@ -551,8 +552,10 @@ export type CelebClientMsg = { t: 'celeb.talk'; visit: number } | { t: 'gift.ope
 export type CelebNo = 'FAR' | 'MET' | 'GONE' | 'SLOW';
 
 export type CelebServerMsg =
-  /** Right after hello: the visit going on and the box waiting to be found, if any. */
-  | { t: 'celebs'; visit: Visit | null; gift: GiftBox | null }
+  /** Right after hello: the visit going on and the box waiting to be found, if any, and the happy hour going on or next. */
+  | { t: 'celebs'; visit: Visit | null; gift: GiftBox | null; happy?: HappyHour }
+  /** The next happy hour (happyhour.ts), once the last is over (or a dev one starts). */
+  | { t: 'happy'; happy: HappyHour }
   /** A celebrity walks in (or a new visit replaces one). */
   | { t: 'celeb'; visit: Visit }
   /** The celebrity has a word with a player (everyone sees them turn and say it). */

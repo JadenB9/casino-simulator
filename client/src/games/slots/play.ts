@@ -22,6 +22,7 @@ import { tween, wait, ease } from '../../table/tween.ts';
 import { celebrate } from '../../table/celebrate.ts';
 import type { SpinTiming } from './reels.ts';
 import { bulbMaterial, buttonAtUv, candleColor } from './cabinet.ts';
+import { blink, wave } from '../../app/comfort.ts';
 import { bankMaterial, ReelBank } from './bank.ts';
 import { buildSkinned, payMatrix, skinEntry, winMeterAt, type SkinnedHandle } from './build.ts';
 import { EMPTY_OVERLAY, lineColorOf, paintLineOverlay, paintSkinMeters, type MeterValues, type OverlayState, type SkinId } from './skin.ts';
@@ -764,20 +765,20 @@ export function mountSkinned(ctx: TableViewCtx): TableView {
         const before = Math.floor(flashing * 5);
         flashing = Math.max(0, flashing - dt);
         const after = Math.floor(flashing * 5);
-        if (before !== after) drawOverlay({}, after % 2 === 0 && flashing > 0);
+        if (before !== after) drawOverlay({}, blink(after % 2 === 0) && flashing > 0);
         if (flashing === 0) drawOverlay({ flash: [] });
       }
       // Diamond Line: the reels that paid pulse behind the glass and the payline glows
       if (hitReels.length) {
-        const pulse = 1.12 + 0.18 * Math.sin(flashT * 7);
+        const pulse = 1.12 + 0.18 * wave(flashT * 7);
         hitReels.forEach((hit, i) => reels.bright(i, hit ? pulse : 0.8));
       }
       if (handle.payline) {
-        const k = paylineGlow ? 0.5 + 0.5 * Math.sin(flashT * 7) : 0;
+        const k = paylineGlow ? 0.5 + 0.5 * wave(flashT * 7) : 0;
         paylineMat.color.setRGB(1, 0.2 + 0.7 * k, 0.15 + 0.7 * k);
       }
       if (candleFlash) {
-        const on = candleFlash === 1 ? Math.sin(flashT * 18) > 0 : Math.cos(flashT * Math.PI) > 0;
+        const on = blink(candleFlash === 1 ? Math.sin(flashT * 18) > 0 : Math.cos(flashT * Math.PI) > 0);
         whiteMat.color.set(on ? '#ffffff' : '#3a3632');
         tintMat.color.set(candleColor(m.denoms[denomIdx]!)).multiplyScalar(on ? 1.2 : 0.35);
       } else {

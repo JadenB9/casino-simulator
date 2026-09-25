@@ -31,14 +31,14 @@ export function rain(w: FxWorld, stock: Stock, ev: FxEvent, late: boolean): Effe
       const p = w.where(ev.id);
       if (p) at.lerp(p, 1 - Math.exp(-dt * 3));
       if (t < secs * RAINS && left > 0) {
-        owed += RATE[q] * dt * (w.calm() ? 0.6 : 1);
+        owed += RATE[q] * dt;
         const top = Math.min(3.4, ceilingAt(w.plan, at.x, at.z) - 0.15);
         for (; owed >= 1; owed--) {
           const r = Math.sqrt(Math.random()) * RADIUS;
           const a = Math.random() * Math.PI * 2;
           // a light shade in each bill, as if some are older than others
           white.setScalar(0.86 + Math.random() * 0.14);
-          bits.spawn(at.x + Math.cos(a) * r, top - Math.random() * 0.3, at.z + Math.sin(a) * r, (Math.random() - 0.5) * 0.3, -0.2, (Math.random() - 0.5) * 0.3, 1, white, (3 + Math.random() * 4) * (w.calm() ? 0.4 : 1));
+          bits.spawn(at.x + Math.cos(a) * r, top - Math.random() * 0.3, at.z + Math.sin(a) * r, (Math.random() - 0.5) * 0.3, -0.2, (Math.random() - 0.5) * 0.3, 1, white, 3 + Math.random() * 4);
         }
       }
       stepPaper(bits, dt, { fall: 0.85, sway: 0.6, drag: 1.4, size: 0.15 });

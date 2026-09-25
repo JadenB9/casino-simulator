@@ -41,7 +41,6 @@ import { golden } from './golden.ts';
 import { headline } from './headline.ts';
 import { takeover } from './takeover.ts';
 import type { Effect, FxView, FxWorld } from './types.ts';
-import { calm } from '../../app/comfort.ts';
 import './fx.css';
 
 export type { Hanger } from './disco.ts';
@@ -127,7 +126,6 @@ export class FxPlayer {
       env: o.env,
       stations: o.stations,
       tally: () => this.tallySign,
-      calm,
     };
   }
 

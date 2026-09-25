@@ -8,6 +8,8 @@
 // champagne and crimson stars falling slowly and crackling, now and then two at once; and the
 // gold of Golden Hour (the warm light, the shafts, the coins) everywhere under it all. Everyone
 // sees it, in every room. The signs and screens get their own faces back at the end.
+// Calm (app/comfort.ts): the lights dip only halfway and come back up without the flash; shells
+// burst less often, never two at once, and the gobo holds steady.
 
 import * as THREE from 'three';
 import type { FxEvent } from '../../../../shared/src/items.ts';
@@ -20,6 +22,7 @@ import { envelope } from './timing.ts';
 import { golden } from './golden.ts';
 import { headline } from './headline.ts';
 import type { Hanger } from './disco.ts';
+import { calm, calmScale, flashAllowed, wave } from '../../app/comfort.ts';
 
 /** Stars in a shell, and seconds between shells on average. */
 const STARS = { high: 180, low: 80 };
@@ -66,8 +69,8 @@ export function takeover(w: FxWorld, stock: Stock, ev: FxEvent, late: boolean, s
       if (!shell) continue;
       const { y, r } = shell;
       tint.copy(STAR_COLORS[Math.floor(Math.random() * STAR_COLORS.length)]!);
-      // the stars travel about speed / drag before the air stops them
-      const speed = (r / 1.5) * (3.4 + Math.random() * 0.6);
+      // the stars travel about speed / drag (2.6) before the air stops them
+      const speed = (r / SHELL_R) * (3.4 + Math.random() * 0.6);
       for (let i = 0; i < STARS[q]; i++) {
         // evenly round a sphere, a little ragged
         const u = Math.random() * 2 - 1;
@@ -103,10 +106,9 @@ export function takeover(w: FxWorld, stock: Stock, ev: FxEvent, late: boolean, s
         revealed = t > REVEAL;
       }
       if (!revealed) {
-        // the blackout: every room's light drops away, then the show (only dimmed, with flashing
-        // and motion turned down)
-        const k = Math.min(1, t / 0.5);
-        w.lighting.setTint(id, { color: '#150c18', k: 0.7 * k, dim: 1 - (w.calm() ? 0.45 : 0.85) * k });
+        // the blackout: every room's light drops away, then the show
+        const k = Math.min(1, t / (calm() ? 1.2 : 0.5));
+        w.lighting.setTint(id, { color: '#150c18', k: 0.7 * k, dim: 1 - (calm() ? 0.5 : 0.85) * k });
         if (t < REVEAL) return true;
         revealed = true;
         w.sounds?.firework(null, 1.5);
@@ -114,21 +116,20 @@ export function takeover(w: FxWorld, stock: Stock, ev: FxEvent, late: boolean, s
         dropCurtain();
         next = 0.1;
       }
-      // the flash as the lights come up, fading into the gold
-      const still = w.calm();
-      // (no flash with flashing turned down: the gold comes up on its own, a second slower)
-      const flash = still ? 0 : Math.max(0, 1 - (t - REVEAL) / 0.8);
-      stars.uniforms.uGain.value = (q === 'high' ? 5 : 2.2) * (still ? 0.45 : 1);
-      w.lighting.setTint(id, left > 0 && flash > 0 ? { color: '#ffd27a', k: 0.5 * flash, dim: 1 + 1.4 * flash } : null);
+      // the flash as the lights come up, fading into the gold (calm: the dark lifts over a second)
+      const flash = Math.max(0, 1 - (t - REVEAL) / (calm() ? 1.2 : 0.8));
+      if (calm()) w.lighting.setTint(id, left > 0 && flash > 0 ? { color: '#150c18', k: 0.7 * flash, dim: 1 - 0.5 * flash } : null);
+      else w.lighting.setTint(id, left > 0 && flash > 0 ? { color: '#ffd27a', k: 0.5 * flash, dim: 1 + 1.4 * flash } : null);
       let alive = false;
       for (const p of parts) alive = p.update(dt, Math.max(0, t - REVEAL), left, view) || alive;
       if (left > 2 && (next -= dt) <= 0) {
-        next = EVERY * (0.6 + Math.random() * 0.8) * (still ? 2 : 1);
+        next = EVERY * calmScale(2.5) * (0.6 + Math.random() * 0.8);
         burst();
         // now and then a second shell a beat later
-        if (!still && Math.random() < 0.3) setTimeout(() => !gone && burst(), 180);
+        if (flashAllowed() && Math.random() < 0.3) setTimeout(() => !gone && burst(), 180);
       }
-      // the stars hang and drift down, the way a willow shell's do
+      // the stars hang and drift down, the way a willow shell's do (calm: soft glows, not flashes)
+      stars.uniforms.uGain.value = (q === 'high' ? 5 : 2.2) * calmScale(0.4);
       stars.step(dt, 2.2, 2.6);
       stars.commit();
       stepPaper(curtain, dt, { fall: 0.6, sway: 0.45, drag: 2, size: 0.03 });
@@ -140,7 +141,7 @@ export function takeover(w: FxWorld, stock: Stock, ev: FxEvent, late: boolean, s
       }
       gobo.rotation.y = t * 0.12;
       const k = envelope(Math.max(0, t - REVEAL), left, 1, 2);
-      ((gobo.material as THREE.MeshBasicMaterial).color as THREE.Color).setRGB(1, 0.78, 0.36).multiplyScalar(0.9 * k * (still ? 0.95 : 0.9 + 0.1 * Math.sin(t * 2.3)));
+      ((gobo.material as THREE.MeshBasicMaterial).color as THREE.Color).setRGB(1, 0.78, 0.36).multiplyScalar(0.9 * k * (0.9 + 0.1 * wave(t * 2.3)));
       if (left > 0) screens.on();
       else screens.off();
       return alive || left > 0 || stars.n > 0;
@@ -183,24 +184,14 @@ export function shellAt(plan: FloorPlan, room: PlannedRoom, hangers: readonly Ha
   return { y, r };
 }
 
-/** A slot machine's topper face, in its cabinet's own frame: where a name card fits over it. */
-export function topperCard(l: { topper: string; top: number; width: number }): { x: number; y: number; z: number; w: number; h: number } {
-  if (l.topper === 'arch') return { x: 0, y: l.top + 0.118, z: 0.156, w: 0.48, h: 0.165 };
-  if (l.topper === 'sign') return { x: 0, y: l.top + 0.12, z: 0.126, w: l.width - 0.08, h: 0.17 };
-  return { x: 0, y: l.top + 0.26, z: 0.136, w: 0.34, h: 0.14 };
-}
-
 /**
  * The buyer's name on every screen and sign that can show one: the online lounge's monitors (each
- * one's glass is given a picture of the name in place of its game's attract picture), the slots
- * hall's win meter (its face) and every slot machine's topper (a lit card with the name over its
- * printed face, all of them one instanced mesh). Nothing of theirs is changed: at the end each gets
- * its own back.
+ * one's glass is given a picture of the name in place of its game's attract picture) and the slots
+ * hall's win meter (its face). Nothing of theirs is changed: at the end each gets its own back.
  */
 class Screens {
   private readonly monitor: THREE.MeshBasicMaterial;
   private readonly meter: THREE.CanvasTexture;
-  private readonly cards: THREE.InstancedMesh | null;
   private readonly borrowed = new Map<THREE.Mesh, THREE.Material | THREE.Material[]>();
   private tallyFace: { uniform: { value: THREE.Texture }; own: THREE.Texture } | null = null;
   private lit = false;
@@ -217,10 +208,6 @@ class Screens {
     this.meter = new THREE.CanvasTexture(meterCanvas(name));
     this.meter.colorSpace = THREE.SRGBColorSpace;
     this.meter.anisotropy = 4;
-    const card = new THREE.CanvasTexture(cardCanvas(name));
-    card.colorSpace = THREE.SRGBColorSpace;
-    card.anisotropy = 4;
-    this.cards = toppers(w, card);
   }
 
   on(): void {
@@ -233,7 +220,6 @@ class Screens {
         m.material = this.monitor;
       }
     });
-    if (this.cards) this.w.root.add(this.cards);
     const face = ((this.w.tally()?.material as THREE.ShaderMaterial | undefined)?.uniforms?.uFace ?? null) as { value: THREE.Texture } | null;
     if (face) {
       this.tallyFace = { uniform: face, own: face.value };
@@ -246,7 +232,6 @@ class Screens {
     this.lit = false;
     for (const [m, own] of this.borrowed) if (m.material === this.monitor) m.material = own;
     this.borrowed.clear();
-    this.cards?.removeFromParent();
     if (this.tallyFace && this.tallyFace.uniform.value === this.meter) this.tallyFace.uniform.value = this.tallyFace.own;
     this.tallyFace = null;
   }
@@ -255,65 +240,7 @@ class Screens {
     this.monitor.map?.dispose();
     this.monitor.dispose();
     this.meter.dispose();
-    if (this.cards) {
-      (this.cards.material as THREE.MeshBasicMaterial).map?.dispose();
-      (this.cards.material as THREE.Material).dispose();
-      this.cards.geometry.dispose();
-      this.cards.dispose();
-    }
   }
-}
-
-/**
- * A card over every slot machine's topper (their cabinets' handles say where), sharing one
- * picture. The classic cabinets say what kind of topper they have (topperCard); the newer skins
- * build theirs, so the card is fitted inside the front of that topper's printed face.
- */
-function toppers(w: FxWorld, picture: THREE.Texture): THREE.InstancedMesh | null {
-  const places: THREE.Matrix4[] = [];
-  const local = new THREE.Matrix4();
-  const faces = new Map<string, ReturnType<typeof topperCard> | null>();
-  w.stations.traverse((o) => {
-    type Handle = { root?: THREE.Object3D; layout?: { topper: string; top: number; width: number }; skin?: { id: string; layout: unknown; topper(l: unknown): { printed: THREE.BufferGeometry[]; body: THREE.BufferGeometry[]; trim: THREE.BufferGeometry[] } } };
-    const h = (o.userData.slots ?? o.userData.slots2) as Handle | undefined;
-    if (!h?.root) return;
-    let c: ReturnType<typeof topperCard> | null = null;
-    if (h.layout?.topper) c = topperCard(h.layout);
-    else if (h.skin) {
-      if (!faces.has(h.skin.id)) faces.set(h.skin.id, skinCard(h.skin));
-      c = faces.get(h.skin.id) ?? null;
-    }
-    if (!c) return;
-    h.root.updateWorldMatrix(true, false);
-    local.compose(new THREE.Vector3(c.x, c.y, c.z), new THREE.Quaternion(), new THREE.Vector3(c.w, c.h, 1));
-    places.push(h.root.matrixWorld.clone().multiply(local));
-  });
-  if (places.length === 0) return null;
-  const m = new THREE.MeshBasicMaterial({ map: picture, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
-  m.name = 'fx-takeover-topper';
-  const mesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), m, places.length);
-  mesh.name = 'fx-toppers';
-  places.forEach((p, i) => mesh.setMatrixAt(i, p));
-  mesh.instanceMatrix.needsUpdate = true;
-  mesh.computeBoundingSphere();
-  return mesh;
-}
-
-/** A newer skin's topper face, from the printed parts its topper builds: a card inside its front. */
-function skinCard(skin: { layout: unknown; topper(l: unknown): { printed: THREE.BufferGeometry[]; body: THREE.BufferGeometry[]; trim: THREE.BufferGeometry[] } }): ReturnType<typeof topperCard> | null {
-  const parts = skin.topper(skin.layout);
-  const box = new THREE.Box3();
-  for (const g of parts.printed) {
-    g.computeBoundingBox();
-    box.union(g.boundingBox!);
-  }
-  for (const g of [...parts.printed, ...parts.body, ...parts.trim]) g.dispose();
-  if (box.isEmpty()) return null;
-  const bw = box.max.x - box.min.x;
-  const bh = box.max.y - box.min.y;
-  const cw = bw * 0.8;
-  const ch = Math.min(bh * 0.55, cw / 2.6);
-  return { x: (box.min.x + box.max.x) / 2, y: (box.min.y + box.max.y) / 2, z: box.max.z + 0.004, w: cw, h: ch };
 }
 
 /** A monitor's picture (the attract pictures' size): the name in gold on a black stage. */
@@ -352,33 +279,6 @@ function monitorCanvas(name: string): HTMLCanvasElement {
   g.fillStyle = '#d9b36a';
   g.font = '600 18px "Barlow Condensed", sans-serif';
   g.fillText('OWN THE NIGHT', 256, 248);
-  return c;
-}
-
-/** A topper's card: the name in gold on black, a hairline of gold round it. */
-function cardCanvas(name: string): HTMLCanvasElement {
-  const c = document.createElement('canvas');
-  c.width = 768;
-  c.height = 256;
-  const g = c.getContext('2d')!;
-  g.fillStyle = '#080605';
-  g.fillRect(0, 0, 768, 256);
-  g.strokeStyle = '#c99a3e';
-  g.lineWidth = 6;
-  g.strokeRect(10, 10, 748, 236);
-  g.textAlign = 'center';
-  g.textBaseline = 'middle';
-  let size = 120;
-  do {
-    g.font = `700 ${size}px Cinzel, Georgia, serif`;
-    size -= 6;
-  } while (g.measureText(name.toUpperCase()).width > 680 && size > 30);
-  const gold = g.createLinearGradient(0, 70, 0, 190);
-  gold.addColorStop(0, '#fff1c4');
-  gold.addColorStop(0.5, '#f0c14e');
-  gold.addColorStop(1, '#b8862e');
-  g.fillStyle = gold;
-  g.fillText(name.toUpperCase(), 384, 136);
   return c;
 }
 

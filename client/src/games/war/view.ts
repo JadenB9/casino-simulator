@@ -54,6 +54,7 @@ import { SpotPicker } from '../multihand/picker.ts';
 import { glideTo, setSpotsInPlay } from '../multihand/frame.ts';
 import { oneAtATime } from '../multihand/turns.ts';
 import './war.css';
+import { wave } from '../../app/comfort.ts';
 
 const KINDS: SpotKind[] = ['tie', 'bet', 'war'];
 const RACK_POINT = new THREE.Vector3(RACK.x, TOP_Y + 0.012, RACK.z);
@@ -1229,7 +1230,7 @@ export function mountWar(ctx: TableViewCtx): TableView {
     update() {
       tickClock();
       // the ring round the tie being decided breathes, so it's found at a glance
-      litMat.opacity = 0.62 + 0.3 * Math.sin(performance.now() / 260);
+      litMat.opacity = 0.62 + 0.3 * wave(performance.now() / 260);
     },
 
     dispose() {

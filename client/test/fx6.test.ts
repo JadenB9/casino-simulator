@@ -6,7 +6,7 @@ import { reachFrom, reached, walkGrid } from '../src/world/reach.ts';
 import { GAMES } from '../src/games/index.ts';
 import { FxBook, envelope, fxKey, phaseOf, playable, reachOf } from '../src/world/fx/timing.ts';
 import { DOOR_CONE, PLINTH, STATUE_POST, fxRoom, inDoorCone, inside, seenFrom, statueSpots } from '../src/world/fx/scope.ts';
-import { SHELL_R, shellAt, topperCard } from '../src/world/fx/takeover.ts';
+import { SHELL_R, shellAt } from '../src/world/fx/takeover.ts';
 import { ceilingAt } from '../src/world/layout.ts';
 import { captionOf, clock } from '../src/world/fx/caption.ts';
 import { ROUND_ITEM, withGlass } from '../src/world/fx/round.ts';
@@ -334,20 +334,6 @@ describe('own the night', () => {
       }
     }
     expect(tried).toBeGreaterThan(200);
-  });
-
-  it("fits a name card inside every kind of slot topper's face", () => {
-    const l = { top: 1.9, width: 0.7 };
-    const arch = topperCard({ ...l, topper: 'arch' });
-    // the arch's face is 0.57 wide and its crown 0.255 over the top
-    expect(arch.w).toBeLessThan(0.57);
-    expect(arch.y + arch.h / 2).toBeLessThan(l.top + 0.255);
-    const sign = topperCard({ ...l, topper: 'sign' });
-    expect(sign.w).toBeLessThan(l.width - 0.05);
-    expect(sign.y + sign.h / 2).toBeLessThan(l.top + 0.22);
-    const disc = topperCard({ ...l, topper: 'disc' });
-    // the corners stay inside the disc's 0.205 face
-    expect(Math.hypot(disc.w / 2, disc.h / 2)).toBeLessThan(0.205);
   });
 });
 
