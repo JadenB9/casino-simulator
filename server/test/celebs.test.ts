@@ -343,7 +343,7 @@ describe('the dev trigger', () => {
         }),
         e,
       );
-    expect((await ask({ ...env, CASINO_DEV: '0' } as Env)).status).toBe(404);
+    expect((await ask({ ...env, CASINO_DEV: '0' } as unknown as Env)).status).toBe(404);
     expect((await ask({ ...env, CASINO_DEV: undefined } as unknown as Env)).status).toBe(404);
     const ok = await ask(env);
     expect(ok.status).toBe(200);
