@@ -423,12 +423,13 @@ if (checks.includes('game')) {
     }, stool.yaw);
     await p.waitForTimeout(400);
     const prompt = await p.evaluate(() => document.querySelector('.world-prompt:not([hidden])')?.textContent ?? '');
+    const up = await state(p);
     await p.keyboard.press('KeyE');
     await p.waitForTimeout(1600);
     const s = await state(p);
     const on = await p.evaluate(() => window.casino.world.life.seating.seated?.id ?? null);
-    // (a bar stool is high: the eyes come down only a little from a standing 1.66 m)
-    ok(on === stool.id && dist(s.cam, s.eye) < 0.01 && s.eye.y < 1.62, `E at ${stool.id} ("${prompt}"): sitting, looking from the stool (eyes ${s.eye.y.toFixed(2)} m)`);
+    // (a bar stool is high: the eyes come down only a little, if at all, from standing)
+    ok(on === stool.id && dist(s.cam, s.eye) < 0.01 && s.eye.y < up.eye.y + 0.01, `E at ${stool.id} ("${prompt}"): sitting, looking from the stool (eyes ${s.eye.y.toFixed(2)} m, ${up.eye.y.toFixed(2)} standing)`);
     await shot(p, 'game-stool');
     await p.keyboard.press('KeyE');
     await p.waitForTimeout(700);
