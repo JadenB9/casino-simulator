@@ -45,7 +45,7 @@ export class CarMaterials {
     this.mats.set('glass', new THREE.MeshStandardMaterial({ color: '#0b1016', roughness: 0.05, metalness: 0.9, envMap: env, envMapIntensity: 1.2 }));
     // lamps: parked, the lenses glow softly (under the glow's threshold); driven, they're on (bright
     // enough to bloom)
-    this.mats.set('lamp', new THREE.MeshBasicMaterial({ color: '#d2cdc2', vertexColors: true }));
+    this.mats.set('lamp', new THREE.MeshBasicMaterial({ color: '#f0eee8', vertexColors: true }));
     // and switched on: a car being driven, the lamp posts, the garage's light strips
     this.mats.set('glow', new THREE.MeshBasicMaterial({ color: new THREE.Color(2.2, 2.2, 2.2), vertexColors: true }));
     this.mats.set('gold', new THREE.MeshStandardMaterial({ color: '#c99a36', vertexColors: true, roughness: 0.3, metalness: 1, envMap: env, envMapIntensity: 0.85 }));
