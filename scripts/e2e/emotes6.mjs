@@ -313,6 +313,13 @@ if (checks.includes('wheel')) {
       await page.waitForTimeout(200);
       const shop = await page.evaluate(() => window.dev.shopped.slice());
       if (shop.join() !== 'griddy') fail(`wheel: a click on a locked emote opened the boutique at ${shop}`);
+      // a locked reward goes to the boutique too, where it's listed as won
+      await page.evaluate(() => window.dev.emotes.open());
+      await page.waitForSelector('.emo-wheel');
+      await page.click('.emo-btn[data-emote="trophy"]');
+      await page.waitForTimeout(200);
+      const shop2 = await page.evaluate(() => window.dev.shopped.slice());
+      if (shop2.join() !== 'griddy,trophy') fail(`wheel: a click on a locked reward opened ${shop2}`);
       // an owned message while it's open unlocks it in place
       await page.evaluate(() => {
         window.dev.emotes.open();

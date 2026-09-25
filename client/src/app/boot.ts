@@ -297,11 +297,10 @@ class App {
     link.on('emote', (id, e) => void this.world.showEmote(id === link.you?.id ? 'me' : id, e));
     // v6 emotes6: an emote bought or earned while you're on the floor is yours at once: in the
     // profile (the wheel reads it there next time) and unlocked on a wheel that's up now
-    link.subscribe((m) => {
-      if (m.t !== 'owned') return;
+    link.on('owned', (emotes) => {
       const p = session.profile;
-      if (p) session.set({ ...p, owned: [...new Set([...(p.owned ?? []), ...m.emotes])] });
-      this.emotes?.grant(m.emotes);
+      if (p) session.set({ ...p, owned: [...new Set([...(p.owned ?? []), ...emotes])] });
+      this.emotes?.grant(emotes);
     });
     link.on('hello', (you, first) => {
       // A tab that takes over from another one carries on where that one stood. Coming back from

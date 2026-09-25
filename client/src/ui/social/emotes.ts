@@ -7,8 +7,8 @@
 //
 // One you don't have yet is on the wheel too, dimmed, with its price (or, for a feat's reward,
 // what earns it): its key only points it out, and a click or Enter on it opens the boutique at it
-// (a reward can't be bought: the hub says what to win). What you own comes from the profile and
-// from the floor's `owned` message, which grant() takes while the wheel is up.
+// (where a reward is shown as won, never sold, with the feat that gives it). What you own comes
+// from the profile and from the floor's `owned` message, which grant() takes while the wheel is up.
 //
 // While it's open it holds the keyboard like any panel, so a number picks a gesture rather than
 // a chip and W doesn't walk; it lets go the moment it closes. Esc, G again or a click or tap
@@ -154,8 +154,8 @@ export function mountEmotes(deps: EmoteDeps): EmoteWheel {
   const pick = (e: EmoteId) => {
     if (!ui) return;
     if (!hasEmote(e, ui.have)) {
-      // not yours yet: to the boutique (a reward only says what earns it)
-      if (!lockedLabel(e).reward && deps.shop) {
+      // not yours yet: to the boutique, which sells it or says what earns it
+      if (deps.shop) {
         close();
         deps.shop(e);
       } else {
