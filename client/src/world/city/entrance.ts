@@ -36,6 +36,26 @@ const OPEN_S = 1.2;
 const CLOSE_S = 1.4;
 const DWELL_S = 1.6;
 
+/**
+ * The plan's box that keeps the street doors shut (collide.ts): the one standing on the floor in
+ * the doorway. The wall's piece over the door (the lintel, from the doors' top up to the ceiling)
+ * has the same footprint and comes first, so the height is what tells them apart: open the lintel
+ * and the doorway stays shut.
+ */
+export function doorwayBox(col: Collider, door: Doorway): Box | null {
+  return (
+    col.boxes.find(
+      (b) =>
+        b.bottom === 0 &&
+        b.top >= door.height - 0.05 &&
+        Math.abs(b.cx - door.x) < 0.05 &&
+        Math.abs(b.cz - door.z) < 0.25 &&
+        b.hx > door.width / 2 - 0.2 &&
+        b.hx < door.width / 2 + 0.3,
+    ) ?? null
+  );
+}
+
 export class EntranceLift implements Lift {
   readonly group = new THREE.Group();
   readonly yaw: number;
@@ -92,7 +112,8 @@ export class EntranceLift implements Lift {
     col.box(x0 + SIDE / 2, (z0 + z1) / 2, SIDE, CAR_D + 0.1, 0, CAR_H);
     col.box(x1 - SIDE / 2, (z0 + z1) / 2, SIDE, CAR_D + 0.1, 0, CAR_H);
     col.box(door.x, z1 + 0.05, x1 - x0, 0.1, 0, CAR_H);
-    this.doorBox = col.boxes.find((b) => Math.abs(b.cx - door.x) < 0.05 && Math.abs(b.cz - door.z) < 0.25 && b.hx > door.width / 2 - 0.2 && b.hx < door.width / 2 + 0.3) ?? null;
+    this.doorBox = doorwayBox(col, door);
+    if (!this.doorBox) console.warn('the entrance doors found no box in their doorway: they will never let anyone through');
     const c = carCentre(spec, 0);
     this.centreAt = { x: c.x / 100, z: c.z / 100 };
     this.cars = [{ x0: x0 + SIDE, x1: x1 - SIDE, z0, z1 }];
