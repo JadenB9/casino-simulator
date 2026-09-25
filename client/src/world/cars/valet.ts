@@ -105,7 +105,8 @@ export interface ValetDeps {
 
 export class Valet {
   readonly group = new THREE.Group();
-  private readonly out = new Map<number, Out>();
+  /** Cars out, by call (`id:at`): a player's new car and the one it replaces, driving off, can both be. */
+  private readonly out = new Map<string, Out>();
   private readonly staff: Character;
   private readonly geos: THREE.BufferGeometry[] = [];
   private readonly extra: { dispose(): void }[] = [];
@@ -198,30 +199,33 @@ export class Valet {
 
   /** The floor says a car was called (or sent back). */
   hear(call: CarCall): void {
-    const o = this.out.get(call.id);
-    if (o && o.call.car === call.car && o.call.at === call.at) {
-      o.call = call;
+    const key = `${call.id}:${call.at}`;
+    const same = this.out.get(key);
+    if (same) {
+      same.call = call;
       return;
     }
-    // a different car in the same space: the old one goes at once
-    if (o) this.drop(call.id);
-    if (!carItem(call.car) || call.slot >= CURB.length) return;
+    // a different car of theirs in the same space: the old one drives off now
+    const now = this.deps.now();
+    for (const o of this.out.values()) if (o.call.id === call.id && o.call.until > now) o.call = { ...o.call, until: now };
+    if (!carItem(call.car) || call.slot >= CURB.length || call.until <= now) return;
     const rig = new Rig(call.car, this.deps.mats);
     this.group.add(rig.root);
-    this.out.set(call.id, { call, rig, d: 0, leaving: false, runner: null, solid: null });
+    this.out.set(key, { call, rig, d: 0, leaving: false, runner: null, solid: null });
   }
 
   /** Everything at the curb, as the floor has it after hello. */
   all(list: CarCall[]): void {
-    for (const id of [...this.out.keys()]) if (!list.some((c) => c.id === id)) this.drop(id);
+    for (const [key, o] of [...this.out]) if (!list.some((c) => c.id === o.call.id && c.at === o.call.at)) this.drop(key);
     for (const c of list) this.hear(c);
   }
 
-  /** Whether your car is out (for the panel). */
+  /** Your car at the curb (or on its way), for the panel. */
   mine(): CarCall | null {
     const id = this.deps.me();
-    const o = id === null ? undefined : this.out.get(id);
-    return o && o.call.until > this.deps.now() ? o.call : null;
+    const now = this.deps.now();
+    for (const o of this.out.values()) if (o.call.id === id && o.call.until > now) return o.call;
+    return null;
   }
 
   private unsolid(o: Out): void {
@@ -231,13 +235,16 @@ export class Valet {
     o.solid = null;
   }
 
-  private drop(id: number): void {
-    const o = this.out.get(id);
+  private drop(key: string): void {
+    const o = this.out.get(key);
     if (!o) return;
     o.rig.dispose();
-    if (o.runner && !o.runner.gone) o.runner.ch.dispose();
+    if (o.runner && !o.runner.gone) {
+      o.runner.ch.root.removeFromParent();
+      o.runner.ch.dispose();
+    }
     this.unsolid(o);
-    this.out.delete(id);
+    this.out.delete(key);
   }
 
   update(dt: number, active: boolean): void {
@@ -250,11 +257,11 @@ export class Valet {
     const near = Math.hypot(p.x - sx, p.z - sz) < 5;
     const want = near ? this.staff.root.rotation.y + turnToward(this.staff.root.rotation.y, sx, sz, p.x, p.z) : STAND_YAW;
     this.staff.root.rotation.y += (want - this.staff.root.rotation.y) * Math.min(1, dt * 3);
-    for (const [id, o] of this.out) {
+    for (const [key, o] of this.out) {
       const t = (now - o.call.at) / 1000;
       const leaveT = (now - o.call.until) / 1000;
       if (leaveT >= LEAVE_S) {
-        this.drop(id);
+        this.drop(key);
         continue;
       }
       if (!active) continue;
@@ -353,6 +360,7 @@ export class Valet {
       }
     } else if (r.t > 1.6 && walkTo(r.back)) {
       // back behind the podium: gone in with the keys box
+      ch.root.removeFromParent();
       ch.dispose();
       r.gone = true;
       return;
@@ -361,7 +369,7 @@ export class Valet {
   }
 
   dispose(): void {
-    for (const id of [...this.out.keys()]) this.drop(id);
+    for (const key of [...this.out.keys()]) this.drop(key);
     this.staff.dispose();
     for (const g of this.geos) g.dispose();
     for (const e of this.extra) e.dispose();

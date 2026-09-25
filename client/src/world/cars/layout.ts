@@ -131,7 +131,9 @@ export function pathLength(path: readonly Waypoint[]): number {
 // --- the garage ----------------------------------------------------------------------------
 
 /** The showroom building across the street: its walls (metres) and the door in its glass front. */
-export const GARAGE = { x0: 169, x1: 197, z0: 8, z1: 42, height: 5.6, doorZ: 25, doorW: 3.4 } as const;
+/** The door is at the south end, nearest the crosswalk (the city's ENTRANCES.garage); the turntable in the middle. */
+export const GARAGE = { x0: 169, x1: 197, z0: 8, z1: 42, height: 5.6, doorZ: 12.4, doorW: 3.4 } as const;
+const MIDDLE_Z = (GARAGE.z0 + GARAGE.z1) / 2;
 
 export interface Bay {
   /** Where the car stands and faces. */
@@ -148,15 +150,15 @@ export interface Bay {
  */
 export function bays(): Bay[] {
   const g = GARAGE;
-  const out: Bay[] = [{ x: (g.x0 + g.x1) / 2 + 1, z: g.doorZ, yaw: -Math.PI / 2 + 0.6, hero: true }];
+  const out: Bay[] = [{ x: (g.x0 + g.x1) / 2 + 1, z: MIDDLE_Z, yaw: -Math.PI / 2 + 0.6, hero: true }];
   const zs = [g.z0 + 3.4, g.z0 + 8.8, g.z0 + 14.2, g.z1 - 14.2, g.z1 - 8.8, g.z1 - 3.4];
   // the back wall's row: all six, facing the door (-x)
   for (const z of zs) out.push({ x: g.x1 - 4.2, z, yaw: -Math.PI / 2, hero: false });
   // the front's row, behind the glass, facing in (+x): the door's aisle stays clear
   for (const z of zs) if (Math.abs(z - g.doorZ) > 4) out.push({ x: g.x0 + 4.2, z, yaw: Math.PI / 2, hero: false });
-  // and two out on the floor either side of the turntable, angled to the door
-  out.push({ x: (g.x0 + g.x1) / 2 - 0.5, z: g.z0 + 6, yaw: -Math.PI / 2 - 0.45, hero: false });
-  out.push({ x: (g.x0 + g.x1) / 2 - 0.5, z: g.z1 - 6, yaw: -Math.PI / 2 + 0.45, hero: false });
+  // and out on the floor either side of the turntable, angled to the door
+  out.push({ x: (g.x0 + g.x1) / 2 - 0.5, z: g.z1 - 6.5, yaw: -Math.PI / 2 + 0.45, hero: false });
+  out.push({ x: (g.x0 + g.x1) / 2 + 1, z: g.z0 + 5, yaw: -Math.PI / 2 - 0.3, hero: false });
   return out.slice(0, CARS.length);
 }
 

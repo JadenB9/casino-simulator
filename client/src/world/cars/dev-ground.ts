@@ -16,7 +16,7 @@ const SPOTS: Record<string, [number, number, number]> = {
   lot: [134, 12, 0.6],
   garage: [GARAGE.x0 + 2, GARAGE.doorZ, Math.PI / 2],
   street: [163, GARAGE.doorZ, Math.PI / 2],
-  inside: [GARAGE.x0 + 6, GARAGE.doorZ + 0.5, Math.PI / 2 + 0.2],
+  inside: [GARAGE.x0 + 4, GARAGE.doorZ + 1, 0.9],
 };
 
 export async function runGround(q: URLSearchParams): Promise<void> {

@@ -141,14 +141,14 @@ export class Garage {
     for (const bay of collection([]).map((c) => c.bay)) {
       if (bay.hero) {
         add(new THREE.CylinderGeometry(TURNTABLE_R + 0.25, TURNTABLE_R + 0.3, 0.04, 48).translate(bay.x, 0.02, bay.z), '#141416');
-        basic.add('metal', new THREE.TorusGeometry(TURNTABLE_R + 0.26, 0.02, 6, 64).rotateX(Math.PI / 2).translate(bay.x, 0.04, bay.z), '#8f7032');
+        basic.add('trim', new THREE.TorusGeometry(TURNTABLE_R + 0.26, 0.02, 6, 64).rotateX(Math.PI / 2).translate(bay.x, 0.04, bay.z), '#8f7032');
         continue;
       }
       const m = new THREE.Matrix4().makeRotationY(bay.yaw).setPosition(bay.x, 0, bay.z);
       add(new THREE.BoxGeometry(PLINTH.w, PLINTH.h, PLINTH.d).translate(0, PLINTH.h / 2, 0).applyMatrix4(m), '#17181b');
-      // a brass edge round its top
-      for (const sx of [-1, 1]) basic.add('metal', new THREE.BoxGeometry(0.03, 0.03, PLINTH.d + 0.03).translate((sx * PLINTH.w) / 2, PLINTH.h - 0.01, 0), '#8f7032', m);
-      for (const sz of [-1, 1]) basic.add('metal', new THREE.BoxGeometry(PLINTH.w + 0.03, 0.03, 0.03).translate(0, PLINTH.h - 0.01, (sz * PLINTH.d) / 2), '#8f7032', m);
+      // a brass-coloured edge round its top (satin, so it doesn't flare in the strip lights)
+      for (const sx of [-1, 1]) basic.add('trim', new THREE.BoxGeometry(0.03, 0.03, PLINTH.d + 0.03).translate((sx * PLINTH.w) / 2, PLINTH.h - 0.01, 0), '#8f7032', m);
+      for (const sz of [-1, 1]) basic.add('trim', new THREE.BoxGeometry(PLINTH.w + 0.03, 0.03, 0.03).translate(0, PLINTH.h - 0.01, (sz * PLINTH.d) / 2), '#8f7032', m);
       // the plaque's lectern, at the nose end
       const lm = new THREE.Matrix4().multiplyMatrices(m, new THREE.Matrix4().makeTranslation(0, 0, PLINTH.d / 2 + 0.55));
       basic.add('trim', new THREE.BoxGeometry(0.06, 0.9, 0.06).translate(0, 0.45, 0), '#1c1d20', lm);
@@ -214,11 +214,12 @@ export class Garage {
     fg.strokeRect(1, 1, 254, 254);
     const ft = texture(fc, this.deps.aniso);
     ft.wrapS = ft.wrapT = THREE.RepeatWrapping;
-    const fw = G.x0 - (lot.x0 + 1.4);
+    // from the city's sidewalk (it ends at the lot's edge) to the glass
+    const fw = G.x0 - lot.x0;
     ft.repeat.set(fw / 1.2, (lot.z1 - lot.z0) / 1.2);
     const fmat = new THREE.MeshStandardMaterial({ map: ft, roughness: 0.85, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 });
     const fore = new THREE.Mesh(new THREE.PlaneGeometry(fw, lot.z1 - lot.z0).rotateX(-Math.PI / 2), fmat);
-    fore.position.set(lot.x0 + 1.4 + fw / 2, 0.01, (lot.z0 + lot.z1) / 2);
+    fore.position.set(lot.x0 + fw / 2, 0.01, (lot.z0 + lot.z1) / 2);
     this.group.add(fore);
     this.disposables.push(tex, mat, floor.geometry, ft, fmat, fore.geometry);
   }
@@ -236,7 +237,7 @@ export class Garage {
     const tex = texture(c, this.deps.aniso);
     const mat = new THREE.MeshBasicMaterial({ map: tex });
     const sign = new THREE.Mesh(new THREE.PlaneGeometry(12, 1.5), mat);
-    sign.position.set(G.x0 - 0.37, G.height - 0.35, G.doorZ);
+    sign.position.set(G.x0 - 0.37, G.height - 0.35, (G.z0 + G.z1) / 2);
     sign.rotation.y = -Math.PI / 2;
     this.group.add(sign);
     this.disposables.push(tex, mat, sign.geometry);
@@ -246,7 +247,7 @@ export class Garage {
   private buildNameWall(): void {
     const mat = new THREE.MeshBasicMaterial({ map: this.nameTex, transparent: true });
     const wall = new THREE.Mesh(new THREE.PlaneGeometry(8, 2), mat);
-    wall.position.set(G.x1 - WALL / 2 - 0.02, 3.6, G.doorZ);
+    wall.position.set(G.x1 - WALL / 2 - 0.02, 3.6, (G.z0 + G.z1) / 2);
     wall.rotation.y = -Math.PI / 2;
     this.group.add(wall);
     this.disposables.push(mat, wall.geometry);
