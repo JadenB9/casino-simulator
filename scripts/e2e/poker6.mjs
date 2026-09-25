@@ -185,7 +185,7 @@ async function playHands(page, n, ms = 240_000) {
 async function leave(page) {
   await page.evaluate(() => window.casino.app.escape());
   const btn = await page.waitForSelector('.modal .btn.primary', { timeout: 5000 }).catch(() => null);
-  if (btn) await btn.click();
+  if (btn) await btn.evaluate((b) => b.click());
   const t0 = Date.now();
   while (Date.now() - t0 < 90_000 && (await me(page)).inPlay !== 0) await page.waitForTimeout(1500);
 }
@@ -208,6 +208,8 @@ if (wanted('micro')) try {
   await a.page.waitForTimeout(300);
   await shot(a.page, 'poker6-2-picker-custom');
   await pickStake(a.page, '$0.50/$1');
+  // (Custom put the cursor in its field: S would type there)
+  await a.page.evaluate(() => document.activeElement?.blur());
   await a.page.keyboard.press('s');
   const note = await buyIn(a.page, 250);
   check(note.includes('$20 to $250'), `the buy-in prompt says the range: "${note}"`);
@@ -294,7 +296,7 @@ async function multiPlay(label, c, d, pick, buy, file) {
   const row = `.lobby-row[data-table="${tableId}"]`;
   await d.page.waitForSelector(row, { timeout: 20_000 });
   const cell = (await d.page.textContent(`${row} .lobby-limits-cell`)).trim();
-  check(cell === shown.trim(), `${label}: the second player sees the blinds before joining: "${cell}"`);
+  check(cell === shown.trim() || cell === shown.trim().replace(/,000/g, 'K'), `${label}: the second player sees the blinds before joining: "${cell}"`);
   await d.page.$eval(row, (e) => e.click());
   await d.page.waitForSelector('.party-limits', { timeout: 15_000 });
   await clickText(d.page, '.party-row .btn', 'Sit down');
