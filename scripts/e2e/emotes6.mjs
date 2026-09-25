@@ -417,6 +417,14 @@ if (checks.includes('live')) {
       await page.click('.menu-item >> nth=0');
     }
     await page.waitForSelector('.hud');
+    // anything that greets you on arrival (the daily bonus) is put away: it holds the keyboard
+    await page.waitForTimeout(1500);
+    for (let i = 0; i < 3; i++) {
+      const held = await page.evaluate(async () => (await import('/casino/src/ui/keyboard.ts')).overlayCount());
+      if (!held) break;
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(400);
+    }
     await page.evaluate(async () => {
       const c = window.casino;
       const m = await import('/casino/src/audio/beat.ts');
