@@ -372,9 +372,9 @@ function buildOpen(s: CarSpec, o: Outline, geos: Geos): void {
   const y = o.yAt((c0 + c1) / 2) + B;
   for (const rz of rows)
     for (const sx of [0.34, -0.34]) {
-      // sunk in the cockpit: only the tops of the backs and the headrests show over the doors
-      add(geos, 'trim', box(0.44, 0.34, 0.1, sx * (s.half / 0.9), y - 0.1, rz, lean), s.interior);
-      add(geos, 'trim', box(0.22, 0.1, 0.08, sx * (s.half / 0.9), y + 0.12, rz - 0.04, lean), shade(s.interior, 0.85));
+      // sunk in the cockpit, the backs below the door tops: only the headrests peek over them
+      add(geos, 'trim', box(0.44, 0.3, 0.1, sx * (s.half / 0.9), y - 0.19, rz, lean), s.interior);
+      add(geos, 'trim', box(0.2, 0.11, 0.07, sx * (s.half / 0.9), y + 0.03, rz - 0.03, lean), shade(s.interior, 0.8));
     }
   // the driver's wheel (left-hand drive: +x)
   const wheel = new THREE.TorusGeometry(0.17, 0.018, 6, 20).rotateX(-0.5);
