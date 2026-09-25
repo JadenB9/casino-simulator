@@ -30,9 +30,9 @@
 
 @keyframes dine-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
 
-@media (prefers-reduced-motion: reduce) {
-  .dine-card, .dine-chip { animation: none; }
-}
+/* Reduce flashing & motion (app/comfort.ts) */
+body.calm .dine-card,
+body.calm .dine-chip { animation: none; }
 @media (max-width: 640px) {
   .dine-hud { left: 10px; }
   .dine-card { min-width: 0; }
