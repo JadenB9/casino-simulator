@@ -2,7 +2,7 @@
 // where the eyes are over the head bone as the look nods, and the choice kept for next time.
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { HEAD_Y, clampPitch, eyeOffset, headHeight, jabDip, showsFromFront, stepToward } from '../src/world/player.ts';
+import { HEAD_Y, clampPitch, eyeOffset, headHeight, jabPull, showsFromFront, stepToward } from '../src/world/player.ts';
 import { EMOTES } from '../../shared/src/protocol.ts';
 
 /** The walker's circle (player.ts RADIUS) and the near plane's reach from the camera (0.05 m out, under 0.09 m across). */
@@ -89,16 +89,15 @@ describe('your own gestures in first person', () => {
     for (const g of ['punch', 'hit', 'brush', 'deal', 'sweep', 'pay', '']) expect(showsFromFront(g)).toBe(false);
   });
 
-  it('dips the look a little for a punch you throw, so the fist comes into view, and back', () => {
-    expect(jabDip(0)).toBe(0);
-    expect(jabDip(-1)).toBe(0);
-    expect(jabDip(Number.NaN)).toBe(0);
-    expect(jabDip(0.62)).toBe(0);
-    expect(jabDip(5)).toBe(0);
-    // deepest as the fist is out, about seven degrees
-    expect(jabDip(0.31)).toBeCloseTo(0.12, 6);
-    expect(jabDip(0.15)).toBeGreaterThan(0);
-    expect(jabDip(0.15)).toBeLessThan(jabDip(0.31));
+  it('draws the eyes back for a punch you throw, so the fist goes out to arm\'s length, and forward again', () => {
+    for (const t of [0, -1, Number.NaN, 0.62, 5]) expect(jabPull(t)).toBe(0);
+    // all the way back before the fist starts out (the wind-up is 0.12 s), held while it's out
+    expect(jabPull(0.12)).toBe(1);
+    expect(jabPull(0.3)).toBe(1);
+    expect(jabPull(0.06)).toBeGreaterThan(0);
+    expect(jabPull(0.06)).toBeLessThan(1);
+    // and forward again as it comes home
+    expect(jabPull(0.55)).toBeLessThan(jabPull(0.45));
   });
 });
 
