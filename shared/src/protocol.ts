@@ -329,10 +329,10 @@ export type FloorServerMsg =
 
 /**
  * Floor bounds in centimetres; positions outside are clamped. The building's outer walls
- * (client/src/world/rooms.ts): x from -31.15 m to 31.15 m, z from -31.15 m (the back rooms) to
- * 15.15 m (the doors).
+ * (client/src/world/rooms.ts): x from -31.15 m to 31.15 m, z from -43.15 m (the north wing:
+ * pachinko, the Jade Room, bingo) to 15.15 m (the doors).
  */
-export const FLOOR_BOUNDS = { minX: -3120, maxX: 3120, minZ: -3120, maxZ: 1520 } as const;
+export const FLOOR_BOUNDS = { minX: -3120, maxX: 3120, minZ: -4320, maxZ: 1520 } as const;
 
 export function parseFloorMsg(raw: unknown, isGame: (g: unknown) => g is GameId): FloorClientMsg | null {
   if (!isObj(raw)) return null;

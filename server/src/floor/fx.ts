@@ -39,6 +39,9 @@ export const ROOM_BOUNDS: readonly { id: string; x0: number; z0: number; x1: num
   { id: 'yard', x0: -31, z0: 3, x1: -17, z1: 15 },
   { id: 'bank', x0: -17, z0: 3, x1: -7, z1: 15 },
   { id: 'boutique', x0: 7, z0: 3, x1: 17, z1: 15 },
+  { id: 'parlour', x0: -31, z0: -43, x1: -9, z1: -31 },
+  { id: 'cardroom', x0: -9, z0: -43, x1: 9, z1: -31 },
+  { id: 'bingo', x0: 9, z0: -43, x1: 31, z1: -31 },
 ];
 
 /** The room a floor position (cm) is in: the one it's inside, or the nearest (the doorstep outside). */

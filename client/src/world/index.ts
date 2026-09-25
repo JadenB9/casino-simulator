@@ -409,13 +409,13 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
       life.update(dt, visibility.visible, sees);
       emotes.update(dt);
       const f = world.focus;
-      lighting.setFocus(f && f.zone !== 'slots' && f.game !== 'videopoker' ? focusAt.copy(f.anchor.position) : null);
+      lighting.setFocus(f && f.zone !== 'slots' && f.zone !== 'parlour' && f.game !== 'videopoker' ? focusAt.copy(f.anchor.position) : null);
       lighting.update(dt);
       // Seated, the camera is a metre from lit felt, cards and brass: nothing on a table glows
       // there; at a machine its own lights do, a little.
       const seat = interact.seated;
       const studio = engine.camera.position.y < STUDIO_BELOW;
-      const want = studio ? STUDIO_BLOOM : !seat ? FLOOR_BLOOM : seat.zone === 'slots' || seat.game === 'videopoker' ? MACHINE_BLOOM : TABLE_BLOOM;
+      const want = studio ? STUDIO_BLOOM : !seat ? FLOOR_BLOOM : seat.zone === 'slots' || seat.zone === 'parlour' || seat.game === 'videopoker' ? MACHINE_BLOOM : TABLE_BLOOM;
       if (want !== bloomLook) {
         bloomLook = want;
         bloom.setLook(want);
