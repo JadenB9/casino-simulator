@@ -19,6 +19,7 @@ import { Directory, ipKey } from './directory.ts';
 import { FloorChat } from './chat.ts';
 import { Wins, type BigWinReport } from './wins.ts';
 import { Effects, Statues, fxKey, type Reserve } from './fx.ts';
+import { ride } from './lift.ts'; // v6 city6
 import { Bucket, KeyedBuckets } from '../ratelimit.ts';
 import { spendTicket } from '../tickets.ts';
 import { Invites } from './invites.ts'; // v6 invite6
@@ -225,8 +226,11 @@ export class CasinoFloor extends DurableObject<Env> {
       if (msg.t !== 'invite.dnd') this.presence.touch(ws, Date.now());
       await this.invites.onMessage(ws, msg);
     } else if (msg.t === 'lift') {
-      // v6 contract: the city slice checks you're at an elevator and moves you (presence.teleport)
+      // v6 city6: the elevator (lift.ts): from beside its doors, not at a table, not while held
       this.presence.touch(ws, Date.now());
+      const att = ws.deserializeAttachment() as FloorAtt | null;
+      const no = att ? ride(this.presence, att, msg.to) : null;
+      if (no) this.send(ws, { t: 'lift.no', to: msg.to, msg: no });
     } else {
       this.presence.onMessage(ws, msg);
     }
@@ -445,6 +449,15 @@ export class CasinoFloor extends DurableObject<Env> {
       } catch {
         /* closing */
       }
+    }
+  }
+
+  // v6 city6: one message to one socket
+  private send(ws: WebSocket, msg: FloorServerMsg): void {
+    try {
+      ws.send(JSON.stringify(msg));
+    } catch {
+      /* closing */
     }
   }
 

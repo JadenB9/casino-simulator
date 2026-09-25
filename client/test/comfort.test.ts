@@ -242,6 +242,8 @@ const FLASHING = [
   'world/consumables/held.ts',
   'world/consumables/particles.ts',
   'world/consumables/diner.ts',
+  // v6 city6: the towers' blinking beacons
+  'world/city/sky.ts',
 ];
 
 describe('every module known to flash reads the switch', () => {
