@@ -41,10 +41,10 @@ export class CarMaterials {
     const env = this.env;
     this.mats.set('paint', this.paint());
     this.mats.set('trim', new THREE.MeshStandardMaterial({ color: '#ffffff', vertexColors: true, roughness: 0.72, metalness: 0.05, envMap: env, envMapIntensity: 0.5 }));
-    this.mats.set('metal', new THREE.MeshStandardMaterial({ color: '#ffffff', vertexColors: true, roughness: 0.2, metalness: 1, envMap: env, envMapIntensity: 1.0 }));
+    this.mats.set('metal', new THREE.MeshStandardMaterial({ color: '#ffffff', vertexColors: true, roughness: 0.22, metalness: 1, envMap: env, envMapIntensity: 0.75 }));
     this.mats.set('glass', new THREE.MeshStandardMaterial({ color: '#0b1016', roughness: 0.05, metalness: 0.9, envMap: env, envMapIntensity: 1.2 }));
     // lamps switched off are lenses: glassy, the lens colour in the vertices, lit by nothing but the light
-    this.mats.set('lamp', new THREE.MeshStandardMaterial({ color: '#9a958c', vertexColors: true, roughness: 0.12, metalness: 0.55, envMap: env, envMapIntensity: 0.9 }));
+    this.mats.set('lamp', new THREE.MeshStandardMaterial({ color: '#77736b', vertexColors: true, roughness: 0.18, metalness: 0.5, envMap: env, envMapIntensity: 0.5 }));
     // and switched on: a car being driven, the lamp posts, the garage's light strips
     this.mats.set('glow', new THREE.MeshBasicMaterial({ color: '#ffffff', vertexColors: true }));
     this.mats.set('gold', new THREE.MeshStandardMaterial({ color: '#c99a36', vertexColors: true, roughness: 0.3, metalness: 1, envMap: env, envMapIntensity: 0.85 }));

@@ -115,6 +115,22 @@ export class Garage {
     // the outside: the fascia over the glass and the roof's edge, dark stone
     add(new THREE.BoxGeometry(0.2, 1.1, D + 0.6).translate(G.x0 - 0.25, G.height - 0.35, cz), '#24262a');
     add(new THREE.BoxGeometry(W + 0.6, 0.3, D + 0.6).translate(cx, G.height + 0.15, cz), '#2a2c30');
+    // a dark skirting round the walls, and pilasters down the long walls
+    add(new THREE.BoxGeometry(0.06, 0.14, D - 0.4).translate(G.x1 - WALL / 2 - 0.03, 0.07, cz), '#1b1c1f');
+    for (const z of [G.z0 + WALL / 2 + 0.03, G.z1 - WALL / 2 - 0.03]) add(new THREE.BoxGeometry(W - 0.4, 0.14, 0.06).translate(cx, 0.07, z), '#1b1c1f');
+    for (let x = G.x0 + 5.6; x < G.x1 - 2; x += 5.6)
+      for (const [z, s] of [[G.z0 + WALL / 2, 1], [G.z1 - WALL / 2, -1]] as const) add(new THREE.BoxGeometry(0.46, G.height, 0.16).translate(x, G.height / 2, z + s * 0.08), '#cbc4b6');
+    // behind the name on the back wall: a feature wall of dark oak slats, lit from above
+    const fw = 11;
+    add(new THREE.BoxGeometry(0.04, 4.6, fw).translate(G.x1 - WALL / 2 - 0.03, 2.3, cz), '#241a12');
+    for (let i = 0; i <= 44; i++) add(new THREE.BoxGeometry(0.05, 4.6, 0.09).translate(G.x1 - WALL / 2 - 0.075, 2.3, cz - fw / 2 + (i * fw) / 44), '#5a3d26');
+    basic.add('glow', new THREE.BoxGeometry(0.1, 0.03, fw).translate(G.x1 - WALL / 2 - 0.2, 4.72, cz), '#ffe9c4');
+    // planters in the back corners
+    for (const z of [G.z0 + 1.2, G.z1 - 1.2]) {
+      add(new THREE.CylinderGeometry(0.45, 0.38, 0.8, 16).translate(G.x1 - 1.2, 0.4, z), '#2a2b2e');
+      basic.add('trim', new THREE.IcosahedronGeometry(0.75, 1).scale(1, 1.5, 1).translate(G.x1 - 1.2, 1.7, z), '#2f4a2c');
+      this.deps.col.post(G.x1 - 1.2, z, 0.5, 1.6, { cam: false });
+    }
     // the ceiling, and a dark reveal round its edge
     add(new THREE.BoxGeometry(W, 0.12, D).translate(cx, G.height - 0.06, cz), '#e9e5dd');
     for (let i = 0; i < 6; i++) {
@@ -247,7 +263,8 @@ export class Garage {
   private buildNameWall(): void {
     const mat = new THREE.MeshBasicMaterial({ map: this.nameTex, transparent: true });
     const wall = new THREE.Mesh(new THREE.PlaneGeometry(8, 2), mat);
-    wall.position.set(G.x1 - WALL / 2 - 0.02, 3.6, (G.z0 + G.z1) / 2);
+    // just in front of the oak slats
+    wall.position.set(G.x1 - WALL / 2 - 0.29, 3.2, (G.z0 + G.z1) / 2);
     wall.rotation.y = -Math.PI / 2;
     this.group.add(wall);
     this.disposables.push(mat, wall.geometry);
@@ -257,13 +274,13 @@ export class Garage {
     const g = this.nameCanvas.getContext('2d')!;
     g.clearRect(0, 0, 1024, 256);
     g.textAlign = 'center';
-    g.fillStyle = '#2a2622';
+    g.fillStyle = '#cdb88f';
     g.font = '500 30px "Inter", Arial, sans-serif';
     g.fillText('T H E   C O L L E C T I O N   O F', 512, 70);
-    g.fillStyle = '#1b1814';
+    g.fillStyle = '#ecdcb4';
     g.font = '600 92px "Playfair Display", Georgia, serif';
     g.fillText(this.name || 'Our Guest', 512, 160);
-    g.fillStyle = '#6d6252';
+    g.fillStyle = '#b09e7e';
     g.font = '500 30px "Inter", Arial, sans-serif';
     g.fillText(n ? `${n} of ${CARS.length} cars` : 'No cars yet. The valet sells them, across the street.', 512, 220);
     this.nameTex.needsUpdate = true;
