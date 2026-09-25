@@ -24,7 +24,7 @@ import { Garage } from './garage.ts';
 
 export { CarMaterials } from './materials.ts';
 export { carKit } from './models.ts';
-export { lotCars, type Lot } from './lot.ts';
+export { CarFleet, lotCars, type Lot } from './lot.ts';
 
 export interface CarsDeps {
   engine: { scene: THREE.Scene; camera: THREE.Camera; renderer: THREE.WebGLRenderer };

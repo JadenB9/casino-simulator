@@ -10,6 +10,9 @@ import { LOTS, inRect } from '../../shared/src/zones.ts';
 import { CURB_LANE, GARAGE, STALL_D, STALL_W, THROUGH_LANE, VALET, along, arrivalPath, bays, collection, departurePath, parked, pathLength, stalls } from '../src/world/cars/layout.ts';
 import { CAR_SPECS } from '../src/world/cars/specs.ts';
 import { carKit, mergeCars } from '../src/world/cars/models.ts';
+import { CarFleet, lotCars } from '../src/world/cars/lot.ts';
+import { CarMaterials } from '../src/world/cars/materials.ts';
+import { Collider } from '../src/world/collision.ts';
 import * as THREE from 'three';
 
 describe('valet lot', () => {
@@ -135,5 +138,28 @@ describe('car models', () => {
       expect(g.getAttribute('color')).toBeTruthy();
       expect(g.getAttribute('normal')).toBeTruthy();
     }
+  });
+
+  it('fills any stalls with parked cars (one mesh per material), and each stops the walker', () => {
+    const col = new Collider();
+    const mats = new CarMaterials('low', null);
+    const lot = lotCars(stalls(), mats, { collider: col });
+    expect(lot.group.children.length).toBeLessThanOrEqual(6);
+    expect(col.boxes.length).toBe(parked(stalls()).length);
+    lot.dispose();
+  });
+
+  it('runs traffic as instances: placed, painted and taken off the road', () => {
+    const fleet = new CarFleet('aurelian-saloon', 4, new CarMaterials('low', null));
+    const meshes = fleet.group.children as THREE.InstancedMesh[];
+    expect(meshes.length).toBeLessThanOrEqual(6);
+    fleet.place(2, new THREE.Matrix4().makeTranslation(155, 0, -20), '#5a0f16');
+    const m = new THREE.Matrix4();
+    meshes[0]!.getMatrixAt(2, m);
+    expect(new THREE.Vector3().setFromMatrixPosition(m).x).toBe(155);
+    fleet.hide(2);
+    meshes[0]!.getMatrixAt(2, m);
+    expect(m.determinant()).toBe(0);
+    fleet.dispose();
   });
 });

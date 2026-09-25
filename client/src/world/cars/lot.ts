@@ -44,3 +44,60 @@ export function lotCars(stalls: readonly Stall[], mats: CarMaterials, opts: { se
     },
   };
 }
+
+/**
+ * One car model many times over, moved every frame (the street's traffic): a set of instanced
+ * meshes, one per material, lamps lit. `place(i, matrix, paint)` puts the i-th one; `hide(i)`
+ * takes it off the road. Each model the traffic uses is one such set (five or six draw calls).
+ */
+export class CarFleet {
+  readonly group = new THREE.Group();
+  private readonly meshes: THREE.InstancedMesh[] = [];
+  private readonly paintMeshes: THREE.InstancedMesh[] = [];
+  private readonly geos: THREE.BufferGeometry[] = [];
+  private readonly zero = new THREE.Matrix4().makeScale(0, 0, 0);
+  private readonly tint = new THREE.Color();
+
+  constructor(readonly id: string, readonly count: number, mats: CarMaterials) {
+    this.group.name = `fleet-${id}`;
+    const one = new MatBatch().car({ id, paint: '#ffffff', matrix: new THREE.Matrix4() }).build();
+    for (const [m, geo] of one) {
+      const mesh = new THREE.InstancedMesh(geo, mats.get(m === 'lamp' ? 'glow' : m), count);
+      mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      mesh.frustumCulled = false;
+      for (let i = 0; i < count; i++) mesh.setMatrixAt(i, this.zero);
+      if (m === 'paint') {
+        for (let i = 0; i < count; i++) mesh.setColorAt(i, this.tint.set('#ffffff'));
+        this.paintMeshes.push(mesh);
+      }
+      this.meshes.push(mesh);
+      this.geos.push(geo);
+      this.group.add(mesh);
+    }
+  }
+
+  place(i: number, matrix: THREE.Matrix4, paint?: string): void {
+    for (const m of this.meshes) {
+      m.setMatrixAt(i, matrix);
+      m.instanceMatrix.needsUpdate = true;
+    }
+    if (paint)
+      for (const m of this.paintMeshes) {
+        m.setColorAt(i, this.tint.set(paint));
+        m.instanceColor!.needsUpdate = true;
+      }
+  }
+
+  hide(i: number): void {
+    for (const m of this.meshes) {
+      m.setMatrixAt(i, this.zero);
+      m.instanceMatrix.needsUpdate = true;
+    }
+  }
+
+  dispose(): void {
+    this.group.removeFromParent();
+    for (const m of this.meshes) m.dispose();
+    for (const g of this.geos) g.dispose();
+  }
+}
