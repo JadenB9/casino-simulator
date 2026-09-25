@@ -1,11 +1,12 @@
-// Diamond Line, Lucky Cherries and Gold Rush at play. The server has settled every spin (and its
+// Diamond Line, Lucky Cherries, Gold Rush and Straw, Sticks & Bricks at play. The server has settled every spin (and its
 // wheel or free games) before a reel moves; this view spins the reels to the stops it sent, left
 // to right, then presents what the spin paid the way the first three machines do (view.ts):
 // nothing for nothing, a quiet "Paid $X" when the return is no more than the bet, a line or
 // payline highlight with a jingle and rollup for a real win, from 10 bets a big win (50 a huge
 // one) with the celebration banner, the count-up meter and the bulbs chasing, and a hand pay for
 // the top award or $2,000 and up. The Cherry Wheel turns to the segment the server drew; Gold
-// Rush's free games hold every wild that lands in front of the reels until they end.
+// Rush's free games hold every wild that lands in front of the reels until they end; Straw, Sticks
+// & Bricks' Blowdown plays out on the overlay (pigs-bonus.ts).
 
 import * as THREE from 'three';
 import type { TableView, TableViewCtx } from '../contract.ts';
@@ -14,6 +15,7 @@ import { LINEUP } from '../../../../shared/src/games/slots/lineup.ts';
 import { DIAMONDS } from '../../../../shared/src/games/slots/diamonds.ts';
 import { GOLDRUSH } from '../../../../shared/src/games/slots/goldrush.ts';
 import { CHERRIES } from '../../../../shared/src/games/slots/cherries.ts';
+import { HOUSE_SYMBOLS, PIGS } from '../../../../shared/src/games/slots/pigs.ts';
 import { cellsShowing } from '../../../../shared/src/games/slots/lines.ts';
 import type { ReelsEvent, ResultEvent, SlotsEvent, SlotsView, SpinEvent } from '../../../../shared/src/games/slots/protocol.ts';
 import { el, button } from '../../ui/kit.ts';
@@ -33,6 +35,7 @@ import { mountAutoDeck } from './autodeck.ts';
 import type { SpinOutcome } from './auto.ts';
 import { openPaysheet } from './paysheet.ts';
 import { slotsTip, timesBet, winTier } from './moments.ts';
+import { presentBlowdown } from './pigs-bonus.ts';
 import './slots2.css';
 
 /** IRS W-2G slot threshold from 2026: an attendant pays this by hand. */
@@ -42,7 +45,7 @@ const IDLE = 0;
 const FLASH = 1;
 const CHASE = 3;
 
-export const SKINNED: readonly SkinId[] = ['diamonds', 'cherries', 'goldrush'];
+export const SKINNED: readonly SkinId[] = ['diamonds', 'cherries', 'goldrush', 'pigs'];
 export const isSkinned = (v: string): v is SkinId => (SKINNED as readonly string[]).includes(v);
 
 function findCabinet(ctx: TableViewCtx, id: SkinId): { handle: SkinnedHandle; owned: boolean } {
@@ -74,6 +77,7 @@ const COUNT = ['', 'One', 'Two', 'Three', 'Four', 'Five'];
 const PLURAL: Record<string, string> = {
   SEVEN: 'sevens', BELL: 'bells', MELON: 'melons', GRAPES: 'grapes', PLUM: 'plums', ORANGE: 'oranges', LEMON: 'lemons', CHERRY: 'cherries',
   CART: 'carts', PICK: 'pickaxes', LANTERN: 'lanterns', PAN: 'pans', A: 'aces', K: 'kings', Q: 'queens', J: 'jacks', '10': 'tens',
+  BRICKPIG: 'brick pigs', STICKPIG: 'stick pigs', STRAWPIG: 'straw pigs', POT: 'pots', CHURN: 'churns', APPLE: 'apples', TURNIP: 'turnips',
 };
 const wordsFor = (count: number, symbol: string) => `${COUNT[count] ?? count} ${PLURAL[symbol] ?? symbol.toLowerCase()}`;
 
@@ -404,6 +408,7 @@ export function mountSkinned(ctx: TableViewCtx): TableView {
   const scatterCells = (stops: readonly number[], free: boolean): number[] => {
     if (id === 'cherries') return cellsShowing(CHERRIES.strips, rows, stops, 'BONUS');
     if (id === 'goldrush') return free ? [] : cellsShowing(GOLDRUSH.strips, rows, stops, 'NUGGET');
+    if (id === 'pigs') return HOUSE_SYMBOLS.flatMap((h) => cellsShowing(PIGS.strips, rows, stops, h)).sort((a, b) => a - b);
     return [];
   };
 
@@ -539,10 +544,10 @@ export function mountSkinned(ctx: TableViewCtx): TableView {
     }
 
     const before = r.running;
-    const lineWin = e.win - (e.wheel?.win ?? 0);
+    const lineWin = e.win - (e.wheel?.win ?? 0) - (e.blowdown?.win ?? 0);
     r.running += lineWin;
     const beats = lineWin > 0 && r.running > r.bet;
-    if (lineWin > 0 && (beats || e.wheel || free)) showWin(e);
+    if (lineWin > 0 && (beats || e.wheel || e.blowdown || free)) showWin(e);
 
     if (e.wheel) {
       // the Cherry Wheel: the BONUS symbols that did it ringed, the bulbs flashing, the wheel turned
@@ -559,6 +564,44 @@ export function mountSkinned(ctx: TableViewCtx): TableView {
       const w0 = r.running;
       r.running += e.wheel.win;
       await rollup({ win: w0, credit: r.credit }, { win: r.running, credit: r.credit }, Math.min(2.2, 0.8 + e.wheel.prize / 40), true);
+      return;
+    }
+
+    if (e.blowdown) {
+      // the Blowdown: the houses that did it ringed, the bulbs flashing, then the board over the
+      // reels spin by spin and the wolf blowing the street down (pigs-bonus.ts)
+      const bd = e.blowdown;
+      drawOverlay({ rings: scatterCells(e.stops, false) });
+      if (lineWin > 0) await rollup({ win: before, credit: r.credit }, { win: r.running, credit: r.credit }, 0.6, true);
+      sound.feature();
+      bulbMode.value = FLASH;
+      await showBanner('Blowdown', `${e.scatters} houses · ${PIGS.bonus.respins} spins`, 2000);
+      bulbMode.value = IDLE;
+      clearWinShow();
+      if (disposed || !overlayCanvas || !spec) return;
+      await presentBlowdown(
+        {
+          canvas: overlayCanvas,
+          scale: handle.scale,
+          spec,
+          commit: () => {
+            if (overlayTex) overlayTex.needsUpdate = true;
+          },
+          tag: (t) => featureTag(t),
+          sfx: ctx.sfx,
+          pay: async (win, seconds) => {
+            const w0 = r.running;
+            r.running += win;
+            await rollup({ win: w0, credit: r.credit }, { win: r.running, credit: r.credit }, seconds, true);
+          },
+          gone: () => disposed,
+        },
+        bd,
+        r.bet,
+      );
+      if (disposed) return;
+      drawOverlay({ rings: [], lines: [], flash: [], held: [] });
+      featureTag(bd.street ? `The Whole Street · Blowdown won ${formatMoney(bd.win)}` : `Blowdown won ${formatMoney(bd.win)}`);
       return;
     }
 
@@ -590,6 +633,7 @@ export function mountSkinned(ctx: TableViewCtx): TableView {
     if (res.freeSpins > 0) return `${res.freeSpins} free games`;
     if (!last) return 'Win';
     if (last.wheel) return `Cherry Wheel ${last.wheel.prize}x${last.wheel.mult > 1 ? ` x${last.wheel.mult}` : ''}`;
+    if (last.blowdown) return last.blowdown.street ? 'The Whole Street' : `Blowdown · ${last.blowdown.houses.length} houses`;
     if (stepper) {
       const label = DIAMONDS.pays.find((p) => p.combo === last.combo)?.label ?? 'Win';
       return last.wilds === 1 ? `${label}, doubled` : last.wilds === 2 ? `${label}, x4` : label;
@@ -601,7 +645,7 @@ export function mountSkinned(ctx: TableViewCtx): TableView {
     const total = res.win;
     const bet = res.bet;
     const ratio = total / bet;
-    const top = lastReels?.combo === 'threeDI';
+    const top = lastReels?.combo === 'threeDI' || (lastReels?.blowdown?.street ?? 0) > 0;
     const tier = winTier(total, bet);
     if (res.freeSpins > 0) {
       // back to the base game: the last free game's lines and held wilds go with its reels
@@ -637,7 +681,7 @@ export function mountSkinned(ctx: TableViewCtx): TableView {
       bulbMode.value = IDLE;
       candleFlash = 0;
     } else if (!tier) {
-      const presented = res.freeSpins > 0 || !!lastReels?.wheel;
+      const presented = res.freeSpins > 0 || !!lastReels?.wheel || !!lastReels?.blowdown;
       if (!presented) sound.jingle(ratio >= 4 ? 5 : 3);
       const from = presented ? total : 0;
       await rollup({ win: from, credit: res.credit - total }, { win: total, credit: res.credit }, Math.min(1.5, 0.6 + ratio * 0.12), true);
@@ -673,7 +717,7 @@ export function mountSkinned(ctx: TableViewCtx): TableView {
       showResult(`Paid ${formatMoney(total)} · ${formatMoney(total - bet, { sign: true })}`, 'win');
     }
     lastWin = total > 0 ? total : null;
-    outcome = { bet, win: total, credit: res.credit, feature: res.freeSpins > 0 || !!lastReels?.wheel, jackpot: top };
+    outcome = { bet, win: total, credit: res.credit, feature: res.freeSpins > 0 || !!lastReels?.wheel || !!lastReels?.blowdown, jackpot: top };
   };
 
   /** What the spin just shown came to, for Auto's stops. */

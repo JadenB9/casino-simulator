@@ -247,6 +247,8 @@ const FLASHING = [
   'world/city/index.ts',
   // v6 law6: taking a punch shakes the view
   'world/law/index.ts',
+  // v6 pigs6: the Blowdown's spinning plots, shaking bricks and flying pieces
+  'games/slots/pigs-bonus.ts',
 ];
 
 describe('every module known to flash reads the switch', () => {

@@ -8,7 +8,7 @@ import type { ReelLook } from './reels.ts';
 import { REGIONS, BUTTONS, type DeckButton, type Rect } from './glass.ts';
 import { meterText } from './segments.ts';
 
-export type SkinId = 'diamonds' | 'cherries' | 'goldrush';
+export type SkinId = 'diamonds' | 'cherries' | 'goldrush' | 'pigs';
 export type ZY = [z: number, y: number];
 type G = CanvasRenderingContext2D;
 

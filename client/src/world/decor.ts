@@ -49,6 +49,8 @@ export const BANK_COLORS: Record<string, [string, string]> = {
   diamonds: ['#63c6ff', '#eef7ff'],
   cherries: ['#ff3d6e', '#f2c14a'],
   goldrush: ['#f2c14a', '#ff9f2e'],
+  // v6 pigs6: straw gold on brick red
+  pigs: ['#e8c35a', '#c9543a'],
 };
 /** For a variant added later without its own colours: one of these, by its place in the catalogue. */
 const SPARE_COLORS: [string, string][] = [
@@ -68,6 +70,7 @@ const BANK_TITLES: Record<string, string> = {
   diamonds: 'DIAMOND LINE',
   cherries: 'LUCKY CHERRIES',
   goldrush: 'GOLD RUSH',
+  pigs: 'STRAW, STICKS & BRICKS',
 };
 
 /** The island's topper; a variant added later reads its catalogue name. */

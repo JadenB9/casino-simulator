@@ -1,10 +1,11 @@
-// The Pays screen (I) for Diamond Line, Lucky Cherries and Gold Rush: the pay table, the rules,
+// The Pays screen (I) for Diamond Line, Lucky Cherries, Gold Rush and Straw, Sticks & Bricks: the pay table, the rules,
 // the published PAR figures, the lines and the reel strips, all generated from the machine's own
 // data, the same tables the server scores with. Same sheet and styles as the first three (pays.ts).
 
 import { DIAMONDS } from '../../../../shared/src/games/slots/diamonds.ts';
 import { CHERRIES } from '../../../../shared/src/games/slots/cherries.ts';
 import { GOLDRUSH } from '../../../../shared/src/games/slots/goldrush.ts';
+import { PIGS } from '../../../../shared/src/games/slots/pigs.ts';
 import { el, button } from '../../ui/kit.ts';
 import { skinEntry } from './build.ts';
 import { lineColorOf, type SkinId } from './skin.ts';
@@ -174,7 +175,35 @@ function goldSheet(box: HTMLElement): void {
   box.append(strips);
 }
 
-const NAMES: Record<SkinId, string> = { diamonds: DIAMONDS.name, cherries: CHERRIES.name, goldrush: GOLDRUSH.name };
+const PIG_NAMES: Record<string, string> = { BRICKPIG: 'Brick pig', STICKPIG: 'Stick pig', STRAWPIG: 'Straw pig', POT: 'Pot', CHURN: 'Churn', APPLE: 'Apple', TURNIP: 'Turnip' };
+
+function pigsSheet(box: HTMLElement): void {
+  box.append(el('p', 'slots-note', 'Pays per credit bet on a line, for 3, 4 or 5 of a kind on adjacent reels from the left. All 20 lines play on every spin; line wins add up.'));
+  const rows = (Object.entries(PIGS.linePays) as [string, readonly number[]][]).map(([sym, p]) => [[icon('pigs', sym)], PIG_NAMES[sym] ?? titleCase(sym), n(p[3]!), n(p[2]!), n(p[1]!)]);
+  box.append(table(['', 'Symbol', '5', '4', '3'], rows));
+  const b = PIGS.bonus;
+  const list = (g: number) => b.prizes[g]!.map((x) => `${x}x`).join(', ');
+  box.append(
+    rules([
+      'The WOLF appears on reels 2 to 5 and stands in for every pig and picture. It pays nothing on its own and never stands in for a house.',
+      `Houses (straw, sticks and brick) never pay on a line. ${PIGS.trigger} or more anywhere start the Blowdown, on top of any line wins.`,
+      `The Blowdown: the houses stay where they are and the other ${b.cells - PIGS.trigger} or fewer plots spin on their own. You get ${b.respins} spins; each spin that builds a house puts the count back to ${b.respins}.`,
+      `On every spin each empty plot builds a house with chance ${b.land[0]} in ${b.land[1]}: straw ${b.grade[0]} times in ${b.gradeDen}, sticks ${b.grade[1]} in ${b.gradeDen}, brick ${b.grade[2]} in ${b.gradeDen}.`,
+      `Before each spin every standing house may be rebuilt one grade stronger: straw to sticks ${b.upgrade[0]} in ${b.upgradeDen}, sticks to brick ${b.upgrade[1]} in ${b.upgradeDen}, brick to a gold mansion ${b.upgrade[2]} in ${b.upgradeDen}.`,
+      `When the spins run out the wolf blows every house down and each pays what it was hiding, in total bets, each amount on its list equally likely: straw ${list(0)}; sticks ${list(1)}; brick ${list(2)}; the gold mansion ${list(3)}.`,
+      `All ${b.cells} plots built is the Whole Street: ${n(b.street)} times the total bet on top of the houses.`,
+      'The Blowdown plays automatically and is paid with the spin that started it.',
+    ]),
+  );
+  box.append(el('h3', '', 'The 20 lines'), lines('pigs', PIGS.lineRows, 3));
+  box.append(el('h3', '', 'PAR sheet'), par(PIGS.published));
+  const strips = el('details', 'slots-strips');
+  strips.append(el('summary', '', 'Reel strips'));
+  strips.append(el('p', 'slots-note', 'Each reel stops uniformly on one of 30 stops; the window shows that stop and the next two.'), stripTable(PIGS.strips));
+  box.append(strips);
+}
+
+const NAMES: Record<SkinId, string> = { diamonds: DIAMONDS.name, cherries: CHERRIES.name, goldrush: GOLDRUSH.name, pigs: PIGS.name };
 
 export function openPaysheet(ui: HTMLElement, id: SkinId, onClose: () => void): { close: () => void } {
   const box = el('div', 'slots-pays panel');
@@ -188,6 +217,7 @@ export function openPaysheet(ui: HTMLElement, id: SkinId, onClose: () => void): 
   box.append(head);
   if (id === 'diamonds') diamondsSheet(box);
   else if (id === 'cherries') cherriesSheet(box);
+  else if (id === 'pigs') pigsSheet(box);
   else goldSheet(box);
   ui.append(box);
   return { close };
