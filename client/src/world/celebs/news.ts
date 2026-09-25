@@ -7,6 +7,12 @@ import { el } from '../../ui/kit.ts';
 import { formatMoney, type Cents } from '../../../../shared/src/money.ts';
 import { calm } from '../../app/comfort.ts';
 
+/** The notice's line when a celebrity is already out on the floor: "in the Bar", "in The Pit". */
+export function sightingTitle(name: string, room: string | null, fresh: boolean): string {
+  if (fresh) return `${name} just walked in through the lobby`;
+  return `${name} is on the floor${room ? `, in the ${room.replace(/^The /, '')}` : ''}`;
+}
+
 const SHOW_MS = 5200;
 const OUT_MS = 380;
 const QUEUE_MAX = 3;
