@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { EMOTES, parseFloorMsg, parseTableMsg } from '../src/protocol.ts';
-import { isGameId, variantOf, TABLE_ID_RE, soloTableName } from '../src/games/catalog.ts';
+import { CATALOG, isGameId, variantOf, TABLE_ID_RE, soloTableName } from '../src/games/catalog.ts';
 import { isValidName, nameProblem } from '../src/names.ts';
 import { parseLook, DEFAULT_LOOK, lookFromJson } from '../src/look.ts';
 
@@ -64,5 +64,11 @@ describe('catalog and names', () => {
     expect(parseLook({ ...DEFAULT_LOOK, top: 'red' })).toBeNull();
     expect(parseLook({ ...DEFAULT_LOOK, skin: 99 })).toBeNull();
     expect(lookFromJson('{broken')).toEqual(DEFAULT_LOOK);
+  });
+});
+
+describe('lobby table ids', () => {
+  it('takes every game prefix in the catalog', () => {
+    for (const g of Object.values(CATALOG)) expect(TABLE_ID_RE.test(`${g.prefix}-abcdefghij`), g.id).toBe(true);
   });
 });
