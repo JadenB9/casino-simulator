@@ -490,6 +490,8 @@ if (checks.includes('game')) {
     return seg ? [...seg.querySelectorAll('[role=radio]')].map((b) => `${b.textContent}:${b.getAttribute('aria-checked')}`) : null;
   });
   ok(row?.join() === 'Third person:false,First person:true', `Settings shows the camera: ${row?.join(' ')}`);
+  await p.evaluate(() => document.querySelector('.settings-sheet [aria-label="Camera"]')?.scrollIntoView({ block: 'center' }));
+  await p.waitForTimeout(700);
   await shot(p, 'game-settings');
   await p.click('.settings-sheet [aria-label="Camera"] [data-id="third"]');
   await p.waitForTimeout(100);
