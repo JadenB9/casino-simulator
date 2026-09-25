@@ -119,8 +119,8 @@
 /* ---------------------------------------------------------------- titles under names */
 
 /* The HUD: your name, and the title you wear under it. */
-.hud-who.titled { flex-direction: column; align-items: flex-start; justify-content: center; gap: 1px; line-height: 1.1; }
-.hud-who .hud-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.hud-who.titled { flex-direction: column; align-items: flex-start; justify-content: center; gap: 1px; max-width: none; line-height: 1.1; }
+.hud-who .hud-name { max-width: 16ch; overflow: hidden; text-overflow: ellipsis; }
 .hud-who .hud-title { max-width: 100%; overflow: hidden; text-overflow: ellipsis; font-family: var(--ui); font-size: 11px; font-weight: 600; letter-spacing: 0.18em; color: var(--ink-3); }
 
 /* Name tags over people on the floor: the title on a line of its own under the name. */
