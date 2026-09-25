@@ -28,7 +28,7 @@
 // breathe in and out with it.
 
 import * as THREE from 'three';
-import { Felt } from './felt.ts';
+import { Felt, type Region } from './felt.ts';
 import type { Pose } from './stage.ts';
 
 /** Screen rectangle in CSS pixels. */
@@ -101,8 +101,9 @@ export function lensed(b: Rect, lens: Lens, w: number, h: number): Rect {
  * room. `margin` is kept inside it all round. Obstacles are clipped to the screen first.
  */
 export function bestSpace(b: Rect, obstacles: Rect[], w: number, h: number, margin = marginFor(w, h)): { safe: Rect; lens: Lens } {
+  // whole pixels, rounded outward, so the edges searched are exactly the obstacles' edges
   const obs = obstacles
-    .map((o) => ({ left: Math.max(0, o.left), top: Math.max(0, o.top), right: Math.min(w, o.right), bottom: Math.min(h, o.bottom) }))
+    .map((o) => ({ left: Math.max(0, Math.floor(o.left)), top: Math.max(0, Math.floor(o.top)), right: Math.min(w, Math.ceil(o.right)), bottom: Math.min(h, Math.ceil(o.bottom)) }))
     .filter((o) => o.right - o.left > 1 && o.bottom - o.top > 1);
   const xs = uniq([0, w, ...obs.flatMap((o) => [o.left, o.right])]);
   const ys = uniq([0, h, ...obs.flatMap((o) => [o.top, o.bottom])]);
@@ -122,8 +123,8 @@ export function bestSpace(b: Rect, obstacles: Rect[], w: number, h: number, marg
           if (across.some((o) => o.top < bottom && o.bottom > top)) break;
           const safe = { left: left + margin, top: top + margin, right: right - margin, bottom: bottom - margin };
           const lens = lensFor(b, safe, w, h);
-          // a thousandth of zoom or a pixel of slide either way is a tie
-          const score: [number, number, number] = [Math.round(lens.zoom * 1000), -Math.round(Math.abs(lens.dx) + Math.abs(lens.dy)), (right - left) * (bottom - top)];
+          // two hundredths of zoom either way can't be seen, a slide can: within that, least slide
+          const score: [number, number, number] = [Math.round(lens.zoom * 50), -Math.round(Math.abs(lens.dx) + Math.abs(lens.dy)), (right - left) * (bottom - top)];
           if (!best || better(score, best.score)) best = { safe, lens, score };
         }
       }
@@ -141,7 +142,7 @@ function better(a: [number, number, number], b: [number, number, number]): boole
 }
 
 function uniq(v: number[]): number[] {
-  return [...new Set(v.map((x) => Math.round(x)))].sort((a, b) => a - b);
+  return [...new Set(v)].sort((a, b) => a - b);
 }
 
 /**
@@ -188,8 +189,8 @@ export function sameLens(a: Lens, b: Lens): boolean {
 
 // --- board parts --------------------------------------------------------------------------------
 
-/** Something on the table the board is made of, in table-local terms. */
-export type BoardPart = THREE.Vector3 | readonly [number, number, number] | THREE.Box3 | THREE.Object3D | Felt;
+/** Something on the table the board is made of, in table-local terms (or a list of them). */
+export type BoardPart = THREE.Vector3 | readonly [number, number, number] | THREE.Box3 | THREE.Object3D | Felt | readonly BoardPart[];
 
 /** Eight points a circle is taken as; a region's circle is small enough that eight hold its edge. */
 const RING = 8;
@@ -205,6 +206,11 @@ export function feltPoints(felt: Felt, y = felt.mesh.position.y): THREE.Vector3[
     for (const [a, b] of [[-hw, -hd], [hw, -hd], [hw, hd], [-hw, hd]] as const) out.push(new THREE.Vector3(x + a, y, z + b));
     return out;
   }
+  return shapePoints(regions, y);
+}
+
+function shapePoints(regions: readonly Region[], y: number): THREE.Vector3[] {
+  const out: THREE.Vector3[] = [];
   for (const r of regions) {
     const s = r.shape;
     if (s.kind === 'rect') for (const [a, b] of [[-1, -1], [1, -1], [1, 1], [-1, 1]] as const) out.push(new THREE.Vector3(s.x + (a * s.w) / 2, y, s.z + (b * s.d) / 2));
@@ -239,6 +245,23 @@ export function localBox(obj: THREE.Object3D, root: THREE.Object3D): THREE.Box3 
   return out;
 }
 
+/** The regions of a felt that `keep` names, as key points (a seat's spots, one end of a craps table). */
+export function regionPoints(felt: Felt, keep: (id: string) => boolean, y = felt.mesh.position.y): THREE.Vector3[] {
+  return shapePoints(felt.spec.regions.filter((r) => keep(r.id)), y);
+}
+
+/** The four corners of a flat patch on the table centred at `p` (a card, a box): `hw` across, `hd` deep. */
+export function around(p: THREE.Vector3 | readonly [number, number, number], hw: number, hd = hw): THREE.Vector3[] {
+  const [x, y, z] = p instanceof THREE.Vector3 ? [p.x, p.y, p.z] : p;
+  return [new THREE.Vector3(x - hw, y, z - hd), new THREE.Vector3(x + hw, y, z - hd), new THREE.Vector3(x + hw, y, z + hd), new THREE.Vector3(x - hw, y, z + hd)];
+}
+
+/** Points round a flat circle on the table (a wheel, a bowl): `n` of them, so a lens takes in its edge. */
+export function ring(c: THREE.Vector3 | readonly [number, number, number], r: number, n = 12): THREE.Vector3[] {
+  const [x, y, z] = c instanceof THREE.Vector3 ? [c.x, c.y, c.z] : c;
+  return Array.from({ length: n }, (_, i) => new THREE.Vector3(x + r * Math.cos((i / n) * Math.PI * 2), y, z + r * Math.sin((i / n) * Math.PI * 2)));
+}
+
 /** Table-local key points of a board made of these parts. */
 export function partPoints(parts: readonly BoardPart[], root: THREE.Object3D): THREE.Vector3[] {
   const out: THREE.Vector3[] = [];
@@ -247,9 +270,15 @@ export function partPoints(parts: readonly BoardPart[], root: THREE.Object3D): T
     else if (p instanceof THREE.Vector3) out.push(p.clone());
     else if (p instanceof THREE.Box3) out.push(...boxPoints(p));
     else if (p instanceof THREE.Object3D) out.push(...boxPoints(localBox(p, root)));
-    else out.push(new THREE.Vector3(p[0], p[1], p[2]));
+    else if (typeof p[0] === 'number') out.push(new THREE.Vector3(p[0], p[1] as number, p[2] as number));
+    else out.push(...partPoints(p as readonly BoardPart[], root));
   }
   return out;
+}
+
+/** The fit of the table a stage root belongs to (for code that has the root but not the stage). */
+export function fitOf(root: THREE.Object3D): BoardFit | null {
+  return (root.userData.fit as BoardFit | undefined) ?? null;
 }
 
 // --- the controls over the scene -----------------------------------------------------------------

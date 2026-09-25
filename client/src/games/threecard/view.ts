@@ -63,6 +63,7 @@ import {
   seatAngle,
   spotPoint,
   spotsPose,
+  boardPoints,
   cameraPose,
 } from './layout.ts';
 import { FLOOR_FELT } from './model.ts';
@@ -538,6 +539,8 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
   const frame = (): void => {
     const n = mode === 'solo' ? Math.max(1, spots.length) : 1;
     setSpotsInPlay('threecard', n);
+    // the hands I play and the dealer's side stay in view at any window size (every seat's while watching)
+    ctx.stage.board(boardPoints(spots.length ? spots : Array.from({ length: SEAT_COUNT }, (_, i) => i)));
     if (framed !== null && framed !== n && !disposed) void glideTo(ctx.stage, n > 1 ? spotsPose(spots, ctx.stage.engine.camera.aspect) : cameraPose(me ?? 0));
     framed = n;
   };

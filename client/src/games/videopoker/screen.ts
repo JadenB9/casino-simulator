@@ -39,6 +39,8 @@ export class MachineScreen {
   readonly denomButton = el('button', 'vp-denom', '$1');
 
   constructor(onCard: (i: number) => void, onDenom: () => void) {
+    // the machine's own screen: the board the table keeps in view, not a control over it (table/fit.ts)
+    this.root.dataset.fit = 'ignore';
     const pays = el('div', 'vp-pays');
     for (const row of PAYTABLE) {
       const r = el('div', 'vp-row');

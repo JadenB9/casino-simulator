@@ -81,6 +81,22 @@ describe('bestSpace', () => {
     expect(overlaps(lensed(b, lens, W, H), panel)).toBe(false);
   });
 
+  it('finds the band between controls whose edges fall between pixels', () => {
+    // the HUD's clusters end at different heights, a fraction of a pixel off the grid
+    const obs = [
+      { left: 14, top: 14, right: 402.3, bottom: 66.2 },
+      { left: 744.6, top: 14, right: 1265.4, bottom: 50.4 },
+      { left: 222, top: 523.2, right: 1058.5, bottom: 583 },
+      { left: 1152, top: 543, right: 1265, bottom: 583 },
+    ];
+    const { safe, lens } = bestSpace({ left: 490, top: 60, right: 785, bottom: 510 }, obs, 1280, 600);
+    // right of the left cluster and under the right one, the taller space: no sideways slide
+    expect(safe.left).toBeLessThan(490);
+    expect(safe.top).toBeLessThan(66);
+    expect(lens.dx).toBe(0);
+    expect(lens.zoom).toBeGreaterThan(0.97);
+  });
+
   it('clips controls to the screen (a tray wider than a narrow window)', () => {
     const wide = { left: -24, top: 874, right: 924, bottom: 946 };
     const b = { left: 20, top: 300, right: 880, bottom: 900 };

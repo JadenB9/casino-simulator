@@ -41,6 +41,8 @@ export class TableStage {
     this.root.name = 'stage';
     anchor.add(this.root);
     this.fit = new BoardFit(this.root, engine.camera, () => this.felts, () => this.restPose(engine.camera));
+    // for code that has the table's root but not its stage (the online screen, fitOf())
+    this.root.userData.fit = this.fit;
   }
 
   /**

@@ -47,7 +47,7 @@ const log = (s) => console.log(new Date().toISOString().slice(11, 19), s);
 const browser = await chromium.launch(GPU ? { channel: 'chromium', args: ['--ignore-gpu-blocklist'] } : { args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 
 async function onFloor(page, name) {
-  await page.goto(`${base}/casino/${OFF ? '?fit=off' : ''}`);
+  if (!page.url().includes('/casino/')) await page.goto(`${base}/casino/${OFF ? '?fit=off' : ''}`);
   await page.waitForSelector('.front:not(.closing) .name-input, .menu-item, .editor-panel.guided, .hud', { timeout: 300_000 });
   if (await page.$('.front:not(.closing) .name-input')) {
     await page.fill('.name-input', name);
@@ -69,7 +69,9 @@ async function sit(page, station) {
   await page.waitForSelector('.lobby-choice, .modal input[type=number]', { timeout: 30_000 });
   if (await page.$('.lobby-choice')) await page.keyboard.press('s');
   await page.waitForSelector('.modal input[type=number]', { timeout: 30_000 });
-  await page.fill('.modal input[type=number]', '1000');
+  // $1,000, or the table's minimum buy-in where that's more (the salon's high limits)
+  const min = Number((await page.getAttribute('.modal input[type=number]', 'min')) ?? 0);
+  await page.fill('.modal input[type=number]', String(Math.max(1000, min)));
   await page.click('.modal .btn.primary');
   await page.waitForFunction(() => window.casino.app.table?.seated === true && !document.querySelector('.modal'), null, { timeout: 30_000 });
 }
@@ -184,6 +186,8 @@ async function run(tag, contextOpts, list, sizes) {
   await onFloor(page, process.env.NAME ?? 'fit6_e2e_1');
   for (const game of list) {
     try {
+      // the dev server reloads the page when a source file changes: back onto the floor first
+      if (!(await page.evaluate(() => !!window.casino?.world && !!document.querySelector('.hud')).catch(() => false))) await onFloor(page, process.env.NAME ?? 'fit6_e2e_1');
       await sit(page, STATIONS[game]);
       await page.waitForTimeout(2000);
       await sweep(page, tag, game, sizes);

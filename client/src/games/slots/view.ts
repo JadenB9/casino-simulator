@@ -17,7 +17,7 @@ import { el, button } from '../../ui/kit.ts';
 import { session } from '../../app/session.ts';
 import { tween, wait, ease } from '../../table/tween.ts';
 import { ReelSet, reelMaterial, type SpinTiming } from './reels.ts';
-import { buildCabinet, bulbMaterial, buttonAtUv, candleColor, payGlassPlacement, type CabinetHandle } from './cabinet.ts';
+import { buildCabinet, bulbMaterial, buttonAtUv, candleColor, payGlassPlacement, playFace, type CabinetHandle } from './cabinet.ts';
 import { lineColor, paintMeters, paintOverlay, COIN_COLUMNS, type MeterValues } from './glass.ts';
 import { MachineSound } from './sound.ts';
 import { openPays } from './pays.ts';
@@ -64,6 +64,7 @@ export function mountSlots(ctx: TableViewCtx): TableView {
   const m = MACHINES[machineId];
   const video = m.kind === 'video';
   const { handle, owned } = findCabinet(ctx, machineId);
+  ctx.stage.board(playFace(handle.layout));
   const l = handle.layout;
   const sound = new MachineSound(ctx.sfx, video ? 'video' : 'stepper');
   let disposed = false;

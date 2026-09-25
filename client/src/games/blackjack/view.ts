@@ -515,6 +515,8 @@ export class BlackjackTable implements TableView {
   private frame(): void {
     const n = this.mode === 'solo' ? Math.max(1, this.mine.length) : 1;
     setSpotsInPlay('blackjack', n);
+    // your circles and the dealer's side stay in view at any window size (every circle while watching)
+    this.ctx.stage.board(L.boardPoints(this.mine.length ? this.mine : Array.from({ length: L.SEATS }, (_, i) => i)));
     if (this.framed !== null && this.framed !== n && !this.disposed) {
       void glideTo(this.ctx.stage, n > 1 ? L.spotsPose(this.mine, this.ctx.stage.engine.camera.aspect) : L.seatPose(this.seat ?? 0));
     }
