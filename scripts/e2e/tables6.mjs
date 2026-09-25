@@ -1,8 +1,12 @@
 #!/usr/bin/env node
 // Let It Ride and Pai Gow Poker, headless, on the real stack (PORT_BASE=<port> npm run dev):
 // several hands of each alone in the dev harness (clicking chips onto the felt, following the
-// tips, one hand pulled back and one let ride, several hands at once, Max), with a screenshot at
-// every stage. Usage: node scripts/e2e/tables6.mjs [port] [outDir] [lr|pg ...]
+// tips, several hands at once, the house way), then two players at a shared table of each in the
+// game proper, with a screenshot at every stage and both players' money checked at the end.
+// Usage: node scripts/e2e/tables6.mjs [port] [outDir] [lr|pg|mp-lr|mp-pg ...]
+//
+// Until the themed room places the two tables on the floor, the shared tables stand in for the
+// Three Card Poker table's spot: the script adds a station there with the new game's model.
 // GPU=1 uses the machine's GPU (quicker, closer to the real thing).
 
 import { chromium } from 'playwright';
@@ -10,7 +14,7 @@ import { mkdirSync } from 'node:fs';
 
 const [port = '6310', outDir = '/tmp/casino-tables6', ...only] = process.argv.slice(2);
 mkdirSync(outDir, { recursive: true });
-const which = only.length ? only : ['lr', 'pg'];
+const which = only.length ? only : ['lr', 'pg', 'mp-lr', 'mp-pg'];
 const browser = process.env.GPU === '1'
   ? await chromium.launch({ channel: 'chromium', args: ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'] })
   : await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
@@ -223,9 +227,177 @@ async function paiGow() {
   await page.context().close();
 }
 
+// ---------------------------------------------------------------------------------------------
+// Two players at a shared table, in the game proper
+
+async function player(name) {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  await ctx.addInitScript(() => {
+    localStorage.setItem('casino.quality', 'low');
+    localStorage.setItem('casino.tips', '1');
+  });
+  const page = await ctx.newPage();
+  page.on('console', (m) => m.type() === 'error' && !/404|Failed to load resource/.test(m.text()) && errors.push(`${name}: ${m.text()}`));
+  page.on('pageerror', (e) => errors.push(`${name}: ${e}`));
+  await page.goto(`http://localhost:${port}/casino/`);
+  await page.waitForSelector('.name-input', { timeout: 180_000 });
+  await page.fill('.name-input', name);
+  await page.fill('.pass-input', 'casino-dev');
+  await page.click('.enter-btn');
+  await page.waitForSelector('.menu-item, .editor-panel.guided', { timeout: 60_000 });
+  if (await page.$('.editor-panel.guided')) {
+    for (let i = 0; i < 3; i++) await page.click('.editor-panel .ed-buttons .btn.primary');
+  } else {
+    await page.click('.menu-item >> nth=0');
+  }
+  await page.waitForSelector('.hud', { timeout: 30_000 });
+  return { page, name };
+}
+
+/** A station for `game` where the Three Card Poker table stands (its model hidden). */
+async function addStation(p, game, id) {
+  await p.page.evaluate(async ([game, id]) => {
+    const w = window.casino.world;
+    if (w.stations.some((s) => s.id === id)) return;
+    const base = w.stations.find((s) => s.id === 'tc-1');
+    const { GAMES } = await import('/casino/src/games/index.ts');
+    const model = GAMES[game].createModel({ variant: '', quality: 'low' });
+    base.model.visible = false;
+    base.anchor.add(model);
+    w.stations.push({ ...base, id, game, variant: '', model, name: game === 'letitride' ? 'Let It Ride' : 'Pai Gow Poker', footprint: GAMES[game].footprint });
+  }, [game, id]);
+}
+
+async function openLobby(p, station) {
+  await p.page.evaluate((id) => {
+    const w = window.casino.world;
+    w.enter(w.stations.find((s) => s.id === id));
+  }, station);
+  await p.page.waitForSelector('.lobby-choice', { timeout: 10_000 });
+  await p.page.keyboard.press('m');
+  await p.page.waitForSelector('.lobby-pin-input', { timeout: 10_000 });
+}
+
+const profile = (p) =>
+  p.page.evaluate(async () => {
+    const r = await fetch(`${location.origin}/casino/api/me`, { headers: { Authorization: `Bearer ${sessionStorage.getItem('casino.token')}` } });
+    return (await r.json()).profile;
+  });
+
+async function shared(game) {
+  const tag = game === 'letitride' ? 'lr' : 'pg';
+  const station = `${tag}-e2e`;
+  const a = await player(`tables6_e2e_${tag}a`);
+  const b = await player(`tables6_e2e_${tag}b`);
+  const before = [await profile(a), await profile(b)];
+  for (const p of [a, b]) await addStation(p, game, station);
+  await openLobby(a, station);
+  await a.page.click('.lobby-actions .btn:has-text("Private")');
+  await a.page.waitForSelector('.party-pin-digits', { timeout: 10_000 });
+  const pin = (await a.page.textContent('.party-pin-digits .lb-seg-lit')).trim();
+  await openLobby(b, station);
+  await b.page.fill('.lobby-pin-input', pin);
+  await b.page.keyboard.press('Enter');
+  await b.page.waitForSelector('.lobby-go-btn', { timeout: 10_000 });
+  await b.page.click('.lobby-go-btn');
+  await a.page.waitForFunction(() => document.querySelectorAll('.party-member').length === 2, null, { timeout: 15_000 });
+  for (const p of [a, b]) {
+    await p.page.click('.party-row .btn:has-text("Sit down")');
+    await p.page.waitForSelector('.modal input[type=number]', { timeout: 10_000 });
+    await p.page.fill('.modal input[type=number]', '2000');
+    await p.page.click('.modal .btn.primary');
+  }
+  await a.page.waitForFunction(() => [...document.querySelectorAll('.party-status')].filter((e) => e.textContent === '$2,000').length === 2, null, { timeout: 15_000 });
+  log(`${game}: private table PIN ${pin}, both seated`);
+  await shot(a.page, `${tag}-mp-0-seated`);
+  // keep the newest view where the loop below can read it
+  for (const p of [a, b]) {
+    await p.page.evaluate(() => {
+      const s = window.casino.app.table.session;
+      s.__lastView = s.snapshot?.view;
+      const orig = s.onMessage.bind(s);
+      s.onMessage = (m) => {
+        orig(m);
+        if (m.t === 'ev' || m.t === 'table') s.__lastView = m.view;
+      };
+    });
+  }
+  await a.page.click('.party-row .btn:has-text("Start")');
+  const meters = tag === 'lr' ? '.lr-meters' : '.pg-meters';
+  // Each window: a bet through the table (the chips then show on the felt) and Ready; each decision
+  // through the real controls, following the tips.
+  const rounds = 2;
+  const played = [0, 0];
+  const t0 = Date.now();
+  let shots = 0;
+  while (Date.now() - t0 < 240_000 && Math.min(...played) < rounds) {
+    for (const [i, p] of [a, b].entries()) {
+      const st = await p.page.evaluate(() => {
+        const s = window.casino.app.table?.session;
+        const v = s?.__lastView;
+        return { phase: v?.phase, round: v?.round, seat: s?.snapshot?.you?.seat };
+      }).catch(() => ({}));
+      if (st.phase === 'betting' && p.bet !== st.round) {
+        p.bet = st.round;
+        await p.page.evaluate(([tag, i]) => {
+          const s = window.casino.app.table.session;
+          s.link.act(tag === 'lr' ? { type: 'bet', unit: 2500, bonus: i ? 500 : 0 } : { type: 'bet', bet: 5000, fortune: i ? 500 : 0 });
+          s.link.ready(true);
+        }, [tag, i]);
+      }
+      if (tag === 'lr' && (await p.page.$('.lr-decide:not([hidden])'))) {
+        if (shots < 2) await shot(p.page, `lr-mp-${++shots}-decide-${p.name.slice(-1)}`);
+        const ride = await p.page.evaluate(() => document.querySelector('.lr-decide .btn.primary')?.classList.contains('tip-pick'));
+        await p.page.keyboard.press(ride ? 'l' : 'p');
+      }
+      if (tag === 'pg' && (await p.page.$('.pg-setter:not([hidden])'))) {
+        if (shots < 2) await shot(p.page, `pg-mp-${++shots}-setting-${p.name.slice(-1)}`);
+        await p.page.keyboard.press('h');
+        await p.page.keyboard.press('Space');
+      }
+      if (st.phase === 'results' && p.done !== st.round) {
+        p.done = st.round;
+        played[i]++;
+        await p.page.waitForTimeout(2500);
+        await shot(p.page, `${tag}-mp-result-${st.round}-${p.name.slice(-1)}`);
+        log(`${game}: ${p.name} round ${st.round}: ${await p.page.textContent(meters).catch(() => '')}`);
+      }
+    }
+    await a.page.waitForTimeout(300);
+  }
+  if (Math.min(...played) < rounds) throw new Error(`${game}: only ${played.join(' and ')} rounds settled`);
+  // stand up and let the chips come home, then check the money: balance + chips on tables moved
+  // only by what the table says was won or lost
+  for (const p of [a, b]) {
+    await p.page.evaluate(() => window.casino.app.escape());
+    const leave = await p.page.waitForSelector('.modal .btn.primary', { timeout: 3000 }).catch(() => null);
+    if (leave) await leave.click();
+  }
+  for (const [i, p] of [a, b].entries()) {
+    const t1 = Date.now();
+    let prof = await profile(p);
+    while (Date.now() - t1 < 90_000 && prof.inPlay !== 0) {
+      await p.page.waitForTimeout(2000);
+      prof = await profile(p);
+    }
+    const r = prof.stats.games[game]?.rounds ?? 0;
+    const was = before[i].stats.games[game]?.rounds ?? 0;
+    const netStats = (prof.stats.games[game]?.net ?? 0) - (before[i].stats.games[game]?.net ?? 0);
+    const moved = prof.balance + prof.inPlay - before[i].balance - before[i].inPlay;
+    log(`${game}: ${p.name} ${r - was} rounds recorded, net ${netStats / 100}, balance moved ${moved / 100}, on tables ${prof.inPlay / 100}`);
+    if (r - was < rounds) errors.push(`${game}: ${p.name} recorded ${r - was} rounds`);
+    if (prof.inPlay !== 0) errors.push(`${game}: ${p.name} still has chips on the table`);
+    if (moved !== netStats) errors.push(`${game}: ${p.name} balance moved ${moved} but the rounds net ${netStats}`);
+  }
+  await a.page.context().close();
+  await b.page.context().close();
+}
+
 try {
   if (which.includes('lr')) await letItRide();
   if (which.includes('pg')) await paiGow();
+  if (which.includes('mp-lr')) await shared('letitride');
+  if (which.includes('mp-pg')) await shared('paigow');
 } catch (err) {
   console.log(JSON.stringify({ failed: String(err).split('\n')[0], shots, errors: errors.slice(0, 10) }, null, 1));
   await browser.close();

@@ -849,16 +849,12 @@ export function mountPaiGow(ctx: TableViewCtx): TableView {
 
   /** The dealer's call for my hand once it has settled. */
   const callResult = async (r: Settlement, mine: Setting, dealer: Setting, brisk: boolean): Promise<void> => {
-    const hi = highName(highScore(mine.high));
-    const lo = lowName(lowScore(mine.low));
-    const dh = highName(highScore(dealer.high));
-    const dl = lowName(lowScore(dealer.low));
     const copyHigh = highScore(mine.high) === highScore(dealer.high);
     const copyLow = lowScore(mine.low) === lowScore(dealer.low);
     const lines: string[] = [];
-    if (r.outcome === 'win') lines.push(`${hi} beats ${dh}, ${lo} beats ${dl}: you win, less 5%`);
-    else if (r.outcome === 'push') lines.push(r.highWins ? `${hi} wins behind, ${lo} ${copyLow ? 'copies' : 'loses'} in front: push` : `${lo} wins in front, ${hi} ${copyHigh ? 'copies' : 'loses'} behind: push`);
-    else if (r.outcome === 'lose') lines.push(copyHigh || copyLow ? `Dealer wins: ${copyHigh ? 'the copy behind' : 'the copy in front'} goes to the dealer` : 'Dealer wins both hands');
+    if (r.outcome === 'win') lines.push('Both hands win: even money, less 5%');
+    else if (r.outcome === 'push') lines.push(r.highWins ? `High hand wins, low hand ${copyLow ? 'copies' : 'loses'}: push` : `Low hand wins, high hand ${copyHigh ? 'copies' : 'loses'}: push`);
+    else if (r.outcome === 'lose') lines.push(copyHigh || copyLow ? `Dealer wins, the copy ${copyHigh ? 'behind' : 'in front'} goes to the dealer` : 'Dealer wins both hands');
     if (r.fortune > 0) lines.push(`Fortune: ${FORTUNE_NAMES[r.fortuneLine]}, ${pay[r.fortuneLine]} to 1`);
     for (const line of lines) {
       ctx.kit.say(line, 2800);
