@@ -8,6 +8,8 @@ is the summary. The full rules, every paytable, the strategy charts and the sour
 - [rules/cards-and-machines.md](rules/cards-and-machines.md): Three Card Poker, video poker,
   slots, Texas Hold'em
 - [rules/online-games.md](rules/online-games.md): the online games on the lounge computers
+- [rules/parlour-games.md](rules/parlour-games.md): bingo in the bingo hall and pachinko in the
+  parlour
 - [rules/limits.md](rules/limits.md): table limits chosen at every table (tiers up to $500,000 a
   bet, custom to $1,000,000), buy-ins, Max, and the machines' coin values
 - [math/](math/): the dependency-free Node scripts that enumerate each game exactly
@@ -106,6 +108,8 @@ inside 3. Seeds are fixed, so `npm run test:mc` reproduces these exactly.
 | | | Skip to an A, 3, 5, 9, J or K, then one guess | 99.000% RTP | exact (enumerated) |
 | | | Each further guess | 99% of what rides | two guesses 97.822%, three 96.824% (10M rounds, z +0.20, −0.18) |
 | Crash (online) | shared rounds, m(t) = e^(0.00006 t); P(crash point > x) = 0.99/x, so 1% of rounds end at 1.00×; paid only below the crash point | Every cash-out, auto or pressed | 99.000% RTP | 98.968% at 2× (10M rounds, z −1.03); 5 targets to 100× within 1.6 SE; presses through the engine 99.152% (60K rounds, z +0.39) |
+| Bingo | 75 balls, 1 to 4 cards a game; line, four corners and blackout each pay a fixed multiple of the card by the call it is completed on (line 50× to 0.4× by call 40, corners 100× to 0.5× by call 35, blackout 20,000× within 45 calls, 2,500× within 50, 200× within 55) | Every card, any number of players | 96.710234% RTP | 96.9530% (3M cards, z −0.31); line, corners and blackout shares within 1.2 SE; through the engine 95.0803% (15K games, z +0.94) |
+| Pachinko | batches of 25 balls; start pocket 1 in 20 pays 4 and spins the reels, tulips 1 in 20 each pay 3; jackpot 1 in 32 spins pays 150 and chains on an odd number, up to 8 | Every batch, any power | 96.69189453125% RTP | 96.5720% (2M batches, z +0.59); through the engine 96.8248% (200K batches, z −0.21) |
 
 The blackjack figure is for exactly these rules. The often-quoted 0.26-0.28% assumes aces can be
 resplit, which this table doesn't allow, and a cut card adds about 0.02 points over dealing each
