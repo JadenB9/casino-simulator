@@ -334,6 +334,8 @@ export type FloorServerMsg =
   | ({ t: 'car' } & CarCall)
   | { t: 'cars'; list: CarCall[] }
   // v6 cars6: end
+  // v6 city6: the elevator won't go (not at its doors, at a table, held): why, in words
+  | { t: 'lift.no'; to: ZoneId; msg: string }
   | { t: 'err'; code: ErrorCode; msg: string }
   | ChatServerMsg;
 

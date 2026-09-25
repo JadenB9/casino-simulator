@@ -140,10 +140,12 @@ export class Presence {
     if (!w) return;
     const a = w.att;
     const now = Date.now();
-    let { x, z } = clampTo(bounds(a), msg.x, msg.z);
+    const placing = a.fresh === true;
+    // v6 city6: the first position on a connection may be in any zone (a dropped connection on the
+    // roof comes back on the roof, not clamped to the casino's wall); the jail still holds.
+    let { x, z } = clampTo(placing ? (a.confine ?? ZONES[zoneOf(msg.x, msg.z) ?? zoneOf(a.x, a.z) ?? 'casino']) : bounds(a), msg.x, msg.z);
     // Walking off a seat gets you up from it, even if the stand itself went missing.
     if (a.seat && Math.hypot(x - a.seat.x, z - a.seat.z) > SEAT_KEEP_CM) this.unseat(ws, a);
-    const placing = a.fresh === true;
     if (placing) {
       // The first position on a connection places the player. After a dropped connection the
       // client kept walking on its own and knows where it is; a first visit echoes the spawn.

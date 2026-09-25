@@ -15,6 +15,7 @@ import { el, toast } from '../ui/kit.ts';
 import { DEFAULT_LOOK, OUTFITS, type Body, type Look } from '../../../shared/src/look.ts';
 import { createWorld, type FloorWorld } from './index.ts';
 import { checkLayout } from './layout.ts';
+import { LIFTS } from '../../../shared/src/lifts.ts';
 
 interface View {
   pos: [number, number, number];
@@ -90,6 +91,12 @@ export async function runDevFloor(params: URLSearchParams): Promise<FloorWorld> 
     ui.append(el('div', 'panel world-help', 'WASD or arrows to walk · Shift to run · click to look with the mouse, Esc to let go · or drag to look · E to sit'));
   }
 
+  // v6 city6: &zone=ground|roof starts out of the elevator there (no server: the ride is local)
+  const zone = params.get('zone');
+  if (zone === 'ground' || zone === 'roof') {
+    const a = LIFTS[zone].arrive;
+    world.teleport(a.x / 100, a.z / 100, (a.r / 256) * Math.PI * 2);
+  }
   if (params.get('lineup')) lineup(world, engine);
   if (params.get('stats')) {
     const box = el('div', 'panel world-stats');
