@@ -14,7 +14,7 @@ import type { Sfx } from '../audio/sfx.ts';
 import { session } from './session.ts';
 import { tips } from './tips.ts';
 import type { GameEvent } from '../../../shared/src/engine.ts';
-import type { ChatServerMsg } from '../../../shared/src/protocol.ts';
+import type { ChatServerMsg, TableServerMsg } from '../../../shared/src/protocol.ts';
 import { limitsLabel, limitsOf, limitsParam, sameLimits, type TableLimits } from '../../../shared/src/limits.ts';
 
 export interface TableTarget {
@@ -37,6 +37,8 @@ export interface TableHooks {
   onLeave?(): void;
   /** The lobby's chat room: new lines, the backlog after each snapshot, refusals (ui/chat). */
   onChat?(msg: ChatServerMsg): void;
+  /** v6 feats6: you earned an achievement or finished a challenge here (ui/feats). */
+  onFeat?(msg: Extract<TableServerMsg, { t: 'feat' }>): void;
 }
 
 export class TableSession {
@@ -86,7 +88,12 @@ export class TableSession {
         if (s === 'closed' && !this.ended) this.onClosed(code);
       },
     });
-    this.offFrame = onFrame((dt) => this.view?.update(dt));
+    // the board is fitted after the view has moved things for the frame
+    stage.fit.watch(ui);
+    this.offFrame = onFrame((dt) => {
+      this.view?.update(dt);
+      stage.fit.update(dt);
+    });
   }
 
   readonly link: TableLink = {
@@ -231,6 +238,9 @@ export class TableSession {
       case 'chat':
       case 'chat.no':
         this.hooks.onChat?.(m);
+        break;
+      case 'feat':
+        this.hooks.onFeat?.(m);
         break;
     }
   }

@@ -10,6 +10,7 @@
 
 import { chromium } from 'playwright';
 import { mkdirSync } from 'node:fs';
+import { barPriceAt } from '../../shared/src/happyhour.ts';
 
 const args = process.argv.slice(2).filter((a) => !a.startsWith('--'));
 const flag = (n) => process.argv.includes(`--${n}`);
@@ -157,9 +158,12 @@ if (checks.includes('drinks')) {
 
   // champagne, walked over by a waiter
   const bal0 = await a.p.evaluate(() => window.casino.session.profile.balance);
+  const asked = Date.now();
   const champ = await order(a.p, 'Champagne', true);
   const bal1 = await a.p.evaluate(() => window.casino.session.profile.balance);
-  check(bal0 - bal1 === 3200, `champagne costs $32 (${(bal0 - bal1) / 100})`);
+  // happy hour halves it; either price if a window's edge fell while ordering
+  const prices = new Set([barPriceAt(3200, asked), barPriceAt(3200, Date.now())]);
+  check(prices.has(bal0 - bal1), `champagne costs what the bar asks (${(bal0 - bal1) / 100}, expected ${[...prices].map((c) => c / 100).join(' or ')})`);
   await tp(a, A_AT);
   await a.p.waitForTimeout(800);
   await shot(a.p, 'a-holding');

@@ -5,6 +5,7 @@
 // since launch and the multiplier the server's rules give for it.
 
 import { RATE } from '../../../../shared/src/games/crash/rules.ts';
+import { calmScale, wave } from '../../app/comfort.ts';
 
 export interface Frame {
   phase: 'idle' | 'betting' | 'running' | 'crashed';
@@ -165,7 +166,7 @@ export class CrashGraph {
     g.translate(x, y);
     g.rotate(angle);
     // flame
-    const flick = now ? 0.75 + 0.25 * Math.sin(now / 45) : 0.6;
+    const flick = now ? 0.75 + 0.25 * wave(now / 45) : 0.6;
     const flame = g.createLinearGradient(-34, 0, -58 - 14 * flick, 0);
     flame.addColorStop(0, '#fff1a8');
     flame.addColorStop(0.4, '#ffb020');
@@ -217,16 +218,18 @@ export class CrashGraph {
     const bx = this.burst && !Number.isNaN(this.burst.x) ? this.burst.x : x;
     const by = this.burst && !Number.isNaN(this.burst.y) ? this.burst.y : y;
     if (k < 1) {
+      // calm (app/comfort.ts): the same burst, well under half as bright
+      const a = (1 - k) * calmScale(0.4);
       const r = 8 + 60 * (1 - (1 - k) ** 3);
       const glow = g.createRadialGradient(bx, by, 0, bx, by, r);
-      glow.addColorStop(0, `rgba(255, 241, 168, ${0.9 * (1 - k)})`);
-      glow.addColorStop(0.35, `rgba(255, 140, 40, ${0.7 * (1 - k)})`);
+      glow.addColorStop(0, `rgba(255, 241, 168, ${0.9 * a})`);
+      glow.addColorStop(0.35, `rgba(255, 140, 40, ${0.7 * a})`);
       glow.addColorStop(1, 'rgba(255, 60, 40, 0)');
       g.fillStyle = glow;
       g.beginPath();
       g.arc(bx, by, r, 0, Math.PI * 2);
       g.fill();
-      g.strokeStyle = `rgba(255, 90, 95, ${1 - k})`;
+      g.strokeStyle = `rgba(255, 90, 95, ${a})`;
       g.lineWidth = 3;
       for (let i = 0; i < 10; i++) {
         const a = (i / 10) * Math.PI * 2 + 0.3;

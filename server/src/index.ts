@@ -15,6 +15,8 @@ import { signTicket, ticketTarget, verifyTicket } from './tickets.ts';
 import { KeyedBuckets } from './ratelimit.ts';
 import { bumpRate, escrowsOf, getAccount, loadProfile, ownedOf, setLook } from './db.ts';
 import { isFreeEmote, emoteItem } from '../../shared/src/items.ts';
+import { featsOf } from './feats.ts';
+import type { FeatsResponse } from '../../shared/src/feats.ts';
 import { takeLoan } from './transfer.ts';
 import { shopApi } from './shop.ts';
 import { leaderboard } from './leaderboard.ts';
@@ -110,6 +112,11 @@ async function handleApi(request: Request, env: Env, route: string, cors: Record
     const profile = await loadProfile(env.DB, claims.a, stacks);
     if (!profile) return fail(401, 'UNAUTHORIZED', 'That account is gone.', cors);
     return json({ profile } satisfies MeResponse, 200, cors);
+  }
+
+  // v6 feats: what you've earned and how far along each challenge is (feats.ts)
+  if (route === 'feats' && request.method === 'GET') {
+    return json((await featsOf(env.DB, claims.a)) satisfies FeatsResponse, 200, cors);
   }
 
   // Names and numbers only; the boards are kept for a minute (see leaderboard.ts).

@@ -20,6 +20,7 @@ import { play } from './sounds.ts';
 import { Fizz, fizzScale, sparksFor } from './particles.ts';
 import { addExtra, extraAt, firstSeen, myOrder, now, ownActs, type ExtraAct } from './state.ts';
 import type { TemplateLike } from '../wearables.ts';
+import { calm, fewer, wave } from '../../app/comfort.ts';
 
 /** The materials a held order is drawn in, from wearables.ts (the reflections of a small casino). */
 export interface HeldKit {
@@ -276,7 +277,7 @@ export class HeldOrder {
     }
     if (this.flames) {
       this.flames.visible = !s.opened;
-      if (!s.opened) this.flames.scale.set(1, 0.85 + 0.15 * Math.sin(this.clock * 23) * Math.sin(this.clock * 7.3), 1);
+      if (!s.opened) this.flames.scale.set(1, 0.85 + 0.15 * wave(this.clock * 23) * wave(this.clock * 7.3), 1);
     }
     this.events(s, t, dt);
   }
@@ -390,7 +391,7 @@ export class HeldOrder {
         // a jet of foam and drops, out of the neck along the bottle
         const at = spout();
         const dir = upAxis().clone();
-        const n = Math.max(1, Math.round(dt * 240));
+        const n = fewer(Math.max(1, Math.round(dt * 240)));
         sparks.burst({ at, vel: dir.clone().multiplyScalar(3.2), spread: 0.55, n, color: [new THREE.Color(1, 0.95, 0.8), new THREE.Color(0.95, 0.85, 0.55)], size: [0.012, 0.03], life: [0.5, 0.9], gravity: 5, drag: 0.8, alpha: 0.75 });
         sparks.burst({ at, vel: dir.clone().multiplyScalar(2.6), spread: 0.7, n: Math.max(1, n >> 2), color: new THREE.Color(1, 0.9, 0.6), size: [0.012, 0.004], life: [0.3, 0.6], gravity: 3, glow: true, twinkle: true });
       }
@@ -403,7 +404,7 @@ export class HeldOrder {
       }
       // a birthday: confetti over them
       const top = this.where(_w).clone().add(new THREE.Vector3(0, 2.1, 0));
-      sparks.burst({ at: top, vel: new THREE.Vector3(0, 0.6, 0), spread: 1.4, scatter: 0.3, n: 90, color: CONFETTI, size: [0.022, 0.018], life: [2.2, 3.4], gravity: 1.1, drag: 1.6 });
+      sparks.burst({ at: top, vel: new THREE.Vector3(0, 0.6, 0), spread: 1.4, scatter: 0.3, n: fewer(90), color: CONFETTI, size: [0.022, 0.018], life: [2.2, 3.4], gravity: 1.1, drag: 1.6 });
     }
     // steam off a hot espresso for the first couple of minutes
     if (m.model === 'cup' && s.level > 0.02 && t - this.plan.at[0]! < 150_000) {
@@ -418,7 +419,7 @@ export class HeldOrder {
     if ((this.item === 'champagne' || this.item === 'dom') && s.taken >= 1 && this.order !== myOrder()) {
       this.emitAt -= dt;
       if (this.emitAt <= 0) {
-        this.emitAt = 0.22;
+        this.emitAt = calm() ? 0.66 : 0.22;
         glint(sparks, this.where(_w));
       }
     }
@@ -430,7 +431,7 @@ export class HeldOrder {
         const a = this.glassAt(new THREE.Vector3());
         const at = partner ? a.add(partner.glassAt(new THREE.Vector3())).multiplyScalar(0.5) : a;
         play('clink', at);
-        sparks.burst({ at, vel: new THREE.Vector3(0, 0.25, 0), spread: 0.6, n: 34, color: [new THREE.Color(1, 0.9, 0.6), new THREE.Color(1, 1, 1)], size: [0.02, 0.005], life: [0.5, 1.0], glow: true, twinkle: true, drag: 2.2 });
+        sparks.burst({ at, vel: new THREE.Vector3(0, 0.25, 0), spread: 0.6, n: fewer(34), color: [new THREE.Color(1, 0.9, 0.6), new THREE.Color(1, 1, 1)], size: [0.02, 0.005], life: [0.5, 1.0], glow: true, twinkle: true, drag: 2.2 });
       }
     }
   }

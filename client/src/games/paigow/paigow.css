@@ -1,0 +1,119 @@
+/* Pai Gow Poker: labels pinned to hands, the hand setter, the meters, the betting clock and
+   the rules card. Everything sits over the table; the bottom-left corner stays free. */
+
+.pg-hand { display: flex; align-items: baseline; gap: 8px; padding: 3px 10px; border-radius: 4px; font-family: var(--serif); font-size: 14px; font-weight: 600; letter-spacing: 0.04em; white-space: nowrap; color: var(--ink); background: rgba(9, 17, 29, 0.8); border: 1px solid rgba(239, 217, 162, 0.28); pointer-events: none; }
+.pg-hand.mine { font-size: 16px; border-color: var(--line-strong); }
+.pg-hand .muted { color: var(--ink-3); font-size: 0.86em; font-weight: 400; }
+.pg-hand .net { font-family: var(--ui); font-size: 1.05em; letter-spacing: 0.02em; color: var(--ink-2); }
+.pg-hand .net.up { color: var(--win); }
+.pg-hand .net.down { color: var(--lose); }
+/* several of your hands side by side: the hand over its result, narrow enough not to meet */
+.pg-hand.stack { flex-direction: column; align-items: center; gap: 0; max-width: 92px; padding: 2px 7px 3px; font-size: 13px; line-height: 1.15; white-space: normal; text-align: center; }
+.pg-hand.stack.mine { font-size: 13px; }
+
+.pg-name { padding: 1px 8px; border-radius: 3px; font-size: 13px; letter-spacing: 0.05em; color: var(--ink-2); background: rgba(12, 10, 8, 0.66); white-space: nowrap; pointer-events: none; }
+.pg-name.mine { color: var(--brass-hi); }
+.pg-name.away { opacity: 0.5; }
+
+.pg-tip { padding: 3px 9px; border-radius: 3px; font-size: 13px; letter-spacing: 0.06em; white-space: nowrap; color: var(--ink); background: var(--glass-2); border: 1px solid var(--line); pointer-events: none; }
+
+.tray.pg-away { display: none; }
+
+
+.pg-meters { position: fixed; top: var(--below-hud); left: 16px; display: grid; grid-template-columns: auto auto; align-items: baseline; gap: 2px 16px; padding: 8px 14px; font-size: 18px; }
+.pg-meters .up { color: var(--win); }
+.pg-meters .down { color: var(--lose); }
+
+.pg-rules-btn { position: fixed; top: calc(var(--below-hud) + 98px); left: 16px; height: 30px; font-size: 14px; }
+.pg-rules { position: fixed; top: calc(var(--below-hud) + 138px); left: 16px; width: 360px; max-height: calc(100vh - var(--below-hud) - 240px); overflow: auto; padding: 12px 16px 14px; font-size: 15px; line-height: 1.38; color: var(--ink-2); }
+.pg-rules[hidden] { display: none; }
+.pg-rules h3 { margin: 2px 0 6px; font-family: var(--serif); font-size: 18px; font-weight: 600; letter-spacing: 0.06em; color: var(--brass-hi); }
+.pg-rules p { margin: 6px 0; }
+.pg-paytable { margin: 8px 0; padding: 6px 10px; border: 1px solid var(--line); border-radius: 4px; }
+.pg-paytable .label { margin-bottom: 3px; letter-spacing: 0.08em; }
+.pg-paytable .row { display: flex; justify-content: space-between; gap: 12px; color: var(--ink); }
+.pg-keys { font-size: 13px; color: var(--ink-3); }
+
+.pg-clock { position: fixed; top: var(--below-hud); left: 50%; width: 48px; height: 48px; transform: translateX(-50%); display: grid; place-items: center; }
+.pg-clock[hidden] { display: none; }
+.pg-ring { position: absolute; inset: 0; width: 100%; height: 100%; }
+.pg-ring circle { fill: rgba(12, 10, 8, 0.7); stroke-width: 3; }
+.pg-ring .track { stroke: rgba(255, 255, 255, 0.14); }
+.pg-ring .left { fill: none; stroke: var(--brass-hi); stroke-linecap: round; transform: rotate(-90deg); transform-origin: 50% 50%; }
+.pg-clock.low .left { stroke: var(--lose); }
+.pg-clock-text { position: relative; font-size: 19px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* The dealer's hand, in front of the dealer's cards: "Dealer · Jack high". */
+.pg-hand.pg-dealer { gap: 9px; padding: 4px 12px 5px; background: rgba(9, 17, 29, 0.88); border-color: var(--line-strong); }
+.pg-dealer-word { font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-2); }
+.pg-dealer-hand { font-size: 20px; color: var(--ink); }
+
+/* Touch screens: the rules card's keyboard list means nothing without a keyboard, and its height
+   is measured against the visible screen. */
+@media (pointer: coarse) {
+  .pg-keys { display: none; }
+  .pg-rules { max-height: calc(100dvh - var(--below-hud) - 240px); }
+}
+@media (max-width: 560px) {
+  .pg-meters { left: 10px; gap: 2px 12px; padding: 6px 12px; font-size: 16px; }
+  .pg-rules-btn { left: 10px; }
+  .pg-rules { left: 10px; right: 10px; width: auto; max-height: calc(100dvh - var(--below-hud) - 314px); }
+}
+/* On its side: slimmer bars, and the rules card opens on the right where there's height for it. */
+@media (max-height: 480px) {
+  .pg-meters { left: 10px; gap: 0 12px; padding: 5px 12px; font-size: 16px; }
+  .pg-rules-btn { top: calc(var(--below-hud) + 82px); left: 10px; }
+  .pg-rules { top: var(--below-hud); left: auto; right: 10px; width: min(380px, 50vw); max-height: calc(100vh - var(--below-hud) - 76px); max-height: calc(100dvh - var(--below-hud) - 76px); }
+}
+
+/* The two hands in a label: the high hand over the low. */
+.pg-hand .low { color: var(--ink-2); font-size: 0.86em; }
+.pg-hand .won { color: var(--win); }
+.pg-hand .lost { color: var(--lose); }
+.pg-hand.pg-dealer { gap: 9px; padding: 4px 12px 5px; background: rgba(4, 20, 15, 0.88); border-color: var(--line-strong); }
+.pg-dealer-word { font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-2); }
+.pg-dealer-hand { font-size: 18px; color: var(--ink); }
+.pg-dealer-low { font-size: 15px; color: var(--ink-2); }
+.tray.pg-away { display: none; }
+
+/* The hand setter: the seven cards large along the bottom, the low hand's two places on the left. */
+.pg-setter { position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); display: grid; gap: 8px; padding: 10px 14px 12px; max-width: calc(100vw - 24px); }
+.pg-setter[hidden] { display: none; }
+.pg-set-head { display: flex; align-items: baseline; justify-content: space-between; gap: 18px; }
+.pg-set-title { font-family: var(--serif); font-size: 17px; font-weight: 600; letter-spacing: 0.06em; color: var(--brass-hi); white-space: nowrap; }
+.pg-set-status { font-size: 14px; letter-spacing: 0.03em; color: var(--ink-2); text-align: right; }
+.pg-set-status.ok { color: var(--ink); }
+.pg-set-status.foul { color: var(--lose); }
+.pg-rows { display: flex; align-items: flex-end; gap: 16px; }
+.pg-group { display: grid; gap: 4px; }
+.pg-group-label { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-3); }
+.pg-row { display: flex; gap: 6px; }
+.pg-low { padding-right: 16px; border-right: 1px solid var(--line); }
+.pg-card { width: 74px; height: 104px; padding: 0; border: 0; border-radius: 6px; background: none; cursor: pointer; transition: transform 120ms ease-out; }
+.pg-card:hover { transform: translateY(-5px); }
+.pg-card .pg-face { display: block; width: 100%; height: 100%; border-radius: 6px; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45); }
+.pg-low .pg-card .pg-face { box-shadow: 0 0 0 2px var(--brass-hi), 0 2px 6px rgba(0, 0, 0, 0.45); }
+.pg-slot { width: 74px; height: 104px; border: 1px dashed var(--line-strong); border-radius: 6px; }
+.pg-set-acts { display: flex; justify-content: flex-end; gap: 10px; }
+.pg-set-acts .btn { height: 42px; min-width: 140px; font-size: 17px; }
+/* The tips line sits above the setter while it is open. */
+:root:has(.pg-setter:not([hidden])) { --tip-bottom: 262px; }
+@media (max-width: 760px), (max-height: 560px) {
+  .pg-card, .pg-slot { width: 52px; height: 73px; }
+  .pg-rows { gap: 10px; }
+  .pg-low { padding-right: 10px; }
+  .pg-set-acts .btn { height: 38px; min-width: 110px; font-size: 15px; }
+  :root:has(.pg-setter:not([hidden])) { --tip-bottom: 214px; }
+}
+/* A phone upright: the setter spans the screen, its words over the cards. */
+@media (max-width: 560px) {
+  .pg-setter { left: 8px; right: 8px; transform: none; max-width: none; padding: 8px 10px 10px; }
+  .pg-set-head { flex-direction: column; align-items: flex-start; gap: 2px; }
+  .pg-set-status { text-align: left; font-size: 13px; }
+  .pg-rows { flex-wrap: wrap; gap: 8px; }
+  .pg-low { padding-right: 8px; }
+  .pg-row { gap: 4px; }
+  .pg-card, .pg-slot { width: 44px; height: 62px; }
+  .pg-set-acts .btn { flex: 1; min-width: 0; }
+  :root:has(.pg-setter:not([hidden])) { --tip-bottom: 304px; }
+}

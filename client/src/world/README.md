@@ -99,7 +99,7 @@ it from a handful of lines (`dressed(look)` in setLook, `wear.dress(...)` after 
 `wear.body(m)` on a quality change, `wear.dispose()`).
 
 ## The floor
-The building is 62 m x 46 m (x east, z south, the street doors on the south wall), eleven rooms
+The building is 62 m x 58 m (x east, z south, the street doors on the south wall), fourteen rooms
 laid out in `rooms.ts`, each with its own floor, walls, ceiling, light and sign over every door:
 
 | Room | Walls (x, z) | Size | What's in it |
@@ -111,15 +111,22 @@ laid out in `rooms.ts`, each with its own floor, walls, ceiling, light and sign 
 | Lounge | 17..31, 3..15 | 14 x 12 m | two sofa groups, armchairs, a fireplace |
 | Poker Room | 9..31, -31..-19 | 22 x 12 m | four Hold'em tables `he-1..4` with lamps hung low over each, a host stand, armchairs |
 | High Limit Salon | -9..9, -31..-19 | 18 x 12 m | `vip-bj-1`, `vip-bc-1`, `vip-rl-1` in plush chairs under chandeliers, opening at the High limit tier; tub chairs |
-| Online Lounge | -31..-9, -31..-19 | 22 x 12 m | sixteen desks, two for each House Original (`pk-1..2`, `tw`, `mn`, `dc`, `lb`, `kn`, `hl`, `cs`), in two islands, gaming-cafe light, HOUSE ORIGINALS in neon |
+| Online Lounge | -31..-9, -31..-19 | 22 x 12 m | twenty-four desks, two for each House Original (`pk-1..2`, `tw`, `mn`, `dc`, `lb`, `kn`, `hl`, `cs`, `cf`, `wh`, `ca`, `dm`), in two islands of twelve either side of the way to the parlour, gaming-cafe light, HOUSE ORIGINALS in neon on the west wall |
 | Bandit Camp | -31..-17, 3..15 | 14 x 12 m | the Bandit Wheel `bw-1` in a yard of concrete, rusted sheet, steel trusses, scrap, crates, barrels and a burning drum under a string of bulbs |
 | Cashier & Bank | -17..-7, 3..15 | 10 x 12 m | the cage along the north wall with three teller windows and the vault behind them, benches |
 | Boutique | 7..17, 3..15 | 10 x 12 m | a shop front on the lobby with windows, two display cases, four mannequins wearing the shop's pieces, the counter and its lit shelves |
+| Pachinko Parlour | -31..-9, -43..-31 | 22 x 12 m | twelve Sakura Storm machines `pa-1..12` back to back in two islands (numbered end caps, a crown with its LED strip, a parlour stool at each), the prize counter with its wall of prizes and gold special prizes under the glass, drinks machines and benches, red paper lanterns strung across, indigo wave walls, PACHINKO in neon, noren over its doors |
+| Jade Room | -9..9, -43..-31 | 18 x 12 m | a Macau card salon: Let It Ride `lr-1..2` and Pai Gow Poker `pg-1..2` under big red lanterns, a moon gate with a painted landscape on the north wall, lattice screens with lit paper, lacquer sideboards with porcelain, red lacquer coffers |
+| Bingo Hall | 9..31, -43..-31 | 22 x 12 m | the hall `bg-1` (the caller's stage, blower, flashboard and four long tables of ten on stacking chairs) framed by velvet drapes, the pattern boards, a snack bar, high-tops and benches, a drop ceiling with fluorescent troffers |
 
 Doors (≥1.4 m wide, `DOORS` in rooms.ts): the street doors, the lobby's grand opening to the pit,
 portals to the bank and the boutique, arches from the pit to the slots and the bar and from the
 bar to the lounge, portals from the pit to the salon, the online lounge and the poker room, from
 the slots to the online lounge and (steel-framed) to the yard, and from the bar to the poker room.
+The north wing opens off the back rooms: red lacquer doors (`lacquer`: posts and head, a black beam
+across the top) from the online lounge to the parlour, from the salon to the Jade Room and between
+the parlour and the Jade Room; portals from the poker room and the Jade Room to the bingo hall. A
+wayfinding sign over the pit's north aisle points to all three.
 
 Spacing comes from each module's `footprint` and `seats`: a row of tables is spaced by each
 table's real reach (the table and the chairs round it), so real models re-flow the floor. There are
@@ -149,12 +156,16 @@ signs, the stand-ins; the stations' own models are listed, not failed). world6.m
 jambs of every doorway from both sides (`doors`), measures every palm and plant's foot against its
 planter's middle (`palms`: props.ts stands them on their foot, not the middle of their spread),
 the directory from the spawn and opened (`directory`), the boutique (`boutique`) and walks up to
-every E spot (`prompts`).
+every E spot (`prompts`). `node scripts/e2e/rooms6.mjs <port> <dir>` walks the real player from the
+spawn into the north wing and across it through every door, checks every new station's prompt
+and seat, sits at each kind, shoots each room and counts the draw calls there.
 
 ### Seats at every table
 Every table game shows its seats: a chair or stool at each `seats()` position (furniture-spec.ts
 `SEATING`: chairs at blackjack, baccarat, Three Card and War, stools at roulette, Sic Bo, the Big
-Six and the slots; craps is played standing at its rail). The salon's tables get plush chairs.
+Six and the slots, chairs at Let It Ride and Pai Gow, narrow stacking chairs at bingo's long
+tables, a parlour stool with a low back at each pachinko machine; craps is played standing at its
+rail). The salon's tables get plush chairs.
 Hold'em's chairs, the Bandit Wheel's stools and the desks' gaming chairs are the modules' own. The
 seat tops sit a fifth of a metre under each table's rail, inside what npcs' downward ray counts
 (0.3-0.95 m), so other players sit on them. The chair you're sitting in is left out while you play.
@@ -168,6 +179,10 @@ Everything is in `rooms.ts`; nothing else needs touching.
 - A slot machine: add a variant to the slots list (`slotIslands()` in layout.ts) and a cell to the
   hall's `islands` grid (`cols` x `rows`).
 - An online game: add it to the lounge's `desks.games` (two desks each, `per` desks a row).
+- Machines back to back (pachinko): `{ kind: 'machines', game, islands: [{ x, z, yaw }], per }`,
+  `per` machines a side along each island, side by side at their own width so their slices of
+  island join; `plan.machineIslands` holds each island's end caps and crown (decor-themes.ts), and
+  checkLayout lets an island's machines touch.
 - Something to sit on: add `{ kind: 'armchair', x, z, yaw }` (or sofa, tub, bench, banquette,
   hightop, crate, plank-bench) to `furniture`; its seats join the life points by themselves.
 Then run `npx vitest run --project unit client/test/world-layout.test.ts client/test/life-points.test.ts`:
@@ -215,7 +230,8 @@ room it leads to.
 
 ## Staff
 `npcs.ts` puts a dealer behind every table (a stickman across the craps table from its players,
-the Big Six dealer beside the wheel, the roulette dealer between the wheel and the zero), and can
+the Big Six dealer beside the wheel, the roulette dealer between the wheel and the zero, the bingo
+caller up on the stage behind the podium: a post's `y` is what they stand on), and can
 put a bartender behind the bar and a cashier at the cage (the floor passes `skip` for both: the
 floor's life brings its own, see Floor life). Where a dealer stands comes from
 the table's own model: rays from the dealer's side at a couple of dozen heights find the table's
@@ -309,9 +325,10 @@ bar over the bartender's Order, a computer over its own desk chair).
 - Rooms you can't see aren't drawn (visibility.ts): from the camera's room through every doorway
   in view, three rooms deep, each room seen through the screen rectangle of the doorways on the way
   to it; a station or a dealer in another room outside that rectangle isn't drawn either. Walls and
-  ceilings, furniture, props, mannequins, stations and staff all follow it. The worst view in the
-  building (looking into the slots hall from the online lounge's door) is under 200 draw calls on
-  High.
+  ceilings, furniture, props, mannequins, stations and staff all follow it. The worst views in the
+  building (across the pachinko parlour's twelve machines, and into the slots hall from the online
+  lounge's door) are under 200 draw calls on High. Pachinko machines are machines to the far
+  stand-ins (8 m) and to the bloom (the 'parlour' zone), and bingo's hall is one station ('hall').
 - The light rig follows you (lighting.ts): three spots light the room you're in (the pit's two
   rows, the poker room, the salon), and the hemisphere takes that room's colours.
 - Static architecture is merged per material (batch.ts), kept per room: one BatchedMesh per
@@ -403,5 +420,5 @@ women's suit): Idle/Walk/Run only, one skinned mesh per outfit, `--compress quan
 `/casino/src/world/dev-floor.html` (or `/casino/?dev=floor` once main.ts routes it): walk with
 WASD/arrows, Shift runs, click to look with the mouse (Esc lets go) or drag, wheel to zoom, E to
 sit, Esc to stand. `&quality=low|high`,
-`&view=overview|slots|pit|cashier|bar|poker|lounge|bigsix|table`, `&stats=1`, `&lineup=1`,
+`&view=overview|slots|pit|cashier|bar|poker|lounge|bigsix|parlour|cardroom|bingo|table`, `&stats=1`, `&lineup=1`,
 `&slots=sevens,neon,...` (the slot islands to lay out instead of the catalogue's).

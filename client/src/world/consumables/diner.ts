@@ -9,6 +9,7 @@ import * as THREE from 'three';
 import { barItem } from '../../../../shared/src/items.ts';
 import type { Look } from '../../../../shared/src/look.ts';
 import { isTyping, overlayCount } from '../../ui/keyboard.ts';
+import { calm, calmScale } from '../../app/comfort.ts';
 import { paceBoost } from '../player.ts';
 import { Effects } from './effects.ts';
 import { glint, heldOrders, setMySway } from './held.ts';
@@ -102,12 +103,13 @@ export class Diner {
     const fx = drinkFx() && floor;
     this.hud.show(floor);
     this.hud.warmth(fx ? sway : 0);
-    this.sway(fx ? sway : 0);
+    // Reduce flashing & motion: the warm edge stays, the view never sways
+    this.sway(fx && !calm() ? sway : 0);
     if (floor && this.effects.isBubbly(wall)) {
       this.glintIn -= dt;
       const sparks = sparksFor(this.deps.character.root);
       if (this.glintIn <= 0 && sparks) {
-        this.glintIn = 0.2;
+        this.glintIn = 0.2 / calmScale(1 / 3);
         glint(sparks, this.deps.character.root.getWorldPosition(new THREE.Vector3()));
       }
     }

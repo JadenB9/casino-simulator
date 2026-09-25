@@ -4,6 +4,7 @@
 // CPU, sized in metres. And the bubbles rising in a glass, which ride the glass.
 
 import * as THREE from 'three';
+import { calm } from '../../app/comfort.ts';
 
 const VERT = /* glsl */ `
 attribute float size;
@@ -148,7 +149,8 @@ class Pool {
       this.size[j] = this.s0[j]! + (this.s1[j]! - this.s0[j]!) * k;
       // in quickly, out slowly
       let a = this.a0[j]! * Math.min(1, age / 0.08) * (1 - k * k);
-      if (this.twinkle[j]) a *= 0.35 + 0.65 * Math.abs(Math.sin(t * 9 + j * 1.7));
+      // (calm: a glint holds steady rather than flickering)
+      if (this.twinkle[j] && !calm()) a *= 0.35 + 0.65 * Math.abs(Math.sin(t * 9 + j * 1.7));
       this.alpha[j] = a;
       j++;
     }
