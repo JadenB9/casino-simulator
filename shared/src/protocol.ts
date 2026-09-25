@@ -230,6 +230,8 @@ export interface HttpError {
   msg: string;
   balance?: Cents;
   inPlay?: Cents;
+  /** v6 bot6: refused because the Quick check is waiting (open it: GET /api/check). */
+  check?: true;
 }
 
 // v6 stats6: the leaderboards (GET /leaderboard), in the order the sheet shows them, grouped
@@ -584,7 +586,34 @@ export type TableServerMsg =
   | { t: 'feat'; feat: string; at: number; balance?: { balance: Cents; inPlay: Cents; rev: number }; paid?: Cents }
   | { t: 'closed'; reason: string }
   | { t: 'err'; ref?: string; code: ErrorCode; msg: string }
+  | CheckTableMsg // v6 bot6
   | ChatServerMsg;
+
+// v6 bot6: the Quick check (server/src/fair.ts). A table sends `check` at a natural pause (no
+// chips of yours on the layout) once the check is due; until it's passed that account can't bet
+// or buy in anywhere, and cashing out works as always. The check itself is GET/POST /api/check.
+export type CheckTableMsg = { t: 'check' };
+/** What the player sees on every refusal while a check is waiting (never "bot"). */
+export const CHECK_MSG = 'Quick check to keep the tables fair.';
+export type CheckState = 'ok' | 'due' | 'paused';
+export type CheckChallenge =
+  /** Drag the chip onto the ring the picture names; `png` is base64, `w` x `h` pixels. */
+  | { kind: 'chip'; id: string; png: string; w: number; h: number; chip: { x: number; y: number }; expires: number }
+  /** Cloudflare Turnstile, when the site has it set up; `chip` is the fallback if it won't load. */
+  | { kind: 'turnstile'; id: string; sitekey: string; expires: number };
+/** GET /api/check: where you stand, and a challenge if one is waiting (after `wait`, ms epoch). */
+export interface CheckResponse {
+  state: CheckState;
+  wait?: number;
+  challenge?: CheckChallenge;
+}
+/** POST /api/check {id, x, y} or {id, token}: passed, or not (and when the next try may start). */
+export interface CheckAnswerResponse {
+  ok: boolean;
+  state: CheckState;
+  wait?: number;
+}
+// v6 bot6: end
 
 const AID_RE = /^[A-Za-z0-9_-]{1,24}$/;
 

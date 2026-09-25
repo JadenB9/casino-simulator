@@ -43,6 +43,9 @@ import { bigWinsIn, type BigWinReport } from '../floor/wins.ts'; // features: bi
 import { TableLaw, type LawNote } from '../law-table.ts'; // v6 law6
 import { FeatBook, stepFacts } from '../feats.ts'; // v6 feats: achievements and challenges
 import { RunBook } from '../stats.ts'; // v6 stats6: win runs, day and week nets
+import { TableFair } from '../table-fair.ts'; // v6 bot6: fair play
+import { autoChecks } from '../fair.ts'; // v6 bot6
+import { CHECK_MSG } from '../../../shared/src/protocol.ts'; // v6 bot6
 
 /** How long a dropped player keeps their seat before being cashed out. */
 export const GRACE_MS = 120_000;
@@ -213,6 +216,8 @@ export class CasinoTable extends DurableObject<Env> {
   private feats: FeatBook;
   /** v6 stats6: each player's run of winning rounds here (server/src/stats.ts). */
   private runs: RunBook;
+  /** v6 bot6: reactions and rounds for fair play, and the Quick check's pause (table-fair.ts). */
+  private fairPart: TableFair | null = null;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -511,6 +516,7 @@ export class CasinoTable extends DurableObject<Env> {
     this.runTicks(now);
     this.ctx.waitUntil(this.noteFloor(accountId, station));
     this.ctx.waitUntil(this.syncDirectory());
+    this.ctx.waitUntil(this.fair().load(accountId, now).catch((err) => console.error('fair: load failed', err))); // v6 bot6
     this.scheduleAlarm();
     return new Response(null, { status: 101, webSocket: client });
   }
@@ -580,6 +586,7 @@ export class CasinoTable extends DurableObject<Env> {
           break;
         case 'buyin':
         case 'topup':
+          if (await this.fairHolds(ws, mem, msg.aid, now)) break; // v6 bot6
           this.handleBuyIn(ws, mem, msg.t, msg.aid, msg.amount, now);
           await this.pump();
           break;
@@ -645,6 +652,7 @@ export class CasinoTable extends DurableObject<Env> {
     }
     mem.disconnected_at = now;
     this.sql.exec(`UPDATE members SET disconnected_at = ?1 WHERE account_id = ?2`, now, mem.account_id);
+    this.fair().flush(mem.account_id, now); // v6 bot6
     this.setDeadline(`grace:${mem.account_id}`, now + GRACE_MS);
     // The seat is held for the whole grace period, but a party can't wait that long for someone
     // to press Start or change the lobby, so the lead moves on sooner.
@@ -834,6 +842,7 @@ export class CasinoTable extends DurableObject<Env> {
     this.broadcastMembers();
     this.ctx.waitUntil(this.noteFloor(mem.account_id, null));
     this.ctx.waitUntil(this.syncDirectory());
+    this.fair().forget(mem.account_id, now); // v6 bot6
   }
 
   private async handleVisibility(ws: WebSocket, mem: MemberRow, visibility: 'public' | 'private'): Promise<void> {
@@ -1152,10 +1161,19 @@ export class CasinoTable extends DurableObject<Env> {
     if (this.meta!.mode === 'multi' && !this.meta!.started) return this.err(ws, 'WRONG_PHASE', 'Waiting for the leader to start.', aid);
     const action = engine.parseAction(raw);
     if (action === null) return this.err(ws, 'BAD_REQUEST', "That move isn't allowed.", aid);
+    // v6 bot6: while a Quick check waits, nothing new starts (chips already out play out)
+    if (this.fair().blocked(mem.account_id, mem.live, now)) {
+      this.send(ws, { t: 'check' });
+      return this.err(ws, 'NOT_ELIGIBLE', CHECK_MSG, aid);
+    }
     const res = engine.act(this.state, mem.seat, action, this.engineCtx(now));
     if (isRefusal(res)) return this.err(ws, res.refuse, res.msg, aid);
     this.rememberAid(mem.account_id, aid, now);
+    const seat = mem.seat;
     if (!this.commit(res, now)) return this.err(ws, 'INTERNAL', 'The table refused that move.', aid);
+    // v6 bot6: this move answered the last news; the news it made is everyone else's
+    this.fair().acted(mem.account_id, seat, res, now);
+    this.fair().cue(this.seatedIds(mem.account_id), now);
     this.runTicks(now);
   }
 
@@ -1167,6 +1185,7 @@ export class CasinoTable extends DurableObject<Env> {
       const step = engine.tick(this.state, this.engineCtx(now));
       if (!step) break;
       if (!this.commit(step, now)) break;
+      this.fair().cue(this.seatedIds(null), now); // v6 bot6: the table moved on its own
       const next = engine.deadline(this.state);
       if (next === null || next > now) break;
     }
@@ -1218,6 +1237,7 @@ export class CasinoTable extends DurableObject<Env> {
         mem.wagered += r.wagered;
         mem.net += r.returned - r.wagered;
         mem.biggest_win = Math.max(mem.biggest_win, r.returned - r.wagered);
+        this.fair().round(mem.account_id, r.wagered, now); // v6 bot6
       }
       // A finished round ends everyone's "ready": the next betting window waits for each player
       // again instead of closing on the first chip because of a click made last round.
@@ -1249,6 +1269,8 @@ export class CasinoTable extends DurableObject<Env> {
     if (step.rounds?.length) this.announceBigWins(step, bySeat, now); // features: big wins
     if (step.rounds?.length) this.tellLaw(step, bySeat, now); // v6 law6
     if (featWork) this.ctx.waitUntil(this.runFeats());
+    // v6 bot6: a check that's due is asked at the player's next pause: nothing of theirs out
+    for (const mem of bySeat.values()) if (mem.live === 0 && this.fair().due(mem.account_id)) this.fair().ask(mem.account_id, now);
     // Nothing on the layout anywhere: the round a seat was given up in is over.
     if (m.held?.length && !this.roundInPlay()) {
       m.held = [];
@@ -1541,6 +1563,52 @@ export class CasinoTable extends DurableObject<Env> {
    * v6 law6: stand a player up now (taken to jail, or out of it): their sockets are told why and
    * the seat leaves the way Leave does it (bets in play settle, then the chips go home).
    */
+  // v6 bot6: fair play -----------------------------------------------------------------------
+
+  private fair(): TableFair {
+    this.fairPart ??= new TableFair({
+      db: () => this.env.DB,
+      game: this.meta!.game,
+      auto: autoChecks(this.env),
+      ask: (accountId) => {
+        for (const ws of this.ctx.getWebSockets(`a:${accountId}`)) this.send(ws, { t: 'check' });
+      },
+      waitUntil: (p) => this.ctx.waitUntil(p),
+    });
+    return this.fairPart;
+  }
+
+  /** Seated players' accounts, but `except`. */
+  private seatedIds(except: number | null): number[] {
+    const ids: number[] = [];
+    for (const mem of this.members.values()) if (mem.status === 'seated' && mem.account_id !== except) ids.push(mem.account_id);
+    return ids;
+  }
+
+  /**
+   * Chips in while a Quick check waits: read the account's state fresh (a check another table
+   * asked, or one the dev stack forced), ask a due one now (a buy-in is a pause), and refuse.
+   */
+  private async fairHolds(ws: WebSocket, mem: MemberRow, aid: string, now: number): Promise<boolean> {
+    const fair = this.fair();
+    try {
+      await fair.load(mem.account_id, now);
+    } catch (err) {
+      console.error('fair: load failed', err);
+      return false;
+    }
+    if (fair.due(mem.account_id)) fair.ask(mem.account_id, now);
+    if (!fair.blocked(mem.account_id, 0, now)) return false;
+    this.err(ws, 'NOT_ELIGIBLE', CHECK_MSG, aid);
+    return true;
+  }
+
+  /** The Worker: this account's check changed (passed, or forced on the dev stack); read it again. */
+  async fairRefresh(accountId: number): Promise<void> {
+    if (!this.meta || !this.members.has(accountId)) return;
+    await this.fair().load(accountId, Date.now());
+  }
+
   async evict(accountId: number): Promise<void> {
     const mem = this.members.get(accountId);
     if (!mem || !this.meta) return;
