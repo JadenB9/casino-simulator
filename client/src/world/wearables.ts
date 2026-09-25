@@ -25,6 +25,7 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 import type { Look } from '../../../shared/src/look.ts';
 import { barItem, itemOfKind, type BarModel } from '../../../shared/src/items.ts';
 import { serverNow } from '../net/clock.ts';
+import { calmScale } from '../app/comfort.ts';
 
 type V3 = THREE.Vector3;
 const V = (x = 0, y = 0, z = 0): V3 => new THREE.Vector3(x, y, z);
@@ -81,8 +82,11 @@ function beforeDraw(renderer: THREE.WebGLRenderer): void {
   const frame = renderer.info.render.frame;
   if (frame !== tickedFrame) {
     tickedFrame = frame;
-    const t = performance.now() / 1000;
-    for (const u of timeUniforms) u.value = t;
+    // calm (app/comfort.ts): the stones glint at a third of the pace
+    const now = performance.now() / 1000;
+    glintT += Math.min(0.1, Math.max(0, now - glintAt)) * calmScale(1 / 3);
+    glintAt = now;
+    for (const u of timeUniforms) u.value = glintT;
   }
   if (envStarted) return;
   envStarted = true;
@@ -96,6 +100,8 @@ function beforeDraw(renderer: THREE.WebGLRenderer): void {
 }
 
 const timeUniforms: { value: number }[] = [];
+let glintT = 0;
+let glintAt = 0;
 
 function lit(r: number, g: number, b: number, side: THREE.Side = THREE.FrontSide): THREE.MeshBasicMaterial {
   return new THREE.MeshBasicMaterial({ color: new THREE.Color(r, g, b), side, toneMapped: false });

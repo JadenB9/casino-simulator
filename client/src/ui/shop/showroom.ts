@@ -14,6 +14,7 @@ import type { ItemKind } from '../../../../shared/src/items.ts';
 import type { EmoteId } from '../../../../shared/src/protocol.ts';
 import type { Character, CharacterFactory } from '../../world/contract.ts';
 import type { EngineLike } from '../menu/deps.ts';
+import { calmScale, fewer } from '../../app/comfort.ts';
 
 export type Framing = 'full' | 'chest' | 'face' | 'head' | 'wrist' | 'hand';
 
@@ -169,7 +170,9 @@ function room(at: THREE.Vector3): { group: THREE.Group; pivot: THREE.Group; mood
   return {
     group,
     pivot,
-    mood(m: Mood, t: number) {
+    mood(m: Mood, clock: number) {
+      // calm (app/comfort.ts): the disco's lights and ball turn at a third of the pace
+      const t = clock * calmScale(1 / 3);
       const dim = m === 'spot' ? 0.12 : m === 'disco' ? 0.18 : m === 'gold' ? 0.55 : 1;
       key.intensity = base.key * dim;
       rim.intensity = base.rim * (m === 'gold' ? 0.9 : dim);
@@ -280,7 +283,9 @@ class Particles {
   }
 
   update(dt: number, t: number): void {
-    const n = SHOWER_COUNT[this.kind];
+    // calm (app/comfort.ts): a third of them
+    const n = fewer(SHOWER_COUNT[this.kind]);
+    this.mesh.count = n;
     const p = this.pos;
     const v = this.vel;
     for (let i = 0; i < n; i++) {

@@ -15,6 +15,7 @@ import type { Quality } from '../render/engine3d.ts';
 import { PIT_CEILING, type FloorPlan } from './layout.ts';
 import { TAPE_ROWS, centred, layoutTape, textWidth, type Run, type Tape } from './ledfont.ts';
 import { Merge, SIGN_COLORS, SIGN_VERTEX, signFragment } from './signbox.ts';
+import { blink } from '../app/comfort.ts';
 
 /** One line on the sign: who, how much, and what paid. */
 export interface SignEntry {
@@ -151,7 +152,8 @@ export class Marquee {
     const act = this.act;
     if (act.mode === 'hold') {
       this.uniforms.uScroll.value = 0;
-      this.uniforms.uOn.value = act.blink && this.t % act.blink > act.blink * 0.62 ? 0 : 1;
+      // calm (app/comfort.ts) holds the name lit instead of blinking it
+      this.uniforms.uOn.value = blink(!(act.blink && this.t % act.blink > act.blink * 0.62)) ? 1 : 0;
       if (this.t >= (act.hold ?? 2)) this.next();
       return;
     }
