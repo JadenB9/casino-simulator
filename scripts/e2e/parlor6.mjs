@@ -163,5 +163,64 @@ async function pachinko() {
   await page.close();
 }
 
-async function bingoSolo() {}
+async function bingoSolo() {
+  const page = await newPage();
+  await page.goto(`${base}/casino/?dev=table&game=bingo&name=parlor6_e2e_bg`);
+  await sitDown(page, '2000');
+  await page.waitForFunction(() => document.getElementById('boot')?.classList.contains('done'), null, { timeout: 90000 });
+  const state = () => page.evaluate(() => window.casino.table.view.debug.state());
+  // a game left running from an earlier run plays out first
+  await page.waitForFunction(() => window.casino.table.view.debug.state().phase === 'buying', null, { timeout: 120000, polling: 100 });
+  await page.waitForTimeout(800);
+  await shot(page, 'bg-0-sale');
+  const home = await page.evaluate(() => ({ p: window.casino.engine.camera.position.toArray(), q: window.casino.engine.camera.quaternion.toArray() }));
+  await page.evaluate(() => {
+    const c = window.casino.engine.camera;
+    c.position.set(4.2, 2.4, 5.2);
+    c.lookAt(0, 1.0, -1.2);
+  });
+  await page.waitForTimeout(500);
+  await shot(page, 'bg-0-hall');
+  await page.evaluate(({ p, q }) => {
+    window.casino.engine.camera.position.fromArray(p);
+    window.casino.engine.camera.quaternion.fromArray(q);
+  }, home);
+  const before = (await state()).stack;
+  await page.keyboard.press('4');
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => window.casino.table.view.debug.state().cards.length === 4, null, { timeout: 15000, polling: 50 });
+  await page.waitForTimeout(400);
+  await shot(page, 'bg-1-cards');
+  if (flag('--quick')) return;
+  await page.keyboard.press('Space');
+  await page.waitForFunction(() => window.casino.table.view.debug.state().called.length >= 12, null, { timeout: 60000, polling: 100 });
+  await shot(page, 'bg-2-calling');
+  await page.waitForFunction(() => window.casino.table.view.debug.state().phase === 'results', null, { timeout: 120000, polling: 100 });
+  await page.waitForTimeout(1200);
+  await shot(page, 'bg-3-over');
+  const st = await state();
+  // every card's prizes, worked out here from the balls the view showed, against what the server paid
+  const rules = await import('../../shared/src/games/bingo/rules.ts');
+  const at = new Array(76).fill(Infinity);
+  st.called.forEach((b, i) => (at[b] = i + 1));
+  let expected = 0;
+  let paid = 0;
+  const mismatches = [];
+  for (const c of st.cards) {
+    const done = rules.completions(c.nums, at);
+    for (const p of rules.PATTERNS) {
+      const want = done[p] <= st.called.length ? rules.prizeFor(p, done[p], c.stake) : 0;
+      const got = c.won[p]?.paid ?? 0;
+      expected += want;
+      paid += got;
+      if (want !== got) mismatches.push({ card: c.id, p, want, got });
+    }
+  }
+  const cost = st.cards.reduce((n, c) => n + c.stake, 0);
+  await page.waitForTimeout(600);
+  const after = (await state()).stack;
+  results.bingoSolo = { calls: st.called.length, cards: st.cards.length, cost, expected, paid, mismatches, before, after, ok: mismatches.length === 0 && after === before - cost + paid };
+  if (!results.bingoSolo.ok) failed = true;
+  await page.close();
+}
 async function bingoMulti() {}

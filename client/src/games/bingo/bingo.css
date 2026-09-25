@@ -1,0 +1,109 @@
+/* The bingo hall's screen: your cards along the bottom as printed paper with dauber ink, the calls
+   (the ball just out, the ones before it, what each pattern pays now) top right, the hall's
+   players under them, and the card sale on the left while cards are on sale. */
+
+.bg-cards { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); display: flex; gap: 12px; align-items: flex-end; pointer-events: none; }
+.bg-cards > * { pointer-events: auto; }
+
+.bg-card { position: relative; width: 184px; padding: 7px 7px 6px; border-radius: 5px; background: #f7f2e6; color: #1d1812; box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5), inset 0 0 0 1px rgba(60, 40, 20, 0.18); font-family: var(--ui); transition: transform 0.25s var(--ease), box-shadow 0.25s; }
+.bg-card.one-to-go { box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5), 0 0 0 2px #ffb347, 0 0 22px rgba(255, 179, 71, 0.45); }
+.bg-card.won { transform: translateY(-6px); }
+.bg-card-head { display: grid; grid-template-columns: repeat(5, 1fr); gap: 2px; margin-bottom: 3px; }
+.bg-letter { text-align: center; font-size: 19px; font-weight: 700; line-height: 26px; border-radius: 3px; color: #fff; }
+.bg-letter.c0 { background: #1f6fd1; }
+.bg-letter.c1 { background: #d8323c; }
+.bg-letter.c2 { background: #e9e6df; color: #1a1a1a; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.18); }
+.bg-letter.c3 { background: #2e9e4f; }
+.bg-letter.c4 { background: #f2b41d; color: #1a1a1a; }
+.bg-grid { display: grid; grid-template-columns: repeat(5, 1fr); border-top: 1px solid rgba(40, 28, 16, 0.35); border-left: 1px solid rgba(40, 28, 16, 0.35); }
+.bg-cell { position: relative; z-index: 0; height: 31px; padding: 0; border: 0; border-right: 1px solid rgba(40, 28, 16, 0.35); border-bottom: 1px solid rgba(40, 28, 16, 0.35); background: transparent; color: #1d1812; font: 600 19px var(--ui); font-variant-numeric: tabular-nums; cursor: default; }
+.bg-cell.free { color: #b8860b; font-size: 17px; }
+/* the dauber's ink: a translucent magenta disc under the number */
+.bg-cell::before { content: ''; position: absolute; inset: 3px 5px; border-radius: 50%; background: rgba(214, 40, 106, 0.72); transform: scale(0); transition: transform 0.18s var(--ease); z-index: -1; }
+.bg-cell.daubed::before { transform: scale(1); }
+.bg-cell.free::before { background: rgba(214, 40, 106, 0.28); }
+.bg-cell.fresh::before { animation: bg-splat 0.45s var(--ease); }
+.bg-cell.called { cursor: pointer; animation: bg-pulse 0.9s ease-in-out infinite; }
+.bg-cell.win { background: rgba(255, 196, 64, 0.45); }
+@keyframes bg-splat { 0% { transform: scale(1.5); opacity: 0.4; } 60% { transform: scale(0.92); } 100% { transform: scale(1); } }
+@keyframes bg-pulse { 50% { background: rgba(255, 179, 71, 0.55); } }
+.bg-card-foot { display: flex; justify-content: space-between; gap: 6px; margin-top: 4px; font-size: 13px; color: #5b4e3e; }
+.bg-card-need { color: #9c3d12; font-weight: 600; }
+.bg-card-tags { position: absolute; left: 6px; right: 6px; bottom: 100%; display: grid; gap: 3px; margin-bottom: 4px; }
+.bg-tag { display: flex; justify-content: space-between; gap: 8px; padding: 3px 8px; border-radius: 4px; background: rgba(14, 12, 10, 0.9); border: 1px solid var(--line-strong); color: var(--ink); font-size: 14px; animation: bg-tag-in 0.35s var(--ease); }
+.bg-tag .money { color: var(--win); }
+.bg-tag.blackout { border-color: #7ce38b; box-shadow: 0 0 16px rgba(124, 227, 139, 0.4); }
+@keyframes bg-tag-in { from { opacity: 0; transform: translateY(6px); } }
+
+/* the balls, as on the flashboard */
+.bg-ball { display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; line-height: 1; background: radial-gradient(circle at 34% 30%, #fff 0 12%, var(--c) 45%, color-mix(in srgb, var(--c) 55%, #000) 100%); box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45); }
+.bg-ball > span { display: block; }
+.bg-ball .l { font-size: 9px; font-weight: 700; color: #1a1a1a; background: #fbfaf6; border-radius: 6px 6px 0 0; padding: 0 3px; margin-top: 3px; }
+.bg-ball .n { font-size: 14px; font-weight: 700; color: #16120e; background: #fbfaf6; border-radius: 0 0 8px 8px; padding: 0 4px 1px; margin-bottom: 4px; }
+.bg-ball.big { width: 76px; height: 76px; }
+.bg-ball.big .l { font-size: 15px; padding: 0 6px; }
+.bg-ball.big .n { font-size: 30px; padding: 0 8px 2px; }
+.bg-ball.empty { background: rgba(255, 255, 255, 0.06); box-shadow: inset 0 0 0 1px var(--line); }
+.bg-ball.c0 { --c: #1f6fd1; }
+.bg-ball.c1 { --c: #d8323c; }
+.bg-ball.c2 { --c: #d9d5cc; }
+.bg-ball.c3 { --c: #2e9e4f; }
+.bg-ball.c4 { --c: #f2b41d; }
+
+.bg-calls { position: fixed; top: var(--below-party); right: 16px; width: 262px; padding: 12px 14px; display: grid; gap: 10px; }
+.bg-calls-head { display: flex; align-items: center; gap: 14px; }
+.bg-count-n { font-family: var(--meter); font-size: 34px; color: #ff5a3c; text-shadow: 0 0 8px rgba(255, 90, 60, 0.55); }
+.bg-recent { display: flex; flex-wrap: wrap; gap: 4px; min-height: 34px; }
+.bg-paysnow { display: grid; gap: 3px; border-top: 1px solid var(--line); padding-top: 8px; }
+.bg-pays-row { display: flex; justify-content: space-between; font-size: 15px; color: var(--ink-2); }
+.bg-pays-row .money { color: var(--brass-hi); }
+.bg-pays-row.closed { opacity: 0.45; }
+.bg-toggles { display: flex; gap: 6px; }
+.bg-toggle { height: 28px; padding: 0 9px; font-size: 13px; flex: 1; }
+.bg-toggle[aria-pressed='true'] { border-color: var(--brass-hi); color: var(--brass-hi); }
+
+.bg-hall { position: fixed; top: calc(var(--below-party) + 300px); right: 16px; width: 262px; max-height: calc(100vh - var(--below-party) - 560px); overflow: hidden; padding: 10px 14px; display: grid; gap: 4px; align-content: start; }
+.bg-hall-head { display: flex; justify-content: space-between; align-items: baseline; font-family: var(--serif); font-size: 15px; color: var(--brass-hi); margin-bottom: 2px; }
+.bg-hall-row { display: flex; justify-content: space-between; gap: 8px; font-size: 15px; color: var(--ink-2); }
+.bg-hall-row.you .name { color: var(--brass-hi); }
+.bg-hall-row.away { opacity: 0.5; }
+.bg-hall-row .st.hot { color: #ffb347; font-weight: 600; }
+
+.bg-buy { position: fixed; left: 16px; top: 50%; transform: translateY(-50%); width: 262px; padding: 12px 14px; display: grid; gap: 10px; }
+.bg-sale { display: flex; justify-content: space-between; align-items: baseline; font-family: var(--serif); font-size: 16px; color: var(--brass-hi); }
+.bg-sale-clock { font-family: var(--meter); font-size: 22px; color: #ffb347; }
+.bg-group { display: grid; gap: 4px; }
+.bg-seg { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.bg-seg-btn { height: 34px; padding: 0; border-radius: 4px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.04); color: var(--ink); font-size: 17px; font-weight: 600; cursor: pointer; }
+.bg-seg-btn[aria-pressed='true'] { border-color: var(--brass-hi); background: rgba(216, 176, 106, 0.18); color: var(--brass-hi); }
+.bg-seg-btn:disabled { opacity: 0.35; cursor: default; }
+.bg-price { display: flex; align-items: center; gap: 6px; }
+.bg-step { width: 34px; padding: 0; font-size: 20px; }
+.bg-price-value { flex: 1; text-align: center; font-size: 22px; font-weight: 600; color: var(--brass-hi); }
+.bg-price .max-btn { height: 36px; }
+.bg-total { font-size: 14px; color: var(--ink-2); min-height: 18px; }
+.bg-buy-acts { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.bg-buy-btn { grid-column: 1 / -1; height: 42px; font-size: 18px; }
+.bg-buy-acts .btn.primary:not(.bg-buy-btn) { grid-column: 1 / -1; }
+
+.bg-results { position: fixed; left: 16px; top: 50%; transform: translateY(-50%); width: 262px; padding: 14px; display: grid; gap: 6px; animation: bg-tag-in 0.35s var(--ease); }
+.bg-results-net { font-family: var(--serif); font-size: 24px; }
+.bg-results-net.win { color: var(--win); }
+.bg-results-net.quiet { color: var(--ink-2); }
+.bg-results-sub { font-size: 15px; color: var(--ink-3); }
+.bg-cards ~ .tip-line { bottom: 290px; }
+
+@media (max-width: 1100px) {
+  .bg-card { width: 150px; }
+  .bg-cell { height: 25px; font-size: 16px; }
+  .bg-letter { font-size: 16px; line-height: 22px; }
+}
+@media (max-width: 760px) {
+  .bg-cards { flex-wrap: wrap; justify-content: center; width: calc(100vw - 16px); bottom: 56px; gap: 6px; }
+  .bg-card { width: 132px; padding: 5px; }
+  .bg-cell { height: 21px; font-size: 14px; }
+  .bg-hall { display: none; }
+  .bg-calls { width: 200px; padding: 8px 10px; }
+  .bg-calls .bg-recent, .bg-calls .bg-paysnow { display: none; }
+  .bg-buy, .bg-results { top: auto; bottom: 56px; transform: none; left: 50%; translate: -50% 0; width: min(320px, calc(100vw - 16px)); }
+}
