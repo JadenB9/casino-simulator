@@ -376,8 +376,14 @@ if (checks.includes('live')) {
 
   // Far off: B hears nothing of it, A still hears its own.
   await b.page.waitForTimeout(2200);
-  await a.page.evaluate(() => window.casino.world.teleport(0.5, -8, 0));
-  await b.page.waitForFunction((id) => window.casino.app.remotes.character(id)?.root.position.z < -7, a.id, { timeout: 20000 }).catch(() => {});
+  // The floor only lets a player move as far as they could have walked (server/src/floor/presence.ts:
+  // 9.5 m banked, refilling at 9 m/s), so A goes there in hops a second apart, not one jump.
+  for (const z of [1.4, -6.6, -8]) {
+    await a.page.evaluate((z) => window.casino.world.teleport(0.5, z, 0), z);
+    await a.page.waitForTimeout(1200);
+  }
+  // (B's copy of A has to have got there: a clap while it's still drawn on its way is in earshot)
+  await b.page.waitForFunction((id) => window.casino.app.remotes.character(id)?.root.position.z < -7, a.id, { timeout: 20000 }).catch(() => fail("B's copy of A never got far off"));
   await a.page.evaluate(() => window.casino.app.link.emote('clap'));
   await b.page.waitForTimeout(1500);
   const far = { a: await a.page.evaluate(() => window.clapCalls.length), b: await b.page.evaluate(() => window.clapCalls.length) };

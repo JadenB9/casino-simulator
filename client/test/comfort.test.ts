@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { readdirSync, statSync } from 'node:fs';
+import { join, sep } from 'node:path';
 
 // "Reduce flashing & motion" (app/comfort.ts): where it starts (the saved choice, else the system's
 // reduced-motion setting), that it's kept, that listeners hear it, what the helpers give in each
@@ -192,6 +194,18 @@ describe("the shop's effects thin out on their own", () => {
 // Every module that flashes, chases, pulses or throws particles today, and what reads calm in
 // it. A new effect in one of these that forgets the switch still passes this; the point is that
 // none of them can drop it without a test going red.
+const root = fileURLToPath(new URL('../src', import.meta.url));
+function files(dir: string, ext: string): string[] {
+  const out: string[] = [];
+  for (const name of readdirSync(dir)) {
+    const f = join(dir, name);
+    if (statSync(f).isDirectory()) out.push(...files(f, ext));
+    else if (f.endsWith(ext)) out.push(f);
+  }
+  return out;
+}
+const cssFiles = () => files(root, '.css');
+
 const FLASHING = [
   'world/marquee.ts',
   'world/attract.ts',
@@ -253,9 +267,19 @@ describe('every module known to flash reads the switch', () => {
     }
   });
 
-  it('the shared CSS turns off every flashing and shaking animation the stylesheets have', () => {
-    const css = readFileSync(fileURLToPath(new URL('../src/app/comfort.css', import.meta.url)), 'utf8');
-    for (const sel of ['.vp-row.win', '.vp-status.win', '.bw-slot.won', '.name-row.shake', '.mn-grid.shake', '.tw-tower.shake', '.kn-tile.full', '.map-you-halo', '.pk-bin.hit'])
-      expect(css).toContain(`body.calm ${sel}`.replace('body.calm .map-you-halo', 'body.calm .map-you .map-you-halo'));
+  it('the stylesheets turn off every flashing and shaking animation under body.calm', () => {
+    const css = cssFiles().map((f) => readFileSync(f, 'utf8')).join('\n');
+    for (const sel of ['.vp-row.win', '.vp-status.win', '.bw-slot.won', '.name-row.shake', '.mn-grid.shake', '.tw-tower.shake', '.kn-tile.full', '.map-you .map-you-halo', '.pk-bin.hit', '.emote-bubble', '.staff-say-bubble'])
+      expect(css).toContain(`body.calm ${sel}`);
+  });
+
+  it('the switch is the one say: nothing but its default reads the system reduced-motion setting', () => {
+    // a @media (prefers-reduced-motion) rule would still apply with the switch at Full
+    const offenders: string[] = [];
+    for (const f of [...cssFiles(), ...files(root, '.ts')]) {
+      if (f.endsWith(`app${sep}comfort.ts`)) continue;
+      if (readFileSync(f, 'utf8').includes('prefers-reduced-motion')) offenders.push(f.slice(root.length + 1));
+    }
+    expect(offenders).toEqual([]);
   });
 });
