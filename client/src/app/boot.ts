@@ -17,6 +17,7 @@ import { RemotePlayers, type SeatPose } from '../world/remote-players.ts';
 import { FloorLink, byteToYaw } from '../net/presence.ts';
 import { GAMES } from '../games/index.ts';
 import { openTableFlow, PartyPanel, withParty, type TableChoice } from '../ui/lobby/index.ts';
+import { closeTableFlows, InviteHub } from '../ui/lobby/index.ts'; // v6 invite6
 import { ensureOwnLook, isNewPlayer, mountHud, mountLogin, mountMenu, openBank, openEditor, openOnboarding, openProfile, openSettings, overlayCount, type Hud, type MenuHandle } from '../ui/menu/index.ts';
 import { isTyping } from '../ui/keyboard.ts';
 import { mountEmotes, openLeaderboard, socialApi, socialButton, type EmoteWheel } from '../ui/social/index.ts';
@@ -106,6 +107,8 @@ class App {
   private comingBack = false;
   /** Walking when we went away (or at a table, which puts us back on the floor): walking again after. */
   private awayWalking = false;
+  /** v6 invite6: invites to lobby tables (ui/lobby/invites.ts), while the floor is connected. */
+  private invites: InviteHub | null = null;
   /** v6 celebs6: the daily bonus's HUD button and sheet, while the HUD is up. */
   private daily: DailyHandle | null = null;
   /** Where each station's n-th seated player is drawn; stations never move. */
@@ -353,6 +356,7 @@ class App {
     // by the waiters, and the staff's greetings by name.
     this.world.life.useLink(link);
     this.world.life.useBar(this.bar);
+    this.invites = this.inviteHub(link); // v6 invite6
     this.world.life.useApp({
       name: () => session.profile?.name ?? null,
       openBarMenu: () => this.openBarMenu(),
@@ -381,6 +385,8 @@ class App {
     }
     this.lifeOff?.();
     this.lifeOff = null;
+    this.invites?.dispose(); // v6 invite6
+    this.invites = null;
     this.chat?.dispose();
     this.chat = null;
     this.world.useRemotes(null);
@@ -544,7 +550,8 @@ class App {
   // --- tables ---------------------------------------------------------------------------------
 
   private async sitDown(station: WorldStation): Promise<void> {
-    const choice = await openTableFlow({
+    // v6 invite6: an invite being joined sits straight down at its table
+    const choice = this.invites?.claim(station) ?? await openTableFlow({
       game: station.game,
       variant: station.variant,
       floor: this.link,
@@ -578,6 +585,7 @@ class App {
             leave: () => void this.leaveTable(),
             sit: () => void table?.promptBuyIn(),
             root: this.ui,
+            invites: this.invites, // v6 invite6
           })
         : null;
     const module = party ? withParty(GAMES[station.game], party) : GAMES[station.game];
@@ -717,6 +725,40 @@ class App {
     void this.refreshProfile();
     toast(code === CLOSE.FORBIDDEN ? "You can't join that table." : code === CLOSE.NOT_FOUND ? 'That table has closed.' : 'Lost the table.', 'err');
     void this.world.exitTable();
+  }
+
+  // --- v6 invite6: invites ----------------------------------------------------------------------
+
+  /** The invite hub over this floor link: what it needs to know and do on the floor. */
+  private inviteHub(link: FloorLink): InviteHub {
+    return new InviteHub({
+      floor: link,
+      root: this.ui,
+      stations: this.world.stations,
+      collider: this.world.collider,
+      where: () => (link.you ? { x: this.world.player.position.x, z: this.world.player.position.z } : null),
+      onFloor: () => this.hud !== null && !this.away && !this.stopped,
+      covered: () => overlayCount() > 0,
+      atTable: () => {
+        const open = this.table;
+        if (open) return { tableId: open.session.target.kind === 'lobby' ? (open.session.target.tableId ?? null) : null, seated: open.seated, game: open.station.game };
+        const at = this.world.seated;
+        return at ? { tableId: null, seated: false, game: at.game } : null;
+      },
+      standUp: async () => {
+        if (this.table) await this.leaveTable();
+        else if (closeTableFlows() || this.world.seated) await this.world.exitTable();
+        this.world.life.seating.stand({ walk: true });
+      },
+      hold: (on) => {
+        if (!this.table && !this.world.seated) this.world.player.setEnabled(!on);
+      },
+      sitAt: (station, x, z, heading) => {
+        this.world.player.teleport(x, z, heading);
+        this.world.enter(station);
+      },
+      sfx: this.sfx,
+    });
   }
 
   // --- the ways a whole session ends ------------------------------------------------------------
