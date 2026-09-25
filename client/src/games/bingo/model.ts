@@ -113,7 +113,7 @@ function build(): Shared {
     legs: merge(legs),
     dauber: merge(dauber),
     caps: merge(caps),
-    board: new THREE.PlaneGeometry(BOARD.w, BOARD.h).translate(0, BOARD.y, BOARD.z + 0.012),
+    board: new THREE.PlaneGeometry(BOARD.w, BOARD.h).translate(0, BOARD.y, BOARD.z + 0.018),
     sign: new THREE.PlaneGeometry(1.8, 0.338).translate(0, BOARD.y + BOARD.h / 2 + 0.3, BOARD.z + 0.01),
     signBox: box(1.9, 0.42, 0.1, at(0, BOARD.y + BOARD.h / 2 + 0.3, BOARD.z - 0.05)),
     dome: new THREE.SphereGeometry(BLOWER.r, 32, 20),

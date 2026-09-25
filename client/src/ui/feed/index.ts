@@ -225,6 +225,7 @@ export function spotsOf(world: FloorWorld): AmbienceSpots {
       { ...mid(p.slotsZone), size: 1.2 },
     ],
     slots: p.banks.map((b) => ({ x: b.x, z: b.z })),
-    tables: world.stations.filter((s) => s.zone === 'pit' || s.zone === 'poker' || s.zone === 'feature').map((s) => ({ x: s.anchor.position.x, z: s.anchor.position.z })),
+    // v6 parlor6: the bingo hall's tables murmur like the pit's
+    tables: world.stations.filter((s) => s.zone === 'pit' || s.zone === 'poker' || s.zone === 'feature' || s.zone === 'hall').map((s) => ({ x: s.anchor.position.x, z: s.anchor.position.z })),
   };
 }

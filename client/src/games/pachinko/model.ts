@@ -206,7 +206,7 @@ function build(): Shared {
     face: new THREE.PlaneGeometry(WIN_W, WIN_H).translate(0, winY, FACE_Z),
     lcd: new THREE.PlaneGeometry(2 * FRAME.hw - 0.012, 2 * FRAME.hh - 0.012).translate(FRAME.u, BOARD_Y + FRAME.v, FACE_Z + 0.009),
     glass: new THREE.PlaneGeometry(WIN_W, WIN_H).translate(0, winY, GLASS_Z),
-    crownSign: new THREE.PlaneGeometry(0.34, 0.085).translate(0, BODY_Y1 + 0.055, FACE_Z + 0.037),
+    crownSign: new THREE.PlaneGeometry(0.34, 0.085).translate(0, BODY_Y1 + 0.055, FACE_Z + 0.043),
     leds: merge([
       ringGeometry(WIN_W + 0.052, WIN_H + 0.052, 0.05, 0.0045, 0.113),
       // the wings: a strip down each side of the body
@@ -300,7 +300,7 @@ export function machineModel(quality: Quality): THREE.Group {
   dataBox.position.set(0, BODY_Y1 + 0.2, -0.02);
   const data = new THREE.Mesh(s.geo.data!, s.mat.data!);
   data.name = DATA;
-  data.position.set(0, BODY_Y1 + 0.2, 0.0051);
+  data.position.set(0, BODY_Y1 + 0.2, 0.009);
   g.add(dataBox, data);
 
   // balls waiting in the upper tray
