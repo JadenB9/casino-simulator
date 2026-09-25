@@ -19,6 +19,8 @@ import type { ErrorCode } from './protocol.ts';
 export const GAME_IDS = [
   'blackjack', 'roulette', 'craps', 'baccarat', 'slots', 'videopoker', 'threecard', 'holdem', 'war', 'bigsix', 'sicbo',
   'plinko', 'tower', 'mines', 'dice', 'limbo', 'keno', 'hilo', 'crash', 'banditwheel',
+  // v6: four more online games, two card tables, the bingo hall and the pachinko parlour
+  'coinflip', 'wheel', 'cases', 'diamonds', 'letitride', 'paigow', 'bingo', 'pachinko',
 ] as const;
 
 /** The casino's games, plus `highcard`: a tiny fixture game used by tests and the dev harness. */
