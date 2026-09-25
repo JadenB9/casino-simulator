@@ -36,9 +36,10 @@ export interface BloomLook {
 /**
  * Walking the floor: past the brightest lit surface (white printing and chips under the pit's
  * spots peak near 1.5, lighting.ts), so only light sources glow: neon, LED strips, bulbs, the
- * machines' lamps, a specular glint on chrome.
+ * machines' lamps, a specular glint on chrome. Kept modest and tight (v6.1): a sign reads lit at
+ * night with a halo a hand wide, not a haze over the room.
  */
-export const FLOOR_BLOOM: BloomLook = { threshold: 1.65, knee: 0.3, strength: 0.72, radius: 0.2 };
+export const FLOOR_BLOOM: BloomLook = { threshold: 1.75, knee: 0.3, strength: 0.46, radius: 0.12 };
 /**
  * Seated at a table, a metre from felt, cards and chips under the pit's spots: lit white printing
  * reaches three or so, so nothing on the table glows at all; only the strongest light sources do.

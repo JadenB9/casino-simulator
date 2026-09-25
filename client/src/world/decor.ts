@@ -96,8 +96,8 @@ export function buildDecor(plan: FloorPlan, stations: WorldStation[], b: Batch, 
     const room = roomOf(bank.x, bank.z);
     into(room);
     const [c1, c2] = bankColors(bank.variant, bi);
-    const led = hdr(c1, 3.2);
-    const led2 = hdr(c2, 2.6);
+    const led = hdr(c1, 2.5);
+    const led2 = hdr(c2, 1.8);
     const at = (lx: number, y: number, lz: number) => {
       // bank-local (x along the bank, z across) to world
       const c = Math.cos(bank.yaw);

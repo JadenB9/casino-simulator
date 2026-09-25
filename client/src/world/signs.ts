@@ -145,7 +145,7 @@ interface Placed {
 
 /** How bright the sign faces are: on High neon's core sits well past the floor's bloom threshold. */
 export function signGain(quality: 'high' | 'low'): number {
-  return quality === 'high' ? 3.6 : 1.6;
+  return quality === 'high' ? 3.0 : 1.6;
 }
 
 /** Draw every sign into one atlas and add their faces to the scene as one mesh. */
