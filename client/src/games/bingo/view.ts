@@ -280,8 +280,8 @@ export function mountBingo(ctx: TableViewCtx): TableView {
 
   function tips(): void {
     const on = ctx.tips.on && selling();
-    if (on) ctx.kit.tip(`Every card returns ${Number(PUBLISHED_RTP).toFixed(2)}% of its price whatever you buy or however many are playing: prizes are fixed by pattern and ball.`);
-    else if (tipShown) ctx.kit.tip(null);
+    if (on && !tipShown) ctx.kit.tip(`Every card returns ${Number(PUBLISHED_RTP).toFixed(2)}% of its price whatever you buy or however many are playing: prizes are fixed by pattern and ball.`);
+    else if (!on && tipShown) ctx.kit.tip(null);
     tipShown = on;
   }
   const offTips = ctx.tips.subscribe(() => tips());

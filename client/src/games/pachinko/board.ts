@@ -128,9 +128,6 @@ export function launchSpeed(power: number): number {
 /** Where balls come up the rail: low on the left, heading up. */
 export const LAUNCH_ANGLE = (225 * Math.PI) / 180;
 
-/** Where the last flight that never ended was left (for tuning the board). */
-export const stuckAt = { u: 0, v: 0 };
-
 export interface Flight {
   /** u, v per frame at FPS. */
   pts: Float32Array;
@@ -315,8 +312,6 @@ export function fly(power: number, seed: number, attackerOpen = false): Flight |
     if (step % PER_FRAME === 0 || end) rec();
     if (end) return { pts: pts.slice(0, frames * 2), frames, end, power };
   }
-  stuckAt.u = u;
-  stuckAt.v = v;
   return null;
 
   /** Push out along (nu, nv) and bounce whatever velocity goes against it. */
@@ -409,12 +404,25 @@ export class FlightPools {
     return this.pool(bucket, end).length;
   }
 
-  /** Top up this bucket's pools for `ms` of the frame. */
+  /** Flights simulated per bucket by fill(), so one whose power can't reach a pocket stops trying. */
+  private tried = new Map<string, number>();
+
+  /**
+   * Top up this bucket's pools for `ms` of the frame. A bucket gives up topping up after a few
+   * hundred flights (a weak shot rarely reaches the right tulip); take() then looks next door.
+   */
   fill(bucket: number, ms: number, fever = false): void {
     const t0 = performance.now();
+    const k = `${bucket}:${fever}`;
     const ends: Catch[] = fever ? ['attacker'] : ['start', 'left', 'right', 'out'];
     while (performance.now() - t0 < ms) {
-      if (ends.every((e) => this.ready(bucket, e) >= this.keep)) return;
+      if (ends.every((e) => this.ready(bucket, e) >= this.keep)) {
+        this.tried.set(k, 0);
+        return;
+      }
+      const n = this.tried.get(k) ?? 0;
+      if (n > 600) return;
+      this.tried.set(k, n + 1);
       this.simulate(bucket, fever);
     }
   }
@@ -426,7 +434,11 @@ export class FlightPools {
     const order = [home, ...Array.from({ length: BUCKETS }, (_, i) => i).filter((b) => b !== home).sort((a, b) => Math.abs(a - home) - Math.abs(b - home))];
     for (const b of order) {
       const p = this.pool(b, end);
-      if (p.length) return p.shift()!;
+      if (p.length) {
+        // the bucket has room again: let fill() try it afresh
+        this.tried.delete(`${b}:${fever}`);
+        return p.shift()!;
+      }
       // search this bucket a while before moving on
       for (let n = 0; n < (b === home ? 400 : 120); n++) {
         const f = this.simulate(b, fever);

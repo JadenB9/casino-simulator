@@ -17,7 +17,7 @@ import { BATCH, POCKET_PAYS, JACKPOT_BALLS, ROUNDS, ROUND_BALLS, MAX_CHAIN, PUBL
 import type { BallView, LaunchEvent, PachinkoView, MachineData } from '../../../../shared/src/games/pachinko/engine.ts';
 import { el, button, maxButton } from '../../ui/kit.ts';
 import { celebrate } from '../../table/celebrate.ts';
-import { FlightPools, bucketOf, flightAt, flightSeconds, type Catch, type Flight, HESO, TULIPS, ATTACKER, OUT_V } from './board.ts';
+import { FlightPools, bucketOf, flightAt, flightSeconds, type Catch, type Flight, ATTACKER, OUT_V } from './board.ts';
 import { paintScreen, paintData, paintLeds, LED_COUNT, type ScreenState, type LedPattern } from './art.ts';
 import { machineModel, sharedLit, ballGeometry, ballMaterial, boardPoint, MACHINE, type MachineHandle } from './model.ts';
 import { PachinkoSound } from './sound.ts';
@@ -325,8 +325,8 @@ export function mountPachinko(ctx: TableViewCtx): TableView {
 
   function tips(): void {
     const on = ctx.tips.on;
-    if (on) ctx.kit.tip(`Every batch returns ${Number(PUBLISHED_RTP).toFixed(2)}% at any power: the handle changes where the balls fly, not what they win.`);
-    else if (tipShown) ctx.kit.tip(null);
+    if (on && !tipShown) ctx.kit.tip(`Every batch returns ${Number(PUBLISHED_RTP).toFixed(2)}% at any power: the handle changes where the balls fly, not what they win.`);
+    else if (!on && tipShown) ctx.kit.tip(null);
     tipShown = on;
   }
   const offTips = ctx.tips.subscribe(() => tips());
