@@ -483,8 +483,8 @@ export class BoardFit {
   private fitted: Lens = NEUTRAL;
 
   /** What the fit sees and does now, for the e2e checks and the debug overlay. */
-  debug(): { lens: Lens; target: Lens; safe: Rect | null; board: Rect | null; behind: number; obstacles: Rect[]; off: boolean } {
-    return { lens: worn.get(this.camera)?.lens ?? NEUTRAL, target: this.target, safe: this.last.safe, board: this.last.box, behind: this.last.behind, obstacles: this.last.obstacles, off: this.off };
+  debug(): { lens: Lens; target: Lens; safe: Rect | null; board: Rect | null; behind: number; obstacles: Rect[]; off: boolean; shot: boolean } {
+    return { lens: worn.get(this.camera)?.lens ?? NEUTRAL, target: this.target, safe: this.last.safe, board: this.last.box, behind: this.last.behind, obstacles: this.last.obstacles, off: this.off, shot: this.shotPose !== null };
   }
 
   /** The table is closing: hand the camera back to the game's own framing, easing out over the flight away. */

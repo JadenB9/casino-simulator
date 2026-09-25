@@ -175,6 +175,51 @@ async function sweep(page, tag, game, sizes) {
   }
 }
 
+// The views that swing the camera to another shot (the wheel, the dice) say what it must show:
+// play a round, wait for the camera to settle on the shot, and check that too.
+const SHOT_ROUNDS = {
+  roulette: [{ type: 'bet', bets: [{ kind: 'red', amount: 500 }] }, { type: 'spin' }],
+  bigsix: [{ type: 'bet', bets: [{ spot: 'one', amount: 500 }] }, { type: 'spin' }],
+  sicbo: [{ type: 'bet', bets: [{ spot: 'small', amount: 500 }] }, { type: 'roll' }],
+  banditwheel: [{ type: 'bet', bets: [{ spot: 1, amount: 500 }] }, { type: 'spin' }],
+};
+const SHOT_SIZES = (process.env.SHOT_VIEWPORTS ?? '1024x640,900x1000').split(',').map((s) => s.split('x').map(Number));
+
+async function shots(page, tag, game) {
+  for (const [w, h] of SHOT_SIZES) {
+    await page.setViewportSize({ width: w, height: h });
+    await page.waitForTimeout(800);
+    await page.evaluate((acts) => acts.forEach((a, i) => setTimeout(() => window.casino.app.table.session.link.act(a), 300 + i * 600)), SHOT_ROUNDS[game]);
+    // on the shot, and the camera still for a moment
+    let prev = null;
+    let still = 0;
+    const t0 = Date.now();
+    while (Date.now() - t0 < 40_000 && still < 3) {
+      const s = await page.evaluate(() => {
+        const st = window.casino.app.table.session.stage;
+        return { shot: st.fit.debug().shot, p: st.engine.camera.position.toArray() };
+      });
+      still = s.shot && prev && Math.hypot(...s.p.map((v, i) => v - prev[i])) < 1e-3 ? still + 1 : 0;
+      prev = s.p;
+      await page.waitForTimeout(120);
+    }
+    if (still < 3) {
+      failures.push(`${tag} ${game} ${w}x${h}: never settled on a shot`);
+      continue;
+    }
+    const m = await measure(page);
+    const bad = check(m);
+    if (bad.length) failures.push(`${tag} ${game} shot ${w}x${h} (zoom ${m.fit.lens.zoom.toFixed(2)}): ${bad.length} points: ${bad.slice(0, 3).join('; ')}`);
+    log(`${tag} ${game} shot ${w}x${h}: ${m.pts.length} points, zoom ${m.fit.lens.zoom.toFixed(2)}${bad.length ? `, ${bad.length} OUT` : ', all in view'}`);
+    if (DEBUG) await overlay(page, m);
+    await page.screenshot({ path: `${out}/${tag}-${game}-shot-${w}x${h}.png`, scale: 'css' });
+    if (DEBUG) await overlay(page, null);
+    // the round plays out and the camera comes home before the next
+    await page.waitForFunction(() => !window.casino.app.table.session.stage.fit.debug().shot, null, { timeout: 60_000 }).catch(() => {});
+    await page.waitForTimeout(6000);
+  }
+}
+
 async function run(tag, contextOpts, list, sizes) {
   const ctx = await browser.newContext(contextOpts);
   await ctx.addInitScript(() => localStorage.setItem('casino.quality', 'low'));
@@ -191,6 +236,7 @@ async function run(tag, contextOpts, list, sizes) {
       await sit(page, STATIONS[game]);
       await page.waitForTimeout(2000);
       await sweep(page, tag, game, sizes);
+      if (tag === 'desk' && SHOT_ROUNDS[game] && process.env.SHOTS !== '0') await shots(page, tag, game);
       if (sizes.length > 1) await page.setViewportSize({ width: sizes[0][0], height: sizes[0][1] });
       await stand(page);
     } catch (err) {
