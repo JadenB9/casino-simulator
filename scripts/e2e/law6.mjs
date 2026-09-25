@@ -127,7 +127,13 @@ async function guardSpot(pl, lead) {
         // his stop's heading, without the look to either side
         const face = staff.poseOf(id, t + 1).yaw;
         const f = [Math.sin(face), Math.cos(face)];
-        return { id, t, face, me: [a.x + f[0] * 2.2, a.z + f[1] * 2.2], them: [a.x + f[0] * 3.0, a.z + f[1] * 3.0], guard: [a.x, a.z] };
+        // both on open floor (not in a display case or a table), where the walker can stand
+        const nav = window.casino.world.life.grid;
+        for (const ahead of [2.2, 3.0, 3.8, 1.8]) {
+          const me = [a.x + f[0] * ahead, a.z + f[1] * ahead];
+          const them = [me[0] + f[0] * 0.8, me[1] + f[1] * 0.8];
+          if (nav.isClear(me[0], me[1]) && nav.isClear(them[0], them[1])) return { id, t, face, me, them, guard: [a.x, a.z] };
+        }
       }
     }
     return null;
