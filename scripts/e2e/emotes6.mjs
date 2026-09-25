@@ -13,6 +13,7 @@
 
 import { chromium } from 'playwright';
 import { mkdirSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 
 const [port = '6250', out = '/tmp/emotes6', ...wanted] = process.argv.slice(2);
 mkdirSync(out, { recursive: true });
@@ -90,7 +91,7 @@ async function openFloor() {
         return o ? o.getWorldPosition(new THREE.Vector3()).applyMatrix4(inv) : null;
       };
       const r = (w) => w && w.toArray().map((x) => +x.toFixed(2));
-      return { lo: r(lo), hi: r(hi), footR: r(at('FootR')), footL: r(at('FootL')), handR: r(at('WristR')), handL: r(at('WristL')), kneeR: r(at('LowerLegR')), kneeL: r(at('LowerLegL')), head: r(at('Head')), hips: r(at('Body')), up: r(new THREE.Vector3(0, 1, 0).applyQuaternion(p.model.quaternion)), prop: p.prop ? { id: p.prop.id, at: r(p.prop.mesh.position), scale: +p.prop.mesh.scale.x.toFixed(2) } : null };
+      return { lo: r(lo), hi: r(hi), footR: r(at('FootR')), footL: r(at('FootL')), handR: r(at('WristR')), handL: r(at('WristL')), kneeR: r(at('LowerLegR')), kneeL: r(at('LowerLegL')), head: r(at('Head')), hips: r(at('Body')), up: r(new THREE.Vector3(0, 1, 0).applyQuaternion(p.model.quaternion)), fwd: r(new THREE.Vector3(0, 0, 1).applyQuaternion(p.model.quaternion)), prop: p.prop ? { id: p.prop.id, at: r(p.prop.mesh.position), scale: +p.prop.mesh.scale.x.toFixed(2) } : null };
     };
     /** Freeze everyone at `t` seconds into `e`: start it over and run it there in small steps (so a stop resets nothing). */
     c.freeze = (e, t) => {
@@ -210,7 +211,9 @@ function judge(e, t, m, names) {
     if (!flying && !['moneyfan', 'trophy', 'dab'].includes(e) && floorY > 0.05 && !(e === 'moonwalk' && t > 3.3)) fail(`${who}: feet off the floor (${floorY})`);
     if (e === 'throwback') {
       if (!(x.head[1] < 1.3)) fail(`${who}: not bent over (head at ${x.head[1]})`);
-      if (!(x.hips[2] < -0.02)) fail(`${who}: hips not pushed back (${x.hips[2]})`);
+      // behind the feet, along the way the (turned) body faces
+      const back = (x.hips[0] - (x.footR[0] + x.footL[0]) / 2) * x.fwd[0] + (x.hips[2] - (x.footR[2] + x.footL[2]) / 2) * x.fwd[2];
+      if (!(back < -0.12)) fail(`${who}: hips not pushed back behind the feet (${back.toFixed(2)})`);
       const reachR = Math.hypot(x.handR[0] - x.kneeR[0], x.handR[1] - x.kneeR[1], x.handR[2] - x.kneeR[2]);
       if (reachR > 0.22) fail(`${who}: right hand ${reachR.toFixed(2)} m from the knee`);
     }
@@ -335,10 +338,20 @@ if (checks.includes('wheel')) {
 }
 
 if (checks.includes('live')) {
-  // Two players through the game proper. The floor passes on a bought emote only once the shop's
-  // ownership lands, so A's emote is shown on B's side as the floor would deliver it; B sees A
-  // throw it back and backflip from the front, and hears the beat from where A stands.
+  // Two players through the game proper. A is paid a win (a ledger row and the balance, the way a
+  // table pays), buys Throw It Back in the boutique's API, sees it unlock on the wheel from the
+  // floor's owned message, and plays it with Q; B sees A throw it back and hears the beat from
+  // where A stands. Then A backflips and lifts the trophy (shown on B's side as the floor would
+  // deliver them: A doesn't own those). A earlier run's purchase is refunded first.
   const name = process.env.TAG ?? 'e2e';
+  const aName = `emo6_al_${name}`;
+  const sql = (command) => execFileSync('node_modules/.bin/wrangler', ['d1', 'execute', 'DB', '--local', '-c', 'server/wrangler.toml', '--json', '--command', command], { stdio: 'pipe', env: { ...process.env, CI: '1' } }).toString();
+  try {
+    sql(`UPDATE casino_accounts SET balance = balance + (SELECT COALESCE(SUM(price), 0) FROM casino_items WHERE account_id = casino_accounts.id AND item = 'throwback') WHERE name = '${aName}';
+         DELETE FROM casino_items WHERE item = 'throwback' AND account_id = (SELECT id FROM casino_accounts WHERE name = '${aName}');`);
+  } catch {
+    /* a fresh database: nothing to take back */
+  }
   async function player(who) {
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
     await ctx.addInitScript(() => localStorage.setItem('casino.quality', 'low'));
@@ -367,9 +380,9 @@ if (checks.includes('live')) {
       const m = await import('/casino/src/audio/beat.ts');
       window.beatCalls = [];
       const play = m.Beats.prototype.play;
-      m.Beats.prototype.play = function (e, at) {
+      m.Beats.prototype.play = function (e, at, ...rest) {
         window.beatCalls.push({ e, from: at ? [at.x, at.z].map((v) => +v.toFixed(1)) : null });
-        return play.call(this, e, at);
+        return play.call(this, e, at, ...rest);
       };
       window.shot = null;
       c.engine.onFrame(() => {
@@ -381,37 +394,72 @@ if (checks.includes('live')) {
     const id = await page.evaluate(() => window.casino.session.profile.id);
     return { page, id, errors };
   }
-  const a = await player(`emo6_al_${name}`);
+  const a = await player(aName);
   const b = await player(`emo6_bo_${name}`);
   await b.page.waitForFunction((id) => window.casino.app.remotes?.drawn?.has(id), a.id);
   await a.page.evaluate(() => window.casino.world.teleport(0.5, 9.4, 0));
   await b.page.waitForFunction((id) => Math.abs((window.casino.app.remotes.character(id)?.root.position.z ?? 0) - 9.4) < 0.05, a.id, { timeout: 20000 }).catch(() => {});
   await b.page.waitForTimeout(900);
   await b.page.evaluate(() => (window.shot = { pos: [0.5, 1.45, 12.4], at: [0.5, 1.0, 9.4] }));
-  for (const [e, times] of [['throwback', [0.7, 0.82]], ['backflip', [0.8]], ['trophy', [1.5]]]) {
-    // B hears of it as the floor would send it; A plays it too (the floor echoes your own back)
+
+  // locked before: the wheel shows its price
+  await a.page.keyboard.press('g');
+  await a.page.waitForSelector('.emo-wheel');
+  await a.page.waitForTimeout(400);
+  await a.page.screenshot({ path: `${out}/live-wheel-before.png` });
+  if (!(await a.page.evaluate(() => document.querySelector('.emo-btn[data-emote="throwback"]').classList.contains('locked')))) fail('live: throwback not locked before buying');
+  // paid a win, then bought (the wheel stays up: the owned message unlocks it in place)
+  const now = Date.now();
+  sql(`INSERT INTO casino_ledger (op_id, account_id, kind, amount, table_id, created_at) SELECT 'e2e-win:' || id || ':${now}', id, 'cashout', 15000000, 'e2e', ${now} FROM casino_accounts WHERE name = '${aName}'; UPDATE casino_accounts SET balance = balance + 15000000, rev = rev + 1 WHERE name = '${aName}';`);
+  const bought = await a.page.evaluate(async () => {
+    const api = await import('/casino/src/ui/shop/api.ts');
+    try {
+      await api.buy('throwback', api.newOp());
+      return 'ok';
+    } catch (e) {
+      return String(e?.message ?? e);
+    }
+  });
+  if (bought !== 'ok') fail(`live: buying throwback: ${bought}`);
+  await a.page.waitForFunction(() => !document.querySelector('.emo-btn[data-emote="throwback"]').classList.contains('locked'), null, { timeout: 15000 }).catch(() => fail('live: the owned message did not unlock throwback on the open wheel'));
+  await a.page.screenshot({ path: `${out}/live-wheel-after.png` });
+  const ownedNow = await a.page.evaluate(() => window.casino.session.profile.owned ?? []);
+  if (!ownedNow.includes('throwback')) fail(`live: the profile does not own throwback (${ownedNow})`);
+  // Q plays it, through the floor
+  await a.page.keyboard.press('q');
+  await b.page.waitForFunction((id) => window.casino.app.remotes.character(id)?.act?.e === 'throwback', a.id, { timeout: 10000 }).catch(() => fail('live: B did not see A throw it back'));
+  for (const t of [0.7, 0.82]) {
+    await b.page.evaluate(([id, t]) => {
+      const ch = window.casino.app.remotes.character(id);
+      if (ch?.act) ch.act.t = t;
+    }, [a.id, t]);
+    await b.page.waitForTimeout(40);
+    await b.page.screenshot({ path: `${out}/live-remote-throwback-${tag(t)}.png` });
+  }
+  await a.page.screenshot({ path: `${out}/live-own-throwback.png` });
+  await b.page.waitForTimeout(4500);
+  // not owned: the floor drops them, so B is shown them the way the floor would deliver them
+  for (const [e, t] of [['backflip', 0.8], ['trophy', 1.5]]) {
     await b.page.evaluate(([id, e]) => window.casino.world.showEmote(id, e), [a.id, e]);
     await a.page.evaluate((e) => window.casino.world.showEmote('me', e), e);
-    let last = 0;
-    for (const t of times) {
-      await b.page.waitForTimeout((t - last) * 1000);
-      last = t;
-      await b.page.screenshot({ path: `${out}/live-remote-${e}-${tag(t)}.png` });
-    }
+    await b.page.waitForTimeout(t * 1000);
+    await b.page.screenshot({ path: `${out}/live-remote-${e}-${tag(t)}.png` });
     await a.page.screenshot({ path: `${out}/live-own-${e}.png` });
-    await b.page.waitForTimeout(4500);
+    await b.page.waitForTimeout(3500);
   }
   const heard = { a: await a.page.evaluate(() => window.beatCalls.slice()), b: await b.page.evaluate(() => window.beatCalls.slice()) };
   console.log(`beats: A ${JSON.stringify(heard.a)} B ${JSON.stringify(heard.b)}`);
   if (!(heard.a.length === 1 && heard.a[0].e === 'throwback' && heard.a[0].from === null)) fail('A does not hear its own beat for the throw it back (and only that)');
   if (!(heard.b.length === 1 && heard.b[0].from !== null)) fail("B does not hear A's beat from where A stands");
-  // the wheel in the game: everything shown, the free six playable
+  // a locked one A presses the key for is only pointed out, and nothing goes to the floor
   await a.page.keyboard.press('g');
   await a.page.waitForSelector('.emo-wheel');
-  await a.page.waitForTimeout(400);
-  await a.page.screenshot({ path: `${out}/live-wheel.png` });
-  const n = await a.page.evaluate(() => document.querySelectorAll('.emo-btn').length);
-  if (n !== 16) fail(`live wheel: ${n} buttons`);
+  await a.page.keyboard.press('w');
+  await a.page.waitForTimeout(300);
+  const hub = await a.page.evaluate(() => document.querySelector('.emo-hub')?.textContent ?? '');
+  if (!/Griddy/.test(hub) || !/\$120,000/.test(hub)) fail(`live: W on the locked griddy reads "${hub}"`);
+  if (!(await a.page.$('.emo-wheel'))) fail('live: W on a locked emote closed the wheel');
+  await a.page.screenshot({ path: `${out}/live-wheel-locked-key.png` });
   await a.page.keyboard.press('Escape');
   for (const p of [a, b]) if (p.errors.length) fail(`live: ${p.errors.slice(0, 5).join(' | ')}`);
   await a.page.context().close();

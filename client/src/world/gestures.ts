@@ -255,8 +255,9 @@ const SPIN_END = 3.35;
 const STRIDE = 0.075;
 
 const SHOP: Record<Exclude<EmoteId, FreeEmote>, Gesture> = {
-  // Bent over, hands on the knees, and the hips popping back four times a second: the pelvis
-  // tips while the shoulders hold still, so only the hips move. Seated: the shoulders bounce.
+  // Turned a quarter away and bent over, hands on the knees, looking back over the shoulder, and
+  // the hips popping back four times a second: the pelvis tips while the shoulders hold still, so
+  // only the hips move, and side-on they show from wherever you watch. Seated: the shoulders bounce.
   throwback: {
     dur: 4,
     beat: BEAT,
@@ -273,11 +274,12 @@ const SHOP: Record<Exclude<EmoteId, FreeEmote>, Gesture> = {
         body: [0.66 + 0.46 * p, 0, 0],
         hips: [0.36 - 0.46 * p, 0, 0],
         chest: [0.12, 0, 0],
-        neck: [-0.45, 0, 0],
-        head: [-0.55, head[1], 0],
+        neck: [-0.4, -0.25, 0],
+        head: [-0.5, -0.5 + head[1] * 0.5, 0],
         footR: foot,
         footL: foot,
         ...both({ knee: [0.01, 0.09, -0.05], elbow: [-1, 0.1, -0.1], palm: [0.2, -1, -0.2], fingers: [0.3, -0.45, 1] }),
+        spin: 0.85 * ramp(t, 0, 0.35),
       };
     },
   },
