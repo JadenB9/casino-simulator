@@ -4,7 +4,7 @@
 import { expect, vi } from 'vitest';
 import { env, exports } from 'cloudflare:workers';
 import { runInDurableObject } from 'cloudflare:test';
-import { ORIGIN, connect, featsHad, type Client } from './helpers.ts';
+import { ORIGIN, connect, type Client } from './helpers.ts';
 import type { CasinoFloor } from '../src/floor/index.ts';
 import type { CasinoTable } from '../src/table/host.ts';
 import type { GameId } from '../../shared/src/engine.ts';
@@ -40,8 +40,6 @@ export async function player(tag: string, ip = nextIp()): Promise<Player> {
   );
   expect(res.status).toBe(200);
   const body = await res.json<any>();
-  // the money here is checked to the cent: no feat pays beside the play
-  await featsHad(body.profile.id);
   return { id: body.profile.id, name: body.profile.name, token: body.token, ip };
 }
 

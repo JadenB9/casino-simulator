@@ -9,6 +9,7 @@ import { evictDurableObject, runDurableObjectAlarm, runInDurableObject } from 'c
 import { CLOSE, IDLE_MS } from '../../shared/src/protocol.ts';
 import { connect, type Client } from './helpers.ts';
 import { aid, buyIn, clockAt, closedWith, deadlines, enter, escrow, find, floor, makeLobby, money, player, sleep, table, type Player } from './party.ts';
+import { featsHad } from './helpers.ts';
 import { IDLE_SWEEP_MS } from '../src/floor/index.ts';
 
 afterEach(() => {
@@ -111,6 +112,8 @@ describe('the floor', () => {
 describe('a table', () => {
   it('stands a seated player up after IDLE_MS the way Leave does: the hand in play is settled, then the seat cashes out', async () => {
     const p = await player('tidle');
+    // the money here is checked to the cent: no feat pays beside the play
+    await featsHad(p.id);
     const before = await money(p.id);
     const { client } = await connect('solo/blackjack', p.token, '', p.ip);
     const c = client!;
