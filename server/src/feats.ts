@@ -372,11 +372,12 @@ export function featOpId(accountId: number, feat: string): string {
 export type UnlockOutcome = { kind: 'applied'; money?: { balance: Cents; inPlay: Cents; rev: number } } | { kind: 'taken' };
 
 /**
- * Pay a feat. 'applied' if this call (or an earlier try of it, stamped with the same `at`) paid
- * it; 'taken' if it was already earned some other way (another table got there first). Anything
- * else throws, and the caller tries again later.
+ * Pay a feat. 'applied' if this call paid it, or on a `retry`, if the try before (stamped with the
+ * same `at`) did and its answer was lost; 'taken' if it was already earned some other way
+ * (another table got there first, maybe in the same millisecond). Anything else throws, and the
+ * caller tries again later.
  */
-export async function unlockFeat(db: D1Database, accountId: number, feat: string, at: number): Promise<UnlockOutcome> {
+export async function unlockFeat(db: D1Database, accountId: number, feat: string, at: number, retry = false): Promise<UnlockOutcome> {
   if (!featOf(feat)) throw new Error(`unlockFeat: no feat ${feat}`);
   try {
     const results = await db.batch<{ balance: number; in_play: number; rev: number }>(unlockStatements(db, accountId, feat, at));
@@ -385,7 +386,7 @@ export async function unlockFeat(db: D1Database, accountId: number, feat: string
   } catch (err) {
     const row = await db.prepare(`SELECT at FROM casino_feats WHERE account_id = ?1 AND feat = ?2`).bind(accountId, feat).first<{ at: number }>();
     if (!row) throw err;
-    if (row.at !== at) return { kind: 'taken' };
+    if (!retry || row.at !== at) return { kind: 'taken' };
     const m = (featOf(feat)?.reward.cash ?? 0) > 0 ? await moneyOf(db, accountId) : null;
     return { kind: 'applied', ...(m ? { money: { balance: m.balance, inPlay: m.in_play, rev: m.rev } } : {}) };
   }
@@ -445,7 +446,10 @@ export class FeatBook {
     // The flush in flight for an account: sent again, unchanged, until D1 has it.
     sql.exec(`CREATE TABLE IF NOT EXISTS feat_flush (account_id INTEGER PRIMARY KEY, seq INTEGER NOT NULL, body TEXT NOT NULL)`);
     // Feats earned here and not yet paid, each stamped once with when it was earned.
-    sql.exec(`CREATE TABLE IF NOT EXISTS feat_todo (account_id INTEGER NOT NULL, feat TEXT NOT NULL, at INTEGER NOT NULL, PRIMARY KEY (account_id, feat)) WITHOUT ROWID`);
+    // `tries` counts the batches sent for it: only a retry can find its own earlier try landed.
+    sql.exec(`CREATE TABLE IF NOT EXISTS feat_todo (
+      account_id INTEGER NOT NULL, feat TEXT NOT NULL, at INTEGER NOT NULL, tries INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (account_id, feat)) WITHOUT ROWID`);
     sql.exec(`CREATE TABLE IF NOT EXISTS feat_meta (k TEXT PRIMARY KEY, v INTEGER NOT NULL) WITHOUT ROWID`);
     // after a restart, every account with unsent progress gets its challenges looked at again
     for (const r of sql.exec<{ account_id: number }>(`SELECT DISTINCT account_id FROM feat_pending`).toArray()) this.dirty.add(r.account_id);
@@ -547,7 +551,7 @@ export class FeatBook {
       this.dirty.delete(a);
     }
     // 2. Feats to pay, oldest first; each account's tallies land first.
-    const todo = this.sql.exec<{ account_id: number; feat: string; at: number }>(`SELECT account_id, feat, at FROM feat_todo ORDER BY at, feat`).toArray();
+    const todo = this.sql.exec<{ account_id: number; feat: string; at: number; tries: number }>(`SELECT account_id, feat, at, tries FROM feat_todo ORDER BY at, feat`).toArray();
     const flushed = new Set<number>();
     for (const t of todo) {
       const base = await this.loadBase(db, t.account_id);
@@ -559,7 +563,8 @@ export class FeatBook {
         flushed.add(t.account_id);
         await this.flush(db, t.account_id);
       }
-      const r = await unlockFeat(db, t.account_id, t.feat, t.at);
+      this.sql.exec(`UPDATE feat_todo SET tries = tries + 1 WHERE account_id = ?1 AND feat = ?2`, t.account_id, t.feat);
+      const r = await unlockFeat(db, t.account_id, t.feat, t.at, t.tries > 0);
       base.have.add(t.feat);
       this.sql.exec(`DELETE FROM feat_todo WHERE account_id = ?1 AND feat = ?2`, t.account_id, t.feat);
       if (r.kind === 'applied') await this.announce(out, t.account_id, t.feat, t.at, r.money);
