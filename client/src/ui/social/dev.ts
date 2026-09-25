@@ -1,7 +1,8 @@
 // Dev page for the leaderboards and the emote wheel, served by Vite in development only:
 //   /casino/src/ui/social/dev.html?screen=<leaderboard|emotes|hud>
 // Options: fixture=1 (canned boards instead of the local worker), fail=1 (with fixture: the
-// request fails), name=<n> (log in as n against the worker), tab=<richest|biggestWin|rounds>.
+// request fails), name=<n> (log in as n against the worker), tab=<a LeaderboardId>, game=<id>
+// (open on that game's boards).
 // It is also a worked example of the wiring app/boot.ts needs: the HUD gets two buttons, G
 // opens the wheel, and a pick goes to the floor link (here, a toast).
 
@@ -10,6 +11,7 @@ import { Engine3D, savedQuality } from '../../render/engine3d.ts';
 import { Sfx } from '../../audio/sfx.ts';
 import { devRoom } from '../../world/dev-room.ts';
 import { GAMES } from '../../games/index.ts';
+import type { GameId } from '../../../../shared/src/engine.ts';
 import * as realApi from '../../net/api.ts';
 import { session } from '../../app/session.ts';
 import { el, toast } from '../kit.ts';
@@ -45,7 +47,8 @@ async function start(): Promise<void> {
   const hud = mountHud({ root: ui, session, sfx, onMenu: () => {} });
   hud.setOnline(23);
   const emotes = mountEmotes({ root: ui, send: (e) => toast(`${EMOTE_LABELS[e]} sent`) });
-  const openBoards = () => openLeaderboard({ root: ui, api });
+  const game = q.get('game') as GameId | null;
+  const openBoards = () => openLeaderboard({ root: ui, api, ...(game ? { game } : {}) });
   // Where boot.ts puts them: with the HUD's other buttons, left of the tips bulb.
   const bar = hud.root.querySelector('.hud-right')!;
   const bulb = bar.querySelector('.hud-btn');
@@ -57,7 +60,7 @@ async function start(): Promise<void> {
     openBoards();
     if (tab) {
       await new Promise((r) => setTimeout(r, 50));
-      document.querySelector<HTMLButtonElement>(`.lb-tabs [id$="-${tab}"]`)?.click();
+      document.querySelector<HTMLButtonElement>(`.lb-nav [id$="-${tab}"]`)?.click();
     }
   } else if (screen === 'emotes') {
     emotes.open();
