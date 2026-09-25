@@ -396,3 +396,53 @@ export function drawLacquerCoffer(size: number): HTMLCanvasElement {
   ctx.fill();
   return c;
 }
+
+/**
+ * Water seen from above: a deep teal with the bright, wandering lines light makes on a pool's
+ * floor, drawn from a few overlapping sine fields so it tiles and never shows a seam.
+ */
+export function drawRipples(size: number): HTMLCanvasElement {
+  const [c, ctx] = canvas(size);
+  const img = ctx.createImageData(size, size);
+  const d = img.data;
+  const T = Math.PI * 2;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const u = (x / size) * T;
+      const v = (y / size) * T;
+      // whole periods in both directions: the tile repeats cleanly
+      const f = Math.sin(3 * u + Math.sin(2 * v)) + Math.sin(2 * v + Math.sin(3 * u + 1)) + 0.6 * Math.sin(5 * u - 4 * v);
+      const line = Math.pow(1 - Math.min(1, Math.abs(f) / 0.55), 3);
+      const i = (y * size + x) * 4;
+      d[i] = 22 + line * 170;
+      d[i + 1] = 88 + line * 150;
+      d[i + 2] = 96 + line * 140;
+      d[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return c;
+}
+
+/** Falling water: bright vertical threads of differing weight over a thin, pale sheet (alpha in the canvas). */
+export function drawFalls(w: number, h: number, seed: number): HTMLCanvasElement {
+  const [c, ctx] = canvas(w, h);
+  const rand = rng(seed);
+  ctx.fillStyle = 'rgba(200,235,240,0.18)';
+  ctx.fillRect(0, 0, w, h);
+  for (let i = 0; i < 70; i++) {
+    const x = rand() * w;
+    const lw = 1 + rand() * 3;
+    const y0 = rand() * h;
+    const len = h * (0.3 + rand() * 0.7);
+    const g = ctx.createLinearGradient(0, y0, 0, y0 + len);
+    g.addColorStop(0, 'rgba(255,255,255,0)');
+    g.addColorStop(0.5, `rgba(235,250,255,${0.35 + rand() * 0.5})`);
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g;
+    // drawn twice, a tile apart, so the threads wrap round top to bottom
+    ctx.fillRect(x, y0, lw, len);
+    ctx.fillRect(x, y0 - h, lw, len);
+  }
+  return c;
+}
