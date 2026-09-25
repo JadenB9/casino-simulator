@@ -94,13 +94,24 @@
 .pg-slot { width: 74px; height: 104px; border: 1px dashed var(--line-strong); border-radius: 6px; }
 .pg-set-acts { display: flex; justify-content: flex-end; gap: 10px; }
 .pg-set-acts .btn { height: 42px; min-width: 140px; font-size: 17px; }
+/* The tips line sits above the setter while it is open. */
+:root:has(.pg-setter:not([hidden])) { --tip-bottom: 262px; }
 @media (max-width: 760px), (max-height: 560px) {
   .pg-card, .pg-slot { width: 52px; height: 73px; }
   .pg-rows { gap: 10px; }
   .pg-low { padding-right: 10px; }
   .pg-set-acts .btn { height: 38px; min-width: 110px; font-size: 15px; }
+  :root:has(.pg-setter:not([hidden])) { --tip-bottom: 214px; }
 }
-@media (max-width: 480px) {
-  .pg-card, .pg-slot { width: 40px; height: 56px; }
+/* A phone upright: the setter spans the screen, its words over the cards. */
+@media (max-width: 560px) {
+  .pg-setter { left: 8px; right: 8px; transform: none; max-width: none; padding: 8px 10px 10px; }
+  .pg-set-head { flex-direction: column; align-items: flex-start; gap: 2px; }
+  .pg-set-status { text-align: left; font-size: 13px; }
+  .pg-rows { flex-wrap: wrap; gap: 8px; }
+  .pg-low { padding-right: 8px; }
   .pg-row { gap: 4px; }
+  .pg-card, .pg-slot { width: 44px; height: 62px; }
+  .pg-set-acts .btn { flex: 1; min-width: 0; }
+  :root:has(.pg-setter:not([hidden])) { --tip-bottom: 304px; }
 }

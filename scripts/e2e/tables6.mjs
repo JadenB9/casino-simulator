@@ -3,7 +3,8 @@
 // several hands of each alone in the dev harness (clicking chips onto the felt, following the
 // tips, several hands at once, the house way), then two players at a shared table of each in the
 // game proper, with a screenshot at every stage and both players' money checked at the end.
-// Usage: node scripts/e2e/tables6.mjs [port] [outDir] [lr|pg|mp-lr|mp-pg ...]
+// Usage: node scripts/e2e/tables6.mjs [port] [outDir] [lr|pg|mp-lr|mp-pg|sizes ...]
+// (sizes: a hand of each at a phone upright, a phone on its side and a small laptop window)
 //
 // Until the themed room places the two tables on the floor, the shared tables stand in for the
 // Three Card Poker table's spot: the script adds a station there with the new game's model.
@@ -393,7 +394,48 @@ async function shared(game) {
   await b.page.context().close();
 }
 
+// ---------------------------------------------------------------------------------------------
+// Small screens: the decision bar and the hand setter at a phone's and a small window's sizes
+
+async function sizes() {
+  const SIZES = [
+    ['phone', { width: 390, height: 844 }],
+    ['phone-side', { width: 844, height: 390 }],
+    ['laptop', { width: 1024, height: 640 }],
+  ];
+  for (const [label, viewport] of SIZES) {
+    for (const game of ['letitride', 'paigow']) {
+      const tag = game === 'letitride' ? 'lr' : 'pg';
+      const page = await open(game, `tables6_e2e_${tag}`, viewport);
+      // one hand, and a chip on it
+      await page.click('.mh-picker .mh-n >> nth=0');
+      await page.waitForTimeout(1200);
+      const at = await onScreen(page, tag === 'lr' ? lrPoint(0, 0.97) : [Math.sin((9 * Math.PI) / 180) * 0.975, 0.76, -0.72 + Math.cos((9 * Math.PI) / 180) * 0.975]);
+      await page.mouse.click(at.x, at.y);
+      await page.waitForTimeout(400);
+      await page.keyboard.press('Space');
+      await page.waitForSelector(tag === 'lr' ? '.lr-decide:not([hidden])' : '.pg-setter:not([hidden])', { timeout: 30_000 }).catch(async (err) => {
+        await shot(page, `${tag}-size-${label}-failed`);
+        throw err;
+      });
+      await page.waitForTimeout(700);
+      await shot(page, `${tag}-size-${label}`);
+      if (tag === 'lr') {
+        await page.keyboard.press('p');
+        await page.waitForSelector('.lr-decide:not([hidden])', { timeout: 30_000 });
+        await page.keyboard.press('p');
+      } else {
+        await page.keyboard.press('h');
+        await page.keyboard.press('Space');
+      }
+      await waitFor(page, (m) => /Bet\$0/.test(document.querySelector(m)?.textContent ?? ''), `.${tag}-meters`, 40_000);
+      await page.context().close();
+    }
+  }
+}
+
 try {
+  if (which.includes('sizes')) await sizes();
   if (which.includes('lr')) await letItRide();
   if (which.includes('pg')) await paiGow();
   if (which.includes('mp-lr')) await shared('letitride');
