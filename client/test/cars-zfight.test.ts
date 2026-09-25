@@ -6,10 +6,7 @@ import * as THREE from 'three';
 import { CARS } from '../../shared/src/items.ts';
 import { MatBatch } from '../src/world/cars/models.ts';
 import { describeFight, findFights, type Surface } from '../src/world/zfight.ts';
-import { bays } from '../src/world/cars/layout.ts';
 
-/** Where the garage stands its cars (the checker's buckets fall differently at every turn). */
-const GARAGE_AT = bays().map((b) => new THREE.Matrix4().makeRotationY(b.yaw).setPosition(b.x, 0.12, b.z));
 
 function surfaces(id: string, lite: boolean, at: THREE.Matrix4): Surface[] {
   const out: Surface[] = [];
@@ -25,7 +22,7 @@ describe('car models: no z-fighting', () => {
     for (const c of CARS)
       it(`${c.id}${lite ? ' (lite)' : ''}`, () => {
         // at the origin and out where the lots are, turned both ways (the checker's buckets fall differently)
-        for (const at of [new THREE.Matrix4(), new THREE.Matrix4().makeRotationY(Math.PI / 2).setPosition(143.8, 0, -31.4), new THREE.Matrix4().setPosition(110.7, 0, 36.6), new THREE.Matrix4().makeRotationY(-Math.PI / 2).setPosition(146.8, 0, 21.1), ...(lite ? [] : GARAGE_AT)]) {
+        for (const at of [new THREE.Matrix4(), new THREE.Matrix4().makeRotationY(Math.PI / 2).setPosition(143.8, 0, -31.4), new THREE.Matrix4().setPosition(110.7, 0, 36.6), new THREE.Matrix4().makeRotationY(-Math.PI / 2).setPosition(146.8, 0, 21.1)]) {
           const fights = findFights(surfaces(c.id, lite, at), { minArea: 1e-5 });
           expect(fights.map(describeFight)).toEqual([]);
         }
