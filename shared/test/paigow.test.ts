@@ -479,3 +479,17 @@ describe('pai gow poker tips', () => {
     expect(houseWayAdvice(cards('5s 5h 3c 3d Kh 9s 2c')).text).toBe('House way: Fives and Threes behind, K-9 in front');
   });
 });
+
+describe('pai gow in the big-win news', () => {
+  it('names the Fortune line or the high hand from what the table turned over', async () => {
+    const { winWhat } = await import('../src/games/paigow/wins.ts');
+    const sim = solo(stackedDeck(cards('8s 8h 8c 8d Kh 9s 2c 7h 6d 5c 4s 2h 3d 9d')));
+    sim.act(0, { type: 'bet', bet: 1_000, fortune: 500 });
+    sim.act(0, { type: 'deal' });
+    const deal = events(sim);
+    const mine = view(sim).seats[0]!.cards as PgCard[];
+    sim.act(0, { type: 'set', low: lowIndexes(mine, houseWay(mine)) });
+    expect(winWhat(events(sim), 0)).toBe('Fortune, Four of a kind');
+    expect(winWhat(deal, 0)).toBeNull();
+  });
+});

@@ -488,3 +488,19 @@ describe('let it ride tips', () => {
     }
   });
 });
+
+describe('let it ride in the big-win news', () => {
+  it('names the hand from what the table turned over, never from a private deal', async () => {
+    const { winWhat } = await import('../src/games/letitride/wins.ts');
+    const sim = solo(stackedDeck(cards('As Ks Qs Js 10s')));
+    sim.act(0, { type: 'bet', unit: 1_000, bonus: 500 });
+    sim.act(0, { type: 'deal' });
+    const dealEvents = events(sim);
+    sim.act(0, { type: 'ride' });
+    const firstEvents = events(sim);
+    sim.act(0, { type: 'ride' });
+    expect(winWhat([...firstEvents, ...events(sim)], 0)).toBe('Royal flush');
+    // the private hand event alone names nothing
+    expect(winWhat(dealEvents, 0)).toBeNull();
+  });
+});

@@ -68,3 +68,21 @@ it('pai gow poker engine, chips and all, lands on the combined edge (Monte Carlo
   expect(Math.abs(tally.edge - published)).toBeLessThanOrEqual(3 * tally.se + ROUNDING);
   expect(sim.rounds).toHaveLength(n);
 });
+
+// Three hands a round against the dealer's one, as a solo player can play: each is still a hand
+// of Pai Gow Poker, so the edge per hand is the same. The hands share the dealer's cards, so the
+// standard error comes from each round's average over its hands.
+it('pai gow poker on three hands from one deck keeps the edge per hand (Monte Carlo, 3 SE)', () => {
+  const n = Math.ceil(mcRounds(10_000_000) / 10);
+  const rng = mcRng(5203);
+  const perRound = new Tally();
+  for (let i = 0; i < n; i++) {
+    const { hands, dealer } = dealHands(rng, 3);
+    const d = houseWay(dealer);
+    let net = 0;
+    for (const seven of hands) net += settle({ bet: 100, fortune: 0 }, houseWay(seven), d, seven, DEFAULT_FORTUNE).bet - 100;
+    perRound.add(net / 300);
+  }
+  console.log(perRound.summary('pai gow poker, three hands a round, per hand', EDGE));
+  expect(Math.abs(perRound.edge - EDGE)).toBeLessThanOrEqual(3 * perRound.se + ROUNDING);
+});

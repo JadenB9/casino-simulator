@@ -1396,10 +1396,10 @@ shared/test/letitride.mc.test.ts, fixed seeds. The high SD comes from the 1,000:
 
 | Bet | Published | Measured | SE | z | N |
 |---|---|---|---|---|---|
-| Let It Ride per unit, by the strategy | 3.5057% | 3.4477% | 0.1603% | −0.36 | 10M hands (SD 5.07) |
+| Let It Ride per unit, by the strategy | 3.5057% | 3.4432% | 0.1607% | −0.39 | 10M hands (SD 5.08) |
 | 3-Card Bonus | 7.0950% | 7.1514% | 0.0908% | +0.62 | the same deals (SD 2.87) |
-| Three hands a round against one board, per hand | 3.5057% | 3.2307% | 0.1785% | −1.54 | 3.33M rounds, 10M hands |
-| Bets and bonus through the table engine, one stack, per unit | 10.6007% | 10.1885% | 1.8374% | −0.22 | 200,000 hands |
+| Three hands a round against one board, per hand | 3.5057% | 3.2225% | 0.1788% | −1.58 | 3.33M rounds, 10M hands |
+| Bets and bonus through the table engine, one stack, per unit | 10.6007% | 10.1655% | 1.8388% | −0.24 | 200,000 hands |
 
 ### Sources for Let It Ride
 
