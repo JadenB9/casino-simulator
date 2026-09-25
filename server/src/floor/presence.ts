@@ -63,6 +63,12 @@ export interface FloorAtt {
    * (confine()). Not carried over to a new connection: the law re-applies it on connect.
    */
   confine?: Rect | null;
+  /**
+   * Where this account was last known to stand before this connection (the floor's `last_pos`),
+   * and when: the first position a connection sends must be walkable from there or from where
+   * hello put it, so reconnecting isn't a way to jump across the floor. Dropped once placed.
+   */
+  from?: { x: number; z: number; t: number } | null;
 }
 
 type Broadcast = (msg: FloorServerMsg, except?: WebSocket) => void;
@@ -95,6 +101,7 @@ export class Presence {
   ) {
     this.sql = ctx.storage.sql;
     this.sql.exec(`CREATE TABLE IF NOT EXISTS seated (account_id INTEGER PRIMARY KEY, station TEXT NOT NULL)`);
+    this.sql.exec(`CREATE TABLE IF NOT EXISTS last_pos (account_id INTEGER PRIMARY KEY, x INTEGER NOT NULL, z INTEGER NOT NULL, t INTEGER NOT NULL)`);
     // After hibernation memory starts empty, but the sockets and their attachments are still there.
     for (const ws of ctx.getWebSockets()) {
       const att = ws.deserializeAttachment() as FloorAtt | null;
@@ -112,6 +119,7 @@ export class Presence {
     const prev = this.leaving.get(who.accountId) ?? this.walkerOf(who.accountId)?.att ?? null;
     this.leaving.delete(who.accountId);
     const station = this.stationOf(who.accountId);
+    const last = prev ? null : this.lastPos(who.accountId);
     const att: FloorAtt = {
       ...who,
       x: prev?.x ?? SPAWN.x,
@@ -122,6 +130,7 @@ export class Presence {
       t: now,
       fresh: true,
       active: now,
+      from: last,
     };
     ws.serializeAttachment(att);
     this.live.set(ws, { att, moving: false, bank: MAX_BANK });
@@ -149,7 +158,16 @@ export class Presence {
     if (placing) {
       // The first position on a connection places the player. After a dropped connection the
       // client kept walking on its own and knows where it is; a first visit echoes the spawn.
+      // Once the floor has seen the account stand somewhere, it's somewhere a walk from there
+      // could have reached; anything else (a reconnect used as a jump to a gift box) puts them
+      // back where the floor last saw them, and tells the client.
       a.fresh = false;
+      if (!a.confine && a.from && !reachable(a, a.from, x, z, now)) {
+        x = a.from.x;
+        z = a.from.z;
+        this.send(ws, { t: 'tp', x, z, r: msg.r });
+      }
+      a.from = null;
     } else {
       // Presence carries no money, so the only checks are the floor bounds and a speed limit:
       // allowance accrues at MAX_SPEED up to MAX_BANK, and a move beyond it stops short on its line.
@@ -173,7 +191,10 @@ export class Presence {
     w.moving = msg.t === 'mv';
     this.dirty.add(ws);
     // Only resting poses need to outlive the object: a walking player keeps it awake anyway.
-    if (!w.moving || placing) this.save(ws, a);
+    if (!w.moving || placing) {
+      this.save(ws, a);
+      this.remember(a);
+    }
     if (now - this.lastFlush >= FLUSH_MS) this.flush(now);
     // Too soon after the last flush (a stop included): send this row when the interval is up,
     // rather than whenever the next message happens to arrive (walkers send only a few times a
@@ -189,6 +210,7 @@ export class Presence {
     this.live.delete(ws);
     this.dirty.delete(ws);
     if (!att) return;
+    if (!att.fresh) this.remember(att);
     // A seat is held only while its sitter is here (a newer tab starts standing, too).
     if (att.seat) {
       this.seats.free(att.accountId);
@@ -264,7 +286,9 @@ export class Presence {
       a.active = now;
       w.bank = MAX_BANK;
       w.moving = false;
+      a.from = null;
       this.save(ws, a);
+      this.remember(a);
       this.dirty.add(ws);
       this.send(ws, { t: 'tp', x: a.x, z: a.z, r });
     }
@@ -415,6 +439,15 @@ export class Presence {
     ws.serializeAttachment({ ...att, watch: stored?.watch ?? null });
   }
 
+  /** Where an account last stood on this floor, and when (kept past its connection). */
+  private lastPos(accountId: number): { x: number; z: number; t: number } | null {
+    return this.sql.exec<{ x: number; z: number; t: number }>(`SELECT x, z, t FROM last_pos WHERE account_id = ?1`, accountId).toArray()[0] ?? null;
+  }
+
+  private remember(a: FloorAtt): void {
+    this.sql.exec(`INSERT OR REPLACE INTO last_pos (account_id, x, z, t) VALUES (?1, ?2, ?3, ?4)`, a.accountId, a.x, a.z, a.t);
+  }
+
   private stationOf(accountId: number): string | null {
     const row = this.sql.exec<{ station: string }>(`SELECT station FROM seated WHERE account_id = ?1`, accountId).toArray()[0];
     return row?.station ?? null;
@@ -431,6 +464,16 @@ export class Presence {
 
 function info(a: FloorAtt): PlayerInfo {
   return { id: a.accountId, name: a.name, look: a.look, x: a.x, z: a.z, r: a.r, at: a.at, seat: a.seat?.id ?? null };
+}
+
+/**
+ * Whether a connection's first position (x, z) is one an honest client sends: where hello put
+ * it (a new page goes there at once), or a walk at the speed limit from where the account last
+ * stood (`from`) since it stood there (a reconnect, which kept walking while it was away).
+ */
+function reachable(a: FloorAtt, from: { x: number; z: number; t: number }, x: number, z: number, now: number): boolean {
+  if (Math.hypot(x - a.x, z - a.z) <= MAX_BANK) return true;
+  return Math.hypot(x - from.x, z - from.z) <= MAX_BANK + (MAX_SPEED * Math.max(0, now - from.t)) / 1000;
 }
 
 function clamp(v: number, lo: number, hi: number): number {

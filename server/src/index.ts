@@ -12,7 +12,7 @@ import { notYet } from '../../shared/src/bank.ts';
 import { closeWith, corsHeaders, fail, json, originAllowed, readJson } from './http.ts';
 import { bearer, logIn, signToken, verifyToken } from './auth.ts';
 import { signTicket, ticketTarget, verifyTicket } from './tickets.ts';
-import { KeyedBuckets } from './ratelimit.ts';
+import { API_BURST, API_PER_SEC, KeyedBuckets } from './ratelimit.ts';
 import { bumpRate, escrowsOf, getAccount, loadProfile, ownedOf, setLook } from './db.ts';
 import { isFreeEmote, emoteItem } from '../../shared/src/items.ts';
 import { featsOf } from './feats.ts';
@@ -46,6 +46,8 @@ const STATION_RE = /^[a-z0-9-]{1,24}$/;
  * Kept per isolate: a burst from one client lands on one, and the objects limit connects anyway.
  */
 const ticketLimits = new KeyedBuckets(30, 1);
+/** Every signed-in request, per account (ratelimit.ts API_BURST). */
+const apiLimits = new KeyedBuckets(API_BURST, API_PER_SEC);
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -113,6 +115,7 @@ async function handleApi(request: Request, env: Env, route: string, cors: Record
 
   const claims = await verifyToken(env.CASINO_TOKEN_SECRET, bearer(request), now);
   if (!claims) return fail(401, 'UNAUTHORIZED', 'Log in again.', cors);
+  if (!apiLimits.take(`a${claims.a}`)) return fail(429, 'RATE_LIMITED', 'Slow down a little.', cors);
 
   if (route === 'me' && request.method === 'GET') {
     const stacks = await reconcileStale(env, claims.a, now);
