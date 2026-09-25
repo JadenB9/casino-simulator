@@ -101,13 +101,15 @@ const CANDIDATES: [number, number][] = [
 export function statueSpots(plan: FloorPlan, n = STATUES): StatueSpot[] {
   const lobby = plan.rooms.find((r) => r.id === 'lobby');
   if (!lobby) return [];
-  // The lobby's plan names its statue places (rooms.ts: kept clear the way an aisle is, round the
-  // fountain): those, best first. A plan without them gets places found below.
-  const planned = (plan as FloorPlan & { statues?: { x: number; z: number; yaw: number; room: string }[] }).statues?.filter((s) => s.room === 'lobby') ?? [];
-  if (planned.length > 0) return planned.slice(0, n).map(({ x, z, yaw }) => ({ x, z, yaw }));
   const L = lobby.inner;
   const cx = (L.x0 + L.x1) / 2;
   const out: StatueSpot[] = [];
+  // the lobby's own statue places (rooms.ts, plan.statues) first, while they're clear
+  const planned = (plan as FloorPlan & { statues?: { x: number; z: number; yaw: number; room: string }[] }).statues ?? [];
+  for (const s of planned) {
+    if (out.length >= n) break;
+    if (s.room === 'lobby' && clearFor(plan, L, s.x, s.z) && out.every((o) => Math.hypot(o.x - s.x, o.z - s.z) >= 2.4)) out.push({ x: s.x, z: s.z, yaw: s.yaw });
+  }
   const pool: [number, number][] = CANDIDATES.map(([x, z]) => [lobby.cx + x, lobby.cz + z]);
   // after the chosen few, a grid down the lobby's sides as a fallback (a plan that changed a lot);
   // never its middle, which is the way from the doors to everything
