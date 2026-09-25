@@ -6,6 +6,7 @@
 //           the lobby stop, "Talk to" for a tip (the flash, the photo, the balance), the other player
 //           seeing the selfie, already met, and the stops after (photos, a table played for show)
 //   gift    a gift box left in the lobby: seen by both, opened by one, gone for the other
+//   phone   a visit on a phone's screen: the notice and the card clear of the HUD
 //
 // Usage: node scripts/e2e/celebs6.mjs [port] [outDir] [checks...]   (default: daily celeb gift)
 //   --sw     SwiftShader instead of the machine's GPU
@@ -21,7 +22,7 @@ import { execFileSync } from 'node:child_process';
 const args = process.argv.slice(2).filter((a) => !a.startsWith('--'));
 const flag = (n) => process.argv.includes(`--${n}`);
 const [port = '6290', out = '/tmp/celebs6-shots', ...wanted] = args;
-const checks = wanted.length ? wanted : ['daily', 'celeb', 'gift'];
+const checks = wanted.length ? wanted : ['daily', 'celeb', 'gift', 'phone'];
 mkdirSync(out, { recursive: true });
 const SHARED = `/casino/@fs${resolve('shared/src/celebs.ts')}`;
 const A = 'celebs6_e2e_a';
@@ -281,7 +282,7 @@ if (checks.includes('celeb')) {
 
   if (!flag('quick')) {
     // the boutique: posing for photos, phones flashing
-    for (const [i, name, world] of [[1, 'celeb-boutique-pose', [-2.6, 1.8, 1.1, 1.25]], [2, 'celeb-table', [0.6, 1.9, 2.7, 1.2]]]) {
+    for (const [i, name, world] of [[1, 'celeb-boutique-pose', [-3.6, 2.6, 1.4, 1.1]], [2, 'celeb-table', [0.6, 1.9, 2.7, 1.2]]]) {
       const s = shared.stops[i];
       const at = s.at;
       await travel(a.p, at[0] + world[0] * 0.8, at[1] + world[2] * 0.8, 0);
@@ -339,6 +340,30 @@ if (checks.includes('gift')) {
   for (const [who, r] of [['a', a], ['b', b]]) for (const e of r.errors) fail(`${who} error: ${e}`);
   await a.ctx.close();
   await b.ctx.close();
+}
+
+// --- on a phone: the notice, the on-the-floor card and the prompt clear of the HUD ------------------
+
+if (checks.includes('phone')) {
+  const m = await enterAs(B, { width: 390, height: 844 });
+  await m.p.keyboard.press('Escape');
+  await travel(m.p, 1.4, 6.8, Math.PI * 0.9);
+  await api(m.p, 'dev/celeb', 'POST', { celeb: 'maddox' });
+  await m.p.waitForSelector('.celeb-sighting', { timeout: 15000 }).catch(() => fail('the card on a phone'));
+  await m.p.waitForTimeout(5000);
+  await shot(m.p, 'phone-celeb');
+  const boxes = await m.p.evaluate(() => {
+    const r = (sel) => document.querySelector(sel)?.getBoundingClientRect();
+    const hud = [...document.querySelectorAll('.hud .hud-btn, .hud-who, .hud-money')].map((e) => e.getBoundingClientRect());
+    const card = r('.celeb-sighting');
+    const overlaps = card ? hud.filter((h) => h.left < card.right && h.right > card.left && h.top < card.bottom && h.bottom > card.top).length : -1;
+    return { card: card && [card.left, card.top, card.right, card.bottom], overlaps, width: innerWidth };
+  });
+  console.log('phone', JSON.stringify(boxes));
+  if (boxes.overlaps !== 0) fail(`the card clear of the HUD on a phone (${boxes.overlaps})`);
+  if (boxes.card && boxes.card[2] > boxes.width) fail('the card on screen');
+  for (const e of m.errors) fail(`phone error: ${e}`);
+  await m.ctx.close();
 }
 
 console.log(failed ? `${failed} failed` : 'ok');

@@ -179,6 +179,8 @@ export class Celebs {
     this.offLink = null;
     this.link = link;
     this.asking = null;
+    // (the next socket may be someone else's: the floor says again who has met whom)
+    if (!link) this.met.clear();
     if (link) this.offLink = link.subscribe((m) => this.hear(m as unknown as CelebServerMsg));
   }
 

@@ -14,7 +14,7 @@
 .celeb-sighting-tag { display: flex; align-items: center; gap: 7px; font-size: 11px; font-weight: 600; letter-spacing: 0.24em; text-transform: uppercase; color: var(--brass); }
 .celeb-sighting-tag::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: #e0556b; box-shadow: 0 0 0 3px rgba(224, 85, 107, 0.22); animation: celeb-live 1.6s ease-in-out infinite; }
 .celeb-sighting.met .celeb-sighting-tag::before { background: var(--brass); box-shadow: none; animation: none; }
-.celeb-sighting-name { font-family: var(--serif); font-size: 16px; font-weight: 600; letter-spacing: 0.04em; color: var(--brass-hi); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.celeb-sighting-name { font-family: var(--serif); font-size: 16px; font-weight: 600; line-height: 1.2; letter-spacing: 0.04em; color: var(--brass-hi); text-wrap: balance; }
 .celeb-sighting-known { font-size: 13px; letter-spacing: 0.03em; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .celeb-sighting-where { margin-top: 3px; font-size: 14px; font-weight: 600; letter-spacing: 0.06em; color: var(--ink-2); }
 
