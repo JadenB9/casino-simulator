@@ -264,15 +264,27 @@ class Screens {
   }
 }
 
-/** A card over every slot machine's topper (their cabinets' handles say where), sharing the monitors' picture. */
+/**
+ * A card over every slot machine's topper (their cabinets' handles say where), sharing one
+ * picture. The classic cabinets say what kind of topper they have (topperCard); the newer skins
+ * build theirs, so the card is fitted inside the front of that topper's printed face.
+ */
 function toppers(w: FxWorld, picture: THREE.Texture): THREE.InstancedMesh | null {
   const places: THREE.Matrix4[] = [];
   const local = new THREE.Matrix4();
+  const faces = new Map<string, ReturnType<typeof topperCard> | null>();
   w.stations.traverse((o) => {
-    const h = o.userData.slots as { root?: THREE.Object3D; layout?: { topper: string; top: number; width: number } } | undefined;
-    if (!h?.root || !h.layout?.topper) return;
+    type Handle = { root?: THREE.Object3D; layout?: { topper: string; top: number; width: number }; skin?: { id: string; layout: unknown; topper(l: unknown): { printed: THREE.BufferGeometry[]; body: THREE.BufferGeometry[]; trim: THREE.BufferGeometry[] } } };
+    const h = (o.userData.slots ?? o.userData.slots2) as Handle | undefined;
+    if (!h?.root) return;
+    let c: ReturnType<typeof topperCard> | null = null;
+    if (h.layout?.topper) c = topperCard(h.layout);
+    else if (h.skin) {
+      if (!faces.has(h.skin.id)) faces.set(h.skin.id, skinCard(h.skin));
+      c = faces.get(h.skin.id) ?? null;
+    }
+    if (!c) return;
     h.root.updateWorldMatrix(true, false);
-    const c = topperCard(h.layout);
     local.compose(new THREE.Vector3(c.x, c.y, c.z), new THREE.Quaternion(), new THREE.Vector3(c.w, c.h, 1));
     places.push(h.root.matrixWorld.clone().multiply(local));
   });
@@ -285,6 +297,23 @@ function toppers(w: FxWorld, picture: THREE.Texture): THREE.InstancedMesh | null
   mesh.instanceMatrix.needsUpdate = true;
   mesh.computeBoundingSphere();
   return mesh;
+}
+
+/** A newer skin's topper face, from the printed parts its topper builds: a card inside its front. */
+function skinCard(skin: { layout: unknown; topper(l: unknown): { printed: THREE.BufferGeometry[]; body: THREE.BufferGeometry[]; trim: THREE.BufferGeometry[] } }): ReturnType<typeof topperCard> | null {
+  const parts = skin.topper(skin.layout);
+  const box = new THREE.Box3();
+  for (const g of parts.printed) {
+    g.computeBoundingBox();
+    box.union(g.boundingBox!);
+  }
+  for (const g of [...parts.printed, ...parts.body, ...parts.trim]) g.dispose();
+  if (box.isEmpty()) return null;
+  const bw = box.max.x - box.min.x;
+  const bh = box.max.y - box.min.y;
+  const cw = bw * 0.8;
+  const ch = Math.min(bh * 0.55, cw / 2.6);
+  return { x: (box.min.x + box.max.x) / 2, y: (box.min.y + box.max.y) / 2, z: box.max.z + 0.004, w: cw, h: ch };
 }
 
 /** A monitor's picture (the attract pictures' size): the name in gold on a black stage. */
