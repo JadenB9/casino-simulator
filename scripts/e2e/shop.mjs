@@ -136,11 +136,11 @@ if (checks.includes('boutique')) {
   await p.waitForTimeout(1200);
   await shot(p, 'boutique-iced');
   if (!(await p.textContent('.bq-primary'))?.startsWith('Buy')) fail('an unowned piece offers Buy');
-  await p.click('.bq-seg .seg-btn[data-id="grill"]');
+  await p.click('.bq-sub .seg-btn[data-id="grill"]');
   await p.waitForTimeout(1200);
   await shot(p, 'boutique-grills');
   if ((await p.textContent('.bq-item[aria-selected="true"] .bq-chip')) !== 'Owned') fail('the grills tab opens on the one you own');
-  await p.click('.bq-seg .seg-btn[data-id="clothes"]');
+  await p.click('.bq-sub .seg-btn[data-id="clothes"]');
   await p.click('.bq-item[data-id="velvet-jacket"]');
   await p.waitForTimeout(1500);
   await shot(p, 'boutique-clothes');

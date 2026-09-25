@@ -1,11 +1,11 @@
-// The boutique's and the bar's HUD buttons, drawn like menu/icons.ts (SVG elements, the CSP rules
+// The boutique's, the effects' and the bar's HUD buttons, drawn like menu/icons.ts (SVG elements, the CSP rules
 // out inline styles and data: URLs), and the button itself, built like the HUD's own.
 
 import { el } from '../kit.ts';
 
 const NS = 'http://www.w3.org/2000/svg';
 
-export type ShopIconName = 'boutique' | 'bar';
+export type ShopIconName = 'boutique' | 'bar' | 'effects';
 
 export function shopIcon(name: ShopIconName): SVGSVGElement {
   const s = document.createElementNS(NS, 'svg');
@@ -23,6 +23,10 @@ export function shopIcon(name: ShopIconName): SVGSVGElement {
     path('M7 4.5h10l3.8 5L12 20.5 3.2 9.5z');
     path('M3.2 9.5h17.6');
     path('M9.6 4.5 8.3 9.5 12 20.5l3.7-11-1.3-5');
+  } else if (name === 'effects') {
+    // A burst: a four-point star with a small one beside it, the way a spark catches the light.
+    path('M10 3.5l1.7 5.1 5.1 1.7-5.1 1.7L10 17.1l-1.7-5.1-5.1-1.7 5.1-1.7z');
+    path('M18 14.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z');
   } else {
     // A cocktail glass with an olive on a pick.
     path('M4.5 5h15L12 13.2z');
