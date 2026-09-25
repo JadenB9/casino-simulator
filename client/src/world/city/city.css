@@ -1,0 +1,153 @@
+/* The elevator: the car's button panel (a brushed steel plate beside the doors, as in the car),
+   and the ride's dark with the floor indicator counting. */
+
+.lift-panel {
+  position: fixed;
+  right: max(16px, 6vw);
+  top: 50%;
+  transform: translateY(-50%);
+  width: 236px;
+  padding: 16px 14px 14px;
+  border-radius: 4px;
+  color: #1a1b1e;
+  background:
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.05) 0 1px, rgba(0, 0, 0, 0.035) 1px 2px),
+    linear-gradient(180deg, #b9bbc0, #9c9ea4);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.35),
+    inset 0 0 0 5px #7c7e84,
+    inset 0 0 0 6px rgba(255, 255, 255, 0.25),
+    0 18px 40px rgba(0, 0, 0, 0.55);
+  z-index: 40;
+  animation: lift-in 0.18s var(--ease) both;
+  outline: none;
+}
+.lift-panel.closing { animation: lift-out 0.15s ease-in both; }
+@keyframes lift-in { from { opacity: 0; transform: translateY(-50%) translateX(12px); } }
+@keyframes lift-out { to { opacity: 0; transform: translateY(-50%) translateX(12px); } }
+
+.lift-head { display: flex; align-items: center; gap: 10px; margin: 0 4px 12px; }
+.lift-display {
+  flex: none;
+  width: 58px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 3px;
+  background: #0b0807;
+  box-shadow: inset 0 0 0 2px #6a4a2a, inset 0 2px 8px rgba(0, 0, 0, 0.8);
+}
+.lift-display-floor { font-family: var(--meter); font-size: 22px; color: #ffa53a; text-shadow: 0 0 6px rgba(255, 150, 40, 0.55); }
+.lift-here { font-family: var(--ui); font-size: 15px; letter-spacing: 0.08em; text-transform: uppercase; color: #2a2b2f; }
+
+.lift-floors { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.lift-btn {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 44px 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 10px;
+  align-items: center;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+.lift-btn:hover, .lift-btn:focus-visible { background: rgba(255, 255, 255, 0.22); outline: none; }
+.lift-btn:focus-visible { box-shadow: 0 0 0 2px var(--focus); }
+.lift-key {
+  grid-row: 1 / span 2;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-family: var(--ui);
+  font-size: 19px;
+  font-weight: 600;
+  color: #e8e9ec;
+  background: radial-gradient(circle at 50% 38%, #3a3b40, #202125 70%);
+  box-shadow: 0 0 0 3px #c9cbd0, 0 0 0 4px #6e7076, 0 2px 3px 4px rgba(0, 0, 0, 0.25);
+}
+.lift-btn.here .lift-key, .lift-btn.lit .lift-key { box-shadow: 0 0 0 3px #ffb04a, 0 0 0 4px #7a4a1a, 0 0 12px 3px rgba(255, 160, 60, 0.55); color: #ffd9a0; }
+.lift-btn.here { cursor: default; }
+.lift-name { font-family: var(--ui); font-size: 18px; font-weight: 600; letter-spacing: 0.03em; color: #1c1d20; line-height: 1.05; }
+.lift-level { font-family: var(--ui); font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase; color: #4a4c52; }
+.lift-btn.here .lift-level::after { content: ' · here'; color: #7a4a1a; }
+
+.lift-stay {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 4px 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #2a2b2f;
+  font-family: var(--ui);
+  font-size: 15px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+.lift-stay .kc { font-size: 11px; padding: 1px 5px; border-radius: 3px; border: 1px solid rgba(0, 0, 0, 0.35); color: #2a2b2f; }
+.lift-stay:hover { color: #000; }
+
+/* the ride */
+.lift-ride {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 14px;
+  background: #050403;
+  opacity: 0;
+  transition: opacity 0.38s ease;
+  z-index: 45;
+  pointer-events: none;
+}
+.lift-ride.dark { opacity: 1; }
+.lift-ride.leaving { transition-duration: 0.55s; }
+.lift-ride-display {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 14px 26px;
+  border-radius: 4px;
+  background: #0b0807;
+  box-shadow: inset 0 0 0 3px #6a4a2a, inset 0 0 0 5px #2a1a0e, 0 0 40px rgba(255, 140, 40, 0.08);
+}
+.lift-ride-floor {
+  min-width: 2.2ch;
+  text-align: right;
+  font-family: var(--meter);
+  font-size: 54px;
+  color: #ffa53a;
+  text-shadow: 0 0 10px rgba(255, 150, 40, 0.6);
+}
+.lift-ride-arrow { width: 0; height: 0; border-left: 16px solid transparent; border-right: 16px solid transparent; }
+.lift-ride-arrow.up { border-bottom: 24px solid #ffa53a; filter: drop-shadow(0 0 6px rgba(255, 150, 40, 0.6)); }
+.lift-ride-arrow.down { border-top: 24px solid #ffa53a; filter: drop-shadow(0 0 6px rgba(255, 150, 40, 0.6)); }
+.lift-ride-arrow.stopped { opacity: 0.2; filter: none; }
+.lift-ride-name { font-family: var(--serif); font-size: 18px; letter-spacing: 0.22em; text-transform: uppercase; color: rgba(241, 213, 154, 0.8); }
+
+@media (max-width: 520px) {
+  .lift-panel { right: 16px; left: 16px; width: auto; top: auto; bottom: 110px; transform: none; }
+  @keyframes lift-in { from { opacity: 0; transform: translateY(12px); } }
+  @keyframes lift-out { to { opacity: 0; transform: translateY(12px); } }
+  .lift-ride-floor { font-size: 42px; }
+}
+/* Reduce flashing & motion: the panel just appears, the dark comes at once */
+body.calm .lift-panel, body.calm .lift-panel.closing { animation: none; }
+body.calm .lift-ride { transition-duration: 0.12s; }
+
+/* the map out of the casino (map.ts) */
+.city-map-body .map-svg.city-map { max-height: 62vh; width: auto; max-width: 100%; margin: 0 auto; }
+.city-map .city-map-lift { fill: var(--brass-hi); stroke: none; }
+.city-map .city-map-mark { fill: #ffe6b8; stroke: none; }
+.city-map .map-walls line { stroke: #d9a52a; stroke-width: 0.3; }
+.city-map .map-walls line.city-map-zebra { stroke: #e8e6df; stroke-width: 0.6; }

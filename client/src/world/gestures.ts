@@ -565,8 +565,57 @@ const STAFF_GESTURES: Record<StaffGesture, { dur: number; pose: (t: number) => P
   },
 };
 
-export function gestureOf(e: EmoteId | StaffGesture): Gesture | undefined {
-  return (GESTURES as Partial<Record<string, Gesture>>)[e] ?? (STAFF_GESTURES as Partial<Record<string, Gesture>>)[e];
+// v6 law6: a punch thrown, a punch taken, and a guard brushing one off (world/law/).
+export type LawGesture = 'punch' | 'hit' | 'brush';
+
+const LAW_GESTURES: Record<LawGesture, Gesture> = {
+  // the left fist up by the chin, the right drawn back and thrown straight out at head height as
+  // the shoulders turn into it, and back
+  punch: {
+    dur: 0.62,
+    pose: (t) => {
+      const out = t < 0.12 ? 0 : t < 0.24 ? smooth((t - 0.12) / 0.12) : Math.max(0, 1 - (t - 0.3) / 0.28);
+      return {
+        torso: [0.08 + 0.06 * out, 0.1 - 0.42 * out, 0],
+        handR: { at: [-0.18 + 0.1 * out, 0.12, 0.3 + 0.68 * out], elbow: [-1, -0.5, -0.4 + 0.3 * out], palm: [0, -1, 0], fingers: [0, 0, 1], fist: 1 },
+        handL: { at: [-0.12, 0.2, 0.34], elbow: [-1, -1, 0], palm: [1, 0, 0], fingers: [0, 1, 0.3], fist: 1 },
+        head: [0.08, 0.1 * out, 0],
+      };
+    },
+  },
+  // the head snaps back and away, the body rocks back on its heels and the arms come up, then it
+  // steadies
+  hit: {
+    dur: 1.0,
+    pose: (t) => {
+      const snap = t < 0.08 ? t / 0.08 : Math.max(0, 1 - (t - 0.08) / 0.7);
+      const sway = Math.sin(t * 9) * Math.max(0, 1 - t / 0.9) * 0.12;
+      const hand: Hand = { upper: [-0.5, -0.6, 0.3], fore: [-0.2, 0.7, 0.5], palm: [0.3, 0, 1], fist: 0.4 };
+      return {
+        hips: [-0.1 * snap, sway, 0],
+        torso: [-0.24 * snap, 0.15 * snap, 0.1 * snap],
+        neck: [-0.2 * snap, 0.2 * snap, 0],
+        head: [-0.42 * snap, 0.38 * snap, 0.12 * snap],
+        handR: hand,
+        handL: hand,
+      };
+    },
+  },
+  // a look down at the shoulder that was hit and a brush of it with the other hand: nothing
+  brush: {
+    dur: 1.3,
+    pose: (t) => {
+      const b = Math.sin(t * 18) * 0.06 * beat(t, 0.25, 1.1);
+      return {
+        head: [0.25, 0.35, 0],
+        handL: { at: [-0.32 + b, -0.02, 0.2], elbow: [0.6, -1, 0.3], palm: [-1, 0, 0], fingers: [-0.4, 0.3, 1] },
+      };
+    },
+  },
+};
+
+export function gestureOf(e: EmoteId | StaffGesture | LawGesture): Gesture | undefined {
+  return (GESTURES as Partial<Record<string, Gesture>>)[e] ?? (STAFF_GESTURES as Partial<Record<string, Gesture>>)[e] ?? (LAW_GESTURES as Partial<Record<string, Gesture>>)[e];
 }
 
 /** How long an emote plays, seconds. */

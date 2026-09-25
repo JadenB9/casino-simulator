@@ -14,6 +14,9 @@ import type { FxEvent, Statue } from './items.ts';
 import type { ZoneId } from './zones.ts';
 import { isSeatId } from './seats.ts';
 import type { TableLimits } from './limits.ts';
+// v6 law6:
+import type { Detour, StaffId } from './law/patrol.ts';
+import type { JailState, LawEvent } from './law/rules.ts';
 
 export const PROTOCOL_VERSION = 1;
 
@@ -369,7 +372,9 @@ export type FloorClientMsg =
   | { t: 'here' }
   // v6: take the elevator to another zone (zones.ts); only from beside an elevator door
   | { t: 'lift'; to: ZoneId }
-  | InviteClientMsg; // v6 invite6
+  | InviteClientMsg // v6 invite6
+  // v6 law6: throw a punch, facing `r` (yaw byte); the server finds who it lands on
+  | { t: 'punch'; r: number };
 
 export type FloorServerMsg =
   | { t: 'hello'; v: number; you: PlayerInfo; players: PlayerInfo[]; online: number; now: number }
@@ -400,6 +405,16 @@ export type FloorServerMsg =
   // v6: the server moved you (the elevator, jail, release): go there at once (cm, yaw byte)
   | { t: 'tp'; x: number; z: number; r: number }
   | InviteServerMsg // v6 invite6
+  // v6 city6: the elevator won't go (not at its doors, at a table, held): why, in words
+  | { t: 'lift.no'; to: ZoneId; msg: string }
+  // v6 law6: a punch (who threw it, and who or which staff member it landed on, null for air);
+  // a member of staff leaving his loop (shared/src/law/patrol.ts), and the ones under way after
+  // hello; a warning, a lock-up or a release; and your own time in jail (null: you're free)
+  | { t: 'punch'; id: number; hit: number | StaffId | null }
+  | { t: 'detour'; d: Detour }
+  | { t: 'detours'; list: Detour[] }
+  | { t: 'law'; ev: LawEvent }
+  | { t: 'jail'; jail: JailState | null }
   // v6 bank6: another player sent you money (shared/src/bank.ts); only to you
   | { t: 'bank.in'; id: string; from: string; amount: Cents; note: string | null; at: number }
   | { t: 'err'; code: ErrorCode; msg: string }
@@ -435,6 +450,10 @@ export function parseFloorMsg(raw: unknown, isGame: (g: unknown) => g is GameId)
       return { t: 'stand' };
     case 'here':
       return { t: 'here' };
+    // v6 law6:
+    case 'punch':
+      if (!isInt(raw.r) || raw.r < 0 || raw.r > 255) return null;
+      return { t: 'punch', r: raw.r };
     default:
       return parseInviteMsg(raw); // v6 invite6
   }
