@@ -20,6 +20,7 @@ import { Wins, type BigWinReport } from './wins.ts';
 import { Effects, Statues, fxKey, type Reserve } from './fx.ts';
 import { Bucket, KeyedBuckets } from '../ratelimit.ts';
 import { spendTicket } from '../tickets.ts';
+import { Law, type HotReport, type StrikeResult } from '../law.ts'; // v6 law6
 
 /** A hard cap on floor connections; a busy night past this gets a polite "casino is full". */
 export const MAX_FLOOR = 150;
@@ -57,6 +58,8 @@ export class CasinoFloor extends DurableObject<Env> {
   /** v6: effects bought in the shop, and the lobby's statues (fx.ts) */
   readonly fx: Effects;
   readonly statues: Statues;
+  /** v6 law6: punches, the staff's catches, jail (server/src/law.ts) */
+  readonly law: Law;
   private buckets = new Map<WebSocket, FloorLimits>();
   private connects = new KeyedBuckets(FLOOR_CONNECT_BURST, FLOOR_CONNECT_PER_SEC);
   private addrConnects = new KeyedBuckets(ADDR_CONNECT_BURST, ADDR_CONNECT_PER_SEC);
@@ -70,6 +73,7 @@ export class CasinoFloor extends DurableObject<Env> {
     this.wins = new Wins(ctx, (msg) => this.broadcast(msg));
     this.fx = new Effects(ctx, (msg) => this.broadcast(msg));
     this.statues = new Statues(ctx, (msg) => this.broadcast(msg));
+    this.law = new Law(ctx, env, this.presence, (msg) => this.broadcast(msg), (id, msg) => this.sendTo(id, msg));
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -114,6 +118,7 @@ export class CasinoFloor extends DurableObject<Env> {
     this.chat.join(server);
     this.wins.greet(server); // features: the recent big wins, after hello
     this.fx.greet(server, Date.now()); // v6: effects playing or queued
+    this.law.greet(accountId, Date.now()); // v6 law6: the detours under way; an inmate back inside
     // Everyone already here is due for the idle sweep no later than this newcomer, so a sweep
     // already set comes first; with none set (nobody here, or a floor from before idling), set one.
     if ((await this.ctx.storage.getAlarm()) === null) await this.ctx.storage.setAlarm(Date.now() + IDLE_MS);
@@ -180,8 +185,16 @@ export class CasinoFloor extends DurableObject<Env> {
     } else if (msg.t === 'lift') {
       // v6 contract: the city slice checks you're at an elevator and moves you (presence.teleport)
       this.presence.touch(ws, Date.now());
+    } else if (msg.t === 'punch') {
+      // v6 law6
+      const id = this.presence.accountOf(ws);
+      this.presence.touch(ws, Date.now());
+      if (id !== null) this.law.punch(id, msg.r, Date.now());
     } else {
       this.presence.onMessage(ws, msg);
+      // v6 law6: an inmate stays inside, a free player isn't left in there
+      const id = this.presence.accountOf(ws);
+      if (id !== null) this.law.afterMove(id, Date.now());
     }
   }
 
@@ -349,6 +362,16 @@ export class CasinoFloor extends DurableObject<Env> {
     this.broadcast({ t: 'feat', id: accountId, name, feat });
   }
 
+  /** v6 law6: a table says this player is winning too much there; the pit boss may be watching. */
+  lawHot(r: HotReport): Promise<StrikeResult> {
+    return this.law.hot(r, Date.now());
+  }
+
+  /** v6 law6: a round finished at this inmate's jail table, won or lost `net` (cents). */
+  jailRound(accountId: number, net: number): Promise<void> {
+    return this.law.progress(accountId, net, Date.now());
+  }
+
   /** Everyone on the floor sees the gesture over this player's head. */
   private emote(ws: WebSocket, e: EmoteId): void {
     const att = ws.deserializeAttachment() as FloorAtt | null;
@@ -388,6 +411,18 @@ export class CasinoFloor extends DurableObject<Env> {
     const data = JSON.stringify(msg);
     for (const ws of this.ctx.getWebSockets()) {
       if (ws === except) continue;
+      try {
+        ws.send(data);
+      } catch {
+        /* closing */
+      }
+    }
+  }
+
+  /** v6 law6: a message for one account's sockets. */
+  private sendTo(accountId: number, msg: FloorServerMsg): void {
+    const data = JSON.stringify(msg);
+    for (const ws of this.ctx.getWebSockets(`a:${accountId}`)) {
       try {
         ws.send(data);
       } catch {

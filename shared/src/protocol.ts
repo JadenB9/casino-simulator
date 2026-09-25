@@ -14,6 +14,9 @@ import type { FxEvent, Statue } from './items.ts';
 import type { ZoneId } from './zones.ts';
 import { isSeatId } from './seats.ts';
 import type { TableLimits } from './limits.ts';
+// v6 law6:
+import type { Detour, StaffId } from './law/patrol.ts';
+import type { JailState, LawEvent } from './law/rules.ts';
 
 export const PROTOCOL_VERSION = 1;
 
@@ -299,7 +302,9 @@ export type FloorClientMsg =
   /** The player is at the keyboard (see HERE_MS); keeps the socket from going idle. */
   | { t: 'here' }
   // v6: take the elevator to another zone (zones.ts); only from beside an elevator door
-  | { t: 'lift'; to: ZoneId };
+  | { t: 'lift'; to: ZoneId }
+  // v6 law6: throw a punch, facing `r` (yaw byte); the server finds who it lands on
+  | { t: 'punch'; r: number };
 
 export type FloorServerMsg =
   | { t: 'hello'; v: number; you: PlayerInfo; players: PlayerInfo[]; online: number; now: number }
@@ -329,6 +334,14 @@ export type FloorServerMsg =
   | { t: 'owned'; emotes: EmoteId[] }
   // v6: the server moved you (the elevator, jail, release): go there at once (cm, yaw byte)
   | { t: 'tp'; x: number; z: number; r: number }
+  // v6 law6: a punch (who threw it, and who or which staff member it landed on, null for air);
+  // a member of staff leaving his loop (shared/src/law/patrol.ts), and the ones under way after
+  // hello; a warning, a lock-up or a release; and your own time in jail (null: you're free)
+  | { t: 'punch'; id: number; hit: number | StaffId | null }
+  | { t: 'detour'; d: Detour }
+  | { t: 'detours'; list: Detour[] }
+  | { t: 'law'; ev: LawEvent }
+  | { t: 'jail'; jail: JailState | null }
   | { t: 'err'; code: ErrorCode; msg: string }
   | ChatServerMsg;
 
@@ -362,6 +375,10 @@ export function parseFloorMsg(raw: unknown, isGame: (g: unknown) => g is GameId)
       return { t: 'stand' };
     case 'here':
       return { t: 'here' };
+    // v6 law6:
+    case 'punch':
+      if (!isInt(raw.r) || raw.r < 0 || raw.r > 255) return null;
+      return { t: 'punch', r: raw.r };
     default:
       return null;
   }

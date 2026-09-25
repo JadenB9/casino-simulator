@@ -40,6 +40,7 @@ import { spendTicket } from '../tickets.ts';
 import type { CasinoFloor } from '../floor/index.ts';
 import { ChatRoom } from '../floor/chat.ts';
 import { bigWinsIn, type BigWinReport } from '../floor/wins.ts'; // features: big wins
+import { TableLaw, type LawNote } from '../law-table.ts'; // v6 law6
 
 /** How long a dropped player keeps their seat before being cashed out. */
 export const GRACE_MS = 120_000;
@@ -200,6 +201,8 @@ export class CasinoTable extends DurableObject<Env> {
   private overdue = 0;
   /** Each member's `idle:` deadline as last written (a cache: a restart just writes it again). */
   private idleDue = new Map<number, number>();
+  /** v6 law6: hot streaks for the pit boss, and a jail table's rounds toward bail (law-table.ts). */
+  private law: TableLaw | null = null;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -1211,6 +1214,7 @@ export class CasinoTable extends DurableObject<Env> {
     for (const seat of stacks.keys()) this.sendSeat(bySeat.get(seat)!);
     if (readyCleared) this.broadcastMembers();
     if (step.rounds?.length) this.announceBigWins(step, bySeat, now); // features: big wins
+    if (step.rounds?.length) this.tellLaw(step, bySeat, now); // v6 law6
     // Nothing on the layout anywhere: the round a seat was given up in is over.
     if (m.held?.length && !this.roundInPlay()) {
       m.held = [];
@@ -1471,6 +1475,49 @@ export class CasinoTable extends DurableObject<Env> {
       return mem ? { accountId: mem.account_id, name: mem.name, station: mem.station } : undefined;
     };
     for (const w of bigWinsIn(m.game, m.variant, step, who, now)) this.ctx.waitUntil(this.tellBigWin(w));
+  }
+
+  // v6 law6: finished rounds, as the law needs them (law-table.ts), off to the floor
+  private tellLaw(step: Step<unknown>, bySeat: Map<number, MemberRow>, now: number): void {
+    const m = this.meta!;
+    this.law ??= new TableLaw(m.name);
+    const who = (seat: number) => {
+      const mem = bySeat.get(seat);
+      return mem ? { accountId: mem.account_id, name: mem.name } : undefined;
+    };
+    for (const n of this.law.rounds(step.rounds ?? [], who, hasLimitChoice(m.game) ? limitsOf(m.config) : null, now)) this.ctx.waitUntil(this.sendLaw(n));
+  }
+
+  private async sendLaw(n: LawNote): Promise<void> {
+    try {
+      if (n.kind === 'jail') {
+        await this.floor().jailRound(n.accountId, n.net);
+        return;
+      }
+      const r = await this.floor().lawHot(n);
+      if (r !== 'unseen') this.law?.caught(n.accountId);
+    } catch (err) {
+      console.error('floor law failed', err);
+    }
+  }
+
+  /**
+   * v6 law6: stand a player up now (taken to jail, or out of it): their sockets are told why and
+   * the seat leaves the way Leave does it (bets in play settle, then the chips go home).
+   */
+  async evict(accountId: number): Promise<void> {
+    const mem = this.members.get(accountId);
+    if (!mem || !this.meta) return;
+    for (const ws of this.ctx.getWebSockets(`a:${accountId}`)) {
+      try {
+        ws.close(CLOSE.FORBIDDEN, 'escorted out');
+      } catch {
+        /* already closing */
+      }
+    }
+    this.beginLeave(mem, Date.now());
+    await this.pump();
+    this.scheduleAlarm();
   }
 
   private async tellBigWin(w: BigWinReport): Promise<void> {

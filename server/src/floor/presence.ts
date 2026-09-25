@@ -313,6 +313,24 @@ export class Presence {
     return w ? { x: w.att.x, z: w.att.z, name: w.att.name } : null;
   }
 
+  /** v6 law6: whose socket this is (null for one that isn't a player's). */
+  accountOf(ws: WebSocket): number | null {
+    return this.live.get(ws)?.att.accountId ?? null;
+  }
+
+  /** v6 law6: everyone on the floor, once each: where they are (cm) and whether they sit (at a table, or on a seat). */
+  standing(): { accountId: number; name: string; x: number; z: number; at: boolean; seat: boolean }[] {
+    const seen = new Set<number>();
+    const out: { accountId: number; name: string; x: number; z: number; at: boolean; seat: boolean }[] = [];
+    for (const [ws, w] of this.live) {
+      const a = w.att;
+      if (seen.has(a.accountId) || ws.readyState !== WebSocket.OPEN) continue;
+      seen.add(a.accountId);
+      out.push({ accountId: a.accountId, name: a.name, x: a.x, z: a.z, at: a.at !== null, seat: !!a.seat });
+    }
+    return out;
+  }
+
   /** Something this player did besides moving (see FloorAtt.active); kept through hibernation. */
   touch(ws: WebSocket, now: number): void {
     const w = this.live.get(ws);
