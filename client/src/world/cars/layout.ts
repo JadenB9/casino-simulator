@@ -52,14 +52,14 @@ export function stalls(): Stall[] {
 }
 
 /** The cars parked in a set of stalls tonight: most full, a few gaps, the same every time. */
-export function parked(list: readonly Stall[] = stalls(), seed = 20260925): { stall: Stall; id: string; paint: string }[] {
+export function parked(list: readonly Stall[] = stalls(), seed = 20260925, fill = 0.82): { stall: Stall; id: string; paint: string }[] {
   // what a guest would drive here, never the top of the range (and nothing longer than a stall)
   const kinds = ['stallard-440', 'aurelian-saloon', 'ardent-overland', 'brenner-rally', 'raffica-v10', 'halden-roadster', 'strale-gt', 'solenne-cabriolet', 'ombra-hyper'];
   let s = seed;
   const rnd = () => ((s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
   const out: { stall: Stall; id: string; paint: string }[] = [];
   for (const stall of list) {
-    if (rnd() < 0.18) continue;
+    if (rnd() >= fill) continue;
     const id = kinds[Math.floor(rnd() * kinds.length)]!;
     out.push({ stall, id, paint: LOT_PAINTS[Math.floor(rnd() * LOT_PAINTS.length)]! });
   }

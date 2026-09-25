@@ -12,7 +12,7 @@ export class CarMaterials {
 
   constructor(
     private quality: Quality,
-    private readonly env: THREE.Texture | null,
+    private env: THREE.Texture | null,
   ) {
     this.build();
   }
@@ -50,8 +50,29 @@ export class CarMaterials {
     this.mats.set('gold', new THREE.MeshStandardMaterial({ color: '#c99a36', vertexColors: true, roughness: 0.3, metalness: 1, envMap: env, envMapIntensity: 0.85 }));
   }
 
+  /** The environment the shiny ones reflect (the scene's, once there is one). */
+  setEnv(env: THREE.Texture | null): void {
+    for (const m of this.mats.values()) {
+      const s = m as THREE.MeshStandardMaterial;
+      if (!s.isMeshStandardMaterial || s.envMap === env) continue;
+      s.envMap = env;
+      s.needsUpdate = true;
+    }
+    this.env = env;
+  }
+
   dispose(): void {
     for (const m of this.mats.values()) m.dispose();
     this.mats.clear();
   }
+}
+
+let shared: CarMaterials | null = null;
+
+/**
+ * The one set of car materials the whole game shares: the city's parked cars and traffic (built
+ * with the floor), the curb, the garage and the valet's showroom.
+ */
+export function carMaterials(quality: Quality): CarMaterials {
+  return (shared ??= new CarMaterials(quality, null));
 }

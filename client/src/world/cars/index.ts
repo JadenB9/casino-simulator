@@ -16,13 +16,13 @@ import { ZONES, inRect } from '../../../../shared/src/zones.ts';
 import type { Collider } from '../collision.ts';
 import type { CharacterFactoryExt } from '../contract.ts';
 import type { SpotProvider } from '../interact.ts';
-import { CarMaterials } from './materials.ts';
+import { carMaterials, type CarMaterials } from './materials.ts';
 import { lotCars, type Lot } from './lot.ts';
 import { stalls } from './layout.ts';
 import { Valet } from './valet.ts';
 import { Garage } from './garage.ts';
 
-export { CarMaterials } from './materials.ts';
+export { CarMaterials, carMaterials } from './materials.ts';
 export { carKit } from './models.ts';
 export { CarFleet, lotCars, type Lot } from './lot.ts';
 
@@ -60,7 +60,8 @@ export class Cars {
     this.group.name = 'cars';
     const env = deps.engine.scene.environment;
     const aniso = Math.min(8, deps.engine.renderer.capabilities.getMaxAnisotropy());
-    this.mats = new CarMaterials(deps.world.quality, env);
+    this.mats = carMaterials(deps.world.quality);
+    this.mats.setEnv(env);
     const col = deps.world.collider;
     this.lot = deps.standIns ? lotCars(stalls(), this.mats, { collider: col }) : null;
     this.valet = new Valet({
@@ -132,7 +133,6 @@ export class Cars {
     this.valet.dispose();
     this.garage.dispose();
     this.lot?.dispose();
-    this.mats.dispose();
     this.group.removeFromParent();
   }
 }

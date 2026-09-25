@@ -82,18 +82,34 @@ async function enterAs(name, viewport = { width: 1440, height: 900 }) {
 
 const shot = (p, name) => p.screenshot({ path: `${out}/${name}.png` }).then(() => console.log(`     ${out}/${name}.png`));
 
-/** Down to the valet stand: the elevator if the city is in, else put there on this client only. */
+/** Walk (in short hops, so the floor takes each move) to (x, z). */
+async function travelTo(p, x, z, yaw) {
+  const from = await p.evaluate(() => ({ x: window.casino.world.player.position.x, z: window.casino.world.player.position.z }));
+  const n = Math.max(1, Math.ceil(Math.hypot(x - from.x, z - from.z) / 6));
+  for (let i = 1; i <= n; i++) {
+    await p.evaluate(([a, b, c]) => window.casino.world.teleport(a, b, c), [from.x + ((x - from.x) * i) / n, from.z + ((z - from.z) * i) / n, yaw]);
+    await p.waitForTimeout(n > 1 ? 800 : 300);
+  }
+}
+
+/**
+ * Down to the valet stand: into an elevator car in the casino's lobby and down (the floor moves
+ * you), then up to the podium from the lobby side. Without the city, the client is put there and
+ * the floor told nothing (the call is then refused).
+ */
 async function toStand(p) {
-  const lifted = await p.evaluate(async () => {
-    const c = window.casino;
-    if (typeof c.app.lift === 'function') {
-      await c.app.lift('ground');
-      return true;
-    }
-    return false;
-  }).catch(() => false);
-  // then walk up to the podium from the lobby side (the stand is at 129.6, 5.0; E faces -x)
-  await p.evaluate(() => window.casino.world.teleport(128.3, 5.0, Math.PI / 2));
+  const bank = await p.evaluate(() => {
+    const L = window.casino.world.city?.casinoBank;
+    return L ? { car: L.centre(0), yaw: L.yaw } : null;
+  });
+  let lifted = false;
+  if (bank) {
+    await travelTo(p, bank.car.x, bank.car.z, bank.yaw);
+    await p.evaluate(() => window.casino.app.link.send({ t: 'lift', to: 'ground' }));
+    lifted = await p.waitForFunction(() => window.casino.world.zone === 'ground' && !window.casino.world.city.riding, null, { timeout: 20000 }).then(() => true, () => false);
+  }
+  // the podium's guest side (the city's plan: the stand at 129.0, 4.4, facing the lobby's doors)
+  await travelTo(p, 128.1, 4.4, Math.PI / 2);
   await p.waitForTimeout(1200);
   return lifted;
 }
@@ -178,11 +194,13 @@ if (!open) {
 
 // --- across the street to the garage -------------------------------------------------------------
 
-await a.p.evaluate(() => window.casino.world.teleport(172, 25, Math.PI / 2 + 0.25));
+await travelTo(a.p, 150.5, 0, Math.PI / 2);
+await travelTo(a.p, 166.5, 0, Math.PI / 2);
+await travelTo(a.p, 172, 13.5, Math.PI / 2 + 0.25);
 await a.p.waitForTimeout(1500);
 check(await a.p.evaluate((car) => window.casino.app.cars.garage['key'].includes(car), CAR), 'the garage shows the car');
 await shot(a.p, '07-garage');
-await a.p.evaluate(() => window.casino.world.teleport(164, 25, Math.PI / 2));
+await a.p.evaluate(() => window.casino.world.teleport(164, 20, Math.PI / 2));
 await a.p.waitForTimeout(1200);
 await shot(a.p, '08-garage-street');
 const stats = await a.p.evaluate(() => window.casino.world.stats());

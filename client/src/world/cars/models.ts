@@ -137,9 +137,9 @@ function sideAt(s: CarSpec, o: Outline, y: number, z: number): number {
 }
 
 /** Extrude a side silhouette across a width (the car's x) and turn it into the car's frame. */
-function extrude(shape: THREE.Shape, half: number, segments = 10): THREE.BufferGeometry {
+function extrude(shape: THREE.Shape, half: number, segments = 10, bevels = 2): THREE.BufferGeometry {
   const depth = Math.max(0.05, 2 * (half - B));
-  const g = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: true, bevelThickness: B, bevelSize: B, bevelSegments: 2, curveSegments: segments, steps: 1 });
+  const g = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: true, bevelThickness: B, bevelSize: B, bevelSegments: bevels, curveSegments: segments, steps: 1 });
   // shape x is the car's z, shape y its height, the extrusion its width
   g.rotateY(-Math.PI / 2);
   g.translate(depth / 2, 0, 0);
@@ -155,7 +155,7 @@ function smooth(g: THREE.BufferGeometry): THREE.BufferGeometry {
   return m;
 }
 
-function buildBody(s: CarSpec, o: Outline, geos: Geos): void {
+function buildBody(s: CarSpec, o: Outline, geos: Geos, lite: boolean): void {
   const shape = new THREE.Shape();
   const pts = s.body;
   shape.moveTo(pts[0]![0], pts[0]![1]);
@@ -170,7 +170,7 @@ function buildBody(s: CarSpec, o: Outline, geos: Geos): void {
   shape.absarc(s.rear, s.wheelR, ar, a0, Math.PI - a0, false);
   shape.lineTo(o.zR + 0.12, s.sill);
   shape.closePath();
-  const g = extrude(shape, s.half);
+  const g = lite ? extrude(shape, s.half, 5, 1) : extrude(shape, s.half);
   const p = g.getAttribute('position');
   for (let i = 0; i < p.count; i++) {
     const x = p.getX(i);
@@ -464,10 +464,17 @@ function buildExtras(s: CarSpec, o: Outline, geos: Geos, roof: { roofY: number; 
 }
 
 /** One wheel at the origin, its outer face towards +x. */
-function buildWheel(s: CarSpec, geos: Geos): void {
+function buildWheel(s: CarSpec, geos: Geos, lite: boolean): void {
   const R = s.wheelR;
   const w = s.wheelW;
   const ri = R * 0.66;
+  if (lite) {
+    // a parked car's or a passing car's wheel: a plain tyre and a flat rim with a hub
+    add(geos, 'trim', new THREE.CylinderGeometry(R, R, w, 12).rotateZ(Math.PI / 2), TYRE);
+    add(geos, 'metal', new THREE.CylinderGeometry(ri, ri, 0.02, 10).rotateZ(Math.PI / 2).translate(w / 2 + 0.002, 0, 0), s.gold ? '#e0b84a' : (s.rimColor ?? CHROME));
+    add(geos, 'trim', new THREE.CylinderGeometry(ri * 0.35, ri * 0.35, 0.02, 8).rotateZ(Math.PI / 2).translate(w / 2 + 0.006, 0, 0), '#1c1d20');
+    return;
+  }
   const prof = [
     [ri, -w / 2], [R - 0.035, -w / 2], [R - 0.008, -w / 2 + 0.02], [R, -w / 2 + 0.05],
     [R, w / 2 - 0.05], [R - 0.008, w / 2 - 0.02], [R - 0.035, w / 2], [ri, w / 2],
@@ -535,6 +542,7 @@ export interface CarKit {
 }
 
 const kits = new Map<string, CarKit>();
+const liteKits = new Map<string, CarKit>();
 
 function mergeAll(geos: Geos): Map<Part, THREE.BufferGeometry> {
   const out = new Map<Part, THREE.BufferGeometry>();
@@ -546,22 +554,25 @@ function mergeAll(geos: Geos): Map<Part, THREE.BufferGeometry> {
   return out;
 }
 
-/** The car's pieces (built once per car, then shared). */
-export function carKit(id: string): CarKit {
-  const cached = kits.get(id);
+/**
+ * The car's pieces (built once per car, then shared). `lite`: fewer segments in the body's curves
+ * and plain wheels, for the many parked cars and the traffic (under half the triangles).
+ */
+export function carKit(id: string, lite = false): CarKit {
+  const cached = (lite ? liteKits : kits).get(id);
   if (cached) return cached;
   const s = CAR_SPECS[id];
   if (!s) throw new Error(`no car ${id}`);
   const o = new Outline(s.body);
   const body: Geos = new Map();
-  buildBody(s, o, body);
+  buildBody(s, o, body, lite);
   const roof = buildCabin(s, o, body);
   buildOpen(s, o, body);
   buildLamps(s, o, body);
   buildNose(s, o, body);
   buildExtras(s, o, body, roof);
   const wheel: Geos = new Map();
-  buildWheel(s, wheel);
+  buildWheel(s, wheel, lite);
   const wx = s.half * Math.min(taper(s, o, s.front), taper(s, o, s.rear)) + B - s.wheelW / 2 + 0.03;
   const kit: CarKit = {
     body: mergeAll(body),
@@ -572,7 +583,7 @@ export function carKit(id: string): CarKit {
     height: Math.max(o.top, ...(s.cabin ?? []).map((p) => p[1])) + B,
     gold: !!s.gold,
   };
-  kits.set(id, kit);
+  (lite ? liteKits : kits).set(id, kit);
   return kit;
 }
 
@@ -592,8 +603,8 @@ function tinted(g: THREE.BufferGeometry, paint: string): THREE.BufferGeometry {
 }
 
 /** The body's pieces per material, painted (the paint's own colour by default). */
-export function bodyGeometries(id: string, paint?: string): Map<CarMat, THREE.BufferGeometry[]> {
-  const kit = carKit(id);
+export function bodyGeometries(id: string, paint?: string, lite = false): Map<CarMat, THREE.BufferGeometry[]> {
+  const kit = carKit(id, lite);
   const colour = paint ?? CAR_SPECS[id]!.paint;
   const out = new Map<CarMat, THREE.BufferGeometry[]>();
   const put = (m: CarMat, g: THREE.BufferGeometry) => out.set(m, [...(out.get(m) ?? []), g]);
@@ -602,8 +613,8 @@ export function bodyGeometries(id: string, paint?: string): Map<CarMat, THREE.Bu
 }
 
 /** A single wheel's pieces per material (its outer face towards +x). */
-export function wheelGeometries(id: string): Map<CarMat, THREE.BufferGeometry[]> {
-  const kit = carKit(id);
+export function wheelGeometries(id: string, lite = false): Map<CarMat, THREE.BufferGeometry[]> {
+  const kit = carKit(id, lite);
   const out = new Map<CarMat, THREE.BufferGeometry[]>();
   for (const [part, g] of kit.wheel) out.set(matOf(part, kit.gold), [...(out.get(matOf(part, kit.gold)) ?? []), g.clone()]);
   return out;
@@ -626,6 +637,8 @@ export interface Placed {
   id: string;
   paint?: string;
   matrix: THREE.Matrix4;
+  /** The lighter build (parked cars, traffic). */
+  lite?: boolean;
 }
 
 /**
@@ -645,9 +658,9 @@ export class MatBatch {
   }
 
   car(c: Placed): this {
-    const kit = carKit(c.id);
-    for (const [m, gs] of bodyGeometries(c.id, c.paint)) for (const g of gs) this.put(m, g.applyMatrix4(c.matrix));
-    const wheel = wheelGeometries(c.id);
+    const kit = carKit(c.id, c.lite);
+    for (const [m, gs] of bodyGeometries(c.id, c.paint, c.lite)) for (const g of gs) this.put(m, g.applyMatrix4(c.matrix));
+    const wheel = wheelGeometries(c.id, c.lite);
     for (let i = 0; i < 4; i++) {
       const wm = new THREE.Matrix4().multiplyMatrices(c.matrix, wheelMatrix(kit, i));
       for (const [m, gs] of wheel) for (const g of gs) this.put(m, g.clone().applyMatrix4(wm));

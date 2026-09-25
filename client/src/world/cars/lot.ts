@@ -18,17 +18,22 @@ export interface Lot {
  * Cars in these stalls (most of them: a few are left empty, the same ones every time for a
  * seed). With a collider, each car also stops the walker (not the camera).
  */
-export function lotCars(stalls: readonly Stall[], mats: CarMaterials, opts: { seed?: number; collider?: Collider } = {}): Lot {
+export function lotCars(stalls: readonly Stall[], mats: CarMaterials, opts: { seed?: number; fill?: number; collider?: Collider } = {}): Lot {
   const group = new THREE.Group();
   group.name = 'valet-lot';
   const batch = new MatBatch();
-  for (const p of parked(stalls, opts.seed)) {
-    batch.car({ id: p.id, paint: p.paint, matrix: new THREE.Matrix4().makeRotationY(p.stall.yaw).setPosition(p.stall.x, 0, p.stall.z) });
+  parked(stalls, opts.seed, opts.fill).forEach((p, i) => {
+    // a little off the stall's middle, as people park
+    const jx = Math.sin(i * 12.9898) * 0.1;
+    const yaw = p.stall.yaw + Math.sin(i * 78.233) * 0.025;
+    const x = p.stall.x + jx;
+    const z = p.stall.z + jx * 0.5;
+    batch.car({ id: p.id, paint: p.paint, matrix: new THREE.Matrix4().makeRotationY(yaw).setPosition(x, 0, z), lite: true });
     if (opts.collider) {
       const k = carKit(p.id);
-      opts.collider.box(p.stall.x, p.stall.z, k.width, k.length, p.stall.yaw, k.height, { cam: false });
+      opts.collider.box(x, z, k.width + 0.1, k.length + 0.1, yaw, k.height);
     }
-  }
+  });
   const geos: THREE.BufferGeometry[] = [];
   for (const [m, geo] of batch.build()) {
     const mesh = new THREE.Mesh(geo, mats.get(m));
@@ -60,7 +65,7 @@ export class CarFleet {
 
   constructor(readonly id: string, readonly count: number, mats: CarMaterials) {
     this.group.name = `fleet-${id}`;
-    const one = new MatBatch().car({ id, paint: '#ffffff', matrix: new THREE.Matrix4() }).build();
+    const one = new MatBatch().car({ id, paint: '#ffffff', matrix: new THREE.Matrix4(), lite: true }).build();
     for (const [m, geo] of one) {
       const mesh = new THREE.InstancedMesh(geo, mats.get(m === 'lamp' ? 'glow' : m), count);
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
