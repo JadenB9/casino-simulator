@@ -7,6 +7,7 @@
 
 import { it, expect } from 'vitest';
 import { mcRounds } from './helpers/stats.ts';
+import { lineUp, stakesSkill, PERSONAS, PERSONA_IDS } from '../src/games/holdem/bots.ts';
 import { alwaysCall, alwaysMinRaise, alwaysRaise, alwaysShove, botPlayer, drawnTable, duplicateMatch, table, type ArenaStats, type MatchResult } from './helpers/poker-arena.ts';
 
 const log = (s: string) => console.log(s);
@@ -14,26 +15,41 @@ const stats: ArenaStats = { decisions: 0, refused: 0, ms: 0, slowestMs: 0 };
 
 const find = (r: MatchResult[], name: string) => r.find((x) => x.name === name)!;
 
-it('bots drawn for high stakes beat bots drawn for micro stakes', () => {
-  const deals = mcRounds(1_200);
+/**
+ * The three kinds of player most likely at a table at this big blind (cents), each at the skill
+ * a bot of that kind is drawn with there: the typical line-up, not one lucky or unlucky draw.
+ */
+function typical(bb: number, tag: string) {
+  const w = lineUp(bb);
+  return [...PERSONA_IDS]
+    .sort((a, b) => w[b]! - w[a]!)
+    .slice(0, 3)
+    .map((id) => botPlayer(`${tag}${id}`, id, Math.min(0.99, PERSONAS[id]!.skill + stakesSkill(bb))));
+}
+
+it('the players at high stakes beat the players at micro stakes', () => {
+  const deals = mcRounds(1_500);
   for (const [lo, hi, seed] of [
     [100, 1_000_000, 11], // $1 against $10,000 big blinds
     [100, 10_000, 12], // $1 against $100
   ] as const) {
     const teams = ['high', 'high', 'high', 'micro', 'micro', 'micro'];
-    const players = [...drawnTable(hi, 3, seed, 'hi:'), ...drawnTable(lo, 3, seed + 1, 'lo:')];
+    const players = [...typical(hi, 'hi:'), ...typical(lo, 'lo:')];
     const r = duplicateMatch(players, deals, seed, stats, { teams });
-    log(`Bots drawn at a $${hi / 100} big blind against bots drawn at $${lo / 100}, ${deals} deals x 6 seatings:\n${table(r)}`);
+    log(`The typical players at a $${hi / 100} big blind against those at $${lo / 100}, ${deals} deals x 6 seatings:\n${table(r)}`);
     const high = find(r, 'high');
     const micro = find(r, 'micro');
-    // the high-stakes bots together win, the micro-stakes ones lose, each by more than 3 SE
+    // the high-stakes players together win, the micro-stakes ones lose, each by more than 3 SE
     expect(high.bb100).toBeGreaterThan(3 * high.se);
     expect(micro.bb100).toBeLessThan(-3 * micro.se);
   }
+  // and a line-up drawn at random, as the engine seats it, for the record
+  const drawn = duplicateMatch([...drawnTable(1_000_000, 3, 11, 'hi:'), ...drawnTable(100, 3, 12, 'lo:')], deals, 13, stats, { teams: ['high', 'high', 'high', 'micro', 'micro', 'micro'] });
+  log(`Bots drawn at random for a $10,000 and a $1 big blind, ${deals} deals x 6 seatings:\n${table(drawn)}`);
 });
 
 it('a professional beats every kind of weak player heads-up', () => {
-  const deals = mcRounds(1_500);
+  const deals = mcRounds(4_000);
   for (const [id, skill, seed] of [
     ['station', 0.12, 21],
     ['fish', 0.2, 22],

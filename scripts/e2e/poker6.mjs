@@ -112,7 +112,11 @@ const me = (page) =>
   });
 
 /** Pick a stake in the picker by its label ("$0.50/$1"). */
-const pickStake = (page, label) => page.click(`.lim-opt:has(.lim-opt-name:text-is("${label}"))`);
+const pickStake = async (page, label) => {
+  const i = await page.$$eval('.lim-opt', (bs, label) => bs.findIndex((b) => b.querySelector('.lim-opt-name')?.textContent === label), label);
+  if (i < 0) throw new Error(`no stake ${label}`);
+  await page.click(`.lim-opt >> nth=${i}`);
+};
 
 async function buyIn(page, dollars) {
   await page.waitForSelector('.modal input[type=number]', { timeout: 30_000 });
