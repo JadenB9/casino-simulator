@@ -13,12 +13,19 @@ import { hdr } from './materials.ts';
 import { MODEL_BASE } from './characters.ts';
 import { modelBytes } from '../render/model-bytes.ts';
 
-const FILES: Record<Exclude<PropKind, 'chandelier'>, { file: string; fit: 'height' | 'length' }> = {
+/**
+ * Each prop's file and what its size measures. `foot`: stood on the middle of its foot (a palm's
+ * trunk, a plant's own pot) rather than the middle of its whole spread: a palm's fronds reach
+ * further one way than the other, and centred on them its trunk came out at the planter's edge.
+ * `upright`: tipped about its foot so its trunk stands straight up out of the pot (the palm's
+ * leans a few degrees).
+ */
+const FILES: Record<Exclude<PropKind, 'chandelier'>, { file: string; fit: 'height' | 'length'; foot?: boolean; upright?: boolean }> = {
   stool: { file: 'stool.glb', fit: 'height' },
   couch: { file: 'couch.glb', fit: 'length' },
-  palm: { file: 'palm.glb', fit: 'height' },
-  'plant-a': { file: 'plant-a.glb', fit: 'height' },
-  'plant-b': { file: 'plant-b.glb', fit: 'height' },
+  palm: { file: 'palm.glb', fit: 'height', foot: true, upright: true },
+  'plant-a': { file: 'plant-a.glb', fit: 'height', foot: true },
+  'plant-b': { file: 'plant-b.glb', fit: 'height', foot: true },
   'lamp-floor': { file: 'lamp-floor.glb', fit: 'height' },
   'bottle-tall': { file: 'bottle-tall.glb', fit: 'height' },
   'bottle-red': { file: 'bottle-red.glb', fit: 'height' },
@@ -26,6 +33,12 @@ const FILES: Record<Exclude<PropKind, 'chandelier'>, { file: string; fit: 'heigh
   'glass-cocktail': { file: 'glass-cocktail.glb', fit: 'height' },
   door: { file: 'door.glb', fit: 'height' },
 };
+
+/**
+ * Parts drawn right on another part's surface (a bottle's label on its glass): pushed out this
+ * much across their long axis, so the two never share a plane and flicker.
+ */
+const PROUD: Record<string, number> = { LightBrown: 1.02 };
 
 /** Materials that should glow: lamp shades and bulbs. */
 const GLOWS: Record<string, THREE.Color> = {
@@ -73,12 +86,23 @@ export class Props {
         if (kind === 'chandelier') return;
         const spec = FILES[kind];
         try {
-          const { parts, size, min } = await this.load(spec.file);
-          const len = spec.fit === 'height' ? size.y : Math.max(size.x, size.z);
+          const { parts, size, min, foot } = await this.load(spec.file);
+          // stand the model on its base, centred on the spot (by its foot, or its bounds), and
+          // tipped upright about its foot (then measured again, stood up)
+          const cx = spec.foot ? foot.x : min.x + size.x / 2;
+          const cz = spec.foot ? foot.y : min.z + size.z / 2;
+          let local = new THREE.Matrix4().makeTranslation(-cx, -min.y, -cz);
+          let height = size.y;
+          if (spec.upright) {
+            local = upright(parts, foot, min.y, size.y).multiply(local);
+            const [y0, y1] = heightOf(parts, local);
+            local.premultiply(new THREE.Matrix4().makeTranslation(0, -y0, 0));
+            height = y1 - y0;
+          }
+          const len = spec.fit === 'height' ? height : Math.max(size.x, size.z);
           const mats = list.map((p) => {
             const s = p.size / len;
-            // stand the model on its base, centred on the spot
-            return new THREE.Matrix4().compose(new THREE.Vector3(p.x, p.y, p.z), new THREE.Quaternion().setFromAxisAngle(_up, p.ry), new THREE.Vector3(s, s, s)).multiply(new THREE.Matrix4().makeTranslation(-(min.x + size.x / 2), -min.y, -(min.z + size.z / 2)));
+            return new THREE.Matrix4().compose(new THREE.Vector3(p.x, p.y, p.z), new THREE.Quaternion().setFromAxisAngle(_up, p.ry), new THREE.Vector3(s, s, s)).multiply(local);
           });
           this.group.add(this.instance(kind, parts, mats, list.map((p) => p.room)));
         } catch (err) {
@@ -235,9 +259,9 @@ export class Props {
     });
   }
 
-  private cache = new Map<string, Promise<{ parts: Part[]; size: THREE.Vector3; min: THREE.Vector3 }>>();
+  private cache = new Map<string, Promise<{ parts: Part[]; size: THREE.Vector3; min: THREE.Vector3; foot: THREE.Vector2 }>>();
 
-  private load(file: string): Promise<{ parts: Part[]; size: THREE.Vector3; min: THREE.Vector3 }> {
+  private load(file: string): Promise<{ parts: Part[]; size: THREE.Vector3; min: THREE.Vector3; foot: THREE.Vector2 }> {
     let p = this.cache.get(file);
     if (!p) {
       p = modelBytes(MODEL_BASE + file).then((bytes) => this.loader.parseAsync(bytes, MODEL_BASE)).then((gltf) => {
@@ -250,10 +274,11 @@ export class Props {
           const glow = GLOWS[src.name];
           const material = glow ? new THREE.MeshBasicMaterial({ color: glow, map: src.map }) : src;
           material.name = src.name;
-          parts.push({ geometry: mesh.geometry, material, matrix: mesh.matrixWorld.clone() });
+          parts.push({ geometry: PROUD[src.name] && file.startsWith('bottle') ? proud(mesh.geometry, PROUD[src.name]!) : mesh.geometry, material, matrix: mesh.matrixWorld.clone() });
         });
         const box = new THREE.Box3().setFromObject(gltf.scene);
-        return { parts, size: box.getSize(new THREE.Vector3()), min: box.min.clone() };
+        const size = box.getSize(new THREE.Vector3());
+        return { parts, size, min: box.min.clone(), foot: footOf(parts, box.min.y, size.y) };
       });
       this.cache.set(file, p);
     }
@@ -287,6 +312,102 @@ export class Props {
 }
 
 const _up = new THREE.Vector3(0, 1, 0);
+
+/**
+ * The middle of a model's foot (x, z): the bounds of everything in the lowest 3% of its height.
+ * layout.ts's LEAVES are measured from the same point.
+ */
+export function footOf(parts: readonly { geometry: THREE.BufferGeometry; matrix: THREE.Matrix4 }[], y0: number, h: number): THREE.Vector2 {
+  const v = new THREE.Vector3();
+  let x0 = Infinity;
+  let x1 = -Infinity;
+  let z0 = Infinity;
+  let z1 = -Infinity;
+  for (const p of parts) {
+    const pos = p.geometry.getAttribute('position');
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i).applyMatrix4(p.matrix);
+      if (v.y > y0 + h * 0.03) continue;
+      x0 = Math.min(x0, v.x);
+      x1 = Math.max(x1, v.x);
+      z0 = Math.min(z0, v.z);
+      z1 = Math.max(z1, v.z);
+    }
+  }
+  return x0 <= x1 ? new THREE.Vector2((x0 + x1) / 2, (z0 + z1) / 2) : new THREE.Vector2();
+}
+
+/**
+ * The turn about a model's foot (its foot at the origin) that stands its trunk up straight: the
+ * trunk followed up from the foot in slices to 60% of the height, and the line from the foot to
+ * the last slice's middle turned to vertical.
+ */
+export function upright(parts: readonly { geometry: THREE.BufferGeometry; matrix: THREE.Matrix4 }[], foot: THREE.Vector2, y0: number, h: number): THREE.Matrix4 {
+  const pts: THREE.Vector3[] = [];
+  for (const p of parts) {
+    const pos = p.geometry.getAttribute('position');
+    for (let i = 0; i < pos.count; i++) pts.push(new THREE.Vector3().fromBufferAttribute(pos, i).applyMatrix4(p.matrix));
+  }
+  // the foot's reach, then each slice's middle near the last one's
+  let r = 0;
+  for (const v of pts) if (v.y <= y0 + h * 0.03) r = Math.max(r, Math.hypot(v.x - foot.x, v.z - foot.y));
+  let cx = foot.x;
+  let cz = foot.y;
+  let top = 0;
+  for (let t = 0.05; t <= 0.6 + 1e-9; t += 0.05) {
+    const ys = y0 + t * h;
+    let x0 = Infinity;
+    let x1 = -Infinity;
+    let z0 = Infinity;
+    let z1 = -Infinity;
+    for (const v of pts) {
+      if (Math.abs(v.y - ys) > h * 0.025 || Math.hypot(v.x - cx, v.z - cz) > r * 1.6) continue;
+      x0 = Math.min(x0, v.x);
+      x1 = Math.max(x1, v.x);
+      z0 = Math.min(z0, v.z);
+      z1 = Math.max(z1, v.z);
+    }
+    if (x0 > x1) continue;
+    cx = (x0 + x1) / 2;
+    cz = (z0 + z1) / 2;
+    top = t * h;
+  }
+  if (top <= 0) return new THREE.Matrix4();
+  const lean = new THREE.Vector3(cx - foot.x, top, cz - foot.y).normalize();
+  return new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion().setFromUnitVectors(lean, _up));
+}
+
+/** The lowest and highest point of a model's parts placed by `m`. */
+function heightOf(parts: readonly { geometry: THREE.BufferGeometry; matrix: THREE.Matrix4 }[], m: THREE.Matrix4): [number, number] {
+  const v = new THREE.Vector3();
+  const w = new THREE.Matrix4();
+  let y0 = Infinity;
+  let y1 = -Infinity;
+  for (const p of parts) {
+    w.multiplyMatrices(m, p.matrix);
+    const pos = p.geometry.getAttribute('position');
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i).applyMatrix4(w);
+      y0 = Math.min(y0, v.y);
+      y1 = Math.max(y1, v.y);
+    }
+  }
+  return [y0, y1];
+}
+
+/** A copy of a part scaled by k about its middle across its two short axes (its long one kept). */
+function proud(g: THREE.BufferGeometry, k: number): THREE.BufferGeometry {
+  const out = g.clone();
+  out.computeBoundingBox();
+  const box = out.boundingBox!;
+  const size = box.getSize(new THREE.Vector3());
+  const c = box.getCenter(new THREE.Vector3());
+  const long = size.x >= size.y && size.x >= size.z ? 'x' : size.y >= size.z ? 'y' : 'z';
+  const s = new THREE.Vector3(k, k, k);
+  s[long] = 1;
+  out.translate(-c.x, -c.y, -c.z).scale(s.x, s.y, s.z).translate(c.x, c.y, c.z);
+  return out;
+}
 
 const GLINT_VERTEX = /* glsl */ `
 uniform float uTime;

@@ -19,6 +19,7 @@ import { Track, type Pose } from './interp.ts';
 import { SEND_MS, shouldSend, type SentPose } from './send-policy.ts';
 import type { ChatClientMsg, ChatServerMsg, EmoteId, FloorClientMsg, FloorServerMsg, PlayerInfo } from '../../../shared/src/protocol.ts';
 import type { Look } from '../../../shared/src/look.ts';
+import type { FxEvent, Statue } from '../../../shared/src/items.ts';
 
 /** Shortest gap between two `mv` messages, in ms (send-policy.ts has the whole rule). */
 export { SEND_MS };
@@ -68,6 +69,16 @@ export interface FloorEvents {
   emote: (id: number, e: EmoteId) => void;
   /** Floor chat: new lines (your own come back too), the room's backlog after each hello, or why your last line was refused. */
   chat: (msg: ChatServerMsg) => void;
+  /** v6: an effect someone bought (items.ts FxEvent); `at` can be in the future (queued). */
+  fx: (ev: FxEvent) => void;
+  /** v6: after each hello, every effect still playing or queued (replaces what you had). */
+  fxs: (list: FxEvent[]) => void;
+  /** v6: the lobby's statues, newest first (after hello, and when someone buys one). */
+  statues: (list: Statue[]) => void;
+  /** v6: someone earned a feat (feats.ts), for the feed. */
+  feat: (id: number, name: string, feat: string) => void;
+  /** v6: you own these emotes now (bought or earned while here): the wheel adds them. */
+  owned: (emotes: EmoteId[]) => void;
 }
 
 type Listeners = { [K in keyof FloorEvents]: Set<FloorEvents[K]> };
@@ -90,8 +101,12 @@ export class FloorLink {
   /** Us, as the server last described us (null until the first hello). */
   you: PlayerInfo | null = null;
   onlineCount = 0;
+  /** v6: the lobby's statues as the floor last said (empty until it does). */
+  statues: Statue[] = [];
+  /** v6: effects playing or queued, as the floor has told us; see effects(). */
+  private fxList: FxEvent[] = [];
   private readonly socket: FloorTransport;
-  private readonly listeners: Listeners = { hello: new Set(), join: new Set(), leave: new Set(), look: new Set(), at: new Set(), online: new Set(), state: new Set(), message: new Set(), emote: new Set(), chat: new Set() };
+  private readonly listeners: Listeners = { hello: new Set(), join: new Set(), leave: new Set(), look: new Set(), at: new Set(), online: new Set(), state: new Set(), message: new Set(), emote: new Set(), chat: new Set(), fx: new Set(), fxs: new Set(), statues: new Set(), feat: new Set(), owned: new Set() };
   private connected = false;
   private placed = false;
   private sent: { x: number; z: number; r: number } | null = null;
@@ -126,6 +141,12 @@ export class FloorLink {
   /** Make a gesture everyone on the floor sees (the server echoes it back to you too). */
   emote(e: EmoteId): boolean {
     return this.socket.send({ t: 'emote', e } satisfies FloorClientMsg);
+  }
+
+  /** v6: effects still playing or yet to start at server time `now`, soonest first. */
+  effects(now = serverNow()): FxEvent[] {
+    this.fxList = this.fxList.filter((e) => e.until > now);
+    return [...this.fxList];
   }
 
   /** Say a line in the floor's chat (ui/chat keeps it to what the server takes). False while reconnecting. */
@@ -230,6 +251,27 @@ export class FloorLink {
       case 'chat':
       case 'chat.no':
         this.emit('chat', m);
+        break;
+      case 'fx': {
+        const { t: _t, ...ev } = m;
+        // a retried purchase can be told twice; one effect is one (buyer, kind, start)
+        if (!this.fxList.some((e) => e.id === ev.id && e.fx === ev.fx && e.at === ev.at)) this.fxList = [...this.fxList, ev].sort((a, b) => a.at - b.at);
+        this.emit('fx', ev);
+        break;
+      }
+      case 'fxs':
+        this.fxList = [...m.list].sort((a, b) => a.at - b.at);
+        this.emit('fxs', m.list);
+        break;
+      case 'statues':
+        this.statues = m.list;
+        this.emit('statues', m.list);
+        break;
+      case 'feat':
+        this.emit('feat', m.id, m.name, m.feat);
+        break;
+      case 'owned':
+        this.emit('owned', m.emotes);
         break;
     }
     this.emit('message', m);
