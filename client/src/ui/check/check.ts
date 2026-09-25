@@ -68,7 +68,8 @@ export async function openCheck(first?: CheckResponse): Promise<void> {
   };
 
   const waitUntil = (at: number) => {
-    stage.replaceChildren();
+    // The spent picture stays, dimmed, so the panel doesn't jump while it counts down.
+    stage.classList.add('check-spent');
     fresh.disabled = true;
     const tick = () => {
       const left = Math.ceil((at - Date.now()) / 1000);
@@ -90,6 +91,7 @@ export async function openCheck(first?: CheckResponse): Promise<void> {
     if (!r.challenge) return;
     fresh.disabled = false;
     status.textContent = '';
+    stage.classList.remove('check-spent');
     if (r.challenge.kind === 'turnstile') void turnstile(r.challenge);
     else void chip(r.challenge);
   };

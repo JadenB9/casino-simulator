@@ -17,3 +17,4 @@
 .check-canvas:active { cursor: grabbing; }
 .check-status { min-height: 1.4em; font-family: var(--ui); letter-spacing: 0.02em; color: var(--brass-hi); }
 .check-status:empty { visibility: hidden; }
+.check-spent .check-canvas { opacity: 0.35; filter: grayscale(0.6); pointer-events: none; }

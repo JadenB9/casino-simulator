@@ -48,9 +48,17 @@ async function enterFloor() {
     await page.fill('.pass-input', 'casino-dev'); // DEV_PASSWORD in client/src/net/api.ts
     await page.click('.enter-btn');
   }
-  await page.waitForSelector('.menu-item', { timeout: 20_000 });
-  await page.click('.menu-item >> nth=0');
-  await page.waitForSelector('.hud', { timeout: 20_000 });
+  // A new account picks its look first (three steps), then lands on the floor.
+  await page.waitForSelector('.menu-item, .editor-panel', { timeout: 20_000 });
+  if (await page.$('.editor-panel')) {
+    for (let i = 0; i < 3; i++) {
+      await page.click('.editor-panel .ed-buttons .btn.primary');
+      await page.waitForTimeout(500);
+    }
+  } else {
+    await page.click('.menu-item >> nth=0');
+  }
+  await page.waitForSelector('.hud', { timeout: 30_000 });
 }
 
 async function sit(station, buyIn = 1000) {
@@ -60,9 +68,12 @@ async function sit(station, buyIn = 1000) {
   }, station);
   await page.waitForSelector('.lobby-choice', { timeout: 10_000 });
   await page.keyboard.press('s');
-  await page.waitForSelector('.modal input[type=number]', { timeout: 20_000 });
-  await page.fill('.modal input[type=number]', String(buyIn));
-  await page.click('.modal .btn.primary');
+  // Chips left from an earlier run: straight back in, no buy-in.
+  await page.waitForFunction(() => window.casino.app.table?.seated === true || !!document.querySelector('.modal input[type=number]'), null, { timeout: 20_000 });
+  if (await page.$('.modal input[type=number]')) {
+    await page.fill('.modal input[type=number]', String(buyIn));
+    await page.click('.modal .btn.primary');
+  }
   await page.waitForFunction(() => window.casino.app.table?.seated === true, null, { timeout: 20_000 });
 }
 
@@ -160,7 +171,7 @@ try {
   await shot('bot6-miss');
   log('miss: waiting');
   // The countdown runs out and a new picture comes by itself.
-  await page.waitForSelector('.check-modal .check-canvas', { timeout: 30_000 });
+  await page.waitForSelector('.check-modal .check-stage:not(.check-spent) .check-canvas', { timeout: 30_000 });
   await page.waitForTimeout(500);
 
   // The right ring.
