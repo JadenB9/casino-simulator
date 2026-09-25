@@ -10,10 +10,12 @@
 //            and a shower of 28 chips; calm, the banner and light stay and 9 chips fall
 //   system   (dev floor) the system's reduced-motion setting only picks the default: with it on and
 //            the switch at Full, the floor's CSS animates as it would anywhere; each way round
+//   rooms    (dev floor) the pachinko parlour during Own the Night, then the bingo hall, calm
+//            turned on live in each: screenshots both ways and the frame-to-frame change
 //   fx       (dev floor) the shop's effects: confetti throws a third of the paper when calm; Disco
 //            Night's ball turns slower and its points stop twinkling, measured frame to frame
 // Usage: node scripts/e2e/comfort6.mjs [port] [outDir] [checks...]   (default: all)
-//   marquee, slots, system and fx need Vite only; switch and pit the local worker too (PORT_BASE=<port> npm run dev).
+//   marquee, slots, system, rooms and fx need Vite only; switch and pit the local worker too (PORT_BASE=<port> npm run dev).
 //   GPU=1 draws on the machine's GPU. Fixed names (comfort6_e2e_*) with the dev password.
 
 import { chromium } from 'playwright';
@@ -22,7 +24,7 @@ import { execFileSync } from 'node:child_process';
 
 const [port = '6380', out = '/tmp/comfort6', ...wanted] = process.argv.slice(2);
 mkdirSync(out, { recursive: true });
-const checks = wanted.length ? wanted : ['switch', 'marquee', 'slots', 'pit', 'system', 'fx'];
+const checks = wanted.length ? wanted : ['switch', 'marquee', 'slots', 'pit', 'system', 'rooms', 'fx'];
 const browser = await chromium.launch(process.env.GPU === '1' ? { channel: 'chromium', args: ['--ignore-gpu-blocklist'] } : { args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 let failed = 0;
 const fail = (what) => {
@@ -312,6 +314,34 @@ if (checks.includes('system')) {
     ok(seen.calm === want, `${tag}: ${want ? 'calm' : 'full'}`);
     ok(want ? seen.halo === 'none' && seen.bubble === 'emote-fade-in' : seen.halo === 'map-pulse' && seen.bubble === 'emote-in', `${tag}: the map halo ${seen.halo}, an emote bubble ${seen.bubble}`);
     ok(errors.length === 0, `${tag}: no errors (${errors.slice(0, 2).join(' | ')})`);
+    await ctx.close();
+  }
+}
+
+// --- the new rooms at their busiest ---------------------------------------------------------------
+
+if (checks.includes('rooms')) {
+  for (const room of ['parlour', 'bingo']) {
+    const { p, ctx, errors } = await page(`/casino/src/world/dev-floor.html?quality=high&view=${room}`, { calm: false });
+    await p.waitForFunction(() => document.getElementById('boot')?.classList.contains('done') && window.casino?.fx, null, { timeout: 300_000 });
+    await p.waitForTimeout(1500);
+    // Own the Night: the whole casino's show, shells bursting ahead of the camera
+    await p.evaluate(() => window.casino.fx.play('fx-takeover', { secs: 60 }));
+    await p.waitForTimeout(4500);
+    const mid = await p.evaluate(() => {
+      const { engine, THREE } = window.casino;
+      const v = new THREE.Vector3(0, 0, -1).applyQuaternion(engine.camera.quaternion).multiplyScalar(5).add(engine.camera.position);
+      return [v.x, v.y, v.z];
+    });
+    const full = await flicker(p, mid, 400, 12, 80);
+    await shot(p, `${room}-full`);
+    await setCalm(p, true);
+    await p.waitForTimeout(3000);
+    const calm = await flicker(p, mid, 400, 12, 80);
+    await shot(p, `${room}-calm`);
+    console.log(`     ${room} during Own the Night, frame-to-frame change: full ${full.mean.toFixed(2)} (most ${full.most.toFixed(2)}), calm ${calm.mean.toFixed(2)} (most ${calm.most.toFixed(2)})`);
+    ok(calm.most <= full.most, `rooms: the ${room} is no busier frame to frame when calm`);
+    ok(errors.length === 0, `rooms (${room}): no errors (${errors.slice(0, 2).join(' | ')})`);
     await ctx.close();
   }
 }
