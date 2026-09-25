@@ -40,7 +40,7 @@ const state = (p) =>
     const w = window.casino.world;
     const pl = w.life.seating.player;
     const cam = window.casino.engine.camera;
-    const dir = cam.getWorldDirection(new window.casino.THREE.Vector3());
+    const dir = cam.getWorldDirection(new cam.position.constructor());
     const head = w.player.character.root.getObjectByName('Head');
     return {
       view: pl.view,
@@ -396,16 +396,17 @@ if (checks.includes('game')) {
   if (stool) {
     // hop there a walk's worth at a time (the floor checks how fast you go)
     const from = await state(p);
-    const tx = stool.x + Math.sin(stool.yaw) * 0.7;
-    const tz = stool.z + Math.cos(stool.yaw) * 0.7;
+    // from behind it (a stool faces the counter), looking the way it faces
+    const tx = stool.x - Math.sin(stool.yaw) * 0.7;
+    const tz = stool.z - Math.cos(stool.yaw) * 0.7;
     const n = Math.max(1, Math.ceil(Math.hypot(tx - from.at.x, tz - from.at.z) / 7));
     for (let i = 1; i <= n; i++) {
-      await p.evaluate(([x, z, yaw]) => window.casino.world.teleport(x, z, yaw), [from.at.x + ((tx - from.at.x) * i) / n, from.at.z + ((tz - from.at.z) * i) / n, stool.yaw + Math.PI]);
+      await p.evaluate(([x, z, yaw]) => window.casino.world.teleport(x, z, yaw), [from.at.x + ((tx - from.at.x) * i) / n, from.at.z + ((tz - from.at.z) * i) / n, stool.yaw]);
       await p.waitForTimeout(1100);
     }
     await p.evaluate((yaw) => {
       const pl = window.casino.world.life.seating.player;
-      pl.camYaw = yaw;
+      pl.camYaw = yaw + Math.PI;
       pl.camPitch = 0.3;
     }, stool.yaw);
     await p.waitForTimeout(400);
@@ -414,7 +415,8 @@ if (checks.includes('game')) {
     await p.waitForTimeout(1600);
     const s = await state(p);
     const on = await p.evaluate(() => window.casino.world.life.seating.seated?.id ?? null);
-    ok(on === stool.id && dist(s.cam, s.eye) < 0.01 && s.eye.y < f.eye.y - 0.1, `E at ${stool.id} ("${prompt}"): sitting, looking from the stool (eyes ${s.eye.y.toFixed(2)} m)`);
+    // (a bar stool is high: the eyes come down only a little from a standing 1.66 m)
+    ok(on === stool.id && dist(s.cam, s.eye) < 0.01 && s.eye.y < 1.62, `E at ${stool.id} ("${prompt}"): sitting, looking from the stool (eyes ${s.eye.y.toFixed(2)} m)`);
     await shot(p, 'game-stool');
     await p.keyboard.press('KeyE');
     await p.waitForTimeout(700);
