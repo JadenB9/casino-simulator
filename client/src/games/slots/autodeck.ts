@@ -207,6 +207,7 @@ export function mountAutoDeck(o: AutoDeckOpts): AutoDeck {
   const refresh = () => {
     const a = driver.auto;
     autoBtn.classList.toggle('on', !!a);
+    o.deck.classList.toggle('auto-on', !!a);
     autoBtn.setAttribute('aria-pressed', String(!!a));
     if (a) autoBtn.replaceChildren(el('span', 'slots-auto-word', 'Auto ·'), el('span', 'slots-auto-count', autoCount(a, driver.inFlight)), el('span', 'slots-auto-stop', 'Stop'));
     else autoBtn.replaceChildren(document.createTextNode('Auto'));

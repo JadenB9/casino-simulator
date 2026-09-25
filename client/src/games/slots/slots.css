@@ -11,6 +11,7 @@
 
 /* Spin holds while pressed (no page menu or text selection on a long press); Auto, on, reads
    "Auto · 23 left" with Stop on it, and opens its stops in a panel over the deck's right end. */
+.slots-deck .btn { white-space: nowrap; }
 .slots-deck .btn.slots-spin { touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 .slots-deck .btn.slots-spin.held { transform: translateY(1px); box-shadow: inset 0 2px 7px rgba(60, 36, 8, 0.55); }
 .slots-deck .btn.slots-auto.open { border-color: var(--brass-hi); }
@@ -107,6 +108,9 @@
   .slots-deck > :nth-child(10) { order: 8; }
   .slots-deck > :nth-child(11) { order: 8; }
   .slots-auto .slots-auto-word { display: none; }
+  /* on Auto the Spin button can't be used: its room goes to the count and Stop */
+  .slots-deck.auto-on .slots-spin { display: none; }
+  .slots-deck.auto-on .slots-auto { flex: 1 1 auto; justify-content: space-between; }
   .slots-auto-pop { right: -10px; width: calc(100vw - 20px); max-width: 440px; }
   .slots-deck .btn { padding: 0 11px; white-space: nowrap; }
   .slots-deck .slots-coin { min-width: 0; }
@@ -135,5 +139,8 @@
   .slots-countup .amount { font-size: 32px; }
   .slots-pays { max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px); }
   .slots-deck ~ .tip-line { left: 10px; right: auto; }
-  .slots-auto-pop { max-height: calc(100vh - 70px); max-height: calc(100dvh - 70px); overflow: auto; gap: 8px; padding: 10px 14px 12px; }
+  /* the stops in two columns (the money fields side by side), so the panel fits over the one-row deck */
+  .slots-auto-pop { width: min(540px, calc(100vw - 20px)); max-height: calc(100vh - 70px); max-height: calc(100dvh - 70px); overflow: auto; grid-template-columns: 1fr 1fr; gap: 8px 12px; padding: 10px 14px 12px; }
+  .slots-auto-pop > :nth-child(1), .slots-auto-pop > :nth-child(2), .slots-auto-pop > .slots-auto-check, .slots-auto-pop > .slots-auto-go { grid-column: 1 / -1; }
+  .slots-auto-pop .slots-auto-note { display: none; }
 }
