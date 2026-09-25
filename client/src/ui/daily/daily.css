@@ -56,6 +56,4 @@
 
 /* Reduce flashing & motion (app/comfort.ts), or the system's reduced motion: the dot holds still */
 .daily-btn.calm.waiting .daily-dot { animation: none; }
-@media (prefers-reduced-motion: reduce) {
-  .daily-btn.waiting .daily-dot { animation: none; }
-}
+body.calm .daily-btn.waiting .daily-dot { animation: none; }
