@@ -109,6 +109,8 @@ export function disco(w: FxWorld, stock: Stock, ev: FxEvent, late: boolean, hang
   /** The room the camera was in last frame (the groove is muffled through the walls). */
   let here = '';
   let spin = Math.random() * 6;
+  /** The heads' sweep, run on its own clock so it can slow down without jumping. */
+  let sweep = 0;
   const tint = new THREE.Color();
   const _m = new THREE.Matrix4();
 
@@ -125,7 +127,10 @@ export function disco(w: FxWorld, stock: Stock, ev: FxEvent, late: boolean, hang
       const down = late ? 1 : Math.min(1, t / DOWN);
       const up = Math.min(1, left / UP);
       const y = high + (low - high) * ease(Math.min(down, up));
-      spin += dt * 0.55;
+      // with flashing and motion turned down: a slow turn, slow steady sweeps, no twinkle or glints
+      const still = w.calm();
+      spin += dt * (still ? 0.15 : 0.55);
+      sweep += dt * (still ? 0.3 : 1);
       ball.position.set(spot.x, y, spot.z);
       ball.rotation.y = spin;
       cable.position.set(spot.x, ceiling, spot.z);
@@ -133,7 +138,7 @@ export function disco(w: FxWorld, stock: Stock, ev: FxEvent, late: boolean, hang
       // the light show runs while the ball is down
       const k = envelope(late ? t + DOWN : t, left, DOWN * 0.8, UP);
       for (const [i, h] of heads.entries()) {
-        const s = t * (0.23 + i * 0.041) + i * 1.7;
+        const s = sweep * (0.23 + i * 0.041) + i * 1.7;
         h.to.set(spot.x + Math.sin(s) * (L.x1 - L.x0) * 0.33, 0, spot.z + Math.cos(s * 1.31 + i) * (L.z1 - L.z0) * 0.33);
         h.dir.subVectors(h.to, h.from).normalize();
         beams.setMatrixAt(i, aimBeam(_m, h.from, h.to, 0.55));
@@ -146,12 +151,15 @@ export function disco(w: FxWorld, stock: Stock, ev: FxEvent, late: boolean, hang
       su.uSpin!.value = spin;
       su.uK!.value = k * (q === 'high' ? 1 : 1.4);
       su.uTime!.value = t;
+      su.uCalm!.value = still ? 1 : 0;
       bu.uTime!.value = t;
-      bu.uK!.value = 0.35 + 0.65 * k;
+      bu.uK!.value = (0.35 + 0.65 * k) * (still ? 0.2 : 1);
+      bu.uCalm!.value = still ? 1 : 0;
       // the room's light, only for those in it: dim, and slowly shifting from violet to magenta
       if (insideRoom && k > 0.01) {
-        tint.set('#4a2cff').lerp(_c.set('#ff2d95'), 0.5 + 0.5 * Math.sin(t * 0.35));
-        w.lighting.setTint(`disco:${ev.id}:${ev.at}`, { color: tint, k: 0.7 * k, dim: 1 - 0.65 * k });
+        if (still) tint.set('#5a34d8');
+        else tint.set('#4a2cff').lerp(_c.set('#ff2d95'), 0.5 + 0.5 * Math.sin(t * 0.35));
+        w.lighting.setTint(`disco:${ev.id}:${ev.at}`, { color: tint, k: 0.7 * k, dim: 1 - (still ? 0.45 : 0.65) * k });
       } else {
         w.lighting.setTint(`disco:${ev.id}:${ev.at}`, null);
       }
@@ -238,7 +246,7 @@ export function ballGeometry(r = BALL_R, rows = 18): THREE.BufferGeometry {
 function ballMaterial(): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
     name: 'fx-mirrorball',
-    uniforms: { uPins: { value: [] as THREE.Vector3[] }, uTime: { value: 0 }, uK: { value: 0 } },
+    uniforms: { uPins: { value: [] as THREE.Vector3[] }, uTime: { value: 0 }, uK: { value: 0 }, uCalm: { value: 0 } },
     vertexShader: /* glsl */ `
       attribute float aTile;
       varying vec3 vN;
@@ -255,6 +263,7 @@ function ballMaterial(): THREE.ShaderMaterial {
       uniform vec3 uPins[2];
       uniform float uTime;
       uniform float uK;
+      uniform float uCalm;
       varying vec3 vN;
       varying vec3 vW;
       varying float vTile;
@@ -277,7 +286,7 @@ function ballMaterial(): THREE.ShaderMaterial {
             c += vec3(1.0, 0.96, 0.9) * g * 14.0 * uK;
           }
           // and each tile twinkles a little as the light across it shifts
-          c += vec3(0.9, 0.85, 1.0) * pow(max(sin(uTime * 3.0 + hash(vTile + 7.0) * 60.0), 0.0), 30.0) * 1.5 * uK;
+          c += vec3(0.9, 0.85, 1.0) * pow(max(sin(uTime * 3.0 + hash(vTile + 7.0) * 60.0), 0.0), 30.0) * 1.5 * uK * (1.0 - uCalm);
         }
         gl_FragColor = vec4(c, 1.0);
         #include <tonemapping_fragment>
@@ -339,6 +348,7 @@ function shellMaterial(): THREE.ShaderMaterial {
       uSpin: { value: 0 },
       uK: { value: 0 },
       uTime: { value: 0 },
+      uCalm: { value: 0 },
       uHeadPos: { value: [] as THREE.Vector3[] },
       uHeadDir: { value: [] as THREE.Vector3[] },
       uHeadCol: { value: [] as THREE.Color[] },
@@ -357,6 +367,7 @@ function shellMaterial(): THREE.ShaderMaterial {
       uniform float uSpin;
       uniform float uK;
       uniform float uTime;
+      uniform float uCalm;
       uniform vec3 uHeadPos[4];
       uniform vec3 uHeadDir[4];
       uniform vec3 uHeadCol[4];
@@ -387,7 +398,7 @@ function shellMaterial(): THREE.ShaderMaterial {
         float size = 0.0075 + 0.003 * h;
         float spot = smoothstep(size, size * 0.7, ang) * step(0.3, h);
         // nearer surfaces get brighter points; each point twinkles as its tile turns
-        float twinkle = 0.7 + 0.3 * sin(uTime * 4.0 + h * 40.0);
+        float twinkle = mix(0.7 + 0.3 * sin(uTime * 4.0 + h * 40.0), 0.75, uCalm);
         float facing = abs(dot(vN, -d));
         vec3 c = vec3(1.0, 0.95, 0.88) * spot * twinkle * (0.5 + 0.5 * facing) * 2.6 / (0.6 + 0.05 * dist * dist);
         // the moving heads' pools

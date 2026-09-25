@@ -30,6 +30,11 @@ export interface FxWorld {
   stations: THREE.Object3D;
   /** The slots hall's win meter, when the app has hung one (its face can be borrowed). */
   tally(): THREE.Mesh | null;
+  /**
+   * "Reduce flashing & motion" (app/comfort.ts), asked every frame so switching it applies at
+   * once: no flashes or flicker, slower sweeps, gentler particles.
+   */
+  calm(): boolean;
 }
 
 /** The part of a character the effects touch. */

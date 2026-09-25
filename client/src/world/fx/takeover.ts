@@ -12,13 +12,14 @@
 import * as THREE from 'three';
 import type { FxEvent } from '../../../../shared/src/items.ts';
 import type { Marquee } from '../marquee.ts';
-import { ceilingAt, inRect, roomAt } from '../layout.ts';
+import { ceilingAt, inRect, roomAt, type FloorPlan, type PlannedRoom } from '../layout.ts';
 import { Bits, Sparks, stepPaper } from './particles.ts';
 import type { Stock } from './stock.ts';
 import type { Effect, FxWorld } from './types.ts';
 import { envelope } from './timing.ts';
 import { golden } from './golden.ts';
 import { headline } from './headline.ts';
+import type { Hanger } from './disco.ts';
 
 /** Stars in a shell, and seconds between shells on average. */
 const STARS = { high: 180, low: 80 };
@@ -30,7 +31,7 @@ const CURTAIN = { high: 520, low: 240 };
 const PAPER = ['#f0c14e', '#f7dc95', '#f6f1e6', '#d9a43a'].map((c) => new THREE.Color(c));
 const STAR_COLORS = ['#ffc34a', '#ffe9b8', '#d8263a', '#ffb02e'].map((c) => new THREE.Color(c));
 
-export function takeover(w: FxWorld, stock: Stock, ev: FxEvent, late: boolean, sign: () => Marquee | null): Effect {
+export function takeover(w: FxWorld, stock: Stock, ev: FxEvent, late: boolean, sign: () => Marquee | null, hangers: readonly Hanger[]): Effect {
   const q = w.quality();
   // the Headline's own fanfare gives way to the show's
   const parts = [headline(w, ev, true, sign), golden(w, stock, ev, late)];
@@ -56,15 +57,17 @@ export function takeover(w: FxWorld, stock: Stock, ev: FxEvent, late: boolean, s
     // somewhere ahead of you in the room you're in, not right over your head
     w.camera.getWorldDirection(ahead);
     const look = Math.atan2(ahead.z, ahead.x);
-    for (let tries = 0; tries < 8; tries++) {
+    for (let tries = 0; tries < 12; tries++) {
       const a = look + (Math.random() - 0.5) * 1.8;
       const d = 3 + Math.random() * 5;
       const x = e.x + Math.cos(a) * d;
       const z = e.z + Math.sin(a) * d;
-      if (!inRect(room.inner, x, z, -1)) continue;
-      const y = Math.max(2.4, Math.min(3.9, ceilingAt(w.plan, x, z) - 0.8));
+      const shell = shellAt(w.plan, room, hangers, x, z);
+      if (!shell) continue;
+      const { y, r } = shell;
       tint.copy(STAR_COLORS[Math.floor(Math.random() * STAR_COLORS.length)]!);
-      const speed = 3.4 + Math.random() * 1.2;
+      // the stars travel about speed / drag before the air stops them
+      const speed = (r / 1.5) * (3.4 + Math.random() * 0.6);
       for (let i = 0; i < STARS[q]; i++) {
         // evenly round a sphere, a little ragged
         const u = Math.random() * 2 - 1;
@@ -100,9 +103,10 @@ export function takeover(w: FxWorld, stock: Stock, ev: FxEvent, late: boolean, s
         revealed = t > REVEAL;
       }
       if (!revealed) {
-        // the blackout: every room's light drops away, then the show
+        // the blackout: every room's light drops away, then the show (only dimmed, with flashing
+        // and motion turned down)
         const k = Math.min(1, t / 0.5);
-        w.lighting.setTint(id, { color: '#150c18', k: 0.7 * k, dim: 1 - 0.85 * k });
+        w.lighting.setTint(id, { color: '#150c18', k: 0.7 * k, dim: 1 - (w.calm() ? 0.45 : 0.85) * k });
         if (t < REVEAL) return true;
         revealed = true;
         w.sounds?.firework(null, 1.5);
@@ -111,15 +115,18 @@ export function takeover(w: FxWorld, stock: Stock, ev: FxEvent, late: boolean, s
         next = 0.1;
       }
       // the flash as the lights come up, fading into the gold
-      const flash = Math.max(0, 1 - (t - REVEAL) / 0.8);
+      const still = w.calm();
+      // (no flash with flashing turned down: the gold comes up on its own, a second slower)
+      const flash = still ? 0 : Math.max(0, 1 - (t - REVEAL) / 0.8);
+      stars.uniforms.uGain.value = (q === 'high' ? 5 : 2.2) * (still ? 0.45 : 1);
       w.lighting.setTint(id, left > 0 && flash > 0 ? { color: '#ffd27a', k: 0.5 * flash, dim: 1 + 1.4 * flash } : null);
       let alive = false;
       for (const p of parts) alive = p.update(dt, Math.max(0, t - REVEAL), left, view) || alive;
       if (left > 2 && (next -= dt) <= 0) {
-        next = EVERY * (0.6 + Math.random() * 0.8);
+        next = EVERY * (0.6 + Math.random() * 0.8) * (still ? 2 : 1);
         burst();
         // now and then a second shell a beat later
-        if (Math.random() < 0.3) setTimeout(() => !gone && burst(), 180);
+        if (!still && Math.random() < 0.3) setTimeout(() => !gone && burst(), 180);
       }
       // the stars hang and drift down, the way a willow shell's do
       stars.step(dt, 2.2, 2.6);
@@ -133,7 +140,7 @@ export function takeover(w: FxWorld, stock: Stock, ev: FxEvent, late: boolean, s
       }
       gobo.rotation.y = t * 0.12;
       const k = envelope(Math.max(0, t - REVEAL), left, 1, 2);
-      ((gobo.material as THREE.MeshBasicMaterial).color as THREE.Color).setRGB(1, 0.78, 0.36).multiplyScalar(0.9 * k * (0.9 + 0.1 * Math.sin(t * 2.3)));
+      ((gobo.material as THREE.MeshBasicMaterial).color as THREE.Color).setRGB(1, 0.78, 0.36).multiplyScalar(0.9 * k * (still ? 0.95 : 0.9 + 0.1 * Math.sin(t * 2.3)));
       if (left > 0) screens.on();
       else screens.off();
       return alive || left > 0 || stars.n > 0;
@@ -155,14 +162,45 @@ export function takeover(w: FxWorld, stock: Stock, ev: FxEvent, late: boolean, s
   };
 }
 
+/** How far a shell's stars travel at the most (m), and the room they're given all round. */
+export const SHELL_R = 1.5;
+const SHELL_CLEAR = 0.3;
+
+/**
+ * Where a shell may burst over (x, z) in a room, and how wide: sized to the room so its stars
+ * stop short of the ceiling, the walls and whatever hangs there (chandeliers, signs). Null if
+ * there's no room for one.
+ */
+export function shellAt(plan: FloorPlan, room: PlannedRoom, hangers: readonly Hanger[], x: number, z: number): { y: number; r: number } | null {
+  // the lowest ceiling the stars could reach (the pit's coffers stand higher than round them)
+  let top = ceilingAt(plan, x, z);
+  for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) top = Math.min(top, ceilingAt(plan, x + dx * SHELL_R, z + dz * SHELL_R));
+  const y = Math.min(4.2, Math.max(2.2, top - 1.4));
+  const r = Math.min(SHELL_R, top - y - SHELL_CLEAR);
+  if (r < 0.6) return null;
+  if (!inRect(room.inner, x, z, -(r + SHELL_CLEAR))) return null;
+  if (hangers.some((h) => Math.hypot(h.x - x, h.z - z) < h.r + r + SHELL_CLEAR)) return null;
+  return { y, r };
+}
+
+/** A slot machine's topper face, in its cabinet's own frame: where a name card fits over it. */
+export function topperCard(l: { topper: string; top: number; width: number }): { x: number; y: number; z: number; w: number; h: number } {
+  if (l.topper === 'arch') return { x: 0, y: l.top + 0.118, z: 0.156, w: 0.48, h: 0.165 };
+  if (l.topper === 'sign') return { x: 0, y: l.top + 0.12, z: 0.126, w: l.width - 0.08, h: 0.17 };
+  return { x: 0, y: l.top + 0.26, z: 0.136, w: 0.34, h: 0.14 };
+}
+
 /**
  * The buyer's name on every screen and sign that can show one: the online lounge's monitors (each
- * one's glass is given a picture of the name in place of its game's attract picture) and the slots
- * hall's win meter (its face). Nothing of theirs is changed: at the end each gets its own back.
+ * one's glass is given a picture of the name in place of its game's attract picture), the slots
+ * hall's win meter (its face) and every slot machine's topper (a lit card with the name over its
+ * printed face, all of them one instanced mesh). Nothing of theirs is changed: at the end each gets
+ * its own back.
  */
 class Screens {
   private readonly monitor: THREE.MeshBasicMaterial;
   private readonly meter: THREE.CanvasTexture;
+  private readonly cards: THREE.InstancedMesh | null;
   private readonly borrowed = new Map<THREE.Mesh, THREE.Material | THREE.Material[]>();
   private tallyFace: { uniform: { value: THREE.Texture }; own: THREE.Texture } | null = null;
   private lit = false;
@@ -179,6 +217,10 @@ class Screens {
     this.meter = new THREE.CanvasTexture(meterCanvas(name));
     this.meter.colorSpace = THREE.SRGBColorSpace;
     this.meter.anisotropy = 4;
+    const card = new THREE.CanvasTexture(cardCanvas(name));
+    card.colorSpace = THREE.SRGBColorSpace;
+    card.anisotropy = 4;
+    this.cards = toppers(w, card);
   }
 
   on(): void {
@@ -191,6 +233,7 @@ class Screens {
         m.material = this.monitor;
       }
     });
+    if (this.cards) this.w.root.add(this.cards);
     const face = ((this.w.tally()?.material as THREE.ShaderMaterial | undefined)?.uniforms?.uFace ?? null) as { value: THREE.Texture } | null;
     if (face) {
       this.tallyFace = { uniform: face, own: face.value };
@@ -203,6 +246,7 @@ class Screens {
     this.lit = false;
     for (const [m, own] of this.borrowed) if (m.material === this.monitor) m.material = own;
     this.borrowed.clear();
+    this.cards?.removeFromParent();
     if (this.tallyFace && this.tallyFace.uniform.value === this.meter) this.tallyFace.uniform.value = this.tallyFace.own;
     this.tallyFace = null;
   }
@@ -211,7 +255,36 @@ class Screens {
     this.monitor.map?.dispose();
     this.monitor.dispose();
     this.meter.dispose();
+    if (this.cards) {
+      (this.cards.material as THREE.MeshBasicMaterial).map?.dispose();
+      (this.cards.material as THREE.Material).dispose();
+      this.cards.geometry.dispose();
+      this.cards.dispose();
+    }
   }
+}
+
+/** A card over every slot machine's topper (their cabinets' handles say where), sharing the monitors' picture. */
+function toppers(w: FxWorld, picture: THREE.Texture): THREE.InstancedMesh | null {
+  const places: THREE.Matrix4[] = [];
+  const local = new THREE.Matrix4();
+  w.stations.traverse((o) => {
+    const h = o.userData.slots as { root?: THREE.Object3D; layout?: { topper: string; top: number; width: number } } | undefined;
+    if (!h?.root || !h.layout?.topper) return;
+    h.root.updateWorldMatrix(true, false);
+    const c = topperCard(h.layout);
+    local.compose(new THREE.Vector3(c.x, c.y, c.z), new THREE.Quaternion(), new THREE.Vector3(c.w, c.h, 1));
+    places.push(h.root.matrixWorld.clone().multiply(local));
+  });
+  if (places.length === 0) return null;
+  const m = new THREE.MeshBasicMaterial({ map: picture, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
+  m.name = 'fx-takeover-topper';
+  const mesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), m, places.length);
+  mesh.name = 'fx-toppers';
+  places.forEach((p, i) => mesh.setMatrixAt(i, p));
+  mesh.instanceMatrix.needsUpdate = true;
+  mesh.computeBoundingSphere();
+  return mesh;
 }
 
 /** A monitor's picture (the attract pictures' size): the name in gold on a black stage. */
@@ -250,6 +323,33 @@ function monitorCanvas(name: string): HTMLCanvasElement {
   g.fillStyle = '#d9b36a';
   g.font = '600 18px "Barlow Condensed", sans-serif';
   g.fillText('OWN THE NIGHT', 256, 248);
+  return c;
+}
+
+/** A topper's card: the name in gold on black, a hairline of gold round it. */
+function cardCanvas(name: string): HTMLCanvasElement {
+  const c = document.createElement('canvas');
+  c.width = 768;
+  c.height = 256;
+  const g = c.getContext('2d')!;
+  g.fillStyle = '#080605';
+  g.fillRect(0, 0, 768, 256);
+  g.strokeStyle = '#c99a3e';
+  g.lineWidth = 6;
+  g.strokeRect(10, 10, 748, 236);
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  let size = 120;
+  do {
+    g.font = `700 ${size}px Cinzel, Georgia, serif`;
+    size -= 6;
+  } while (g.measureText(name.toUpperCase()).width > 680 && size > 30);
+  const gold = g.createLinearGradient(0, 70, 0, 190);
+  gold.addColorStop(0, '#fff1c4');
+  gold.addColorStop(0.5, '#f0c14e');
+  gold.addColorStop(1, '#b8862e');
+  g.fillStyle = gold;
+  g.fillText(name.toUpperCase(), 384, 136);
   return c;
 }
 

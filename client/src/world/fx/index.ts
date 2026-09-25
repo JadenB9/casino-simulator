@@ -41,6 +41,7 @@ import { golden } from './golden.ts';
 import { headline } from './headline.ts';
 import { takeover } from './takeover.ts';
 import type { Effect, FxView, FxWorld } from './types.ts';
+import { calm } from '../../app/comfort.ts';
 import './fx.css';
 
 export type { Hanger } from './disco.ts';
@@ -126,6 +127,7 @@ export class FxPlayer {
       env: o.env,
       stations: o.stations,
       tally: () => this.tallySign,
+      calm,
     };
   }
 
@@ -280,7 +282,7 @@ export class FxPlayer {
           effect = golden(w, s, ev, late);
           break;
         case 'fx-takeover':
-          effect = takeover(w, s, ev, late, () => this.marquee);
+          effect = takeover(w, s, ev, late, () => this.marquee, this.o.hangers);
           break;
       }
     } catch (err) {

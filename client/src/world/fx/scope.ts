@@ -117,6 +117,27 @@ export function statueSpots(plan: FloorPlan, n = STATUES): StatueSpot[] {
   return out;
 }
 
+/**
+ * Whether a footprint of half-width `half` at (x, z) stands in the way in to a doorway: the cone of
+ * floor in front of each door (on both sides), reaching `DOOR_CONE` metres out and widening as it
+ * goes, the way people fan out walking through.
+ */
+export function inDoorCone(plan: FloorPlan, x: number, z: number, half: number): boolean {
+  for (const d of plan.doors) {
+    const along = d.axis === 'x' ? x : z;
+    const across = (d.axis === 'x' ? z : x) - d.c;
+    const out = Math.abs(across);
+    if (out > DOOR_CONE + half) continue;
+    const mid = (d.a0 + d.a1) / 2;
+    const reach = (d.a1 - d.a0) / 2 + 0.4 + 0.25 * out;
+    if (Math.abs(along - mid) < reach + half) return true;
+  }
+  return false;
+}
+
+/** How far out from a doorway its way in is kept clear (m). */
+export const DOOR_CONE = 2.8;
+
 function clearFor(plan: FloorPlan, room: Rect, x: number, z: number): boolean {
   const half = PLINTH.base / 2;
   // inside the room with a walker's width to the walls
@@ -126,6 +147,7 @@ function clearFor(plan: FloorPlan, room: Rect, x: number, z: number): boolean {
   const hits = (a: Rect, b: Rect) => a.x0 < b.x1 && b.x0 < a.x1 && a.z0 < b.z1 && b.z0 < a.z1;
   for (const a of plan.aisles) if (hits(foot, grow(a, 0.35))) return false;
   for (const d of plan.doorways) if (hits(foot, grow(d, 1.2))) return false;
+  if (inDoorCone(plan, x, z, half)) return false;
   for (const s of plan.stations) if (Math.hypot(s.x - x, s.z - z) < Math.max(s.fp.width, s.fp.depth) / 2 + half + 1.2) return false;
   for (const s of plan.solids) {
     const tall = s.y0 < TALL;

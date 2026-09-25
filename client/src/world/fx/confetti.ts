@@ -23,7 +23,9 @@ const PER_SHOT = { high: 260, low: 130 };
 
 export function confetti(w: FxWorld, stock: Stock, ev: FxEvent, late: boolean): Effect {
   const q = w.quality();
-  const per = PER_SHOT[q];
+  // gentler with flashing and motion turned down: half the paper, turning slowly
+  const per = w.calm() ? PER_SHOT[q] >> 1 : PER_SHOT[q];
+  const spin = w.calm() ? 0.35 : 1;
   const bits = new Bits(stock.paperGeo, stock.paper(q), per * 2, 'fx-confetti');
   w.root.add(bits.mesh);
   const at = w.where(ev.id)?.clone() ?? new THREE.Vector3(fxPoint(ev).x, 0, fxPoint(ev).z);
@@ -47,7 +49,7 @@ export function confetti(w: FxWorld, stock: Stock, ev: FxEvent, late: boolean): 
       const vx = Math.sin(spread) * Math.cos(a) * speed + side * 0.9;
       const vz = Math.sin(spread) * Math.sin(a) * speed;
       const vy = Math.cos(spread) * speed;
-      bits.spawn(ox, 1.5, oz, vx, vy, vz, 0.75 + Math.random() * 0.6, pick(), 8 + Math.random() * 14);
+      bits.spawn(ox, 1.5, oz, vx, vy, vz, 0.75 + Math.random() * 0.6, pick(), (8 + Math.random() * 14) * spin);
     }
   };
 
@@ -56,7 +58,7 @@ export function confetti(w: FxWorld, stock: Stock, ev: FxEvent, late: boolean): 
     for (let i = 0; i < per * 2; i++) {
       const r = Math.sqrt(Math.random()) * 3.2;
       const a = Math.random() * Math.PI * 2;
-      bits.spawn(at.x + Math.cos(a) * r, 0.2 + Math.random() * (ceiling - 0.4), at.z + Math.sin(a) * r, 0, -0.5, 0, 0.75 + Math.random() * 0.6, pick(), 8 + Math.random() * 14);
+      bits.spawn(at.x + Math.cos(a) * r, 0.2 + Math.random() * (ceiling - 0.4), at.z + Math.sin(a) * r, 0, -0.5, 0, 0.75 + Math.random() * 0.6, pick(), (8 + Math.random() * 14) * spin);
     }
     shots = 2;
   } else {
