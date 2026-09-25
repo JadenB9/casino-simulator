@@ -41,6 +41,7 @@ import { ease, tween, wait } from '../../table/tween.ts';
 import { handMoment } from './moments.ts';
 import { ChipTray, button, el } from '../../ui/kit.ts';
 import { serverNow } from '../../net/clock.ts';
+import { wave } from '../../app/comfort.ts';
 import {
   TOP_Y,
   RACK,
@@ -1123,7 +1124,7 @@ export function mountLetItRide(ctx: TableViewCtx): TableView {
 
     update() {
       tickClock();
-      litMat.opacity = 0.62 + 0.3 * Math.sin(performance.now() / 260);
+      litMat.opacity = 0.62 + 0.3 * wave(performance.now() / 260);
     },
 
     dispose() {
