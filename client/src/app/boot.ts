@@ -417,7 +417,9 @@ class App {
     const bar = this.hud.root.querySelector('.hud-right')!;
     const first = bar.querySelector('.hud-btn');
     bar.insertBefore(socialButton('emotes', 'Emotes (G)', () => this.emotes?.toggle()), first);
-    bar.insertBefore(socialButton('leaderboard', 'Leaderboards', () => openLeaderboard({ root: this.ui, api: socialApi })), first);
+    // v6 stats6: at a table, the leaderboards open on its game's boards
+    const boards = () => openLeaderboard({ root: this.ui, api: socialApi, ...(this.table ? { game: this.table.station.game } : {}) });
+    bar.insertBefore(socialButton('leaderboard', 'Leaderboards', boards), first);
     bar.insertBefore(shopButton('boutique', 'Boutique', () => this.openShop()), first);
     bar.insertBefore(shopButton('effects', 'Effects', () => this.openEffects()), first); // v6 shop6
     bar.insertBefore(shopButton('bar', 'Bar', () => this.openBarMenu()), first);
