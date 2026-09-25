@@ -156,6 +156,11 @@ export class FxPlayer {
     return [...this.playing.values()].map((p) => ({ fx: p.ev.fx, name: p.ev.name, at: p.ev.at, until: p.ev.until, shown: p.group.visible }));
   }
 
+  /** How far the effects have tinted the room's light (0: not at all), for the checks. */
+  get tinted(): number {
+    return this.o.lighting.tinted;
+  }
+
   /** Everything known: playing and queued. */
   get known(): FxEvent[] {
     return this.book.list();

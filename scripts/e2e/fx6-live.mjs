@@ -125,40 +125,60 @@ export async function live({ browser, port, out }) {
     await look(b.p, [-0.8, 1.8, 13.4], [0.6, 1.8, 9.2]);
     await shot(b.p, 'live-b-confetti');
 
-    for (const fx of ['fx-spotlight', 'fx-sparklers', 'fx-round', 'fx-disco']) {
+    // The floor plays one effect at a time per slot (each buyer's own, each room, the casino) and
+    // queues the rest: every purchase says when it starts.
+    const buy = async (fx) => {
       const r = await shop(a.p, 'shop/fx', fx);
-      check(r.status === 200, `A buys ${fx} (${r.status} ${r.body?.error ?? ''}${r.body?.fx ? `, starts in ${Math.round((r.body.fx.at - Date.now()) / 1000)} s` : ''})`);
-    }
-    // a second disco in the same room waits for the first
-    const second = await shop(a.p, 'shop/fx', 'fx-disco');
-    const queued = second.status === 200 && second.body.fx.at > Date.now() + 30_000;
-    check(queued, `a second disco is queued behind the first (${second.status}, at +${second.body?.fx ? Math.round((second.body.fx.at - Date.now()) / 1000) : '?'} s)`);
-    await b.p.waitForTimeout(6000);
+      const at = r.body?.fx?.at ?? 0;
+      check(r.status === 200, `A buys ${fx} (${r.status} ${r.body?.error ?? ''}${at ? `, starts in ${Math.round((at - Date.now()) / 1000)} s` : ''})`);
+      return r.body?.fx ?? null;
+    };
+    const until = (p, t) => p.waitForTimeout(Math.max(0, t - Date.now()));
+    const disco = await buy('fx-disco');
+    const sparks = await buy('fx-sparklers');
+    const round = await buy('fx-round');
+    const spot = await buy('fx-spotlight');
+    check(disco && round && round.at >= disco.until, 'the round waits for the disco (one room effect at a time)');
+    check(sparks && spot && spot.at >= sparks.until, 'the spotlight waits for the sparks (one of your own at a time)');
+    if (!disco || !sparks || !round || !spot) throw new Error('a purchase failed');
+
+    await until(b.p, sparks.at + 2500);
     const shownB = await active(b.p);
-    for (const fx of ['fx-spotlight', 'fx-sparklers', 'fx-round', 'fx-disco']) check(shownB.some((e) => e.fx === fx && e.shown), `B sees ${fx}`);
+    for (const fx of ['fx-disco', 'fx-sparklers']) check(shownB.some((e) => e.fx === fx && e.shown), `B sees ${fx}`);
     const lines = await caption(b.p);
     check(lines.some((l) => l.includes('Disco Night') && l.includes('fx6_e2e_a')), `B's caption names A's disco: ${JSON.stringify(lines)}`);
-    check(lines.some((l) => l.startsWith('Next')), "B's caption shows the queued disco as next");
-    // A holds a flute (drawn, not saved), and so does B, in the same room
-    const flutes = await b.p.evaluate(() => [...window.casino.world.characterFactory.people()].filter((p) => p.currentLook.held?.item === 'champagne').length);
+    check(lines.some((l) => l.startsWith('Next') && l.includes('Spotlight')), "B's caption shows the spotlight coming next");
+    check((await b.p.evaluate(() => window.casino.world.rooms.current)) === 'lobby' && (await b.p.evaluate(() => window.casino.world.fx.tinted)) > 0.3, "the disco darkens B's lobby");
+    await look(b.p, [-0.8, 2.0, 13.8], [0.4, 1.6, 7.5]);
+    await shot(b.p, 'live-b-disco-sparks');
+    await look(a.p, [2.2, 2.0, 12.8], [0.6, 1.5, 9.2]);
+    await shot(a.p, 'live-a-own');
+
+    await until(b.p, spot.at + 2000);
+    check((await active(b.p)).some((e) => e.fx === 'fx-spotlight' && e.shown), 'B sees the spotlight on A');
+    await look(b.p, [-0.8, 2.0, 13.8], [0.4, 1.6, 8]);
+    await shot(b.p, 'live-b-spotlight');
+
+    // B joins late: a new page gets the list of what's on after its hello and comes in part way through
+    await b.ctx.close();
+    const c = await enterAs('fx6_e2e_b');
+    await c.p.waitForTimeout(2500);
+    const late = await active(c.p);
+    const known = await c.p.evaluate(() => window.casino.world.fx.known.map((e) => e.fx));
+    check(late.some((e) => e.fx === 'fx-disco') && late.some((e) => e.fx === 'fx-spotlight'), `a page joining late plays what's on (${late.map((e) => e.fx).join(', ')})`);
+    check(known.includes('fx-round'), `and knows what's queued (${known.join(', ')})`);
+
+    // the round: a flute in every hand in the room, drawn and never saved
+    await until(c.p, round.at + 2000);
+    const flutes = await c.p.evaluate(() => [...window.casino.world.characterFactory.people()].filter((p) => p.currentLook.held?.item === 'champagne').length);
     check(flutes >= 2, `the round puts a glass in ${flutes} hands in B's lobby`);
     const saved = await a.p.evaluate(async () => {
       const t = sessionStorage.getItem('casino.token');
       return (await (await fetch('/casino/api/me', { headers: { Authorization: `Bearer ${t}` } })).json()).profile.look.held ?? null;
     });
     check(!saved || saved.item !== 'champagne', "the round's glass is never saved in A's look");
-    await look(b.p, [-0.8, 2.0, 13.8], [0.4, 1.6, 7.5]);
-    await shot(b.p, 'live-b-lobby-party');
-    await look(a.p, [2.2, 2.0, 12.8], [0.6, 1.5, 9.2]);
-    await shot(a.p, 'live-a-own');
-
-    // B joins late: a new page gets the list of what's playing and comes in part way through
-    await b.ctx.close();
-    const c = await enterAs('fx6_e2e_b');
-    await c.p.waitForTimeout(2500);
-    const late = await active(c.p);
-    check(late.some((e) => e.fx === 'fx-disco') && late.some((e) => e.fx === 'fx-spotlight'), `a page joining late plays what's on (${late.map((e) => e.fx).join(', ')})`);
-    check((await heard(c.p, 'fxs')).length >= 1, 'it heard the fxs list after its hello');
+    await look(c.p, [-0.4, 1.7, 11.6], [0.6, 1.3, 9.2]);
+    await shot(c.p, 'live-b-round');
 
     // the statue: bought once, in the lobby for everyone
     const st = await shop(a.p, 'shop/buy', 'statue');
