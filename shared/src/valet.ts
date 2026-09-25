@@ -6,10 +6,13 @@
 // multiplies by 100.
 
 /**
- * The valet's podium, on the sidewalk under the porte-cochère, facing the lobby's doors (-x): the
- * city's plan puts it here (client/src/world/city/plan.ts VALET_STAND), and so does the floor's check.
+ * The valet's podium, on the sidewalk under the porte-cochère, facing south along the sidewalk
+ * (the city's plan puts it here: client/src/world/city/plan.ts VALET_STAND): a guest stands on its
+ * south side, the attendant behind it on the north. The floor's check measures from it too.
  */
-export const VALET_STAND = { x: 129.0, z: 4.4 } as const;
+export const VALET_STAND = { x: 129.2, z: 4.4 } as const;
+/** Where the attendant stands behind the podium, and which way they face (towards the guest, +z). */
+export const VALET_ATTENDANT = { x: 129.2, z: 3.55, yaw: 0 } as const;
 
 /** A call is taken from this close to the stand (metres, the floor's last known position). */
 export const CALL_REACH = 8;

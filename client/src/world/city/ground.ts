@@ -148,10 +148,8 @@ export function buildGround(mats: Mats, col: Collider, quality: Quality): ZoneBu
   kit.box('glass', gx - 0.02, gx + 0.02, 3.2, 6.4, G.doors.z0 - 0.11, G.doors.z1 + 0.11);
   kit.box('brass', gx - 0.08, gx + 0.08, 3.1, 3.24, G.doors.z0 - 0.11, G.doors.z1 + 0.11);
   kit.box('marble-black', gx - 0.1, gx + 0.2, 6.4, 6.8, H.z0 - 0.4, H.z1 + 0.4, 1.2);
-  // v6 cars6: the glass stops the walker, not the camera: at the valet's podium, just outside it,
-  // the follow camera would otherwise be pushed into your back
-  kit.solid(gx - 0.1, gx + 0.1, H.z0, G.doors.z0 - 0.1, 6.4, { cam: false });
-  kit.solid(gx - 0.1, gx + 0.1, G.doors.z1 + 0.1, H.z1, 6.4, { cam: false });
+  kit.solid(gx - 0.1, gx + 0.1, H.z0, G.doors.z0 - 0.1, 6.4);
+  kit.solid(gx - 0.1, gx + 0.1, G.doors.z1 + 0.1, H.z1, 6.4);
   kit.solid(gx - 0.1, gx + 0.1, G.doors.z0 - 0.1, G.doors.z1 + 0.1, 6.4, { walk: false, bottom: 3.1 });
   const doors = new SlidingDoors({ x: gx, z0: G.doors.z0 - 0.1, z1: G.doors.z1 + 0.1, height: 3.1 }, mats, col);
   group.add(doors.group);
