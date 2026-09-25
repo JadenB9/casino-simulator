@@ -258,6 +258,21 @@ export class CasinoFloor extends DurableObject<Env> {
     return this.wins.report(r);
   }
 
+  /**
+   * v6: an account now owns these emotes (bought in the shop, or given by a feat): its sockets may
+   * send them from now on, and hear `owned` so the wheel adds them. Called by the Worker (shop.ts)
+   * and by tables (feats) over RPC. The shop slice fills this in.
+   */
+  grant(accountId: number, emotes: EmoteId[]): void {
+    void accountId;
+    void emotes;
+  }
+
+  /** v6: someone earned a feat (feats.ts): a line in everyone's feed. Called by tables over RPC. */
+  featEarned(accountId: number, name: string, feat: string): void {
+    this.broadcast({ t: 'feat', id: accountId, name, feat });
+  }
+
   /** Everyone on the floor sees the gesture over this player's head. */
   private emote(ws: WebSocket, e: EmoteId): void {
     const att = ws.deserializeAttachment() as FloorAtt | null;
