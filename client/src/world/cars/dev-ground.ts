@@ -12,7 +12,7 @@ import { Cars } from './index.ts';
 import { GARAGE } from './layout.ts';
 
 const SPOTS: Record<string, [number, number, number]> = {
-  stand: [VALET_STAND.x - 1.6, VALET_STAND.z - 0.5, Math.PI / 2],
+  stand: [VALET_STAND.x, VALET_STAND.z + 1.6, Math.PI],
   lot: [134, 12, 0.6],
   garage: [GARAGE.x0 + 2, GARAGE.doorZ, Math.PI / 2],
   street: [163, GARAGE.doorZ, Math.PI / 2],

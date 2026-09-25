@@ -5,7 +5,7 @@
 // car waits at the curb, and when its time is up (or it's sent back) it drives off down the street.
 
 import * as THREE from 'three';
-import { ARRIVE_MS, CURB, VALET_STAND, type CarCall } from '../../../../shared/src/valet.ts';
+import { ARRIVE_MS, CURB, VALET_ATTENDANT, VALET_STAND, type CarCall } from '../../../../shared/src/valet.ts';
 import { carItem } from '../../../../shared/src/items.ts';
 import type { Look } from '../../../../shared/src/look.ts';
 import { uniformOutfit } from '../characters.ts';
@@ -23,8 +23,8 @@ const VALET_LOOKS: Look[] = [
   { v: 1, body: 'f', outfit: uniformOutfit('vest'), skin: 5, hair: '#0e0c0b', top: '#5c1a1f', bottom: '#15161a', shoes: '#0c0c0e' },
 ];
 
-/** The podium faces the lobby's doors (-x); its valet stands behind it. */
-const STAND_YAW = -Math.PI / 2;
+/** The attendant faces the guest's side of the podium. */
+const STAND_YAW = VALET_ATTENDANT.yaw;
 /** Seconds the drive in takes out of ARRIVE_MS; the rest is the handover. */
 const DRIVE_S = ARRIVE_MS / 1000 - 3;
 /** Seconds to drive away. */
@@ -116,10 +116,10 @@ export class Valet {
     if (deps.podium) this.buildStand();
     this.staff = deps.characters.create(VALET_LOOKS[0]!, '');
     this.staff.setName('');
-    this.staff.root.position.set(VALET_STAND.x + 0.8, 0, VALET_STAND.z);
+    this.staff.root.position.set(VALET_ATTENDANT.x, 0, VALET_ATTENDANT.z);
     this.staff.root.rotation.y = STAND_YAW;
     this.group.add(this.staff.root);
-    deps.col.post(VALET_STAND.x + 0.8, VALET_STAND.z, 0.3, 1.9, { cam: false });
+    deps.col.post(VALET_ATTENDANT.x, VALET_ATTENDANT.z, 0.3, 1.9, { cam: false });
   }
 
   load(): Promise<unknown> {
@@ -336,7 +336,7 @@ export class Valet {
       const len = dir.length();
       const to = len > 0.9 ? door.clone().addScaledVector(dir.normalize(), len - 0.85) : door.clone();
       ch.root.position.copy(door);
-      o.runner = { ch, t: 0, to, back: new THREE.Vector3(VALET_STAND.x + 0.4, 0, VALET_STAND.z + 1.2), handed: false, gone: false };
+      o.runner = { ch, t: 0, to, back: new THREE.Vector3(VALET_ATTENDANT.x + 0.7, 0, VALET_ATTENDANT.z - 0.5), handed: false, gone: false };
     }
     const r = o.runner;
     if (r.gone) return;

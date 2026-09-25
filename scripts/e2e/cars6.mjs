@@ -113,8 +113,8 @@ async function toStand(p) {
     await p.evaluate(() => window.casino.app.link.send({ t: 'lift', to: 'ground' }));
     lifted = await p.waitForFunction(() => window.casino.world.zone === 'ground' && !window.casino.world.city.riding, null, { timeout: 20000 }).then(() => true, () => false);
   }
-  // the podium's guest side (the city's plan: the stand at 129.0, 4.4, facing the lobby's doors)
-  await travelTo(p, 128.1, 4.4, Math.PI / 2);
+  // the podium's guest side (the city's plan: the stand at 129.2, 4.4, the guest south of it)
+  await travelTo(p, 129.2, 5.3, Math.PI);
   await p.waitForTimeout(1200);
   return lifted;
 }
