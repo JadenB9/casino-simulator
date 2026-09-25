@@ -780,7 +780,11 @@ function chainPath(fit: Fit, drop: number, thick: number): Path {
     for (let j = -2; j <= 2; j++) sum.add(pts[(k + j + K) % K]!);
     return sum.divideScalar(5);
   });
-  const loop = smooth.map((p, k) => (p.distanceTo(V(fit.cx, p.y, fit.zc)) < pts[k]!.distanceTo(V(fit.cx, pts[k]!.y, fit.zc)) ? pts[k]!.clone().setY(p.y) : p));
+  let loop = smooth.map((p, k) => (p.distanceTo(V(fit.cx, p.y, fit.zc)) < pts[k]!.distanceTo(V(fit.cx, pts[k]!.y, fit.zc)) ? pts[k]!.clone().setY(p.y) : p));
+  // A rope as thick as a thumb shows every kink of the sparse mesh under it. Round the neck's axis
+  // its distance out is taken as the most of its neighbours' (so it stays clear) and then eased,
+  // and its height eased, both over a wider stretch.
+  if (thick >= 0.016) loop = evenOut(loop, fit.cx, fit.zc);
   const curve = new THREE.CatmullRomCurve3(loop, true, 'centripetal');
   return {
     curve,
@@ -791,6 +795,38 @@ function chainPath(fit: Fit, drop: number, thick: number): Path {
       return outs[a % K]!.clone().lerp(outs[(a + 1) % K]!, f - a).normalize();
     },
   };
+}
+
+/** A closed line round the axis (cx, zc), its distance out and height evened over its neighbours, never nearer the axis. */
+function evenOut(loop: V3[], cx: number, zc: number): V3[] {
+  const K = loop.length;
+  const r = loop.map((p) => Math.hypot(p.x - cx, p.z - zc));
+  const a = loop.map((p) => Math.atan2(p.x - cx, p.z - zc));
+  const wrap = (k: number) => (k + K) % K;
+  const ease = (v: number[], reach: number, passes: number): number[] => {
+    let out = v;
+    for (let n = 0; n < passes; n++) {
+      const from = out;
+      out = from.map((_, k) => {
+        let sum = 0;
+        for (let j = -reach; j <= reach; j++) sum += from[wrap(k + j)]!;
+        return sum / (reach * 2 + 1);
+      });
+    }
+    return out;
+  };
+  const most = r.map((_, k) => {
+    let m = 0;
+    for (let j = -3; j <= 3; j++) m = Math.max(m, r[wrap(k + j)]!);
+    return m;
+  });
+  const out = ease(most, 4, 3).map((v, k) => Math.max(v, r[k]!));
+  const y = ease(
+    loop.map((p) => p.y),
+    4,
+    3,
+  );
+  return loop.map((_, k) => V(cx + Math.sin(a[k]!) * out[k]!, y[k]!, zc + Math.cos(a[k]!) * out[k]!));
 }
 
 /** A curve given by a function (a strand twisting round a chain's centre line). */
@@ -2280,11 +2316,11 @@ const CLOTH_GLSL: Record<ClothesSpec['cloth'], { color?: string; pbr?: string; n
   },
 };
 
-/** A special clothes' body material for one outfit model (the lapels depend on the model). */
-function clothesMaterial(id: string, fit: Fit): THREE.MeshPhysicalMaterial | null {
+/** A special clothes' body material for one outfit model (the lapels depend on the model), with the hair tucked under a hat. */
+function clothesMaterial(id: string, fit: Fit, hat: string | null, tuck: Tuck | null): THREE.MeshPhysicalMaterial | null {
   const spec = CLOTHES[id];
   if (!spec) return null;
-  const key = `${id}|${fit.id}`;
+  const key = `${id}|${fit.id}|${tuck ? hat : ''}`;
   const known = clothesMats.get(key);
   if (known) return known;
   const code = CLOTH_GLSL[spec.cloth];
@@ -2314,6 +2350,7 @@ function clothesMaterial(id: string, fit: Fit): THREE.MeshPhysicalMaterial | nul
     s.vertexShader = s.vertexShader
       .replace('#include <common>', '#include <common>\nattribute float wSlot;\nattribute vec3 wRest;\nattribute vec3 wRestN;\nvarying float vSlot;\nvarying vec3 vRest;\nvarying vec3 vRestN;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvSlot = wSlot;\nvRest = wRest;\nvRestN = wRestN;');
+    if (tuck) tuckShader(s, tuck, false);
     s.fragmentShader = s.fragmentShader
       .replace(
         '#include <common>',
@@ -2349,10 +2386,109 @@ ${code.color ?? ''}`,
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\n${code.emissive ?? ''}`)
       .replace('#include <lights_physical_fragment>', `#include <lights_physical_fragment>\n${code.sheen ? `#ifdef USE_SHEEN\n${code.sheen}\n#endif` : ''}`);
   };
-  const cacheKey = `wear-clothes-${spec.cloth}-${fit.id}`;
+  const cacheKey = `wear-clothes-${spec.cloth}-${fit.id}${tuck ? '-tuck' : ''}`;
   m.customProgramCacheKey = () => cacheKey;
   reflect(m);
   clothesMats.set(key, m);
+  return m;
+}
+
+// --- hair under a hat -----------------------------------------------------------------------------
+//
+// A hat sits on the skull, and some hair stands far above it (a quiff, a punk's crest). Under a
+// hat that hair is tucked in, in the vertex shader: every hair vertex above the hat's seat is
+// pressed down into the crown's height and drawn in to the band, carried from the character's
+// frame into the head bone's bind space (hair rides the head), so it still moves with the body.
+
+/** Each hat's band (per body) and how much height its crown gives the hair; a crown sits a little lower. */
+const HAT_ROOM: Record<string, { band: (female: boolean) => number; crown: number; lower?: number }> = {
+  'black-fedora': { band: (f) => (f ? 0.104 : 0.1), crown: 0.094 },
+  'panama-hat': { band: (f) => (f ? 0.104 : 0.1), crown: 0.094 },
+  'top-hat': { band: (f) => (f ? 0.102 : 0.098), crown: 0.15 },
+  'cowboy-hat': { band: (f) => (f ? 0.104 : 0.1), crown: 0.084 },
+  'gold-crown': { band: (f) => (f ? 0.102 : 0.098), crown: 0.06, lower: 0.004 },
+  'imperial-crown': { band: (f) => (f ? 0.102 : 0.098), crown: 0.1, lower: 0.006 },
+};
+
+/** How to tuck the hair under one hat on one model. */
+interface Tuck {
+  /** From this height up the hair is pressed down by `k`, and drawn in to the ellipse round `c`. */
+  from: number;
+  k: number;
+  c: THREE.Vector2;
+  r: THREE.Vector2;
+  /** The character frame to the head bone's bind space (rotation and scale only). */
+  toHead: THREE.Matrix3;
+}
+
+const HAIR = [2, 3];
+const tucks = new Map<string, Tuck | null>();
+
+/** The tuck for a hat on a model, or null when the hat is unknown or no hair reaches its seat. */
+function hairTuck(fit: Fit, hat: string): Tuck | null {
+  const key = `${fit.id}|${hat}`;
+  if (tucks.has(key)) return tucks.get(key)!;
+  const room = HAT_ROOM[hat];
+  let tuck: Tuck | null = null;
+  const head = boneIndex(fit, 'Head');
+  if (room && head >= 0) {
+    const band = room.band(fit.female);
+    const { x0, z0, seat } = hatSeat(fit, band);
+    // a little under the seat: a hat tips forward, its front sits lower
+    const from = seat - (room.lower ?? 0) - 0.012;
+    const rest = fit.rest.array as Float32Array;
+    const slot = fit.slot.array as Float32Array;
+    let top = -Infinity;
+    for (let i = 0; i < slot.length; i++) if (HAIR.includes(slot[i]!)) top = Math.max(top, rest[i * 3 + 1]!);
+    if (top > from) {
+      const r = band - 0.01;
+      tuck = {
+        from,
+        k: Math.min(1, Math.max(0.05, room.crown * 0.85 - 0.012) / (top - from)),
+        c: new THREE.Vector2(x0, z0),
+        r: new THREE.Vector2(r * 0.93, r * 1.07),
+        toHead: new THREE.Matrix3().setFromMatrix4(fit.toBind[head]!),
+      };
+    }
+  }
+  tucks.set(key, tuck);
+  return tuck;
+}
+
+/** The tuck in a material's vertex shader (after its own attributes, if it declares them). */
+function tuckShader(s: { uniforms: Record<string, THREE.IUniform>; vertexShader: string }, t: Tuck, declare: boolean): void {
+  s.uniforms.uTuck = { value: new THREE.Vector4(t.from, t.k, 0, 0) };
+  s.uniforms.uTuckC = { value: t.c };
+  s.uniforms.uTuckR = { value: t.r };
+  s.uniforms.uTuckM = { value: t.toHead };
+  s.vertexShader = s.vertexShader
+    .replace('#include <common>', `#include <common>\n${declare ? 'attribute float wSlot;\nattribute vec3 wRest;\n' : ''}uniform vec4 uTuck; uniform vec2 uTuckC; uniform vec2 uTuckR; uniform mat3 uTuckM;`)
+    .replace(
+      '#include <begin_vertex>',
+      `#include <begin_vertex>
+if ((abs(wSlot - 2.0) < 0.5 || abs(wSlot - 3.0) < 0.5) && wRest.y > uTuck.x) {
+  vec3 q = wRest;
+  q.y = uTuck.x + (wRest.y - uTuck.x) * uTuck.y;
+  float l = length((q.xz - uTuckC) / uTuckR);
+  if (l > 1.0) q.xz = uTuckC + (q.xz - uTuckC) / l;
+  transformed += uTuckM * (q - wRest);
+}`,
+    );
+}
+
+const tuckMats = new Map<string, THREE.Material>();
+
+/** A plain body material (the characters', a mannequin's gloss) with the hair tucked under a hat. */
+function tuckMaterial(base: THREE.Material, fit: Fit, hat: string, tuck: Tuck): THREE.Material {
+  const key = `${base.uuid}|${fit.id}|${hat}`;
+  let m = tuckMats.get(key);
+  if (m) return m;
+  m = base.clone();
+  m.name = `${base.name}:tuck`;
+  m.onBeforeCompile = (s) => tuckShader(s, tuck, true);
+  const cacheKey = `wear-tuck-${base.type}-${fit.id}-${hat}`;
+  m.customProgramCacheKey = () => cacheKey;
+  tuckMats.set(key, m);
   return m;
 }
 
@@ -2372,7 +2508,10 @@ export class Wearables {
   private set: Attached | null = null;
   private hand: Attached | null = null;
   private plain: THREE.Material | null = null;
+  /** Special clothes' material, and the hat the hair is tucked under (either makes the body's own material). */
   private suit: THREE.Material | null = null;
+  private tucked: { fit: Fit; hat: string; tuck: Tuck } | null = null;
+  private own: THREE.Material | null = null;
   private carry: THREE.AnimationAction | null = null;
   private carryMixer: THREE.AnimationMixer | null = null;
   private carrying = false;
@@ -2398,23 +2537,29 @@ export class Wearables {
     }
     this.fit = fit;
 
-    // special clothes: their own body material, reading each vertex's slot and rest position
-    if (body.material !== this.suit) this.plain = body.material as THREE.Material;
-    const suit = look.clothes ? clothesMaterial(look.clothes, fit) : null;
-    if (suit) {
+    // special clothes: their own body material, reading each vertex's slot and rest position; a
+    // hat tucks the hair in (in whichever material the body wears)
+    if (body.material !== this.own) this.plain = body.material as THREE.Material;
+    const hat = itemOfKind(look.hat, 'hat') ? look.hat! : null;
+    const tuck = hat ? hairTuck(fit, hat) : null;
+    this.tucked = tuck ? { fit, hat: hat!, tuck } : null;
+    const suit = look.clothes ? clothesMaterial(look.clothes, fit, hat, tuck) : null;
+    this.suit = suit;
+    const own = suit ?? (this.tucked && this.plain ? tuckMaterial(this.plain, fit, this.tucked.hat, tuck!) : null);
+    if (own) {
       const g = body.geometry;
       if (g.getAttribute('wRest') !== fit.rest) {
         g.setAttribute('wRest', fit.rest);
         g.setAttribute('wRestN', fit.restN);
         g.setAttribute('wSlot', fit.slot);
       }
-      body.material = suit;
+      body.material = own;
       // the diamonds' glint keeps time even when nothing else is worn
-      body.onBeforeRender = beforeDraw;
+      if (suit) body.onBeforeRender = beforeDraw;
     } else if (this.plain) {
       body.material = this.plain;
     }
-    this.suit = suit;
+    this.own = own;
 
     // jewellery, watch, shades, hat
     const { big, small } = pieces(look);
@@ -2438,10 +2583,12 @@ export class Wearables {
     this.pose(mixer, model, !!held);
   }
 
-  /** The body material to use now: the special clothes' own, or the plain one given. */
+  /** The body material to use now: the special clothes' own, or the plain one given (hair tucked under a hat). */
   body(m: THREE.Material): THREE.Material {
     this.plain = m;
-    return this.suit ?? m;
+    const t = this.tucked;
+    this.own = this.suit ?? (t ? tuckMaterial(m, t.fit, t.hat, t.tuck) : null);
+    return this.own ?? m;
   }
 
   dispose(): void {
