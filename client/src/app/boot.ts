@@ -35,6 +35,8 @@ import { mountDaily, dailyApi, type DailyHandle } from '../ui/daily/index.ts'; /
 import { CLOSE, type Profile } from '../../../shared/src/protocol.ts';
 // v6 dine6: drinking and eating what the bar brings
 import { Diner } from '../world/consumables/diner.ts';
+import { mountLaw, type Law } from '../world/law/index.ts'; // v6 law6
+import type { Person } from '../world/characters.ts'; // v6 law6
 
 export async function boot(): Promise<void> {
   const ui = document.getElementById('ui')!;
@@ -117,6 +119,8 @@ class App {
   private readonly seatCache = new Map<string, SeatPose | null>();
   /** v6 dine6: you, drinking and eating what the bar brings (world/consumables/). */
   readonly diner: Diner;
+  /** v6 law6: security, the pit boss, punches and the jail (world/law/). */
+  private readonly law: Law;
   /** v6 feats6: the achievements (HUD cup, J, the sheet, the card when you earn one). */
   private feats: FeatsUi | null = null;
 
@@ -156,6 +160,17 @@ class App {
       true,
     );
     this.life = mountFloorLife({ engine, world, sfx, ui });
+    // v6 law6:
+    this.law = mountLaw({
+      engine,
+      world,
+      ui,
+      sfx,
+      character: (id) => this.remotes?.character(id) as Person | undefined,
+      canPunch: () => this.hud !== null && this.table === null && world.seated === null,
+      leaveTable: () => void this.leaveTable(),
+      openBank: () => this.openCashier(),
+    });
     // v6 looks6: B steps off your ride and back on (a look save, so everyone sees it)
     rideKey({
       profile: () => session.profile,
@@ -372,6 +387,7 @@ class App {
     // by the waiters, and the staff's greetings by name.
     this.world.life.useLink(link);
     this.world.useFloor(link); // v6 city6: the elevator and the server's moves
+    this.law.useLink(link); // v6 law6
     this.world.life.useBar(this.bar);
     this.invites = this.inviteHub(link); // v6 invite6
     this.world.life.useApp({
@@ -396,6 +412,7 @@ class App {
     this.world.life.useBar(null);
     this.world.life.useLink(null);
     this.world.useFloor(null); // v6 city6
+    this.law.useLink(null); // v6 law6
     this.world.useBar(null);
     if (!keepBar) {
       this.bar?.dispose();
@@ -570,8 +587,14 @@ class App {
   // --- tables ---------------------------------------------------------------------------------
 
   private async sitDown(station: WorldStation): Promise<void> {
+    // v6 law6: the jail's tables go straight to a solo table, and only for inmates
+    const jailed = this.law.tableChoice(station);
+    if (jailed === 'refuse') {
+      await this.world.exitTable();
+      return;
+    }
     // v6 invite6: an invite being joined sits straight down at its table
-    const choice = this.invites?.claim(station) ?? await openTableFlow({
+    const choice = jailed ?? this.invites?.claim(station) ?? await openTableFlow({
       game: station.game,
       variant: station.variant,
       floor: this.link,

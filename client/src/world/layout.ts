@@ -351,6 +351,15 @@ export interface FloorPlan {
   patternBoards: WallMount[];
   /** Stage drapes: `w` is the stage's width between the two curtains. */
   drapes: WallMount[];
+  /** LED grids across ceilings (the parlour's): the room's inner rect, its ceiling, the pitch and colours. */
+  ledGrids: { rect: Rect; y: number; pitch: number; colors: [string, string]; room: RoomId }[];
+  /** Tiered fountains standing on the floor (the lobby's). */
+  fountains: { x: number; z: number; room: RoomId }[];
+  /**
+   * Where statues on plinths may stand (the lobby's, for the shop's statues): world x, z and the
+   * way each faces, best first. The plan keeps a plinth's floor and a walk round it clear.
+   */
+  statues: { x: number; z: number; yaw: number; room: RoomId }[];
   columns: (Column & { room: RoomId })[];
   plants: Plant[];
   palms: Palm[];
@@ -426,6 +435,14 @@ export const PATTERN_BOARD = { w: 1.08, h: 1.3, y: 1.72 };
 export const LANTERN = { r: 0.2, h: 0.46 };
 /** The big lanterns over the Jade Room's tables. */
 export const TABLE_LANTERN = { r: 0.36, h: 0.62, y: 2.35 };
+/** A statue's plinth (square), and the clear floor kept round it. */
+export const STATUE_PLINTH = 1.12;
+export const STATUE_CLEAR = 0.55;
+/**
+ * The lobby's fountain: the basin's outer radius and its rim's height, the middle bowl and the top
+ * bowl (radius and the height of their lips), and the finial's top.
+ */
+export const FOUNTAIN = { r: 1.5, rim: 0.5, mid: { r: 0.78, y: 1.12 }, top: { r: 0.38, y: 1.7 }, crown: 2.15 };
 /** Stage drapes: each curtain's width, how far it stands off the wall, and the pelmet across the top. */
 export const DRAPES = { w: 2.0, d: 0.2, pelmet: 0.36 };
 /** A counter along a wall (the prizes, the snack bar): its height, and the shelves' depth and height behind it. */
@@ -684,6 +701,8 @@ export function planFloor(footprint: (game: GameId) => Footprint, slots: readonl
   const lattices: WallMount[] = [];
   const patternBoards: WallMount[] = [];
   const drapes: WallMount[] = [];
+  const fountains: FloorPlan['fountains'] = [];
+  const ledGrids: FloorPlan['ledGrids'] = [];
   for (const spec of ROOMS) {
     const r = room(spec.id);
     for (const fx of spec.fixtures) fixture(fx, r);
@@ -774,6 +793,12 @@ export function planFloor(footprint: (game: GameId) => Footprint, slots: readonl
       case 'lattice':
         for (const [x, z] of fx.at) lattices.push({ x: r.cx + x, z: r.cz + z, ry: fx.ry, w: fx.w, room: r.id });
         break;
+      case 'ledgrid':
+        ledGrids.push({ rect: r.inner, y: r.style.ceiling, pitch: fx.pitch, colors: fx.colors, room: r.id });
+        break;
+      case 'fountain':
+        fountains.push({ x: r.cx + fx.x, z: r.cz + fx.z, room: r.id });
+        break;
       case 'drapes':
         drapes.push({ x: r.cx + fx.x, z: r.cz + fx.z, ry: fx.ry, w: fx.w, room: r.id });
         break;
@@ -809,9 +834,12 @@ export function planFloor(footprint: (game: GameId) => Footprint, slots: readonl
   const aisles: Rect[] = [];
   const pitSpec = ROOMS.find((r) => r.id === 'pit');
   const ordered = pitSpec ? [pitSpec, ...ROOMS.filter((r) => r !== pitSpec)] : ROOMS;
+  const statues: FloorPlan['statues'] = [];
   for (const spec of ordered) {
     const r = room(spec.id);
     for (const a of [...spec.aisles, ...(spec.keep ?? [])]) aisles.push({ x0: r.cx + a.x0, z0: r.cz + a.z0, x1: r.cx + a.x1, z1: r.cz + a.z1 });
+    // a statue's plinth and the walk round it are kept clear of anything placed (checkLayout)
+    for (const [x, z, yaw] of spec.statues ?? []) statues.push({ x: r.cx + x, z: r.cz + z, yaw, room: r.id });
   }
   for (const d of doors) {
     if (d.b === 'outside') continue;
@@ -887,6 +915,9 @@ export function planFloor(footprint: (game: GameId) => Footprint, slots: readonl
     lattices,
     patternBoards,
     drapes,
+    fountains,
+    ledGrids,
+    statues,
     deskIslands,
     columns,
     plants: [],
@@ -1216,6 +1247,14 @@ function baseSolids(plan: FloorPlan): Solid[] {
     else turned(`chair-${ch.station}-${ch.slot + 1}`, g, ch.x, ch.z, k.w, k.d, ch.yaw, 0, k.h, { of: ch.station });
   }
 
+  // fountains: the basin on the floor, the column and bowls over its middle
+  plan.fountains.forEach((f, i) => {
+    room = f.room;
+    const g = `fountain-${i + 1}`;
+    round(`${g}-basin`, g, f.x, f.z, FOUNTAIN.r + 0.04, 0, FOUNTAIN.rim + 0.04, { floor: true });
+    round(`${g}-bowls`, g, f.x, f.z, FOUNTAIN.mid.r + 0.06, FOUNTAIN.rim, FOUNTAIN.crown);
+  });
+
   // islands of machines: the spine and the plinth hold the machines; end caps and a crown over them
   for (const isl of plan.machineIslands) {
     room = isl.room;
@@ -1508,6 +1547,14 @@ function clashes(plan: FloorPlan, s: Solid, others: Solid[]): string[] {
     if (strip && s.y0 < 1.8 && !s.holds?.length && shapesOverlap(shape, { poly: strip })) out.push(`${s.id} blocks the players of ${p.id}`);
   }
   if (s.floor) for (const [k, aisle] of plan.aisles.entries()) if (shapesOverlap(shape, { poly: rectPoly(aisle) })) out.push(`${s.id} stands in aisle ${k}`);
+  // a statue's place: nothing standing on its plinth or the walk round it, and nothing overhead
+  // (a palm's fronds) within reach of the figure
+  for (const [k, st] of plan.statues.entries()) {
+    const h = STATUE_PLINTH / 2 + STATUE_CLEAR;
+    const onFloor = s.y0 < 1.2 && shapesOverlap(shape, { poly: rectPoly({ x0: st.x - h, z0: st.z - h, x1: st.x + h, z1: st.z + h }) });
+    const over = s.y0 >= 1.2 && s.y0 < 3.2 && shapesOverlap(shape, { x: st.x, z: st.z, r: 0.45 });
+    if (onFloor || over) out.push(`${s.id} stands on statue place ${k + 1}`);
+  }
   for (const o of others) {
     if (o === s || o.group === s.group) continue;
     if (s.y0 >= o.y1 || o.y0 >= s.y1) continue;

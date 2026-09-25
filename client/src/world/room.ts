@@ -248,7 +248,8 @@ export function buildRoom(plan: FloorPlan, b: Batch, m: Mats, glow: GlowMerge): 
         if (x1 > x0 && z1 > z0) b.box(m.get('brass-inlay'), (x0 + x1) / 2, 0.006, (z0 + z1) / 2, x1 - x0, 0.006, z1 - z0);
       }
     }
-    if (r.id === 'lobby') compass(r.cx, r.cz);
+    // the compass rose, unless a fountain stands over the middle
+    if (r.id === 'lobby' && !plan.fountains.some((f) => Math.hypot(f.x - r.cx, f.z - r.cz) < 2)) compass(r.cx, r.cz);
     if (r.id === 'bar') {
       // the bartenders' side of the bar is dark boards, the customers' a rug of the floor's carpet
       const bar = plan.bar;

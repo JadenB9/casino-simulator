@@ -104,8 +104,8 @@ laid out in `rooms.ts`, each with its own floor, walls, ceiling, light and sign 
 
 | Room | Walls (x, z) | Size | What's in it |
 |---|---|---|---|
-| Lobby | -7..7, 3..15 | 14 x 12 m | the street doors, marble, a compass rose, the directory board, palms, benches; the grand opening north to the pit |
-| The Pit | -13..13, -19..3 | 26 x 22 m | table games in two rows round the staff area and podium under a 6.6 m coffered ceiling (north: `rl-us`, `cr-1`, `sb-1`, `rl-eu`; south: `bj-1`, `bc-1`, `wr-1`, `tc-1`, `bj-2`), the Big Six `b6-1` on the west wall, a round banquette round a palm |
+| Lobby | -7..7, 3..15 | 14 x 12 m | the street doors, marble, a tiered fountain in the middle under the chandelier, the directory board, two palms flanking the way on to the pit, a bench; the grand opening (3.7 m) north to the pit; three statue places (`plan.statues`) and the lift bank's stretch of the south wall east of the doors kept clear |
+| The Pit | -13..13, -19..3 | 26 x 22 m | table games in two rows round the staff area and podium under a 6.6 m coffered ceiling, the rest of its ceiling at 4.4 m (north: `rl-us`, `cr-1`, `sb-1`, `rl-eu`; south: `bj-1`, `bc-1`, `wr-1`, `tc-1`, `bj-2`), the Big Six `b6-1` on the west wall, a round banquette round a palm |
 | Slots Hall | -31..-13, -19..3 | 18 x 22 m | twelve islands, every slots variant twice (`slots-<variant>-1..8`), a main aisle from the pit's arch, the win meter |
 | Bar | 13..31, -19..3 | 18 x 22 m | the counter along the east wall with video poker `vp-1..4` set into it, bar stools, six high-tops with three stools each, board floor |
 | Lounge | 17..31, 3..15 | 14 x 12 m | two sofa groups, armchairs, a fireplace |
@@ -115,7 +115,7 @@ laid out in `rooms.ts`, each with its own floor, walls, ceiling, light and sign 
 | Bandit Camp | -31..-17, 3..15 | 14 x 12 m | the Bandit Wheel `bw-1` in a yard of concrete, rusted sheet, steel trusses, scrap, crates, barrels and a burning drum under a string of bulbs |
 | Cashier & Bank | -17..-7, 3..15 | 10 x 12 m | the cage along the north wall with three teller windows and the vault behind them, benches |
 | Boutique | 7..17, 3..15 | 10 x 12 m | a shop front on the lobby with windows, two display cases, four mannequins wearing the shop's pieces, the counter and its lit shelves |
-| Pachinko Parlour | -31..-9, -43..-31 | 22 x 12 m | twelve Sakura Storm machines `pa-1..12` back to back in two islands (numbered end caps, a crown with its LED strip, a parlour stool at each), the prize counter with its wall of prizes and gold special prizes under the glass, drinks machines and benches, red paper lanterns strung across, indigo wave walls, PACHINKO in neon, noren over its doors |
+| Pachinko Parlour | -31..-9, -43..-31 | 22 x 12 m | twelve Sakura Storm machines `pa-1..12` back to back in two islands (numbered end caps, a crown with its LED strip, a parlour stool at each), the prize counter with its wall of prizes and gold special prizes under the glass, drinks machines and benches, red paper lanterns strung across, a black ceiling ruled in pink and ice-blue LED lines, indigo wave walls, PACHINKO in neon, noren over its doors |
 | Jade Room | -9..9, -43..-31 | 18 x 12 m | a Macau card salon: Let It Ride `lr-1..2` and Pai Gow Poker `pg-1..2` under big red lanterns, a moon gate with a painted landscape on the north wall, lattice screens with lit paper, lacquer sideboards with porcelain, red lacquer coffers |
 | Bingo Hall | 9..31, -43..-31 | 22 x 12 m | the hall `bg-1` (the caller's stage, blower, flashboard and four long tables of ten on stacking chairs) framed by velvet drapes, the pattern boards, a snack bar, high-tops and benches, a drop ceiling with fluorescent troffers |
 
@@ -183,6 +183,12 @@ Everything is in `rooms.ts`; nothing else needs touching.
   `per` machines a side along each island, side by side at their own width so their slices of
   island join; `plan.machineIslands` holds each island's end caps and crown (decor-themes.ts), and
   checkLayout lets an island's machines touch.
+- Floor to keep clear without a runner (the lift bank's): a room's `keep` rects join `plan.aisles`.
+- A statue's place: a room's `statues` ([x, z, yaw], best first) become `plan.statues`; checkLayout
+  keeps a plinth and the walk round it clear, and nothing overhead within the figure's reach.
+  fx/scope.ts `statueSpots` takes them first.
+- A fountain: `{ kind: 'fountain', x, z }` in `fixtures` (FOUNTAIN in layout.ts sizes it; its
+  basin and bowls are solids). Its water is two scrolled textures (decor-themes.ts `tickWater`).
 - Something to sit on: add `{ kind: 'armchair', x, z, yaw }` (or sofa, tub, bench, banquette,
   hightop, crate, plank-bench) to `furniture`; its seats join the life points by themselves.
 Then run `npx vitest run --project unit client/test/world-layout.test.ts client/test/life-points.test.ts`:
