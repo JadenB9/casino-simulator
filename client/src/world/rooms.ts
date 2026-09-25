@@ -14,7 +14,7 @@
 import type { GameId } from '../../../shared/src/engine.ts';
 import type { ItemKind } from '../../../shared/src/items.ts';
 
-export type RoomId = 'lobby' | 'pit' | 'slots' | 'bar' | 'lounge' | 'poker' | 'salon' | 'online' | 'yard' | 'bank' | 'boutique';
+export type RoomId = 'lobby' | 'pit' | 'slots' | 'bar' | 'lounge' | 'poker' | 'salon' | 'online' | 'yard' | 'bank' | 'boutique' | 'parlour' | 'cardroom' | 'bingo';
 
 export interface RoomStyle {
   /** Floor material (materials.ts) and the metres one texture repeat covers. */
@@ -27,7 +27,7 @@ export interface RoomStyle {
   /** Ceiling height and material; a tray is a raised middle washed by a hidden cove. */
   ceiling: number;
   ceilingMat: string;
-  kind: 'panels' | 'tray' | 'coffer' | 'truss';
+  kind: 'panels' | 'tray' | 'coffer' | 'truss' | 'troffer';
   /** Recessed downlights on this pitch (0: none), and the cove's glow (lighting.ts GLOW), if any. */
   downlights: number;
   cove: 'warm' | 'cool' | 'neon' | 'amber' | null;
@@ -84,7 +84,19 @@ export interface DesksItem {
   games: GameId[];
 }
 
-export type StationSpec = StationItem | RowItem | IslandsItem | DesksItem;
+/**
+ * Machines back to back in islands (the pachinko parlour's): `per` machines a side along each
+ * island's long axis (local x, turned by `yaw`), a thin spine between the two rows, players on the
+ * outside. yaw 0 runs an island east-west, its machines facing north and south.
+ */
+export interface MachinesItem {
+  kind: 'machines';
+  game: GameId;
+  islands: { x: number; z: number; yaw: number }[];
+  per: number;
+}
+
+export type StationSpec = StationItem | RowItem | IslandsItem | DesksItem | MachinesItem;
 
 /** Loose furniture: every one of them is also solid, and those with seats are in the life points. */
 export type FurnitureKind =
@@ -108,7 +120,9 @@ export type FurnitureKind =
   | 'directory'
   | 'podium'
   | 'lamp'
-  | 'palm';
+  | 'palm'
+  | 'vending'
+  | 'cabinet';
 
 export interface FurnitureItem {
   kind: FurnitureKind;
@@ -142,7 +156,23 @@ export type FixtureItem =
   /** Lamps hanging low over each poker table. */
   | { kind: 'table-lamps' }
   /** Work lamps and a string of bulbs over the yard. */
-  | { kind: 'festoon'; from: [number, number]; to: [number, number] };
+  | { kind: 'festoon'; from: [number, number]; to: [number, number] }
+  /** A prize counter (a rect of glass case) with the prize shelves on the wall behind it (side: which wall). */
+  | { kind: 'prizes'; x0: number; x1: number; z0: number; z1: number }
+  /** A snack bar's counter (a rect) along a wall, the cooler and menu behind it. */
+  | { kind: 'snack'; x0: number; x1: number; z0: number; z1: number }
+  /** Paper lanterns on a cord from one point to another, `n` of them, in a colour. */
+  | { kind: 'lanterns'; from: [number, number]; to: [number, number]; n: number; color: string }
+  /** A big red lantern low over each table in the room. */
+  | { kind: 'table-lanterns' }
+  /** A moon gate on a wall: a round opening in a carved frame, a painted landscape in it (room-local point on the wall face). */
+  | { kind: 'moongate'; x: number; z: number; ry: number }
+  /** Lattice screens on a wall face, each `w` wide (room-local middles on the face). */
+  | { kind: 'lattice'; at: [number, number][]; ry: number; w: number }
+  /** Bingo pattern boards on a wall: lit 5 x 5 grids of the patterns that pay (room-local middles on the face). */
+  | { kind: 'patterns'; at: [number, number][]; ry: number }
+  /** Stage drapes on a wall: velvet curtains either side of a stage `w` wide, a pelmet across (room-local middle on the face). */
+  | { kind: 'drapes'; x: number; z: number; ry: number; w: number };
 
 /** A sign box hung from the ceiling: its text (or wayfinding segments), both faces. */
 export interface HangItem {
@@ -196,7 +226,7 @@ export interface RoomSpec {
   plants: [number, number][];
 }
 
-export type DoorKind = 'entrance' | 'grand' | 'portal' | 'arch' | 'shopfront' | 'industrial';
+export type DoorKind = 'entrance' | 'grand' | 'portal' | 'arch' | 'shopfront' | 'industrial' | 'lacquer';
 
 export interface DoorSpec {
   id: string;
@@ -300,6 +330,38 @@ export const ROOMS: RoomSpec[] = [
     fixtures: [{ kind: 'pit-podium' }],
     hanging: [
       { id: 'table-games', x: 0, y: 2.96, z: -0.15, ry: 0, w: 4.6, h: 0.6, kind: 'lit', text: 'TABLE GAMES', color: '#ffe0a0' },
+      // over the north aisle, either side of the salon's door (clear of the signs over the doors):
+      // the north wing's rooms lie one room beyond the doors along it
+      {
+        id: 'north-wing-w',
+        x: -6.3,
+        y: 2.9,
+        z: -9.3,
+        ry: 0,
+        w: 4.2,
+        h: 0.4,
+        kind: 'way',
+        front: [
+          { text: 'PACHINKO', arrow: 'left', before: true },
+          { text: 'JADE ROOM', arrow: 'right' },
+        ],
+        back: [{ text: 'LOBBY', arrow: 'up' }],
+      },
+      {
+        id: 'north-wing-e',
+        x: 6.3,
+        y: 2.9,
+        z: -9.3,
+        ry: 0,
+        w: 4.2,
+        h: 0.4,
+        kind: 'way',
+        front: [
+          { text: 'JADE ROOM', arrow: 'left', before: true },
+          { text: 'BINGO', arrow: 'right' },
+        ],
+        back: [{ text: 'LOBBY', arrow: 'up' }],
+      },
     ],
     spots: [],
     aisles: [
@@ -487,18 +549,15 @@ export const ROOMS: RoomSpec[] = [
     hanging: [],
     spots: [{ x: 0, z: -1.0, tx: 0, tz: -1.5, k: 28, angle: 1.1 }],
     aisles: [{ x0: -1.9, z0: 3.4, x1: 1.9, z1: 5.85 }],
-    plants: [
-      [-8.4, -5.4],
-      [8.4, -5.4],
-    ],
+    plants: [[-8.4, -5.4]],
   },
 
-  // --- the online lounge: sixteen desks, two for each House Original --------------------------------
+  // --- the online lounge: twenty-four desks, two for each House Original --------------------------
   {
     id: 'online',
     name: 'Online Lounge',
     sign: 'ONLINE LOUNGE',
-    about: 'The House Originals on sixteen computers',
+    about: 'The House Originals on twenty-four computers',
     x0: -31,
     z0: -31,
     x1: -9,
@@ -509,21 +568,23 @@ export const ROOMS: RoomSpec[] = [
     stations: [
       {
         kind: 'desks',
+        // two long islands either side of the way through to the pachinko parlour
         islands: [
-          { x: -4.6, z: -0.6 },
-          { x: 4.6, z: -0.6 },
+          { x: -5.1, z: -0.6 },
+          { x: 5.1, z: -0.6 },
         ],
-        per: 4,
+        per: 6,
         pitch: 1.3,
-        games: ['plinko', 'tower', 'mines', 'dice', 'limbo', 'keno', 'hilo', 'crash'],
+        games: ['plinko', 'tower', 'mines', 'dice', 'limbo', 'keno', 'hilo', 'crash', 'coinflip', 'wheel', 'cases', 'diamonds'],
       },
     ],
     furniture: [{ kind: 'sofa', x: 3.2, z: 5.05, yaw: Math.PI }],
-    fixtures: [{ kind: 'neon', text: 'HOUSE ORIGINALS', color: '#1fe07e', x: 0, y: 2.35, z: -5.85, ry: 0, w: 5.4, h: 0.62, font: 'Tilt Neon' }],
+    // on the west wall, down the length of the islands (the north wall has the parlour's door)
+    fixtures: [{ kind: 'neon', text: 'HOUSE ORIGINALS', color: '#1fe07e', x: -10.85, y: 2.35, z: -0.6, ry: Math.PI / 2, w: 5.4, h: 0.62, font: 'Tilt Neon' }],
     hanging: [],
     spots: [
-      { x: -4.6, z: 0.6, tx: -4.6, tz: -0.6, k: 22, angle: 1.0, color: '#cfdcff' },
-      { x: 4.6, z: 0.6, tx: 4.6, tz: -0.6, k: 22, angle: 1.0, color: '#cfdcff' },
+      { x: -5.1, z: 0.6, tx: -5.1, tz: -0.6, k: 22, angle: 1.0, color: '#cfdcff' },
+      { x: 5.1, z: 0.6, tx: 5.1, tz: -0.6, k: 22, angle: 1.0, color: '#cfdcff' },
     ],
     aisles: [],
     plants: [
@@ -623,6 +684,144 @@ export const ROOMS: RoomSpec[] = [
     aisles: [{ x0: -4.85, z0: -0.7, x1: 2.4, z1: 1.7 }],
     plants: [],
   },
+
+  // --- the pachinko parlour: two islands of Sakura Storm machines, the prize counter, lanterns ------
+  {
+    id: 'parlour',
+    name: 'Pachinko Parlour',
+    sign: 'PACHINKO',
+    about: 'Twelve machines in two islands, the prize counter and a rest corner',
+    x0: -31,
+    z0: -43,
+    x1: -9,
+    z1: -31,
+    // bright, loud and mirrored: a white ceiling thick with downlights, pink neon along the walls
+    style: { floor: 'carpet-parlour', floorUv: 2.4, wall: 'wall-parlour', wainscot: null, rail: 'chrome', ceiling: 3.4, ceilingMat: 'ceiling-parlour', kind: 'panels', downlights: 1.5, cove: 'neon', ambient: { sky: '#ffe6f2', ground: '#3a1426', k: 1.55 } },
+    stations: [
+      {
+        kind: 'machines',
+        game: 'pachinko',
+        // running north-south either side of the way in from the online lounge
+        islands: [
+          { x: -2.9, z: -0.5, yaw: Math.PI / 2 },
+          { x: 2.9, z: -0.5, yaw: Math.PI / 2 },
+        ],
+        per: 3,
+      },
+    ],
+    furniture: [
+      { kind: 'vending', x: 6.9, z: -5.3, yaw: 0 },
+      { kind: 'vending', x: 8.1, z: -5.3, yaw: 0 },
+      { kind: 'bench', x: 10.2, z: -3.2, yaw: -Math.PI / 2 },
+      { kind: 'bench', x: 10.2, z: 3.3, yaw: -Math.PI / 2 },
+    ],
+    fixtures: [
+      { kind: 'prizes', x0: -9.75, x1: -9.05, z0: -3.4, z1: 1.8 },
+      { kind: 'neon', text: 'PACHINKO', color: '#ff4fa8', x: 0, y: 2.5, z: -5.85, ry: 0, w: 4.4, h: 0.74, font: 'Tilt Neon' },
+      // strung across the room, over the islands and the aisles between them
+      { kind: 'lanterns', from: [-8.2, -3.6], to: [8.2, -3.6], n: 9, color: '#e8352c' },
+      { kind: 'lanterns', from: [-8.2, 0.4], to: [8.2, 0.4], n: 9, color: '#e8352c' },
+      { kind: 'lanterns', from: [-8.2, 4.2], to: [8.2, 4.2], n: 9, color: '#e8352c' },
+    ],
+    hanging: [],
+    spots: [
+      { x: -2.9, z: 1.6, tx: -2.9, tz: -0.5, k: 24, angle: 1.0, color: '#ffe8f4' },
+      { x: 2.9, z: 1.6, tx: 2.9, tz: -0.5, k: 24, angle: 1.0, color: '#ffe8f4' },
+      { x: -7.6, z: -0.8, tx: -9.4, tz: -0.8, k: 16, angle: 0.9 },
+    ],
+    aisles: [{ x0: -1.1, z0: -4.4, x1: 1.1, z1: 5.85 }],
+    plants: [
+      [-10.4, 5.4],
+      [10.4, 5.4],
+      [-10.4, -5.4],
+    ],
+  },
+
+  // --- the Jade Room: a Macau card salon, Let It Ride and Pai Gow Poker under red lanterns --------
+  {
+    id: 'cardroom',
+    name: 'Jade Room',
+    sign: 'JADE ROOM',
+    about: 'A Macau card salon: Let It Ride and Pai Gow Poker under the lanterns',
+    x0: -9,
+    z0: -43,
+    x1: 9,
+    z1: -31,
+    style: { floor: 'carpet-jade', floorUv: 2.6, wall: 'wall-crimson', wainscot: 'wainscot', rail: 'brass', ceiling: 3.8, ceilingMat: 'ceiling-jade', kind: 'tray', downlights: 0, cove: 'warm', ambient: { sky: '#ffd6a0', ground: '#2e0c0a', k: 1.3 } },
+    stations: [
+      { kind: 'station', id: 'lr-1', game: 'letitride', x: -4.3, z: -2.2, yaw: 0 },
+      { kind: 'station', id: 'pg-1', game: 'paigow', x: 4.3, z: -2.2, yaw: 0 },
+      { kind: 'station', id: 'pg-2', game: 'paigow', x: -4.3, z: 2.5, yaw: 0 },
+      { kind: 'station', id: 'lr-2', game: 'letitride', x: 4.3, z: 2.5, yaw: 0 },
+    ],
+    furniture: [
+      { kind: 'cabinet', x: -5.4, z: -5.5, yaw: 0 },
+      { kind: 'cabinet', x: 5.4, z: -5.5, yaw: 0 },
+      { kind: 'armchair', x: -6.9, z: 5.2, yaw: Math.PI },
+      { kind: 'armchair', x: -4.9, z: 5.2, yaw: Math.PI },
+      { kind: 'side', x: -5.9, z: 5.3, yaw: 0 },
+    ],
+    fixtures: [
+      { kind: 'table-lanterns' },
+      { kind: 'moongate', x: 0, z: -5.85, ry: 0 },
+      { kind: 'lattice', at: [[-8.85, -3.5], [-8.85, 3.4]], ry: Math.PI / 2, w: 2.2 },
+      { kind: 'lattice', at: [[-2.55, -5.85], [2.55, -5.85]], ry: 0, w: 1.3 },
+      { kind: 'lattice', at: [[8.85, -3.5], [8.85, 3.0]], ry: -Math.PI / 2, w: 2.2 },
+    ],
+    hanging: [],
+    spots: [
+      { x: 0, z: -1.2, tx: 0, tz: -2.2, k: 30, angle: 1.15 },
+      { x: 0, z: 3.4, tx: 0, tz: 2.5, k: 30, angle: 1.15 },
+    ],
+    // the cross aisle from the parlour's door to the bingo hall's, between the rows
+    aisles: [{ x0: -8.85, z0: -0.45, x1: 8.85, z1: 0.8 }],
+    plants: [
+      [-8.4, -5.4],
+      [8.4, -5.4],
+      [-8.4, 5.4],
+    ],
+  },
+
+  // --- the bingo hall: the caller's stage and forty places, a snack bar, the pattern boards ---------
+  {
+    id: 'bingo',
+    name: 'Bingo Hall',
+    sign: 'BINGO',
+    about: 'The caller, the flashboard and forty places; a snack bar',
+    x0: 9,
+    z0: -43,
+    x1: 31,
+    z1: -31,
+    style: { floor: 'carpet-bingo', floorUv: 2.4, wall: 'wall-bingo', wainscot: 'wainscot', rail: 'brass', ceiling: 4.0, ceilingMat: 'ceiling-bingo', kind: 'troffer', downlights: 0, cove: null, ambient: { sky: '#fff0d8', ground: '#2c1c12', k: 1.5 } },
+    // the stage's own wall stands a hand's width off the room's north wall
+    stations: [{ kind: 'station', id: 'bg-1', game: 'bingo', x: 0, z: -2.3, yaw: 0 }],
+    furniture: [
+      { kind: 'hightop', x: 5.4, z: -3.2, yaw: 0.2 },
+      { kind: 'hightop', x: 5.4, z: 0.4, yaw: 0.7 },
+      { kind: 'bench', x: -6.6, z: 5.3, yaw: Math.PI },
+      { kind: 'bench', x: -4.3, z: 5.3, yaw: Math.PI },
+      { kind: 'bench', x: 4.3, z: 5.3, yaw: Math.PI },
+      { kind: 'bench', x: 6.6, z: 5.3, yaw: Math.PI },
+    ],
+    fixtures: [
+      { kind: 'snack', x0: 8.15, x1: 8.85, z0: -3.6, z1: 1.4 },
+      // velvet either side of the stage's wall, a pelmet across the top: the hall's proscenium
+      { kind: 'drapes', x: 0, z: -5.85, ry: 0, w: 4.9 },
+      { kind: 'patterns', at: [[-10.85, -4.6], [-10.85, -3.3], [-10.85, -2.0]], ry: Math.PI / 2 },
+      { kind: 'neon', text: 'BINGO', color: '#ffcf3a', x: -10.85, y: 2.5, z: 3.4, ry: Math.PI / 2, w: 2.8, h: 0.9, font: 'Limelight' },
+    ],
+    hanging: [],
+    spots: [
+      { x: 0, z: 0.2, tx: 0, tz: -4.4, k: 26, angle: 0.95 },
+      { x: 0, z: 3.0, tx: 0, tz: -0.8, k: 24, angle: 1.1 },
+      { x: 6.4, z: -1.0, tx: 8.4, tz: -1.0, k: 14, angle: 0.9 },
+    ],
+    aisles: [{ x0: -1.2, z0: 1.9, x1: 1.2, z1: 5.85 }],
+    plants: [
+      [-10.4, 5.4],
+      [10.4, 5.4],
+    ],
+  },
 ];
 
 export const DOORS: DoorSpec[] = [
@@ -639,6 +838,12 @@ export const DOORS: DoorSpec[] = [
   { id: 'slots-yard', a: 'slots', b: 'yard', at: -22.4, width: 3.4, height: 3.0, kind: 'industrial' },
   { id: 'bar-poker', a: 'bar', b: 'poker', at: 22.5, width: 2.4, height: 2.8, kind: 'portal' },
   { id: 'bar-lounge', a: 'bar', b: 'lounge', at: 24, width: 5.0, height: 3.0, kind: 'arch' },
+  // the north wing: the parlour off the online lounge, the Jade Room off the salon, bingo off poker
+  { id: 'online-parlour', a: 'online', b: 'parlour', at: -20, width: 2.4, height: 2.7, kind: 'lacquer' },
+  { id: 'salon-cardroom', a: 'salon', b: 'cardroom', at: 7.3, width: 2.2, height: 3.0, kind: 'lacquer' },
+  { id: 'poker-bingo', a: 'poker', b: 'bingo', at: 20, width: 2.4, height: 2.8, kind: 'portal' },
+  { id: 'parlour-cardroom', a: 'parlour', b: 'cardroom', at: -37, width: 2.0, height: 2.7, kind: 'lacquer' },
+  { id: 'cardroom-bingo', a: 'cardroom', b: 'bingo', at: -37, width: 2.0, height: 2.8, kind: 'portal' },
 ];
 
 /** The ceiling heights doors must clear: the lower of the two rooms', less a lintel. */
@@ -678,19 +883,35 @@ export const ROUTES: [RoomId | 'pickup', number, number, number?][][] = [
     ['pit', 11.6, -9.4],
     ['pit', 11.8, 0.9],
   ],
-  // the salon, from the pit's north aisle
+  // the salon, from the pit's north aisle, and on up its east side into the Jade Room
   [
     ['pit', 0, -9.6],
     ['salon', 0, 4.6],
     ['salon', -5.6, 1.2, 3],
     ['salon', 5.6, 1.2, 3],
+    ['salon', 7.6, 1.2],
+    ['salon', 7.6, -4.9],
+    ['cardroom', 7.3, 4.6],
+    ['cardroom', 7.3, 0.2],
+    ['cardroom', 0, 0.2, 3],
+    ['cardroom', 7.1, 0.4],
+    ['cardroom', 7.3, 4.4],
+    ['salon', 7.6, -4.8],
+    ['salon', 7.5, 1.5],
     ['salon', 0.6, 4.6],
   ],
-  // the poker room, from the bar's north door, round between its two rows of tables
+  // the poker room, from the bar's north door, round between its two rows of tables, with a
+  // turn through the bingo hall to its snack bar
   [
     ['bar', 0.5, -9.4],
     ['poker', 2.5, 4.9],
     ['poker', 0, 0, 2],
+    ['poker', 0, -4.9],
+    ['bingo', 0, 4.6],
+    ['bingo', 4.2, 2.4, 3],
+    ['bingo', 0.3, 4.4],
+    ['poker', 0.3, -4.8],
+    ['poker', -0.2, 0],
     ['poker', -8.4, 0, 2],
     ['poker', -8.4, 4.9],
     ['poker', 2.3, 5.0],

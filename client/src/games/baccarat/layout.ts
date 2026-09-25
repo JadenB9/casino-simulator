@@ -12,6 +12,7 @@
 import * as THREE from 'three';
 import type { Spot } from '../../../../shared/src/games/baccarat/rules.ts';
 import { CARD_H, CARD_W } from '../../table/cards.ts';
+import { around } from '../../table/fit.ts';
 
 export const TOP_Y = 0.76;
 /** Centre of the players' arc (x = 0). */
@@ -178,4 +179,23 @@ export function seatCamera(n: number): { position: [number, number, number]; tar
   const [x, z] = polar(1.18, a);
   const [tx, tz] = polar(0.51, a);
   return { position: [x, 1.62, z], target: [tx * 0.6, TOP_Y, tz] };
+}
+
+/**
+ * What must stay in view at this table (table/fit.ts): your seat's boxes (every seat's while you
+ * watch), the Player and Banker hands, the commission boxes and the chip rack.
+ */
+export function boardPoints(seatNo: number | null): THREE.Vector3[] {
+  const out: THREE.Vector3[] = [];
+  const at = ([x, z]: [number, number]) => new THREE.Vector3(x, TOP_Y, z);
+  for (let n = 1; n <= SEAT_COUNT; n++) {
+    if (seatNo !== null && n !== seatNo) continue;
+    const a = seatAngle(n);
+    for (const b of Object.values(BANDS)) out.push(...sectorPoints(b.r0, b.r1, a - b.half, a + b.half, 2).map(at));
+    for (const spot of ['playerPair', 'bankerPair'] as const) out.push(...around(at(spotCentre(n, spot)), PAIR_RADIUS));
+  }
+  for (const h of [HAND_BOX.player, HAND_BOX.banker]) out.push(...around(new THREE.Vector3(h.x, TOP_Y, h.z), HAND_BOX.w / 2, HAND_BOX.d / 2));
+  out.push(...around(new THREE.Vector3(0, TOP_Y, COMMISSION.z), 0.27 + COMMISSION.w / 2, COMMISSION.d / 2));
+  out.push(...around(new THREE.Vector3(RACK.x, TOP_Y, RACK.z), RACK.w / 2, RACK.d / 2));
+  return out;
 }

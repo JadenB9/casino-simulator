@@ -9,8 +9,12 @@
 // - Beams: soft cones of light (a follow spot, the disco's moving heads), additive and faded at the
 //   edges by the angle they're seen at, so they read as light in haze rather than as cones.
 // - Pools: light landing on the floor, as an additive disc.
+//
+// Calm (app/comfort.ts): Bits and Sparks keep one piece in three of what they're asked for, and bits
+// tumble at less than half the spin, so every effect built from them thins out on its own.
 
 import * as THREE from 'three';
+import { calm, calmScale } from '../../app/comfort.ts';
 
 const _q = new THREE.Quaternion();
 const _r = new THREE.Quaternion();
@@ -43,6 +47,7 @@ export class Bits {
   readonly seed: Float32Array;
   readonly landed: Uint8Array;
   private readonly colors: Float32Array;
+  private thin = 0;
 
   constructor(geometry: THREE.BufferGeometry, material: THREE.Material, max: number, name: string) {
     this.max = max;
@@ -67,6 +72,7 @@ export class Bits {
 
   /** A new piece; -1 when they're all in use. */
   spawn(x: number, y: number, z: number, vx: number, vy: number, vz: number, size: number, color: THREE.Color, spin: number): number {
+    if (calm() && ++this.thin % 3 !== 0) return -1;
     if (this.n >= this.max) return -1;
     const i = this.n++;
     this.p.set([x, y, z], i * 3);
@@ -74,7 +80,7 @@ export class Bits {
     _q.setFromEuler(new THREE.Euler(Math.random() * 6.28, Math.random() * 6.28, Math.random() * 6.28));
     _q.toArray(this.q, i * 4);
     _a.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
-    this.w.set([_a.x, _a.y, _a.z, spin], i * 4);
+    this.w.set([_a.x, _a.y, _a.z, spin * calmScale(0.4)], i * 4);
     this.size[i] = size;
     this.age[i] = 0;
     this.seed[i] = Math.random();
@@ -254,6 +260,7 @@ export class Sparks {
   private readonly tint: THREE.InstancedBufferAttribute;
   private readonly age: Float32Array;
   private readonly life: Float32Array;
+  private thin = 0;
   readonly uniforms: { uLen: { value: number }; uWidth: { value: number }; uHot: { value: THREE.Color }; uCool: { value: THREE.Color }; uGain: { value: number } };
 
   constructor(max: number, o: { hot: THREE.ColorRepresentation; cool: THREE.ColorRepresentation; gain: number; width: number; len: number; name: string }) {
@@ -299,6 +306,7 @@ export class Sparks {
 
   /** A spark; `tint` colours it as it cools (white: the material's own colours). */
   spawn(x: number, y: number, z: number, vx: number, vy: number, vz: number, life: number, tint?: THREE.Color): void {
+    if (calm() && ++this.thin % 3 !== 0) return;
     if (this.n >= this.max) return;
     const i = this.n++;
     (this.pos.array as Float32Array).set([x, y, z], i * 3);

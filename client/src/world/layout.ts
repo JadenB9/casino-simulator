@@ -29,7 +29,8 @@ export interface Rect {
 }
 
 /** What kind of station: a table in the pit (or the salon), poker, a machine, the wheels, a desk. */
-export type Zone = 'pit' | 'slots' | 'bar' | 'poker' | 'cashier' | 'feature' | 'online' | 'wheel';
+/** Pachinko machines stand in the parlour's islands; bingo's hall is one station with its stage. */
+export type Zone = 'pit' | 'slots' | 'bar' | 'poker' | 'cashier' | 'feature' | 'online' | 'wheel' | 'parlour' | 'hall';
 
 export interface Placement {
   id: string;
@@ -88,6 +89,42 @@ export interface Bank {
   length: number;
   depth: number;
   ids: string[];
+}
+
+/** An island of machines back to back (the pachinko parlour's): its middle, its long axis's turn, its size. */
+export interface MachineIsland {
+  game: GameId;
+  x: number;
+  z: number;
+  /** 0: the long axis along x; PI/2: along z. */
+  yaw: number;
+  /** The machines' run along the island, and across it (both rows and the spine). */
+  length: number;
+  depth: number;
+  ids: string[];
+  room: RoomId;
+  /** Its number on the floor, for its end caps. */
+  n: number;
+}
+
+/** A counter along a wall (the parlour's prizes, the bingo hall's snack bar): the counter's rect, the wall behind it. */
+export interface WallCounter {
+  kind: 'prizes' | 'snack';
+  counter: Rect;
+  /** The wall face the shelves stand against, and which way that is from the counter (+1 east or south, -1 west or north). */
+  wall: number;
+  axis: 'x' | 'z';
+  side: 1 | -1;
+  room: RoomId;
+}
+
+/** Something flat set on a wall face: its middle on the face, its turn (facing into the room) and width. */
+export interface WallMount {
+  x: number;
+  z: number;
+  ry: number;
+  w: number;
+  room: RoomId;
 }
 
 export interface Column {
@@ -299,6 +336,21 @@ export interface FloorPlan {
   deskIslands: { x: number; z: number; w: number; room: RoomId; games: GameId[] }[];
   /** Strings of bulbs (the yard's). */
   festoons: { x0: number; z0: number; x1: number; z1: number; y: number; room: RoomId }[];
+  /** Islands of machines back to back (the pachinko parlour's). */
+  machineIslands: MachineIsland[];
+  /** Counters along a wall with shelves behind: the prize counter, the snack bar. */
+  counters: WallCounter[];
+  /** Paper lanterns on cords: each lantern's middle and its colour; the cord's ends. */
+  lanterns: { x: number; z: number; y: number; color: string; room: RoomId }[];
+  cords: { x0: number; z0: number; x1: number; z1: number; y: number; room: RoomId }[];
+  /** A big lantern low over each table in the rooms that ask for them. */
+  tableLanterns: { x: number; z: number; room: RoomId }[];
+  /** Moon gates, lattice screens and pattern boards on the walls. */
+  moongates: WallMount[];
+  lattices: WallMount[];
+  patternBoards: WallMount[];
+  /** Stage drapes: `w` is the stage's width between the two curtains. */
+  drapes: WallMount[];
   columns: (Column & { room: RoomId })[];
   plants: Plant[];
   palms: Palm[];
@@ -366,12 +418,24 @@ export const COFFEE_TABLE = { w: 1.3, d: 0.7, h: 0.44 };
 export const PODIUM = { w: 1.4, d: 0.64, h: 1.49 };
 /** The bar counter's height (the video poker bar-top units stand on it). */
 export const BAR_TOP = 1.08;
+/** The Jade Room's moon gate: the round opening's radius and its middle's height. */
+export const MOONGATE = { r: 1.15, y: 1.62 };
+/** A bingo pattern board: its face, its middle's height. */
+export const PATTERN_BOARD = { w: 1.08, h: 1.3, y: 1.72 };
+/** A paper lantern: its radius (the tall ones are a little taller than wide) and height. */
+export const LANTERN = { r: 0.2, h: 0.46 };
+/** The big lanterns over the Jade Room's tables. */
+export const TABLE_LANTERN = { r: 0.36, h: 0.62, y: 2.35 };
+/** Stage drapes: each curtain's width, how far it stands off the wall, and the pelmet across the top. */
+export const DRAPES = { w: 2.0, d: 0.2, pelmet: 0.36 };
+/** A counter along a wall (the prizes, the snack bar): its height, and the shelves' depth and height behind it. */
+export const WALL_COUNTER = { h: 1.02, shelf: 0.42, back: 2.3 };
 
 /** Room for a dealer standing beside a station (npcs.ts's bodies are 0.28 m posts). */
 const DEALER_ROOM = 0.7;
 
 /** How tall each kind of station stands, for checking what hangs or leans over it. */
-export const STATION_H: Record<Zone, number> = { pit: 1.45, poker: 1.45, slots: 2.45, bar: 1.8, feature: 3.05, cashier: 1.2, online: 1.4, wheel: 3.3 };
+export const STATION_H: Record<Zone, number> = { pit: 1.45, poker: 1.45, slots: 2.45, bar: 1.8, feature: 3.05, cashier: 1.2, online: 1.4, wheel: 3.3, parlour: 2.1, hall: 3.4 };
 
 /** Standing or seated players in front of a table or machine. */
 const PLAYER_ZONE = 0.95;
@@ -388,6 +452,11 @@ export function slotIslands(): string[] {
   return [...v, ...v];
 }
 const PER_SIDE = 2;
+/** The gap between the backs of an island's two rows of machines, where its spine stands. */
+export const MACHINE_SPINE = 0.12;
+/** How far an island's end caps stand out past its machines, and how tall an island's crown stands. */
+export const ISLAND_CAP = 0.2;
+export const ISLAND_TOP = 2.36;
 const VP_COUNT_DEFAULT = 4;
 
 function zoneOf(game: GameId): Zone {
@@ -396,6 +465,8 @@ function zoneOf(game: GameId): Zone {
   if (game === 'holdem') return 'poker';
   if (game === 'bigsix') return 'feature';
   if (game === 'banditwheel') return 'wheel';
+  if (game === 'pachinko') return 'parlour';
+  if (game === 'bingo') return 'hall';
   if (CATALOG[game]?.online) return 'online';
   return 'pit';
 }
@@ -484,6 +555,7 @@ export function planFloor(footprint: (game: GameId) => Footprint, slots: readonl
 
   const rows: { room: RoomId; z: number; yaw: number; ids: string[]; x0: number; x1: number; depth: number; seatDepth: number }[] = [];
   const deskIslands: FloorPlan['deskIslands'] = [];
+  const machineIslands: MachineIsland[] = [];
   let slotList = [...slots];
   for (const spec of ROOMS) {
     const r = room(spec.id);
@@ -528,6 +600,28 @@ export function planFloor(footprint: (game: GameId) => Footprint, slots: readonl
           banks.push({ variant, x, z, yaw: 0, length: PER_SIDE * pitch, depth: 2 * sf.depth + 0.3, ids });
         });
         slotList = slotList.slice(cells.length);
+      } else if (item.kind === 'machines') {
+        const f = fp(item.game);
+        const pitch = f.width;
+        for (const isl of item.islands) {
+          const X = r.cx + isl.x;
+          const Z = r.cz + isl.z;
+          const c = Math.cos(isl.yaw);
+          const sn = Math.sin(isl.yaw);
+          const ids: string[] = [];
+          // one row on each side of the spine, machines side by side so their slices of island join up
+          for (const side of [1, -1]) {
+            for (let k = 0; k < item.per; k++) {
+              const lx = (k - (item.per - 1) / 2) * pitch * side;
+              const lz = side * (MACHINE_SPINE / 2 + f.depth / 2);
+              const n = stations.filter((s) => s.game === item.game).length + 1;
+              const id = `${CATALOG[item.game].prefix}-${n}`;
+              ids.push(id);
+              add({ id, game: item.game, variant: '', x: X + lx * c + lz * sn, z: Z - lx * sn + lz * c, yaw: isl.yaw + (side > 0 ? 0 : Math.PI), room: r.id });
+            }
+          }
+          machineIslands.push({ game: item.game, x: X, z: Z, yaw: isl.yaw, length: item.per * pitch, depth: 2 * f.depth + MACHINE_SPINE, ids, room: r.id, n: machineIslands.length + 1 });
+        }
       } else if (item.kind === 'desks') {
         const f = fp(item.games[0]!);
         let g = 0;
@@ -582,6 +676,14 @@ export function planFloor(footprint: (game: GameId) => Footprint, slots: readonl
   const neons: FloorPlan['neons'] = [];
   const tableLamps: FloorPlan['tableLamps'] = [];
   const festoons: FloorPlan['festoons'] = [];
+  const counters: WallCounter[] = [];
+  const lanterns: FloorPlan['lanterns'] = [];
+  const cords: FloorPlan['cords'] = [];
+  const tableLanterns: FloorPlan['tableLanterns'] = [];
+  const moongates: WallMount[] = [];
+  const lattices: WallMount[] = [];
+  const patternBoards: WallMount[] = [];
+  const drapes: WallMount[] = [];
   for (const spec of ROOMS) {
     const r = room(spec.id);
     for (const fx of spec.fixtures) fixture(fx, r);
@@ -634,7 +736,49 @@ export function planFloor(footprint: (game: GameId) => Footprint, slots: readonl
         vaults.push({ x: r.cx + fx.x, z: r.inner.z0, room: r.id });
         break;
       case 'neon':
-        neons.push({ text: fx.text, color: fx.color, font: fx.font ?? 'Tilt Neon', x: r.cx + fx.x, y: fx.y, z: r.cz + fx.z + 0.03, ry: fx.ry, w: fx.w, h: fx.h, room: r.id });
+        // a few centimetres off the wall, the way it faces
+        neons.push({ text: fx.text, color: fx.color, font: fx.font ?? 'Tilt Neon', x: r.cx + fx.x + Math.sin(fx.ry) * 0.03, y: fx.y, z: r.cz + fx.z + Math.cos(fx.ry) * 0.03, ry: fx.ry, w: fx.w, h: fx.h, room: r.id });
+        break;
+      case 'prizes':
+      case 'snack': {
+        const counter: Rect = { x0: r.cx + fx.x0, x1: r.cx + fx.x1, z0: r.cz + fx.z0, z1: r.cz + fx.z1 };
+        // against the nearer of the room's walls, across the counter's narrow way
+        const alongZ = counter.z1 - counter.z0 > counter.x1 - counter.x0;
+        const I = r.inner;
+        if (alongZ) {
+          const east = I.x1 - counter.x1 < counter.x0 - I.x0;
+          counters.push({ kind: fx.kind, counter, wall: east ? I.x1 : I.x0, axis: 'z', side: east ? 1 : -1, room: r.id });
+        } else {
+          const south = I.z1 - counter.z1 < counter.z0 - I.z0;
+          counters.push({ kind: fx.kind, counter, wall: south ? I.z1 : I.z0, axis: 'x', side: south ? 1 : -1, room: r.id });
+        }
+        break;
+      }
+      case 'lanterns': {
+        const y = r.style.ceiling - 0.62;
+        const [x0, z0] = [r.cx + fx.from[0], r.cz + fx.from[1]];
+        const [x1, z1] = [r.cx + fx.to[0], r.cz + fx.to[1]];
+        cords.push({ x0, z0, x1, z1, y: y + 0.36, room: r.id });
+        for (let i = 0; i < fx.n; i++) {
+          const t = fx.n === 1 ? 0.5 : i / (fx.n - 1);
+          lanterns.push({ x: x0 + (x1 - x0) * t, z: z0 + (z1 - z0) * t, y, color: fx.color, room: r.id });
+        }
+        break;
+      }
+      case 'table-lanterns':
+        for (const s of stations) if (s.room === r.id && s.zone === 'pit') tableLanterns.push({ x: s.x, z: s.z, room: r.id });
+        break;
+      case 'moongate':
+        moongates.push({ x: r.cx + fx.x, z: r.cz + fx.z, ry: fx.ry, w: MOONGATE.r * 2 + 0.5, room: r.id });
+        break;
+      case 'lattice':
+        for (const [x, z] of fx.at) lattices.push({ x: r.cx + x, z: r.cz + z, ry: fx.ry, w: fx.w, room: r.id });
+        break;
+      case 'drapes':
+        drapes.push({ x: r.cx + fx.x, z: r.cz + fx.z, ry: fx.ry, w: fx.w, room: r.id });
+        break;
+      case 'patterns':
+        for (const [x, z] of fx.at) patternBoards.push({ x: r.cx + x, z: r.cz + z, ry: fx.ry, w: PATTERN_BOARD.w, room: r.id });
         break;
       case 'table-lamps':
         for (const s of stations) if (s.room === r.id && s.game === 'holdem') tableLamps.push({ x: s.x, z: s.z, yaw: s.yaw, room: r.id });
@@ -734,6 +878,15 @@ export function planFloor(footprint: (game: GameId) => Footprint, slots: readonl
     neons,
     tableLamps,
     festoons,
+    machineIslands,
+    counters,
+    lanterns,
+    cords,
+    tableLanterns,
+    moongates,
+    lattices,
+    patternBoards,
+    drapes,
     deskIslands,
     columns,
     plants: [],
@@ -1058,9 +1211,52 @@ function baseSolids(plan: FloorPlan): Solid[] {
     room = ch.room;
     const k = CHAIRS[ch.kind];
     const g = `chairs-${ch.station}`;
-    if (k.round) round(`chair-${ch.station}-${ch.slot + 1}`, g, ch.x, ch.z, k.w / 2, 0, ch.top + 0.06, { of: ch.station });
+    // (a round seat is its cushion, or its back where it has one: the pachinko stool's)
+    if (k.round) round(`chair-${ch.station}-${ch.slot + 1}`, g, ch.x, ch.z, k.w / 2, 0, Math.max(ch.top + 0.06, k.h), { of: ch.station });
     else turned(`chair-${ch.station}-${ch.slot + 1}`, g, ch.x, ch.z, k.w, k.d, ch.yaw, 0, k.h, { of: ch.station });
   }
+
+  // islands of machines: the spine and the plinth hold the machines; end caps and a crown over them
+  for (const isl of plan.machineIslands) {
+    room = isl.room;
+    const g = `island-${isl.n}`;
+    turned(`${g}-body`, g, isl.x, isl.z, isl.length + 2 * ISLAND_CAP, isl.depth, isl.yaw, 0, ISLAND_TOP, { holds: isl.ids, floor: true });
+  }
+
+  // counters along a wall (the parlour's prizes, the bingo hall's snack bar) and the shelves behind them
+  for (const c of plan.counters) {
+    room = c.room;
+    const k = c.counter;
+    const g = `${c.kind}-${Math.round(k.x0)}-${Math.round(k.z0)}`;
+    box(`${g}-counter`, g, k.x0, k.x1, k.z0, k.z1, 0, WALL_COUNTER.h, { floor: true });
+    const back = c.side > 0 ? [c.wall - WALL_COUNTER.shelf, c.wall] : [c.wall, c.wall + WALL_COUNTER.shelf];
+    if (c.axis === 'z') box(`${g}-shelves`, g, back[0]!, back[1]!, k.z0 - 0.3, k.z1 + 0.3, 0, WALL_COUNTER.back, { wall: true });
+    else box(`${g}-shelves`, g, k.x0 - 0.3, k.x1 + 0.3, back[0]!, back[1]!, 0, WALL_COUNTER.back, { wall: true });
+  }
+
+  // paper lanterns on their cords, and the big ones low over the Jade Room's tables
+  plan.lanterns.forEach((l, i) => {
+    room = l.room;
+    round(`lantern-${i + 1}`, `lantern-${i + 1}`, l.x, l.z, LANTERN.r, l.y - LANTERN.h / 2 - 0.05, ceilingAt(plan, l.x, l.z));
+  });
+  for (const l of plan.tableLanterns) {
+    room = l.room;
+    round(`table-lantern-${Math.round(l.x)}-${Math.round(l.z)}`, 'table-lanterns', l.x, l.z, TABLE_LANTERN.r, TABLE_LANTERN.y - TABLE_LANTERN.h / 2 - 0.08, ceilingAt(plan, l.x, l.z));
+  }
+
+  // things on the walls: the moon gate's frame, lattice screens, the pattern boards
+  const onWall = (id: string, m: WallMount, d: number, y0: number, y1: number) => {
+    room = m.room;
+    turned(id, id, m.x + Math.sin(m.ry) * (d / 2), m.z + Math.cos(m.ry) * (d / 2), m.w, d, m.ry, y0, y1, { wall: true });
+  };
+  plan.moongates.forEach((m, i) => onWall(`moongate-${i + 1}`, m, 0.16, 0, MOONGATE.y + MOONGATE.r + 0.62));
+  plan.lattices.forEach((m, i) => onWall(`lattice-${i + 1}`, m, 0.16, 0.3, 2.62));
+  plan.drapes.forEach((m, i) => {
+    const top = ceilingAt(plan, m.x, m.z) - 0.02;
+    for (const e of [-1, 1]) onWall(`drape-${i + 1}-${e > 0 ? 'e' : 'w'}`, { ...m, x: m.x + Math.cos(m.ry) * e * (m.w / 2 + DRAPES.w / 2), z: m.z - Math.sin(m.ry) * e * (m.w / 2 + DRAPES.w / 2), w: DRAPES.w }, DRAPES.d, 0, top - DRAPES.pelmet);
+    onWall(`pelmet-${i + 1}`, { ...m, w: m.w + 2 * DRAPES.w + 0.2 }, DRAPES.d + 0.08, top - DRAPES.pelmet, top);
+  });
+  plan.patternBoards.forEach((m, i) => onWall(`pattern-board-${i + 1}`, m, 0.09, PATTERN_BOARD.y - PATTERN_BOARD.h / 2 - 0.05, PATTERN_BOARD.y + PATTERN_BOARD.h / 2 + 0.05));
 
   // lamps low over the poker tables, and the yard's string of bulbs overhead
   for (const l of plan.tableLamps) {
@@ -1330,6 +1526,10 @@ export function checkLayout(plan: FloorPlan): string[] {
   const out: string[] = [];
   const PAD = 0.05;
   const boxes = plan.stations.map((s) => ({ s, poly: corners(s.x, s.z, s.fp.width + PAD, s.fp.depth + PAD, s.yaw) }));
+  // an island's machines stand shoulder to shoulder on purpose: each is its slice of the island
+  const island = new Map<string, number>();
+  for (const isl of plan.machineIslands) for (const id of isl.ids) island.set(id, isl.n);
+  const together = (a: string, b: string) => island.has(a) && island.get(a) === island.get(b);
   for (let i = 0; i < boxes.length; i++) {
     const a = boxes[i]!;
     const r = plan.rooms.find((x) => x.id === a.s.room);
@@ -1337,7 +1537,7 @@ export function checkLayout(plan: FloorPlan): string[] {
     for (const [x, z] of a.poly) if (!inRect(inner, x, z, 0.01)) out.push(`${a.s.id} pokes through a wall`);
     for (let j = i + 1; j < boxes.length; j++) {
       const b = boxes[j]!;
-      if (overlaps(a.poly, b.poly)) out.push(`${a.s.id} overlaps ${b.s.id}`);
+      if (overlaps(a.poly, b.poly) && !together(a.s.id, b.s.id)) out.push(`${a.s.id} overlaps ${b.s.id}`);
     }
     for (const [k, aisle] of plan.aisles.entries()) if (overlaps(a.poly, rectPoly(aisle))) out.push(`${a.s.id} stands in aisle ${k}`);
     const front = playerStrip(a.s);

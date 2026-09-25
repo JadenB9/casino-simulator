@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { env } from 'cloudflare:workers';
-import { connect, login, type Client } from './helpers.ts';
+import { connect, featsHad, login, type Client } from './helpers.ts';
 import type { GameEngine, GameId } from '../../shared/src/engine.ts';
 import { isRefusal } from '../../shared/src/engine.ts';
 import { engineFor } from '../../shared/src/games/index.ts';
@@ -39,6 +39,8 @@ describe('the four new online games on the table host', () => {
   for (const game of ['wheel', 'cases', 'diamonds'] as const) {
     it(`${game}: rounds settle at the table, D1 moves only at the edges`, { timeout: 20_000 }, async () => {
       const { token, profile } = await login(`o6_${game}`);
+      // the money here is checked to the cent: no feat pays beside the play
+      await featsHad(profile.id);
       const c = (await connect(`solo/${game}`, token)).client!;
       const hello = await c.next((m) => m.t === 'table');
       expect(hello.meta.game).toBe(game);
@@ -67,6 +69,8 @@ describe('the four new online games on the table host', () => {
 
   it('coinflip: a streak rides at the table, and a replayed call is applied once', { timeout: 20_000 }, async () => {
     const { token, profile } = await login('o6_money_cf');
+    // the money here is checked to the cent: no feat pays beside the play
+    await featsHad(profile.id);
     const c = (await connect('solo/coinflip', token)).client!;
     await c.next((m) => m.t === 'table');
     const start = (await money(profile.id))!.balance;
@@ -114,6 +118,8 @@ describe('the four new online games on the table host', () => {
 
   it('coinflip: cashing out mid-streak pays the streak before the chips go home', { timeout: 20_000 }, async () => {
     const { token, profile } = await login('o6_leave_cf');
+    // the money here is checked to the cent: no feat pays beside the play
+    await featsHad(profile.id);
     const c = (await connect('solo/coinflip', token)).client!;
     await c.next((m) => m.t === 'table');
     const start = (await money(profile.id))!.balance;
