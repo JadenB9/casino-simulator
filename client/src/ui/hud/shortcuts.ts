@@ -20,6 +20,7 @@ export const SHORTCUTS: readonly { title: string; rows: readonly Row[] }[] = [
       ['F', 'First or third person'],
       ['B', 'Step off your ride, and back on'],
       ['V', 'Throw a punch'],
+      ['Q', 'Take a sip or a bite of what you hold'],
       ['N', 'Map of the casino'],
       ['T or Enter', 'Chat'],
     ],

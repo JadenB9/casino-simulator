@@ -7,6 +7,7 @@
 import { el } from '../kit.ts';
 import { segmented } from './parts.ts';
 import { SENS_MAX, SENS_MIN, loadMouse, setMouseSettings, type View } from '../../world/mouse.ts';
+import { drinkFx, setDrinkFx } from '../../world/consumables/prefs.ts';
 
 type Row = (label: string, control: HTMLElement, note?: HTMLElement) => HTMLElement;
 
@@ -27,7 +28,18 @@ export function controlSettings(row: Row): HTMLElement[] {
     view.root,
     el('p', 'set-note', fine ? 'Third person follows behind you; first person sees the floor through your eyes. F switches on the floor.' : 'Third person follows behind you; first person sees the floor through your eyes.'),
   );
-  if (!fine) return [el('h3', 'section-label', 'Controls'), camera];
+  // the bar menu has the same switch (world/consumables/prefs.ts)
+  const sway = segmented<'on' | 'off'>(
+    'Drinks sway the view',
+    [
+      { id: 'on', label: 'On' },
+      { id: 'off', label: 'Off' },
+    ],
+    drinkFx() ? 'on' : 'off',
+    (v) => setDrinkFx(v === 'on'),
+  );
+  const drinks = row('Drinks sway the view', sway.root, el('p', 'set-note', 'A few drinks sway the camera a little and warm the edges of the view. Reduce flashing & motion turns the sway off too.'));
+  if (!fine) return [el('h3', 'section-label', 'Controls'), camera, drinks];
   const look = segmented<'lock' | 'drag'>(
     'Mouse look',
     [
@@ -57,6 +69,7 @@ export function controlSettings(row: Row): HTMLElement[] {
     camera,
     row('Mouse look', look.root, el('p', 'set-note', 'Locked: on the floor, moving the mouse looks around. Esc frees the cursor and a click on the floor takes it back. Drag: hold the button and drag to look.')),
     row('Sensitivity', wrap),
+    drinks,
   ];
 }
 
