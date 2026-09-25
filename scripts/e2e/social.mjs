@@ -29,14 +29,14 @@ async function page(query, viewport = { width: 1280, height: 800 }, touch = fals
   await p.screenshot({ path: `${out}/social-richest.png` });
   results.richest = await p.$$eval('.lb-table tbody tr', (rows) => rows.map((r) => r.className + ' | ' + r.textContent));
   results.sub = await p.textContent('.sheet-sub');
-  await p.click('.lb-tabs [id$="-biggestWin"]');
+  await p.click('.lb-nav [id$="-biggestWin"]');
   await p.waitForTimeout(900);
   await p.screenshot({ path: `${out}/social-biggestwin.png` });
   // Arrow keys move between tabs from the focused tab.
-  await p.focus('.lb-tabs [aria-selected="true"]');
-  await p.keyboard.press('ArrowRight');
+  await p.focus('.lb-nav [aria-selected="true"]');
+  await p.keyboard.press('ArrowDown');
   await p.waitForTimeout(900);
-  results.afterArrow = await p.textContent('.lb-tabs [aria-selected="true"]');
+  results.afterArrow = await p.textContent('.lb-nav [aria-selected="true"]');
   await p.screenshot({ path: `${out}/social-rounds.png` });
   await p.waitForTimeout(1500);
   results.subLater = await p.textContent('.sheet-sub');

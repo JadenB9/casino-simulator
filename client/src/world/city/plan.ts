@@ -54,10 +54,12 @@ export const GROUND = {
 
 /**
  * The valet stand: a podium on the sidewalk under the porte-cochere, its front (the guest's
- * side) facing the lobby's doors. `guest` is where someone stands to talk to the valet; `valet`
- * where the attendant stands behind it. cars6 puts its prompt and panel here.
+ * side) facing south along the sidewalk, so a guest stands with the open walk behind them rather
+ * than the lobby's glass (the follow camera needs the room). `guest` is where someone stands to
+ * talk to the valet; `valet` where the attendant stands behind it. cars6 puts its prompt and
+ * panel here.
  */
-export const VALET_STAND = { x: 129.0, z: 4.4, yaw: -Math.PI / 2, guest: { x: 128.2, z: 4.4 }, valet: { x: 129.8, z: 4.4 } };
+export const VALET_STAND = { x: 129.2, z: 4.4, yaw: 0, guest: { x: 129.2, z: 5.25 }, valet: { x: 129.2, z: 3.55 } };
 
 /** Where a car pulls up for its owner: in the drive's near lane, under the porte-cochere. */
 export const PICKUP = { x: 132.2, z: 2.0, yaw: Math.PI };
@@ -68,7 +70,7 @@ export const PICKUP = { x: 132.2, z: 2.0, yaw: Math.PI };
  * its own.
  */
 export const ENTRANCES = {
-  jail: { x: m(LOTS.jail.minX), z: -25, yaw: -Math.PI / 2 },
+  jail: { x: m(LOTS.jail.minX) + 0.6, z: -25, yaw: -Math.PI / 2 },
   garage: { x: m(LOTS.garage.minX), z: 8, yaw: -Math.PI / 2 },
 };
 

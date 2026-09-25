@@ -57,12 +57,12 @@ export function carCentre(b: LiftBank, i: number): { x: number; z: number } {
 }
 
 /**
- * The three banks. The casino's stands against the lobby's south wall east of the street doors,
- * its doors facing north into the lobby; the valet lobby's in its back (west) wall, facing the glass doors to the drive; the
+ * The three banks. The casino's stands against the lobby's south wall east of the street doors
+ * (its cars' back in front of the wall's wainscot and rail), its doors facing north into the lobby; the valet lobby's in its back (west) wall, facing the glass doors to the drive; the
  * terrace's in the stair-and-lift pavilion at its east end, facing west over the city.
  */
 export const LIFTS: Record<ZoneId, LiftBank> = {
-  casino: bank('casino', 420, 1300, 128, 2),
+  casino: bank('casino', 420, 1285, 128, 2),
   ground: bank('ground', 10_500, 0, 64, 3),
   roof: bank('roof', -11_300, 0, 192, 2),
 };

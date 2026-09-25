@@ -172,7 +172,11 @@ export type FixtureItem =
   /** Bingo pattern boards on a wall: lit 5 x 5 grids of the patterns that pay (room-local middles on the face). */
   | { kind: 'patterns'; at: [number, number][]; ry: number }
   /** Stage drapes on a wall: velvet curtains either side of a stage `w` wide, a pelmet across (room-local middle on the face). */
-  | { kind: 'drapes'; x: number; z: number; ry: number; w: number };
+  | { kind: 'drapes'; x: number; z: number; ry: number; w: number }
+  /** A tiered fountain on the floor (room-local middle). */
+  | { kind: 'fountain'; x: number; z: number }
+  /** LED lines across the ceiling on a grid, `pitch` apart, in two colours (along x, along z). */
+  | { kind: 'ledgrid'; pitch: number; colors: [string, string] };
 
 /** A sign box hung from the ceiling: its text (or wayfinding segments), both faces. */
 export interface HangItem {
@@ -226,6 +230,8 @@ export interface RoomSpec {
   plants: [number, number][];
   /** Floor kept clear of everything the plan places, but not drawn as a runner (room-local). */
   keep?: { x0: number; z0: number; x1: number; z1: number }[];
+  /** Places for statues on plinths (room-local x, z and the way each faces), best first. */
+  statues?: [number, number, number][];
 }
 
 export type DoorKind = 'entrance' | 'grand' | 'portal' | 'arch' | 'shopfront' | 'industrial' | 'lacquer';
@@ -246,7 +252,7 @@ export interface DoorSpec {
 
 const WARM = { sky: '#ffd6a6', ground: '#3a1810', k: 1.35 };
 
-const PIT: RoomStyle = { floor: 'carpet', floorUv: 3.2, wall: 'wall', wainscot: 'wainscot', rail: 'brass', ceiling: 3.4, ceilingMat: 'ceiling', kind: 'coffer', downlights: 2.4, cove: 'warm', ambient: WARM };
+const PIT: RoomStyle = { floor: 'carpet', floorUv: 3.2, wall: 'wall', wainscot: 'wainscot', rail: 'brass', ceiling: 4.4, ceilingMat: 'ceiling', kind: 'coffer', downlights: 2.4, cove: 'warm', ambient: WARM };
 
 export const ROOMS: RoomSpec[] = [
   // --- the lobby: the doors, marble, the directory, and the grand opening to the pit ---------------
@@ -266,22 +272,29 @@ export const ROOMS: RoomSpec[] = [
       // view as you come in, clear of the palms' fronds and of anyone's path
       { kind: 'directory', x: -3.6, z: -0.3, yaw: 0.72 },
       { kind: 'bench', x: -6.2, z: -3.3, yaw: Math.PI / 2 },
-      { kind: 'bench', x: 6.2, z: -3.3, yaw: -Math.PI / 2 },
-      // two palms flank the way on to the pit
+      // two palms flank the way on from the fountain to the pit
       { kind: 'palm', x: -3.0, z: -3.6, yaw: 0 },
       { kind: 'palm', x: 3.0, z: -3.6, yaw: 0 },
     ],
-    fixtures: [],
+    // the fountain in the middle of the marble, under the tray and its chandelier
+    fixtures: [{ kind: 'fountain', x: 0, z: 0 }],
     hanging: [],
-    spots: [],
-    // the runner from the doors to the compass rose, and on from it to the pit
+    spots: [{ x: 0, z: 2.6, tx: 0, tz: 0, k: 20, angle: 0.8 }],
+    // the runner from the doors to the fountain, and on from it to the pit; then kept clear: the lift
+    // bank on the south wall east of the doors and the way up to it (city6's, shared/src/lifts.ts)
     aisles: [
       { x0: -2.2, z0: -5.85, x1: 2.2, z1: -1.7 },
       { x0: -2.2, z0: 1.7, x1: 2.2, z1: 5.85 },
     ],
-    // kept clear: the lift bank on the south wall east of the doors and the way up to it (city6's,
-    // shared/src/lifts.ts)
     keep: [{ x0: 1.9, z0: 2.5, x1: 6.5, z1: 5.85 }],
+    // where the lobby's statues stand (the shop's, fx6): each plinth with a clear walk round it,
+    // clear of the doors' approaches, the directory, the palms and the lift bank; best first, each
+    // facing the lobby's middle three metres toward the doors
+    statues: [
+      [3.4, -1.4, -0.85],
+      [-4.0, 3.6, 0.93],
+      [5.6, -2.6, -1.08],
+    ],
     plants: [[-6.4, 5.4]],
   },
 
@@ -332,13 +345,13 @@ export const ROOMS: RoomSpec[] = [
     furniture: [{ kind: 'banquette', x: 8.4, z: 6.3, yaw: 0 }],
     fixtures: [{ kind: 'pit-podium' }],
     hanging: [
-      { id: 'table-games', x: 0, y: 2.96, z: -0.15, ry: 0, w: 4.6, h: 0.6, kind: 'lit', text: 'TABLE GAMES', color: '#ffe0a0' },
+      { id: 'table-games', x: 0, y: 3.5, z: -0.15, ry: 0, w: 4.6, h: 0.6, kind: 'lit', text: 'TABLE GAMES', color: '#ffe0a0' },
       // over the north aisle, either side of the salon's door (clear of the signs over the doors):
       // the north wing's rooms lie one room beyond the doors along it
       {
         id: 'north-wing-w',
         x: -6.3,
-        y: 2.9,
+        y: 3.1,
         z: -9.3,
         ry: 0,
         w: 4.2,
@@ -353,7 +366,7 @@ export const ROOMS: RoomSpec[] = [
       {
         id: 'north-wing-e',
         x: 6.3,
-        y: 2.9,
+        y: 3.1,
         z: -9.3,
         ry: 0,
         w: 4.2,
@@ -699,7 +712,7 @@ export const ROOMS: RoomSpec[] = [
     x1: -9,
     z1: -31,
     // bright, loud and mirrored: a white ceiling thick with downlights, pink neon along the walls
-    style: { floor: 'carpet-parlour', floorUv: 2.4, wall: 'wall-parlour', wainscot: null, rail: 'chrome', ceiling: 3.4, ceilingMat: 'ceiling-parlour', kind: 'panels', downlights: 1.5, cove: 'neon', ambient: { sky: '#ffe6f2', ground: '#3a1426', k: 1.55 } },
+    style: { floor: 'carpet-parlour', floorUv: 2.4, wall: 'wall-parlour', wainscot: null, rail: 'chrome', ceiling: 3.4, ceilingMat: 'ceiling-dark', kind: 'panels', downlights: 1.5, cove: 'neon', ambient: { sky: '#ffe6f2', ground: '#3a1426', k: 1.55 } },
     stations: [
       {
         kind: 'machines',
@@ -721,6 +734,8 @@ export const ROOMS: RoomSpec[] = [
     fixtures: [
       { kind: 'prizes', x0: -9.75, x1: -9.05, z0: -3.4, z1: 1.8 },
       { kind: 'neon', text: 'PACHINKO', color: '#ff4fa8', x: 0, y: 2.5, z: -5.85, ry: 0, w: 4.4, h: 0.74, font: 'Tilt Neon' },
+      // a loud ceiling, as a parlour's is: black, ruled in pink and ice-blue light
+      { kind: 'ledgrid', pitch: 3.0, colors: ['#ff4fa8', '#7fe0ff'] },
       // strung across the room, over the islands and the aisles between them
       { kind: 'lanterns', from: [-8.2, -3.6], to: [8.2, -3.6], n: 9, color: '#e8352c' },
       { kind: 'lanterns', from: [-8.2, 0.4], to: [8.2, 0.4], n: 9, color: '#e8352c' },
@@ -829,7 +844,7 @@ export const ROOMS: RoomSpec[] = [
 
 export const DOORS: DoorSpec[] = [
   { id: 'entrance', a: 'lobby', b: 'outside', at: 0, width: 2.6, height: 2.9, kind: 'entrance' },
-  { id: 'lobby-pit', a: 'lobby', b: 'pit', at: 0, width: 8, height: 3.2, kind: 'grand' },
+  { id: 'lobby-pit', a: 'lobby', b: 'pit', at: 0, width: 8, height: 3.7, kind: 'grand' },
   { id: 'lobby-bank', a: 'lobby', b: 'bank', at: 9.5, width: 2.4, height: 2.8, kind: 'portal' },
   { id: 'lobby-boutique', a: 'lobby', b: 'boutique', at: 9.5, width: 2.2, height: 2.7, kind: 'shopfront' },
   { id: 'pit-slots', a: 'pit', b: 'slots', at: -6.4, width: 4.2, height: 3.1, kind: 'arch' },

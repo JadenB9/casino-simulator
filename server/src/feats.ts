@@ -23,7 +23,7 @@
 
 import type { GameEvent, GameId, RoundResult, Step } from '../../shared/src/engine.ts';
 import { CATALOG, isGameId } from '../../shared/src/games/catalog.ts';
-import { DAILY_KEEP_DAYS, FEATS, casinoDay, dailyFeats, featOf, isMaxTally, tallyValue } from '../../shared/src/feats.ts';
+import { DAILY_KEEP_DAYS, FEATS, cashFor, casinoDay, dailyFeats, featOf, isMaxTally, tallyValue, theoOf } from '../../shared/src/feats.ts';
 import type { EmoteId, TableServerMsg } from '../../shared/src/protocol.ts';
 import { LINEUP, isSlotId } from '../../shared/src/games/slots/lineup.ts';
 import { ROYAL_FLUSH, STRAIGHT_FLUSH as VP_STRAIGHT_FLUSH, FOUR_OF_A_KIND } from '../../shared/src/games/videopoker/hands.ts';
@@ -37,6 +37,7 @@ import type { Card } from '../../shared/src/cards.ts';
 import type { Cents } from '../../shared/src/money.ts';
 import { moneyOf } from './transfer.ts';
 import { revealAt } from './floor/wins.ts';
+import { addRoundStats } from '../../shared/src/stats.ts'; // v6 stats6
 
 /** Unsent tallies wait at most this long after the first of them before going to D1. */
 export const FLUSH_MS = 120_000;
@@ -52,6 +53,8 @@ export interface RoundFacts {
   tally: Record<string, number>;
   /** Achievements this round earned, by feat id (whether or not the player has them already). */
   moments: string[];
+  /** What the round staked: an achievement's cash scales with it (feats.ts cashFor). */
+  stake: Cents;
 }
 
 /**
@@ -61,14 +64,21 @@ export interface RoundFacts {
  * challenges too (the `d:<day>:` tallies).
  */
 export function roundFacts(game: GameId, variant: string, step: Pick<Step<unknown>, 'events' | 'state'>, r: RoundResult, day?: string): RoundFacts {
-  const out: RoundFacts = { tally: {}, moments: [] };
+  const out: RoundFacts = { tally: {}, moments: [], stake: 0 };
   if (!isGameId(game) || CATALOG[game].dev) return out;
   if (!Number.isSafeInteger(r.wagered) || !Number.isSafeInteger(r.returned) || r.wagered <= 0 || r.returned < 0) return out;
+  out.stake = r.wagered;
   const profit = r.returned - r.wagered;
   const add = (k: string, n: number) => (out.tally[k] = (out.tally[k] ?? 0) + n);
   const d = day ? `d:${day}:` : null;
   add('rounds', 1);
   if (d) add(`${d}rounds`, 1);
+  // what the round cost on average, the budget comps are paid from
+  const theo = theoOf(game, r.wagered);
+  if (theo > 0) {
+    add('theo', theo);
+    if (d) add(`${d}theo`, theo);
+  }
   if (profit > 0) {
     add('won', profit);
     add(`won:${game}`, profit);
@@ -81,6 +91,8 @@ export function roundFacts(game: GameId, variant: string, step: Pick<Step<unknow
     }
     out.moments.push('first-win');
   }
+  // v6 stats6: losses, the worst round, wins in all and rounds per game, for the leaderboards
+  addRoundStats(out.tally, game, profit);
   // A solo player's extra spots are named in the events by their spot, not the seat.
   const pos = r.spot ?? r.seat;
   try {
@@ -91,6 +103,8 @@ export function roundFacts(game: GameId, variant: string, step: Pick<Step<unknow
     // A shape we didn't expect costs the player a moment, never the round.
     console.error('feats: reading a round failed', game, err);
   }
+  // a pendant's moment needs a real bet behind it
+  out.moments = out.moments.filter((id) => (featOf(id)?.minStake ?? 0) <= r.wagered);
   return out;
 }
 
@@ -416,9 +430,11 @@ export function flushStatements(db: D1Database, accountId: number, marker: strin
   return stmts;
 }
 
-/** The unlock batch: the feat row, and for cash the ledger row and the balance, together. */
-export function unlockStatements(db: D1Database, accountId: number, feat: string, at: number): D1PreparedStatement[] {
-  const cash = featOf(feat)?.reward.cash ?? 0;
+/**
+ * The unlock batch: the feat row, and for cash the ledger row and the balance, together (and a
+ * comp's cash on the `comp` tally, so later comps know what's been paid).
+ */
+export function unlockStatements(db: D1Database, accountId: number, feat: string, at: number, cash: Cents): D1PreparedStatement[] {
   const stmts = [db.prepare(`INSERT INTO casino_feats (account_id, feat, at) VALUES (?1, ?2, ?3)`).bind(accountId, feat, at)];
   if (cash > 0) {
     stmts.push(
@@ -427,7 +443,16 @@ export function unlockStatements(db: D1Database, accountId: number, feat: string
         .bind(featOpId(accountId, feat), accountId, cash, at),
       db.prepare(`UPDATE casino_accounts SET balance = balance + ?2, rev = rev + 1 WHERE id = ?1 RETURNING balance, in_play, rev`).bind(accountId, cash),
     );
+    if (featOf(feat)?.comp) {
+      stmts.push(
+        db.prepare(`INSERT INTO casino_tally (account_id, key, n) VALUES (?1, 'comp', ?2) ON CONFLICT (account_id, key) DO UPDATE SET n = n + excluded.n`).bind(accountId, cash),
+      );
+    }
   }
+  // v6 stats6: the count the "most achievements" board reads, last so the money stays results[2]
+  stmts.push(
+    db.prepare(`INSERT INTO casino_tally (account_id, key, n) VALUES (?1, 'feats', 1) ON CONFLICT (account_id, key) DO UPDATE SET n = n + 1`).bind(accountId),
+  );
   return stmts;
 }
 
@@ -435,7 +460,7 @@ export function featOpId(accountId: number, feat: string): string {
   return `feat:${accountId}:${feat}`;
 }
 
-export type UnlockOutcome = { kind: 'applied'; money?: { balance: Cents; inPlay: Cents; rev: number } } | { kind: 'taken' };
+export type UnlockOutcome = { kind: 'applied'; paid: Cents; money?: { balance: Cents; inPlay: Cents; rev: number } } | { kind: 'taken' };
 
 /**
  * Pay a feat. 'applied' if this call paid it, or on a `retry`, if the try before (stamped with the
@@ -443,31 +468,42 @@ export type UnlockOutcome = { kind: 'applied'; money?: { balance: Cents; inPlay:
  * (another table got there first, maybe in the same millisecond). Anything else throws, and the
  * caller tries again later.
  */
-export async function unlockFeat(db: D1Database, accountId: number, feat: string, at: number, retry = false): Promise<UnlockOutcome> {
-  if (!featOf(feat)) throw new Error(`unlockFeat: no feat ${feat}`);
+export async function unlockFeat(db: D1Database, accountId: number, feat: string, at: number, retry = false, cash?: Cents): Promise<UnlockOutcome> {
+  const f = featOf(feat);
+  if (!f) throw new Error(`unlockFeat: no feat ${feat}`);
+  // (with no cash given: what it pays with nothing staked, which is only ever an amount challenge's)
+  const paid = Math.max(0, Math.floor(cash ?? cashFor(f, {})));
   try {
-    const results = await db.batch<{ balance: number; in_play: number; rev: number }>(unlockStatements(db, accountId, feat, at));
+    const results = await db.batch<{ balance: number; in_play: number; rev: number }>(unlockStatements(db, accountId, feat, at, paid));
     const m = results[2]?.results?.[0];
-    return { kind: 'applied', ...(m ? { money: { balance: m.balance, inPlay: m.in_play, rev: m.rev } } : {}) };
+    return { kind: 'applied', paid, ...(m ? { money: { balance: m.balance, inPlay: m.in_play, rev: m.rev } } : {}) };
   } catch (err) {
     const row = await db.prepare(`SELECT at FROM casino_feats WHERE account_id = ?1 AND feat = ?2`).bind(accountId, feat).first<{ at: number }>();
     if (!row) throw err;
     if (!retry || row.at !== at) return { kind: 'taken' };
-    const m = (featOf(feat)?.reward.cash ?? 0) > 0 ? await moneyOf(db, accountId) : null;
-    return { kind: 'applied', ...(m ? { money: { balance: m.balance, inPlay: m.in_play, rev: m.rev } } : {}) };
+    const m = paid > 0 ? await moneyOf(db, accountId) : null;
+    return { kind: 'applied', paid, ...(m ? { money: { balance: m.balance, inPlay: m.in_play, rev: m.rev } } : {}) };
   }
 }
 
 /** An account's progress and feats as D1 has them. */
-export async function featsOf(db: D1Database, accountId: number): Promise<{ tally: Record<string, number>; feats: { feat: string; at: number }[] }> {
-  const [t, f] = await db.batch([
+export async function featsOf(db: D1Database, accountId: number): Promise<{ tally: Record<string, number>; feats: { feat: string; at: number; paid?: Cents }[] }> {
+  const [t, f, g] = await db.batch([
     db.prepare(`SELECT key, n FROM casino_tally WHERE account_id = ?1`).bind(accountId),
     db.prepare(`SELECT feat, at FROM casino_feats WHERE account_id = ?1 ORDER BY at`).bind(accountId),
+    db.prepare(`SELECT op_id, amount FROM casino_ledger WHERE account_id = ?1 AND kind = 'grant' AND op_id LIKE 'feat:%'`).bind(accountId),
   ]);
+  const prefix = `feat:${accountId}:`;
+  const paid = new Map((g!.results as { op_id: string; amount: number }[]).map((r) => [r.op_id.slice(prefix.length), r.amount]));
   const tally: Record<string, number> = {};
   for (const r of t!.results as { key: string; n: number }[]) if (isProgressKey(r.key)) tally[r.key] = r.n;
   // a feat taken off the list (never done once shipped, but a row can outlive a rename in dev)
-  const feats = (f!.results as { feat: string; at: number }[]).filter((r) => featOf(r.feat));
+  const feats = (f!.results as { feat: string; at: number }[])
+    .filter((r) => featOf(r.feat))
+    .map((r) => {
+      const got = paid.get(r.feat) ?? (featOf(r.feat)?.reward.cash ? 0 : undefined);
+      return got !== undefined ? { ...r, paid: got } : r;
+    });
   return { tally, feats };
 }
 
@@ -517,9 +553,11 @@ export class FeatBook {
     // Feats earned here and not yet paid, each stamped once with when it was earned.
     // `tries` counts the batches sent for it: only a retry can find its own earlier try landed.
     // `show_at` is when the player sees the round that earned it: the floor hears no sooner.
+    // `cash` is what it pays: an achievement's is set by its round's stake as it's earned; a
+    // challenge's is settled on the first try and kept, so a retry pays exactly the same.
     sql.exec(`CREATE TABLE IF NOT EXISTS feat_todo (
       account_id INTEGER NOT NULL, feat TEXT NOT NULL, at INTEGER NOT NULL, tries INTEGER NOT NULL DEFAULT 0,
-      show_at INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (account_id, feat)) WITHOUT ROWID`);
+      show_at INTEGER NOT NULL DEFAULT 0, cash INTEGER, PRIMARY KEY (account_id, feat)) WITHOUT ROWID`);
     sql.exec(`CREATE TABLE IF NOT EXISTS feat_meta (k TEXT PRIMARY KEY, v INTEGER NOT NULL) WITHOUT ROWID`);
     // after a restart, every account with unsent progress gets its challenges looked at again
     for (const r of sql.exec<{ account_id: number }>(`SELECT DISTINCT account_id FROM feat_pending`).toArray()) this.dirty.add(r.account_id);
@@ -546,8 +584,10 @@ export class FeatBook {
       }
       const have = this.base.get(accountId)?.have;
       for (const feat of f.moments) {
-        if (have?.has(feat) || !featOf(feat)) continue;
-        this.sql.exec(`INSERT OR IGNORE INTO feat_todo (account_id, feat, at, show_at) VALUES (?1, ?2, ?3, ?4)`, accountId, feat, now, showAt);
+        const def = featOf(feat);
+        if (have?.has(feat) || !def) continue;
+        const cash = cashFor(def, { stake: f.stake });
+        this.sql.exec(`INSERT OR IGNORE INTO feat_todo (account_id, feat, at, show_at, cash) VALUES (?1, ?2, ?3, ?4, ?5)`, accountId, feat, now, showAt, cash);
         todo = true;
       }
       if (keys.length === 0) continue;
@@ -622,7 +662,9 @@ export class FeatBook {
     }
     // 2. Feats to pay, oldest first; each account's tallies land first.
     const todo = this.sql
-      .exec<{ account_id: number; feat: string; at: number; tries: number; show_at: number }>(`SELECT account_id, feat, at, tries, show_at FROM feat_todo ORDER BY at, feat`)
+      .exec<{ account_id: number; feat: string; at: number; tries: number; show_at: number; cash: number | null }>(
+        `SELECT account_id, feat, at, tries, show_at, cash FROM feat_todo ORDER BY at, feat`,
+      )
       .toArray();
     const flushed = new Set<number>();
     for (const t of todo) {
@@ -635,11 +677,14 @@ export class FeatBook {
         flushed.add(t.account_id);
         await this.flush(db, t.account_id);
       }
-      this.sql.exec(`UPDATE feat_todo SET tries = tries + 1 WHERE account_id = ?1 AND feat = ?2`, t.account_id, t.feat);
-      const r = await unlockFeat(db, t.account_id, t.feat, t.at, t.tries > 0);
+      // a challenge's cash, from where the player stands now (a comp's from what play has cost)
+      const cash = t.cash ?? cashFor(featOf(t.feat)!, { tally: this.totals(t.account_id) });
+      this.sql.exec(`UPDATE feat_todo SET tries = tries + 1, cash = ?3 WHERE account_id = ?1 AND feat = ?2`, t.account_id, t.feat, cash);
+      const r = await unlockFeat(db, t.account_id, t.feat, t.at, t.tries > 0, cash);
       base.have.add(t.feat);
+      if (r.kind === 'applied' && r.paid > 0 && featOf(t.feat)?.comp) addTally(base.tally, { comp: r.paid });
       this.sql.exec(`DELETE FROM feat_todo WHERE account_id = ?1 AND feat = ?2`, t.account_id, t.feat);
-      if (r.kind === 'applied') await this.announce(out, t.account_id, t.feat, t.at, t.show_at, r.money);
+      if (r.kind === 'applied') await this.announce(out, t.account_id, t.feat, t.at, t.show_at, r.paid, r.money);
     }
     // 3. Tallies whose time has come (a flush in flight is always due).
     const due = this.sql
@@ -656,9 +701,9 @@ export class FeatBook {
     );
   }
 
-  private async announce(out: FeatOut, accountId: number, feat: string, at: number, showAt: number, money?: { balance: Cents; inPlay: Cents; rev: number }): Promise<void> {
+  private async announce(out: FeatOut, accountId: number, feat: string, at: number, showAt: number, paid: Cents, money?: { balance: Cents; inPlay: Cents; rev: number }): Promise<void> {
     const name = this.sql.exec<{ name: string }>(`SELECT name FROM feat_acct WHERE account_id = ?1`, accountId).toArray()[0]?.name ?? '';
-    out.send(accountId, { t: 'feat', feat, at, ...(money ? { balance: money } : {}) });
+    out.send(accountId, { t: 'feat', feat, at, paid, ...(money ? { balance: money } : {}) });
     const f = featOf(feat);
     const emote = f?.reward.emote;
     await Promise.all([

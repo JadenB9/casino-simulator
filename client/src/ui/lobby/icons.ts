@@ -39,3 +39,21 @@ export const unlock = () =>
 export const chevron = () => icon('chev', [['path', { class: 'lb-s', d: 'm4.5 6.2 3.5 3.6 3.5-3.6' }]]);
 
 export const back = () => icon('back', [['path', { class: 'lb-s', d: 'M9.8 3.5 5.3 8l4.5 4.5' }]]);
+
+// v6 invite6: the invite button, a picked row, the search field, dismiss
+export const invite = () =>
+  icon('invite', [
+    ['circle', { class: 'lb-f', cx: '6.2', cy: '5', r: '2.6' }],
+    ['path', { class: 'lb-f', d: 'M1.4 13.6c.3-2.9 2.3-4.6 4.8-4.6s4.5 1.7 4.8 4.6z' }],
+    ['path', { class: 'lb-s', d: 'M13 5.2v4.4M10.8 7.4h4.4' }],
+  ]);
+
+export const tick = () => icon('tick', [['path', { class: 'lb-s', d: 'm3.6 8.3 2.8 2.8 6-6.2' }]]);
+
+export const search = () =>
+  icon('search', [
+    ['circle', { class: 'lb-s', cx: '7', cy: '7', r: '4.3' }],
+    ['path', { class: 'lb-s', d: 'm10.2 10.2 3.6 3.6' }],
+  ]);
+
+export const cross = () => icon('cross', [['path', { class: 'lb-s', d: 'm4.2 4.2 7.6 7.6m0-7.6-7.6 7.6' }]]);

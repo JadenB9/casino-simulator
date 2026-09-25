@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { FEATS, featOf } from '../../shared/src/feats.ts';
-import { dollars, earnedOn, featGroups, feedLines, isMoneyTally, progressOf, rewardParts, titleText, unlockKind, unlockSub } from '../src/ui/feats/lines.ts';
+import { cashNote, dollars, earnedOn, paidNote, featGroups, feedLines, isMoneyTally, progressOf, rewardParts, titleText, unlockKind, unlockSub } from '../src/ui/feats/lines.ts';
 
 // How the achievements read: the sheet's groups and bars, the card when you earn one, the feed.
 describe('the sheet', () => {
@@ -24,7 +24,7 @@ describe('the sheet', () => {
 
   it('names rewards the way the boutique does, cash first', () => {
     expect(rewardParts(featOf('vp-royal')!)).toEqual([
-      { kind: 'cash', text: '$50,000' },
+      { kind: 'cash', text: 'Up to $50,000' },
       { kind: 'item', text: 'Royal Flush Pendant' },
       { kind: 'title', text: 'Title: Royal' },
     ]);
@@ -52,6 +52,31 @@ describe('the sheet', () => {
     const now = Date.UTC(2026, 8, 25, 12);
     expect(earnedOn(Date.UTC(2026, 7, 26, 12), now)).toBe('Aug 26');
     expect(earnedOn(Date.UTC(2025, 11, 31, 12), now)).toBe('Dec 31, 2025');
+  });
+});
+
+describe('cash that scales', () => {
+  it('the sheet says how an achievement pays and where it pays in full', () => {
+    expect(cashNote(featOf('mn-clear')!)).toBe('6.2¢ for every $1 the round stakes: the full $10,000 on a $160,000 round.');
+    expect(cashNote(featOf('dc-long')!)).toBe('10¢ for every $1 the round stakes: the full $1,000 on a $10,000 round.');
+    expect(cashNote(featOf('cr-long')!)).toMatch(/¢ for every \$1 the round stakes/);
+    expect(cashNote(featOf('rounds-100')!)).toMatch(/^A comp: half the house's edge on all your play/);
+    expect(cashNote(featOf('daily:2026-09-25:0')!)).toMatch(/today's play/);
+    // an amount challenge pays as listed; a title-only feat has nothing to say
+    expect(cashNote(featOf('won-10k')!)).toBeNull();
+    expect(cashNote(featOf('first-win')!)).toBeNull();
+    expect(rewardParts(featOf('won-10k')!)[0]).toEqual({ kind: 'cash', text: '$1,000' });
+    expect(rewardParts(featOf('rounds-100')!)[0]).toEqual({ kind: 'cash', text: 'Up to $1,000' });
+  });
+
+  it('the card and the sheet say what it paid when it was less, and why', () => {
+    const sweep = featOf('mn-clear')!;
+    expect(unlockSub(sweep, 6)).toBe('Mines · +$0.06 of $10,000: bet more for the full amount · Title: Minesweeper');
+    expect(unlockSub(sweep, 1_000_000)).toBe('Mines · +$10,000 · Title: Minesweeper');
+    expect(unlockSub(featOf('rounds-100')!, 2_375)).toBe('+$23.75 of $1,000: comps grow with your play');
+    expect(paidNote(sweep, 6)).toBe('Paid $0.06 of $10,000');
+    expect(paidNote(sweep, 1_000_000)).toBeNull();
+    expect(paidNote(featOf('first-win')!, 0)).toBeNull();
   });
 });
 

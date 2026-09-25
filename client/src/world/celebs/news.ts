@@ -103,7 +103,8 @@ export class Sighting {
       this.card = c;
       this.shown = s.name;
     }
-    const near = s.metres < 4 ? 'right here' : `${Math.round(s.metres)} m away`;
+    // (v6 city6: Infinity when you're out of the casino, a ride away)
+    const near = !Number.isFinite(s.metres) ? 'in the casino' : s.metres < 4 ? 'right here' : `${Math.round(s.metres)} m away`;
     this.where!.textContent = s.met ? `${s.room} · met tonight` : `${s.room} · ${near}`;
     this.card.classList.toggle('met', s.met);
   }

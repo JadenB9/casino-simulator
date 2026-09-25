@@ -177,7 +177,7 @@ describe('the building', () => {
     stool.x = p.bar.front - 0.1;
     // a sign hung too high goes through the ceiling
     const sign = p.solids.find((s) => s.id === 'sign-table-games')!;
-    sign.y1 = 3.5;
+    sign.y1 = 4.5;
     // a plant in a table
     const bj = p.stations.find((s) => s.id === 'bj-1')!;
     p.solids.push({ id: 'stray-plant', group: 'stray', x: bj.x, z: bj.z, w: 1.2, d: 1.2, yaw: 0, y0: 0.4, y1: 1.5, round: true });

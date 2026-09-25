@@ -130,8 +130,10 @@ export class Bank {
     box(wood, -N * PITCH / 2, N * PITCH / 2, 0, CAR_H, back, -DEPTH, 1.4);
     box(clad, -N * PITCH / 2, N * PITCH / 2, CAR_H, CAR_H + 0.1, back, -FRONT, 1.2);
     const mirror = mats.get('mirror');
-    const steel = mats.get('chrome');
-    const floor = mats.get('marble-black');
+    // matte in the car: a polished floor or chrome sill under the lobby's lights and the zone's sun
+    // throws a specular hot spot at your feet, and the glow blooms it into a blob
+    const steel = mats.get('steel');
+    const floor = mats.get('lift-floor');
     for (let i = 0; i < N; i++) {
       const c = cx(i);
       const w = PITCH - 0.2;

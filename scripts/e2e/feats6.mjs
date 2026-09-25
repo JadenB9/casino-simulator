@@ -205,10 +205,14 @@ for (let i = 0; i < 150 && !long; i++) {
   long = (await featsSeen(A.p)).includes('dc-long');
 }
 check(long, 'Long Odds came from the table after a 4% roll won');
-// The card waits for the roll to be shown; then it's up for five seconds.
-const card = await A.p.waitForSelector('.ft-card', { timeout: 10_000 }).catch(() => null);
-check(!!card, 'the unlock card shows at the table');
-await A.p.waitForTimeout(700);
+// A $1 roll: Long Odds pays 10 cents of its $1,000 (its cash scales with the stake).
+const longMsg = await A.p.evaluate(() => window.__feats.find((m) => m.feat === 'dc-long') ?? null);
+check(longMsg?.paid === 10, `Long Odds on a $1 roll paid ${longMsg?.paid} cents, 10 of its $1,000`);
+// The card waits for the roll to be shown (and Beginner's Luck's card before it).
+const card = await A.p.waitForSelector('.ft-card:has-text("Long Odds")', { timeout: 15_000 }).catch(() => null);
+const cardText = card ? await card.textContent() : '';
+check(/\$0\.10 of \$1,000/.test(cardText ?? '') && /bet more/.test(cardText ?? ''), `the unlock card says what it paid and why: "${cardText}"`);
+await A.p.waitForTimeout(500);
 await A.p.screenshot({ path: `${out}/card-at-table.png` });
 const toast = await B.p.waitForSelector('.bigwin-toast.feat', { timeout: 15_000 }).catch(() => null);
 const toastText = toast ? await toast.textContent() : '';

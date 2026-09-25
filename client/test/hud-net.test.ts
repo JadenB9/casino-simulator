@@ -26,8 +26,8 @@ describe('the HUD session net', () => {
 
   it("leaves an achievement's cash out, and counts only what was earned since", () => {
     const start = netStart(profile({ feats: [{ feat: 'first-win', at: 1 }] }), 0);
-    // won $100 at play; Long Odds paid $1,000 beside it
-    const now = profile({ balance: 51_100 * D, feats: [{ feat: 'first-win', at: 1 }, { feat: 'dc-long', at: 2 }] });
+    // won $100 at play; Long Odds paid $12.50 beside it (its cash scales with the stake)
+    const now = profile({ balance: 50_112.5 * D, feats: [{ feat: 'first-win', at: 1 }, { feat: 'dc-long', at: 2, paid: 12.5 * D }] });
     expect(sessionNet(now, start, null, 0)).toBe(100 * D);
   });
 
@@ -43,6 +43,18 @@ describe('the HUD session net', () => {
     // and what was spent before the HUD came up doesn't count either way
     const later = netStart(profile({ balance: 50_000 * D }), 250_000 * D);
     expect(sessionNet(profile({ balance: 49_991 * D }), later, null, 250_009 * D)).toBe(0);
+  });
+
+  it('v6 bank6: moving money into the bank is not a loss, and what the bank made is not a win', () => {
+    const start = netStart(profile({ bank: { savings: 0, deposits: 0, fundCost: 0, fundValue: 0, gain: 0, worth: 50_000 * D } }), 0);
+    // $20,000 to savings, $10,000 in a deposit, $5,000 in the fund (now worth $4,000)
+    const moved = profile({ balance: 15_000 * D, bank: { savings: 20_000 * D, deposits: 10_000 * D, fundCost: 5_000 * D, fundValue: 4_000 * D, gain: 0, worth: 49_000 * D } });
+    expect(sessionNet(moved, start, null, 0)).toBe(0);
+    // $300 of interest paid and $1,000 from a friend: the bank's gain, not play
+    const later = profile({ balance: 16_000 * D, bank: { savings: 20_300 * D, deposits: 10_000 * D, fundCost: 5_000 * D, fundValue: 4_000 * D, gain: 1_300 * D, worth: 50_300 * D } });
+    expect(sessionNet(later, start, null, 0)).toBe(0);
+    // then $500 won at a table
+    expect(sessionNet({ ...later, balance: 16_500 * D }, start, null, 0)).toBe(500 * D);
   });
 
   it('a purchase answered by the server is counted as spending once, whatever its rev', () => {
