@@ -230,6 +230,11 @@ async function enterAs(name, phone = false) {
   }
   await p.waitForSelector('.hud', { timeout: 30000 });
   await p.waitForTimeout(1500);
+  // the day's bonus sheet may greet you: close whatever is over the floor
+  for (let i = 0; i < 4 && (await p.$('.sheet')); i++) {
+    await p.keyboard.press('Escape');
+    await p.waitForTimeout(400);
+  }
   return { p, ctx, errors };
 }
 
@@ -435,11 +440,6 @@ if (checks.includes('floor')) {
 
 if (checks.includes('touch')) {
   const t = await enterAs('looks6_e2e_a', true);
-  // the day's bonus sheet may greet you: close whatever is over the floor
-  for (let i = 0; i < 4 && (await t.p.$('.sheet')); i++) {
-    await t.p.keyboard.press('Escape');
-    await t.p.waitForTimeout(400);
-  }
   own('looks6_e2e_a', [['skateboard', 60000]]);
   await saveLook(t.p, { ride: 'skateboard' });
   // the login's clicks came from a mouse, which turns the touch controls off; a touch turns them on
