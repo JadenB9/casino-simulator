@@ -294,7 +294,7 @@ export const ROOMS: RoomSpec[] = [
       [-4.0, 3.6, 0.93],
       [4.0, 3.6, -0.93],
     ],
-    plants: [[-6.4, 5.4]],
+    plants: [[-6.4, 5.4], [6.4, 5.4]],
   },
 
   // --- the pit: table games in two rows round the staff area, under the coffered ceiling ------------
