@@ -7,6 +7,11 @@
 // seconds per decision and stands when the time runs out; results show for 5 seconds, then the
 // next window opens.
 //
+// The shoe: a continuous shuffling machine, as on the Strip's CSM tables and online. Every round
+// is dealt from all six decks freshly shuffled, so what was dealt before tells nothing about what
+// comes next and counting cards gains nothing (docs/ODDS-AUDIT.md §1.1). The house edge is the
+// fresh-shoe figure, 0.3336% at basic strategy.
+//
 // Money: chips leave the stack when they go down on the layout (bets, doubles, splits,
 // insurance) and come back when a hand or the insurance settles. The rule core keeps a running
 // wagered/returned per circle, and every step turns the change in those into chip moves.
@@ -186,6 +191,8 @@ function wrapUp(s: BlackjackState, ctx: EngineCtx, events: GameEvent[], before: 
   let rounds: RoundResult[] | undefined;
   if (r.stage === 'done') {
     rounds = r.spots.filter((sp) => seated.has(S.owner(ctx, sp.seat)) && !sp.reported).map((sp) => S.roundOf(ctx, sp.seat, sp.wagered, sp.returned));
+    // The round's cards go into the shuffler: the next round is dealt from a freshly shuffled shoe.
+    s.shoe = openShoe(ctx.rng);
     s.phase = 'results';
     s.deadline = multi ? ctx.now + RESULTS_MS : null;
     events.push({ type: 'done', round: s.round });

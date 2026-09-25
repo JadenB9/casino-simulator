@@ -5,7 +5,7 @@
 //             that warning, you go to jail. A warning runs out after the window.
 //   Jail      Across the street. You stay inside until your winnings at the jail's own tables
 //             reach your bail; then you walk out with everything you have, strikes cleared.
-//   Bail      A fiftieth of what you had when you went in (balance and chips on tables), rounded
+//   Bail      A fiftieth of what you had when you went in (balance, chips on tables, the bank), rounded
 //             to $100, never under $1,000 or over $25,000.
 //   Progress  Each finished round at a jail table adds what it won or lost, but never takes you
 //             below zero. Every round has a chance to win and a loss can only send you back to
@@ -90,7 +90,7 @@ export function hotAmount(l: TableLimits | null): Cents {
 export const BAIL_MIN: Cents = 1_000 * DOLLAR;
 export const BAIL_MAX: Cents = 25_000 * DOLLAR;
 
-/** The bail for someone worth `worth` (balance plus chips on tables) when they went in. */
+/** The bail for someone worth `worth` (balance, chips on tables and the bank at cost) when they went in. */
 export function bailFor(worth: Cents): Cents {
   const raw = Math.round(Math.max(0, worth) / 50 / (100 * DOLLAR)) * 100 * DOLLAR;
   return Math.min(BAIL_MAX, Math.max(BAIL_MIN, raw));

@@ -88,12 +88,13 @@ function report(label: string, published: number, n: number, { tally, counts }: 
   console.log(`  per 100 rounds: naturals ${per(counts.naturals)}, pushes ${per(counts.pushes)}, surrenders ${per(counts.surrenders)}, splits ${per(counts.splits)}, doubles ${per(counts.doubles)}`);
 }
 
-// The game as the table deals it: a 6-deck shoe to the cut card at 75%. Wizard of Odds
+// For reference, the same rules dealt as a shoe game: a 6-deck shoe to the cut card at 75% (the
+// table itself deals from a continuous shuffler, the next test). Wizard of Odds
 // calculator for exactly these rules (6D, S17, DAS, split to 4, no resplit aces, late
 // surrender, peek, 3:2), total-dependent basic strategy dealt to a cut card: 0.3536%, which
 // docs/rules/table-games.md §1.2 rounds to 0.354% for this test. SD is about 1.14, so 12 million
 // rounds give an SE of about 0.033%.
-it('blackjack: basic strategy to a 75% cut card has the published 0.354% edge (Monte Carlo, 3 SE)', () => {
+it('blackjack, for reference: basic strategy to a 75% cut card has the published 0.354% edge (Monte Carlo, 3 SE)', () => {
   const PUBLISHED = 0.00354;
   const n = mcRounds(12_000_000);
   const run = simulate(n, 20260922, false);
@@ -101,8 +102,8 @@ it('blackjack: basic strategy to a 75% cut card has the published 0.354% edge (M
   expect(Math.abs(run.tally.edge - PUBLISHED)).toBeLessThanOrEqual(3 * run.tally.se);
 });
 
-// The same game with a fresh shoe every round, which is what the reference figures in §1.2 and
-// §1.6 were measured on: the continuous-shuffler edge (0.3336%), how often each thing happens,
+// The game as the table deals it: a fresh shoe every round (its continuous shuffler), which is also
+// what the reference figures in §1.2 and §1.6 were measured on: the published edge (0.3336%), how often each thing happens,
 // and the whole distribution of a round's net result. A settlement bug can move the
 // distribution a lot while barely moving the edge, so this is checked bin by bin as well.
 it('blackjack: from a fresh shoe every round, the edge, the rates and the net distribution match the reference (Monte Carlo)', () => {

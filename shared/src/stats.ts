@@ -36,15 +36,17 @@ export function isStatMaxTally(key: string): boolean {
 /**
  * What one counted round adds to the tallies, beside the feats' own keys: `profit` is returned
  * minus wagered. Pure; server/src/feats.ts roundFacts calls it for every round with a stake.
+ * `fromHouse` false (Hold'em, where chips go between players) keeps the round to its own game's
+ * keys: two players passing a pot back and forth mustn't climb the boards of everything.
  */
-export function addRoundStats(tally: Record<string, number>, game: GameId, profit: number): void {
+export function addRoundStats(tally: Record<string, number>, game: GameId, profit: number, fromHouse = true): void {
   const add = (k: string, n: number) => (tally[k] = (tally[k] ?? 0) + n);
   add(`rounds:${game}`, 1);
-  if (profit > 0) add('wins', 1);
+  if (profit > 0 && fromHouse) add('wins', 1);
   if (profit < 0) {
-    add('lost', -profit);
+    if (fromHouse) add('lost', -profit);
     add(`lost:${game}`, -profit);
-    tally.worst = Math.max(tally.worst ?? 0, -profit);
+    if (fromHouse) tally.worst = Math.max(tally.worst ?? 0, -profit);
     tally[`worst:${game}`] = Math.max(tally[`worst:${game}`] ?? 0, -profit);
   }
 }

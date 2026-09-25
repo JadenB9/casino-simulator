@@ -358,7 +358,8 @@ async function handleSocket(request: Request, env: Env, url: URL, route: string,
   const solo = route.match(/^solo\/([a-z]+)$/);
   if (solo) {
     const game = solo[1];
-    if (!isGameId(game)) return closeWith(CLOSE.NOT_FOUND, 'no such game');
+    // The test fixture game (High Card, no house edge) is only on the dev stack, like its lobbies.
+    if (!isGameId(game) || (CATALOG[game].dev && env.CASINO_DEV !== '1')) return closeWith(CLOSE.NOT_FOUND, 'no such game');
     if (jail && !isJailGame(game)) return closeWith(CLOSE.FORBIDDEN, 'in jail');
     const variant = variantOf(game, url.searchParams.get('variant'));
     // The name comes from the ticket's account, so nobody can open another player's solo table.

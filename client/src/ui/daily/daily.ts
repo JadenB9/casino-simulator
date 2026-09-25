@@ -32,6 +32,22 @@ export interface DailyHandle {
 }
 
 const SHOWN_KEY = 'casino.daily.shown';
+/** Set (to '1') by a headless check that wants the sheet on arrival; see autoOpens(). */
+const AUTO_KEY = 'casino.daily.auto';
+
+/**
+ * Whether the sheet opens by itself on arrival. Not for a browser driven by a script (Playwright
+ * sets navigator.webdriver): the older checks walk straight onto the floor and would find it
+ * holding the keys. A script that wants it sets AUTO_KEY in localStorage first.
+ */
+function autoOpens(): boolean {
+  if (typeof navigator === 'undefined' || !navigator.webdriver) return true;
+  try {
+    return localStorage.getItem(AUTO_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
 const NS = 'http://www.w3.org/2000/svg';
 
 /** A wrapped present from the front, the ribbon over it and a bow on top (the HUD's line style). */
@@ -183,7 +199,7 @@ export function mountDaily(deps: DailyDeps): DailyHandle {
 
   // Walking onto the floor with today's still waiting: the sheet, once a day per tab.
   void refresh().then(() => {
-    if (disposed || !status || status.claimed) return;
+    if (disposed || !status || status.claimed || !autoOpens()) return;
     let shown: string | null = null;
     try {
       shown = sessionStorage.getItem(SHOWN_KEY);

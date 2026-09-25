@@ -362,21 +362,29 @@ describe('blackjack shoe', () => {
     expect([...counts.values()].every((n) => n === 6)).toBe(true);
   });
 
-  it('the cut card coming out finishes the round, then the shoe is shuffled and one card burned', () => {
+  it('deals every round from a freshly shuffled shoe (a continuous shuffler): no cut card, nothing to count', () => {
     const sim = solo();
-    rig(sim, 'Ts 9d 8h 7c Kd', 2);
+    rig(sim, 'Ts 9d 8h 7c Kd');
     sim.act(0, { type: 'bet', amount: 2500 });
     sim.act(0, { type: 'deal' });
-    expect(types(sim)).toContain('cut');
-    expect(view(sim).phase).toBe('play');
-    expect(view(sim).shoe.lastHand).toBe(true);
-    sim.act(0, { type: 'stand' });
-    const t = types(sim);
-    expect(t.indexOf('shuffle')).toBeGreaterThan(t.lastIndexOf('result'));
-    expect(t).toContain('burn');
-    expect(sim.state.shoe.cards).toHaveLength(312);
-    expect(sim.state.shoe.pos).toBe(1);
     expect(view(sim).shoe.lastHand).toBe(false);
+    sim.act(0, { type: 'stand' });
+    // the round's cards went into the shuffler: a whole new shoe of six decks is waiting
+    const next = sim.state.shoe;
+    expect(next.cards).toHaveLength(312);
+    expect(next.pos).toBe(1);
+    expect(next.cards.slice(0, 5).join(' ')).not.toBe('Ts 9d 8h 7c Kd');
+    expect(types(sim)).not.toContain('cut');
+    // round after round, each starts at the top of a new shoe
+    for (let i = 0; i < 20; i++) {
+      sim.act(0, { type: 'bet', amount: 2500 });
+      sim.act(0, { type: 'deal' });
+      for (let v = view(sim); v.phase === 'insurance' || v.phase === 'play'; v = view(sim)) {
+        sim.act(0, v.phase === 'insurance' ? { type: 'insurance', take: false } : { type: 'stand' });
+      }
+      expect(sim.state.shoe.pos).toBe(1);
+      expect(view(sim).shoe.left).toBe(311);
+    }
   });
 
   it('a shoe that runs dry mid-round reshuffles the discards, not the cards on the table', () => {
@@ -699,8 +707,8 @@ describe('blackjack money', () => {
 
   it('the table and the Monte Carlo loop play identical rounds from the same shoe', () => {
     // The engine (through the host stand-in) and the bare rule core, fed the same seed, must
-    // deal the same cards and reach the same result every round, reshuffles included. This is
-    // what lets the Monte Carlo test stand for the table.
+    // deal the same cards and reach the same result every round, the shuffle after each included.
+    // This is what lets the Monte Carlo test stand for the table.
     const sim = new TableSim(engine, seededRng(42), 'solo', [{ seat: 0, stack: 1e12 }]) as Sim;
     const rng = seededRng(42);
     const d: Dealing = { shoe: openShoe(rng), rng, out: null };
@@ -718,6 +726,8 @@ describe('blackjack money', () => {
       const r = startRound([{ seat: 0, bet: 2500 }], d);
       if (r.stage === 'insurance') decideInsurance(r, 0, false, d);
       for (let c = current(r); c; c = current(r)) play(r, 0, basicStrategy(c.hand.cards, r.dealer[0]!, legalMoves(r, c.spot, c.hand)), d);
+      // the table's continuous shuffler: a freshly shuffled shoe after every round
+      d.shoe = openShoe(rng);
 
       const v = view(sim);
       expect(v.spots[0]!.hands.map((h) => h.cards)).toEqual(r.spots[0]!.hands.map((h) => h.cards));

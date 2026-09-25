@@ -26,8 +26,13 @@
 .pa-pay .money { color: var(--ink); }
 .pa-deck ~ .tip-line { bottom: 104px; }
 
-@media (max-width: 900px) {
+@media (max-width: 980px) {
   .pa-side { display: none; }
+  .pa-deck { gap: 8px; padding: 8px 10px; }
+  .pa-dial { width: 104px; }
+  .pa-meters { gap: 8px; }
+  .pa-meter { min-width: 52px; }
+  .pa-launch { min-width: 104px; }
 }
 @media (max-width: 720px) {
   .pa-deck { flex-wrap: wrap; justify-content: center; width: calc(100vw - 20px); max-width: 460px; bottom: 54px; gap: 8px 10px; }

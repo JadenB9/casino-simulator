@@ -76,12 +76,18 @@ export async function statsOf(db: D1Database, accountId: number, now: number): P
     Object.assign(line(g), { counted, wins: n(`wins:${g}`), won: n(`won:${g}`), lost: n(`lost:${g}`), biggestLoss: n(`worst:${g}`) });
   }
 
-  const total: StatLine = { ...EMPTY, counted: n('rounds'), wins: n('wins'), won: n('won'), lost: n('lost'), biggestLoss: n('worst') };
+  // Won, lost and wins in all from the games' own rows: the everywhere tallies leave Hold'em out
+  // (feats.ts roundFacts), and your own record shouldn't.
+  const total: StatLine = { ...EMPTY, counted: n('rounds') };
   for (const s of Object.values(games)) {
     total.rounds += s.rounds;
     total.wagered += s.wagered;
     total.net += s.net;
     total.biggestWin = Math.max(total.biggestWin, s.biggestWin);
+    total.wins += s.wins;
+    total.won += s.won;
+    total.lost += s.lost;
+    total.biggestLoss = Math.max(total.biggestLoss, s.biggestLoss);
   }
 
   let celebs = 0;

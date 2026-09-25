@@ -344,7 +344,7 @@ describe('blackjack spots: money and odds', () => {
 
   it('the table and the Monte Carlo loop play identical three-spot rounds from the same shoe', () => {
     // As for one spot (blackjack.test.ts): the engine and the bare rule core, fed the same seed,
-    // deal the same cards to the same circles and reach the same results, reshuffles included.
+    // deal the same cards to the same circles and reach the same results, the shuffle after each round included.
     const sim = new TableSim(engine, seededRng(43), 'solo', [{ seat: 0, stack: 1e12 }]) as Sim;
     const rng = seededRng(43);
     const d: Dealing = { shoe: openShoe(rng), rng, out: null };
@@ -364,6 +364,8 @@ describe('blackjack spots: money and odds', () => {
       const r = startRound(bets, d);
       if (r.stage === 'insurance') for (const s of r.spots) if (r.stage === 'insurance') decideInsurance(r, s.seat, false, d);
       for (let c = current(r); c; c = current(r)) play(r, c.spot.seat, basicStrategy(c.hand.cards, r.dealer[0]!, legalMoves(r, c.spot, c.hand)) as Move, d);
+      // the table's continuous shuffler: a freshly shuffled shoe after every round
+      d.shoe = openShoe(rng);
 
       const v = view(sim);
       expect(v.spots.map((s) => s.hands.map((h) => h.cards))).toEqual(r.spots.map((s) => s.hands.map((h) => h.cards)));

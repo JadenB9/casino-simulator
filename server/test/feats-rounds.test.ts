@@ -598,7 +598,7 @@ describe('the online games', () => {
 
   it('junk in the events costs the moment, never the tallies', () => {
     const f = roundFacts('holdem', '', { events: [{ type: 'win', winners: [{ seat: 0, amount: 5 }], hand: 'x', best: ['zz', 'yy', 1, null, {}] }] as never, state: null }, round(100, 200));
-    expect(f.tally.won).toBe(100);
+    expect(f.tally['won:holdem']).toBe(100);
   });
 });
 
@@ -703,7 +703,8 @@ describe('the real engines send what the feats read', () => {
         const sim = playLobby(game, seed, 1_500);
         expect(sim.expectRounds).toBeGreaterThan(20);
         expect(sim.tally.rounds ?? 0).toBe(sim.expectRounds);
-        expect(sim.tally.won ?? 0).toBe(sim.expectWon);
+        // (Hold'em pots are won from other players: they count at Hold'em only)
+        expect(sim.tally.won ?? 0).toBe(game === 'holdem' ? 0 : sim.expectWon);
         expect(sim.tally[`won:${game}`] ?? 0).toBe(sim.expectWon);
         for (const m of sim.seen.keys()) seen.add(m);
         // nothing from another game's list

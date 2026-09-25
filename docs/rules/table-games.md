@@ -42,8 +42,8 @@ both are shown and one is picked, with the reason.
 | Rule | Setting |
 |---|---|
 | Decks | 6 (312 cards) |
-| Shuffle | Full Fisher-Yates shuffle of all 312 cards; burn 1 card after each shuffle (house procedure only, no effect on the odds) |
-| Cut card / penetration | Cut card 78 cards from the back (75% penetration). When the cut card comes out, finish the round, then shuffle before the next one |
+| Shuffle | A continuous shuffling machine (CSM), as on many Strip tables and at every online casino: after each round the dealer feeds its cards into the machine, and the next round is dealt from all 312 cards freshly shuffled (a full Fisher-Yates shuffle; one card burned, a house procedure with no effect on the odds). Nothing dealt before tells anything about the next round, so counting cards gains nothing (docs/ODDS-AUDIT.md §1.1) |
+| Cut card / penetration | None: there is no shoe to deal down. (The shoe game, dealt to a cut card 78 cards from the back, is kept below as a reference figure only) |
 | Dealer soft 17 | Stands on all 17s (S17) |
 | Hole card | American style: the dealer takes a hole card and **peeks** for blackjack when the up card is an ace or a ten-value card |
 | Blackjack pays | 3:2 |
@@ -93,9 +93,9 @@ effect at 0.020 points for 6 decks [5], without stating the penetration. The sim
 measured 0.0245 ± 0.0018 points at 75% penetration with one seat. The size depends on penetration
 and on how many seats are playing.
 
-**Which number the tests use.** Use **0.354%** when the test deals a single seat to the 75% cut
-card, matching the game as played. Use **0.334%** when the test deals every round from a fresh
-shoe. The simulated cut-card figure is 0.004 points off the published one. That gap stays under
+**Which number the tests use.** The table deals every round from a fresh shoe (its continuous
+shuffler), so the game's figure is **0.334%** (0.3336%). Use **0.354%** only for the reference
+test that deals a single seat to a 75% cut card, the shoe game this table no longer deals. The simulated cut-card figure is 0.004 points off the published one. That gap stays under
 1 SE for any run shorter than 5×10⁸ rounds.
 
 The brief's "~0.3%" is close. The often-quoted 0.26–0.28% "liberal Strip" figure assumes
@@ -115,7 +115,7 @@ Nearby rule sets from the same calculator [1], for when a rule becomes a table o
 
 | Bet / outcome | Pays | House edge | SD per unit | Source |
 |---|---|---|---|---|
-| Main bet, whole game, basic strategy | 1:1; blackjack 3:2; surrender returns ½ | 0.354% (cut card), 0.334% (fresh shoe) | 1.15 published; 1.1405 measured for this rule set | [1], [7], [6] |
+| Main bet, whole game, basic strategy | 1:1; blackjack 3:2; surrender returns ½ | 0.334% (fresh shoe, as dealt); 0.354% for a shoe game to a cut card | 1.15 published; 1.1405 measured for this rule set | [1], [7], [6] |
 | Player blackjack (natural) | 3:2 | P = 192/4043 = **4.749%** per round (fresh shoe) | – | [9] |
 | Insurance | 2:1 | **7.40%** average (−23/311: only the dealer ace is known). By the player's cards: 6.80% (no tens), 7.77% (one ten), 8.74% (two tens) | 1.386 per unit insured | [10]; per-hand values calculated |
 | Even money | 1:1 on a natural against a dealer ace | Takes a sure +1.000 instead of +1.039 by declining (6 decks) | 0 | calculated |
@@ -256,9 +256,10 @@ HARD   5-8 HHHHHHHHHH    SOFT  A2 HHHDDHHHHH    PAIRS  AA YYYYYYYYYY
 14. **Dealer stands on every 17**, soft 17 included (A-6, A-2-4, …). The dealer hits 16 or less.
 15. **Soft totals**: an ace counts 11 unless that would bust the hand. A hand is "soft" while one ace
     is still counted as 11.
-16. **Cut card reached mid-round**: finish the round, then shuffle. The engine needs a fallback in
-    case the shoe could run dry mid-round, which is practically impossible with 78 cards behind the
-    cut card. The fallback: reshuffle the discards (not the cards on the table) and keep dealing.
+16. **The shuffle**: every round is dealt from a freshly shuffled six-deck shoe (a continuous
+    shuffler), so a round can never reach a cut card or run the shoe dry. The rule functions keep
+    the shoe game's cut card and its fallback (a shoe run dry mid-round reshuffles the discards,
+    not the cards on the table) for the reference Monte Carlo.
 17. **Multi-seat order**: seats act from the dealer's left. Each seat finishes all its split hands
     before the next seat acts. The dealer's hand is played once, after every seat.
 18. **Auto-stand on 21**: a hand that reaches 21 takes no more actions.
@@ -310,9 +311,9 @@ same rule functions the table deals with (shared/test/blackjack-spots.mc.test.ts
 
 | Spots | Dealing | Published (one spot) | Measured per hand | SE | z | N |
 |---|---|---|---|---|---|---|
-| 3 | cut card at 75% | 0.354% | 0.3499% | 0.0250% | −0.16 | 12M rounds, 36M hands |
-| 3 | fresh shoe every round | 0.3336% | 0.3135% | 0.0250% | −0.80 | 12M rounds, 36M hands |
-| 5 | cut card at 75% | 0.354% | 0.3511% | 0.0327% | −0.09 | 6M rounds, 30M hands |
+| 3 | fresh shoe every round (as dealt) | 0.3336% | 0.3135% | 0.0250% | −0.80 | 12M rounds, 36M hands |
+| 5 | fresh shoe every round (as dealt) | 0.3336% | 0.2756% | 0.0327% | −1.77 | 6M rounds, 30M hands |
+| 3 | cut card at 75% (reference) | 0.354% | 0.3499% | 0.0250% | −0.16 | 12M rounds, 36M hands |
 
 The card-removal effect is far below what these runs can see. A unit test also plays 3,000
 three-spot rounds through the table engine and the bare rule functions from the same seed and

@@ -44,8 +44,8 @@ Every hand plays by the same rules, so the figures below are per hand either way
 shoe or deck changes nothing measurable (Three Card Poker, Let It Ride and Pai Gow Poker exactly
 nothing). The Monte Carlo runs with several hands, their standard errors taken
 from each round's average since the hands share the dealer's cards, are in rules/table-games.md
-§1.7 and §7.6 and rules/cards-and-machines.md §1.9: blackjack on three spots to the cut card
-0.3499% per hand (36M hands, z −0.16), Three Card Poker on three hands 3.3801% (30M hands,
+§1.7 and §7.6 and rules/cards-and-machines.md §1.9: blackjack on three spots 0.3135% per hand
+(36M hands, z −0.80) and on five 0.2756% (30M hands, z −1.77), Three Card Poker on three hands 3.3801% (30M hands,
 z +0.20), Casino War on three spots 2.3315% (30M spots, z +0.06); and in rules/table-games.md
 (Let It Ride, Pai Gow Poker): Let It Ride on three hands against one board 3.2225% per unit
 (10M hands, z −1.58), Pai Gow Poker on three hands against the dealer's one 2.8401% (3M hands,
@@ -60,7 +60,7 @@ inside 3. Seeds are fixed, so `npm run test:mc` reproduces these exactly.
 
 | Game | Rules | Bet | Published | Measured |
 |---|---|---|---|---|
-| Blackjack | 6 decks, dealer stands on soft 17, blackjack pays 3:2, double any two, double after split, split to 4 hands, no resplitting aces, late surrender, dealer peeks, insurance 2:1, cut card at 75% | Basic strategy, cut card | 0.354% | 0.328% (12M rounds, z −0.80) |
+| Blackjack | 6 decks in a continuous shuffling machine (every round from a freshly shuffled shoe), dealer stands on soft 17, blackjack pays 3:2, double any two, double after split, split to 4 hands, no resplitting aces, late surrender, dealer peeks, insurance 2:1 | Basic strategy | 0.334% | 0.326% (12M rounds, z −0.23) |
 | Roulette (American) | 0 and 00, all inside and outside bets | Every bet but the top line | 5.263% | red 5.229%, odd 5.222%, straight 17 5.748% (3M spins, z −0.59, −0.72, +1.46) |
 | | | Top line (0-00-1-2-3), 6:1 | 7.895% | 7.924% (3M spins, z +0.21) |
 | Roulette (European) | single 0, no la partage | Every bet | 2.703% | red 2.717%, odd 2.601%, straight 17 2.813% (3M spins, z +0.24, −1.77, +0.33) |
@@ -91,14 +91,14 @@ inside 3. Seeds are fixed, so `npm run test:mc` reproduces these exactly.
 | Slots | six machines, published reel strips | A "Classic Sevens" (3 reels) | 94.428% RTP | 94.563% (10M spins, z +0.65) |
 | | | B "Neon Nights" (5x3, 20 lines, free spins) | 95.374% RTP | 95.325% (10M spins, z −0.41) |
 | | | C "5x Wild" (3 reels, high volatility) | 89.820% RTP | 89.968% (50M spins, z +0.39) |
+| | | D "Diamond Line" (3 reels, doubling diamond wild) | 94.983% RTP | 94.929% (10M spins, z −0.28) |
+| | | E "Lucky Cherries" (5x3, 10 lines, Cherry Wheel) | 94.028% RTP | 94.126% (10M spins, z +0.90) |
+| | | F "Gold Rush" (5x4, 40 lines, sticky-wild free games) | 92.994% RTP | 93.138% (10M spins, z +1.22) |
 | Sic Bo | three dice in an automated shaker, US (Atlantic City) pay table, Odd and Even offered | Small, Big, Odd, Even (lose to any triple) | 2.778% | 2.755%, 2.781%, 2.754%, 2.782% (4M rolls, z −0.46, +0.06, −0.48, +0.08) |
 | | | Single number (1, 2 or 3 to 1) | 7.870% | 7.814% on 4 (4M rolls, z −1.01) |
 | | | Totals: 7 or 14 at 12:1 (best) to 9 or 12 at 6:1 (worst) | 9.722% to 18.981% | 9.507% on 7, 19.080% on 9 (4M rolls, z −1.30, +0.88) |
 | | | Specific triple (180:1) / any triple (30:1) | 16.204% / 13.889% | 15.799% on 6-6-6, 14.197% (4M rolls, z −0.66, +1.21) |
 | | | Double (10:1) / two-dice combination (5:1) | 18.519% / 16.667% | 18.524% on 5-5, 16.857% on 2-5 (4M rolls, z +0.04, +1.84) |
-| | | D "Diamond Line" (3 reels, doubling diamond wild) | 94.983% RTP | 94.929% (10M spins, z −0.28) |
-| | | E "Lucky Cherries" (5x3, 10 lines, Cherry Wheel) | 94.028% RTP | 94.126% (10M spins, z +0.90) |
-| | | F "Gold Rush" (5x4, 40 lines, sticky-wild free games) | 92.994% RTP | 93.138% (10M spins, z +1.22) |
 | Texas Hold'em | no-limit, blinds $0.50/$1 to $100K/$200K, Poker TDA rules; bot tables rake 5% (cap 3 BB, no flop no drop), people-only tables no rake | | no house edge | every seat within 1.2 SE of 0 (300K hands, 6 seats); deals uniform (chi-square z 0.45, 2M deals); bots: high-stakes line-ups beat micro ones, trivial strategies lose to them (holdem-bots.mc) |
 | Plinko (online) | 8 to 16 rows, Low/Medium/High (Stake's tables), each bounce 50/50 | 16 rows High (top pay 1,000×) | 98.976% RTP | 98.938% (4M drops, z −0.12) |
 | | | 11 rows High (best) / 8 rows Medium (worst) | 99.160% / 98.906% RTP | 99.405% / 98.913% (4M drops, z +1.18, +0.10) |
@@ -125,8 +125,10 @@ inside 3. Seeds are fixed, so `npm run test:mc` reproduces these exactly.
 | Pachinko | batches of 25 balls; start pocket 1 in 20 pays 4 and spins the reels, tulips 1 in 20 each pay 3; jackpot 1 in 32 spins pays 150 and chains on an odd number, up to 8 | Every batch, any power | 96.69189453125% RTP | 96.5720% (2M batches, z +0.59); through the engine 96.8248% (200K batches, z −0.21) |
 
 The blackjack figure is for exactly these rules. The often-quoted 0.26-0.28% assumes aces can be
-resplit, which this table doesn't allow, and a cut card adds about 0.02 points over dealing each
-round from a fresh shoe (0.334%).
+resplit, which this table doesn't allow. Every round is dealt from a freshly shuffled shoe (a
+continuous shuffling machine, as on many Strip tables and online), so counting cards gains
+nothing; the same rules dealt as a shoe game to a 75% cut card would be 0.354%, and a counter
+spreading bets could beat that (docs/ODDS-AUDIT.md §1.1).
 
 The Casino War figure most often quoted, 2.88%, is for tables that pay a tie in the war only even
 money on the raise. Pennsylvania's rules and the Mirage pay it 2:1 (a bonus equal to the bet), which

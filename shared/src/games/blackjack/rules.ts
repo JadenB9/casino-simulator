@@ -4,8 +4,9 @@
 // very same functions millions of times with the strategy chart making the decisions. So the
 // edge the test measures is the edge of the code the table runs.
 //
-// House rules (docs/rules/table-games.md §1.1): 6 decks, cut card at 75%, burn one after each
-// shuffle, dealer stands on all 17s, blackjack pays 3:2, double on any two cards, double after
+// House rules (docs/rules/table-games.md §1.1): 6 decks in a continuous shuffling machine (the
+// engine deals every round from a fresh shoe; the cut card here is for the reference Monte Carlo
+// of a shoe game), dealer stands on all 17s, blackjack pays 3:2, double on any two cards, double after
 // split, split to 4 hands, split aces once and get one card each, late surrender, the dealer
 // peeks with an ace or a ten up, insurance pays 2:1.
 
