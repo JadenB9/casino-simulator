@@ -10,8 +10,10 @@ import { formatMoney } from '../../../../shared/src/money.ts';
 import { hasLimitChoice, limitsLabel, limitsOf } from '../../../../shared/src/limits.ts';
 import type { GameClientModule, MembersMsg, TableSnapshot, TableView } from '../../games/contract.ts';
 import { el, toast } from '../kit.ts';
-import { chevron, crown, lock, unlock } from './icons.ts';
+import { chevron, crown, invite, lock, unlock } from './icons.ts';
+import type { InviteTable } from './invite-picker.ts';
 import './lobby.css';
+import './invites.css'; // v6 invite6
 
 export interface PartyPanelOpts {
   /** My account id. */
@@ -25,9 +27,20 @@ export interface PartyPanelOpts {
   sit?: () => void;
   /** Where the panel goes; defaults to #ui. */
   root?: HTMLElement;
+  /** v6 invite6: invites (ui/lobby/invites.ts); without it there is no Invite button. */
+  invites?: PartyInvites | null;
+}
+
+/** v6 invite6: what the party panel asks of the invite hub. */
+export interface PartyInvites {
+  openPicker(table: InviteTable): void;
+  closePicker(tableId?: string): void;
+  noteMet(people: { id: number; name: string }[]): void;
 }
 
 interface Party {
+  tableId: string;
+  variant: string;
   members: Member[];
   leader: number | null;
   visibility: 'public' | 'private';
@@ -65,6 +78,8 @@ export class PartyPanel {
       return;
     }
     this.update({
+      tableId: m.tableId,
+      variant: m.variant,
       members: snap.members,
       leader: snap.leader,
       visibility: m.visibility,
@@ -77,6 +92,8 @@ export class PartyPanel {
 
   onMembers(msg: MembersMsg): void {
     this.update({
+      tableId: this.party?.tableId ?? '',
+      variant: this.party?.variant ?? '',
       members: msg.members,
       leader: msg.leader,
       visibility: msg.visibility,
@@ -94,6 +111,7 @@ export class PartyPanel {
 
   dispose(): void {
     clearTimeout(this.pendingTimer);
+    if (this.party) this.opts.invites?.closePicker(this.party.tableId);
     this.root.remove();
   }
 
@@ -117,6 +135,8 @@ export class PartyPanel {
     // header, out of the way of the table.
     if (next.started && !this.party?.started) this.setCollapsed(true, false);
     this.party = next;
+    // the people you play with come first in the invite list next time
+    this.opts.invites?.noteMet(next.members.map((m) => ({ id: m.accountId, name: m.name })));
     this.root.hidden = false;
     this.settle();
   }
@@ -187,6 +207,28 @@ export class PartyPanel {
         seg.append(b);
       }
       controls.append(seg);
+    }
+
+    // v6 invite6: invite players on the floor (a private table's invite carries the way in)
+    const invites = this.opts.invites;
+    if (invites && p.tableId) {
+      const full = p.members.length >= p.maxSeats;
+      if (p.members.length === 1 && !p.started) controls.append(el('p', 'party-alone', p.pin ? 'Nobody else here yet. Invite players, or share the PIN.' : 'Nobody else here yet. Invite players to join you.'));
+      const inv = el('button', 'btn party-invite');
+      inv.type = 'button';
+      inv.append(invite(), el('span', '', full ? 'Table full' : 'Invite players'));
+      inv.disabled = full;
+      inv.addEventListener('click', () =>
+        invites.openPicker({
+          tableId: p.tableId,
+          ...(p.pin ? { pin: p.pin } : {}),
+          game: this.opts.game,
+          variant: p.variant,
+          members: p.members.map((m) => m.accountId),
+          seatsLeft: Math.max(0, p.maxSeats - p.members.length),
+        }),
+      );
+      controls.append(inv);
     }
 
     const row = el('div', 'party-row');

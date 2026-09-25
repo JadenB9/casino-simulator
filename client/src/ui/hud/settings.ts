@@ -11,6 +11,7 @@ import { openSheet } from '../menu/sheet.ts';
 import { segmented } from '../menu/parts.ts';
 import { bigWinSettings } from '../feed/settings.ts'; // features: big-win toasts
 import { controlSettings } from '../menu/controls.ts'; // world: the camera and mouse look
+import { inviteSettings } from '../lobby/invite-settings.ts'; // v6 invite6: do not disturb
 
 export interface SettingsDeps {
   root: HTMLElement;
@@ -95,6 +96,7 @@ export function openSettings(deps: SettingsDeps): Closable {
     el('h3', 'section-label', 'Tables'),
     row('Tips', tipsCtl.root, el('p', 'set-note', 'Shows the best play where a game has one (basic strategy, the video poker holds, Q-6-4) and which bets are better elsewhere.')),
     ...bigWinSettings(row), // features: big-win toasts
+    ...inviteSettings(row), // v6 invite6: do not disturb
     el('h3', 'section-label', 'Graphics'),
     row('Quality', quality.root, qBox),
     el('h3', 'section-label', 'Audio'),
