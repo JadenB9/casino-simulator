@@ -1,7 +1,8 @@
 /* "Reduce flashing & motion" (comfort.ts): <body> has the class `calm` while it's on. The shared
-   overrides live here; a module's own CSS can key on `body.calm` too. Calm keeps the light and
-   the colour of a moment and takes out the strobing and the shaking: a flashing row holds its
-   lit colours, a shake doesn't happen, a pulse halo stands still. */
+   overrides live here; a module's own CSS keys on `body.calm` too. No rule asks the system
+   for reduced motion directly: that setting only picks the switch's default, so Full means full on
+   any system. Calm keeps the light and the colour of a moment and takes out the strobing and
+   the shaking: a flashing row holds its lit colours, a shake doesn't happen, a halo stands still. */
 
 /* Shakes: the login field that refused, Mines' board on a mine, the Tower on the dragon, a full
    keno card. The colours already say it. */
@@ -9,10 +10,6 @@ body.calm .name-row.shake,
 body.calm .mn-grid.shake,
 body.calm .tw-tower.shake,
 body.calm .kn-tile.full { animation: none; }
-
-/* Video poker: the pay row and the hand's name hold lit instead of flashing. */
-body.calm .vp-row.win > * { animation: none; background: #fff49a; color: #0b1a6e; }
-body.calm .vp-status.win { animation: none; color: #fff49a; text-shadow: 0 0 18px rgba(255, 244, 154, 0.6); }
 
 /* The Bandit Wheel's winning slot: its gold ring stays lit (no four quick blinks). */
 body.calm .bw-slot.won .bw-slot-face { animation: none; }
@@ -28,15 +25,11 @@ body.calm .cf-coin.land .cf-side { animation: none; }
 body.calm .map-you .map-you-halo { animation: none; transform: scale(1.2); opacity: 0.6; }
 body.calm .backdrop-canvas { animation: none; }
 
-/* Speech and emote bubbles fade in and out where they are instead of popping and rising. */
-body.calm .emote-bubble { animation: calm-fade-in 0.2s both; }
-body.calm .emote-bubble.leaving { animation: calm-fade-out 0.4s ease-in forwards; }
-body.calm .staff-say-bubble { animation: calm-fade-in 0.2s both; }
-body.calm .staff-say-bubble.leaving { animation: calm-fade-out 0.4s forwards; }
+/* The celebration banner fades in where it stands instead of rising into place. (Each module's
+   own CSS keys the rest on body.calm too: the bubbles, video poker's rows, the emote wheel.) */
 body.calm .celebrate { animation: calm-fade-in 0.35s both; }
 body.calm .celebrate.out { transform: translate(-50%, -50%); }
 @keyframes calm-fade-in { from { opacity: 0; } }
-@keyframes calm-fade-out { to { opacity: 0; } }
 
 /* The switch itself on the login screen: a quiet row under the note. */
 .calm-switch {
