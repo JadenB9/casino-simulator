@@ -81,6 +81,7 @@ export function mountDaily(deps: DailyDeps): DailyHandle {
     btn.setAttribute('aria-label', btn.title);
   };
 
+  let turn = 0;
   const refresh = async () => {
     try {
       status = await deps.api.status();
@@ -90,6 +91,9 @@ export function mountDaily(deps: DailyDeps): DailyHandle {
     if (disposed) return;
     mark();
     render?.();
+    // when the day turns over, tomorrow's is waiting: ask again then (the dot comes back)
+    clearTimeout(turn);
+    turn = window.setTimeout(() => void refresh(), Math.min(86_400_000, Math.max(60_000, status.resetAt - Date.now() + 3_000)));
   };
 
   function open(): void {
@@ -200,6 +204,7 @@ export function mountDaily(deps: DailyDeps): DailyHandle {
     refresh,
     dispose() {
       disposed = true;
+      clearTimeout(turn);
       sheet?.close();
       btn.remove();
     },
