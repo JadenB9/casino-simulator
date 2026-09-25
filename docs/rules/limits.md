@@ -122,6 +122,7 @@ added, so the top bet on every machine is $25,000 to $50,000:
 | Neon Nights | 5¢, 25¢, $1, $5, $25, $100, $500 | 5 a line on 20 lines: $50,000 |
 | Lucky Cherries | 1¢, 5¢, 25¢, $1, $5, $25, $100, $500 | 5 a line on 10 lines: $25,000 |
 | Gold Rush | 1¢, 5¢, 10¢, 25¢, $1, $25, $100, $250 | 5 a line on 40 lines: $50,000 |
+| Straw, Sticks & Bricks | 1¢, 5¢, 25¢, $1, $5, $25, $100, $500 | 5 a line on 20 lines: $50,000 |
 | Video poker | $1, $5, $25, $100, $500, $1,000, $5,000 | 5 coins: $25,000 a hand |
 
 A machine takes a hundred of its top bets at most (never less than $500,000). Every pay is per coin,

@@ -241,7 +241,7 @@ function simulate(n) {
   return { rtp: m, sd: Math.sqrt(sumSq / n - m * m) };
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const e = exact();
   const pct = (x, d = 4) => (x * 100).toFixed(d) + '%';
   console.log('Straw, Sticks & Bricks: 30^5 windows, 20 lines');

@@ -9,7 +9,7 @@ enumerates the game exactly. Where both exist, they agree to the digits shown.
 |---|---|---|
 | [1](#1-three-card-poker) | Three Card Poker (Ante/Play with 1/4/5 Ante Bonus, Pair Plus 40-30-6-3-1) | Ante house edge 3.3730% with Q-6-4 strategy; Pair Plus 7.2760% |
 | [2](#2-video-poker-jacks-or-better-96) | Video poker, Jacks or Better 9/6 | 99.5439% with the hold list in 2.4 (5 coins) |
-| [3](#3-slot-machines) | Slots: six machines with published reel strips | A 94.4275%, B 95.3741%, C 89.8204%, D 94.9829%, E 94.0280%, F 92.9936% |
+| [3](#3-slot-machines) | Slots: seven machines with published reel strips | A 94.4275%, B 95.3741%, C 89.8204%, D 94.9829%, E 94.0280%, F 92.9936%, G 94.6852% |
 | [4](#4-texas-holdem-no-limit-cash-game) | Texas Hold'em, no-limit, blinds, no rake | No house edge; rules follow the Poker TDA and Robert's Rules |
 
 ## 0. Conventions and test targets
@@ -34,6 +34,7 @@ enumerates the game exactly. Where both exist, they agree to the digits shown.
 | Slot A "Classic Sevens" | 94.4275% RTP | 6.6640 | +/- 0.632% |
 | Slot B "Neon Nights" (free spins counted in the paid spin) | 95.3741% RTP | 3.7849 | +/- 0.359% |
 | Slot C "5x Wild" | 89.8204% RTP | 26.7169 | +/- 2.535% (+/- 0.80% at 100M) |
+| Slot G "Straw, Sticks & Bricks" (the Blowdown counted in the paid spin) | 94.6852% RTP | about 4.8 (simulated) | +/- 0.45% |
 | Texas Hold'em | no house edge (no rake) | n/a | see 4.10 |
 
 All scripts run with plain Node.js (18 or newer, no dependencies): `node three-card-poker.mjs`, and so on.
@@ -1331,6 +1332,96 @@ Simulation, 20,000,000 paid spins (seeded sfc32), 21.3 s:
 The three later machines follow the implementation notes of 3.6: the tables are data in
 `shared/src/games/slots/{diamonds,cherries,goldrush}.ts`, checked stop for stop against the scripts above,
 and the tests enumerate through the engine's own scoring (`shared/test/slots-{diamonds,cherries,goldrush}.test.ts`).
+
+---
+
+### 3.10 Machine G: "Straw, Sticks & Bricks" (5x3 video slot, 20 lines, the Blowdown)
+
+An original machine on the public-domain tale of the three little pigs: the name, art, sounds and
+mechanics are this casino's own.
+
+- **Format:** 5 reels x 3 rows, Neon Nights' 20 fixed lines, 1-5 credits per line at 1¢, 5¢, 25¢, $1 or
+  $5, and the high-limit room's $25, $100 and $500 (total bet 20 x credits x coin value; $50,000 at the
+  top). Each reel is a 30-stop strip drawn uniformly; the window shows `strip[s]` to `strip[s+2]`. Cycle:
+  30^5 = 24,300,000.
+- **Symbols:** WOLF (the wild, reels 2-5 only), the brick pig, the stick pig and the straw pig, a pot, a
+  churn, an apple and a turnip, and three houses: STRAW, STICKS and BRICK.
+- **Line wins:** 3, 4 or 5 of a kind on adjacent reels from reel 1, paid per credit on the line. The WOLF
+  stands in for every pig and picture and pays nothing on its own; houses never pay on a line and end
+  any line they sit on (the WOLF never stands in for one).
+- **The Blowdown:** 6 or more houses anywhere start it, on top of any line wins, and it is paid with the
+  spin that started it. The houses stay in their cells; each other cell spins on its own.
+  - **Spins:** 3 to start; a spin that builds any house puts the count back to 3. It ends when the
+    count runs out or all 15 cells are built.
+  - **Building:** on each spin every empty cell builds a house with chance **1 in 25**: straw 6, sticks 3,
+    brick 1 out of 10.
+  - **Rebuilding:** before each spin, every standing house may be rebuilt one grade stronger: straw to
+    sticks **12 in 200**, sticks to brick **8 in 200**, brick to a **gold mansion 3 in 200** (a mansion
+    stays a mansion). Houses that triggered it keep the grades they showed on the reels.
+  - **The wolf:** when it ends, the wolf blows every house down and each pays a prize drawn evenly from its
+    grade's list, in total bets: straw 1, 1, 1, 2, 2, 3; sticks 2, 3, 3, 4, 5, 8; brick 5, 6, 8, 10, 15,
+    20; the gold mansion 50.
+  - **The Whole Street:** all 15 cells built pays **1,000 total bets** on top of the houses.
+  - The server draws in a fixed order (each spin: every standing house's rebuild roll in cell order, then
+    each empty cell's build roll and, when it builds, its grade; at the end each house's prize in cell
+    order), all with the unbiased `randInt`.
+- **Math, exact:** the line game by enumeration of every window through the engine's own scorer (and
+  again from symbol counts). The Blowdown by a backward recursion over (houses standing k, spins left r):
+  every empty cell builds independently with the same chance on every spin, so the number built on a spin
+  is Binomial(15 - k, 1/25) and (k, r) is a Markov chain on its own; a standing house's grade moves only
+  by its own rebuild rolls, independent of the chain; and prizes are drawn at the end independently of
+  everything. So, with the next state k' = k + j, r' = 3 if j > 0 else r - 1,
+  h_g(k, r) = sum_j Bin(j) [(1 - u_g) h_g(k', r') + u_g h_{g+1}(k', r')] is a grade-g house's expected
+  prize, v(k, r) = sum_j Bin(j) [j sum_g pi_g h_g(k', r') + v(k', r')] the expected prizes of houses still
+  to come plus the Whole Street, and f(k, r) its chance; at k = 15 or r = 0, h_g is the mean of g's list,
+  v is 1,000 at k = 15 (else 0), f is 1 at k = 15 (else 0). A Blowdown started by n_g houses of grade g is
+  worth sum_g n_g h_g(k, 3) + v(k, 3) total bets. The machine's test checks this recursion against an
+  exhaustive walk of every draw sequence of the play function itself on small grids, and the Monte Carlo
+  plays the Blowdown from fixed starts against it.
+
+| Symbol | 5 | 4 | 3 |
+|---|---:|---:|---:|
+| Brick pig | 800 | 200 | 40 |
+| Stick pig | 400 | 100 | 30 |
+| Straw pig | 250 | 75 | 20 |
+| Pot | 125 | 40 | 10 |
+| Churn | 100 | 30 | 8 |
+| Apple | 60 | 15 | 5 |
+| Turnip | 50 | 10 | 4 |
+
+The Blowdown by the houses that start it (windows of the 24,300,000; values in total bets, at 3 spins):
+
+| Houses | Windows | Straw house | Sticks house | Brick house | Mansion | Houses to come + street | Whole Street |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 6 | 147,744 | 2.6443 | 5.8397 | 13.8644 | 50.0000 | 8.1082 | 1 in 2,433 |
+| 7 | 49,368 | 2.5693 | 5.7165 | 13.6675 | 50.0000 | 6.9167 | 1 in 1,765 |
+| 8 | 11,808 | 2.4994 | 5.6006 | 13.4790 | 50.0000 | 5.9811 | 1 in 1,205 |
+| 9 | 2,632 | 2.4341 | 5.4918 | 13.2989 | 50.0000 | 5.3980 | 1 in 764 |
+| 10 | 496 | 2.3734 | 5.3897 | 13.1270 | 50.0000 | 5.4184 | 1 in 441 |
+| 11 | 56 | 2.3164 | 5.2934 | 12.9621 | 50.0000 | 6.7524 | 1 in 226 |
+| 12 | 8 | 2.2618 | 5.2005 | 12.8001 | 50.0000 | 11.7335 | 1 in 99 |
+
+(A house standing from the start is worth less the more houses there are: the street fills and the
+Blowdown ends sooner, so it gets fewer rebuild rolls.)
+
+```
+$ node docs/math/slot-g-straw-sticks-bricks.mjs --simulate=3000000
+Straw, Sticks & Bricks: 30^5 windows, 20 lines
+  line wins      63.7104%   (from symbol counts: 63.7104%)
+  Blowdown       30.9748%   started 1 in 114.56 paid spins
+  total          94.6852%
+  hit frequency  51.7180%   (1 in 1.93)
+  Whole Street   1 in 235,070 paid spins
+  base-game SD   1.6953 bets; best line total 1900 credits
+  simulated      94.3856% over 3,000,000 spins, SD 4.467 bets
+```
+
+Monte Carlo (`shared/test/slots-pigs.mc.test.ts`, seeded): 10,000,000 paid spins returned 94.8716%
+(SE 0.1503%, z +1.24 on the return, SD 4.75 bets a spin), the Blowdown 1 in 114.6 with a gold mansion in
+7.49% of them and 51 Whole Streets; the Blowdown alone from fixed starts of 6, 9 and 13 houses within
+3 SE of the recursion (400,000 each); 1,000,000 spins through `engine.act()` 94.4834% (z -0.44).
+The tables are data in `shared/src/games/slots/pigs.ts`, checked stop for stop against the script, and
+the test enumerates through the engine's own scoring (`shared/test/slots-pigs.test.ts`).
 
 ---
 
@@ -2907,9 +2998,9 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) main();
 
 </details>
 
-### Slot machines D, E and F: `slot-d-diamond-line.mjs`, `slot-e-lucky-cherries.mjs`, `slot-f-gold-rush.mjs`
+### Slot machines D, E, F and G: `slot-d-diamond-line.mjs`, `slot-e-lucky-cherries.mjs`, `slot-f-gold-rush.mjs`, `slot-g-straw-sticks-bricks.mjs`
 
-Their output is in 3.7, 3.8 and 3.9; the scripts are in [../math/](../math/) (`node docs/math/slot-e-lucky-cherries.mjs --simulate=20000000`
+Their output is in 3.7, 3.8, 3.9 and 3.10; the scripts are in [../math/](../math/) (`node docs/math/slot-e-lucky-cherries.mjs --simulate=20000000`
 adds a seeded simulation of that many paid spins).
 
 ### Poker hand counts: `holdem-hand-counts.mjs`

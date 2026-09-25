@@ -44,6 +44,7 @@ Stake's published tables for the online originals.
 | Slots D Diamond Line | | 94.983% | same | slots-diamonds.test 248,992 / 262,144 | slots-diamonds.mc | Realistic |
 | Slots E Lucky Cherries | | 94.028% | same | slots-cherries.test (30^5 windows + wheel) | slots-cherries.mc | Realistic |
 | Slots F Gold Rush | | 92.994% | same | slots-goldrush.test (32^5 windows + free games) | slots-goldrush.mc | Realistic |
+| Slots G Straw, Sticks & Bricks | | 94.685% | same | slots-pigs.test (30^5 windows + the Blowdown recursion, walked exhaustively on small grids) | slots-pigs.mc | Realistic |
 | Texas Hold'em | multiplayer, no rake | no house edge | real rooms rake 5-10% of each pot, capped | holdem.mc (every seat breaks even; 133,784,560 hands; uniform deals) | holdem.mc | Player to player, so no rake is fine (a friends' game). **Against the bots: a rake (1.2, poker6)** |
 | Plinko | 27 boards | 98.906% to 99.160% | Stake 98.9-99.2% | plinko.test "every board returns ..., as published" | plinko.mc | Realistic |
 | Dice | multiplier 99/chance, floored to the cent | 99.0% (98.03% at worst; 97.06% chance at $1) | Stake 99% | dice.test (every roll of every target at $1) | dice.mc | Realistic; the cent floor only bites at $1 bets |

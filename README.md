@@ -127,6 +127,7 @@ within three standard errors of the published one:
 | | Star or Crown (40:1) | 24.074% | 23.921% / 24.214% (10M spins) |
 | Slots: Classic Sevens / Neon Nights / 5x Wild | | 94.428% / 95.374% / 89.820% RTP | 94.563% / 95.325% / 89.968% RTP |
 | Slots: Diamond Line / Lucky Cherries / Gold Rush | | 94.983% / 94.028% / 92.994% RTP | 94.929% / 94.126% / 93.138% RTP |
+| Slots: Straw, Sticks & Bricks | the Blowdown included | 94.685% RTP | 94.872% RTP (10M spins) |
 | Bandit Wheel | 1 / 10 / 20 | 4% / 12% / 16% | 3.965% / 12.085% / 15.946% (10M spins) |
 | Plinko | 16 rows, High | 98.976% RTP (every board 98.906–99.160%) | 98.938% RTP (4M drops) |
 | Dice | 49.50% to win, $1 | 99% RTP before the cent | 98.978% RTP (10M rolls) |

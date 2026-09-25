@@ -88,12 +88,13 @@ inside 3. Seeds are fixed, so `npm run test:mc` reproduces these exactly.
 | Pai Gow Poker | 53 cards with the joker (a bug), A-2-3-4-5 second-highest straight, dealer banks and sets by the Trump Plaza house way, 5% commission, copies to the dealer; Fortune pay table 2 (8,000 to 2) | The bet, set by the house way | 2.731% | 2.715% (10M hands, z −0.68) |
 | | | Fortune | 7.766% | 7.728% (10M hands, z −0.21) |
 | Video poker | Jacks or Better 9/6, 5 coins, optimal hold list | | 99.544% RTP | 99.447% (20M hands, z −1.00) |
-| Slots | six machines, published reel strips | A "Classic Sevens" (3 reels) | 94.428% RTP | 94.563% (10M spins, z +0.65) |
+| Slots | seven machines, published reel strips | A "Classic Sevens" (3 reels) | 94.428% RTP | 94.563% (10M spins, z +0.65) |
 | | | B "Neon Nights" (5x3, 20 lines, free spins) | 95.374% RTP | 95.325% (10M spins, z −0.41) |
 | | | C "5x Wild" (3 reels, high volatility) | 89.820% RTP | 89.968% (50M spins, z +0.39) |
 | | | D "Diamond Line" (3 reels, doubling diamond wild) | 94.983% RTP | 94.929% (10M spins, z −0.28) |
 | | | E "Lucky Cherries" (5x3, 10 lines, Cherry Wheel) | 94.028% RTP | 94.126% (10M spins, z +0.90) |
 | | | F "Gold Rush" (5x4, 40 lines, sticky-wild free games) | 92.994% RTP | 93.138% (10M spins, z +1.22) |
+| | | G "Straw, Sticks & Bricks" (5x3, 20 lines, the Blowdown hold-and-spin) | 94.685% RTP | 94.872% (10M spins, z +1.24) |
 | Sic Bo | three dice in an automated shaker, US (Atlantic City) pay table, Odd and Even offered | Small, Big, Odd, Even (lose to any triple) | 2.778% | 2.755%, 2.781%, 2.754%, 2.782% (4M rolls, z −0.46, +0.06, −0.48, +0.08) |
 | | | Single number (1, 2 or 3 to 1) | 7.870% | 7.814% on 4 (4M rolls, z −1.01) |
 | | | Totals: 7 or 14 at 12:1 (best) to 9 or 12 at 6:1 (worst) | 9.722% to 18.981% | 9.507% on 7, 19.080% on 9 (4M rolls, z −1.30, +0.88) |
