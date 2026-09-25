@@ -7,8 +7,9 @@
 //   Medium  half the segments pay nothing; the rest pay 1.50× to 5.00×
 //   High    one segment pays 0.99 × segments (9.90× on ten, 49.50× on fifty); the rest nothing
 //
-// These are the shapes of Stake's Wheel; Medium's 10- to 40-segment layouts are Stake's, and the
-// 50-segment one keeps the same colours with the counts that make it 99%.
+// Low and High have the counts of Stake's Wheel, and so does Medium 20. The other
+// Medium wheels keep Stake's pay levels (1.5× to 5×, half the wheel blank) with counts chosen so
+// each averages exactly 99% (docs/rules/online-games.md §10.2).
 
 import { randInt, type Rng } from '../../rng.ts';
 import type { Cents } from '../../money.ts';
