@@ -2,7 +2,8 @@
 // where the eyes are over the head bone as the look nods, and the choice kept for next time.
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { HEAD_Y, clampPitch, eyeOffset, headHeight, stepToward } from '../src/world/player.ts';
+import { HEAD_Y, clampPitch, eyeOffset, headHeight, showsFromFront, stepToward } from '../src/world/player.ts';
+import { EMOTES } from '../../shared/src/protocol.ts';
 
 /** The walker's circle (player.ts RADIUS) and the near plane's reach from the camera (0.05 m out, under 0.09 m across). */
 const WALKER = 0.3;
@@ -76,6 +77,16 @@ describe('the eyes', () => {
       expect(o.ahead).toBeGreaterThanOrEqual(0);
       expect(o.ahead + NEAR_REACH).toBeLessThanOrEqual(WALKER);
     }
+  });
+});
+
+describe('your own gestures in first person', () => {
+  it('swings out in front for every emote, free, bought or earned', () => {
+    for (const e of EMOTES) expect(showsFromFront(e)).toBe(true);
+  });
+
+  it('keeps the eyes put for a punch thrown or taken, and anything else', () => {
+    for (const g of ['punch', 'hit', 'brush', 'deal', 'sweep', 'pay', '']) expect(showsFromFront(g)).toBe(false);
   });
 });
 

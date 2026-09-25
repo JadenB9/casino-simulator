@@ -28,6 +28,7 @@ import type { Collider } from './collision.ts';
 
 import { loadMouse, onMouseChange, setMouseSettings, type MouseSettings, type View } from './mouse.ts';
 import { EMOTE_S } from './emotes.ts';
+import { EMOTES } from '../../../shared/src/protocol.ts';
 
 const RADIUS = 0.3;
 // A brisk default pace (the floor is 40 m across), and Shift for a run.
@@ -181,14 +182,16 @@ export class Player {
   /**
    * The walker hears two things others tell the character: an emote (world/emotes.ts), which in
    * first person swings the camera out to show it, and sitting down on a floor seat
-   * (world/life/sitting.ts), after which the seat, not the look, turns the body.
+   * (world/life/sitting.ts), after which the seat, not the look, turns the body. Other motions
+   * through the same call (a punch thrown or taken, world/law/) are quick and happen in front of
+   * you: the eyes stay put and your own arm swings into view.
    */
   private hear(ch: Character): void {
     const gesture = ch.gesture?.bind(ch);
     if (gesture) {
       ch.gesture = (e) => {
         gesture(e);
-        this.showEmote();
+        if (showsFromFront(e)) this.showEmote();
       };
     }
     const sit = ch.sit?.bind(ch);
@@ -721,6 +724,13 @@ export function stepToward(a: number, b: number, step: number): number {
 function smooth(x: number): number {
   const t = Math.max(0, Math.min(1, x));
   return t * t * (3 - 2 * t);
+}
+
+const EMOTE_IDS: ReadonlySet<string> = new Set(EMOTES);
+
+/** Whether a gesture of your own swings the first-person camera out to show it: an emote does, a punch doesn't. */
+export function showsFromFront(gesture: string): boolean {
+  return EMOTE_IDS.has(gesture);
 }
 
 const MOVE_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ShiftRight']);
