@@ -464,9 +464,9 @@ describe('leaderboard reads', () => {
 
   it('go through the index each one names', async () => {
     const richestTop = await plan(SQL.richestTop, LEADERBOARD_TOP);
-    expect(richestTop).toMatch(/SEARCH casino_accounts USING COVERING INDEX idx_casino_accounts_worth/);
+    expect(richestTop).toMatch(/SEARCH casino_accounts USING COVERING INDEX idx_casino_accounts_networth/);
     expect(richestTop).not.toMatch(/TEMP B-TREE/);
-    expect(await plan(SQL.richestPlace, 1)).toMatch(/SEARCH o USING COVERING INDEX idx_casino_accounts_worth/);
+    expect(await plan(SQL.richestPlace, 1)).toMatch(/SEARCH o USING COVERING INDEX idx_casino_accounts_networth/);
 
     expect(await plan(SQL.biggestWinTop, WIN_ROWS, LEADERBOARD_TOP)).toMatch(/SEARCH casino_stats USING COVERING INDEX idx_casino_stats_biggest_win/);
     expect(await plan(SQL.biggestWinPlace, 1)).toMatch(/SEARCH casino_stats USING COVERING INDEX idx_casino_stats_biggest_win/);
