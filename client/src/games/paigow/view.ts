@@ -37,6 +37,7 @@ import type { Felt } from '../../table/felt.ts';
 import { ease, tween, wait } from '../../table/tween.ts';
 import { ChipTray, button, el } from '../../ui/kit.ts';
 import { serverNow } from '../../net/clock.ts';
+import { wave } from '../../app/comfort.ts';
 import { handMoment } from './moments.ts';
 import { HandSetter } from './setter.ts';
 import { PgCardMesh } from './joker.ts';
@@ -1069,7 +1070,7 @@ export function mountPaiGow(ctx: TableViewCtx): TableView {
 
     update() {
       tickClock();
-      litMat.opacity = 0.62 + 0.3 * Math.sin(performance.now() / 260);
+      litMat.opacity = 0.62 + 0.3 * wave(performance.now() / 260);
     },
 
     dispose() {
