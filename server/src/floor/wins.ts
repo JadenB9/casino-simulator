@@ -126,6 +126,10 @@ const SHOW_MS: Partial<Record<GameId, number>> = {
   mines: 1_000,
   hilo: 1_000,
   crash: 500,
+  // v6 parlor6: a bingo prize lights as its ball is called; a pachinko batch big enough for the
+  // feed is a chain of fevers, about ten seconds a jackpot after the balls have flown
+  bingo: 2_000,
+  pachinko: 45_000,
 };
 /** Each free game plays out after the paid spin. */
 const FREE_GAME_MS = 2_400;
@@ -268,6 +272,17 @@ export function describeWin(game: GameId, variant: string, events: readonly Game
         const e = mine('draw')[0];
         const name = e ? PATTERN_NAMES[e.pattern as DiamondsPattern] : undefined;
         return name ? `${name}, ${mult(e!.mult)}` : times;
+      }
+      // v6 parlor6: the biggest bingo prize the last ball paid, and a pachinko chain
+      case 'bingo': {
+        const best = mine('win').sort((a, b) => Number(b.mult) - Number(a.mult))[0];
+        const name = best ? { line: 'Line', corners: 'Four corners', blackout: 'Blackout' }[best.pattern as string] : undefined;
+        return name ? `${name} on ball ${best!.call}, ${mult(best!.mult)}` : `Bingo, ${times}`;
+      }
+      case 'pachinko': {
+        const e = mine('launch')[0];
+        const n = typeof e?.jackpots === 'number' ? e.jackpots : 0;
+        return n > 0 ? `${n}-jackpot ${n > 1 ? 'chain' : 'fever'}, ${e!.balls} balls` : times;
       }
       case 'holdem': {
         // Only a hand shown down is named; an uncontested pot stays a pot.

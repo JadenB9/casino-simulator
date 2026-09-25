@@ -12,7 +12,7 @@ import type { Look } from '../../../../shared/src/look.ts';
 import { DEFAULT_LOOK } from '../../../../shared/src/look.ts';
 import { formatMoney, type Cents } from '../../../../shared/src/money.ts';
 import {
-  FX_MAX_WAIT_MS, KIND_LABELS, KIND_ONE, withItem,
+  FX_MAX_WAIT_MS, KIND_LABELS, KIND_ONE, theName, withItem,
   type BuyResponse, type EffectResponse, type FxEvent, type ItemKind, type ShopResponse, type Statue,
 } from '../../../../shared/src/items.ts';
 import type { EmoteId } from '../../../../shared/src/protocol.ts';
@@ -28,7 +28,7 @@ import { Showroom, framingFor, type Mood, type Shower } from './showroom.ts';
 import { applyMoney } from './bar.ts';
 import { newOp } from './api.ts';
 import {
-  NEW_IDS, REACH_TEXT, SECTIONS, WEAR_KINDS, clockText, entries, entryOf, rewardFeat, roomName, secsText, waitFor,
+  NEW_IDS, REACH_TEXT, SECTIONS, WEAR_KINDS, clockText, entries, entryOf, inVault, rewardFeat, roomName, secsText, waitFor,
   type Entry, type Section,
 } from './catalog.ts';
 
@@ -66,6 +66,14 @@ export interface ShopDeps {
 }
 
 const dateFmt = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+/** A share of a price as the status line says it: "0.04%", "12%", "nearly all". */
+function coverText(k: number): string {
+  if (k >= 0.995) return 'nearly all';
+  const pct = k * 100;
+  if (pct < 0.01) return 'less than 0.01%';
+  return `${pct < 1 ? pct.toFixed(2) : Math.floor(pct)}%`;
+}
 
 /** How each effect previews in the showroom. */
 const FX_PREVIEW: Record<string, { mood: Mood; shower: Shower | null; cheer?: true }> = {
@@ -221,29 +229,34 @@ export function openShop(deps: ShopDeps): Closable {
   const renderList = () => {
     list.replaceChildren();
     rows.clear();
-    let rewardsFrom = -1;
-    listed().forEach((e, i) => {
-      if (e.reward && rewardsFrom < 0) {
-        rewardsFrom = i;
-        list.append(el('div', 'bq-group', 'Won, never sold'));
-      }
-      const row = el('button', `bq-item${e.reward ? ' reward' : ''}`);
+    let group = '';
+    for (const e of listed()) {
+      // headings: the private collection, then what's won and never sold
+      const g = e.reward ? 'Won, never sold' : inVault(e) ? 'Private Collection' : '';
+      if (g && g !== group) list.append(el('div', `bq-group${g === 'Private Collection' ? ' vault' : ''}`, g));
+      group = g;
+      const row = el('button', `bq-item${e.reward ? ' reward' : ''}${inVault(e) ? ' vault' : ''}`);
       row.type = 'button';
       row.setAttribute('role', 'option');
       row.dataset.id = e.id;
       const chip = el('span', 'bq-chip');
       const about = el('span', 'bq-about', e.about);
-      if (e.fx) {
-        const meta = el('span', 'bq-meta');
-        meta.append(el('span', '', secsText(e.fx.secs)), el('span', '', REACH_TEXT[e.fx.reach]));
-        about.prepend(meta);
-      }
+      const meta = el('span', 'bq-meta');
+      if (e.section === 'vault') meta.append(el('span', '', e.fx ? 'Effect' : KIND_ONE[e.kind!]));
+      if (e.fx) meta.append(el('span', '', secsText(e.fx.secs)), el('span', '', REACH_TEXT[e.fx.reach]));
+      if (meta.childElementCount) about.prepend(meta);
       row.append(el('span', 'bq-name', e.name), el('span', 'bq-price money', e.reward ? 'Reward' : formatMoney(e.price)), about, chip);
+      // a piece of the collection shows how much of it your balance would cover
+      if (inVault(e)) {
+        const bar = el('span', 'bq-cover');
+        bar.append(el('span', 'bq-cover-fill'));
+        row.append(bar);
+      }
       row.addEventListener('click', () => pick(e));
       row.addEventListener('dblclick', () => primary.click());
       list.append(row);
       rows.set(e.id, row);
-    });
+    }
     if (section === 'statue') list.append(statueBox);
     paintRows();
   };
@@ -292,17 +305,25 @@ export function openShop(deps: ShopDeps): Closable {
       chip.textContent = state;
       chip.className = `bq-chip ${state.toLowerCase()}`.trim();
       row.classList.toggle('short', !e.reward && !isOwned(e) && e.price > balance());
+      const fill = row.querySelector<HTMLElement>('.bq-cover-fill');
+      if (fill) {
+        const owns = !e.fx && isOwned(e);
+        fill.parentElement!.hidden = owns;
+        fill.style.width = `${Math.min(100, (balance() / e.price) * 100)}%`;
+      }
     }
     // a dot on the sections (and kinds) with something new you don't have yet
     const fresh = (es: Entry[]) => es.some((e) => NEW_IDS.has(e.id) && !isOwned(e) && !e.fx);
     for (const b of tabs.root.querySelectorAll<HTMLElement>('.seg-btn')) {
       const s = b.dataset.id as Section;
       b.classList.toggle('has-new', s === 'fx' ? false : s === 'wear' ? WEAR_KINDS.some((k) => fresh(entries('wear', k))) : fresh(entries(s)));
+      b.classList.toggle('vault-tab', s === 'vault');
     }
     for (const b of kinds.root.querySelectorAll<HTMLElement>('.seg-btn')) b.classList.toggle('has-new', fresh(entries('wear', b.dataset.id as ItemKind)));
   };
 
   const capLineOf = (e: Entry): string => {
+    if (inVault(e)) return `Private Collection · ${e.fx ? 'Effect' : KIND_ONE[e.kind!]} · ${formatMoney(e.price)}`;
     if (e.fx) return `Effect · ${secsText(e.fx.secs)} · ${REACH_TEXT[e.fx.reach]}`;
     const what = e.section === 'emote' ? 'Emote' : e.section === 'statue' ? 'In the lobby' : KIND_ONE[e.kind!];
     return `${what} · ${e.reward ? 'Won, never sold' : formatMoney(e.price)}`;
@@ -314,8 +335,9 @@ export function openShop(deps: ShopDeps): Closable {
   const decide = (e: Entry): { line: { text: string; kind: '' | 'ok' | 'err' }; label: string; enabled: boolean } => {
     const short = e.price > balance();
     const buy = { label: `Buy · ${formatMoney(e.price)}`, enabled: !short && owned !== null };
+    const cover = inVault(e) ? ` Your balance covers ${coverText(balance() / e.price)} of it.` : " Chips on tables don't count here.";
     const money = short
-      ? { text: `You're ${formatMoney(e.price - balance())} short. Chips on tables don't count here.`, kind: 'err' as const }
+      ? { text: `You're ${formatMoney(e.price - balance())} short.${cover}`, kind: 'err' as const }
       : { text: `Balance after: ${formatMoney(balance() - e.price)}.`, kind: '' as const };
     if (owned === null && !e.fx) return { line: { text: 'Checking what you own.', kind: '' }, label: 'Buy', enabled: false };
     if (e.fx) {
@@ -361,7 +383,10 @@ export function openShop(deps: ShopDeps): Closable {
     balVal.textContent = formatMoney(balance());
     const n = owned ? [...owned.keys()].length : 0;
     ownVal.textContent = owned ? (n ? `${n} owned` : 'Nothing owned yet') : '';
-    sub.textContent = section === 'fx' ? 'Paid each time. It plays where you stand, for everyone to see.' : 'Paid from your balance. Yours to keep.';
+    sub.textContent =
+      section === 'fx' ? 'Paid each time. It plays where you stand, for everyone to see.'
+      : section === 'vault' ? 'The private collection: a billion dollars and up.'
+      : 'Paid from your balance. Yours to keep.';
     kinds.root.hidden = section !== 'wear';
     capName.textContent = NAME_IN_LIGHTS.has(e.id) ? (session.profile?.name ?? e.name) : e.name;
     capName.classList.toggle('led', NAME_IN_LIGHTS.has(e.id));
@@ -384,6 +409,7 @@ export function openShop(deps: ShopDeps): Closable {
     clearInterval(replay);
     room.setLook(previewLook(e));
     room.gilded(e.section === 'statue');
+    room.vitrine(inVault(e) && !!e.kind);
     const fx = e.fx ? FX_PREVIEW[e.id] : undefined;
     room.preview(fx?.mood ?? 'none', fx?.shower ?? null);
     room.show(e.kind ? framingFor(e.kind) : 'full');
@@ -432,10 +458,10 @@ export function openShop(deps: ShopDeps): Closable {
     const after = balance() - e.price;
     // one purchase, one op id: a retried request after a dropped answer is still this purchase
     const op = newOp();
-    const go = button('Buy', async () => {
+    const go = button(inVault(e) ? `Buy for ${formatMoney(e.price)}` : 'Buy', async () => {
       m.close();
       busy = true;
-      note = { text: `Buying the ${e.name}.`, kind: '' };
+      note = { text: `Buying ${theName(e.name)}.`, kind: '' };
       primary.textContent = 'Buying';
       paint();
       try {
@@ -446,16 +472,16 @@ export function openShop(deps: ShopDeps): Closable {
         if (e.kind) {
           // walk out wearing it (riding it), the way a shop hands it over
           await wear(e, true).catch(() => {});
-          note = { text: `The ${e.name} is yours. ${wearWords(e).now}.`, kind: 'ok' };
+          note = { text: `${theName(e.name, true)} is yours. ${wearWords(e).now}.`, kind: 'ok' };
         } else if (e.section === 'emote') {
           room.gesture(e.id as EmoteId);
-          note = { text: `The ${e.name} is on your emote wheel. Press G on the floor.`, kind: 'ok' };
+          note = { text: `${theName(e.name, true)} is on your emote wheel. Press G on the floor.`, kind: 'ok' };
         } else {
           const p = session.profile;
           if (p && !statues.some((s) => s.name === p.name)) statues = [{ name: p.name, look: previewLook(e), at: r.at }, ...statues].slice(0, 3);
           note = { text: 'Your statue is going up in the lobby, by the directory.', kind: 'ok' };
         }
-        toast(`Bought the ${e.name} for ${formatMoney(r.price)}.`);
+        toast(`Bought ${theName(e.name)} for ${formatMoney(r.price)}.`);
       } catch (err) {
         const body = (err as { body?: { error?: string; balance?: number; inPlay?: number } }).body;
         if (body?.error === 'NOT_ELIGIBLE' && /already own/.test(problemText(err))) own(e.id, Date.now());
@@ -468,7 +494,7 @@ export function openShop(deps: ShopDeps): Closable {
       }
     }, { cls: 'primary' });
     const m = modal(
-      `Buy the ${e.name}?`,
+      `Buy ${theName(e.name)}?`,
       [
         el('p', 'bq-confirm-price money', formatMoney(e.price)),
         `Balance after: ${formatMoney(after)}. It comes out of your balance; chips on tables stay where they are.`,
@@ -509,8 +535,8 @@ export function openShop(deps: ShopDeps): Closable {
       deps.sfx?.play('chips-stack', { volume: 0.45 });
       const wait = r.fx.at - serverNow();
       note = wait > 1500
-        ? { text: `Paid. The ${e.name} starts in ${clockText(wait)}.`, kind: 'ok' }
-        : { text: `The ${e.name} is going off where you stand. Close the boutique to watch it.`, kind: 'ok' };
+        ? { text: `Paid. ${e.name} starts in ${clockText(wait)}.`, kind: 'ok' }
+        : { text: `${e.name} is going off where you stand. Close the boutique to watch it.`, kind: 'ok' };
       toast(`${e.name}, ${formatMoney(e.price)}.`);
     } catch (err) {
       const body = (err as { status?: number; body?: { balance?: number; inPlay?: number } }).body;

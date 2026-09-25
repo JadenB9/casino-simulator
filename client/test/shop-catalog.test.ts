@@ -3,8 +3,8 @@
 // out when an effect would start the same way the floor queues it (server/src/floor/fx.ts).
 
 import { describe, expect, it } from 'vitest';
-import { EFFECTS, EMOTE_ITEMS, FX_GAP_MS, SHOP_ITEMS, effectItem, type FxEvent } from '../../shared/src/items.ts';
-import { NEW_IDS, SECTIONS, WEAR_KINDS, clockText, entries, entryOf, roomAt, roomName, secsText, waitFor } from '../src/ui/shop/catalog.ts';
+import { EFFECTS, EMOTE_ITEMS, FX_GAP_MS, SHOP_ITEMS, effectItem, theName, type FxEvent } from '../../shared/src/items.ts';
+import { NEW_IDS, SECTIONS, VAULT_FROM, WEAR_KINDS, inVault, clockText, entries, entryOf, roomAt, roomName, secsText, waitFor } from '../src/ui/shop/catalog.ts';
 import { roomAt as floorRoomAt } from '../../server/src/floor/fx.ts';
 
 describe('the boutique lists', () => {
@@ -25,7 +25,28 @@ describe('the boutique lists', () => {
     expect(ids.sort()).toEqual(EMOTE_ITEMS.filter((e) => e.price > 0).map((e) => e.id).sort());
     expect(entries('fx').map((e) => e.id)).toEqual(EFFECTS.map((e) => e.id));
     expect(entries('statue').map((e) => e.id)).toEqual(['statue']);
-    expect(SECTIONS.map((s) => s.id)).toEqual(['wear', 'ride', 'emote', 'fx', 'statue']);
+    expect(SECTIONS.map((s) => s.id)).toEqual(['wear', 'ride', 'emote', 'fx', 'statue', 'vault']);
+  });
+
+  it('keep the private collection in the Vault, dearest last, and at the end of its own kind too', () => {
+    const vault = entries('vault');
+    expect(vault.map((e) => e.id)).toEqual(['billionaire-chain', 'fx-takeover', 'emperor-robe', 'hover-throne', 'imperial-crown']);
+    expect(vault.every((e) => e.price >= VAULT_FROM && inVault(e))).toBe(true);
+    for (const e of vault.filter((x) => x.kind)) {
+      const home = e.kind === 'ride' ? entries('ride') : entries('wear', e.kind);
+      const sold = home.filter((x) => !x.reward);
+      expect(sold.at(-1)!.id === e.id || sold.slice(sold.findIndex((x) => inVault(x))).every(inVault)).toBe(true);
+    }
+    // a reward is never in the collection, whatever it would cost
+    expect(inVault({ price: 25_000_000_000_00, reward: true })).toBe(false);
+  });
+
+  it('name pieces the way a sentence says them', () => {
+    expect(theName('Rope Chain')).toBe('the Rope Chain');
+    expect(theName('The Griddy', true)).toBe('The Griddy');
+    expect(theName('The Billionaire')).toBe('the Billionaire');
+    expect(theName('Your Statue')).toBe('your statue');
+    expect(theName('Your Statue', true)).toBe('Your statue');
   });
 
   it('find the row for any id it opens at', () => {

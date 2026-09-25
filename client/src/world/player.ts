@@ -28,6 +28,7 @@ import type { Collider } from './collision.ts';
 
 import { loadMouse, onMouseChange, setMouseSettings, type MouseSettings, type View } from './mouse.ts';
 import { EMOTE_S } from './emotes.ts';
+import { ridePace } from './rides.ts';
 
 const RADIUS = 0.3;
 // A brisk default pace (the floor is 40 m across), and Shift for a run.
@@ -335,23 +336,32 @@ export class Player {
     const len = Math.hypot(mx, mz);
     // walking off brings the eyes back from showing an emote
     if (this.showing && (len > 0 || this.clock > this.showing.until)) this.showing = null;
-    const speed = len > 0 ? (run ? RUN : WALK * pace) : 0;
+    // v6 looks6: on a ride, its own speeds; it gets going and rolls to a stop more slowly
+    const ride = ridePace(this.character);
+    const speed = len > 0 ? (run ? (ride?.run ?? RUN) : (ride?.walk ?? WALK) * pace) : 0;
     if (len > 0) {
       mx /= len;
       mz /= len;
     }
-    const a = 1 - Math.exp(-dt * (len > 0 ? 9 : 12));
+    if (ride && len > 0) {
+      // a ride goes where it points, and swings round to where you steer at its own pace: it carves
+      this.heading = turn(this.heading, Math.atan2(mx, mz), 1 - Math.exp(-dt * ride.turn));
+      mx = Math.sin(this.heading);
+      mz = Math.cos(this.heading);
+    }
+    const a = 1 - Math.exp(-dt * (len > 0 ? (ride?.accel ?? 9) : (ride?.coast ?? 12)));
     this.vel.x += (mx * speed - this.vel.x) * a;
     this.vel.y += (mz * speed - this.vel.y) * a;
     const p = { x: this.position.x + this.vel.x * dt, z: this.position.z + this.vel.y * dt };
-    this.col.resolve(p, RADIUS);
+    this.col.resolve(p, ride?.radius ?? RADIUS);
     // speed actually achieved (sliding along a wall is slower than pushing into it)
     const moved = Math.hypot(p.x - this.position.x, p.z - this.position.z) / Math.max(dt, 1e-4);
     this.position.x = p.x;
     this.position.z = p.z;
     if (this.mouse.view === 'first' && !this.showing) {
       // through your eyes the body faces where you look, walking or not, unless a seat holds it
-      if (!this.sitting) this.heading = turn(this.heading, this.camYaw + Math.PI, 1 - Math.exp(-dt * 20));
+      // (a ride keeps its own heading: it carves where you steer, whatever you look at)
+      if (!this.sitting && !ride) this.heading = turn(this.heading, this.camYaw + Math.PI, 1 - Math.exp(-dt * 20));
     } else if (len > 0) {
       const want = Math.atan2(mx, mz);
       this.heading = turn(this.heading, want, 1 - Math.exp(-dt * 12));
