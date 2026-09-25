@@ -40,7 +40,7 @@ export interface Route {
   stops: readonly RouteStop[];
 }
 
-export const ROUTE_IDS = ['bar', 'yard', 'salon', 'boutique', 'online', 'pit'] as const;
+export const ROUTE_IDS = ['bar', 'yard', 'salon', 'boutique', 'online', 'pit', 'wing'] as const;
 export type RouteId = (typeof ROUTE_IDS)[number];
 
 /**
@@ -72,6 +72,12 @@ export const ROUTES: Record<RouteId, Route> = {
   online: {
     pts: [[0, 14.2], [0, 8.2], [0, 0.5], [-10, -6], [-11.9, -7.8], [-11.9, -17.6], [-11.55, -19.65], [-16.45, -22.45], [-19.6, -22.3], [-20, -22.6], [-16.45, -22.5], [-11.6, -19.5], [-11.5, -19.3], [-11.6, -17.9], [-11.9, -17.6], [-11.9, -7.8], [-10.3, -7.8], [-8.34, -8.9], [0, 0.5], [0, 8.2], [0, 14.2]],
     stops: [{ at: 1, kind: 'greet', secs: 24, face: 0 }, { at: 9, kind: 'table', secs: 45, face: 2 }, { at: 17, kind: 'table', secs: 45, face: 2 }, { at: 20, kind: 'bye', secs: 9, face: 2 }],
+  },
+  // the north wing: through the Online Lounge to a pachinko machine, the Jade Room, a number
+  // called at the Bingo Hall's stage, and back round by the Poker Room
+  wing: {
+    pts: [[0, 14.2], [0, 8.2], [0, 0.5], [-10, -6], [-11.9, -7.8], [-11.9, -17.6], [-11.5, -18.7], [-11.55, -19.65], [-16.45, -22.45], [-19.2, -23.6], [-19.3, -24.2], [-20, -31.4], [-21.3, -37.5], [-17.8, -35.9], [-13, -36], [-12, -37], [0, -37], [12, -37], [19, -35], [20, -34.8], [20, -30.6], [20, -25], [16.9, -21], [11.7, -19.6], [11.5, -19.3], [11.6, -17.9], [11.9, -17.6], [11.9, -7.8], [10, -6], [0, 0.5], [0, 8.2], [0, 14.2]],
+    stops: [{ at: 1, kind: 'greet', secs: 24, face: 0 }, { at: 12, kind: 'table', secs: 45, face: -1 }, { at: 16, kind: 'sign', secs: 40, face: 0 }, { at: 19, kind: 'table', secs: 45, face: 2 }, { at: 31, kind: 'bye', secs: 9, face: 2 }],
   },
   // along the pit's south row, blackjack at both ends, then the slots hall
   pit: {
@@ -225,7 +231,7 @@ export function faceYaw(quarters: number): number {
 // ---------------------------------------------------------------------------------------------
 // The celebrities
 
-export const CELEB_IDS = ['nightjar', 'maddox', 'vale', 'castellan', 'quill', 'harlow'] as const;
+export const CELEB_IDS = ['nightjar', 'maddox', 'vale', 'castellan', 'quill', 'harlow', 'marlowe'] as const;
 export type CelebId = (typeof CELEB_IDS)[number];
 
 export interface Celeb {
@@ -370,6 +376,26 @@ export const CELEBS: readonly Celeb[] = [
       bye: "That's a wrap!",
     },
   },
+  {
+    id: 'marlowe',
+    name: 'Buddy Marlowe',
+    known: 'Game show host, Lucky Numbers',
+    look: { v: 1, body: 'm', outfit: 'suit', skin: 4, hair: '#8c8a86', top: '#1c2a44', bottom: '#141417', shoes: '#0c0c0e', clothes: 'sequin-suit', watch: 'gold-watch' },
+    scale: 1.0,
+    route: 'wing',
+    lines: {
+      hello: [
+        "Congratulations, you're tonight's lucky winner!",
+        "Come on down! Here's a little something.",
+        'Folks, give it up for this one. Here you go.',
+        'No buzzer needed. The prize is yours.',
+        'And the envelope says... you. Enjoy it.',
+      ],
+      stop: ['Good evening, everybody! Are you feeling lucky?', 'Keep those tickets close, folks!', "Let's make some noise in here!"],
+      table: ['Under the B, number nine!', 'N, thirty-one. Anybody close?', 'Look at those silver balls go!', 'G, fifty-four. Somebody shout it!'],
+      bye: 'Goodnight, and stay lucky!',
+    },
+  },
 ];
 
 const BY_ID = new Map(CELEBS.map((c) => [c.id, c]));
@@ -442,6 +468,8 @@ export const GIFT_SPOTS: readonly (readonly [number, number])[] = [
   [5.6, 4.3], [-5.6, 4.3], [-15.5, 13.4], [-29.4, 4.6], [-29.4, 13.4], [-29.2, -17.3], [-14.8, 1.1], [-29.6, -29.6],
   [-10.9, -29.2], [-7.3, -29.2], [7.1, -20.8], [29.1, -29.2], [10.7, -29.2], [14.8, -17.3], [29.3, 1.2], [29.2, 13.1],
   [18.7, 13.2], [15.6, 13.6], [-12.3, -18.3], [12.3, 0.9], [-12.3, 1.0],
+  // the north wing: the Pachinko Parlour, the Jade Room, the Bingo Hall
+  [-10.0, -42.0], [-29.0, -32.2], [-8.2, -41.0], [30.0, -42.0],
 ];
 
 export interface GiftBox {

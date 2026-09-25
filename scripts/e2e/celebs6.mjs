@@ -70,6 +70,8 @@ async function enterAs(name, viewport = { width: 1280, height: 800 }) {
   const ctx = await browser.newContext({ viewport, deviceScaleFactor: 1 });
   const p = await ctx.newPage();
   const errors = watch(p);
+  // the daily sheet opens on arrival for a scripted browser only when asked (ui/daily/daily.ts)
+  await ctx.addInitScript(() => localStorage.setItem('casino.daily.auto', '1'));
   await p.goto(`http://localhost:${port}/casino/`, { timeout: 180000 });
   await p.waitForSelector('.name-input', { timeout: 180000 });
   await p.fill('.name-input', name);
@@ -389,7 +391,7 @@ if (checks.includes('lineup')) {
   await a.p.keyboard.press('Escape');
   await travel(a.p, 3.2, 4.4, 0);
   await hold(a.p);
-  for (const id of ['nightjar', 'maddox', 'vale', 'castellan', 'quill', 'harlow']) {
+  for (const id of ['nightjar', 'maddox', 'vale', 'castellan', 'quill', 'harlow', 'marlowe']) {
     const v = (await api(a.p, 'dev/celeb', 'POST', { celeb: id })).body.visit;
     await a.p.waitForFunction((st) => Date.now() - st > 9_000, v.start, { timeout: 30000 });
     // in front of them (they face the doors), a little to one side
