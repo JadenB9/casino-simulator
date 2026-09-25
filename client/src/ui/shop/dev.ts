@@ -1,7 +1,8 @@
 // Dev page for the boutique, the bar and the wearables, served by Vite in development only:
-//   /casino/src/ui/shop/dev.html?screen=<wear|boutique|bar>
-// boutique, bar: against the local worker, logged in as name=<n> (dev password), or fixture=1 for
-// a canned high roller with no server at all. item=<id> opens the boutique at that piece.
+//   /casino/src/ui/shop/dev.html?screen=<wear|boutique|bar|effects>
+// boutique, bar, effects: against the local worker, logged in as name=<n> (dev password), or
+// fixture=1 for a canned high roller with no server at all (a disco already on in the Bar, where
+// they stand). item=<id> opens the boutique at that piece; section=<wear|ride|emote|fx|statue>.
 // wear: your character in the showroom wearing what the URL says, to look at the pieces up close:
 // body=m|f, outfit=suit, chain=, grill=, clothes=, watch=, shades=, hat=, held=<bar item>,
 // view=full|chest|face|head|wrist|hand, yaw=<radians> (holds the turn still).
@@ -15,14 +16,16 @@ import { Sfx } from '../../audio/sfx.ts';
 import * as realApi from '../../net/api.ts';
 import { session } from '../../app/session.ts';
 import { DEFAULT_LOOK, type Look } from '../../../../shared/src/look.ts';
-import { EFFECTS, EMOTE_ITEMS, HOLD_MS, ITEM_KINDS, SHOP_ITEMS, STATUE, shopEmote, shopItem, type BuyResponse, type OrderResponse } from '../../../../shared/src/items.ts';
+import { EFFECTS, EMOTE_ITEMS, FX_GAP_MS, HOLD_MS, ITEM_KINDS, SHOP_ITEMS, STATUE, effectItem, shopEmote, shopItem, type BuyResponse, type EffectResponse, type FxEvent, type OrderResponse, type Statue } from '../../../../shared/src/items.ts';
 import { barItem } from '../../../../shared/src/items.ts';
 import type { Profile } from '../../../../shared/src/protocol.ts';
 import { ApiError } from '../../net/api.ts';
 import { el } from '../kit.ts';
 import { mountHud } from '../menu/index.ts';
 import { Showroom, type Framing } from './showroom.ts';
-import { Bar, openBarMenu, openShop, shopApi, shopButton, type ShopApi } from './index.ts';
+import { Bar, openBarMenu, openEffects, openShop, shopApi, shopButton, type FloorView, type ShopApi } from './index.ts';
+import { serverNow } from '../../net/clock.ts';
+import { waitFor, type Section } from './catalog.ts';
 
 const q = new URLSearchParams(location.search);
 const screen = q.get('screen') ?? 'wear';
@@ -68,10 +71,32 @@ function highRoller(): Profile {
   };
 }
 
-function fixtureApi(): ShopApi & { order(item: string, op: string): Promise<OrderResponse> } {
-  const owned = new Map<string, { price: number; at: number }>([
+/** Where the fixture's high roller stands: the Bar, metres. */
+const FIXTURE_AT = { x: 21, z: -6 };
+
+/** A floor for the fixture: a disco someone else put on in the Bar, and whatever you buy after it. */
+function fixtureFloor(): FloorView & { add(e: FxEvent): void } {
+  const now = serverNow();
+  let list: FxEvent[] = [{ fx: 'fx-disco', id: 99, name: 'Lucky_Lou', at: now - 20_000, until: now + 40_000, x: 2300, z: -900 }];
+  const statues: Statue[] = [
+    { name: 'Vegas_Vic', look: { v: 1, body: 'm', outfit: 'suit', skin: 2, hair: '#2b1d14', top: '#1f2430', bottom: '#1f2430', shoes: '#111111', hat: 'top-hat' }, at: Date.now() - 2 * DAY },
+    { name: 'Queen_Bee', look: { v: 1, body: 'f', outfit: 'dress', skin: 1, hair: '#3a2415', top: '#5a1020', bottom: '#5a1020', shoes: '#111111' }, at: Date.now() - 9 * DAY },
+  ];
+  return {
+    you: { id: 7 },
+    statues,
+    effects: (t = serverNow()) => (list = list.filter((e) => e.until > t)),
+    add: (e) => list.push(e),
+  };
+}
+
+function fixtureApi(floor: ReturnType<typeof fixtureFloor>): ShopApi & { order(item: string, op: string): Promise<OrderResponse> } {
+  const owned = new Map<string, { price: number; at: number; feat?: string }>([
     ['rope-chain', { price: shopItem('rope-chain')!.price, at: Date.now() - 12 * DAY }],
     ['gold-top-six', { price: shopItem('gold-top-six')!.price, at: Date.now() - 3 * DAY }],
+    ['skateboard', { price: shopItem('skateboard')!.price, at: Date.now() - 5 * DAY }],
+    ['dab', { price: shopEmote('dab')!.price, at: Date.now() - 4 * DAY }],
+    ['trophy', { price: 0, at: Date.now() - DAY, feat: 'won-1m' }],
   ]);
   const wait = () => new Promise((r) => setTimeout(r, 350));
   const money = (price: number) => {
@@ -84,21 +109,32 @@ function fixtureApi(): ShopApi & { order(item: string, op: string): Promise<Orde
       await wait();
       return {
         items: SHOP_ITEMS.filter((i) => !i.reward),
-        owned: [...owned].map(([item, o]) => ({ item, price: o.price, at: o.at })),
+        owned: [...owned].map(([item, o]) => ({ item, price: o.price, at: o.at, ...(o.feat ? { feat: o.feat } : {}) })),
         balance: session.profile!.balance,
         emotes: EMOTE_ITEMS.filter((e) => shopEmote(e.id)),
         effects: EFFECTS,
         statue: STATUE,
-        statues: [],
+        statues: floor.statues,
       };
     },
     async buy(item: string): Promise<BuyResponse> {
       await wait();
-      const it = shopItem(item)!;
+      const it = shopItem(item) ?? shopEmote(item) ?? (item === STATUE.id ? STATUE : null)!;
       if (owned.has(item)) throw new ApiError(409, { error: 'NOT_ELIGIBLE', msg: `You already own the ${it.name}.` });
       const m = money(it.price);
       owned.set(item, { price: it.price, at: Date.now() });
       return { item, price: it.price, at: Date.now(), ...m };
+    },
+    async fx(item: string): Promise<EffectResponse> {
+      await wait();
+      const fx = effectItem(item)!;
+      const now = serverNow();
+      const w = waitFor(floor.effects(now), fx, 7, FIXTURE_AT.x, FIXTURE_AT.z, now);
+      const at = w.behind ? w.behind.until + FX_GAP_MS : now;
+      const ev: FxEvent = { fx: fx.id, id: 7, name: 'Ace_High', at, until: at + fx.secs * 1000, x: FIXTURE_AT.x * 100, z: FIXTURE_AT.z * 100 };
+      const m = money(fx.price);
+      floor.add(ev);
+      return { fx: ev, ...m };
     },
     async saveLook(look: Look) {
       await wait();
@@ -165,27 +201,36 @@ async function start(): Promise<void> {
   }
 
   await ensureSession();
-  const api = fixture ? fixtureApi() : { shop: shopApi.shop, buy: shopApi.buy, order: shopApi.order, saveLook: realApi.saveLook };
+  const floor = fixture ? fixtureFloor() : null;
+  const api = floor ? fixtureApi(floor) : { shop: shopApi.shop, buy: shopApi.buy, fx: shopApi.fx, order: shopApi.order, saveLook: realApi.saveLook };
+  const where = () => (floor ? FIXTURE_AT : null);
   await characters.load(session.profile!.look).catch(() => {});
   const bar = new Bar({ session, api, seated: () => false, onSit: () => () => {}, delay: Number(q.get('delay') ?? 2500) });
   const hud = mountHud({ root: ui, session, sfx, onMenu: () => {} });
   const right = hud.root.querySelector('.hud-right')!;
   const firstBtn = right.querySelector('.hud-btn');
   let boutique: { close(): void } | null = null;
-  const shop = (item?: string) => (boutique = openShop({ root: ui, api, session, engine, characters, sfx, item, onClose: () => (boutique = null) }));
+  const shop = (item?: string, section?: Section) =>
+    (boutique = openShop({ root: ui, api, session, engine, characters, sfx, item, section, floor, where, onClose: () => (boutique = null) }));
   const menu = () => openBarMenu({ root: ui, bar, session, sfx });
+  const effects = () => openEffects({ root: ui, api, session, floor, where, sfx, openBoutique: () => shop('fx-confetti') });
   right.insertBefore(shopButton('boutique', 'Boutique', () => shop()), firstBtn);
+  right.insertBefore(shopButton('effects', 'Effects', effects), firstBtn);
   right.insertBefore(shopButton('bar', 'Bar', menu), firstBtn);
   let room: Showroom | null = null;
-  if (screen === 'boutique') shop(q.get('item') ?? undefined);
-  else {
+  if (screen === 'boutique') shop(q.get('item') ?? undefined, (q.get('section') as Section | null) ?? undefined);
+  else if (screen === 'effects') {
+    room = backdrop();
+    room.show('full');
+    effects();
+  } else {
     room = backdrop();
     room.show('full');
     const r = room;
     session.on((p) => r.setLook(p.look));
     menu();
   }
-  (window as unknown as { dev: unknown }).dev = { engine, session, bar, characters, shop, menu, get boutique() { return boutique; }, room };
+  (window as unknown as { dev: unknown }).dev = { engine, session, bar, characters, shop, menu, effects, floor, get boutique() { return boutique; }, room };
   document.body.dataset.ready = '1';
 }
 

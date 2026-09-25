@@ -21,7 +21,9 @@
 // Everything lives in the floor's SQLite, because the floor hibernates whenever nobody moves.
 
 import type { FloorServerMsg } from '../../../shared/src/protocol.ts';
-import { effectItem, STATUE, STATUES, type EffectItem, type FxEvent, type Statue } from '../../../shared/src/items.ts';
+import { FX_GAP_MS, FX_MAX_WAIT_MS, effectItem, STATUE, STATUES, type EffectItem, type FxEvent, type Statue } from '../../../shared/src/items.ts';
+
+export { FX_GAP_MS, FX_MAX_WAIT_MS };
 import { lookFromJson, type Look } from '../../../shared/src/look.ts';
 
 /** Rooms by the centre lines of their walls, metres (client/src/world/rooms.ts ROOMS). */
@@ -65,10 +67,6 @@ export function slotOf(fx: EffectItem, accountId: number, x: number, z: number):
   return `you:${accountId}`;
 }
 
-/** Nothing is sold that would start further out than this: the slot is booked. */
-export const FX_MAX_WAIT_MS = 5 * 60_000;
-/** A breath between two effects queued in one slot, so the second reads as its own. */
-export const FX_GAP_MS = 1_000;
 /** A reservation not confirmed or cancelled in this long is settled against D1 by the alarm. */
 export const FX_PENDING_MS = 30_000;
 /**

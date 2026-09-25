@@ -217,6 +217,14 @@ export const EFFECTS: readonly EffectItem[] = [
 
 const FX_BY_ID = new Map(EFFECTS.map((i) => [i.id, i]));
 
+/**
+ * The floor plays one effect at a time per player ('you'), per room ('room') and for the casino
+ * ('casino'); a busy one queues the next behind it, this long after it ends. Nothing is sold that
+ * would start further out than FX_MAX_WAIT_MS.
+ */
+export const FX_GAP_MS = 1_000;
+export const FX_MAX_WAIT_MS = 5 * 60_000;
+
 export function effectItem(id: unknown): EffectItem | null {
   return typeof id === 'string' ? (FX_BY_ID.get(id) ?? null) : null;
 }
