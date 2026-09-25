@@ -68,6 +68,27 @@ async function shot(name, pos, at, player) {
   console.log('shot', `${out}/${name}.png`);
 }
 
+// the punch held at its furthest (the fist out, the guard fist up), third person, from the side
+// and the front; SHOTS=fist for just these
+async function frozenPunch(name, t, pos, at) {
+  if (only && !only.includes(name)) return;
+  await p.evaluate(([t]) => {
+    const c = window.casino;
+    const ch = c.world.player.character;
+    c.world.player.teleport(0, 7.5, 0);
+    c.freeze = () => (ch.act = { e: 'punch', t, fade: 1 });
+    ch.gesture('punch');
+    c.freeze();
+    if (!c.frozeHook) c.frozeHook = c.engine.onFrame(() => c.freeze?.());
+  }, [t]);
+  await shot(name, pos, at);
+}
+await frozenPunch('fist-side', 0.26, [0.75, 1.5, 8.15], [0, 1.42, 8.15]);
+await frozenPunch('fist-front', 0.26, [0.15, 1.5, 8.85], [0, 1.42, 8.1]);
+await frozenPunch('fist-windup', 0.1, [0.7, 1.5, 7.9], [0, 1.45, 7.75]);
+await frozenPunch('fist-eyes', 0.26, [0, 1.66, 7.62], [-0.12, 1.42, 8.3]);
+await p.evaluate(() => (window.casino.freeze = null));
+
 // the jail: from across the street, the door, the hall through the bars, inside
 await shot('jail-street', [158, 3.2, -25], [172, 2.2, -25], [170, -10, 0]);
 await shot('jail-corner', [160, 9, -50], [180, 1, -25]);

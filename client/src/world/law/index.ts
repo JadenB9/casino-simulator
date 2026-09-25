@@ -12,14 +12,13 @@ import type { Engine3D } from '../../render/engine3d.ts';
 import type { FloorWorld, WorldStation } from '../index.ts';
 import type { Sfx } from '../../audio/sfx.ts';
 import type { FloorLink } from '../../net/presence.ts';
-import { byteToYaw, yawToByte } from '../../net/presence.ts';
+import { yawToByte } from '../../net/presence.ts';
 import { serverNow } from '../../net/clock.ts';
 import type { FloorServerMsg } from '../../../../shared/src/protocol.ts';
 import { formatMoney } from '../../../../shared/src/money.ts';
 import { limitsLabel } from '../../../../shared/src/limits.ts';
-import { zoneOf } from '../../../../shared/src/zones.ts';
 import { isStaffId, parseDetour, type Detour, type StaffId } from '../../../../shared/src/law/patrol.ts';
-import { JAIL, JAIL_GAMES, PUNCH_GAP_MS, STRIKE_WINDOW_MS, jailLimits, type JailState, type LawEvent } from '../../../../shared/src/law/rules.ts';
+import { ESCORT_TALK_MS, JAIL, JAIL_GAMES, PUNCH_GAP_MS, RELEASE_MS, STRIKE_WINDOW_MS, jailLimits, type JailState, type LawEvent } from '../../../../shared/src/law/rules.ts';
 import { SPAWN } from '../layout.ts';
 import { el, toast } from '../../ui/kit.ts';
 import { isTyping, overlayCount } from '../../ui/keyboard.ts';
@@ -83,6 +82,8 @@ export class Law {
   /** A move to or from jail is coming (the next `tp` fades). */
   private moving: 'in' | 'out' | null = null;
   private helloTimer: ReturnType<typeof setTimeout> | null = null;
+  private darkTimer: ReturnType<typeof setTimeout> | null = null;
+  private lightTimer: ReturnType<typeof setTimeout> | null = null;
   private heardJail = false;
   private readonly hud = el('div', 'law-hud');
   private readonly fade = el('div', 'law-fade');
@@ -111,7 +112,7 @@ export class Law {
     this.fist.setAttribute('aria-label', 'Throw a punch');
     this.fist.addEventListener('click', () => this.link?.you && deps.canPunch() && this.punch());
     deps.ui.append(this.hud, this.fade, this.fist);
-    this.offs.push(addSpots(world, this.spots));
+    this.offs.push(world.spots(this.spots));
     this.offs.push(engine.onFrame((dt) => this.update(dt)));
     addEventListener('keydown', this.onKey);
     this.showState();
@@ -168,7 +169,7 @@ export class Law {
         this.onJail(m.jail);
         break;
       case 'tp':
-        if (this.moving) this.arrive(m.x, m.z, m.r);
+        if (this.moving) this.arrived();
         break;
     }
   }
@@ -249,7 +250,9 @@ export class Law {
     } else if (ev.k === 'jail') {
       this.warnUntil = 0;
       toast('Caught again. You are going to jail across the street.', 'err', 6000);
-      this.leaveForJail('in');
+      // the floor moves you once the guard has walked over and had his word
+      const d = ev.staff ? this.staff.detourFor(ev.staff, ev.id, now) : null;
+      this.leaveForJail('in', (d ? d.at + d.go : now) + ESCORT_TALK_MS - now);
     }
   }
 
@@ -262,41 +265,58 @@ export class Law {
       s.limits = l ? limitsLabel(s.game, l) : 'Inmates only';
     }
     if (jail && !was) {
-      // locked up (or back inside after a reconnect): off any table, and in through the fade
-      this.leaveForJail('in');
+      // locked up (or back inside after a reconnect: the move comes at once)
+      this.leaveForJail('in', 0);
     } else if (!jail && was && !quiet) {
       toast(`Bail made. You walk out with everything you won.`, 'info', 6000);
       this.sounds.buzzer();
       const officer = this.staff.get('officer-booking');
       if (officer) this.speech.say(officer.person.root, FREE_LINE, 'Officer', 2.05);
-      this.leaveForJail('out');
+      this.leaveForJail('out', RELEASE_MS);
     }
     this.showState();
   }
 
-  /** Off any table, and the next `tp` fades you across the street (or back). */
-  private leaveForJail(dir: 'in' | 'out'): void {
-    this.moving = dir;
+  /**
+   * Off any table, and dark just before the floor moves you across the street (or back), `inMs`
+   * from now: the world (city/) makes the move when `tp` comes, and the dark hides the jump.
+   */
+  private leaveForJail(dir: 'in' | 'out', inMs: number): void {
     if (this.deps.world.seated) this.deps.leaveTable();
+    if (this.moving === dir) return;
+    this.moving = dir;
+    if (this.darkTimer) clearTimeout(this.darkTimer);
+    this.darkTimer = setTimeout(() => this.darken(), Math.max(0, inMs - FADE_MS));
   }
 
-  /** The server moved us: dark for a moment, there, and light again. */
-  private arrive(x: number, z: number, r: number): void {
-    this.moving = null;
+  private darken(): void {
+    this.darkTimer = null;
     this.fade.hidden = false;
     this.fade.classList.remove('out');
-    // two frames for the dark to land before the jump
-    requestAnimationFrame(() =>
-      requestAnimationFrame(() => {
-        setTimeout(() => {
-          if (!this.deps.world.seated) this.deps.world.player.teleport(x / 100, z / 100, byteToYaw(r));
-          this.fade.classList.add('out');
-          setTimeout(() => {
-            this.fade.hidden = true;
-          }, FADE_MS);
-        }, FADE_MS);
-      }),
-    );
+    // never left dark: light again if the move doesn't come
+    if (this.lightTimer) clearTimeout(this.lightTimer);
+    this.lightTimer = setTimeout(() => this.lighten(), 8000);
+  }
+
+  private lighten(): void {
+    if (this.lightTimer) clearTimeout(this.lightTimer);
+    this.lightTimer = null;
+    this.fade.classList.add('out');
+    setTimeout(() => {
+      if (this.fade.classList.contains('out')) this.fade.hidden = true;
+    }, FADE_MS);
+  }
+
+  /** The floor moved us (the world has already gone there): light again once it has settled. */
+  private arrived(): void {
+    this.moving = null;
+    if (this.darkTimer) {
+      // the move came before the dark did (a reconnect): a short dip instead
+      clearTimeout(this.darkTimer);
+      this.darkTimer = null;
+      this.darken();
+    }
+    setTimeout(() => this.lighten(), FADE_MS);
   }
 
   // --- punching ------------------------------------------------------------------------------
@@ -321,20 +341,15 @@ export class Law {
 
   // --- each frame ------------------------------------------------------------------------------
 
-  private cameraZone(): string | null {
-    const c = this.deps.engine.camera.position;
-    return zoneOf(c.x * 100, c.z * 100);
-  }
-
   private canSee(x: number, z: number): boolean {
     const cam = this.deps.engine.camera.position;
     if (inLot(x, z)) return this.jail.group.visible && Math.hypot(x - cam.x, z - cam.z) < 45;
-    return this.cameraZone() === 'casino' && this.deps.world.canSee(x, z);
+    return this.deps.world.zone === 'casino' && this.deps.world.canSee(x, z);
   }
 
   private update(dt: number): void {
     const now = serverNow();
-    this.jail.group.visible = this.cameraZone() === 'ground';
+    this.jail.group.visible = this.deps.world.zone === 'ground';
     const p = this.deps.world.player.position;
     this.staff.update(dt, now, this._watch.set(p.x, 1.6, p.z));
     this.speech.update(dt);
@@ -420,15 +435,4 @@ function inside(x: number, z: number): boolean {
 /** Anywhere on the jail's lot (metres). */
 function inLot(x: number, z: number): boolean {
   return x >= 166 && x <= 196 && z >= -45 && z <= -5;
-}
-
-/**
- * Offer "Press E" spots. The world doesn't hand its Interact out yet (a `spots` hook on FloorWorld
- * is the ask); until it does, the floor's life has it.
- */
-function addSpots(world: FloorWorld, fn: SpotProvider): () => void {
-  const w = world as FloorWorld & { spots?: (fn: SpotProvider) => () => void };
-  if (w.spots) return w.spots(fn);
-  const life = world.life as unknown as { deps?: { interact?: { spots(fn: SpotProvider): () => void } } };
-  return life.deps?.interact?.spots(fn) ?? (() => {});
 }

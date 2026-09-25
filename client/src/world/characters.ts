@@ -817,7 +817,11 @@ export class Person implements Character {
         });
       }
     }
-    if (h.thumb) {
+    if (h.thumb === 'tuck') {
+      // v6 law6: folded across the front of the curled fingers, from the index side toward the little finger's
+      const across = _dir.crossVectors(along, palm).multiplyScalar(-m).addScaledVector(palm, 0.6).addScaledVector(along, 0.15).normalize();
+      for (const bone of arm.thumb) this.point(bone, across);
+    } else if (h.thumb) {
       // the index finger's side of the hand
       const up = _dir.crossVectors(along, palm).multiplyScalar(m).addScaledVector(along, 0.12).normalize();
       for (const bone of arm.thumb) this.point(bone, up);

@@ -54,8 +54,8 @@ export interface Hand {
   fingers?: Vec;
   /** The fingers curled into a fist, 0 to 1. */
   fist?: number;
-  /** The thumb straight up along the index finger's side of the hand. */
-  thumb?: boolean;
+  /** The thumb straight up along the index finger's side of the hand; 'tuck' folds it across the front of a fist (v6 law6). */
+  thumb?: boolean | 'tuck';
   /** Everything above turns with the chest (a hand kept on the heart through a bow). */
   frame?: 'chest';
 }
@@ -570,15 +570,16 @@ export type LawGesture = 'punch' | 'hit' | 'brush';
 
 const LAW_GESTURES: Record<LawGesture, Gesture> = {
   // the left fist up by the chin, the right drawn back and thrown straight out at head height as
-  // the shoulders turn into it, and back
+  // the shoulders turn into it, and back. Both hands clenched throughout, the punching fist turned
+  // palm-in (a jab's upright fist) so the curled fingers show from behind in first person too.
   punch: {
     dur: 0.62,
     pose: (t) => {
       const out = t < 0.12 ? 0 : t < 0.24 ? smooth((t - 0.12) / 0.12) : Math.max(0, 1 - (t - 0.3) / 0.28);
       return {
         torso: [0.08 + 0.06 * out, 0.1 - 0.42 * out, 0],
-        handR: { at: [-0.18 + 0.1 * out, 0.12, 0.3 + 0.68 * out], elbow: [-1, -0.5, -0.4 + 0.3 * out], palm: [0, -1, 0], fingers: [0, 0, 1], fist: 1 },
-        handL: { at: [-0.12, 0.2, 0.34], elbow: [-1, -1, 0], palm: [1, 0, 0], fingers: [0, 1, 0.3], fist: 1 },
+        handR: { at: [-0.18 + 0.1 * out, 0.12, 0.3 + 0.68 * out], elbow: [-1, -0.5, -0.4 + 0.3 * out], palm: [1, -0.45, 0], fingers: [0, 0, 1], fist: 1, thumb: 'tuck' },
+        handL: { at: [-0.12, 0.2, 0.34], elbow: [-1, -1, 0], palm: [1, 0, 0], fingers: [0, 1, 0.3], fist: 1, thumb: 'tuck' },
         head: [0.08, 0.1 * out, 0],
       };
     },
