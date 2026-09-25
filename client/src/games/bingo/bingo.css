@@ -63,7 +63,7 @@
 .bg-toggle[aria-pressed='true'] { border-color: var(--brass-hi); color: var(--brass-hi); }
 
 .bg-hall { position: fixed; top: calc(var(--below-party) + 300px); right: 16px; width: 262px; max-height: calc(100vh - var(--below-party) - 560px); overflow: hidden; padding: 10px 14px; display: grid; gap: 4px; align-content: start; }
-.bg-hall-head { display: flex; justify-content: space-between; align-items: baseline; font-family: var(--serif); font-size: 15px; color: var(--brass-hi); margin-bottom: 2px; }
+.bg-hall-head { display: grid; gap: 1px; font-family: var(--serif); font-size: 15px; color: var(--brass-hi); margin-bottom: 4px; }
 .bg-hall-row { display: flex; justify-content: space-between; gap: 8px; font-size: 15px; color: var(--ink-2); }
 .bg-hall-row.you .name { color: var(--brass-hi); }
 .bg-hall-row.away { opacity: 0.5; }

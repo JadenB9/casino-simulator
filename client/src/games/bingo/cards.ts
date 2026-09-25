@@ -55,6 +55,12 @@ export class CardEl {
 
   /** Daub (or show as called, waiting for a daub) every number on the card that has been called. */
   mark(called: ReadonlySet<number>, auto: boolean): void {
+    // prizes already won (a card seen again after a reconnect) keep their ring
+    for (const [p, w] of Object.entries(this.card.won)) {
+      if (!w) continue;
+      const upTo = new Set([...called].filter((n) => this.callOf(n, called) <= w.call));
+      for (const cell of patternCells(this.card.nums, upTo, p as Pattern)) this.cells[cell]!.classList.add('win');
+    }
     this.card.nums.forEach((n, cell) => {
       if (cell === FREE || !called.has(n)) return;
       if (auto) this.daub(n, false);
@@ -74,6 +80,16 @@ export class CardEl {
       c.classList.add('fresh');
       setTimeout(() => c.classList.remove('fresh'), 500);
     }
+  }
+
+  /** Where a ball came in the calls (the set keeps call order). */
+  private callOf(n: number, called: ReadonlySet<number>): number {
+    let i = 0;
+    for (const b of called) {
+      i++;
+      if (b === n) return i;
+    }
+    return Infinity;
   }
 
   has(n: number): boolean {
