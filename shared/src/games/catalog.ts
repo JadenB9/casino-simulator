@@ -55,6 +55,7 @@ export const CATALOG: Record<GameId, GameInfo> = {
       { id: 'diamonds', name: 'Diamond Line' },
       { id: 'cherries', name: 'Lucky Cherries' },
       { id: 'goldrush', name: 'Gold Rush' },
+      { id: 'pigs', name: 'Straw, Sticks & Bricks' },
     ],
   },
   videopoker: { id: 'videopoker', name: 'Video Poker', prefix: 'vp', seats: { min: 1, max: 1 }, multiplayer: false, variants: [] },

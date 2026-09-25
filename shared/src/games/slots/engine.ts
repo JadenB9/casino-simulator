@@ -1,4 +1,4 @@
-// Slot machines: six one-player machines, one variant each (see lineup.ts). A spin is one action
+// Slot machines: seven one-player machines, one variant each (see lineup.ts). A spin is one action
 // and one round: the bet comes off the stack, the reels are drawn and scored, the win goes back
 // on, all in the same step. There is no betting window, no timer and nothing live between spins,
 // so leaving is always clean.
@@ -15,6 +15,7 @@ import { LINEUP, isSlotId, reelLengths, type AnyMachine, type SlotId } from './l
 import { settleDiamonds } from './diamonds.ts';
 import { settleCherries } from './cherries.ts';
 import { settleGoldRush } from './goldrush.ts';
+import { settlePigs } from './pigs.ts';
 import type { LineWinView, ReelsEvent, ResultEvent, SlotsAction, SlotsView, SpinEvent, SpinSettlement } from './protocol.ts';
 
 export interface SlotsState {
@@ -36,6 +37,7 @@ const SETTLE: Partial<Record<SlotId, (rng: Rng, unit: Cents) => SpinSettlement>>
   diamonds: settleDiamonds,
   cherries: settleCherries,
   goldrush: settleGoldRush,
+  pigs: settlePigs,
 };
 
 /** Every bet this machine can take, for the limits: smallest, largest and their common step. */

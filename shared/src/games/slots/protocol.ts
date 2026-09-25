@@ -4,7 +4,8 @@
 //
 // Events for one paid spin, in order:
 //   spin    the bet leaves the credit meter (`credit` is the stack right after the bet)
-//   reels   the paid spin's stops and what it paid (Lucky Cherries: and its Cherry Wheel spin)
+//   reels   the paid spin's stops and what it paid (Lucky Cherries: and its Cherry Wheel spin;
+//           Straw, Sticks & Bricks: and its Blowdown)
 //   reels   ...one per free game on Neon Nights and Gold Rush, in play order (`spin` 1, 2, ...)
 //   result  the total paid for the spin, free games included, and the stack after it
 //
@@ -75,7 +76,32 @@ export type ReelsEvent = {
   held?: number[];
   /** Lucky Cherries: the Cherry Wheel this spin's BONUS symbols started. */
   wheel?: WheelSpin;
+  /** Straw, Sticks & Bricks: the Blowdown this spin's houses started (its win is in `win`). */
+  blowdown?: BlowdownView;
 };
+
+/**
+ * Straw, Sticks & Bricks' Blowdown, spin by spin. Cells are reel * 3 + row; grades 0 straw, 1
+ * sticks, 2 brick, 3 the gold mansion.
+ */
+export interface BlowdownView {
+  /** The houses that started it: [cell, grade]. */
+  start: [cell: number, grade: number][];
+  spins: {
+    /** Houses rebuilt one grade up before the spin. */
+    rebuilt: number[];
+    /** Houses built on the spin: [cell, grade]. */
+    landed: [cell: number, grade: number][];
+    /** Spins left after it. */
+    left: number;
+  }[];
+  /** Every house the wolf blew down, in cell order: [cell, final grade, cents it paid]. */
+  houses: [cell: number, grade: number, win: Cents][];
+  /** The Whole Street's cents when every cell was built, else 0. */
+  street: Cents;
+  /** Everything the Blowdown paid. */
+  win: Cents;
+}
 
 /** One spin of the Cherry Wheel. */
 export interface WheelSpin {
