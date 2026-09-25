@@ -15,10 +15,25 @@ export function fxPoint(ev: Pick<FxEvent, 'x' | 'z'>): { x: number; z: number } 
   return { x: ev.x / 100, z: ev.z / 100 };
 }
 
-/** The room an event was bought in (null outside every room: the street, a bad point). */
+/**
+ * The room an event was bought in: the one its point is in, or the nearest (a doorstep just
+ * outside), as the floor decides it (server/src/floor/fx.ts). Null only for a plan with no rooms.
+ */
 export function fxRoom(plan: FloorPlan, ev: Pick<FxEvent, 'x' | 'z'>): PlannedRoom | null {
   const p = fxPoint(ev);
-  return roomAt(plan, p.x, p.z);
+  const inside = roomAt(plan, p.x, p.z);
+  if (inside) return inside;
+  let best: PlannedRoom | null = null;
+  let bestD = Infinity;
+  for (const r of plan.rooms) {
+    const b = r.bounds;
+    const d = Math.hypot(Math.max(b.x0 - p.x, 0, p.x - b.x1), Math.max(b.z0 - p.z, 0, p.z - b.z1));
+    if (d < bestD) {
+      best = r;
+      bestD = d;
+    }
+  }
+  return best;
 }
 
 /**

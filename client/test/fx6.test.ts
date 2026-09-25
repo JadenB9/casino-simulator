@@ -109,7 +109,8 @@ describe('the book of events', () => {
 describe('where an effect plays', () => {
   it('finds the room the buyer stood in', () => {
     for (const r of P.rooms) expect(fxRoom(P, { x: Math.round(r.cx * 100), z: Math.round(r.cz * 100) })?.id).toBe(r.id);
-    expect(fxRoom(P, { x: 999_999, z: 0 })).toBeNull();
+    // a doorstep outside the building counts as the nearest room, as the floor counts it
+    expect(fxRoom(P, { x: 0, z: 1600 })?.id).toBe('lobby');
   });
 
   it('draws a room effect for its room and the rooms that see into it, a casino one everywhere', () => {
