@@ -21,7 +21,7 @@ const glArgs = gl === 'metal' ? ['--use-angle=metal', '--enable-gpu', '--ignore-
 const browser = await chromium.launch({ args: [...glArgs, `--explicitly-allowed-ports=${port},${Number(port) + 1}`] });
 const report = [];
 let failed = false;
-const money = (c) => '$' + Math.floor(c / 100).toLocaleString('en-US') + '.' + String(c % 100).padStart(2, '0');
+const money = (c) => '$' + Math.floor(c / 100).toLocaleString('en-US') + (c % 100 ? '.' + String(c % 100).padStart(2, '0') : '');
 
 async function open(game, name) {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
@@ -123,6 +123,49 @@ for (const game of games) {
     await settle(600);
     await shot('4-after');
     out.notes.push(`rounds ${events('over').length}; chips shown ${await checkChips()}`);
+  }
+
+  if (game === 'wheel') {
+    await setBet(10);
+    await page.click('.os-side .os-seg button:has-text("Medium")');
+    await page.click('.os-side .os-seg button:has-text("30")');
+    await page.click('.os-action.go');
+    await settle(1200);
+    await shot('1-spinning');
+    await settle(2600);
+    await shot('2-landed');
+    const spin = events('spin').at(-1);
+    check(!!spin && spin.risk === 'medium' && spin.segments === 30, 'the spin went out on Medium, 30');
+    const hub = await text('.wh-hub-mult');
+    check(hub === `${(spin.mult / 100).toFixed(2)}×`, `the hub shows the server's ${spin.mult / 100}× (${hub})`);
+    const hit = await page.$eval('.wh-key-item.hit', (e) => Number(e.dataset.mult)).catch(() => null);
+    check(hit === spin.mult, 'the key lights the multiplier that came up');
+    out.notes.push(`spin: segment ${spin.segment} ${spin.mult / 100}x paid ${money(spin.payout)}`);
+    // High risk, 50 segments, until something pays or eight spins.
+    await page.click('.os-side .os-seg button:has-text("High")');
+    await page.click('.os-side .os-seg button:has-text("50")');
+    await settle(300);
+    await shot('3-high-50');
+    for (let i = 0; i < 8; i++) {
+      await page.keyboard.press('Space');
+      await settle(3600);
+      if (events('spin').at(-1).payout > 0) break;
+    }
+    await shot('4-high-after');
+    await page.hover('.wh-key-item >> nth=1');
+    await settle(300);
+    await shot('5-key-card');
+    // Low risk, 10 segments, a few spins.
+    await page.click('.os-side .os-seg button:has-text("Low")');
+    await page.click('.os-side .os-seg button:has-text("10")');
+    for (let i = 0; i < 3; i++) {
+      await page.keyboard.press('Space');
+      await settle(3500);
+    }
+    await shot('6-low-10');
+    const spins = events('spin');
+    check(spins.every((s) => s.payout === (s.bet / 100) * s.mult), 'every spin paid its multiplier exactly');
+    out.notes.push(`spins ${spins.length}: ${spins.map((s) => `${s.risk[0]}${s.segments} ${s.mult / 100}x`).join(', ')}; chips shown ${await checkChips()}`);
   }
 
   out.notes.push(`frames: ${frames.length}`);
