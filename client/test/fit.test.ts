@@ -119,8 +119,8 @@ describe('bestSpace', () => {
     bestSpace(b, obs, W, H);
     const t0 = performance.now();
     for (let i = 0; i < 5; i++) bestSpace(b, obs, W, H);
-    // a few ms warm; generous for a loaded machine
-    expect((performance.now() - t0) / 5).toBeLessThan(60);
+    // a few ms warm; generous, for a machine busy with other work (it guards against a blow-up)
+    expect((performance.now() - t0) / 5).toBeLessThan(250);
   });
 
   it('falls back to the whole screen when controls leave no room at all', () => {

@@ -504,6 +504,13 @@ export class BoardFit {
     if (this.disposed) return;
     this.disposed = true;
     const cam = this.camera;
+    const now = worn.get(cam);
+    if (!now || now.owner !== this) return;
+    if (sameLens(now.lens, NEUTRAL)) {
+      wear(cam, NEUTRAL, null);
+      worn.delete(cam);
+      return;
+    }
     const off = engine.onFrame((dt) => {
       const cur = worn.get(cam);
       // another table has the lens now, or it's already neutral
