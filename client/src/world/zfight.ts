@@ -46,7 +46,10 @@ interface Tri {
   n: [number, number, number];
   d: number;
   face: 1 | -1;
-  /** The triangle in the plane's 2D frame, and its bounds there. */
+  /** Its middle, in world space. */
+  c: [number, number, number];
+  /** The 2D frame (its bucket's), the triangle in it, and its bounds there. */
+  f: Frame;
   p: [number, number][];
   u0: number;
   u1: number;
@@ -87,11 +90,18 @@ export function findFights(surfaces: readonly Surface[], opts: FightOptions = {}
       const face = (Math.abs(nx) > 1e-6 ? nx : Math.abs(ny) > 1e-6 ? ny : nz) > 0 ? 1 : -1;
       const n: [number, number, number] = [nx * face, ny * face, nz * face];
       const d = n[0] * ax + n[1] * ay + n[2] * az;
-      const p = project([ax, ay, az, P[i + 3]!, P[i + 4]!, P[i + 5]!, P[i + 6]!, P[i + 7]!, P[i + 8]!], n);
+      // projected in the frame of its bucket's normal, not its own: every triangle a bucket holds
+      // shares one frame. (Frames a degree apart, far from the origin, put two triangles metres
+      // apart on top of each other, and the other way round.)
+      const k = [Math.round(n[0] * QN), Math.round(n[1] * QN), Math.round(n[2] * QN)];
+      const kl = Math.hypot(k[0]!, k[1]!, k[2]!);
+      const f = frame(k[0]! / kl, k[1]! / kl, k[2]! / kl);
+      const p = project([ax, ay, az, P[i + 3]!, P[i + 4]!, P[i + 5]!, P[i + 6]!, P[i + 7]!, P[i + 8]!], f);
       const us = p.map((q) => q[0]);
       const vs = p.map((q) => q[1]);
-      const t: Tri = { s, id: ids++, d, face, n, p, u0: Math.min(...us), u1: Math.max(...us), v0: Math.min(...vs), v1: Math.max(...vs) };
-      const nk = `${Math.round(n[0] * QN)},${Math.round(n[1] * QN)},${Math.round(n[2] * QN)}`;
+      const c: [number, number, number] = [(3 * ax + bx + cx) / 3, (3 * ay + by + cy) / 3, (3 * az + bz + cz) / 3];
+      const t: Tri = { s, id: ids++, d, face, n, c, f, p, u0: Math.min(...us), u1: Math.max(...us), v0: Math.min(...vs), v1: Math.max(...vs) };
+      const nk = k.join(',');
       const dk = Math.floor(d / gap);
       // in its own step and the next, so two planes either side of a step boundary still meet
       put(`${nk}|${dk}`, t);
@@ -102,7 +112,10 @@ export function findFights(surfaces: readonly Surface[], opts: FightOptions = {}
   const pairs = new Map<string, Fight>();
   const best = new Map<Fight, number>();
   const seen = new Set<string>();
-  const near = (A: Tri, B: Tri) => B.u0 < A.u1 && A.u0 < B.u1 && B.v0 < A.v1 && A.v0 < B.v1 && Math.abs(A.d - B.d) <= gap && A.n[0] * B.n[0] + A.n[1] * B.n[1] + A.n[2] * B.n[2] > 0.9995;
+  // how far apart two planes are: each one's middle from the other's plane (not the difference of
+  // their distances from the origin, which two planes a degree apart make metres out there)
+  const apart = (A: Tri, B: Tri) => Math.max(Math.abs(A.n[0] * B.c[0] + A.n[1] * B.c[1] + A.n[2] * B.c[2] - A.d), Math.abs(B.n[0] * A.c[0] + B.n[1] * A.c[1] + B.n[2] * A.c[2] - B.d));
+  const near = (A: Tri, B: Tri) => B.u0 < A.u1 && A.u0 < B.u1 && B.v0 < A.v1 && A.v0 < B.v1 && A.n[0] * B.n[0] + A.n[1] * B.n[1] + A.n[2] * B.n[2] > 0.9995 && apart(A, B) <= gap;
   for (const list of buckets.values()) {
     if (list.length < 2) continue;
     // only surfaces of different materials matter: skip a bucket of one material
@@ -141,7 +154,7 @@ export function findFights(surfaces: readonly Surface[], opts: FightOptions = {}
         }
         if (area < 1e-7) continue;
         const nf: [number, number, number] = [A.n[0] * A.face, A.n[1] * A.face, A.n[2] * A.face];
-        const at = unproject(centroid(poly), A.n, A.d);
+        const at = unproject(centroid(poly), A.f, A.n, A.d);
         if (opts.unseen?.(at, nf)) continue;
         const [first, second] = A.s < B.s ? [sa, sb] : [sb, sa];
         const key = `${first.name}|${first.mat}|${second.name}|${second.mat}|${nf.map((v) => Math.round(v * QN)).join(',')}|${Math.round(A.d * 100)}`;
@@ -155,7 +168,7 @@ export function findFights(surfaces: readonly Surface[], opts: FightOptions = {}
           f.at = at;
         }
         f.area += area;
-        f.gap = Math.max(f.gap, Math.abs(A.d - B.d));
+        f.gap = Math.max(f.gap, apart(A, B));
       }
     }
   }
@@ -177,8 +190,10 @@ export function describeFight(f: Fight): string {
 
 // --- the plane's own 2D frame ------------------------------------------------------------------
 
+type Frame = [[number, number, number], [number, number, number]];
+
 /** Two axes in the plane of normal n. */
-function frame(nx: number, ny: number, nz: number): [[number, number, number], [number, number, number]] {
+function frame(nx: number, ny: number, nz: number): Frame {
   // any vector not along n, crossed with n
   const [hx, hy, hz] = Math.abs(ny) < 0.9 ? [0, 1, 0] : [1, 0, 0];
   let ux = hy * nz - hz * ny;
@@ -194,8 +209,7 @@ function frame(nx: number, ny: number, nz: number): [[number, number, number], [
   ];
 }
 
-function project(v: number[], n: [number, number, number]): [number, number][] {
-  const [u, w] = frame(n[0], n[1], n[2]);
+function project(v: number[], [u, w]: Frame): [number, number][] {
   const out: [number, number][] = [];
   for (let k = 0; k < 9; k += 3) out.push([v[k]! * u[0] + v[k + 1]! * u[1] + v[k + 2]! * u[2], v[k]! * w[0] + v[k + 1]! * w[1] + v[k + 2]! * w[2]]);
   // counter-clockwise, for the clipper
@@ -203,9 +217,17 @@ function project(v: number[], n: [number, number, number]): [number, number][] {
   return out;
 }
 
-function unproject(c: [number, number], n: [number, number, number], d: number): [number, number, number] {
-  const [u, w] = frame(n[0], n[1], n[2]);
-  return [0, 1, 2].map((k) => c[0] * u[k]! + c[1] * w[k]! + d * n[k]!) as [number, number, number];
+/** The point on the plane (n, d) that projects to c in the frame (u, w). */
+function unproject(c: [number, number], [u, w]: Frame, n: [number, number, number], d: number): [number, number, number] {
+  // x·u = c0, x·w = c1, x·n = d, by Cramer's rule
+  const det = (a: number[], b: number[], e: number[]) => a[0]! * (b[1]! * e[2]! - b[2]! * e[1]!) - a[1]! * (b[0]! * e[2]! - b[2]! * e[0]!) + a[2]! * (b[0]! * e[1]! - b[1]! * e[0]!);
+  const D = det(u, w, n);
+  const r = [c[0], c[1], d];
+  const col = (k: number) => [u, w, n].map((row, i) => row.map((v, j) => (j === k ? r[i]! : v)));
+  return [0, 1, 2].map((k) => {
+    const [a, b, e] = col(k);
+    return det(a!, b!, e!) / D;
+  }) as [number, number, number];
 }
 
 function signed(p: [number, number][]): number {
