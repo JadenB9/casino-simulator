@@ -26,9 +26,12 @@ picked limits. A private lobby's PIN shows its table (host, limits, seats) befor
 | Big Six (each spot) | $1–$100 | $1–$500 | $5–$1,000 | $25–$5,000 | $100–$25,000 | $1,000–$100,000 | to $100,000 |
 | Bandit Wheel, the online games | $1–$100 | $1–$1,000 | $5–$5,000 | $25–$10,000 | $100–$50,000 | $1,000–$100,000 | to $100,000 |
 
-Texas Hold'em chooses its blinds: $1/$2, $2/$5, **$5/$10** (Standard), $10/$20, $25/$50, $50/$100,
-$100/$200, $500/$1,000, $1,000/$2,000, or custom: a small blind of $1 to $5,000 and a big blind two to
-three times it, up to $10,000.
+Texas Hold'em chooses its blinds, from the micros to the nosebleeds: $0.50/$1, $1/$2, $2/$5, **$5/$10**
+(Standard), $10/$20, $25/$50, $50/$100, $100/$200, $250/$500, $500/$1,000, $1,000/$2,000,
+$5,000/$10,000, $25,000/$50,000, $100,000/$200,000, or custom: any small blind of $0.50 or whole
+dollars up to $100,000, and a big blind two to three times it in whole dollars. At $0.50/$1 bets go in
+half dollars. The bots at a solo table are drawn by the stakes: loose, passive players at the micros,
+strong regulars at the top ([cards-and-machines.md](cards-and-machines.md) 4.9).
 
 **Custom limits**, for a game of bets: the minimum is $1 up to a tenth of the game's ceiling ($100,000
 at the tables, $10,000 at Big Six, the Bandit Wheel and the online games), in whole dollars; the
@@ -65,8 +68,9 @@ bet's step. So at every table:
 Every table takes a buy-in (and top-ups) of up to **a hundred times its maximum bet**. The smallest
 buy-in is the Standard table's, scaled to the chosen minimum (four times the minimum bet at blackjack,
 for example). Your balance is the only other cap, and the buy-in prompt's last choice is your whole
-balance whenever the table would take more. Hold'em keeps poker's convention of 20 to 100 big
-blinds, so a deeper stack means bigger blinds. The machines take up to $500,000.
+balance whenever the table would take more. Hold'em takes 20 to 250 big blinds (a short stack to a
+deep one), at any blinds from $0.50/$1 to $100,000/$200,000 (custom: a $0.50 small blind or whole
+dollars up to $100,000, the big blind two to three times it). The machines take up to $500,000.
 
 ## Solo tables and chips left on them
 

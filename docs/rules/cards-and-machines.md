@@ -1343,12 +1343,16 @@ tournaments; where cash games differ, Robert's Rules governs.
 ### 4.1 Table and stakes
 
 - 2 to 9 seats. One 52-card deck, shuffled for every hand. Two blinds, small (SB) and big (BB), chosen when
-  the table is started: $1/$2 to $1,000/$2,000, or custom ([limits.md](limits.md)); $5/$10 at Standard. No
-  antes, no straddles, no rake.
+  the table is started: fourteen stakes from $0.50/$1 to $100,000/$200,000, or any custom blinds in between
+  (a $0.50 small blind or whole dollars up to $100,000, the big blind two to three times it;
+  [limits.md](limits.md)); $5/$10 at Standard. No antes, no straddles, no rake. Bets and raises are whole
+  dollars, or half dollars at a table whose blinds are on the half dollar ($0.50/$1), so every bet is made
+  of real chips.
 - **Table stakes:** only chips on the table when the hand starts can be bet, and chips cannot be added or
-  removed during a hand ([Wikipedia][wikibet]). Buy-in: 20 to 100 big blinds, a common convention ("in a $1/2
-  No Limit cash game, the minimum stake is often set at $40 while maximum stake is often set at $200"
-  [Wikipedia][wikibet]). Players top up only between hands.
+  removed during a hand ([Wikipedia][wikibet]). Buy-in: 20 to 250 big blinds, in whole dollars. The low end
+  is the common short-stack convention ("in a $1/2 No Limit cash game, the minimum stake is often set at $40
+  while maximum stake is often set at $200" [Wikipedia][wikibet]); the top is a deep-stack table's, so one
+  table does both. Players top up only between hands.
 
 ### 4.2 Button, blinds and seating
 
@@ -1529,81 +1533,97 @@ checked" ([TDA][tda] rule 31). Treat a disconnected player the same way.
 
 ### 4.9 Bots for single-player tables
 
-The goal is opponents that play believably and differently from one another, not a game-theory solver.
-Three parts:
+Rule-based opponents built the way solid poker bots are: position-aware charts before the flop, ranges and
+equity after it, and players that differ from one another and from hand to hand. Everything a bot decides
+from is what its own seat could see at a real table: its two cards, the board, the bets and stacks, the
+public actions of this hand, and what it has seen each player do in the hands it played with them. It never
+sees the deck or anyone's hole cards (`shared/src/games/holdem/situation.ts` builds its view; a test deals
+everyone else different cards and checks the bot's view and decision don't change).
 
-**1. Before the flop: the Chen formula** (Bill Chen's system from Lou Krieger's *Hold'em Excellence*,
-[Wikipedia][wikistart]; steps as given by [The Poker Bank][chen]):
+**1. Before the flop: charts by seat.** The standard raise-first-in ranges for six- and nine-handed cash
+games at 100 big blinds, the solver-derived charts widely published for training ([Upswing][upsrfi];
+[GTO Wizard][gtowrfi]), rounded to the notation players use (`ranges.ts`):
 
-1. Score the highest card: A = 10, K = 8, Q = 7, J = 6, and 10 down to 2 score half their face value.
-2. Pairs: double that score; the minimum for a pair is 5.
-3. Suited: +2.
-4. Gap between the two ranks: none -0, one card -1, two -2, three -4, four or more -5.
-5. +1 if the gap is 0 or 1 and both cards are below a queen.
-6. Round half points up.
+| Seat | Opens | Share of hands |
+|---|---|---|
+| UTG, nine handed | 77+, ATs+, KTs+, QTs+, JTs, AJo+, KQo | 10% |
+| UTG six handed, lojack nine handed | 22+, A2s+, K9s+, Q9s+, J9s+, T9s, 98s, 87s, ATo+, KJo+ | 19% |
+| Hijack | + K8s, T8s, 97s, 76s, 65s, A9o, KTo, QJo | 23% |
+| Cutoff | + K5s-K7s, Q8s, J8s, 86s, 75s, 54s, A8o, A5o, QTo, JTo | 29% |
+| Button, small blind | + the rest of the suited kings, Q4s+, J6s+, T6s+ ... A2o+, K8o+, Q9o+, J9o+, T8o+, 98o, 87o | 46% |
 
-Fixtures: AA = 20, AKs = 12, TT = 10, 57s = 6, 72o = -1 ([The Poker Bank][chen]).
+The charts nest, so they also order all 169 kinds of hand, best first (within a tier by Bill Chen's score,
+[The Poker Bank][chen]); "the top 12%" means the same thing to every bot. Heads-up the button opens 80%.
 
-Starting thresholds from the same source. Full ring: raise with 10+ in early position, 9+ in middle, 7+
-late. Six-handed: 9+, 8+ and 7+. "Only ever consider calling a raise with 10 points or more. Always raise
-or reraise with 12 points or more" ([The Poker Bank][chen]).
+- **Facing a raise:** the raiser's range is their seat's chart, widened or narrowed by how often the bot
+  has seen them raise. A bot 3-bets the top eighth of that range (at least QQ+ and AK) and, against
+  late-position opens, a few suited wheel aces and suited connectors as bluffs; it flat-calls the next half
+  in position, defends its big blind by the price (about 1.4 times the opener's range at a 2.5x open), and
+  plays small pairs and suited connectors only with the stack behind to pay them off (15 and 18 times the
+  call). Against a 3-bet it 4-bets the top third of the 3-bettor's range and calls with the next slice;
+  against a 4-bet only the very top goes on. 3-bets are 3x the raise in position and about 3.8x out of it.
+- **Short stacks:** 15 big blinds or fewer, move in or fold, wider the shorter the stack.
+- **All-or-nothing calls:** facing an all-in, or a call of more than a third of the stack, the bot deals the
+  hand out against the raiser's range and calls when its chance beats the price.
 
-An alternative lookup is the Sklansky-Malmuth hand groups from *Hold'em Poker for Advanced Players*
-(1999). They were built for limit hold'em, so treat them as a rough strength order in no-limit. Published
-reproductions differ slightly between editions; the widely copied 1999 list is:
+**2. After the flop: equity against a range, then pot odds.** The bot sizes up its hand on the board
+(`postflop.ts`: the nuts, a set, top pair graded by kicker, an underpair, air; flush and straight draws and
+whether the flush draw is the nuts) and the board's texture (dry to wet: suits, connectedness, pairs). It
+then estimates its chance of winning by dealing the hand out 220 times, each opponent dealt from their
+range: their preflop range, narrowed by how they have bet since (a bet says a medium pair or a draw at
+least, a raise more, a re-raise more again; the street being played counts most), passing weaker hands
+only as often as that player bluffs, which it reads from how often they bet and raise rather than call.
+This is the University of Alberta approach of re-weighting opponent hands by their actions ([Billings et
+al. 1998][billings98]; [Billings et al. 2002][billings02]). Then:
 
-| Group | Hands |
-|---|---|
-| 1 | AA, KK, QQ, JJ, AKs |
-| 2 | TT, AQs, AJs, KQs, AK |
-| 3 | 99, JTs, QJs, KJs, ATs, AQ |
-| 4 | T9s, KQ, 88, QTs, 98s, J9s, AJ, KTs |
-| 5 | 77, 87s, Q9s, T8s, KJ, QJ, JT, 76s, 97s, Axs, 65s |
-| 6 | 66, AT, 55, 86s, KT, QT, 54s, K9s, J8s, 75s |
-| 7 | 44, J9, 64s, T9, 53s, 33, 98, 43s, 22, Kxs, T7s, Q8s |
-| 8 | 87, A9, Q9, 76, 42s, 32s, 96s, 85s, J8, J7s, 65, 54, 74s, K9, T8 |
+- **Pot odds:** facing a bet of `c` into a pot of `P` (the pot already including the bet), call when the
+  chance is at least `c / (P + c)`; a real draw on the flop or turn adds implied odds (a share of what is
+  left behind). A skilled bot also defends a little wider than the bare price against small bets.
+- **Value:** bet when well ahead of the players still in (55% heads-up, more multiway), thinner against
+  players who call too much; raise a bet with about 72% or more heads-up. A monster on a dry board is
+  sometimes slow-played, which out of position makes check-raises.
+- **Continuation bets and barrels** by texture, position and the number of players: more on dry boards,
+  in position and heads-up; less against players who rarely fold. Strong draws semi-bluff.
+- **Sizing:** a third of the pot on dry flops up to three quarters on wet ones, two thirds on the turn,
+  two thirds to the pot on the river with the occasional overbet with the nuts; raises about 3x. Sizes are
+  mixed a little and rounded the way people say them.
+- **Stack to pot:** with the stack about the size of the pot or less, a good hand just gets it in.
+- **River bluffs** balanced against the value bets: for a river bet of `b` times the pot the bettor's
+  bluffs-to-value ratio should be `b : (1 + b)`, so bluffs make up `b / (1 + 2b)` of the betting range (a
+  third for a pot-sized bet); the caller must defend `1 / (1 + b)` of the time (Chen and Ankenman, *The
+  Mathematics of Poker*, 2006; [summary][mop]). Missed draws and air bluff at about that rate, more with
+  the initiative, less against players who don't fold.
 
-`s` = suited, no suffix = offsuit; Axs means A9s down to A2s (ATs is in group 3) and Kxs means K8s down
-to K2s. Groups 1-6 are from [RakebackPros][sm16]; groups 7-8 are from [Hablando de Poker][sm78], citing
-holdemguide.net. [The Poker Bank][smpb] prints a slightly different variant.
+**3. Reads.** Every hand, the table notes each player's public actions (`reads.ts`): how often they put
+money in before the flop (VPIP) and raise it (PFR), how often they bet and raise after the flop rather than
+call, and how often they fold to a bet. A read starts at the population's averages and moves toward what
+the player does as hands go by (twelve hands weigh as much as the prior); old hands fade. This is what
+keeps one-note play from farming the bots: a player who raises every hand is read as a wide raiser and
+called and re-raised wider; one who calls everything is value-bet thinner and never bluffed.
 
-**2. After the flop: Monte Carlo equity against a range, then pot odds.**
+**4. Who sits at which stakes.** Eight kinds of player: the calling station, the loose fish, the maniac,
+the rock, the tight-aggressive and loose-aggressive players, the solid regular and the professional, each
+set by how loose, aggressive and bluffy it is, how much it calls, how it takes a bad beat, and its skill.
+Skill decides how well a bot reads ranges (a weak player barely narrows a bettor's range and ignores what
+it has seen), whether it plays by position, and how often it makes a mistake. The line-up is drawn by
+the stakes: at a $1 big blind half the table is stations, fish and maniacs; at $10,000 and up nearly all
+are regulars and professionals, with the odd rich amateur; everyone's skill rises a little with the
+stakes and varies a little from bot to bot.
 
-- **Equity:** deal random hole cards to each live opponent from the cards not seen, drawing from that
-  opponent's estimated range; deal the rest of the board; score the hands; count a win as 1 and a k-way
-  tie as 1/k. Average over N samples. The standard error is `sqrt(e(1 - e) / N)`, so N = 1,000 gives about
-  +/- 1.6 percentage points. Durable Objects meter and cap CPU time, so keep each decision to a few
-  milliseconds with a fast lookup-table evaluator and 500 to 2,000 samples, and check the current Workers
-  limits before tuning N upward.
-- **Ranges:** start uniform. Narrow an opponent's range when they raise before the flop, for example to
-  hands with Chen score of at least 8. This is the University of Alberta approach of re-weighting opponent
-  hands by their actions ([Billings et al. 1998][billings98]; [Billings et al. 2002][billings02]).
-- **Hand strength and potential:** Billings et al. define effective hand strength
-  `EHS = HS_n + (1 - HS_n) * PPot`, where `HS_n` is the current hand strength raised to the power of the
-  number of opponents and `PPot` is the chance of improving to the best hand ([Billings et al.
-  1998][billings98]; [Wikipedia][ehs]). A full Monte Carlo run to the river already includes potential, so
-  `EHS` is an optional cheaper shortcut.
-- **Pot odds:** facing a bet of `c` into a pot of `P` (the pot already including the bet), call when
-  equity is at least `c / (P + c)`, plus a margin that makes easier bots looser and harder bots tighter.
-
-**3. Bet sizing and bluffing.** These are tunable starting points, not sourced rules:
-
-- open-raise 2.5 to 3 BB, plus 1 BB per limper; re-raise to about 3x the raise;
-- after the flop, bet 1/2 to 3/4 of the pot for value, with smaller bets on dry boards;
-- raise a bet with very high equity (for example above 0.75 heads-up), and semi-bluff sometimes with strong
-  draws.
-
-Bluff with a frequency the opponent cannot exploit. For a river bet of `b` times the pot, the bettor's
-bluffs-to-value ratio should be `b : (1 + b)`, so bluffs make up `b / (1 + 2b)` of the betting range:
-a third for a pot-sized bet, a quarter for a half-pot bet. The caller must defend at least
-`1 / (1 + b)` of the time (the "minimum defense frequency") to keep bluffs from profiting (Chen and
-Ankenman, *The Mathematics of Poker*, 2006; [summary][mop]).
-
-**Difficulty and personality.** Give each bot four knobs: its Chen thresholds (tight or loose), its call
-margin, its bluff and semi-bluff rates, and a little randomness (+/- 5% on thresholds; mixed choices at
-close decisions) so it cannot be read exactly. A randomized think time of about 1 to 3 seconds keeps the
-pace human. Bots act through the same server action path as people, so all table rules apply to them
+**5. Variance.** Every range edge is mixed (a hand near it is played some of the time), sizes are
+randomised, and every bot slips now and then, the way its kind does: a loose call from a station, a spewy
+bluff from a maniac, a nervous fold from a rock, a hero call or a strange size from a regular (about 2% of
+decisions for a professional, 15% for a fish). A bot that loses a big pot tilts (by its persona): looser,
+more aggressive, more mistakes, fading hand by hand. A randomised think time of about 1 to 3 seconds keeps
+the pace human. Bots act through the same action path as people, so all table rules apply to them
 unchanged.
+
+**Measured** (`shared/test/holdem-bots.mc.test.ts`, duplicate format: every deal played once per seating
+so each player holds every seat's cards; 100 big blinds, topped up each hand): bots drawn for high stakes
+beat bots drawn for micro stakes; a professional beats a station, a fish, a maniac and a rock heads-up;
+and no trivial strategy (always call, always raise the pot, min-raise every street, all-in every hand)
+wins against the tables the engine seats at high stakes. A decision takes well under a millisecond on
+average (the Monte Carlo is bounded at 220 deals).
 
 ### 4.10 Testing Hold'em
 
@@ -1615,7 +1635,9 @@ There is no house edge to measure, so the Monte Carlo test checks the pieces tha
 - the TDA fixtures in 4.4 as unit tests of reopening and minimum raises;
 - side-pot splits with three or more all-ins, including odd-cent splits;
 - deal uniformity: over millions of deals, each of the 1,326 hole-card combinations appears about equally
-  often (chi-square test).
+  often (chi-square test);
+- the bots (4.9): stronger line-ups beat weaker ones and no trivial strategy beats the high-stakes tables,
+  in big blinds per 100 hands with standard errors, over thousands of duplicate deals with fixed seeds.
 
 ---
 
@@ -1660,6 +1682,8 @@ There is no house edge to measure, so the Monte Carlo test checks the pieces tha
 - [billings98]: D. Billings, D. Papp, J. Schaeffer, D. Szafron, "Opponent Modeling in Poker", AAAI-98: https://cdn.aaai.org/AAAI/1998/AAAI98-070.pdf
 - [billings02]: D. Billings, A. Davidson, J. Schaeffer, D. Szafron, "The challenge of poker", *Artificial Intelligence* 134 (2002) 201-240: https://doi.org/10.1016/S0004-3702(01)00130-8
 - [ehs]: Wikipedia, Effective hand strength algorithm: https://en.wikipedia.org/wiki/Effective_hand_strength_algorithm
+- [upsrfi]: Upswing Poker, preflop charts (6-max and full ring raise-first-in): https://upswingpoker.com/preflop-charts/
+- [gtowrfi]: GTO Wizard, cash game preflop ranges: https://gtowizard.com/
 - [mop]: Summary of Chen and Ankenman, *The Mathematics of Poker* (ConJelCo, 2006): https://www.overnightmonster.com/pages/mathematicsofpoker
 
 [tcp]: https://wizardofodds.com/games/three-card-poker/

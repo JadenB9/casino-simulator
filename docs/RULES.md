@@ -91,7 +91,7 @@ inside 3. Seeds are fixed, so `npm run test:mc` reproduces these exactly.
 | | | D "Diamond Line" (3 reels, doubling diamond wild) | 94.983% RTP | 94.929% (10M spins, z −0.28) |
 | | | E "Lucky Cherries" (5x3, 10 lines, Cherry Wheel) | 94.028% RTP | 94.126% (10M spins, z +0.90) |
 | | | F "Gold Rush" (5x4, 40 lines, sticky-wild free games) | 92.994% RTP | 93.138% (10M spins, z +1.22) |
-| Texas Hold'em | no-limit, blinds, Poker TDA rules, no rake | | no house edge | every seat within 1.2 SE of 0 (300K hands, 6 seats); deals uniform (chi-square z 0.45, 2M deals) |
+| Texas Hold'em | no-limit, blinds $0.50/$1 to $100K/$200K, Poker TDA rules, no rake | | no house edge | every seat within 1.2 SE of 0 (300K hands, 6 seats); deals uniform (chi-square z 0.45, 2M deals); bots: high-stakes line-ups beat micro ones, trivial strategies lose to them (holdem-bots.mc) |
 | Plinko (online) | 8 to 16 rows, Low/Medium/High (Stake's tables), each bounce 50/50 | 16 rows High (top pay 1,000×) | 98.976% RTP | 98.938% (4M drops, z −0.12) |
 | | | 11 rows High (best) / 8 rows Medium (worst) | 99.160% / 98.906% RTP | 99.405% / 98.913% (4M drops, z +1.18, +0.10) |
 | | | Every board | 98.906% to 99.160% RTP | all 27 within 2.2 SE (4M drops each) |
