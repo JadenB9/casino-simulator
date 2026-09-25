@@ -87,14 +87,22 @@ export class Props {
         const spec = FILES[kind];
         try {
           const { parts, size, min, foot } = await this.load(spec.file);
-          const tip = spec.upright ? upright(parts, foot, min.y, size.y) : new THREE.Matrix4();
-          const len = spec.fit === 'height' ? size.y : Math.max(size.x, size.z);
-          // stand the model on its base, centred on the spot (by its foot, or its bounds)
+          // stand the model on its base, centred on the spot (by its foot, or its bounds), and
+          // tipped upright about its foot (then measured again, stood up)
           const cx = spec.foot ? foot.x : min.x + size.x / 2;
           const cz = spec.foot ? foot.y : min.z + size.z / 2;
+          let local = new THREE.Matrix4().makeTranslation(-cx, -min.y, -cz);
+          let height = size.y;
+          if (spec.upright) {
+            local = upright(parts, foot, min.y, size.y).multiply(local);
+            const [y0, y1] = heightOf(parts, local);
+            local.premultiply(new THREE.Matrix4().makeTranslation(0, -y0, 0));
+            height = y1 - y0;
+          }
+          const len = spec.fit === 'height' ? height : Math.max(size.x, size.z);
           const mats = list.map((p) => {
             const s = p.size / len;
-            return new THREE.Matrix4().compose(new THREE.Vector3(p.x, p.y, p.z), new THREE.Quaternion().setFromAxisAngle(_up, p.ry), new THREE.Vector3(s, s, s)).multiply(tip).multiply(new THREE.Matrix4().makeTranslation(-cx, -min.y, -cz));
+            return new THREE.Matrix4().compose(new THREE.Vector3(p.x, p.y, p.z), new THREE.Quaternion().setFromAxisAngle(_up, p.ry), new THREE.Vector3(s, s, s)).multiply(local);
           });
           this.group.add(this.instance(kind, parts, mats, list.map((p) => p.room)));
         } catch (err) {
@@ -367,6 +375,24 @@ export function upright(parts: readonly { geometry: THREE.BufferGeometry; matrix
   if (top <= 0) return new THREE.Matrix4();
   const lean = new THREE.Vector3(cx - foot.x, top, cz - foot.y).normalize();
   return new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion().setFromUnitVectors(lean, _up));
+}
+
+/** The lowest and highest point of a model's parts placed by `m`. */
+function heightOf(parts: readonly { geometry: THREE.BufferGeometry; matrix: THREE.Matrix4 }[], m: THREE.Matrix4): [number, number] {
+  const v = new THREE.Vector3();
+  const w = new THREE.Matrix4();
+  let y0 = Infinity;
+  let y1 = -Infinity;
+  for (const p of parts) {
+    w.multiplyMatrices(m, p.matrix);
+    const pos = p.geometry.getAttribute('position');
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i).applyMatrix4(w);
+      y0 = Math.min(y0, v.y);
+      y1 = Math.max(y1, v.y);
+    }
+  }
+  return [y0, y1];
 }
 
 /** A copy of a part scaled by k about its middle across its two short axes (its long one kept). */
