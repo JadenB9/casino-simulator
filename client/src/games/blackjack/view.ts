@@ -35,6 +35,7 @@ import { SpotPicker } from '../multihand/picker.ts';
 import { glideTo, setSpotsInPlay } from '../multihand/frame.ts';
 import { oneAtATime } from '../multihand/turns.ts';
 import './blackjack.css';
+import { wave } from '../../app/comfort.ts';
 
 const SVG = 'http://www.w3.org/2000/svg';
 
@@ -515,6 +516,8 @@ export class BlackjackTable implements TableView {
   private frame(): void {
     const n = this.mode === 'solo' ? Math.max(1, this.mine.length) : 1;
     setSpotsInPlay('blackjack', n);
+    // your circles and the dealer's side stay in view at any window size (every circle while watching)
+    this.ctx.stage.board(L.boardPoints(this.mine.length ? this.mine : Array.from({ length: L.SEATS }, (_, i) => i)));
     if (this.framed !== null && this.framed !== n && !this.disposed) {
       void glideTo(this.ctx.stage, n > 1 ? L.spotsPose(this.mine, this.ctx.stage.engine.camera.aspect) : L.seatPose(this.seat ?? 0));
     }
@@ -764,7 +767,7 @@ export class BlackjackTable implements TableView {
 
   update(): void {
     // The lit circle breathes, so the hand being played is found at a glance.
-    this.litMat.opacity = 0.62 + 0.3 * Math.sin(performance.now() / 260);
+    this.litMat.opacity = 0.62 + 0.3 * wave(performance.now() / 260);
     const v = this.v;
     if (this.timerObj && v?.deadline) {
       const left = Math.max(0, v.deadline - serverNow());

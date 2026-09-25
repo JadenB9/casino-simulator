@@ -25,6 +25,9 @@ import { spotOf as bandit } from '../../../shared/src/games/banditwheel/rules.ts
 import { SPOT_NAMES as BACCARAT_SPOTS, type Spot as BaccaratSpot } from '../../../shared/src/games/baccarat/rules.ts';
 import { handName as threeCardHand, score as threeCardScore } from '../../../shared/src/games/threecard/rules.ts';
 import type { Card } from '../../../shared/src/cards.ts';
+// v6 tables6: Let It Ride's and Pai Gow's hands, from what the table turned over
+import { winWhat as letItRideWin } from '../../../shared/src/games/letitride/wins.ts';
+import { winWhat as paiGowWin } from '../../../shared/src/games/paigow/wins.ts';
 // v6 online6: the new online games' item and hand names
 import { CASE_INFO, isCase } from '../../../shared/src/games/cases/rules.ts';
 import { PATTERN_NAMES, type Pattern as DiamondsPattern } from '../../../shared/src/games/diamonds/rules.ts';
@@ -126,6 +129,14 @@ const SHOW_MS: Partial<Record<GameId, number>> = {
   mines: 1_000,
   hilo: 1_000,
   crash: 500,
+  // v6 parlor6: a bingo prize lights as its ball is called; a pachinko batch big enough for the
+  // feed is a chain of fevers, about ten seconds a jackpot after the balls have flown
+  bingo: 2_000,
+  pachinko: 45_000,
+  // v6 tables6: the second community card turns and each hand is paid; the dealer's seven turn,
+  // are set, and each hand is shown and compared
+  letitride: 4_000,
+  paigow: 5_000,
 };
 /** Each free game plays out after the paid spin. */
 const FREE_GAME_MS = 2_400;
@@ -269,6 +280,23 @@ export function describeWin(game: GameId, variant: string, events: readonly Game
         const name = e ? PATTERN_NAMES[e.pattern as DiamondsPattern] : undefined;
         return name ? `${name}, ${mult(e!.mult)}` : times;
       }
+      // v6 parlor6: the biggest bingo prize the last ball paid, and a pachinko chain
+      case 'bingo': {
+        const best = mine('win').sort((a, b) => Number(b.mult) - Number(a.mult))[0];
+        const name = best ? { line: 'Line', corners: 'Four corners', blackout: 'Blackout' }[best.pattern as string] : undefined;
+        return name ? `${name} on ball ${best!.call}, ${mult(best!.mult)}` : `Bingo, ${times}`;
+      }
+      case 'pachinko': {
+        const e = mine('launch')[0];
+        const n = typeof e?.jackpots === 'number' ? e.jackpots : 0;
+        return n > 0 ? `${n}-jackpot ${n > 1 ? 'chain' : 'fever'}, ${e!.balls} balls` : times;
+      }
+      // v6 tables6: the paying hand ("Royal flush", "Kings full of Fours"), the 3-Card Bonus, the
+      // Fortune line ("Fortune, Five aces") or the high hand that won both
+      case 'letitride':
+        return letItRideWin(events, seat) ?? times;
+      case 'paigow':
+        return paiGowWin(events, seat) ?? times;
       case 'holdem': {
         // Only a hand shown down is named; an uncontested pot stays a pot.
         for (const e of events) {

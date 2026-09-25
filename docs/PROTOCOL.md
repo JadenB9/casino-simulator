@@ -107,6 +107,7 @@ every request).
 | POST | `/tables/join` | `{ pin }` | `{ tableId, game, lobby?: LobbySummary }` | 404 `BAD_PIN`, 429 |
 | POST | `/ticket` | `{ target }` | `{ ticket, exp }` | 400 (not a socket path), 401, 429 |
 | GET | `/leaderboard` | | `LeaderboardResponse` | 401 |
+| GET | `/feats` | | `FeatsResponse` | 401 |
 | GET | `/shop` | | `ShopResponse` | 401 |
 | POST | `/shop/buy` | `{ item, op }` | `BuyResponse` | 400 (op), 404 `NOT_FOUND`, 409 `INSUFFICIENT_FUNDS {balance, inPlay}`, 409 `NOT_ELIGIBLE` (already yours), 429 |
 | POST | `/bar/order` | `{ item, op }` | `OrderResponse` | 400 (op), 404 `NOT_FOUND`, 409 `INSUFFICIENT_FUNDS {balance, inPlay}`, 429 |
@@ -129,6 +130,18 @@ $50,000 and records the difference as a loan: `loan.amount` is that difference, 
 whose `msg` says what the bank counted; `balance` and `inPlay` are the profile's. While chips
 are moving between a table and D1 (a buy-in, top-up or cash-out in flight) it is `409 BUSY`:
 ask again in a moment.
+
+**Achievements and challenges** (`shared/src/feats.ts`). The tables decide them from the rounds
+they settle (`server/src/feats.ts`); each is earned once per account and paid once, in one D1
+batch: the `casino_feats` row and, for a cash reward, a `'grant'` ledger row with op id
+`feat:<account>:<feat>` and the balance change. The player hears `{ t: 'feat', feat, at,
+balance? }` on the table's socket (the balance after a cash reward) and everyone on the floor
+`{ t: 'feat', id, name, feat }`. Reward pieces, emotes and titles need no row of their own: they
+come with the feat (`profile.owned`, and `look.title` may name a feat whose reward has a
+title). `GET /feats` is `{ feats: [{ feat, at }], tally }`: the tallies challenges are measured on
+(`won`, `best`, `rounds`, `won:<game>`, `wins:<game>`, `bj:naturals`), as D1 has them. Tables
+send their tallies now and then (two minutes after the first unsent one, when the player stands
+up, and before paying a feat), so the numbers can trail a table still in play.
 
 ```ts
 type Profile = {
@@ -188,6 +201,28 @@ are shared on a tie (1, 2, 2, 4), and ties are listed oldest account first. `you
 when there's nothing to rank yet (no money, no win, no rounds). Names only: no account ids.
 Each Worker isolate reads the boards from D1 at most once a minute and `age` says how old they
 are (ms); a player outside a top ten has their own place read once per such read.
+
+**The daily bonus** (`server/src/daily.ts`, `shared/src/celebs.ts`). `GET /daily` says where your
+streak stands; `POST /daily/claim` takes today's. Days are Las Vegas days. The first claim pays
+$2,500, then $5,000, $7,500, $10,000, $15,000, $20,000 and $50,000 on seven days in a row, and
+$50,000 every day after; a missed day starts again at $2,500. A claim is a `grant` in the ledger
+keyed `daily:<account>:<yyyy-mm-dd>`, so a second claim the same day (another tab, a retry, a race)
+is `409 NOT_ELIGIBLE` with the balance, never a second payment. 20 claims a minute per account.
+`met` counts the celebrities you've said hello to.
+
+```ts
+type DailyStatus = { day: string; streak: number; claimed: boolean;
+                     next: number;            // which of the seven days the next claim is (1-7)
+                     amount: number;          // what it pays: today's if unclaimed, else tomorrow's
+                     amounts: number[];       // the seven days' amounts, cents
+                     resetAt: number;         // server time the Las Vegas day ends
+                     met: Partial<Record<CelebId, number>> };
+type DailyClaimResponse = { amount: number; streak: number; balance: number; inPlay: number; rev: number; status: DailyStatus };
+```
+
+On the dev stack only (`CASINO_DEV` in `server/wrangler.toml`; production never sets it),
+`POST /dev/celeb {celeb?}` starts a celebrity's visit a moment from now and `POST /dev/gift
+{spot?}` leaves a gift box at once, for the headless checks. Elsewhere both are `404`.
 
 ## Socket tickets
 
@@ -311,6 +346,40 @@ the floor hears about a win before the winner sees it. The words in `what` come 
 the table showed everyone once the round was over: the bet that paid, a hand turned over to be
 paid, a machine's own display. A Hold'em pot won without a showdown is just "Took the pot".
 
+### Celebrities and the gift box
+
+Beside the messages above, the floor carries these (`shared/src/celebs.ts`, `server/src/floor/celebs.ts`).
+A visit is planned ahead (every 20 to 40 minutes while people are on the floor, 4 to 10 minutes
+after the floor fills up again) and told to everyone at once; clients draw the whole visit from
+it and the server clock: the route (`ROUTES`, walked at 1.1 m/s with its stops) is the same
+function on the server, which checks a player asking for a word is within 3.5 m of where it puts
+the celebrity at that moment. One tip per account per visit, $500 to $10,000 in hundreds (mostly
+under $2,000), a `grant` keyed `celeb:<account>:<visit>`. A gift box's place is only sent when it
+appears; the first to open it within 2.6 m keeps $1,000 to $5,000 (`gift:<box>`, one payment per
+box). Asking is limited to three in a burst, then one every two seconds (`SLOW`).
+
+| From the client | Fields |
+|---|---|
+| `celeb.talk` | `visit` (a word with the celebrity, for a tip) |
+| `gift.open` | `id` |
+
+| From the floor | Fields |
+|---|---|
+| `celebs` | `visit: Visit \| null, gift: GiftBox \| null` (right after `hello`) |
+| `celeb` | `visit: Visit` (a visit planned, or replacing one) |
+| `celeb.talk` | `visit, id, line` (to everyone: the celebrity turns to player `id` and says `lines.hello[line]`) |
+| `celeb.tip` | `visit, line, amount, balance, inPlay, rev, met` (to the one who asked: paid) |
+| `celeb.no` | `visit, code: 'FAR' \| 'MET' \| 'GONE' \| 'SLOW', msg` |
+| `gift` | `gift: GiftBox` (a box appears) |
+| `gift.gone` | `id, name` (found by `name`, or run out when null) |
+| `gift.won` | `id, amount, balance, inPlay, rev` (to the finder; asking again says it again) |
+| `gift.no` | `id, code, msg` |
+
+```ts
+type Visit = { id: number; celeb: CelebId; start: number; seed: number };   // id = start (ms)
+type GiftBox = { id: number; x: number; z: number; until: number };         // metres; id = when it was left
+```
+
 ## Table socket
 
 Lobby: `wss://api.j4den.com/casino/ws/table/<tableId>?v=1&ticket=<ticket>[&pin=<pin>]`
@@ -419,8 +488,10 @@ folder documents the final shapes):
 | threecard | `bet {ante, pairPlus, spot?}`, `deal` (solo), `spots {n}` (solo, 1-3), `play {spot?}`, `fold {spot?}` |
 | war | `bet {bet, tie, spot?}`, `deal` (solo), `spots {n}` (solo, 1-3), `war {spot?}`, `surrender {spot?}` |
 | holdem | `fold`, `check`, `call`, `bet {amount}`, `raise {to}`, `allin`, `sitout {on}` |
+| letitride | `bet {unit, bonus, spot?}` (unit on each of the three bets), `deal` (solo), `spots {n}` (solo, 1-3), `ride {spot?}`, `pull {spot?}` (the bet up now: 1, then 2) |
+| paigow | `bet {bet, fortune, spot?}`, `deal` (solo), `spots {n}` (solo, 1-3), `set {low: [i, j], spot?}` (the two of the seven that make the low hand) |
 
-Several hands (blackjack, Three Card Poker, Casino War): a hand is played at a spot numbered like
+Several hands (blackjack, Three Card Poker, Casino War, Let It Ride, Pai Gow Poker): a hand is played at a spot numbered like
 the seats, and in these games' events and views every `seat` is a spot. At a shared table a
 player's spot is their seat; a solo player can play spots 0 to n - 1 (`spots {n}`), and `spot`
 in an action says which of them it's for. Each view's `mine` lists the viewer's spots.

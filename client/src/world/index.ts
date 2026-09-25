@@ -40,6 +40,9 @@ import { el } from '../ui/kit.ts';
 import { City, type CityLink } from './city/index.ts'; // v6 city6
 import { zoneMap } from './city/map.ts'; // v6 city6
 import type { ZoneId } from '../../../shared/src/zones.ts';
+import { FxPlayer, type Hanger } from './fx/index.ts';
+import { marqueePlacement, type Marquee } from './marquee.ts';
+import type { FxEvent, Statue } from '../../../shared/src/items.ts';
 import './world.css';
 
 export type { WorldStation } from './stations.ts';
@@ -159,6 +162,23 @@ export interface FloorWorld extends World {
   useFloor(link: CityLink | null): void;
   /** v6 city6: more "Press E" spots (the valet, the jail's desk); the returned function takes them back. */
   spots(fn: SpotProvider): () => void;
+  /**
+   * An effect bought in the shop (the floor's `fx` message): played for everyone who can see it,
+   * starting at its server time `at` (fx/index.ts). A repeat of one already known is ignored.
+   */
+  playFx(ev: FxEvent): void;
+  /** Everything still playing or queued (the floor's `fxs`, after each hello). */
+  syncFx(list: FxEvent[]): void;
+  /** The lobby's statues, newest first (the floor's `statues`). Resolves when they stand. */
+  setStatues(list: Statue[]): Promise<void>;
+  /**
+   * What the effects need from the app: your floor id (effects follow their buyer, yours follow
+   * you), the pit's LED sign (the Headline puts a name on it) and the slots hall's win meter (Own
+   * the Night borrows its face). Null forgets a sign.
+   */
+  useFx(o: { self?: () => number | null; marquee?: Marquee | null; tally?: { mesh: THREE.Mesh } | null }): void;
+  /** The effects and statues themselves (for the dev floor and the checks). */
+  readonly fx: FxPlayer;
 }
 
 /** v6 city6: no rooms of the casino are seen from another zone. */
@@ -257,6 +277,16 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
   root.add(cashierAnchor);
   const cashier: CashierPoint = { id: 'cashier', anchor: cashierAnchor, position: new THREE.Vector3(plan.cashier.x, 0, plan.cashier.z) };
   const ui = ui0;
+  // The floor's own reflections (High), made once the shaders are compiled (reflect() below).
+  let reflections: THREE.WebGLRenderTarget | null = null;
+  // The shop's effects and the lobby's statues (fx/): made before the compile, so their materials are in it.
+  const sign = marqueePlacement(plan);
+  const hangers: Hanger[] = [
+    ...chandeliers.map((c) => ({ x: c.x, z: c.z, r: 0.9 })),
+    ...plan.hanging.map((h) => ({ x: h.x, z: h.z, r: h.w / 2 })),
+    { x: sign.x, z: sign.z, r: sign.length / 2 },
+  ];
+  const fx = new FxPlayer({ root, plan, camera: engine.camera, quality: () => quality, lighting, collider: col, characters, mats, me: character, ui, sfx: opts.sfx, hangers, env: () => reflections?.texture ?? null, stations: stationRoot });
   const interact = new Interact(stations, cashier, player, engine.camera, ui, opts.onEscape);
   // Rooms nobody can see from where the camera is aren't drawn: their walls and ceilings, their
   // furniture and props, their stations and staff.
@@ -336,7 +366,6 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
   // The floor's own reflections (High): the casino captured from inside the doors and
   // prefiltered, for the polished marble, lacquer and wood, so they mirror its warm lights and
   // signs instead of a studio.
-  let reflections: THREE.WebGLRenderTarget | null = null;
   const reflect = () => {
     if (reflections || quality !== 'high') return;
     const pmrem = new THREE.PMREMGenerator(renderer);
@@ -361,12 +390,14 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
 
   // with the shaders compiled, the capture is only the drawing
   reflect();
+  await fx.rewarm(renderer, scene);
   progress(1);
 
   const emotes = new Emotes({ ui, sfx: opts.sfx, ears: () => engine.camera.position });
   let remotes: CharacterSource | null = null;
   let bar: Parameters<FloorWorld['useBar']>[0] = null;
 
+  const allRooms: ReadonlySet<string> = new Set(plan.rooms.map((r) => r.id));
   let bloomLook: BloomLook = FLOOR_BLOOM;
   let lastCalls = 0;
   let lastTris = 0;
@@ -425,6 +456,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
       lighting.setQuality(q);
       city.setQuality(q);
       characters.setQuality(q);
+      fx.setQuality(q);
       void props.setQuality(q).then(() => reflect());
       applyQuality(q);
     },
@@ -453,14 +485,16 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
       life.update(dt, home ? visibility.visible : NO_ROOMS, sees);
       emotes.update(dt);
       const f = world.focus;
-      if (home) lighting.setFocus(f && f.zone !== 'slots' && f.game !== 'videopoker' ? focusAt.copy(f.anchor.position) : null);
+      if (home) lighting.setFocus(f && f.zone !== 'slots' && f.zone !== 'parlour' && f.game !== 'videopoker' ? focusAt.copy(f.anchor.position) : null);
+      // the shop's effects: before the lights settle, since they tint them and borrow the focus spot
+      fx.update(dt, { here: visibility.room, visible: everything ? allRooms : home ? visibility.visible : NO_ROOMS }, interact.seated !== null);
       lighting.update(dt);
       city.light(dt);
       // Seated, the camera is a metre from lit felt, cards and brass: nothing on a table glows
       // there; at a machine its own lights do, a little.
       const seat = interact.seated;
       const studio = engine.camera.position.y < STUDIO_BELOW;
-      const want = studio ? STUDIO_BLOOM : !seat ? FLOOR_BLOOM : seat.zone === 'slots' || seat.game === 'videopoker' ? MACHINE_BLOOM : TABLE_BLOOM;
+      const want = studio ? STUDIO_BLOOM : !seat ? FLOOR_BLOOM : seat.zone === 'slots' || seat.zone === 'parlour' || seat.game === 'videopoker' ? MACHINE_BLOOM : TABLE_BLOOM;
       if (want !== bloomLook) {
         bloomLook = want;
         bloom.setLook(want);
@@ -490,6 +524,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
     },
     useRemotes(source) {
       remotes = source;
+      fx.useRemotes(source);
     },
     // v6 city6: nobody in another zone is drawn
     canSee: (x, z) => city.sees(x, z, (a, b) => everything || visibility.seesPerson(a, b)),
@@ -523,8 +558,18 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
     },
     useFloor: (link) => city.useLink(link),
     spots: (fn) => interact.spots(fn),
+    playFx: (ev) => fx.play(ev),
+    syncFx: (list) => fx.sync(list),
+    setStatues: (list) => fx.setStatues(list),
+    useFx(o) {
+      if (o.self) fx.useSelf(o.self);
+      if (o.marquee !== undefined) fx.useMarquee(o.marquee);
+      if (o.tally !== undefined) fx.useTally(o.tally?.mesh ?? null);
+    },
+    fx,
     dispose() {
       city.dispose();
+      fx.dispose();
       map.dispose();
       directories.dispose();
       mannequins.dispose();

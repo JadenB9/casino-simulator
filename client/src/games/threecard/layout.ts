@@ -12,6 +12,7 @@ import { CARD_H, CARD_W } from '../../table/cards.ts';
 import type { Paytable } from '../../../../shared/src/games/threecard/rules.ts';
 import { CATEGORY_NAMES } from '../../../../shared/src/games/threecard/rules.ts';
 import { fitWidth } from '../multihand/frame.ts';
+import { around } from '../../table/fit.ts';
 
 export const TOP_Y = 0.76;
 /** Centre of the players' arc, behind the dealer's edge. */
@@ -337,3 +338,19 @@ export function makeFelt(pay: Paytable, resolution: number): Felt {
   return felt;
 }
 
+
+/**
+ * What must stay in view at this table (table/fit.ts): the spots and cards of the hands you play
+ * (every seat's while you watch), with their payouts, and the dealer's cards and chip rack.
+ */
+export function boardPoints(seats: readonly number[]): THREE.Vector3[] {
+  const out: THREE.Vector3[] = [];
+  const card = Math.hypot(CARD_W, CARD_H) / 2;
+  for (const seat of seats) {
+    for (const kind of Object.keys(SPOT_R) as SpotKind[]) out.push(...around(spotPoint(seat, kind), SPOT_RADIUS * 1.15), ...around(payoutPoint(seat, kind), 0.025));
+    for (let i = 0; i < 3; i++) out.push(...around(handSlot(seat, i).pos, card));
+  }
+  for (let i = 0; i < 3; i++) out.push(...around(dealerSlot(i), card * DEALER_CARD_SCALE));
+  out.push(...around(new THREE.Vector3(RACK.x, TOP_Y, RACK.z), RACK.w / 2, RACK.d / 2));
+  return out;
+}

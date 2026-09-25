@@ -28,6 +28,8 @@ import type { Collider } from './collision.ts';
 
 import { loadMouse, onMouseChange, setMouseSettings, type MouseSettings, type View } from './mouse.ts';
 import { EMOTE_S } from './emotes.ts';
+import { ridePace } from './rides.ts';
+import { EMOTES } from '../../../shared/src/protocol.ts';
 
 const RADIUS = 0.3;
 // A brisk default pace (the floor is 40 m across), and Shift for a run.
@@ -82,6 +84,13 @@ const SHOW_AT = 0.74;
 const SHOW_ROOM = 1.8;
 const SHOW_TRIES = [0.55, -0.55, 0.95, -0.95, 0.2, -0.2, 1.4, -1.4, 1.9, -1.9];
 const SHOW_S = EMOTE_S + 0.2;
+/**
+ * A punch (world/law/, the 'punch' gesture) is thrown at the character's own head height, a little
+ * under the eyes: for its length the look dips this much and comes back, so the fist swings into
+ * view in first person (the look itself is left where it was).
+ */
+const JAB_S = 0.62;
+const JAB_DIP = 0.12;
 /** Looking this far (radians) while an emote is shown brings the eyes back. */
 const SHOW_CANCEL = 0.03;
 /** Seconds without mouse input before the follow camera swings back behind the walker. */
@@ -132,6 +141,8 @@ export class Player {
   /** An emote being shown from out in front: the camera's yaw, and until when. */
   private showing: { yaw: number; until: number } | null = null;
   private showLook = 0;
+  /** Seconds left of a punch you threw: the eyes follow the fist down a little and back. */
+  private jab = 0;
   /** A seat holds the body (the character was sat down): the look doesn't turn it. */
   private sitting = false;
   private readonly posQ = new THREE.Quaternion();
@@ -181,14 +192,17 @@ export class Player {
   /**
    * The walker hears two things others tell the character: an emote (world/emotes.ts), which in
    * first person swings the camera out to show it, and sitting down on a floor seat
-   * (world/life/sitting.ts), after which the seat, not the look, turns the body.
+   * (world/life/sitting.ts), after which the seat, not the look, turns the body. Other motions
+   * through the same call (a punch thrown or taken, world/law/) are quick and happen in front of
+   * you: the eyes stay put and your own arm swings into view.
    */
   private hear(ch: Character): void {
     const gesture = ch.gesture?.bind(ch);
     if (gesture) {
       ch.gesture = (e) => {
         gesture(e);
-        this.showEmote();
+        if (showsFromFront(e)) this.showEmote();
+        else if ((e as string) === 'punch') this.jab = JAB_S;
       };
     }
     const sit = ch.sit?.bind(ch);
@@ -335,23 +349,32 @@ export class Player {
     const len = Math.hypot(mx, mz);
     // walking off brings the eyes back from showing an emote
     if (this.showing && (len > 0 || this.clock > this.showing.until)) this.showing = null;
-    const speed = len > 0 ? (run ? RUN : WALK * pace) : 0;
+    // v6 looks6: on a ride, its own speeds; it gets going and rolls to a stop more slowly
+    const ride = ridePace(this.character);
+    const speed = len > 0 ? (run ? (ride?.run ?? RUN) : (ride?.walk ?? WALK) * pace) : 0;
     if (len > 0) {
       mx /= len;
       mz /= len;
     }
-    const a = 1 - Math.exp(-dt * (len > 0 ? 9 : 12));
+    if (ride && len > 0) {
+      // a ride goes where it points, and swings round to where you steer at its own pace: it carves
+      this.heading = turn(this.heading, Math.atan2(mx, mz), 1 - Math.exp(-dt * ride.turn));
+      mx = Math.sin(this.heading);
+      mz = Math.cos(this.heading);
+    }
+    const a = 1 - Math.exp(-dt * (len > 0 ? (ride?.accel ?? 9) : (ride?.coast ?? 12)));
     this.vel.x += (mx * speed - this.vel.x) * a;
     this.vel.y += (mz * speed - this.vel.y) * a;
     const p = { x: this.position.x + this.vel.x * dt, z: this.position.z + this.vel.y * dt };
-    this.col.resolve(p, RADIUS);
+    this.col.resolve(p, ride?.radius ?? RADIUS);
     // speed actually achieved (sliding along a wall is slower than pushing into it)
     const moved = Math.hypot(p.x - this.position.x, p.z - this.position.z) / Math.max(dt, 1e-4);
     this.position.x = p.x;
     this.position.z = p.z;
     if (this.mouse.view === 'first' && !this.showing) {
       // through your eyes the body faces where you look, walking or not, unless a seat holds it
-      if (!this.sitting) this.heading = turn(this.heading, this.camYaw + Math.PI, 1 - Math.exp(-dt * 20));
+      // (a ride keeps its own heading: it carves where you steer, whatever you look at)
+      if (!this.sitting && !ride) this.heading = turn(this.heading, this.camYaw + Math.PI, 1 - Math.exp(-dt * 20));
     } else if (len > 0) {
       const want = Math.atan2(mx, mz);
       this.heading = turn(this.heading, want, 1 - Math.exp(-dt * 12));
@@ -453,6 +476,7 @@ export class Player {
     const drawnNear = first && cam.position.distanceTo(this.eye) < HEADLESS_NEAR;
     const toEyes = first && !this.showing ? 1 : 0;
     this.eyesK = stepToward(this.eyesK, toEyes, dt / SWITCH_S);
+    this.jab = Math.max(0, this.jab - dt);
     const k = smooth(this.eyesK);
     if (k < 1) {
       // behind you, or out in front while an emote is shown
@@ -498,7 +522,7 @@ export class Player {
 
   /** Which way the eyes look (unit length): straight away from where the follow camera would be. */
   private lookDir(out: THREE.Vector3): THREE.Vector3 {
-    const p = clampPitch(this.camPitch, 'first');
+    const p = clampPitch(this.camPitch + jabDip(JAB_S - this.jab), 'first');
     const cp = Math.cos(p);
     return out.set(-Math.sin(this.camYaw) * cp, -Math.sin(p), -Math.cos(this.camYaw) * cp);
   }
@@ -711,6 +735,12 @@ export function eyeOffset(pitch: number): { ahead: number; up: number } {
   return { ahead: HEAD_AHEAD + EYES_AHEAD * c + EYES_OVER_HEAD * s, up: EYES_OVER_HEAD * c - EYES_AHEAD * s };
 }
 
+/** How far the look dips `t` seconds into a punch you threw (0 before and after it). */
+export function jabDip(t: number): number {
+  if (!(t > 0) || t >= JAB_S) return 0;
+  return JAB_DIP * Math.sin((Math.PI * t) / JAB_S);
+}
+
 /** Move `a` toward `b` by at most `step`. */
 export function stepToward(a: number, b: number, step: number): number {
   if (!(step > 0)) return a;
@@ -721,6 +751,13 @@ export function stepToward(a: number, b: number, step: number): number {
 function smooth(x: number): number {
   const t = Math.max(0, Math.min(1, x));
   return t * t * (3 - 2 * t);
+}
+
+const EMOTE_IDS: ReadonlySet<string> = new Set(EMOTES);
+
+/** Whether a gesture of your own swings the first-person camera out to show it: an emote does, a punch doesn't. */
+export function showsFromFront(gesture: string): boolean {
+  return EMOTE_IDS.has(gesture);
 }
 
 const MOVE_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ShiftRight']);

@@ -317,8 +317,8 @@ export function buildRoof(mats: Mats, col: Collider, quality: Quality): ZoneBuil
       if (x >= -127.8 && x <= -119 && z >= D.z0 && z <= D.z0 + 4.1) return 2.7;
       return null;
     },
-    update(dt, _people, calm) {
-      beacons.update(dt, calm);
+    update(dt) {
+      beacons.update(dt);
     },
     setQuality(q) {
       void props.setQuality(q);

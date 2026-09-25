@@ -141,9 +141,9 @@
   @keyframes lift-out { to { opacity: 0; transform: translateY(12px); } }
   .lift-ride-floor { font-size: 42px; }
 }
-@media (prefers-reduced-motion: reduce) {
-  .lift-panel, .lift-panel.closing { animation: none; }
-}
+/* Reduce flashing & motion: the panel just appears, the dark comes at once */
+body.calm .lift-panel, body.calm .lift-panel.closing { animation: none; }
+body.calm .lift-ride { transition-duration: 0.12s; }
 
 /* the map out of the casino (map.ts) */
 .city-map-body .map-svg.city-map { max-height: 62vh; width: auto; max-width: 100%; margin: 0 auto; }

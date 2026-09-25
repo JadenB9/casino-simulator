@@ -7,6 +7,7 @@
 
 import * as THREE from 'three';
 import { canvasTexture } from '../carpet.ts';
+import { calmUniform } from '../../app/comfort.ts';
 
 export type SkyKind = 'night' | 'sunset';
 
@@ -450,7 +451,8 @@ void main() {
 /** Red lights on the tallest towers' tops, blinking slowly (steady when calm). */
 export class Beacons {
   readonly points: THREE.Points;
-  private readonly uniforms = { uTime: { value: 0 }, uScale: { value: 600 }, uSteady: { value: 0 } };
+  // (steady while calm: comfort.ts's uniform, shared)
+  private readonly uniforms = { uTime: { value: 0 }, uScale: { value: 600 }, uSteady: calmUniform };
 
   constructor(at: THREE.Vector3[], seed: number) {
     const rnd = rng(seed);
@@ -468,8 +470,7 @@ export class Beacons {
     };
   }
 
-  update(dt: number, calm: boolean): void {
+  update(dt: number): void {
     this.uniforms.uTime.value += dt;
-    this.uniforms.uSteady.value = calm ? 1 : 0;
   }
 }

@@ -452,10 +452,10 @@ export function buildGround(mats: Mats, col: Collider, quality: Quality): ZoneBu
       if (x >= C.x0 && x <= C.x1 && z >= C.z0 && z <= C.z1) return cy;
       return null;
     },
-    update(dt, people, calm) {
+    update(dt, people) {
       doors.update(dt, people);
       traffic.update(dt, people);
-      beacons.update(dt, calm);
+      beacons.update(dt);
     },
     setQuality(q) {
       void props.setQuality(q);

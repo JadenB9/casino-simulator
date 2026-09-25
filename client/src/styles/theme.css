@@ -118,10 +118,6 @@ button { font: inherit; color: inherit; }
 .timer .track { stroke: rgba(255, 255, 255, 0.12); }
 .timer .left { stroke: var(--brass-hi); stroke-linecap: round; transform: rotate(-90deg); transform-origin: 50% 50%; }
 
-@media (prefers-reduced-motion: reduce) {
-  * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
-}
-
 /* Tips: one line above the table's controls, and a ring on the control it recommends. */
 .tip-line { position: fixed; left: 50%; bottom: var(--tip-bottom, 104px); transform: translateX(-50%); max-width: min(560px, calc(100vw - 32px)); display: flex; gap: 10px; align-items: baseline; padding: 7px 14px; font-size: 15px; color: var(--ink); text-wrap: balance; pointer-events: none; }
 .tip-label { font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--brass-hi); }

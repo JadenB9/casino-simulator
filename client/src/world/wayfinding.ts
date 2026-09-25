@@ -30,6 +30,9 @@ const TINT: Record<string, string> = {
   yard: '#6a4418',
   bank: '#6a5a36',
   boutique: '#7a6230',
+  parlour: '#7a2456',
+  cardroom: '#6a1418',
+  bingo: '#2a4a7a',
 };
 
 /** What's in a room, for the map and the directory: its games, then what else it has. */

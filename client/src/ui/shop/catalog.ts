@@ -9,10 +9,10 @@ import {
   type EffectItem, type FxEvent, type ItemKind,
 } from '../../../../shared/src/items.ts';
 import { FEATS, type Feat } from '../../../../shared/src/feats.ts';
-import type { Cents } from '../../../../shared/src/money.ts';
+import { DOLLAR, type Cents } from '../../../../shared/src/money.ts';
 import { ROOMS, type RoomId } from '../../world/rooms.ts';
 
-export type Section = 'wear' | 'ride' | 'emote' | 'fx' | 'statue';
+export type Section = 'wear' | 'ride' | 'emote' | 'fx' | 'statue' | 'vault';
 
 export const SECTIONS: readonly { id: Section; label: string }[] = [
   { id: 'wear', label: 'Wear' },
@@ -20,7 +20,16 @@ export const SECTIONS: readonly { id: Section; label: string }[] = [
   { id: 'emote', label: 'Emotes' },
   { id: 'fx', label: 'Effects' },
   { id: 'statue', label: 'Statue' },
+  { id: 'vault', label: 'Vault' },
 ];
+
+/**
+ * The private collection: anything from a billion dollars up. It has a section of its own (the
+ * Vault) and sits at the end of its kind's list under its own heading, and the showroom shows a
+ * piece of it in a glass case.
+ */
+export const VAULT_FROM: Cents = 1_000_000_000 * DOLLAR;
+export const inVault = (e: { price: Cents; reward: boolean }) => !e.reward && e.price >= VAULT_FROM;
 
 /** The kinds worn on you (a ride has a section of its own). */
 export const WEAR_KINDS: readonly ItemKind[] = ITEM_KINDS.filter((k) => k !== 'ride');
@@ -69,6 +78,11 @@ export function entries(section: Section, kind: ItemKind = 'chain'): Entry[] {
       return EFFECTS.map((f): Entry => ({ section, id: f.id, name: f.name, price: f.price, about: f.about, reward: false, fx: f }));
     case 'statue':
       return [{ section, id: STATUE.id, name: STATUE.name, price: STATUE.price, about: STATUE.about, reward: false }];
+    case 'vault':
+      return [
+        ...SHOP_ITEMS.filter((i) => !i.reward && i.price >= VAULT_FROM).map((i): Entry => ({ section, id: i.id, name: i.name, price: i.price, about: i.about, reward: false, kind: i.kind })),
+        ...EFFECTS.filter((f) => f.price >= VAULT_FROM).map((f): Entry => ({ section, id: f.id, name: f.name, price: f.price, about: f.about, reward: false, fx: f })),
+      ].sort(cheapestFirst);
   }
 }
 

@@ -2,7 +2,8 @@
 //   /casino/src/ui/shop/dev.html?screen=<wear|boutique|bar|effects>
 // boutique, bar, effects: against the local worker, logged in as name=<n> (dev password), or
 // fixture=1 for a canned high roller with no server at all (a disco already on in the Bar, where
-// they stand). item=<id> opens the boutique at that piece; section=<wear|ride|emote|fx|statue>.
+// they stand). item=<id> opens the boutique at that piece; section=<wear|ride|emote|fx|statue|vault>;
+// balance=<dollars> sets the high roller's balance.
 // wear: your character in the showroom wearing what the URL says, to look at the pieces up close:
 // body=m|f, outfit=suit, chain=, grill=, clothes=, watch=, shades=, hat=, held=<bar item>,
 // view=full|chest|face|head|wrist|hand, yaw=<radians> (holds the turn still).
@@ -16,7 +17,7 @@ import { Sfx } from '../../audio/sfx.ts';
 import * as realApi from '../../net/api.ts';
 import { session } from '../../app/session.ts';
 import { DEFAULT_LOOK, type Look } from '../../../../shared/src/look.ts';
-import { EFFECTS, EMOTE_ITEMS, FX_GAP_MS, HOLD_MS, ITEM_KINDS, SHOP_ITEMS, STATUE, effectItem, shopEmote, shopItem, type BuyResponse, type EffectResponse, type FxEvent, type OrderResponse, type Statue } from '../../../../shared/src/items.ts';
+import { theName, EFFECTS, EMOTE_ITEMS, FX_GAP_MS, HOLD_MS, ITEM_KINDS, SHOP_ITEMS, STATUE, effectItem, shopEmote, shopItem, type BuyResponse, type EffectResponse, type FxEvent, type OrderResponse, type Statue } from '../../../../shared/src/items.ts';
 import { barItem } from '../../../../shared/src/items.ts';
 import type { Profile } from '../../../../shared/src/protocol.ts';
 import { ApiError } from '../../net/api.ts';
@@ -120,7 +121,7 @@ function fixtureApi(floor: ReturnType<typeof fixtureFloor>): ShopApi & { order(i
     async buy(item: string): Promise<BuyResponse> {
       await wait();
       const it = shopItem(item) ?? shopEmote(item) ?? (item === STATUE.id ? STATUE : null)!;
-      if (owned.has(item)) throw new ApiError(409, { error: 'NOT_ELIGIBLE', msg: `You already own the ${it.name}.` });
+      if (owned.has(item)) throw new ApiError(409, { error: 'NOT_ELIGIBLE', msg: `You already own ${theName(it.name)}.` });
       const m = money(it.price);
       owned.set(item, { price: it.price, at: Date.now() });
       return { item, price: it.price, at: Date.now(), ...m };
@@ -151,7 +152,9 @@ function fixtureApi(floor: ReturnType<typeof fixtureFloor>): ShopApi & { order(i
 
 async function ensureSession(): Promise<void> {
   if (fixture) {
-    session.set(highRoller());
+    // balance=<dollars> for a richer (or poorer) high roller
+    const dollars = Number(q.get('balance'));
+    session.set({ ...highRoller(), ...(dollars > 0 ? { balance: Math.round(dollars * 100) } : {}) });
     return;
   }
   session.set(await realApi.login(q.get('name') ?? `dev_${Math.random().toString(36).slice(2, 8)}`, realApi.DEV_PASSWORD));

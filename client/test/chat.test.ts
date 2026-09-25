@@ -3,7 +3,7 @@
 
 import { describe, it, expect, beforeAll } from 'vitest';
 import type { FloorLink as FloorLinkT, FloorTransport } from '../src/net/presence.ts';
-import { KEEP, RoomLog, SendGate, nameHue, sayFor } from '../src/ui/chat/model.ts';
+import { KEEP, RoomLog, SendGate, chatLook, nameHue, sayFor } from '../src/ui/chat/model.ts';
 import { CHAT_BURST, type ChatLine, type ChatServerMsg } from '../../shared/src/protocol.ts';
 
 // api.ts reads a constant Vite defines at build time; the unit project has no Vite define.
@@ -124,5 +124,25 @@ describe('small helpers', () => {
     expect(sayFor('hi')).toBe(4);
     expect(sayFor('x'.repeat(60))).toBeCloseTo(6.6);
     expect(sayFor('x'.repeat(200))).toBe(9);
+  });
+});
+
+describe('the pinned chat', () => {
+  const at = (o: Partial<Parameters<typeof chatLook>[0]>) => chatLook({ visible: true, open: false, pinned: false, typing: false, ...o });
+
+  it('is nothing off the floor and the dock while closed, pinned or not', () => {
+    expect(at({ visible: false, open: true, pinned: true })).toBe('hidden');
+    expect(at({})).toBe('dock');
+    expect(at({ pinned: true })).toBe('dock');
+  });
+
+  it('is the whole box while typing, pinned or not, and while opened for a moment', () => {
+    expect(at({ open: true, typing: true })).toBe('box');
+    expect(at({ open: true, typing: true, pinned: true })).toBe('box');
+    expect(at({ open: true })).toBe('box');
+  });
+
+  it('stays up idle, letting the game have the clicks, once pinned and done typing', () => {
+    expect(at({ open: true, pinned: true })).toBe('idle');
   });
 });

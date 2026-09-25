@@ -13,6 +13,7 @@ import { Felt, type Region } from '../../table/felt.ts';
 import { CARD_H, CARD_W } from '../../table/cards.ts';
 import type { WarRules } from '../../../../shared/src/games/war/rules.ts';
 import { fitWidth } from '../multihand/frame.ts';
+import { around } from '../../table/fit.ts';
 
 export const TOP_Y = 0.76;
 /** Centre of the players' arc, behind the dealer's edge. */
@@ -384,4 +385,20 @@ export function makeFelt(rules: WarRules, resolution: number): Felt {
   const felt = new Felt({ width: FELT_W, depth: FELT_D, color: FELT_TEAL, resolution, paint: paint(rules), regions: regions() });
   cutFeltToD(felt);
   return felt;
+}
+
+/**
+ * What must stay in view at this table (table/fit.ts): the boxes and cards of the spots you play
+ * (every seat's while you watch), with their payouts, and the dealer's cards and chip rack.
+ */
+export function boardPoints(seats: readonly number[]): THREE.Vector3[] {
+  const out: THREE.Vector3[] = [];
+  const card = Math.hypot(CARD_W, CARD_H) / 2;
+  for (const seat of seats) {
+    for (const kind of Object.keys(SPOT_R) as SpotKind[]) out.push(...around(spotPoint(seat, kind), SPOT_SIZE[kind] * 1.15), ...around(payoutPoint(seat, kind), 0.025));
+    for (const war of [false, true]) out.push(...around(cardSlot(seat, war).pos, card));
+  }
+  for (const war of [false, true]) out.push(...around(dealerSlot(war), card));
+  out.push(...around(new THREE.Vector3(RACK.x, TOP_Y, RACK.z), RACK.w / 2, RACK.d / 2));
+  return out;
 }

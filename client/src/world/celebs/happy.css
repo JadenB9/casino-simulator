@@ -1,0 +1,19 @@
+/* Happy hour at the bar: the menu's full price struck through beside the half, the line over the
+   menu, and the countdown card under the HUD. */
+
+.bar-price.happy { display: inline-flex; align-items: baseline; gap: 6px; }
+.happy-was { font-size: 0.82em; color: var(--ink-3); text-decoration-thickness: 1.5px; text-decoration-color: rgba(224, 118, 107, 0.85); }
+.happy-now { color: var(--brass-hi); }
+.happy-banner { display: flex; align-items: baseline; gap: 10px; margin: 0 0 6px; padding: 8px 12px; border: 1px solid var(--line-strong); border-radius: 5px; background: linear-gradient(90deg, rgba(216, 176, 106, 0.16), rgba(216, 176, 106, 0.03)); font-size: 15px; letter-spacing: 0.03em; color: var(--ink-2); }
+.happy-banner[hidden] { display: none; }
+.happy-banner-word { font-family: var(--serif); font-size: 15px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--brass-hi); white-space: nowrap; }
+
+.happy-card { display: grid; gap: 1px; width: 236px; padding: 9px 14px 10px; border-color: var(--line-strong); pointer-events: none; animation: celeb-slide 0.4s var(--ease); }
+.happy-card-tag { font-size: 11px; font-weight: 600; letter-spacing: 0.24em; text-transform: uppercase; color: var(--brass); }
+.happy-card-title { font-family: var(--serif); font-size: 16px; font-weight: 600; letter-spacing: 0.04em; color: var(--brass-hi); }
+.happy-card-left { display: flex; align-items: baseline; justify-content: space-between; margin-top: 3px; font-size: 14px; font-weight: 600; letter-spacing: 0.06em; color: var(--ink-2); }
+.happy-card-clock { font-family: var(--meter); font-size: 15px; letter-spacing: 0.08em; color: var(--ink); }
+
+@media (max-width: 720px) {
+  .happy-card { width: 188px; padding: 7px 11px 8px; }
+}

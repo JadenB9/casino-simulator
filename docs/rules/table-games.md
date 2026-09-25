@@ -1,7 +1,7 @@
 # Table Game Rules and Odds
 
-Blackjack, roulette, craps, baccarat, Casino War, the Big Six wheel, Sic Bo and the Bandit Wheel
-as this casino deals them. For each game this page lists the house rules, every bet's payout, its house edge with
+Blackjack, roulette, craps, baccarat, Casino War, the Big Six wheel, Sic Bo, the Bandit Wheel, Let It
+Ride and Pai Gow Poker as this casino deals them. For each game this page lists the house rules, every bet's payout, its house edge with
 a source, and the standard deviation (SD) per bet. The Monte Carlo tests use the SD to work out how
 many rounds they need.
 
@@ -1293,3 +1293,257 @@ the 10 and the 20 (see below) would move those edges by 8 and 16 points, far pas
   https://whenisforcewiperust.com/bandit-camp-rust
 - [R8] EIP Gaming, "Bandit Camp - Rust Monument Guide" (2022-08-25): lists the 10 and 20 as paying
   12× and 25×. https://eip.gg/rust/guides/bandit-camp-monument/
+
+---
+
+## Let It Ride
+
+Researched 2026-09-25. Let It Ride is Shuffle Master's poker game with no dealer hand to beat: the
+player's three cards and two community cards make one five-card hand, paid from a table, and the
+player may take back two of the three bets as the cards come. Sources L1 and L2 are at the end of the
+section. Code: shared/src/games/letitride/ (rules.ts has the hand ranks, the pay tables, the
+strategy and settlement; engine.ts the table).
+
+### House rules
+
+| Rule | Setting | Source |
+|---|---|---|
+| Deck | One 52-card deck, shuffled fresh every round | [L1] |
+| Bets | Three equal bets, marked 1, 2 and $, whole dollars within the table's limits ([limits.md](limits.md); Standard: $10 to $1,000 each), and the optional 3-Card Bonus ($5 to $250) with them | [L1], [L2] |
+| Deal | Three cards to each player, first base first, and two community cards face down | [L1] |
+| Bet 1 | After seeing their three cards the player lets it ride or pulls it back (it comes back to the stack) | [L1] |
+| Bet 2 | The first community card is turned; the player lets bet 2 ride or pulls it back, whatever they did with bet 1 | [L1] |
+| The $ bet | Always rides | [L1] |
+| Settlement | The second community card is turned. Every bet still riding is paid by the pay table on the five cards, or lost below a pair of tens | [L1] |
+| 3-Card Bonus | Paid on the player's own first three cards, ranked as at Three Card Poker (a straight beats a flush), whatever the player does with bets 1 and 2 | [L2] |
+| Shared table | Up to 7 players. Bets 1 and 2 are each decided by everyone at once within 15 seconds; a player who doesn't answer has the bet pulled back (it risks nothing more) | this casino |
+| Several hands | Alone, up to three hands, each with its own bets and decisions, against the one pair of community cards | this casino |
+| Aggregate payout limit | None. Some casinos cap a hand's total win; a cap changes the edge, so this table has none | this casino |
+
+### Pay tables and house edges
+
+| Five-card hand | Pays on each riding bet | Combinations | 3-Card Bonus hand | Pays | Combinations |
+|---|---|---|---|---|---|
+| Royal flush | 1,000:1 | 4 | Mini royal (A-K-Q suited) | 50:1 | 4 |
+| Straight flush | 200:1 | 36 | Straight flush | 40:1 | 44 |
+| Four of a kind | 50:1 | 624 | Three of a kind | 30:1 | 52 |
+| Full house | 11:1 | 3,744 | Straight | 6:1 | 720 |
+| Flush | 8:1 | 5,108 | Flush | 3:1 | 1,096 |
+| Straight | 5:1 | 10,200 | Pair | 1:1 | 3,744 |
+| Three of a kind | 3:1 | 54,912 | Anything less | loses | 16,440 |
+| Two pair | 2:1 | 123,552 | | | |
+| Pair of tens or better | 1:1 | 422,400 | | | |
+| Anything less | loses | 1,978,380 | | | 22,100 |
+
+The main table is the Strip standard, Wizard of Odds' pay table 1 [L1]. The 3-Card Bonus is the
+50-40-30-6-3-1 table [L2].
+
+| Bet | House edge | Exact | Source |
+|---|---|---|---|
+| Let It Ride, the three bets played by the strategy below, per unit (one of the three bets) | **3.5057%** | −1,822,224 / 51,979,200 | [L1] 3.51% |
+| The same as a share of everything left riding (element of risk; 1.2321 units ride on average) | 2.8453% | −1,822,224 / 64,042,752 | [L1] 2.85% (1.232 units riding) |
+| 3-Card Bonus 50-40-30-6-3-1 | **7.0950%** | −1,568 / 22,100 | [L2] 7.10% |
+
+shared/test/letitride-exact.test.ts plays every one of the 2,598,960 hands in all 20 orders it can
+come (which three are the player's, which card is turned first) through the rules functions the
+engine settles with, and finds these figures exactly.
+
+### The strategy (the Tips)
+
+Pull back bet 1 unless the three cards hold one of these, and let it ride if they do:
+
+1. A paying hand already: a pair of tens or better, or three of a kind.
+2. Three to a royal flush.
+3. Three suited cards in a row, except 2-3-4 and A-2-3.
+4. Three to a straight flush with one gap and at least one high card (ten or better).
+5. Three to a straight flush with two gaps and at least two high cards.
+
+Pull back bet 2 unless the four cards (your three and the first community card) hold one of these:
+
+1. A paying hand already (two pair, three or four of a kind, a pair of tens or better).
+2. Four to a flush.
+3. Four to an outside straight (four in a row that a card at either end fills: not A-2-3-4 or
+   J-Q-K-A).
+4. Four high cards to an inside straight (10-J-Q-A, J-Q-K-A and the like).
+
+This is the strategy the Wizard of Odds publishes [L1], and the exact test checks it against the
+best play for every three-card hand (22,100) and every four-card hand (270,725): the value of
+letting a bet ride is the average of what it pays over every way the rest can come, and the
+strategy rides whenever that value is above zero and pulls back whenever it is below. No three-card
+hand ties; 2,268 four-card hands are worth exactly zero either way: four to an outside straight
+with no high card (5-6-7-8) and four high cards to an inside straight. The Wizard rides those, and
+so do the Tips; the edge is the same either way, and with them 1.232 units ride on average, as he
+says.
+
+### Edge cases (each one has a unit test)
+
+1. The three bets are always equal: a bet sets the unit for all three at once, and a chip on any
+   circle goes on all three.
+2. A pulled bet comes back at once. Bets 1 and 2 are pulled independently; the $ bet never can be.
+3. The 3-Card Bonus needs the three bets with it, is settled on the first three cards alone, and
+   stands whatever the player pulls back.
+4. A pair below tens is worth no more than nothing: every riding bet loses.
+5. The ace plays high (A-K-Q-J-10) or low (5-4-3-2-A) in a straight, never around the corner
+   (K-A-2-3-4 is nothing).
+6. A player leaving mid-hand has every bet still waiting pulled back, as the clock would; the $ bet
+   (and anything let ride) stays until the table settles. Alone at a table that is at once.
+7. Other players' cards are hidden until the second community card is turned, then every hand is
+   shown. The community cards are hidden from everyone until turned.
+
+### Monte Carlo
+
+shared/test/letitride.mc.test.ts, fixed seeds. The high SD comes from the 1,000:1 royal.
+
+| Bet | Published | Measured | SE | z | N |
+|---|---|---|---|---|---|
+| Let It Ride per unit, by the strategy | 3.5057% | 3.4432% | 0.1607% | −0.39 | 10M hands (SD 5.08) |
+| 3-Card Bonus | 7.0950% | 7.1514% | 0.0908% | +0.62 | the same deals (SD 2.87) |
+| Three hands a round against one board, per hand | 3.5057% | 3.2225% | 0.1788% | −1.58 | 3.33M rounds, 10M hands |
+| Bets and bonus through the table engine, one stack, per unit | 10.6007% | 10.1655% | 1.8388% | −0.24 | 200,000 hands |
+
+### Sources for Let It Ride
+
+- L1. Wizard of Odds, "Let It Ride" (rules, the standard pay table, the strategy with its two
+  zero-house-edge plays, "an expected loss of 3.51% of the minimum bet size", 1.232 bets left on the
+  table, element of risk 2.85%, the aggregate payout warning). https://wizardofodds.com/games/let-it-ride/
+- L2. Wizard of Odds, "Let It Ride", 3-Card Bonus Bet ("the most common pay table", 50-40-30-6-3-1,
+  house edge 0.070950, and four other tables). https://wizardofodds.com/games/let-it-ride/
+
+---
+
+## Pai Gow Poker
+
+Researched 2026-09-25. Pai Gow Poker is played with 52 cards and a joker: seven cards each, set
+into a five-card high hand and a two-card low hand, both against the dealer's. Sources P1 to P6 are
+at the end of the section. Code: shared/src/games/paigow/ (rules.ts has the hand ranks, the house
+way, settlement and the Fortune; engine.ts the table).
+
+### House rules
+
+| Rule | Setting | Source |
+|---|---|---|
+| Deck | 53 cards: the 52 and one joker, shuffled fresh every round | [P1] |
+| The joker | A bug, not fully wild: it plays as an ace, or as any card that completes a straight, a flush or a straight flush. So the joker and an ace are a pair of aces, and the joker with four aces is five aces, the top hand. In a flush it is the highest card the flush is missing | [P1], [P2] |
+| Hand ranks | Five aces, straight flush (the royal the best of them), four of a kind, full house, flush, straight, three of a kind, two pair, pair, high card. **A-2-3-4-5 is the second-highest straight** (and straight flush), under A-K-Q-J-10 and over K-Q-J-10-9, as at most Nevada tables. The two-card hand is a pair or two high cards | [P1], [P2] |
+| Bets | The bet, whole dollars within the table's limits (Standard: $10 to $1,000), and the optional Fortune bonus ($5 to $100) with it | [P4] |
+| Deal | Seven cards to each player with a bet and seven to the dealer | [P1] |
+| Setting | The five-card high hand must outrank the two-card low hand; a hand set the other way (a foul) is refused, so it can't be played | [P1] |
+| The dealer's hand | Set by the house way: the Trump Plaza's, below | [P3] |
+| Settlement | Both hands beat the dealer's: the bet pays 1:1 less a 5% commission (exact to the cent: 5% of a whole dollar is 5 cents). One wins and one loses: push. Both lose: the bet loses. **A tie (a copy) goes to the dealer** | [P1] |
+| Banking | The dealer always banks. Players can't bank (the rotating player bank isn't offered), so there is no banker's side to take | this casino |
+| Shared table | Up to 6 players. Everyone sets at once within 40 seconds; a hand not set in time is set by the house way, as a dealer would set it for a player | this casino |
+| Several hands | Alone, up to three hands, each with its own seven, all from one deck, each against the dealer | this casino |
+
+### The house way (Trump Plaza, Atlantic City)
+
+As published by the Wizard of Odds [P3]; "front" is the low hand and "back" the high. Where the
+rule needs a card "to play in front", the joker counts as an ace.
+
+| Hand | Set |
+|---|---|
+| No pair | The highest card behind, the next two in front |
+| One pair | The pair behind, the next two highest in front |
+| Two pair | Pairs are low (2-6), medium (7-10), high (J-K) or aces. Low and low, low and medium: split unless holding a king or better, then both pairs behind. Low and high, medium and medium: split unless holding an ace. Medium and high, high and high, aces and anything: always split. Split means the higher pair behind and the lower in front |
+| Three pair | The highest pair in front |
+| Three of a kind | Behind, unless aces: then a pair of aces behind and one ace in front |
+| Three of a kind twice | A pair from the higher in front |
+| Full house | Split, the pair in front, unless the pair is twos with an ace and a king to play in front |
+| Full house with two pair | The higher pair in front |
+| Four of a kind | 2-6: always together. 7-10: split unless a king or better can play in front. J-K: split unless an ace can. Aces: always split. With a pair, or three of a kind: that pair (or a pair from it) in front |
+| Five aces | Three aces behind and two in front, unless there is a pair of kings to play in front |
+| Straights and flushes, no pair | Play the straight, flush or straight flush that leaves the highest two cards in front (with six or seven to one, the lower one behind) |
+| Straights and flushes with one pair | The pair in front if the straight or flush stands without it; otherwise the straight or flush behind with the best two left in front |
+| With two pair, three pair, three of a kind, a full house | The two pair, three pair and full house rules; three of a kind plays the straight or flush behind with the pair left in front |
+
+The "House way" button (H) at the table sets your cards this way, and the Tips say what it does
+(`houseWayAdvice` in advice.ts).
+
+**How it checks out.** The published figures for this game assume both sides set by the house way.
+The Wizard's earlier pai gow poker section gives, for player against dealer both on the house way:
+player wins both 28.61%, a push 41.48%, the dealer wins both 29.91% [P5]. This house way measures
+28.607%, 41.485%, 29.908% (48,000,000 hands, eight fixed seeds), and the Monte Carlo test holds all
+three within 3 SE. The edge that follows, 0.2991 − 0.95 × 0.2861 = **2.7305%**, is the published
+figure; this house way measures 2.7309% ± 0.0108% over the same 48M hands.
+
+### Payout table and house edges
+
+| Bet | Pays | House edge | Source |
+|---|---|---|---|
+| The bet, both sides setting by the house way | 1:1 less 5% on a win; push on one each | **2.7305%** | [P5]: 28.61% win, 41.48% push, 29.91% loss |
+| Fortune, pay table 2 | below | **7.7656%** exactly (−11,970,096 / 154,143,080) | [P4] 7.77% |
+
+| Fortune line (best poker hand in all seven cards) | Pays | Combinations |
+|---|---|---|
+| Seven-card straight flush, no joker | 8,000:1 | 32 |
+| Royal flush plus a suited K-Q (royal match) | 2,000:1 | 72 |
+| Seven-card straight flush with the joker | 1,000:1 | 196 |
+| Five aces | 400:1 | 1,128 |
+| Royal flush | 150:1 | 26,020 |
+| Straight flush | 50:1 | 184,644 |
+| Four of a kind | 25:1 | 307,472 |
+| Full house | 5:1 | 4,188,528 |
+| Flush | 4:1 | 6,172,088 |
+| Three of a kind | 3:1 | 7,672,500 |
+| Straight | 2:1 | 11,034,204 |
+| Three pair, and anything less | loses | 124,556,196 |
+| **Every seven-card hand** | | **154,143,080** |
+
+Pay table 2 is the one the Wizard of Odds finds most common [P4]. The Fortune pays on the seven
+cards however the hand is set, and is settled with the bet. The **Envy Bonus** (a fixed amount paid
+to every Fortune bettor when another player at the table has four of a kind or better) isn't
+offered: it depends on the other players and is not a per-bet edge. shared/test/
+paigow-fortune.exact.mc.test.ts sorts every one of the 154,143,080 seven-card hands into the lines
+above and matches each of the Wizard's twelve counts exactly.
+
+### Edge cases (each one has a unit test)
+
+1. Five aces (four aces and the joker) beat a royal flush; a royal with the joker ties a natural one.
+2. The joker completing 2-3-4-5 makes the wheel, A-2-3-4-5, which outranks a six-high straight.
+3. The joker with a king-high flush plays as the ace; with an ace-high flush, as the king.
+4. A hand whose two cards outrank its five fouls and is refused; five cards with the same pair and
+   kickers outrank the two-card pair.
+5. A copy on one hand goes to the dealer: win the other and it pushes; lose the other and the bet
+   loses.
+6. The commission is 5% of the bet on a win, exact to the cent.
+7. How another player set a hand, and their cards, stay hidden until the dealer turns them over.
+8. The house way never fouls (checked over 50,000 random hands) and always sets five and two.
+
+### Monte Carlo
+
+shared/test/paigow.mc.test.ts, fixed seeds; each figure the WoO publishes is rounded to 0.005%,
+which the test adds to its allowance.
+
+| Bet | Published | Measured | SE | z | N |
+|---|---|---|---|---|---|
+| The bet, house way against house way | 2.7305% | 2.7145% | 0.0236% | −0.68 | 10M hands (SD 0.746) |
+| Win both / push / lose both | 28.61% / 41.48% / 29.91% | 28.613% / 41.490% / 29.897% | 0.014% / 0.016% / 0.014% | +0.2 / +0.6 / −0.9 | the same hands |
+| Fortune, pay table 2 | 7.7656% | 7.7275% | 0.1850% | −0.21 | the same hands (SD 5.85) |
+| Bet and Fortune through the table engine, the player setting by the house way through the table's own action | 10.4961% | 10.1142% | 0.8229% | −0.46 | 200,000 hands |
+| Three hands a round against the dealer's one, per hand (each hand's deal is exchangeable with a two-player deal, so the edge is exactly the same) | 2.7305% | 2.8401% | 0.0559% | +1.96 | 1M rounds, 3M hands |
+
+### Where sources disagree
+
+| Topic | Disagreement | Choice and reason |
+|---|---|---|
+| The house edge | The Wizard's current page gives an exact 2.7212% (29.12% win, 40.50% push, 30.38% loss) for "the house way" without naming which [P1]; his earlier section, which this house way reproduces to the second decimal of every outcome, gives 28.61% / 41.48% / 29.91%, 2.73% [P5] | 2.7305%, the figure for the house way this table uses. The two differ by 0.01 points; house ways "differ marginally" [P1] |
+| Which house way | Casinos publish their own; the Wizard lists fourteen [P1] | Trump Plaza's: the one the Wizard's own tables for the dealer's hands and his commission-free analysis use [P3], [P6] |
+| A-2-3-4-5 | Second-highest straight at most tables; some casinos have dropped the rule [P1] | Second highest, as most do |
+| Banking | Players may bank in turn at a real table | Not offered; the dealer banks every hand |
+
+### Sources for Pai Gow Poker
+
+- P1. Wizard of Odds, "Pai Gow Poker" (rules, the joker, A-2-3-4-5, commission, copies to the
+  banker, the exact return tables for the house way and optimal strategy, the list of house ways).
+  https://wizardofodds.com/games/pai-gow-poker/
+- P2. Wizard of Odds, "MGM Grand House Way for Pai Gow Poker" (notes: A-2-3-4-5 is the second
+  highest straight; the joker as an ace or to fill a straight, flush, straight flush or royal; in a
+  flush the highest card not already held). https://wizardofodds.com/games/pai-gow-poker/house-way/mgm/
+- P3. Wizard of Odds, "The House Way for Pai Gow Poker at the Trump Plaza".
+  https://wizardofodds.com/games/pai-gow-poker/house-way/trump-plaza-atlantic-city/
+- P4. Wizard of Odds, "Fortune Pai Gow Poker Side Bet" (pay tables 1 to 8, the combinations of
+  every line, pay table 2's 7.77%, the Envy Bonus). https://wizardofodds.com/games/pai-gow-poker/side-bets/fortune/
+- P5. Wizard of Odds, Ask the Wizard, pai gow poker: "From my pai gow poker section we have the
+  following probabilities. Player wins both 28.61%, Tie 41.48%, Banker wins both 29.91%".
+  https://wizardofodds.com/ask-the-wizard/pai-gow-poker/
+- P6. Wizard of Odds, "Commission Free Pai Gow Poker" (its tables "assume the Trump Plaza house way
+  and the Nevada version of the rules"). https://wizardofodds.com/games/commission-free-pai-gow-poker/

@@ -1,0 +1,59 @@
+/* The daily bonus: the HUD button's brass dot, and the sheet with the week laid out like a row of
+   plaques on the cage wall (the seventh in brass), today's lit, the ones taken stamped. */
+
+.daily-btn { position: relative; }
+.daily-dot { position: absolute; top: 5px; right: 5px; width: 8px; height: 8px; border-radius: 50%; background: var(--brass-hi); box-shadow: 0 0 0 2px rgba(14, 12, 10, 0.9); opacity: 0; transform: scale(0.4); transition: opacity 0.2s, transform 0.2s var(--ease); }
+.daily-btn.waiting { color: var(--brass-hi); border-color: var(--line-strong); }
+.daily-btn.waiting .daily-dot { opacity: 1; transform: none; animation: daily-dot 2.4s ease-in-out infinite; }
+
+.daily-sheet { width: min(620px, 100%); }
+.daily-sheet .sheet-body { display: grid; gap: 16px; padding: 18px 24px 22px; overflow-y: auto; }
+.daily-loading { color: var(--ink-3); }
+.daily-streak { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.daily-streak-hint { font-size: 15px; letter-spacing: 0.03em; color: var(--ink-3); }
+.daily-streak-n { font-family: var(--serif); font-size: 40px; font-weight: 600; line-height: 1; color: var(--brass-hi); }
+.daily-streak-label { font-size: 16px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-2); }
+
+.daily-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; margin: 0; padding: 0; list-style: none; }
+.daily-day { position: relative; display: grid; align-content: start; justify-items: center; gap: 4px; min-height: 84px; padding: 10px 4px 8px; border: 1px solid var(--line); border-radius: 5px; background: linear-gradient(#1d1813, #14110d); text-align: center; }
+.daily-day-label { font-size: 12px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-3); white-space: nowrap; }
+.daily-day-amount { font-size: 16px; font-weight: 600; letter-spacing: 0.02em; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.daily-day-check { margin-top: auto; padding: 1px 6px; border: 1px solid rgba(127, 209, 139, 0.45); border-radius: 3px; font-size: 11px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--win); transform: rotate(-4deg); }
+.daily-day.best { background: linear-gradient(#2c2316, #1a140c); border-color: rgba(216, 176, 106, 0.5); }
+.daily-day.best .daily-day-amount { color: var(--brass-hi); }
+.daily-day.taken { opacity: 0.72; }
+.daily-day.today { border-color: var(--brass-hi); background: linear-gradient(#3a2d19, #1f180f); box-shadow: 0 0 0 1px rgba(241, 213, 154, 0.35), 0 0 22px rgba(241, 213, 154, 0.18); }
+.daily-day.today .daily-day-label { color: var(--brass-hi); }
+.daily-day.today .daily-day-amount { color: var(--ink); }
+.daily-day.tomorrow { border-style: dashed; border-color: var(--line-strong); }
+.daily-day.tomorrow .daily-day-label { color: var(--brass); }
+
+.daily-action { display: flex; align-items: center; gap: 14px; min-height: 44px; }
+.daily-claim { height: 42px; padding: 0 22px; font-size: 18px; }
+.daily-left { font-size: 15px; letter-spacing: 0.04em; color: var(--ink-3); }
+.daily-done { font-size: 16px; letter-spacing: 0.03em; color: var(--ink-2); }
+.daily-note { margin: -6px 0 0; font-size: 14px; letter-spacing: 0.03em; color: var(--ink-3); }
+
+.daily-met-head { display: flex; align-items: baseline; justify-content: space-between; padding-top: 12px; border-top: 1px solid var(--line); }
+.daily-met-title { font-size: 13px; font-weight: 600; letter-spacing: 0.2em; text-transform: uppercase; color: var(--brass); }
+.daily-met-count { font-size: 15px; font-weight: 600; letter-spacing: 0.04em; color: var(--ink-2); }
+.daily-met { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 0; padding: 0; list-style: none; }
+.daily-celeb { display: grid; gap: 1px; padding: 7px 10px 8px; border: 1px solid rgba(214, 178, 110, 0.14); border-radius: 4px; background: rgba(255, 255, 255, 0.015); }
+.daily-celeb-name { font-family: var(--serif); font-size: 14px; font-weight: 600; line-height: 1.2; letter-spacing: 0.03em; color: var(--ink-3); text-wrap: balance; }
+.daily-celeb-known { overflow: hidden; font-size: 12px; letter-spacing: 0.03em; color: #6f675b; text-overflow: ellipsis; white-space: nowrap; }
+.daily-celeb.met { border-color: var(--line); background: rgba(241, 213, 154, 0.05); }
+.daily-celeb.met .daily-celeb-name { color: var(--brass-hi); }
+.daily-celeb.met .daily-celeb-known { color: var(--win); }
+
+@keyframes daily-dot { 50% { box-shadow: 0 0 0 2px rgba(14, 12, 10, 0.9), 0 0 0 5px rgba(241, 213, 154, 0.18); } }
+
+@media (max-width: 560px) {
+  .daily-week { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .daily-met { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .daily-streak-n { font-size: 32px; }
+  .daily-action { flex-wrap: wrap; }
+}
+
+/* Reduce flashing & motion (app/comfort.ts), or the system's reduced motion: the dot holds still */
+.daily-btn.calm.waiting .daily-dot { animation: none; }
+body.calm .daily-btn.waiting .daily-dot { animation: none; }

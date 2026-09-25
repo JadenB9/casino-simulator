@@ -14,6 +14,8 @@ import { chromium } from 'playwright';
 import { mkdirSync } from 'node:fs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+// v6 celebs6: bar prices follow happy hour's schedule (half price inside a window)
+import { halfPrice, happyHourAt } from '../../shared/src/happyhour.ts';
 
 const run = promisify(execFile);
 const [port = '6100', out = '/tmp/qa-money', ...only] = process.argv.slice(2);
@@ -58,6 +60,11 @@ async function sql(query) {
     maxBuffer: 64 * 1024 * 1024,
   });
   return JSON.parse(stdout.slice(stdout.indexOf('[')))[0]?.results ?? [];
+}
+
+/** Cash feats have paid this account (v6: grants beside the play, never part of a round's net). */
+async function featPaid(id) {
+  return (await sql(`SELECT COALESCE(SUM(amount), 0) AS n FROM casino_ledger WHERE account_id = ${Number(id)} AND op_id LIKE 'feat:%'`))[0]?.n ?? 0;
 }
 
 /** The load script's audit (scripts/load/net.mjs), for the named accounts. */
@@ -258,6 +265,7 @@ if (wanted('desks')) {
       const prefix = { plinko: 'pk', dice: 'dc', limbo: 'lb', keno: 'kn', tower: 'tw', mines: 'mn', hilo: 'hl', crash: 'cs' }[game];
       const since = Date.now();
       const before = await me(p);
+      const paidBefore = await featPaid(before.id);
       await walkUp(p, `${prefix}-1`);
       // the fly-in, a third of the way and at rest, with the station panel up
       await page.waitForTimeout(300);
@@ -327,7 +335,8 @@ if (wanted('desks')) {
       const after = await settled(p);
       const rounds = roundsOf(p, game, since);
       const net = rounds.reduce((s, r) => s + r.returned - r.wagered, 0);
-      check(after.balance - before.balance === net, `${game}: the balance moved by the rounds' net ${money(net)} (${rounds.length} rounds): ${money(before.balance)} to ${money(after.balance)}`);
+      const feats = (await featPaid(after.id)) - paidBefore;
+      check(after.balance - before.balance - feats === net, `${game}: the balance moved by the rounds' net ${money(net)} (${rounds.length} rounds) and ${money(feats)} of feats: ${money(before.balance)} to ${money(after.balance)}`);
       for (const r of rounds) check(r.expected === null || r.expected === r.returned, `${game}: ${r.what} paid ${money(r.returned)}${r.expected !== null ? `, expected ${money(r.expected)}` : ''}`);
       check(after.inPlay === 0, `${game}: nothing left on the table`);
     }
@@ -770,6 +779,7 @@ if (wanted('money')) {
     await setBalance('qm_whale', 60_000_000 * 100);
     await whale.page.evaluate(async () => window.casino.session.set(await (await import('/casino/src/net/api.ts')).me()));
     const w0 = await me(whale);
+    const w0Paid = await featPaid(w0.id);
     await walkUp(whale, 'lb-1');
     await whale.page.waitForSelector('.lim-opt', { timeout: 20_000 });
     await whale.page.click('.lim-opt:has-text("Penthouse")');
@@ -815,7 +825,8 @@ if (wanted('money')) {
     const w1 = await settled(whale);
     const rounds = roundsOf(whale, 'limbo', sinceW);
     const netW = rounds.reduce((s2, r) => s2 + r.returned - r.wagered, 0);
-    check(w1.balance - w0.balance === netW, `big limits: the balance moved by the rounds' net ${money(netW)} (${money(w0.balance)} to ${money(w1.balance)})`);
+    const featsW = (await featPaid(w1.id)) - w0Paid;
+    check(w1.balance - w0.balance - featsW === netW, `big limits: the balance moved by the rounds' net ${money(netW)} and ${money(featsW)} of feats (${money(w0.balance)} to ${money(w1.balance)})`);
 
     // --- the bank: under $10,000 in all tops up to $50,000; $10,000 exactly doesn't -----------------
     const broke = await player('qm_broke');
@@ -888,8 +899,12 @@ if (wanted('money')) {
     check(same.status === 200 && same.body.balance === 0 && same.body.at === buy.body.at, 'the same op again is the same purchase, not a second charge');
     const twice = await api('shop/buy', { method: 'POST', token: ts, body: { item: item.id, op: `${op}-2` } });
     check(twice.status === 409 && twice.body.error === 'NOT_ELIGIBLE', `buying it again: ${twice.status} "${twice.body?.msg}"`);
+    const domAsked = Date.now();
     const dom = await api('bar/order', { method: 'POST', token: ts, body: { item: 'dom', op: `${op}-bar` } });
-    check(dom.status === 409 && dom.body.msg === 'Not enough: the Bottle of Dom is $1,200 and your balance is $0.', `the bar refuses what the balance can't pay: "${dom.body?.msg}"`);
+    // v6 celebs6: the price the schedule gives at order time (either, if a window opened or closed meanwhile)
+    const domPrices = [domAsked, Date.now()].map((t) => (happyHourAt(t) ? halfPrice(120_000) : 120_000));
+    const domSays = domPrices.map((c) => `Not enough: the Bottle of Dom is ${money(c)} and your balance is $0.`);
+    check(dom.status === 409 && domSays.includes(dom.body.msg), `the bar refuses what the balance can't pay: "${dom.body?.msg}"`);
     const loan0 = await api('bank/loan', { method: 'POST', token: ts });
     check(loan0.status === 200 && loan0.body.loan.amount === 5_000_000, `at $0 the bank tops up the whole $50,000: ${loan0.body?.loan?.amount}`);
     // in the page: the bar's refusal is shown in words
@@ -933,6 +948,7 @@ if (wanted('bigwin')) {
       w.teleport(pit.cx, pit.cz + 4, Math.PI);
     });
     const start = await me(luck);
+    const startPaid = await featPaid(start.id);
     const since = Date.now();
     await sitSolo(luck, 'lb-1', { buyin: '3000' });
     await luck.page.waitForSelector('.os-screen:not([hidden])');
@@ -948,7 +964,7 @@ if (wanted('bigwin')) {
     check(!!win, `Limbo paid a 25x target: ${win ? `${money(win.payout)} on ${money(win.bet)}` : 'no win in 300 bets'}`);
     if (win) {
       // the floor hears it once the page has shown it, and not before
-      const heard = await watch.page.waitForFunction(() => document.querySelector('.bigwin-toast')?.textContent ?? null, null, { timeout: 20_000 }).then((h) => h.jsonValue()).catch(() => null);
+      const heard = await watch.page.waitForFunction(() => document.querySelector('.bigwin-toast:not(.feat)')?.textContent ?? null, null, { timeout: 20_000 }).then((h) => h.jsonValue()).catch(() => null);
       check(heard === 'qm_lucky won $240Limbo, Target 25x', `the watcher's toast: "${heard}"`);
       const wire = watch.frames.filter((m) => m.t === 'bigwin').at(-1);
       check(wire && wire.amount === 24_000 && wire.what === 'Target 25x' && wire.station === 'lb-1' && wire.game === 'limbo', `the floor's news: ${JSON.stringify(wire && { amount: wire.amount, what: wire.what, station: wire.station })}`);
@@ -959,7 +975,7 @@ if (wanted('bigwin')) {
       // the winner's own page celebrates it (25x is over the site's 10x), no toast for themselves
       await luck.page.waitForTimeout(1500);
       await shoot(luck.page, 'bigwin-2-winner');
-      check(!(await luck.page.$('.bigwin-toast')), 'the winner gets no toast about their own win');
+      check(!(await luck.page.$('.bigwin-toast:not(.feat)')), 'the winner gets no toast about their own win');
     }
     // the HUD's session net is the rounds' net to the cent
     const rounds = roundsOf(luck, 'limbo', since);
@@ -969,7 +985,8 @@ if (wanted('bigwin')) {
     check(hud === (net > 0 ? '+' : '') + money(net), `the HUD's session net ${hud} is the ${rounds.length} rounds' ${money(net)}`);
     await leave(luck);
     const end = await settled(luck);
-    check(end.balance - start.balance === net, `the balance moved by ${money(end.balance - start.balance)}, the rounds' net`);
+    const featsL = (await featPaid(end.id)) - startPaid;
+    check(end.balance - start.balance - featsL === net, `the balance moved by ${money(end.balance - start.balance)}, the rounds' net and ${money(featsL)} of feats`);
     await audit(['qm_lucky', 'qm_watcher'], 'bigwin');
   } catch (err) {
     failed('bigwin', err);

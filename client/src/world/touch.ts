@@ -18,6 +18,7 @@ import type { Player } from './player.ts';
 import type { WorldStation } from './stations.ts';
 import type { GameId } from '../../../shared/src/engine.ts';
 import { CATALOG } from '../../../shared/src/games/catalog.ts';
+import { rideChoice } from './rides.ts';
 import './touch.css';
 
 /** How far the knob travels from the centre, px. */
@@ -119,6 +120,9 @@ export class TouchControls {
   private readonly actLabel = el('span', 'touch-act-label');
   private readonly caption = el('div', 'touch-caption');
   private readonly leave = el('button', 'touch-leave');
+  /** Step off your ride or back on (B), beside the action button while walking. */
+  private readonly ride = el('button', 'touch-ride');
+  private rideShown: 'on' | 'off' | null = null;
   private readonly note = el('div', 'touch-note');
   private readonly noteText = el('span');
   /** The finger on the stick and where it came down. */
@@ -153,13 +157,18 @@ export class TouchControls {
     this.leave.append(leaveIcon(), el('span', 'touch-leave-label', 'Leave'));
     this.leave.addEventListener('click', () => press('Escape', 'Escape'));
 
+    this.ride.type = 'button';
+    this.ride.hidden = true;
+    this.ride.append(lineIcon('M3 14h18', 'M5 14c0-1.6 1-2 2-2h10c1 0 2 .4 2 2', 'M7 17.5a1.5 1.5 0 1 0 0 .01', 'M17 17.5a1.5 1.5 0 1 0 0 .01'));
+    this.ride.addEventListener('click', () => press('b', 'KeyB'));
+
     this.note.hidden = true;
     this.note.setAttribute('role', 'status');
     this.note.append(rotateIcon(), this.noteText);
     this.note.addEventListener('click', () => this.hideNote());
 
     deps.ui.prepend(this.layer);
-    deps.ui.append(this.caption, this.act, this.note);
+    deps.ui.append(this.caption, this.act, this.ride, this.note);
 
     this.layer.addEventListener('pointerdown', this.onDown);
     this.layer.addEventListener('pointermove', this.onMove);
@@ -183,8 +192,10 @@ export class TouchControls {
     const clear = overlayCount() === 0;
     const mode: Mode = !this.on || !clear ? 'off' : seated ? 'table' : this.deps.player.isEnabled ? 'walk' : 'off';
     if (mode !== this.mode) this.setMode(mode);
-    if (mode === 'walk') this.paintTarget();
-    else if (mode === 'table') this.paintTable(seated!);
+    if (mode === 'walk') {
+      this.paintTarget();
+      this.paintRide();
+    } else if (mode === 'table') this.paintTable(seated!);
   }
 
   dispose(): void {
@@ -200,6 +211,7 @@ export class TouchControls {
     this.layer.remove();
     this.caption.remove();
     this.act.remove();
+    this.ride.remove();
     this.leave.remove();
     this.note.remove();
   }
@@ -214,6 +226,8 @@ export class TouchControls {
     this.target = '';
     this.act.hidden = true;
     this.caption.hidden = true;
+    this.ride.hidden = true;
+    this.rideShown = null;
     if (mode !== 'table') {
       this.leave.hidden = true;
       this.leave.remove();
@@ -246,6 +260,18 @@ export class TouchControls {
     this.actLabel.textContent = station ? 'Play' : 'Visit';
     this.act.setAttribute('aria-label', station ? `Play ${station.name}` : 'Open the cashier');
     this.caption.textContent = station ? [station.name, station.limits].filter(Boolean).join(' · ') : 'Cashier';
+  }
+
+  /** The ride button: shown while there's a ride to step off or onto. */
+  private paintRide(): void {
+    const r = rideChoice();
+    if (r === this.rideShown) return;
+    this.rideShown = r;
+    this.ride.hidden = !r;
+    this.ride.classList.toggle('riding', r === 'off');
+    const label = r === 'off' ? 'Step off your ride' : 'Get on your ride';
+    this.ride.title = label;
+    this.ride.setAttribute('aria-label', label);
   }
 
   /** At a table: the Leave button in the HUD's controls, and the note for an upright phone. */

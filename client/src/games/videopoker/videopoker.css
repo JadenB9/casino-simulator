@@ -83,10 +83,9 @@
 .vp-help p { margin: 0 0 8px; }
 .vp-help .vp-keys { color: #ffe600; font-size: 18px; letter-spacing: 0.04em; }
 
-@media (prefers-reduced-motion: reduce) {
-  .vp-row.win > * { animation: none; background: #fff49a; color: #0b1a6e; }
-  .vp-status.win { animation: none; color: #fff49a; }
-}
+/* Reduce flashing & motion (app/comfort.ts): the row and the name hold lit */
+body.calm .vp-row.win > * { animation: none; background: #fff49a; color: #0b1a6e; }
+body.calm .vp-status.win { animation: none; color: #fff49a; }
 
 /* Phones and tablets upright: the tips line clear of the back chip. */
 @media (max-aspect-ratio: 1/1) {
