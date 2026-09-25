@@ -33,6 +33,8 @@ import { mountFeats, type FeatsUi } from '../ui/feats/index.ts'; // v6 feats6
 import { ENGINES } from '../../../shared/src/games/index.ts';
 import { mountDaily, dailyApi, type DailyHandle } from '../ui/daily/index.ts'; // v6 celebs6
 import { CLOSE, type Profile } from '../../../shared/src/protocol.ts';
+// v6 dine6: drinking and eating what the bar brings
+import { Diner } from '../world/consumables/diner.ts';
 
 export async function boot(): Promise<void> {
   const ui = document.getElementById('ui')!;
@@ -113,6 +115,8 @@ class App {
   private daily: DailyHandle | null = null;
   /** Where each station's n-th seated player is drawn; stations never move. */
   private readonly seatCache = new Map<string, SeatPose | null>();
+  /** v6 dine6: you, drinking and eating what the bar brings (world/consumables/). */
+  readonly diner: Diner;
   /** v6 feats6: the achievements (HUD cup, J, the sheet, the card when you earn one). */
   private feats: FeatsUi | null = null;
 
@@ -180,6 +184,18 @@ class App {
       // Straight to the sockets: a table session's own send() would toast while it reconnects.
       here: () => (this.link?.send({ t: 'here' }) ?? true) && (this.table?.session.socket.send({ t: 'here' }) ?? true),
     });
+    // v6 dine6: sips and bites (Q), what they do for you, the empty taken away
+    this.diner = new Diner({
+      ui,
+      camera: engine.camera,
+      character: world.player.character,
+      look: () => session.profile?.look ?? null,
+      drop: () => void this.bar?.drop(),
+      onFloor: () => this.hud !== null && this.table === null && this.world.seated === null,
+      waiters: world.life.waiters,
+      sound: sfx,
+    });
+    engine.onFrame((dt) => this.diner.update(dt));
   }
 
   async start(saved: Promise<Profile | null>): Promise<void> {

@@ -238,6 +238,10 @@ const FLASHING = [
   'games/bingo/view.ts',
   'games/pachinko/view.ts',
   'world/celebs/flash.ts',
+  // v6 dine6: a Dom's spray, a toast's clink, champagne's glints, candles, and the tipsy view
+  'world/consumables/held.ts',
+  'world/consumables/particles.ts',
+  'world/consumables/diner.ts',
 ];
 
 describe('every module known to flash reads the switch', () => {
