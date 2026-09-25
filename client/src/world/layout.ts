@@ -351,6 +351,11 @@ export interface FloorPlan {
   patternBoards: WallMount[];
   /** Stage drapes: `w` is the stage's width between the two curtains. */
   drapes: WallMount[];
+  /**
+   * Where statues on plinths may stand (the lobby's, for the shop's statues): world x, z and the
+   * way each faces, best first. checkLayout keeps a plinth's floor and a walk round it clear.
+   */
+  statues: { x: number; z: number; yaw: number; room: RoomId }[];
   columns: (Column & { room: RoomId })[];
   plants: Plant[];
   palms: Palm[];
@@ -426,6 +431,9 @@ export const PATTERN_BOARD = { w: 1.08, h: 1.3, y: 1.72 };
 export const LANTERN = { r: 0.2, h: 0.46 };
 /** The big lanterns over the Jade Room's tables. */
 export const TABLE_LANTERN = { r: 0.36, h: 0.62, y: 2.35 };
+/** A statue's plinth (square), and the clear floor kept round it. */
+export const STATUE_PLINTH = 1.12;
+export const STATUE_CLEAR = 0.55;
 /** Stage drapes: each curtain's width, how far it stands off the wall, and the pelmet across the top. */
 export const DRAPES = { w: 2.0, d: 0.2, pelmet: 0.36 };
 /** A counter along a wall (the prizes, the snack bar): its height, and the shelves' depth and height behind it. */
@@ -807,11 +815,14 @@ export function planFloor(footprint: (game: GameId) => Footprint, slots: readonl
 
   // --- aisles: each room's walkways, then the approach to every door on both sides -----------------
   const aisles: Rect[] = [];
+  const statues: FloorPlan['statues'] = [];
   const pitSpec = ROOMS.find((r) => r.id === 'pit');
   const ordered = pitSpec ? [pitSpec, ...ROOMS.filter((r) => r !== pitSpec)] : ROOMS;
   for (const spec of ordered) {
     const r = room(spec.id);
     for (const a of [...spec.aisles, ...(spec.keep ?? [])]) aisles.push({ x0: r.cx + a.x0, z0: r.cz + a.z0, x1: r.cx + a.x1, z1: r.cz + a.z1 });
+    // a statue's plinth and the walk round it are kept clear of anything placed (checkLayout)
+    for (const [x, z, yaw] of spec.statues ?? []) statues.push({ x: r.cx + x, z: r.cz + z, yaw, room: r.id });
   }
   for (const d of doors) {
     if (d.b === 'outside') continue;
@@ -887,6 +898,7 @@ export function planFloor(footprint: (game: GameId) => Footprint, slots: readonl
     lattices,
     patternBoards,
     drapes,
+    statues,
     deskIslands,
     columns,
     plants: [],
@@ -1508,6 +1520,14 @@ function clashes(plan: FloorPlan, s: Solid, others: Solid[]): string[] {
     if (strip && s.y0 < 1.8 && !s.holds?.length && shapesOverlap(shape, { poly: strip })) out.push(`${s.id} blocks the players of ${p.id}`);
   }
   if (s.floor) for (const [k, aisle] of plan.aisles.entries()) if (shapesOverlap(shape, { poly: rectPoly(aisle) })) out.push(`${s.id} stands in aisle ${k}`);
+  // a statue's place: nothing standing on its plinth or the walk round it, and nothing overhead
+  // (a palm's fronds) within reach of the figure
+  for (const [k, st] of plan.statues.entries()) {
+    const h = STATUE_PLINTH / 2 + STATUE_CLEAR;
+    const onFloor = s.y0 < 1.2 && shapesOverlap(shape, { poly: rectPoly({ x0: st.x - h, z0: st.z - h, x1: st.x + h, z1: st.z + h }) });
+    const over = s.y0 >= 1.2 && s.y0 < 3.2 && shapesOverlap(shape, { x: st.x, z: st.z, r: 0.45 });
+    if (onFloor || over) out.push(`${s.id} stands on statue place ${k + 1}`);
+  }
   for (const o of others) {
     if (o === s || o.group === s.group) continue;
     if (s.y0 >= o.y1 || o.y0 >= s.y1) continue;

@@ -226,6 +226,8 @@ export interface RoomSpec {
   plants: [number, number][];
   /** Floor kept clear of everything the plan places, but not drawn as a runner (room-local). */
   keep?: { x0: number; z0: number; x1: number; z1: number }[];
+  /** Places for statues on plinths (room-local x, z and the way each faces), best first. */
+  statues?: [number, number, number][];
 }
 
 export type DoorKind = 'entrance' | 'grand' | 'portal' | 'arch' | 'shopfront' | 'industrial' | 'lacquer';
@@ -266,7 +268,6 @@ export const ROOMS: RoomSpec[] = [
       // view as you come in, clear of the palms' fronds and of anyone's path
       { kind: 'directory', x: -3.6, z: -0.3, yaw: 0.72 },
       { kind: 'bench', x: -6.2, z: -3.3, yaw: Math.PI / 2 },
-      { kind: 'bench', x: 6.2, z: -3.3, yaw: -Math.PI / 2 },
       // two palms flank the way on to the pit
       { kind: 'palm', x: -3.0, z: -3.6, yaw: 0 },
       { kind: 'palm', x: 3.0, z: -3.6, yaw: 0 },
@@ -282,6 +283,14 @@ export const ROOMS: RoomSpec[] = [
     // kept clear: the lift bank on the south wall east of the doors and the way up to it (city6's,
     // shared/src/lifts.ts)
     keep: [{ x0: 1.9, z0: 2.5, x1: 6.5, z1: 5.85 }],
+    // where the lobby's statues stand (the shop's, fx6): each plinth with a clear walk round it,
+    // clear of the doors' approaches, the directory, the palms and the lift bank; best first, each
+    // facing the lobby's middle three metres toward the doors
+    statues: [
+      [3.4, -1.4, -0.85],
+      [-4.0, 3.6, 0.93],
+      [5.6, -2.6, -1.08],
+    ],
     plants: [[-6.4, 5.4]],
   },
 
