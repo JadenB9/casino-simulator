@@ -56,7 +56,16 @@ async function openFloor(quality, extra = '', calm = false) {
 }
 
 const place = (page, pos, at) => page.evaluate(([p, a]) => (window.casino.shot = { pos: p, at: a }), [pos, at]);
-const stand = (page, x, z, yaw = Math.PI) => page.evaluate(([x, z, yaw]) => window.casino.world.teleport(x, z, yaw), [x, z, yaw]);
+// qa6: every preset spot must be one a walker could stand on (not in a fountain, a plinth or a wall)
+const stand = async (page, x, z, yaw = Math.PI) => {
+  const free = await page.evaluate(async ([x, z, yaw]) => {
+    const { walkGrid, isFree } = await import('/casino/src/world/reach.ts');
+    window.casino.world.teleport(x, z, yaw);
+    window.__grid ??= walkGrid(window.casino.world.plan);
+    return isFree(window.__grid, x, z);
+  }, [x, z, yaw]);
+  if (!free) fail(`the player was stood at (${x}, ${z}), where nobody can stand`);
+};
 const wait = (page, s) => page.waitForTimeout(s * 1000);
 const shot = async (page, name) => {
   const path = `${out}/${name}.png`;
