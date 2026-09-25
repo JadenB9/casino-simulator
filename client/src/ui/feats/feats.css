@@ -50,6 +50,7 @@
 .ft-row.earned .ft-name { color: var(--ink); }
 .ft-kind { font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-3); white-space: nowrap; }
 .ft-about { margin: 2px 0 0; font-size: 15px; letter-spacing: 0.02em; color: var(--ink-3); }
+.ft-cash { margin: 3px 0 0; font-size: 13px; letter-spacing: 0.03em; color: var(--ink-3); opacity: 0.85; }
 .ft-bar { max-width: 360px; height: 4px; margin-top: 9px; border-radius: 2px; background: rgba(255, 255, 255, 0.07); overflow: hidden; }
 .ft-bar i { display: block; height: 100%; min-width: 0; background: linear-gradient(90deg, var(--brass), var(--brass-hi)); border-radius: 2px; transition: width 0.5s var(--ease); }
 .ft-prog { margin-top: 5px; font-size: 13px; letter-spacing: 0.04em; color: var(--ink-3); }

@@ -15,7 +15,7 @@ import type { Closable, SessionLike } from '../menu/deps.ts';
 import { openSheet } from '../menu/sheet.ts';
 import { problemText } from '../menu/parts.ts';
 import { medal } from './icons.ts';
-import { dollars, earnedOn, featGroups, progressOf, rewardParts, titleText, type FeatGroup } from './lines.ts';
+import { cashNote, dollars, earnedOn, featGroups, paidNote, progressOf, rewardParts, titleText, type FeatGroup } from './lines.ts';
 
 export interface FeatsApi {
   feats(): Promise<FeatsResponse>;
@@ -33,7 +33,7 @@ export interface FeatsSheetDeps {
 
 export interface FeatsSheet extends Closable {
   /** A feat just earned: lit where it stands in the list. */
-  earned(feat: string, at: number): void;
+  earned(feat: string, at: number, paid?: number): void;
 }
 
 export function openFeats(deps: FeatsSheetDeps): FeatsSheet {
@@ -55,6 +55,8 @@ export function openFeats(deps: FeatsSheetDeps): FeatsSheet {
   // at a table, its game's; otherwise today's challenges
   let current: FeatGroup = groups.find((g) => g.id === deps.game) ?? groups[0]!;
   const earned = new Map<string, number>((session.profile?.feats ?? []).map((f) => [f.feat, f.at]));
+  /** The cash each earned feat paid, where the server has said. */
+  const paidOf = new Map<string, number>((session.profile?.feats ?? []).flatMap((f) => (f.paid !== undefined ? [[f.feat, f.paid] as [string, number]] : [])));
   let tally: Record<string, number> | null = null;
   let problem: string | null = null;
 
@@ -207,7 +209,15 @@ export function openFeats(deps: FeatsSheetDeps): FeatsSheet {
     const rewards = el('ul', 'ft-rewards');
     for (const p of rewardParts(f)) rewards.append(el('li', `ft-reward ${p.kind}`, p.text));
     side.append(rewards);
-    if (got) side.append(el('div', 'ft-when', `Earned ${earnedOn(at)}`));
+    if (got) {
+      const short = paidNote(f, paidOf.get(f.id));
+      side.append(el('div', 'ft-when', short ? `Earned ${earnedOn(at)} · ${short}` : `Earned ${earnedOn(at)}`));
+    } else {
+      // how the cash is worked out, and what a minimum stake unlocks
+      const note = cashNote(f);
+      if (note) text.append(el('p', 'ft-cash', note));
+      if (f.minStake) text.append(el('p', 'ft-cash', `Counts on a round staking ${dollars(f.minStake)} or more.`));
+    }
     r.append(text, side);
     return r;
   }
@@ -260,7 +270,11 @@ export function openFeats(deps: FeatsSheetDeps): FeatsSheet {
     (r) => {
       if (!alive) return;
       tally = r.tally;
-      for (const f of r.feats) if (featOf(f.feat)) earned.set(f.feat, f.at);
+      for (const f of r.feats) {
+        if (!featOf(f.feat)) continue;
+        earned.set(f.feat, f.at);
+        if (f.paid !== undefined) paidOf.set(f.feat, f.paid);
+      }
       paint();
     },
     (err: unknown) => {
@@ -273,9 +287,10 @@ export function openFeats(deps: FeatsSheetDeps): FeatsSheet {
 
   return {
     root: sheet.root,
-    earned(feat, at) {
+    earned(feat, at, paid) {
       if (!featOf(feat) || earned.has(feat)) return;
       earned.set(feat, at);
+      if (paid !== undefined) paidOf.set(feat, paid);
       paint();
       list.querySelector<HTMLElement>(`[data-feat="${feat}"]`)?.classList.add('fresh');
     },

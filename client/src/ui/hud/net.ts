@@ -32,6 +32,7 @@ export function sessionNet(p: Profile, start: NetStart, seat: { stack: Cents; es
   const worth = p.balance + p.inPlay + (seat ? seat.stack - seat.escrow : 0);
   const lent = p.loans.slice(0, Math.max(0, p.loansTaken - start.loans)).reduce((sum, l) => sum + l.amount, 0);
   let rewards = 0;
-  for (const f of p.feats ?? []) if (!start.feats?.has(f.feat)) rewards += featOf(f.feat)?.reward.cash ?? 0;
+  // what each paid (it scales with the stake that earned it), else its listed cash
+  for (const f of p.feats ?? []) if (!start.feats?.has(f.feat)) rewards += f.paid ?? featOf(f.feat)?.reward.cash ?? 0;
   return worth - start.worth - lent - rewards + (spent - start.spent);
 }

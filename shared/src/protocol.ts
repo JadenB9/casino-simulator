@@ -147,8 +147,8 @@ export interface Profile {
   stats: { total: GameStats; games: Partial<Record<GameId, GameStats>> };
   /** v6: every worn item and emote the account has, bought or earned (ids from items.ts). */
   owned?: string[];
-  /** v6: the feats earned (feats.ts), oldest first. */
-  feats?: { feat: string; at: number }[];
+  /** v6: the feats earned (feats.ts), oldest first, with the cash each paid. */
+  feats?: { feat: string; at: number; paid?: Cents }[];
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -401,9 +401,10 @@ export type TableServerMsg =
   | { t: 'balance'; balance: Cents; inPlay: Cents; rev: number }
   /**
    * v6: you earned an achievement or finished a challenge at this table (feats.ts). A cash
-   * reward went to your balance (a 'grant' ledger row) and `balance` is the money after it.
+   * reward went to your balance (a 'grant' ledger row): `paid` is how much (it scales with the
+   * round's stake, feats.ts cashFor) and `balance` is the money after it.
    */
-  | { t: 'feat'; feat: string; at: number; balance?: { balance: Cents; inPlay: Cents; rev: number } }
+  | { t: 'feat'; feat: string; at: number; balance?: { balance: Cents; inPlay: Cents; rev: number }; paid?: Cents }
   | { t: 'closed'; reason: string }
   | { t: 'err'; ref?: string; code: ErrorCode; msg: string }
   | ChatServerMsg;
