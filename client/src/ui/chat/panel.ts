@@ -5,15 +5,20 @@
 //
 // Keys: Enter or T opens it and starts typing, Enter sends, Esc stops. While the line has focus
 // the panel holds the keyboard (ui/keyboard.ts), so W/A/S/D type instead of walking and a table's
-// shortcuts stay quiet. Opened by a key it closes again after sending; opened with a click it
-// stays open until closed. The corner is shared with some tables' meters, so the whole thing
-// rises above any panel a table keeps down there. Names and lines go in with textContent only.
+// shortcuts stay quiet. Opened by a key it closes again after sending; pinned (the pin in its head,
+// or opening it with a click) it stays up, and is up again next time, until unpinned or closed.
+// Pinned and not typing, it's `idle`: the log stays on screen while you walk, look round with the
+// mouse held, sit and play, drawn lighter and letting clicks and drags through to the game; T or
+// Enter (or a click on its line) types again. On a touch screen the idle log is only the newest
+// lines, beside the action button and clear of the stick, and the dock starts typing. The corner
+// is shared with some tables' meters, so the whole thing rises above any panel a table keeps down
+// there. Names and lines go in with textContent only.
 
 import './chat.css';
 import { CHAT_MAX, cleanChat, type ChatLine, type ChatServerMsg } from '../../../../shared/src/protocol.ts';
 import { el } from '../kit.ts';
 import { holdKeyboard, isTyping, overlayCount } from '../keyboard.ts';
-import { RoomLog, SendGate, nameHue, type RoomId } from './model.ts';
+import { RoomLog, SendGate, chatLook, nameHue, type RoomId } from './model.ts';
 
 /** Where a room's lines go out: FloorLink.say, or the table socket. False while it's down. */
 export interface RoomLink {
@@ -64,12 +69,13 @@ export class ChatPanel {
   private readonly input = el('input', 'chat-input');
   private readonly status = el('span', 'chat-status');
   private readonly muteBtn = el('button', 'chat-icon chat-mute');
+  private readonly pinBtn = el('button', 'chat-icon chat-pin');
   private readonly rooms: Record<RoomId, Room>;
   private active: RoomId = 'floor';
   private table: RoomLink | null = null;
   private visible = false;
   private open = false;
-  /** Opened on purpose (a click): it stays open after a line goes out, and next time. */
+  /** Pinned (or opened on purpose, with a click): it stays open after a line goes out, and next time. */
   private pinned = load(OPEN_KEY) === '1';
   private release: (() => void) | null = null;
   private pressing = false;
@@ -92,7 +98,8 @@ export class ChatPanel {
     this.dock.title = 'Chat (T or Enter)';
     const kc = el('kbd', 'chat-kc', 'T');
     this.dock.append(icon('chat'), el('span', 'chat-dock-label', 'Chat'), this.dockBadge, kc);
-    this.dock.addEventListener('click', () => this.show(true, true));
+    // Idle on a touch screen the dock stays under the log: a tap there starts typing.
+    this.dock.addEventListener('click', () => (this.open ? this.focus() : this.show(true, true)));
 
     // The open box: tabs and switches, the log, the line.
     const head = el('div', 'chat-head');
@@ -102,13 +109,17 @@ export class ChatPanel {
     this.muteBtn.type = 'button';
     this.muteBtn.addEventListener('click', () => this.setMuted(!this.muted));
     keepTyping(this.muteBtn);
+    this.pinBtn.type = 'button';
+    this.pinBtn.append(icon('pin'));
+    this.pinBtn.addEventListener('click', () => this.setPinned(!this.pinned));
+    keepTyping(this.pinBtn);
     const close = el('button', 'chat-icon chat-close');
     close.type = 'button';
     close.title = 'Close chat';
     close.setAttribute('aria-label', 'Close chat');
     close.append(icon('down'));
     close.addEventListener('click', () => this.show(false));
-    head.append(tabs, this.muteBtn, close);
+    head.append(tabs, this.muteBtn, this.pinBtn, close);
 
     const room = (id: RoomId, label: string): Room => {
       const tab = el('button', 'chat-tab');
@@ -209,6 +220,7 @@ export class ChatPanel {
 
     this.select('floor');
     this.paintMute();
+    this.paintPin();
   }
 
   /** Show the chat (on the floor, at a table) or hide it (the menu). */
@@ -219,10 +231,12 @@ export class ChatPanel {
     if (!on) {
       this.input.blur();
       clearInterval(this.placeTimer);
+      this.paintLook();
       return;
     }
     // A box left open (on purpose) last time is open again.
     if (this.pinned && !this.open) this.show(true);
+    this.paintLook();
     this.place();
     // Tables mount and unmount their panels as they please; keep clear of them.
     this.placeTimer = window.setInterval(this.place, 1500);
@@ -277,7 +291,28 @@ export class ChatPanel {
       return;
     }
     this.show(true);
+    // an idle box on a touch screen has its line put away: out of idle first, or it can't take focus
+    this.root.classList.remove('idle');
     this.input.focus({ preventScroll: true });
+    if (document.activeElement !== this.input) this.paintLook();
+  }
+
+  /** Keep the chat up while you walk and play (the pin in its head); remembered for next time. */
+  setPinned(on: boolean): void {
+    if (on === this.pinned) return;
+    if (on) this.pin();
+    else {
+      this.pinned = false;
+      save(OPEN_KEY, null);
+    }
+    this.paintPin();
+    // Unpinned while nothing's being typed, it goes away like a box opened by a key.
+    if (!on && this.open && !this.release) this.show(false);
+    this.paintLook();
+  }
+
+  get isPinned(): boolean {
+    return this.pinned;
   }
 
   setMuted(on: boolean): void {
@@ -312,11 +347,11 @@ export class ChatPanel {
     if (!on && this.pinned) {
       this.pinned = false;
       save(OPEN_KEY, null);
+      this.paintPin();
     }
     if (on === this.open) return;
     this.open = on;
     this.box.hidden = !on;
-    this.dock.hidden = on;
     this.dock.setAttribute('aria-expanded', String(on));
     if (on) {
       this.peeks.replaceChildren();
@@ -326,12 +361,14 @@ export class ChatPanel {
       // After `open` is false, so the focusout that follows finds nothing left to do.
       this.input.blur();
     }
+    this.paintLook();
     this.place();
   }
 
   private pin(): void {
     this.pinned = true;
     save(OPEN_KEY, '1');
+    this.paintPin();
   }
 
   private select(id: RoomId): void {
@@ -367,6 +404,7 @@ export class ChatPanel {
       this.afterTyping();
     });
     this.root.classList.add('typing');
+    this.paintLook();
     // A walk key held down as the line took focus would never see its keyup (the floor ignores
     // keys typed into a field) and walk on by itself: the floor forgets held keys on a blur.
     dispatchEvent(new Event('blur'));
@@ -376,6 +414,7 @@ export class ChatPanel {
     this.release?.();
     this.release = null;
     this.root.classList.remove('typing');
+    this.paintLook();
   }
 
   /** Done typing: a box opened by a key goes away again. */
@@ -476,6 +515,23 @@ export class ChatPanel {
     this.dock.replaceChild(icon(this.muted ? 'muted' : 'chat'), this.dock.firstElementChild!);
   }
 
+  private paintPin(): void {
+    this.root.classList.toggle('pinned', this.pinned);
+    this.pinBtn.setAttribute('aria-pressed', String(this.pinned));
+    const label = this.pinned ? 'Unpin chat' : 'Pin chat open';
+    this.pinBtn.title = this.pinned ? 'Pinned: chat stays up while you walk and play. Unpin' : 'Pin chat open: keep it up while you walk and play';
+    this.pinBtn.setAttribute('aria-label', label);
+  }
+
+  /** Idle (pinned, not typing) or not; on a touch screen the dock stays under an idle log. */
+  private paintLook(): void {
+    const look = chatLook({ visible: this.visible, open: this.open, pinned: this.pinned, typing: this.release !== null });
+    this.root.classList.toggle('idle', look === 'idle');
+    this.dock.hidden = look === 'box';
+    // the newest lines in view, whatever was scrolled to while typing
+    if (look === 'idle') this.toBottom();
+  }
+
   private showCount(): void {
     if (this.statusTimer) return;
     const n = [...this.input.value].length;
@@ -546,14 +602,16 @@ export class ChatPanel {
    */
   private place = (): void => {
     if (!this.visible) return;
-    const shown = this.open ? this.box : this.dock;
+    // (idle on a touch screen the box stands beside the dock, which keeps the corner)
+    const compact = this.root.classList.contains('idle') && document.documentElement.classList.contains('touch-ui');
+    const shown = this.open && !compact ? this.box : this.dock;
     const r0 = shown.getBoundingClientRect();
     if (r0.width === 0) return;
     // Unlifted, from the CSS's own base (not the live rect: `bottom` is transitioned, and a
     // reading taken mid-way would be off), at the log's full height.
     const bottom = innerHeight - (parseFloat(getComputedStyle(this.root).getPropertyValue('--chat-base')) || 18);
     const log = Math.min(232, Math.max(120, innerHeight * 0.3));
-    const height = this.open ? shown.offsetHeight - this.scroller.offsetHeight + log : shown.offsetHeight;
+    const height = shown === this.box ? shown.offsetHeight - this.scroller.offsetHeight + log : shown.offsetHeight;
     const top = bottom - height;
     let lift = 0;
     let ceiling = 0;
@@ -623,7 +681,7 @@ function save(key: string, value: string | null): void {
 // style attributes and data: URLs.
 const NS = 'http://www.w3.org/2000/svg';
 
-function icon(name: 'chat' | 'muted' | 'shown' | 'hidden' | 'down' | 'send'): SVGSVGElement {
+function icon(name: 'chat' | 'muted' | 'shown' | 'hidden' | 'down' | 'send' | 'pin'): SVGSVGElement {
   const s = document.createElementNS(NS, 'svg');
   s.setAttribute('viewBox', '0 0 24 24');
   s.setAttribute('class', 'chat-ico');
@@ -655,6 +713,11 @@ function icon(name: 'chat' | 'muted' | 'shown' | 'hidden' | 'down' | 'send'): SV
       break;
     case 'send':
       path('M4.5 12h14M13 6.5l5.5 5.5-5.5 5.5');
+      break;
+    case 'pin':
+      // a push pin, its point down
+      path('M9 3.5h6M10 3.5l-.6 6L6.5 13h11l-2.9-3.5-.6-6');
+      path('M12 13v7.5');
       break;
   }
   return s;
