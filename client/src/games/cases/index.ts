@@ -26,6 +26,52 @@ const chanceText = (w: number) => {
   return p >= 0.01 ? pctText(p) : `1 in ${Math.round(1 / p).toLocaleString('en-US')}`;
 };
 
+/** A few of the items, simply, for the desk's picture: a watch, dice, a crown, a dollar, a chip. */
+function drawThing(g: CanvasRenderingContext2D, i: number, cx: number, cy: number): void {
+  const disc = (r: number, fill: string) => {
+    g.fillStyle = fill;
+    g.beginPath();
+    g.arc(cx, cy, r, 0, Math.PI * 2);
+    g.fill();
+  };
+  if (i === 0) {
+    disc(15, '#c9a227');
+    disc(11, '#fbf7ec');
+    g.strokeStyle = '#1d1a14';
+    g.lineWidth = 2;
+    g.beginPath();
+    g.moveTo(cx, cy);
+    g.lineTo(cx, cy - 8);
+    g.moveTo(cx, cy);
+    g.lineTo(cx + 6, cy + 3);
+    g.stroke();
+  } else if (i === 1) {
+    g.fillStyle = '#f7f4ee';
+    g.beginPath();
+    g.roundRect(cx - 17, cy - 6, 15, 15, 3);
+    g.roundRect(cx + 1, cy - 11, 15, 15, 3);
+    g.fill();
+  } else if (i === 2) {
+    g.fillStyle = '#f5c542';
+    g.beginPath();
+    g.moveTo(cx - 17, cy + 10);
+    g.lineTo(cx - 19, cy - 10);
+    g.lineTo(cx - 8, cy - 1);
+    g.lineTo(cx, cy - 14);
+    g.lineTo(cx + 8, cy - 1);
+    g.lineTo(cx + 19, cy - 10);
+    g.lineTo(cx + 17, cy + 10);
+    g.closePath();
+    g.fill();
+  } else if (i === 3) {
+    disc(15, '#7c8a98');
+    disc(13, '#c9d3dc');
+  } else {
+    disc(15, '#c62b36');
+    disc(9, '#a3202b');
+  }
+}
+
 /** The monitor on the floor: the site's bar, a bet panel, and a reel stopped on a gold card. */
 function drawAttract(g: CanvasRenderingContext2D, w: number, h: number): void {
   const top = drawSiteBar(g, w, 'Cases');
@@ -52,6 +98,7 @@ function drawAttract(g: CanvasRenderingContext2D, w: number, h: number): void {
     g.globalAlpha = 1;
     g.fillStyle = RARITY_COLOR[r]!;
     g.fillRect(x, y0 + 82, cw, 4);
+    drawThing(g, i, x + cw / 2, y0 + 34);
     g.fillStyle = '#eef3f8';
     g.font = '700 13px system-ui, sans-serif';
     g.fillText(m, x + cw / 2, y0 + 70);

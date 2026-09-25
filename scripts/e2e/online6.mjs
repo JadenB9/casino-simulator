@@ -23,6 +23,49 @@ const report = [];
 let failed = false;
 const money = (c) => '$' + Math.floor(c / 100).toLocaleString('en-US') + (c % 100 ? '.' + String(c % 100).padStart(2, '0') : '');
 
+// `desks` as the only game stands the four desks in a row, as the lounge will, and shoots them
+// from across the floor and each monitor's attract picture up close.
+if (games[0] === 'desks') {
+  const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  await page.goto(`http://localhost:${port}/casino/?dev=table&game=coinflip&name=online6_e2e_dk`);
+  if (await page.waitForSelector('.pass-input', { timeout: 2500 }).catch(() => null)) await page.fill('.pass-input', 'casino-dev');
+  await page.waitForSelector('.modal .btn', { timeout: 30000 }).catch(() => null);
+  await page.keyboard.press('Escape');
+  await page.evaluate(async () => {
+    const { engine, table } = window.casino;
+    // The harness's own desk (Coinflip) loses its page; Wheel, Cases and Diamonds stand to its right.
+    table.view.dispose();
+    const { GAMES } = await import('/casino/src/games/index.ts');
+    const anchor = table.stage.anchor;
+    ['wheel', 'cases', 'diamonds'].forEach((id, i) => {
+      const m = GAMES[id].createModel({ variant: '', quality: engine.quality });
+      m.position.set(anchor.position.x + 1.35 * (i + 1), 0, anchor.position.z);
+      engine.scene.add(m);
+    });
+    engine.camera.position.set(2.1, 1.75, 3.1);
+    engine.camera.lookAt(2.0, 0.85, -0.3);
+  });
+  await page.waitForTimeout(800);
+  const shots = [`${outDir}/desks-row.png`];
+  await page.screenshot({ path: shots[0] });
+  for (let i = 0; i < 4; i++) {
+    await page.evaluate((x) => {
+      const { engine } = window.casino;
+      engine.camera.position.set(x + 0.3, 1.2, 0.55);
+      engine.camera.lookAt(x, 1.06, -0.47);
+    }, 1.35 * i);
+    await page.waitForTimeout(300);
+    const path = `${outDir}/desk-${['coinflip', 'wheel', 'cases', 'diamonds'][i]}.png`;
+    await page.screenshot({ path });
+    shots.push(path);
+  }
+  console.log(JSON.stringify({ shots, errors }, null, 1));
+  await browser.close();
+  process.exit(errors.length ? 1 : 0);
+}
+
 async function open(game, name) {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   const errors = [];
