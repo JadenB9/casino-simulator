@@ -1980,6 +1980,13 @@ function buildPieces(fit: Fit, ids: string[], out: Out): void {
   }
 }
 
+const HATS = new Set(['black-fedora', 'panama-hat', 'top-hat', 'cowboy-hat', 'gold-crown']);
+
+/** Whether a worn piece (not a ride: rides.ts) has a model here; every one in the catalog should. */
+export function hasWearModel(id: string): boolean {
+  return !!(CHAINS[id] || GRILLS[id] || WATCHES[id] || SHADES[id] || CLOTHES[id]) || id === 'gold-aviators' || HATS.has(id);
+}
+
 /** The chain as one plain gold rope, for far away. */
 function buildFarChain(fit: Fit, id: string, out: Out): void {
   const chain = CHAINS[id];
