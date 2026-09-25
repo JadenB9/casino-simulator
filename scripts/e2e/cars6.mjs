@@ -73,6 +73,11 @@ async function enterAs(name, viewport = { width: 1440, height: 900 }) {
   }
   await p.waitForSelector('.hud', { timeout: 30000 });
   await p.waitForFunction(() => window.casino.app.link?.you, null, { timeout: 20000 });
+  // the day's gift greets you on arrival: put it aside (it holds the keyboard)
+  if (await p.waitForSelector('.daily-claim, .daily-done', { timeout: 4000 }).then(() => true, () => false)) {
+    await p.keyboard.press('Escape');
+    await p.waitForTimeout(400);
+  }
   await p.evaluate(() => {
     window.heard = [];
     window.casino.app.link.subscribe((m) => window.heard.push(m));
@@ -117,9 +122,12 @@ async function toStand(p) {
 // --- one: buy at the valet --------------------------------------------------------------------
 
 const NAME = 'cars6_e2e_1';
-const CAR = 'stallard-440';
+// the cheapest car this account doesn't have yet (every run buys one), the roadster once all are owned
+const PRICES = { 'halden-roadster': 250_000, 'brenner-rally': 400_000, 'stallard-440': 650_000, 'solenne-cabriolet': 900_000, 'ardent-overland': 1_200_000, 'aurelian-saloon': 2_000_000 };
+const have = new Set(rows(`SELECT i.item FROM casino_items i JOIN casino_accounts a ON a.id = i.account_id WHERE a.name = '${NAME}'`).map((r) => r.item));
+const CAR = Object.keys(PRICES).find((id) => !have.has(id)) ?? 'halden-roadster';
 const a = await enterAs(NAME);
-grant(NAME, 2_000_000);
+grant(NAME, PRICES[CAR] + 50_000);
 await a.p.evaluate(async () => {
   const t = sessionStorage.getItem('casino.token');
   const r = await fetch('/casino/api/me', { headers: { Authorization: `Bearer ${t}` } });
@@ -149,7 +157,7 @@ if (owned0 === 0) {
   const said = await a.p.textContent('.valet .bq-status');
   check(/is yours/.test(said ?? ''), `bought: "${said}"`);
   const after = rows(`SELECT balance FROM casino_accounts WHERE name = '${NAME}'`)[0].balance;
-  check(before - after === 650_000 * 100, `charged $650,000 once (${(before - after) / 100})`);
+  check(before - after === PRICES[CAR] * 100, `charged $${PRICES[CAR].toLocaleString('en-US')} once (${(before - after) / 100})`);
 } else console.log('     already owned from an earlier run');
 check(balanced(NAME), 'the money adds up: ledger - items - orders = balance');
 check(await a.p.evaluate((car) => window.casino.session.profile.owned?.includes(car), CAR), 'the profile owns it');
