@@ -38,6 +38,8 @@ async function open(url, { viewport = { width: 1280, height: 800 }, last = null 
     localStorage.setItem('casino.quality', 'low');
     if (n) localStorage.setItem('casino.lastName', n);
   }, last);
+  // qa6: the GPU's headless Chrome asks for /favicon.ico, which the dev server doesn't have
+  await ctx.route('**/favicon.ico', (r) => r.fulfill({ status: 204 }));
   const p = await ctx.newPage();
   // A refused login is an expected 401/429 on the network; anything else is an error.
   p.on('console', (m) => m.type() === 'error' && !/status of 40[01]|status of 429/.test(m.text()) && errors.push(`${url}: ${m.text()}`));
@@ -62,6 +64,14 @@ function sql(command) {
     env: { ...process.env, CI: '1' },
     encoding: 'utf8',
   });
+}
+
+// qa6: on a fresh local database a brand-new name is greeted by the guided look editor, not the
+// menu these checks walk; make NAME an account from over a quarter of an hour ago first, as it is
+// on any database the script has run on before.
+{
+  await fetch(`http://localhost:${port}/casino/api/login`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: NAME, password: PASS }) });
+  execFileSync('node_modules/.bin/wrangler', ['d1', 'execute', 'DB', '--local', '-c', 'server/wrangler.toml', '--command', `UPDATE casino_accounts SET created_at = created_at - 3600000 WHERE name = '${NAME}'`], { cwd: new URL('../..', import.meta.url), env: { ...process.env, CI: '1' }, stdio: 'ignore' });
 }
 
 // ---- first visit: name, password, the rule, Show; in; out; "Continue as" asks for the password

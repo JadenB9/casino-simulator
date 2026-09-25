@@ -32,6 +32,7 @@ import type { CasinoFloor } from './floor/index.ts';
 import { jailOf } from './law.ts'; // v6 law6
 import { isJailGame, jailLimits, jailTableName } from '../../shared/src/law/rules.ts'; // v6 law6
 import type { CasinoTable } from './table/host.ts';
+import { fairApi, fairOf, pause, pausedFail } from './fair.ts'; // v6 bot6
 
 export { CasinoFloor } from './floor/index.ts';
 export { CasinoTable } from './table/host.ts';
@@ -125,6 +126,9 @@ async function handleApi(request: Request, env: Env, route: string, cors: Record
     return json((await featsOf(env.DB, claims.a)) satisfies FeatsResponse, 200, cors);
   }
 
+  // v6 bot6: the Quick check (fair.ts); on the dev stack, POST /api/dev/check forces one
+  if (route === 'check' || route === 'dev/check' || route === 'dev/check/answer') return fairApi(request, env, route, claims.a, cors, (id) => refreshTables(env, id));
+
   // Names and numbers only; the boards are kept for a minute (see leaderboard.ts).
   // v6 stats6: ?game=<id> for one game's boards; GET /stats for your own record
   if (route === 'leaderboard' && request.method === 'GET') {
@@ -180,6 +184,13 @@ async function handleApi(request: Request, env: Env, route: string, cors: Record
   // v6 law6: an inmate plays only the jail's own tables (see handleSocket)
   if ((route === 'tables' || route === 'tables/join') && request.method === 'POST' && (await jailOf(env.DB, claims.a))) {
     return fail(403, 'NOT_ELIGIBLE', IN_JAIL, cors);
+  }
+
+  // v6 bot6: no new lobbies while a Quick check waits (opening one is a pause: a due one is asked)
+  if ((route === 'tables' || route === 'tables/join') && request.method === 'POST') {
+    const fair = await fairOf(env.DB, claims.a);
+    if (fair.state === 'due') await pause(env.DB, claims.a, now);
+    if (fair.state !== 'ok') return pausedFail(cors);
   }
 
   if (route === 'tables' && request.method === 'POST') {
@@ -240,6 +251,17 @@ async function handleApi(request: Request, env: Env, route: string, cors: Record
   if (route === 'shop' || route.startsWith('shop/') || route.startsWith('bar/')) return shopApi(request, env, route, claims.a, cors);
 
   return fail(404, 'NOT_FOUND', 'Not here.', cors);
+}
+
+/** v6 bot6: every table holding this account's chips reads its Quick check state again. */
+async function refreshTables(env: Env, accountId: number): Promise<void> {
+  await Promise.all(
+    (await escrowsOf(env.DB, accountId)).map((e) =>
+      table(env, e.table_id)
+        .fairRefresh(accountId)
+        .catch((err: unknown) => console.error('fair refresh failed', e.table_id, err)),
+    ),
+  );
 }
 
 // v6 law6

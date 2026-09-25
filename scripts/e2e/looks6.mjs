@@ -254,9 +254,8 @@ const saveLook = (p, change) =>
 /** The other player's character as B draws it: the one that isn't B's own. */
 const remoteOf = (p) =>
   p.evaluate(() => {
-    const mine = window.casino.world.player.character;
-    for (const c of window.casino.world.characterFactory.people()) {
-      if (c === mine) continue;
+    // qa6: the other player, not the first character that isn't B (the ground floor's valet is one too)
+    for (const { ch: c } of window.casino.app.remotes.drawn.values()) {
       const at = c.root.getWorldPosition(c.root.position.clone());
       return { riding: c.riding ?? null, shown: c.ride?.outer.visible ?? false, x: at.x, z: at.z, lean: c.ride?.lean ?? 0 };
     }
@@ -273,7 +272,7 @@ const watchFrom = (p, off, look = 0.8) =>
       window.__watch?.();
       const mine = world.player.character;
       window.__watch = engine.onFrame(() => {
-        const them = [...world.characterFactory.people()].find((c) => c !== mine);
+        const them = [...window.casino.app.remotes.drawn.values()][0]?.ch; // qa6: the other player
         if (!them) return;
         const at = them.root.position;
         engine.camera.position.set(at.x + o[0], o[1], at.z + o[2]);

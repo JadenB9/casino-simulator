@@ -46,6 +46,7 @@ import { openValet } from '../ui/cars/valet.ts';
 import * as carsApi from '../ui/cars/api.ts';
 import { serverNow } from '../net/clock.ts';
 import { carItem } from '../../../shared/src/items.ts';
+import { installCheck } from '../ui/check/check.ts'; // v6 bot6: the Quick check
 
 export async function boot(): Promise<void> {
   const ui = document.getElementById('ui')!;
@@ -519,6 +520,7 @@ class App {
     this.feats = mountFeats({ root: this.ui, session, sfx: this.sfx, game: () => this.table?.station.game ?? null });
     bar.insertBefore(this.feats.button, first);
     this.feats.useHud(this.hud.root);
+    installCheck(); // v6 bot6: the Quick check, when a table or the API says one is waiting
     this.chat?.setVisible(true);
   }
 

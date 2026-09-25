@@ -30,6 +30,8 @@ import { Law, type HotReport, type StrikeResult } from '../law.ts'; // v6 law6
 import { Celebs } from './celebs.ts';
 import { parseCelebMsg, type CelebServerMsg, type GiftBox, type Visit } from '../../../shared/src/celebs.ts';
 import type { HappyHour } from '../../../shared/src/happyhour.ts';
+import { FloorFair } from './fair.ts'; // v6 bot6: fair play
+import { autoChecks } from '../fair.ts'; // v6 bot6
 
 /** A hard cap on floor connections; a busy night past this gets a polite "casino is full". */
 export const MAX_FLOOR = 150;
@@ -75,6 +77,8 @@ export class CasinoFloor extends DurableObject<Env> {
   readonly valet: Valet;
   /** v6 celebs6: celebrity visits and the gift box (celebs.ts) */
   readonly celebs: Celebs;
+  /** v6 bot6: where walks end and when players are active, for fair play (fair.ts) */
+  readonly fair: FloorFair;
   private buckets = new Map<WebSocket, FloorLimits>();
   private connects = new KeyedBuckets(FLOOR_CONNECT_BURST, FLOOR_CONNECT_PER_SEC);
   private addrConnects = new KeyedBuckets(ADDR_CONNECT_BURST, ADDR_CONNECT_PER_SEC);
@@ -101,6 +105,7 @@ export class CasinoFloor extends DurableObject<Env> {
     });
     this.law = new Law(ctx, env, this.presence, (msg) => this.broadcast(msg), (id, msg) => this.sendTo(id, msg));
     this.valet = new Valet((msg) => this.broadcast(msg)); // v6 cars6
+    this.fair = new FloorFair(() => env.DB, autoChecks(env), (p) => ctx.waitUntil(p)); // v6 bot6
     // v6 celebs6
     this.celebs = new Celebs({
       sql: ctx.storage.sql,
@@ -199,6 +204,7 @@ export class CasinoFloor extends DurableObject<Env> {
     const say = parseSay(data);
     if (say) {
       this.presence.touch(ws, Date.now());
+      this.fairSaw(ws, null); // v6 bot6
       return this.chat.say(ws, say.text);
     }
     const msg = parseFloorMsg(data, isGameId);
@@ -206,6 +212,7 @@ export class CasinoFloor extends DurableObject<Env> {
       this.strike(ws, b);
       return;
     }
+    this.fairSaw(ws, msg); // v6 bot6
     // Extra emotes are dropped quietly (people mash the key); they already counted as frames.
     if (msg.t === 'emote') {
       if (b.emote.take()) {
@@ -278,6 +285,7 @@ export class CasinoFloor extends DurableObject<Env> {
   }
 
   private idleOut(ws: WebSocket): void {
+    this.fairGone(ws); // v6 bot6
     try {
       ws.close(CLOSE.IDLE, 'away');
     } catch {
@@ -290,6 +298,7 @@ export class CasinoFloor extends DurableObject<Env> {
   }
 
   async webSocketClose(ws: WebSocket, code: number, reason: string): Promise<void> {
+    this.fairGone(ws); // v6 bot6
     try {
       ws.close(code, reason);
     } catch {
@@ -301,6 +310,7 @@ export class CasinoFloor extends DurableObject<Env> {
   }
 
   async webSocketError(ws: WebSocket): Promise<void> {
+    this.fairGone(ws); // v6 bot6
     this.buckets.delete(ws);
     this.directory.unwatch(ws);
     this.presence.onClose(ws);
@@ -460,6 +470,21 @@ export class CasinoFloor extends DurableObject<Env> {
     const att = ws.deserializeAttachment() as FloorAtt | null;
     // v6: the free six, or one the account owns; anything else is dropped quietly (an old wheel)
     if (att && (isFreeEmote(e) || att.emotes?.includes(e))) this.broadcast({ t: 'emote', id: att.accountId, e });
+  }
+
+  // v6 bot6: fair play: every message is a moment of activity; walks and floor seats say where stops were
+  private fairSaw(ws: WebSocket, msg: ReturnType<typeof parseFloorMsg>): void {
+    const id = this.presence.accountOf(ws);
+    if (id === null) return;
+    const now = Date.now();
+    this.fair.touched(id, now);
+    if (msg?.t === 'mv' || msg?.t === 'st') this.fair.position(id, msg.x, msg.z, msg.t === 'st', now);
+    else if (msg?.t === 'sit') this.fair.sat(id, msg.x, msg.z);
+  }
+
+  private fairGone(ws: WebSocket): void {
+    const id = this.presence.accountOf(ws);
+    if (id !== null) this.fair.gone(id, Date.now());
   }
 
   // --- plumbing ------------------------------------------------------------------------------

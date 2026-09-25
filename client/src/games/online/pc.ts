@@ -25,11 +25,17 @@ export const PC_FOOTPRINT = { width: 1.2, depth: 1.6 };
 export const PC_SEAT: [number, number, number] = [0, 0, 0.46];
 export const SEAT_TOP = 0.515;
 
+/**
+ * v6 qa6: the glass's plane, 4 mm proud of the shell's front face (the shell is 25 mm deep): at
+ * 0.1 mm the two fought in the depth buffer from across the room.
+ */
+const GLASS_Z = SCREEN_CENTER.z + 0.0125 + 0.004;
+
 /** The glass's corners in station coordinates: top-left, top-right, bottom-right, bottom-left. */
 export function pcScreenCorners(): THREE.Vector3[] {
   const hw = SCREEN_W / 2;
   const hh = SCREEN_H / 2;
-  const z = SCREEN_CENTER.z + 0.0125;
+  const z = GLASS_Z;
   return [
     new THREE.Vector3(-hw, SCREEN_CENTER.y + hh, z),
     new THREE.Vector3(hw, SCREEN_CENTER.y + hh, z),
@@ -160,7 +166,7 @@ export function pcModel(opts: PcOptions): THREE.Group {
   // The glass: the attract picture on the floor; the DOM screen covers it while you play.
   const glass = new THREE.Mesh(new THREE.PlaneGeometry(SCREEN_W, SCREEN_H), new THREE.MeshBasicMaterial({ map: opts.attract, toneMapped: false }));
   glass.name = 'pc-screen';
-  glass.position.set(0, SCREEN_CENTER.y, SCREEN_CENTER.z + 0.0126);
+  glass.position.set(0, SCREEN_CENTER.y, GLASS_Z);
   g.add(glass);
   return g;
 }

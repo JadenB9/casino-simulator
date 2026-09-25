@@ -15,6 +15,7 @@ import { session } from './session.ts';
 import { tips } from './tips.ts';
 import type { GameEvent } from '../../../shared/src/engine.ts';
 import type { ChatServerMsg, TableServerMsg } from '../../../shared/src/protocol.ts';
+import { CHECK_MSG } from '../../../shared/src/protocol.ts'; // v6 bot6
 import { limitsLabel, limitsOf, limitsParam, sameLimits, type TableLimits } from '../../../shared/src/limits.ts';
 
 export interface TableTarget {
@@ -228,8 +229,11 @@ export class TableSession {
         if (m.pin) this.pin = m.pin;
         this.view?.onMembers?.(m);
         break;
+      case 'check': // v6 bot6: the Quick check is waiting (ui/check)
+        dispatchEvent(new Event('casino:check'));
+        break;
       case 'err':
-        this.kit.toast(m.msg, 'err');
+        if (m.msg !== CHECK_MSG) this.kit.toast(m.msg, 'err'); // v6 bot6: the check's own panel says it
         this.view?.onError?.(m.code, m.msg);
         break;
       case 'closed':

@@ -7,6 +7,7 @@
 
 import { chromium } from 'playwright';
 import { mkdirSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 
 const [port = '5173', out = '/tmp/casino-accounts'] = process.argv.slice(2);
 mkdirSync(out, { recursive: true });
@@ -25,7 +26,8 @@ const check = (what, ok, detail) => checks.push(ok ? { what, ok } : { what, ok, 
 async function open(url, viewport = { width: 1280, height: 800 }) {
   const ctx = await browser.newContext({ viewport, deviceScaleFactor: 1 });
   const p = await ctx.newPage();
-  p.on('console', (m) => m.type() === 'error' && errors.push(`${url}: ${m.text()}`));
+  // qa6: a fixture page has no session, and bank6's bank still asks the API (a 401, answered with the fixture)
+  p.on('console', (m) => m.type() === 'error' && !(url.includes('fixture=1') && /status of 401/.test(m.text())) && errors.push(`${url}: ${m.text()}`));
   p.on('pageerror', (e) => errors.push(`${url}: ${e}`));
   await p.goto(`${base}?${url}&dock=0`);
   return p;
@@ -39,6 +41,14 @@ async function shot(p, name) {
 
 const text = (p, sel) => p.textContent(sel).then((t) => (t ?? '').trim());
 const selected = (p) => p.getAttribute('.menu-item.sel', 'data-id');
+
+// qa6: on a fresh local database a brand-new name is greeted by the guided look editor, not the
+// menu these checks walk; make NAME an account from over a quarter of an hour ago first, as it is
+// on any database the script has run on before.
+{
+  await fetch(`http://localhost:${port}/casino/api/login`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: NAME, password: PASS }) });
+  execFileSync('node_modules/.bin/wrangler', ['d1', 'execute', 'DB', '--local', '-c', 'server/wrangler.toml', '--command', `UPDATE casino_accounts SET created_at = created_at - 3600000 WHERE name = '${NAME}'`], { cwd: new URL('../..', import.meta.url), env: { ...process.env, CI: '1' }, stdio: 'ignore' });
+}
 
 // ---- login, the live rule, the menu by keyboard, a new player's profile, log out, continue
 {
@@ -65,11 +75,11 @@ const selected = (p) => p.getAttribute('.menu-item.sel', 'data-id');
   await p.keyboard.press('KeyS');
   check('S selects Profile', (await selected(p)) === 'profile');
   await p.keyboard.press('Enter');
-  await p.waitForSelector('.profile-sheet .games tbody tr');
+  await p.waitForSelector('.profile-sheet .pf-games tbody tr, .profile-sheet .pf-games-wrap .quiet'); // qa6: stats6's games table (or its empty note)
   await p.waitForFunction(() => !document.querySelector('.profile-sheet .sheet-sub')?.textContent?.includes('Updating'));
   await p.waitForTimeout(500);
   await shot(p, '04-profile-new');
-  check('profile shows the $50,000 balance or more', /\$\d/.test(await text(p, '.profile-stats .stat-value')));
+  check('profile shows the $50,000 balance or more', /\$\d/.test(await text(p, '.pf-strip .stat-value'))); // qa6: stats6's strip
   await p.keyboard.press('KeyW'); // must not reach the menu behind the sheet
   await p.keyboard.press('Escape');
   await p.waitForSelector('.sheet-scrim', { state: 'detached' });
@@ -104,7 +114,7 @@ const selected = (p) => p.getAttribute('.menu-item.sel', 'data-id');
   await p.waitForTimeout(900);
   await shot(p, '07-profile');
   check('profile lists two loans', (await p.$$('.profile-sheet .loans tbody tr')).length === 2);
-  check('profile says Loans taken: 2', (await text(p, '.profile-side')).includes('Loans taken: 2'));
+  check('profile says Loans taken: 2', (await text(p, '.pf-lower')).includes('Loans taken: 2')); // qa6: stats6's lower row
   await p.context().close();
 }
 
