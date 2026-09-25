@@ -322,7 +322,7 @@ class Particles {
 
 /** The statue's gold: brushed, warm, catching the key and the rim. */
 function statueGold(): THREE.MeshStandardMaterial {
-  return new THREE.MeshStandardMaterial({ color: '#c8a04a', metalness: 0.82, roughness: 0.32, emissive: '#3a2708', emissiveIntensity: 0.55 });
+  return new THREE.MeshStandardMaterial({ color: '#b89240', metalness: 0.85, roughness: 0.36, emissive: '#2a1c06', emissiveIntensity: 0.2 });
 }
 
 export interface ShowroomOpts {
