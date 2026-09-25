@@ -23,7 +23,8 @@ import { LIFTS, floorOf } from '../../../../shared/src/lifts.ts';
 import { ZONES, zoneOf, type ZoneId } from '../../../../shared/src/zones.ts';
 import { calm } from '../../app/comfort.ts';
 import { toast } from '../../ui/kit.ts';
-import { Bank, CAR_H, panelTexture } from './bank.ts';
+import { panelTexture, type Lift } from './bank.ts';
+import { EntranceLift, type Doorway } from './entrance.ts';
 import { defineCityMats } from './kit.ts';
 import { buildGround } from './ground.ts';
 import { buildRoof, SUN_DIR } from './roof.ts';
@@ -50,6 +51,8 @@ export interface CityDeps {
   mats: Mats;
   col: Collider;
   quality: Quality;
+  /** The lobby's street doorway (the floor plan's `door`): the casino's elevator. */
+  door: Doorway;
   ui: HTMLElement;
   sfx?: Sfx;
 }
@@ -94,7 +97,8 @@ const CALL_REACH = 2.4;
 
 export class City {
   zone: ZoneId = 'casino';
-  readonly casinoBank: Bank;
+  /** The casino's elevator: the lobby's own street doors, opening onto a car (entrance.ts). */
+  readonly casinoBank: EntranceLift;
   private readonly zones = new Map<ZoneId, ZoneBuild>();
   private readonly preparing = new Map<ZoneId, Promise<void>>();
   private readonly ceilings = new Set<(x: number, z: number) => number | null>();
@@ -132,13 +136,13 @@ export class City {
     this.quality = deps.quality;
     this.sounds = new LiftSounds(deps.sfx);
     this.nearFar = deps.camera.far;
-    // the casino's bank stands in the lobby: its pieces go in with the lobby's (drawn and hidden
-    // with the room, no draw calls of their own)
+    // the casino's elevator is the lobby's street doors: its car's pieces go in with the lobby's
+    // (drawn and hidden with the room, no draw calls of their own)
     const room = batch.room;
     const glowRoom = glow.room;
     batch.room = 'lobby';
     glow.room = 'lobby';
-    this.casinoBank = new Bank(LIFTS.casino, batch, glow, deps.mats, deps.col, { height: 3.4, clad: 'marble-black', trim: 'brass', door: 'lift-door' }, panelTexture('casino'));
+    this.casinoBank = new EntranceLift(LIFTS.casino, deps.door, batch, glow, deps.mats, deps.col, panelTexture('casino'), deps.quality);
     batch.room = room;
     glow.room = glowRoom;
     deps.root.add(this.casinoBank.group);
@@ -165,7 +169,12 @@ export class City {
   }
 
   /** The bank in the zone you're in. */
-  get bank(): Bank {
+  /** The street doors' two leaves (behind the loading screen). */
+  load(): Promise<void> {
+    return this.casinoBank.load().catch((err) => console.warn('the entrance doors failed to load', err));
+  }
+
+  get bank(): Lift {
     return this.zone === 'casino' ? this.casinoBank : this.zones.get(this.zone)!.bank;
   }
 
@@ -179,7 +188,7 @@ export class City {
     const zone = zoneOf(x * 100, z * 100);
     if (!zone) return null;
     const bank = zone === 'casino' ? this.casinoBank : this.zones.get(zone)?.bank;
-    if (bank && bank.carAt(x, z, 0.02) >= 0) return CAR_H;
+    if (bank && bank.carAt(x, z, 0.02) >= 0) return bank.ceiling;
     for (const fn of this.ceilings) {
       const c = fn(x, z);
       if (c !== null) return c;
@@ -246,6 +255,7 @@ export class City {
 
   setQuality(q: Quality): void {
     this.quality = q;
+    this.casinoBank.setQuality(q);
     for (const z of this.zones.values()) z.setQuality(q);
   }
 
@@ -491,7 +501,7 @@ export class City {
   }
 
   /** The camera at the back corner of the car, looking over your shoulder at the doors. */
-  private placeRideCamera(bank: Bank, car: number): void {
+  private placeRideCamera(bank: Lift, car: number): void {
     const c = bank.centre(car);
     const w = bank.doorway(car);
     const nx = w.x - c.x;
@@ -541,7 +551,7 @@ export class City {
     if (f.seated()) this.leaveTable?.();
   }
 
-  private hearDoors(bank: Bank): void {
+  private hearDoors(bank: Lift): void {
     bank.onDoor = (car, opening) => {
       const f = this.floor;
       if (!f || bank !== this.bank) return;

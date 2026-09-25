@@ -62,7 +62,7 @@ export function carCentre(b: LiftBank, i: number): { x: number; z: number } {
  * terrace's in the stair-and-lift pavilion at its east end, facing west over the city.
  */
 export const LIFTS: Record<ZoneId, LiftBank> = {
-  casino: bank('casino', 420, 1285, 128, 2),
+  casino: bank('casino', 0, 1500, 128, 1),
   ground: bank('ground', 10_500, 0, 64, 3),
   roof: bank('roof', -11_300, 0, 192, 2),
 };

@@ -132,7 +132,26 @@ if (checks.includes('dev')) {
     await camera(p, [[bank.mid.x + bank.n.x * k - 1.2, 1.8, bank.mid.z + bank.n.z * k], [bank.mid.x, 1.5, bank.mid.z]]);
     await frames(p, 12);
     await shot(p, `${quality}-casino-bank`);
+    // the street doors are the casino's elevator: called, they slide apart onto the car
+    await p.evaluate(() => window.casino.world.city.casinoBank.call(0));
+    await p.waitForTimeout(550);
+    await shot(p, `${quality}-casino-doors-opening`);
+    await p.waitForTimeout(1200);
+    await shot(p, `${quality}-casino-doors-open`);
+    const car = await p.evaluate(() => window.casino.world.city.casinoBank.centre(0));
+    await camera(p, [[car.x + 0.9, 1.75, car.z + 0.7], [car.x - 0.6, 1.2, car.z - 2.4]]);
+    await p.evaluate(() => window.casino.world.city.casinoBank.call(0));
+    await frames(p, 12);
+    await shot(p, `${quality}-casino-car-inside`);
     await camera(p, null);
+    // a new arrival at the spawn doesn't open them
+    const closedAtSpawn = await p.evaluate(async () => {
+      const w = window.casino.world;
+      w.teleport(0, 12.8, Math.PI);
+      await new Promise((r) => setTimeout(r, 5200));
+      return w.city.casinoBank.isShut(0);
+    });
+    ok(closedAtSpawn, `${quality}: standing where new players arrive leaves the doors shut`);
     for (const zone of ['ground', 'roof']) {
       const t0 = Date.now();
       await p.evaluate(async (z) => {

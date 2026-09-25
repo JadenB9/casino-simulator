@@ -4,6 +4,7 @@ import { reachFrom, reached, walkGrid } from '../src/world/reach.ts';
 import { GAMES } from '../src/games/index.ts';
 import type { GameId } from '../../shared/src/engine.ts';
 import { LIFTS, bankAxes, CAR_PITCH_CM, CAR_DEPTH_CM } from '../../shared/src/lifts.ts';
+import { FLOOR_BOUNDS } from '../../shared/src/protocol.ts';
 import { LOTS, ZONES } from '../../shared/src/zones.ts';
 import { ENTRANCES, GROUND, PICKUP, ROOF, STALL, VALET_STAND, stalls, type Area } from '../src/world/city/plan.ts';
 
@@ -32,34 +33,32 @@ function bankArea(zone: keyof typeof LIFTS): { block: Area; front: Area } {
 
 describe('the casino elevator', () => {
   const plan = planFloor(footprint, undefined, { seats });
-  const { block, front } = bankArea('casino');
+  const b = LIFTS.casino;
+  const door = plan.door;
 
-  it('stands in the lobby, clear of every solid and doorway, with room in front of its doors', () => {
-    const lobby = plan.rooms.find((r) => r.id === 'lobby')!;
-    // (its back may reach into the wall it stands against)
-    expect(inside(lobby.bounds, (block.x0 + block.x1) / 2, (block.z0 + block.z1) / 2)).toBe(true);
-    expect(inside(lobby.bounds, front.x0, front.z0) && inside(lobby.bounds, front.x1, front.z1)).toBe(true);
-    for (const s of plan.solids) {
-      const r = s.round ? s.w / 2 : Math.hypot(s.w, s.d) / 2;
-      const near: Area = { x0: s.x - r, x1: s.x + r, z0: s.z - r, z1: s.z + r };
-      expect(overlap(near, block), `${s.id} against the elevator`).toBe(false);
-      expect(overlap(near, front), `${s.id} in front of the elevator's doors`).toBe(false);
-    }
-    for (const d of plan.doorways) {
-      const pad: Area = { x0: d.x0 - 0.3, x1: d.x1 + 0.3, z0: d.z0 - 0.3, z1: d.z1 + 0.3 };
-      expect(overlap(pad, block), 'a doorway blocked by the elevator').toBe(false);
-    }
+  it('is the lobby street doors: its car stands right behind them, inside the casino bounds', () => {
+    // the doors' middle, and facing north into the lobby
+    expect(m(b.x)).toBeCloseTo((door.x0 + door.x1) / 2);
+    expect(m(b.z)).toBeCloseTo(door.z);
+    expect(b.r).toBe(128);
+    // the car (where a ride arrives) behind the wall, within the doorway's width, inside the bounds
+    expect(m(b.arrive.z)).toBeGreaterThan(door.z + 0.3);
+    expect(m(b.arrive.x)).toBeGreaterThan(door.x0);
+    expect(m(b.arrive.x)).toBeLessThan(door.x1);
+    expect(b.arrive.z + CAR_DEPTH_CM / 2).toBeLessThanOrEqual(FLOOR_BOUNDS.maxZ);
+    expect(roomAt(plan, m(b.arrive.x), m(b.arrive.z))).toBeNull();
   });
 
-  it('can be walked up to from where everyone arrives', () => {
+  it('can be walked up to from where everyone arrives, which is no nearer than the doors sense', () => {
     const g = walkGrid(plan);
     const seen = reachFrom(g, SPAWN.x, SPAWN.z);
-    const b = LIFTS.casino;
     const { nx, nz } = bankAxes(b);
     const x = m(b.x) + nx * 1.0;
     const z = m(b.z) + nz * 1.0;
     expect(roomAt(plan, x, z)?.id).toBe('lobby');
     expect(reached(g, seen, x, z)).toBe(true);
+    // (the doors open for someone within 1.3 m of their lobby side: a new arrival stands further off)
+    expect(Math.hypot(SPAWN.x - m(b.x), SPAWN.z - (m(b.z) - 0.25))).toBeGreaterThan(1.6);
   });
 });
 

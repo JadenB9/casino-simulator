@@ -56,7 +56,7 @@ describe('the elevators', () => {
     expect(liftRefusal({ ...at('casino'), at: null, confine: { minX: 0, maxX: 1, minZ: 0, maxZ: 1 } }, 'ground')).toBe('held');
     expect(liftRefusal({ ...at('casino'), at: { station: 'bj-1' } }, 'ground')).toBe('table');
     expect(liftRefusal({ ...at('ground'), at: null }, 'ground')).toBe('here');
-    expect(liftRefusal({ x: 0, z: 1300, at: null }, 'roof')).toBe('far');
+    expect(liftRefusal({ x: 0, z: 400, at: null }, 'roof')).toBe('far');
     // between zones is nowhere to ride from
     expect(liftRefusal({ x: 5000, z: 0, at: null }, 'roof')).toBe('far');
     // the held check comes first: the jail is in the ground zone, beside nothing

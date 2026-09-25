@@ -72,11 +72,11 @@ describe('the elevator', () => {
   });
 
   it('refuses a ride from across the room, to the floor you are on, and a made-up floor', async () => {
-    const a = await arrive('lift_far_a', 0, 1300);
+    const a = await arrive('lift_far_a', 0, 400);
     await wait(40);
     a.c.send({ t: 'lift', to: 'roof' });
     expect(await a.c.next<any>((m) => m.t === 'lift.no')).toEqual({ t: 'lift.no', to: 'roof', msg: 'Walk up to the elevator first.' });
-    a.c.send({ t: 'st', x: casino.x + 80, z: casino.z, r: 64 });
+    a.c.send({ t: 'st', x: casino.x + 80, z: casino.z - 60, r: 64 });
     await wait(40);
     a.c.send({ t: 'lift', to: 'casino' });
     expect((await a.c.next<any>((m) => m.t === 'lift.no')).msg).toBe('You’re already on this floor.');

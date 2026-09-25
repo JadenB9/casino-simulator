@@ -74,7 +74,8 @@ describe('the building', () => {
     }
     // and not much more than that
     expect(FLOOR_BOUNDS.minX).toBeGreaterThan(p.room.x0 * 100 - 50);
-    expect(FLOOR_BOUNDS.maxZ).toBeLessThan(p.room.z1 * 100 + 50);
+    // (v6 city6: south of the lobby the bounds take in the elevator car behind the street doors)
+    expect(FLOOR_BOUNDS.maxZ).toBeLessThan(p.room.z1 * 100 + 250);
     expect([SERVER_SPAWN.x / 100, SERVER_SPAWN.z / 100]).toEqual([SPAWN.x, SPAWN.z]);
   });
 
