@@ -90,10 +90,20 @@ describe('tallies', () => {
       'won:roulette': 2_600,
       'wins:roulette': 1,
       best: 2_600,
+      // v6 stats6: the leaderboards' keys (shared/src/stats.ts)
+      wins: 1,
+      'rounds:roulette': 1,
     });
-    expect(roundFacts('roulette', 'american', { events: [], state: null }, round(1_000, 0)).tally).toEqual({ rounds: 1 });
-    // a push is no win
-    expect(roundFacts('blackjack', '', { events: [], state: null }, round(1_000, 1_000)).tally).toEqual({ rounds: 1 });
+    expect(roundFacts('roulette', 'american', { events: [], state: null }, round(1_000, 0)).tally).toEqual({
+      rounds: 1,
+      'rounds:roulette': 1,
+      lost: 1_000,
+      'lost:roulette': 1_000,
+      worst: 1_000,
+      'worst:roulette': 1_000,
+    });
+    // a push is no win (and no loss)
+    expect(roundFacts('blackjack', '', { events: [], state: null }, round(1_000, 1_000)).tally).toEqual({ rounds: 1, 'rounds:blackjack': 1 });
   });
 
   it('first-win comes with any profit, at any game', () => {

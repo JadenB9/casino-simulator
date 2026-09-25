@@ -93,10 +93,10 @@ export const SQL = {
               FROM casino_stats INDEXED BY idx_casino_stats_biggest_win
              WHERE biggest_win > 0
              ORDER BY biggest_win DESC, account_id
-             LIMIT ?2)
+             LIMIT ?1)
      GROUP BY account_id
      ORDER BY v DESC, id
-     LIMIT ?1`,
+     LIMIT ?2`,
   biggestWinPlace: `
     SELECT me.v AS v,
            (SELECT COUNT(DISTINCT account_id) FROM casino_stats INDEXED BY idx_casino_stats_biggest_win
