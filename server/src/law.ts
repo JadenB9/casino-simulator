@@ -245,7 +245,7 @@ export class Law {
     this.jailing.add(accountId);
     try {
       const db = this.env.DB;
-      const acct = await db.prepare(`SELECT balance + in_play AS worth FROM casino_accounts WHERE id = ?1`).bind(accountId).first<{ worth: number }>();
+      const acct = await db.prepare(`SELECT balance + in_play + banked AS worth FROM casino_accounts WHERE id = ?1`).bind(accountId).first<{ worth: number }>();
       if (!acct) return;
       await db
         .prepare(`INSERT OR IGNORE INTO casino_jail (account_id, at, bail, won, why) VALUES (?1, ?2, ?3, 0, ?4)`)
