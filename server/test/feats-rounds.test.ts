@@ -10,7 +10,7 @@ import type { GameEngine, GameEvent, GameId, RoundResult, Step } from '../../sha
 import { isRefusal } from '../../shared/src/engine.ts';
 import { engineFor } from '../../shared/src/games/index.ts';
 import { CATALOG } from '../../shared/src/games/catalog.ts';
-import { FEATS, FEAT_GAMES, featOf, tallyValue } from '../../shared/src/feats.ts';
+import { DAILY_COUNT, FEATS, FEAT_GAMES, casinoDay, dailyFeats, featOf, tallyValue } from '../../shared/src/feats.ts';
 import { TableSim } from '../../shared/test/helpers/table-sim.ts';
 import { seededRng } from '../../shared/test/helpers/seeded.ts';
 import { BUY_IN, ENGINE_READY, LOBBY_GAMES, botDoneBetting, botMove, type Rand } from '../../scripts/load/bots.ts';
@@ -132,6 +132,53 @@ describe('tallies', () => {
     expect(tallyValue({ 'wins:highcard': 3 }, 'games')).toBe(0);
     const every = Object.fromEntries(FEAT_GAMES.map((g) => [`wins:${g}`, 1]));
     expect(challengesMet(every, new Set(['games-5']))).toEqual(['games-all']);
+  });
+});
+
+describe('daily challenges', () => {
+  it('three a day, the same for everyone, of three different kinds, found again by id', () => {
+    for (const day of ['2026-09-25', '2026-09-26', '2027-01-01', '2026-02-29']) {
+      const d = dailyFeats(day);
+      expect(d).toHaveLength(DAILY_COUNT);
+      expect(d.map((f) => f.id)).toEqual([0, 1, 2].map((i) => `daily:${day}:${i}`));
+      const kinds = d.map((f) => f.tally!.replace(/^d:[^:]+:/, '').replace(/^wins:.*/, 'wins'));
+      expect(new Set(kinds).size).toBe(3);
+      for (const f of d) {
+        expect(f.daily).toBe(day);
+        expect(f.tally!.startsWith(`d:${day}:`)).toBe(true);
+        expect(f.reward.cash! > 0 && f.reward.cash! <= 150_000).toBe(true);
+        expect(featOf(f.id)).toEqual(f);
+      }
+      expect(dailyFeats(day)).toEqual(d);
+    }
+    // the days differ
+    const week = Array.from({ length: 14 }, (_, i) => dailyFeats(casinoDay(Date.UTC(2026, 8, 1 + i, 20))).map((f) => f.name).join('|'));
+    expect(new Set(week).size).toBeGreaterThan(5);
+    expect(featOf('daily:2026-09-25:3')).toBeNull();
+    expect(featOf('daily:nope:0')).toBeNull();
+  });
+
+  it("a round counts toward its day's tallies", () => {
+    const f = roundFacts('dice', '', { events: [], state: null }, round(100, 250), '2026-09-25');
+    expect(f.tally).toMatchObject({ 'd:2026-09-25:rounds': 1, 'd:2026-09-25:won': 150, 'd:2026-09-25:wins:dice': 1, 'd:2026-09-25:best': 150 });
+    const lost = roundFacts('dice', '', { events: [], state: null }, round(100, 0), '2026-09-25');
+    expect(lost.tally).toEqual({ rounds: 1, 'd:2026-09-25:rounds': 1 });
+  });
+
+  it("only the day's own are met, from the day's tallies", () => {
+    const day = '2026-09-25';
+    const tally: Record<string, number> = {};
+    for (const f of dailyFeats(day)) {
+      if (/:games$/.test(f.tally!)) for (const g of FEAT_GAMES.slice(0, f.goal!)) tally[`d:${day}:wins:${g}`] = 1;
+      else tally[f.tally!] = f.goal!;
+    }
+    expect(tallyValue(tally, `d:${day}:games`)).toBeGreaterThanOrEqual(0);
+    const met = challengesMet(tally, new Set(), day).filter((id) => id.startsWith('daily:'));
+    expect(met.sort()).toEqual(dailyFeats(day).map((f) => f.id).sort());
+    // the next day's aren't met by today's rows
+    expect(challengesMet(tally, new Set(), '2026-09-26').filter((id) => id.startsWith('daily:'))).toEqual([]);
+    expect(casinoDay(Date.UTC(2026, 8, 25, 6, 59))).toBe('2026-09-24');
+    expect(casinoDay(Date.UTC(2026, 8, 25, 7, 1))).toBe('2026-09-25');
   });
 });
 

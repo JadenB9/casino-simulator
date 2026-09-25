@@ -8,7 +8,7 @@ import { featOf } from '../../../../shared/src/feats.ts';
 import { el } from '../kit.ts';
 import type { SfxLike } from '../menu/deps.ts';
 import { medal } from './icons.ts';
-import { unlockSub } from './lines.ts';
+import { unlockKind, unlockSub } from './lines.ts';
 
 const SHOW_MS = 5200;
 const OUT_MS = 380;
@@ -62,7 +62,7 @@ export class UnlockCards {
     card.title = 'Achievements (J)';
     const text = el('div', 'ft-card-text');
     text.append(
-      el('div', 'ft-card-kind', f.kind === 'challenge' ? 'Challenge complete' : 'Achievement'),
+      el('div', 'ft-card-kind', unlockKind(f)),
       el('div', 'ft-card-name', f.name),
       el('div', 'ft-card-sub', unlockSub(f)),
     );

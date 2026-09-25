@@ -11,7 +11,7 @@ import { evictDurableObject, runInDurableObject } from 'cloudflare:test';
 import type { CasinoTable } from '../src/table/host.ts';
 import type { GameEvent, Step } from '../../shared/src/engine.ts';
 import { DOLLAR, STARTING_BALANCE } from '../../shared/src/money.ts';
-import { featOf } from '../../shared/src/feats.ts';
+import { FEAT_GAMES, casinoDay, dailyFeats, featOf } from '../../shared/src/feats.ts';
 import { DEFAULT_LOOK } from '../../shared/src/look.ts';
 import { featOpId, flushStatements, unlockFeat } from '../src/feats.ts';
 import { ORIGIN, TEST_PASSWORD, api, connect, type Client } from './helpers.ts';
@@ -154,7 +154,12 @@ describe('a feat earned at a table', () => {
       (b) => (b.tally?.rounds ?? 0) === 1,
     );
     expect(got.feats.map((f: any) => f.feat).sort()).toEqual(['first-win', 'lb-100x', 'lb-10x']);
-    expect(got.tally).toEqual({ rounds: 1, won: 990_000, 'won:limbo': 990_000, 'wins:limbo': 1, best: 990_000 });
+    const d = `d:${casinoDay(Date.now())}:`;
+    expect(got.tally).toEqual({
+      rounds: 1, won: 990_000, 'won:limbo': 990_000, 'wins:limbo': 1, best: 990_000,
+      // the day's own copies, for the daily challenges
+      [`${d}rounds`]: 1, [`${d}won`]: 990_000, [`${d}wins:limbo`]: 1, [`${d}best`]: 990_000,
+    });
     // $9,900 won: not yet the $10,000 challenge
     expect(got.feats.some((f: any) => f.feat === 'won-10k')).toBe(false);
 
@@ -216,6 +221,52 @@ describe('a feat earned at a table', () => {
   }, 30_000);
 });
 
+describe('daily challenges', () => {
+  it("today's are paid like any feat, once, and the floor isn't told", async () => {
+    const me = await account('ft_daily');
+    const watcher = await account('ft_daily_w');
+    const w = (await connect('floor', watcher.token)).client!;
+    await w.next((m) => m.t === 'hello');
+    await unlockFeat(env.DB, me.id, 'first-win', 1);
+    // Today's first daily, met already in D1 (played elsewhere today); a round here looks again.
+    const daily = dailyFeats(casinoDay(Date.now()))[0]!;
+    const games = /:games$/.exec(daily.tally!);
+    const rows: [string, number][] = games ? FEAT_GAMES.slice(0, daily.goal!).map((g) => [daily.tally!.replace(/games$/, `wins:${g}`), 1]) : [[daily.tally!, daily.goal!]];
+    for (const [key, n] of rows) await env.DB.prepare(`INSERT INTO casino_tally (account_id, key, n) VALUES (?1, ?2, ?3)`).bind(me.id, key, n).run();
+    const start = await money(me.id);
+    const c = await sit(me.token, 'dice');
+    await play(soloStub('dice', me.id), 100, 0);
+    const got = await c.next((m) => m.t === 'feat' && m.feat === daily.id, 5_000);
+    expect(got.balance.balance).toBe(start.balance - 20_000 * DOLLAR + daily.reward.cash!);
+    await play(soloStub('dice', me.id), 100, 0);
+    await new Promise((r) => setTimeout(r, 1_500));
+    expect(c.msgs.filter((m: any) => m.t === 'feat')).toEqual([]);
+    expect(w.msgs.filter((m: any) => m.t === 'feat' && m.id === me.id)).toEqual([]);
+    expect(await count(`SELECT count(*) AS n FROM casino_ledger WHERE op_id = ?1`, featOpId(me.id, daily.id))).toBe(1);
+    // GET /feats lists it by its day's id
+    expect((await (await api('feats', me.token)).json<any>()).feats.map((f: any) => f.feat)).toContain(daily.id);
+    await cashOut(c);
+    await expectBalanced(me.id);
+    c.ws.close(1000, 'bye');
+    w.ws.close(1000, 'bye');
+  }, 30_000);
+
+  it('a flush drops day rows a few days old and keeps the recent ones', async () => {
+    const me = await account('ft_daily_prune');
+    const now = Date.now();
+    const old = `d:${casinoDay(now - 5 * 86_400_000)}:won`;
+    const recent = `d:${casinoDay(now - 86_400_000)}:won`;
+    for (const key of [old, recent, 'daily-streak', 'bj:naturals']) await env.DB.prepare(`INSERT INTO casino_tally (account_id, key, n) VALUES (?1, ?2, 7)`).bind(me.id, key).run();
+    await env.DB.batch(flushStatements(env.DB, me.id, 'flush:prune', 1, { rounds: 1 }, now));
+    const t = await tally(me.id);
+    expect(t[old]).toBeUndefined();
+    expect(t[recent]).toBe(7);
+    // another slice's row that happens to start with d
+    expect(t['daily-streak']).toBe(7);
+    expect(t['bj:naturals']).toBe(7);
+  });
+});
+
 describe('tallies', () => {
   it('build up at the table, survive an eviction, and land in D1 once at cash-out', async () => {
     const me = await account('ft_tallies');
@@ -242,7 +293,11 @@ describe('tallies', () => {
     const marker = Object.keys(t).filter((k) => k.startsWith('flush:'));
     expect(marker).toHaveLength(1);
     delete t[marker[0]!];
-    expect(t).toEqual({ rounds: 4, won: 900 + 4_500 + 2_000, 'won:dice': 7_400, 'wins:dice': 3, best: 4_500 });
+    const d = `d:${casinoDay(Date.now())}:`;
+    expect(t).toEqual({
+      rounds: 4, won: 900 + 4_500 + 2_000, 'won:dice': 7_400, 'wins:dice': 3, best: 4_500,
+      [`${d}rounds`]: 4, [`${d}won`]: 7_400, [`${d}wins:dice`]: 3, [`${d}best`]: 4_500,
+    });
     // GET /feats never shows the marker
     expect(Object.keys((await (await api('feats', me.token)).json<any>()).tally).some((k) => k.startsWith('flush:'))).toBe(false);
     c2.ws.close(1000, 'bye');

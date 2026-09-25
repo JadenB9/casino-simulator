@@ -23,7 +23,7 @@
 
 import type { GameEvent, GameId, RoundResult, Step } from '../../shared/src/engine.ts';
 import { CATALOG, isGameId } from '../../shared/src/games/catalog.ts';
-import { FEATS, TEN_X_MULTIPLE, featOf, isMaxTally, tallyValue } from '../../shared/src/feats.ts';
+import { DAILY_KEEP_DAYS, FEATS, TEN_X_MULTIPLE, casinoDay, dailyFeats, featOf, isMaxTally, tallyValue } from '../../shared/src/feats.ts';
 import type { EmoteId, TableServerMsg } from '../../shared/src/protocol.ts';
 import { LINEUP, isSlotId } from '../../shared/src/games/slots/lineup.ts';
 import { ROYAL_FLUSH, STRAIGHT_FLUSH as VP_STRAIGHT_FLUSH, FOUR_OF_A_KIND } from '../../shared/src/games/videopoker/hands.ts';
@@ -53,20 +53,28 @@ export interface RoundFacts {
 /**
  * One finished round's part in the feats. `state` is the engine's state after the step (only
  * blackjack reads it). A round with nothing staked (a free game of some kind) counts for nothing,
- * and neither does the test fixture game.
+ * and neither does the test fixture game. With a casino `day`, the round counts toward that day's
+ * challenges too (the `d:<day>:` tallies).
  */
-export function roundFacts(game: GameId, variant: string, step: Pick<Step<unknown>, 'events' | 'state'>, r: RoundResult): RoundFacts {
+export function roundFacts(game: GameId, variant: string, step: Pick<Step<unknown>, 'events' | 'state'>, r: RoundResult, day?: string): RoundFacts {
   const out: RoundFacts = { tally: {}, moments: [] };
   if (!isGameId(game) || CATALOG[game].dev) return out;
   if (!Number.isSafeInteger(r.wagered) || !Number.isSafeInteger(r.returned) || r.wagered <= 0 || r.returned < 0) return out;
   const profit = r.returned - r.wagered;
   const add = (k: string, n: number) => (out.tally[k] = (out.tally[k] ?? 0) + n);
+  const d = day ? `d:${day}:` : null;
   add('rounds', 1);
+  if (d) add(`${d}rounds`, 1);
   if (profit > 0) {
     add('won', profit);
     add(`won:${game}`, profit);
     add(`wins:${game}`, 1);
     out.tally.best = profit;
+    if (d) {
+      add(`${d}won`, profit);
+      add(`${d}wins:${game}`, 1);
+      out.tally[`${d}best`] = profit;
+    }
     out.moments.push('first-win');
   }
   // A solo player's extra spots are named in the events by their spot, not the seat.
@@ -299,10 +307,10 @@ function momentsAt(
   return { moments, counts };
 }
 
-/** Every challenge the tallies meet that isn't in `have`. */
-export function challengesMet(tally: Readonly<Record<string, number>>, have: ReadonlySet<string>): string[] {
+/** Every challenge the tallies meet that isn't in `have`: the list's, and with a `day`, that day's. */
+export function challengesMet(tally: Readonly<Record<string, number>>, have: ReadonlySet<string>, day?: string): string[] {
   const out: string[] = [];
-  for (const f of FEATS) {
+  for (const f of day ? [...FEATS, ...dailyFeats(day)] : FEATS) {
     if (f.kind !== 'challenge' || !f.tally || f.goal === undefined || have.has(f.id)) continue;
     if (tallyValue(tally, f.tally) >= f.goal) out.push(f.id);
   }
@@ -327,8 +335,10 @@ export function isProgressKey(key: string): boolean {
  * One flush of an account's tallies from one table: every change, then the table's marker, all
  * applied only if the marker is still below `seq`.
  */
-export function flushStatements(db: D1Database, accountId: number, marker: string, seq: number, delta: Readonly<Record<string, number>>): D1PreparedStatement[] {
-  const stmts: D1PreparedStatement[] = [];
+export function flushStatements(db: D1Database, accountId: number, marker: string, seq: number, delta: Readonly<Record<string, number>>, now = Date.now()): D1PreparedStatement[] {
+  // Days gone by: their rows go (any day's `d:` key sorts below the cut-off's).
+  const cut = `d:${casinoDay(now - (DAILY_KEEP_DAYS - 1) * 86_400_000)}`;
+  const stmts: D1PreparedStatement[] = [db.prepare(`DELETE FROM casino_tally WHERE account_id = ?1 AND key >= 'd:' AND key < ?2`).bind(accountId, cut)];
   for (const [key, n] of Object.entries(delta)) {
     if (!isProgressKey(key) || !Number.isSafeInteger(n)) continue;
     const merge = isMaxTally(key) ? 'MAX(n, excluded.n)' : 'n + excluded.n';
@@ -593,9 +603,11 @@ export class FeatBook {
   private async announce(out: FeatOut, accountId: number, feat: string, at: number, showAt: number, money?: { balance: Cents; inPlay: Cents; rev: number }): Promise<void> {
     const name = this.sql.exec<{ name: string }>(`SELECT name FROM feat_acct WHERE account_id = ?1`, accountId).toArray()[0]?.name ?? '';
     out.send(accountId, { t: 'feat', feat, at, ...(money ? { balance: money } : {}) });
-    const emote = featOf(feat)?.reward.emote;
+    const f = featOf(feat);
+    const emote = f?.reward.emote;
     await Promise.all([
-      name ? out.featEarned(accountId, name, feat, showAt).catch((err) => console.error('floor featEarned failed', err)) : null,
+      // a daily challenge is everyone's every day: no news for the floor
+      name && !f?.daily ? out.featEarned(accountId, name, feat, showAt).catch((err) => console.error('floor featEarned failed', err)) : null,
       emote ? out.grant(accountId, [emote]).catch((err) => console.error('floor grant failed', err)) : null,
     ]);
   }
@@ -613,7 +625,7 @@ export class FeatBook {
     const base = this.base.get(accountId);
     if (!base) return [];
     const queued = new Set(this.sql.exec<{ feat: string }>(`SELECT feat FROM feat_todo WHERE account_id = ?1`, accountId).toArray().map((r) => r.feat));
-    return challengesMet(this.totals(accountId), base.have).filter((f) => !queued.has(f));
+    return challengesMet(this.totals(accountId), base.have, casinoDay(Date.now())).filter((f) => !queued.has(f));
   }
 
   private async loadBase(db: D1Database, accountId: number): Promise<Base> {
@@ -680,10 +692,11 @@ export function stepFacts(
 ): StepFacts[] {
   const out: StepFacts[] = [];
   const showAt = revealAt(game, step.events, now);
+  const day = casinoDay(now);
   for (const r of step.rounds ?? []) {
     const w = who(r.seat);
     if (!w) continue;
-    const facts = roundFacts(game, variant, step, r);
+    const facts = roundFacts(game, variant, step, r, day);
     if (Object.keys(facts.tally).length || facts.moments.length) out.push({ ...w, facts, showAt });
   }
   return out;
