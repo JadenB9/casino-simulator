@@ -12,6 +12,7 @@ import type { GameId, TableMode, TableConfig } from './engine.ts';
 import type { Look } from './look.ts';
 import type { FxEvent, Statue } from './items.ts';
 import type { ZoneId } from './zones.ts';
+import type { CarCall } from './valet.ts'; // v6 cars6
 import { isSeatId } from './seats.ts';
 import type { TableLimits } from './limits.ts';
 // v6 law6:
@@ -405,6 +406,10 @@ export type FloorServerMsg =
   // v6: the server moved you (the elevator, jail, release): go there at once (cm, yaw byte)
   | { t: 'tp'; x: number; z: number; r: number }
   | InviteServerMsg // v6 invite6
+  // v6 cars6: a car called to the valet's curb (or sent back: until has passed); the ones at the curb after hello
+  | ({ t: 'car' } & CarCall)
+  | { t: 'cars'; list: CarCall[] }
+  // v6 cars6: end
   // v6 city6: the elevator won't go (not at its doors, at a table, held): why, in words
   | { t: 'lift.no'; to: ZoneId; msg: string }
   // v6 law6: a punch (who threw it, and who or which staff member it landed on, null for air);

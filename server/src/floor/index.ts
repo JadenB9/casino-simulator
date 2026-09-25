@@ -19,6 +19,7 @@ import { Directory, ipKey } from './directory.ts';
 import { FloorChat } from './chat.ts';
 import { Wins, type BigWinReport } from './wins.ts';
 import { Effects, Statues, fxKey, type Reserve } from './fx.ts';
+import { Valet, type CallResult } from './valet.ts'; // v6 cars6
 import { ride } from './lift.ts'; // v6 city6
 import { Bucket, KeyedBuckets } from '../ratelimit.ts';
 import { spendTicket } from '../tickets.ts';
@@ -70,6 +71,8 @@ export class CasinoFloor extends DurableObject<Env> {
   readonly invites: Invites;
   /** v6 law6: punches, the staff's catches, jail (server/src/law.ts) */
   readonly law: Law;
+  /** v6 cars6: the valet's curb (valet.ts) */
+  readonly valet: Valet;
   /** v6 celebs6: celebrity visits and the gift box (celebs.ts) */
   readonly celebs: Celebs;
   private buckets = new Map<WebSocket, FloorLimits>();
@@ -97,6 +100,7 @@ export class CasinoFloor extends DurableObject<Env> {
       sockets: () => this.ctx.getWebSockets(),
     });
     this.law = new Law(ctx, env, this.presence, (msg) => this.broadcast(msg), (id, msg) => this.sendTo(id, msg));
+    this.valet = new Valet((msg) => this.broadcast(msg)); // v6 cars6
     // v6 celebs6
     this.celebs = new Celebs({
       sql: ctx.storage.sql,
@@ -153,6 +157,7 @@ export class CasinoFloor extends DurableObject<Env> {
     this.wins.greet(server); // features: the recent big wins, after hello
     this.fx.greet(server, Date.now()); // v6: effects playing or queued
     this.law.greet(accountId, Date.now()); // v6 law6: the detours under way; an inmate back inside
+    this.valet.greet(server, Date.now()); // v6 cars6: the cars at the valet's curb
     this.celebs.greet(server, Date.now()); // v6 celebs6: the visit and the gift box, after hello
     // Everyone already here is due for the idle sweep no later than this newcomer, so a sweep
     // already set comes first; with none set (nobody here, or a floor from before idling), set one.
@@ -312,6 +317,11 @@ export class CasinoFloor extends DurableObject<Env> {
   playerLook(accountId: number, look: Look): void {
     this.presence.setLook(accountId, look);
     this.statues.lookChanged(accountId, look);
+  }
+
+  /** v6 cars6: bring a player's car round to the valet's curb (the Worker checked they own it), or send it back (null). */
+  valetCall(accountId: number, name: string, car: string | null): CallResult {
+    return this.valet.call({ id: accountId, name }, car, this.presence.positionOf(accountId), Date.now());
   }
 
   online(): number {
