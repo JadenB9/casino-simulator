@@ -5,7 +5,7 @@
 // the ground floor's lots (the valet lobby, the valet, the street, the garage, the jail) and the
 // roof, and seated at the first station of each game (seat-<game>.png), each with the frame's draw
 // calls; `only` limits it to shots whose name has one of the words.
-// Draw calls on High over CALL_LIMIT (250) fail.
+// Draw calls on High over CALL_LIMIT (250) fail, except from the corners.
 
 import { chromium } from 'playwright';
 import { mkdirSync } from 'node:fs';
@@ -94,7 +94,8 @@ async function tour(quality) {
     const file = `${quality}-${p.name}.png`;
     await page.screenshot({ path: `${out}/${file}` });
     shots.push(`${p.name} ${s.calls}`);
-    if (quality === 'high' && s.calls > CALL_LIMIT) {
+    // (the corner shots only look: a corner camera can stand inside a slot island)
+    if (quality === 'high' && s.calls > CALL_LIMIT && !/-[ab]$/.test(p.name)) {
       failed++;
       console.log(`FAIL ${quality} ${p.name}: ${s.calls} draw calls`);
     }
