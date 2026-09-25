@@ -13,6 +13,8 @@
 //   const module = party ? withParty(GAMES[game], party) : GAMES[game];
 //   session = new TableSession({ ...choice, game, variant, station }, module, stage, ui, sfx, onFrame, onClosed);
 
-export { openTableFlow, type TableChoice, type TableFlowOpts } from './flow.ts';
+export { closeTableFlows, openTableFlow, type TableChoice, type TableFlowOpts } from './flow.ts';
 export { PartyPanel, withParty, type PartyPanelOpts } from './party.ts';
+// v6 invite6: invites to a lobby table (the cards, the picker, joining)
+export { InviteHub, type InviteApp, type InviteFloor } from './invites.ts';
 export { LobbyWatch, sortLobbies, type LobbyFloor } from './watch.ts';

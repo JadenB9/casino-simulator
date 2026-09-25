@@ -29,6 +29,7 @@ import type { Collider } from './collision.ts';
 import { loadMouse, onMouseChange, setMouseSettings, type MouseSettings, type View } from './mouse.ts';
 import { EMOTE_S } from './emotes.ts';
 import { ridePace } from './rides.ts';
+import { EMOTES } from '../../../shared/src/protocol.ts';
 
 const RADIUS = 0.3;
 // A brisk default pace (the floor is 40 m across), and Shift for a run.
@@ -83,6 +84,16 @@ const SHOW_AT = 0.74;
 const SHOW_ROOM = 1.8;
 const SHOW_TRIES = [0.55, -0.55, 0.95, -0.95, 0.2, -0.2, 1.4, -1.4, 1.9, -1.9];
 const SHOW_S = EMOTE_S + 0.2;
+/**
+ * A punch (world/law/, the 'punch' gesture, JAB_S long) is thrown straight out from the chin, and
+ * these arms are short: seen from the eyes the fist would end a hand's width from the lens. For
+ * its length the eyes draw back into the head this far and a little to the left (still well inside
+ * the walker), so the fist goes out to arm's length, low and right of the middle, moving away; the neck the camera now sits in, and the other arm, up by the chin as a guard right under
+ * the eyes, are left out (shrunk into their joints).
+ */
+const JAB_S = 0.62;
+const JAB_PULL = 0.1;
+const JAB_LEFT = 0.07;
 /** Looking this far (radians) while an emote is shown brings the eyes back. */
 const SHOW_CANCEL = 0.03;
 /** Seconds without mouse input before the follow camera swings back behind the walker. */
@@ -133,6 +144,10 @@ export class Player {
   /** An emote being shown from out in front: the camera's yaw, and until when. */
   private showing: { yaw: number; until: number } | null = null;
   private showLook = 0;
+  /** Seconds left of a punch you threw: the eyes draw back to watch the fist go out. */
+  private jab = 0;
+  /** The forearm shrunk away for a punch (the guard up by the chin), if any. */
+  private guard: THREE.Object3D | null = null;
   /** A seat holds the body (the character was sat down): the look doesn't turn it. */
   private sitting = false;
   private readonly posQ = new THREE.Quaternion();
@@ -182,14 +197,17 @@ export class Player {
   /**
    * The walker hears two things others tell the character: an emote (world/emotes.ts), which in
    * first person swings the camera out to show it, and sitting down on a floor seat
-   * (world/life/sitting.ts), after which the seat, not the look, turns the body.
+   * (world/life/sitting.ts), after which the seat, not the look, turns the body. Other motions
+   * through the same call (a punch thrown or taken, world/law/) are quick and happen in front of
+   * you: the eyes stay put and your own arm swings into view.
    */
   private hear(ch: Character): void {
     const gesture = ch.gesture?.bind(ch);
     if (gesture) {
       ch.gesture = (e) => {
         gesture(e);
-        this.showEmote();
+        if (showsFromFront(e)) this.showEmote();
+        else if ((e as string) === 'punch') this.jab = JAB_S;
       };
     }
     const sit = ch.sit?.bind(ch);
@@ -290,6 +308,7 @@ export class Player {
       this.release();
       // the dressing room, the showroom and the tables show the whole character
       this.shrinkHead(false);
+      this.shrinkGuard(false);
     } else if (!was) {
       // back from a table (the fly-out ended at followPose()) or the menu: no swing
       this.eyesK = this.mouse.view === 'first' ? 1 : 0;
@@ -414,6 +433,7 @@ export class Player {
   dispose(): void {
     this.release();
     this.shrinkHead(false);
+    this.shrinkGuard(false);
     this.offOverlay();
     this.offMouse();
     clearTimeout(this.focusTimer);
@@ -463,6 +483,7 @@ export class Player {
     const drawnNear = first && cam.position.distanceTo(this.eye) < HEADLESS_NEAR;
     const toEyes = first && !this.showing ? 1 : 0;
     this.eyesK = stepToward(this.eyesK, toEyes, dt / SWITCH_S);
+    this.jab = Math.max(0, this.jab - dt);
     const k = smooth(this.eyesK);
     if (k < 1) {
       // behind you, or out in front while an emote is shown
@@ -490,7 +511,22 @@ export class Player {
       }
     }
     // the head goes once the camera is in it, and comes back the moment it leaves
-    this.shrinkHead(drawnNear && cam.position.distanceTo(this.eye) < HEADLESS_NEAR);
+    const inHead = drawnNear && cam.position.distanceTo(this.eye) < HEADLESS_NEAR;
+    this.shrinkHead(inHead);
+    this.shrinkGuard(inHead && this.jab > 0);
+  }
+
+  /**
+   * Throwing a punch through your own eyes: the guarding arm comes up from below the view to right
+   * under the eyes and goes back down, so it's left out (shrunk into the shoulder) for the whole
+   * punch.
+   */
+  private shrinkGuard(on: boolean): void {
+    const bone = on ? this.bone('UpperArmL') : null;
+    if (bone === this.guard) return;
+    this.guard?.scale.setScalar(1);
+    bone?.scale.setScalar(SHRUNK);
+    this.guard = bone;
   }
 
   /** Where the eyes are this frame: from the head bone as last drawn, the way you look. */
@@ -500,10 +536,19 @@ export class Player {
     const drawn = bone ? bone.matrixWorld.elements[13]! - this.floorY : Number.NaN;
     const y = headHeight(drawn > HEAD_MIN && drawn < HEAD_MAX ? drawn : null, this.position.y);
     // eased (a walk's bob, getting onto a seat), snapped after a jump
-    if (!(Math.abs(y - this.headY) < 0.5) || dt <= 0) this.headY = y;
+    // (held through a punch: the neck is shrunk then, and the head bone with it)
+    if (this.jab > 0 && Number.isFinite(this.headY)) {
+      /* as it was */
+    } else if (!(Math.abs(y - this.headY) < 0.5) || dt <= 0) this.headY = y;
     else this.headY += (y - this.headY) * (1 - Math.exp(-dt * 12));
     const o = eyeOffset(this.camPitch);
-    this.eye.set(this.position.x - Math.sin(this.camYaw) * o.ahead, this.headY + o.up, this.position.z - Math.cos(this.camYaw) * o.ahead);
+    const jab = jabPull(JAB_S - this.jab);
+    o.ahead -= JAB_PULL * jab;
+    // and over to the left, so the right fist goes out right of the middle
+    const left = JAB_LEFT * jab;
+    const s = Math.sin(this.camYaw);
+    const c = Math.cos(this.camYaw);
+    this.eye.set(this.position.x - s * o.ahead - c * left, this.headY + o.up, this.position.z - c * o.ahead + s * left);
   }
 
   /** Which way the eyes look (unit length): straight away from where the follow camera would be. */
@@ -521,9 +566,16 @@ export class Player {
     return this.head;
   }
 
+  /** One of the character's bones by name (the rigs name them 'UpperArmL' or 'UpperArm.L'). */
+  private bone(name: string): THREE.Object3D | null {
+    const r = this.character.root;
+    return r.getObjectByName(name) ?? r.getObjectByName(name.replace(/([LR])$/, '.$1')) ?? null;
+  }
+
   /** Shrink your own head away (the camera is inside it), or give it back. */
   private shrinkHead(on: boolean): void {
-    const bone = on ? this.headBone() : null;
+    // drawn back for a punch the camera is down in the neck: that goes too (the head with it)
+    const bone = on ? (this.jab > 0 ? this.bone('Neck') : this.headBone()) : null;
     if (bone === this.shrunk) return;
     this.shrunk?.scale.setScalar(1);
     bone?.scale.setScalar(SHRUNK);
@@ -721,6 +773,16 @@ export function eyeOffset(pitch: number): { ahead: number; up: number } {
   return { ahead: HEAD_AHEAD + EYES_AHEAD * c + EYES_OVER_HEAD * s, up: EYES_OVER_HEAD * c - EYES_AHEAD * s };
 }
 
+/**
+ * How far the eyes have drawn back (0..1 of JAB_PULL) `t` seconds into a punch you threw: back
+ * before the fist starts out (the wind-up is 0.12 s), held while it's out, forward again as it
+ * comes home.
+ */
+export function jabPull(t: number): number {
+  if (!(t > 0) || t >= JAB_S) return 0;
+  return smooth(Math.min(1, t / 0.12)) * smooth(Math.min(1, (JAB_S - t) / 0.22));
+}
+
 /** Move `a` toward `b` by at most `step`. */
 export function stepToward(a: number, b: number, step: number): number {
   if (!(step > 0)) return a;
@@ -731,6 +793,13 @@ export function stepToward(a: number, b: number, step: number): number {
 function smooth(x: number): number {
   const t = Math.max(0, Math.min(1, x));
   return t * t * (3 - 2 * t);
+}
+
+const EMOTE_IDS: ReadonlySet<string> = new Set(EMOTES);
+
+/** Whether a gesture of your own swings the first-person camera out to show it: an emote does, a punch doesn't. */
+export function showsFromFront(gesture: string): boolean {
+  return EMOTE_IDS.has(gesture);
 }
 
 const MOVE_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ShiftRight']);

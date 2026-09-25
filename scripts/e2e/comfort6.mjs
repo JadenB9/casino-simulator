@@ -8,10 +8,12 @@
 //            and its candle flashes; calm, frame to frame the machine barely changes
 //   pit      (table harness) a huge blackjack celebration: the banner, the light round the cards
 //            and a shower of 28 chips; calm, the banner and light stay and 9 chips fall
+//   system   (dev floor) the system's reduced-motion setting only picks the default: with it on and
+//            the switch at Full, the floor's CSS animates as it would anywhere; each way round
 //   fx       (dev floor) the shop's effects: confetti throws a third of the paper when calm; Disco
 //            Night's ball turns slower and its points stop twinkling, measured frame to frame
 // Usage: node scripts/e2e/comfort6.mjs [port] [outDir] [checks...]   (default: all)
-//   marquee, slots and fx need Vite only; switch and pit the local worker too (PORT_BASE=<port> npm run dev).
+//   marquee, slots, system and fx need Vite only; switch and pit the local worker too (PORT_BASE=<port> npm run dev).
 //   GPU=1 draws on the machine's GPU. Fixed names (comfort6_e2e_*) with the dev password.
 
 import { chromium } from 'playwright';
@@ -20,7 +22,7 @@ import { execFileSync } from 'node:child_process';
 
 const [port = '6380', out = '/tmp/comfort6', ...wanted] = process.argv.slice(2);
 mkdirSync(out, { recursive: true });
-const checks = wanted.length ? wanted : ['switch', 'marquee', 'slots', 'pit', 'fx'];
+const checks = wanted.length ? wanted : ['switch', 'marquee', 'slots', 'pit', 'system', 'fx'];
 const browser = await chromium.launch(process.env.GPU === '1' ? { channel: 'chromium', args: ['--ignore-gpu-blocklist'] } : { args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 let failed = 0;
 const fail = (what) => {
@@ -271,6 +273,45 @@ if (checks.includes('pit')) {
     ok(chips === (calm ? 9 : 28), `pit (${tag}): ${chips} chips shower down`);
     ok(!!(await p.$('.celebrate.tier-huge')), `pit (${tag}): the banner stays`);
     ok(errors.length === 0, `pit (${tag}): no errors (${errors.slice(0, 2).join(' | ')})`);
+    await ctx.close();
+  }
+}
+
+// --- the system setting picks the default, the switch decides ------------------------------------
+
+if (checks.includes('system')) {
+  // [system asks for reduced motion, what's saved, calm expected]
+  const cases = [
+    [true, undefined, true],
+    [true, false, false],
+    [false, undefined, false],
+    [false, true, true],
+  ];
+  for (const [reduce, saved, want] of cases) {
+    const tag = `system ${reduce ? 'reduce' : 'no preference'}, switch ${saved === undefined ? 'untouched' : saved ? 'Reduced' : 'Full'}`;
+    const { p, ctx, errors } = await page('/casino/src/world/dev-floor.html?quality=low', { calm: saved, ctx: { reducedMotion: reduce ? 'reduce' : 'no-preference' } });
+    await p.waitForFunction(() => document.getElementById('boot')?.classList.contains('done'), null, { timeout: 300_000 });
+    // the floor's own animations, on stand-ins for the map's halo and an emote bubble
+    const seen = await p.evaluate(() => {
+      const ui = document.getElementById('ui');
+      const you = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      you.setAttribute('class', 'map-you');
+      const halo = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      halo.setAttribute('class', 'map-you-halo');
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      you.append(halo);
+      svg.append(you);
+      const bubble = document.createElement('div');
+      bubble.className = 'emote-bubble';
+      ui.append(svg, bubble);
+      const out = { calm: document.body.classList.contains('calm'), halo: getComputedStyle(halo).animationName, bubble: getComputedStyle(bubble).animationName };
+      svg.remove();
+      bubble.remove();
+      return out;
+    });
+    ok(seen.calm === want, `${tag}: ${want ? 'calm' : 'full'}`);
+    ok(want ? seen.halo === 'none' && seen.bubble === 'emote-fade-in' : seen.halo === 'map-pulse' && seen.bubble === 'emote-in', `${tag}: the map halo ${seen.halo}, an emote bubble ${seen.bubble}`);
+    ok(errors.length === 0, `${tag}: no errors (${errors.slice(0, 2).join(' | ')})`);
     await ctx.close();
   }
 }

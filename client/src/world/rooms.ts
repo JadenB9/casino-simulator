@@ -224,6 +224,8 @@ export interface RoomSpec {
   aisles: { x0: number; z0: number; x1: number; z1: number }[];
   /** Plants for the corners, where they fit (room-local points, pushed against the walls). */
   plants: [number, number][];
+  /** Floor kept clear of everything the plan places, but not drawn as a runner (room-local). */
+  keep?: { x0: number; z0: number; x1: number; z1: number }[];
 }
 
 export type DoorKind = 'entrance' | 'grand' | 'portal' | 'arch' | 'shopfront' | 'industrial' | 'lacquer';
@@ -265,8 +267,9 @@ export const ROOMS: RoomSpec[] = [
       { kind: 'directory', x: -3.6, z: -0.3, yaw: 0.72 },
       { kind: 'bench', x: -6.2, z: -3.3, yaw: Math.PI / 2 },
       { kind: 'bench', x: 6.2, z: -3.3, yaw: -Math.PI / 2 },
-      { kind: 'palm', x: -3.6, z: 4.8, yaw: 0 },
-      { kind: 'palm', x: 3.6, z: 4.8, yaw: 0 },
+      // two palms flank the way on to the pit
+      { kind: 'palm', x: -3.0, z: -3.6, yaw: 0 },
+      { kind: 'palm', x: 3.0, z: -3.6, yaw: 0 },
     ],
     fixtures: [],
     hanging: [],
@@ -276,10 +279,10 @@ export const ROOMS: RoomSpec[] = [
       { x0: -2.2, z0: -5.85, x1: 2.2, z1: -1.7 },
       { x0: -2.2, z0: 1.7, x1: 2.2, z1: 5.85 },
     ],
-    plants: [
-      [-6.4, 5.4],
-      [6.4, 5.4],
-    ],
+    // kept clear: the lift bank on the south wall east of the doors and the way up to it (city6's,
+    // shared/src/lifts.ts)
+    keep: [{ x0: 1.9, z0: 2.5, x1: 6.5, z1: 5.85 }],
+    plants: [[-6.4, 5.4]],
   },
 
   // --- the pit: table games in two rows round the staff area, under the coffered ceiling ------------

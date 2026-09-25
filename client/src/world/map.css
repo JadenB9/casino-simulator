@@ -44,6 +44,5 @@
 .map-games { margin: 4px 0 0; font-size: 15px; letter-spacing: 0.02em; color: var(--ink-3); }
 .map-hint { margin: 0; color: var(--ink-3); }
 
-@media (prefers-reduced-motion: reduce) {
-  .map-you .map-you-halo { animation: none; }
-}
+/* Reduce flashing & motion (app/comfort.ts) */
+body.calm .map-you .map-you-halo { animation: none; }
