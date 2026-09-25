@@ -47,6 +47,7 @@ import {
   railPoint,
   spotPoint,
   spotsPose,
+  boardPoints,
   cameraPose,
 } from './layout.ts';
 import { FLOOR_FELT, discardStack } from './model.ts';
@@ -54,6 +55,7 @@ import { SpotPicker } from '../multihand/picker.ts';
 import { glideTo, setSpotsInPlay } from '../multihand/frame.ts';
 import { oneAtATime } from '../multihand/turns.ts';
 import './war.css';
+import { wave } from '../../app/comfort.ts';
 
 const KINDS: SpotKind[] = ['tie', 'bet', 'war'];
 const RACK_POINT = new THREE.Vector3(RACK.x, TOP_Y + 0.012, RACK.z);
@@ -499,6 +501,8 @@ export function mountWar(ctx: TableViewCtx): TableView {
   const frame = (): void => {
     const n = mode === 'solo' ? Math.max(1, spots.length) : 1;
     setSpotsInPlay('war', n);
+    // the spots I play and the dealer's side stay in view at any window size (every seat's while watching)
+    ctx.stage.board(boardPoints(spots.length ? spots : Array.from({ length: SEAT_COUNT }, (_, i) => i)));
     if (framed !== null && framed !== n && !disposed) void glideTo(ctx.stage, n > 1 ? spotsPose(spots, ctx.stage.engine.camera.aspect) : cameraPose(me ?? 0));
     framed = n;
   };
@@ -1229,7 +1233,7 @@ export function mountWar(ctx: TableViewCtx): TableView {
     update() {
       tickClock();
       // the ring round the tie being decided breathes, so it's found at a glance
-      litMat.opacity = 0.62 + 0.3 * Math.sin(performance.now() / 260);
+      litMat.opacity = 0.62 + 0.3 * wave(performance.now() / 260);
     },
 
     dispose() {

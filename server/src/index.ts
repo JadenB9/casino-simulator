@@ -18,6 +18,9 @@ import { isFreeEmote, emoteItem } from '../../shared/src/items.ts';
 import { takeLoan } from './transfer.ts';
 import { shopApi } from './shop.ts';
 import { leaderboard } from './leaderboard.ts';
+// v6 celebs6: the daily bonus, and the dev stack's celebrity trigger
+import { dailyApi } from './daily.ts';
+import { celebsDevApi } from './floor/celebs.ts';
 import { ipKey } from './floor/directory.ts';
 import type { CasinoFloor } from './floor/index.ts';
 import type { CasinoTable } from './table/host.ts';
@@ -192,6 +195,10 @@ async function handleApi(request: Request, env: Env, route: string, cors: Record
     if (!ticketLimits.take(`a${claims.a}`)) return fail(429, 'RATE_LIMITED', 'Slow down a little.', cors);
     return json((await signTicket(env.CASINO_TOKEN_SECRET, claims.a, target, now)) satisfies TicketResponse, 200, cors);
   }
+
+  // v6 celebs6: the daily bonus (daily.ts); on the dev stack only, a celebrity or a gift box on demand
+  if (route === 'daily' || route === 'daily/claim') return dailyApi(request, env, route, claims.a, cors);
+  if (route.startsWith('dev/') && env.CASINO_DEV === '1') return celebsDevApi(request, env, route, cors, floor(env));
 
   // The boutique and the bar (shop.ts): paid from the balance, never from chips on tables.
   if (route === 'shop' || route.startsWith('shop/') || route.startsWith('bar/')) return shopApi(request, env, route, claims.a, cors);

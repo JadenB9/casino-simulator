@@ -7,7 +7,8 @@
 // yard|cashier|boutique|bigsix|table
 // (a fixed camera for screenshots), &stats=1 (draw calls and frame time), &lineup=1 (every outfit
 // side by side in debug colours, to check outfits.json), &slots=sevens,neon,... (the slot islands
-// to lay out, instead of the catalogue's variants).
+// to lay out, instead of the catalogue's variants), &fx=fx-disco,... (play the shop's effects round
+// you as the floor opens), &statues=3 (sample statues in the lobby; fx/dev.ts has the console hooks).
 
 import * as THREE from 'three';
 import { Engine3D, savedQuality, type Quality } from '../render/engine3d.ts';
@@ -15,6 +16,7 @@ import { el, toast } from '../ui/kit.ts';
 import { DEFAULT_LOOK, OUTFITS, type Body, type Look } from '../../../shared/src/look.ts';
 import { createWorld, type FloorWorld } from './index.ts';
 import { checkLayout } from './layout.ts';
+import { fxDev } from './fx/dev.ts';
 
 interface View {
   pos: [number, number, number];
@@ -103,7 +105,9 @@ export async function runDevFloor(params: URLSearchParams): Promise<FloorWorld> 
       box.textContent = `${engine.frameMs().toFixed(1)} ms · ${s.calls} calls · ${Math.round(s.triangles / 1000)}k tris · ${s.programs} programs · pr ${s.pixelRatio}`;
     }, 500);
   }
-  (window as unknown as { casino: unknown }).casino = { engine, world, THREE };
+  // the shop's effects and the lobby's statues without a server (fx/dev.ts)
+  const fx = fxDev(world, engine, params);
+  (window as unknown as { casino: unknown }).casino = { engine, world, THREE, fx };
   return world;
 }
 
