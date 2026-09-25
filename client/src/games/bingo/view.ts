@@ -22,6 +22,7 @@ import { COLUMN_COLOURS, paintBoard, paintBallFace, multText, nowPays, type Boar
 import { hallModel, chutePath, domeRest, HALL, DOME_COUNT, DOME_Y, BALL_R, type HallHandle } from './model.ts';
 import { BLOWER } from './layout.ts';
 import { BingoVoice } from './voice.ts';
+import { calm } from '../../app/comfort.ts';
 
 const AUTO_KEY = 'casino.bingo.autodaub';
 const RISE_MS = 650;
@@ -333,7 +334,9 @@ export function mountBingo(ctx: TableViewCtx): TableView {
     const v = view;
     const phase: BoardState['phase'] = !v || v.phase === 'idle' ? 'idle' : v.phase === 'buying' ? 'sale' : v.phase === 'results' ? 'over' : 'calling';
     const seconds = v?.phase === 'buying' && v.deadline !== null ? Math.max(0, Math.ceil((v.deadline - serverNow()) / 1000)) : undefined;
-    const flash = now < flashUntil && Math.floor(now / 160) % 2 === 0;
+    // the newest number blinks as it lights (holds steady with flashing turned down)
+    const flash = now < flashUntil && (calm() || Math.floor(now / 160) % 2 === 0);
+    cardsRow.classList.toggle('calm', calm());
     const key = `${called.length}:${phase}:${seconds}:${flash}`;
     if (key === boardKey) return;
     boardKey = key;

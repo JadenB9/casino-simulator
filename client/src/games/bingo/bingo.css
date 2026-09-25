@@ -24,6 +24,7 @@
 .bg-cell.free::before { background: rgba(214, 40, 106, 0.28); }
 .bg-cell.fresh::before { animation: bg-splat 0.45s var(--ease); }
 .bg-cell.called { cursor: pointer; animation: bg-pulse 0.9s ease-in-out infinite; }
+.bg-cards.calm .bg-cell.called { animation: none; background: rgba(255, 179, 71, 0.4); }
 .bg-cell.win { background: rgba(255, 196, 64, 0.45); }
 @keyframes bg-splat { 0% { transform: scale(1.5); opacity: 0.4; } 60% { transform: scale(0.92); } 100% { transform: scale(1); } }
 @keyframes bg-pulse { 50% { background: rgba(255, 179, 71, 0.55); } }

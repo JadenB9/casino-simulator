@@ -21,6 +21,7 @@ import { FlightPools, bucketOf, flightAt, flightSeconds, type Catch, type Flight
 import { paintScreen, paintData, paintLeds, LED_COUNT, type ScreenState, type LedPattern } from './art.ts';
 import { machineModel, sharedLit, ballGeometry, ballMaterial, boardPoint, MACHINE, type MachineHandle } from './model.ts';
 import { PachinkoSound } from './sound.ts';
+import { calm as reduceFlashing } from '../../app/comfort.ts';
 
 /** How often the launcher fires. */
 const FIRE_MS = 300;
@@ -537,7 +538,7 @@ export function mountPachinko(ctx: TableViewCtx): TableView {
 
   function screenState(now: number): ScreenState {
     const s = show;
-    const base: ScreenState = { t: now, mode: 'idle', reels: [...reels] as [number, number, number], stopped: [true, true, true], holds: Math.min(4, holds.length), line };
+    const base: ScreenState = { t: now, calm: reduceFlashing(), mode: 'idle', reels: [...reels] as [number, number, number], stopped: [true, true, true], holds: Math.min(4, holds.length), line };
     if (s.kind === 'spin') {
       const st = (now - s.t0) / 1000;
       return { ...base, mode: s.reach && st >= STOP_R ? 'reach' : 'spin', stopped: [st >= s.stops[0], st >= s.stops[1], st >= s.stops[2]], heat: Math.min(1, Math.max(0, (st - STOP_R) / (REACH_M - STOP_R))) };
@@ -573,7 +574,7 @@ export function mountPachinko(ctx: TableViewCtx): TableView {
     paintedAt = now;
     paintScreen(lcdCanvas, screenState(now));
     lcdTex.needsUpdate = true;
-    paintLeds(ledData, ledPattern(), now);
+    paintLeds(ledData, ledPattern(), now, reduceFlashing());
     ledTex.needsUpdate = true;
     // the attacker's lid swings open for a fever
     const open = show.kind === 'fever' ? 1 : 0;

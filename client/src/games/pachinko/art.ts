@@ -292,6 +292,8 @@ export interface ScreenState {
   won?: number;
   /** 0..1 for the reach's slow middle reel and the hit's flash. */
   heat?: number;
+  /** Reduce flashing & motion: steady colours instead of blinking, no spinning rays. */
+  calm?: boolean;
 }
 
 function digitAt(g: CanvasRenderingContext2D, d: number, x: number, y: number, size: number, alpha: number, glow: boolean): void {
@@ -316,6 +318,8 @@ function digitAt(g: CanvasRenderingContext2D, d: number, x: number, y: number, s
 
 /** The screen, painted for this moment. */
 export function paintScreen(canvas: HTMLCanvasElement, st: ScreenState): void {
+  /** Alternates every `ms`, unless flashing is turned down (then it holds the first). */
+  const blink = (ms: number) => !st.calm && Math.floor(st.t / ms) % 2 === 1;
   if (canvas.width !== LCD_W) {
     canvas.width = LCD_W;
     canvas.height = LCD_H;
@@ -348,7 +352,7 @@ export function paintScreen(canvas: HTMLCanvasElement, st: ScreenState): void {
     const k = st.heat ?? 0;
     g.save();
     g.translate(W / 2, H * 0.46);
-    g.rotate(st.t * 0.0012);
+    g.rotate(st.calm ? 0 : st.t * 0.0012);
     for (let i = 0; i < 16; i++) {
       g.rotate((Math.PI * 2) / 16);
       g.fillStyle = `rgba(255, ${st.mode === 'hit' ? 210 : 120}, 80, ${0.08 + 0.12 * k})`;
@@ -362,7 +366,7 @@ export function paintScreen(canvas: HTMLCanvasElement, st: ScreenState): void {
   }
 
   if (st.mode === 'fever' || st.mode === 'end' || st.mode === 'kakuhen') {
-    const flash = Math.floor(st.t / 180) % 2 === 0;
+    const flash = !blink(180);
     g.textAlign = 'center';
     g.textBaseline = 'middle';
     if (st.mode === 'kakuhen') {
@@ -398,14 +402,14 @@ export function paintScreen(canvas: HTMLCanvasElement, st: ScreenState): void {
   } else if (st.mode === 'hit') {
     // three of a kind, and the jackpot's kanji
     const d = st.reels[0];
-    const pulse = 1 + 0.06 * Math.sin(st.t / 60);
+    const pulse = st.calm ? 1 : 1 + 0.06 * Math.sin(st.t / 60);
     for (let i = 0; i < 3; i++) digitAt(g, d, W * (0.24 + i * 0.26), H * 0.4, 150 * pulse, 1, true);
     g.textAlign = 'center';
     g.textBaseline = 'middle';
     g.font = `900 64px ${JP}`;
     g.lineWidth = 8;
     g.strokeStyle = '#3a0010';
-    g.fillStyle = Math.floor(st.t / 140) % 2 ? '#ffe36b' : '#fff';
+    g.fillStyle = blink(140) ? '#ffe36b' : '#fff';
     g.strokeText('大当り', W / 2, H * 0.78);
     g.fillText('大当り', W / 2, H * 0.78);
   } else {
@@ -426,7 +430,7 @@ export function paintScreen(canvas: HTMLCanvasElement, st: ScreenState): void {
     if (st.mode === 'reach') {
       g.textAlign = 'center';
       g.font = `900 46px 'Barlow Condensed', sans-serif`;
-      g.fillStyle = Math.floor(st.t / 160) % 2 ? '#ff4d5e' : '#ffe36b';
+      g.fillStyle = blink(160) ? '#ff4d5e' : '#ffe36b';
       g.strokeStyle = '#1b0726';
       g.lineWidth = 6;
       g.strokeText('REACH', W / 2, H * 0.1 + 14);
@@ -529,7 +533,9 @@ export function paintCrown(canvas: HTMLCanvasElement): void {
 export const LED_COUNT = 96;
 export type LedPattern = 'idle' | 'spin' | 'reach' | 'hit' | 'fever';
 
-export function paintLeds(data: Uint8Array, pattern: LedPattern, t: number): void {
+export function paintLeds(data: Uint8Array, pattern: LedPattern, t: number, calm = false): void {
+  // Reduce flashing & motion: the lamps keep their colours but hold still and never strobe
+  if (calm) t = 0;
   for (let i = 0; i < LED_COUNT; i++) {
     let r = 0;
     let gr = 0;
@@ -546,12 +552,12 @@ export function paintLeds(data: Uint8Array, pattern: LedPattern, t: number): voi
       gr *= lvl;
       b *= lvl;
     } else if (pattern === 'spin') {
-      const on = (i + Math.floor(t / 70)) % 6 < 2;
+      const on = calm || (i + Math.floor(t / 70)) % 6 < 2;
       r = on ? 255 : 60;
       gr = on ? 200 : 30;
       b = on ? 240 : 70;
     } else if (pattern === 'reach') {
-      const on = Math.floor(t / 110) % 2 === 0;
+      const on = calm || Math.floor(t / 110) % 2 === 0;
       r = 255;
       gr = on ? 40 : 190;
       b = on ? 40 : 40;
@@ -559,7 +565,7 @@ export function paintLeds(data: Uint8Array, pattern: LedPattern, t: number): voi
       // hit and fever: every colour, fast
       const hue = (phase * 3 + t / (pattern === 'hit' ? 300 : 600)) % 1;
       const [hr, hg, hb] = hsv(hue);
-      const on = pattern === 'hit' ? Math.floor(t / 90) % 2 === 0 : true;
+      const on = pattern === 'hit' && !calm ? Math.floor(t / 90) % 2 === 0 : true;
       r = hr * (on ? 255 : 90);
       gr = hg * (on ? 255 : 90);
       b = hb * (on ? 255 : 90);
