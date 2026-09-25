@@ -254,9 +254,11 @@ export const FEATS: readonly Feat[] = [
   A('bc-pair', 'baccarat', 'Pair Dealt', 'Win a Player or Banker pair bet.', { cash: $(2_500) }, 0.15),
 
   // --- slots ---------------------------------------------------------------------------------
-  A('sl-bonus', 'slots', 'Bonus Round', 'Start free games or the Cherry Wheel.', { cash: $(1_000) }, 0.03),
+  A('sl-bonus', 'slots', 'Bonus Round', 'Start free games, the Cherry Wheel or the Blowdown.', { cash: $(1_000) }, 0.03),
   A('sl-hundred', 'slots', 'Hundred Times', 'Win 100 times your bet on one spin.', { cash: $(5_000) }, 0.01),
   A('sl-jackpot', 'slots', 'Jackpot', "Hit a machine's top award.", { item: 'horseshoe-pendant', cash: $(25_000), title: 'Jackpot' }, 0.04),
+  // v6 pigs6: Straw, Sticks & Bricks' Whole Street, 1 in 235,070 paid spins there (docs/rules/cards-and-machines.md §3.10)
+  A('sl-street', 'slots', 'The Whole Street', 'Build all fifteen houses in a Blowdown on Straw, Sticks & Bricks.', { cash: $(50_000), title: 'Homebuilder' }, 1 / 235_000),
 
   // --- video poker ---------------------------------------------------------------------------
   A('vp-quads', 'videopoker', 'Four of a Kind', 'Draw four of a kind.', { cash: $(2_500) }, 0.003),

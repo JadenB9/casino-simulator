@@ -494,6 +494,20 @@ describe('the slot machines', () => {
     expect(moments('slots', [reels({})], round(100, 0), 'neon')).toEqual([]);
   });
 
+  it('Straw, Sticks & Bricks: the Blowdown is a bonus, and all fifteen houses built is the Whole Street', () => {
+    const bd = (street: number) => ({ start: [], spins: [], houses: [], street, win: street + 2_000 });
+    expect(moments('slots', [reels({ trigger: true, blowdown: bd(0) })], round(100, 2_000), 'pigs')).toEqual(['sl-bonus']);
+    expect(moments('slots', [reels({ trigger: true, blowdown: bd(100_000) })], round(100, 102_000), 'pigs')).toEqual(['sl-bonus', 'sl-hundred', 'sl-street']);
+    // five brick pigs on a line is the machine's top line award
+    const line = { line: 0, symbol: 'BRICKPIG', count: 5, win: 1_000_000 };
+    expect(moments('slots', [reels({ lines: [line] })], round(2_500, 1_000_000), 'pigs')).toContain('sl-jackpot');
+    const f = featOf('sl-street')!;
+    // its cash scales with the stake like every moment: in full on a spin of $38 or more
+    expect(fullStake(f)).toBe(38 * 100);
+    expect(cashFor(f, { stake: 20 })).toBe(Math.floor(momentRate(f)! * 20 + 1e-6));
+    expect(cashFor(f, { stake: 5_000_000 })).toBe(50_000 * 100);
+  });
+
   it('a hundred times the bet on a spin', () => {
     expect(moments('slots', [reels({})], round(100, 10_000), 'neon')).toEqual(['sl-hundred']);
     expect(moments('slots', [reels({})], round(100, 9_999), 'neon')).toEqual([]);

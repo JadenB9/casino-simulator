@@ -219,6 +219,8 @@ function momentsAt(
           : top !== null && Array.isArray(e.lines) && e.lines.some((l: { symbol?: unknown; count?: unknown }) => l?.symbol === top.symbol && l?.count === 5),
       );
       if (hit) moments.push('sl-jackpot');
+      // v6 pigs6: every cell built in Straw, Sticks & Bricks' Blowdown
+      if (reels.some((e) => num((e.blowdown as { street?: unknown } | undefined)?.street) > 0)) moments.push('sl-street');
       break;
     }
     case 'videopoker': {

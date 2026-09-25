@@ -98,7 +98,7 @@ describe('high-limit machines', () => {
 
   it('the high-limit coins on every machine: $25,000 to $50,000 at the top', async () => {
     const p = await player('top');
-    const tops: Record<string, number> = { sevens: 3_000_000, wild: 3_000_000, diamonds: 3_000_000, neon: 5_000_000, cherries: 2_500_000, goldrush: 5_000_000 };
+    const tops: Record<string, number> = { sevens: 3_000_000, wild: 3_000_000, diamonds: 3_000_000, neon: 5_000_000, cherries: 2_500_000, goldrush: 5_000_000, pigs: 5_000_000 };
     for (const [variant, top] of Object.entries(tops)) {
       const { client } = await connect('solo/slots', p.token, `&variant=${variant}`);
       const snap = await client!.next<any>((m) => m.t === 'table');
