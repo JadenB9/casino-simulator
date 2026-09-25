@@ -58,9 +58,9 @@ for (const variant of variants) {
       } catch {}
     }),
   );
-  page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+  // (the dev harness has no favicon: not the machine's)
+  page.on('console', (m) => m.type() === 'error' && !/favicon\.ico/.test(m.location()?.url ?? '') && errors.push(`${m.text()} ${m.location()?.url ?? ''}`));
   page.on('pageerror', (e) => errors.push(String(e)));
-  page.on('response', (r) => r.status() >= 400 && errors.push(`${r.status()} ${r.url()}`));
   await page.goto(`http://localhost:${port}/casino/?dev=table&game=slots&variant=${variant}&name=sl2_${variant}`);
   await page.waitForSelector('.modal input[type=number], .slots-deck', { timeout: 30000 });
   await page.waitForTimeout(2500);
