@@ -13,6 +13,7 @@ import { CARD_H, CARD_W } from '../../table/cards.ts';
 import type { Paytable } from '../../../../shared/src/games/letitride/rules.ts';
 import { BONUS_NAMES, CATEGORY_NAMES } from '../../../../shared/src/games/letitride/rules.ts';
 import { fitWidth } from '../multihand/frame.ts';
+import { around } from '../../table/fit.ts';
 
 export const TOP_Y = 0.76;
 /** Centre of the players' arc, behind the dealer's edge. */
@@ -158,20 +159,14 @@ export function spotsPose(spots: readonly number[], aspect?: number): { position
  */
 export function boardPoints(seats: readonly number[]): THREE.Vector3[] {
   const out: THREE.Vector3[] = [];
-  const flat = (p: THREE.Vector3, hw: number, hd = hw) => [
-    p.clone().add(new THREE.Vector3(-hw, 0, -hd)),
-    p.clone().add(new THREE.Vector3(hw, 0, -hd)),
-    p.clone().add(new THREE.Vector3(-hw, 0, hd)),
-    p.clone().add(new THREE.Vector3(hw, 0, hd)),
-  ];
   const card = Math.hypot(CARD_W, CARD_H) / 2;
   for (const seat of seats) {
-    for (const c of [0, 1, 2] as Circle[]) out.push(...flat(circlePoint(seat, c), CIRCLE_RADIUS * 1.2));
-    out.push(...flat(bonusPoint(seat), BONUS_RADIUS * 1.2));
-    for (let i = 0; i < 3; i++) out.push(...flat(handSlot(seat, i).pos, card));
+    for (const c of [0, 1, 2] as Circle[]) out.push(...around(circlePoint(seat, c), CIRCLE_RADIUS * 1.2));
+    out.push(...around(bonusPoint(seat), BONUS_RADIUS * 1.2));
+    for (let i = 0; i < 3; i++) out.push(...around(handSlot(seat, i).pos, card));
   }
-  for (let i = 0; i < 2; i++) out.push(...flat(boardSlot(i), card * BOARD_CARD_SCALE));
-  out.push(...flat(new THREE.Vector3(RACK.x, TOP_Y, RACK.z), RACK.w / 2, RACK.d / 2));
+  for (let i = 0; i < 2; i++) out.push(...around(boardSlot(i), card * BOARD_CARD_SCALE));
+  out.push(...around(new THREE.Vector3(RACK.x, TOP_Y, RACK.z), RACK.w / 2, RACK.d / 2));
   return out;
 }
 

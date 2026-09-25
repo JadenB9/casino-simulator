@@ -14,6 +14,7 @@ import { Felt, type Region } from '../../table/felt.ts';
 import { CARD_H, CARD_W } from '../../table/cards.ts';
 import type { FortunePays } from '../../../../shared/src/games/paigow/rules.ts';
 import { fitWidth } from '../multihand/frame.ts';
+import { around } from '../../table/fit.ts';
 
 export const TOP_Y = 0.76;
 export const CENTER_Z = -0.72;
@@ -139,19 +140,13 @@ export function spotsPose(spots: readonly number[], aspect?: number): { position
 /** What must stay in view (table/fit.ts): your places' bets and cards, and the dealer's row and rack. */
 export function boardPoints(seats: readonly number[]): THREE.Vector3[] {
   const out: THREE.Vector3[] = [];
-  const flat = (p: THREE.Vector3, hw: number, hd = hw) => [
-    p.clone().add(new THREE.Vector3(-hw, 0, -hd)),
-    p.clone().add(new THREE.Vector3(hw, 0, -hd)),
-    p.clone().add(new THREE.Vector3(-hw, 0, hd)),
-    p.clone().add(new THREE.Vector3(hw, 0, hd)),
-  ];
   const card = Math.hypot(CARD_W, CARD_H) / 2;
   for (const seat of seats) {
-    out.push(...flat(betPoint(seat), BET_RADIUS * 1.2), ...flat(fortunePoint(seat), FORTUNE_RADIUS * 1.2));
-    out.push(...flat(seatCard(seat, 'seven', 0).pos, card), ...flat(seatCard(seat, 'seven', 6).pos, card), ...flat(seatCard(seat, 'low', 0).pos, card));
+    out.push(...around(betPoint(seat), BET_RADIUS * 1.2), ...around(fortunePoint(seat), FORTUNE_RADIUS * 1.2));
+    out.push(...around(seatCard(seat, 'seven', 0).pos, card), ...around(seatCard(seat, 'seven', 6).pos, card), ...around(seatCard(seat, 'low', 0).pos, card));
   }
-  out.push(...flat(dealerCard('seven', 0), card * DEALER_CARD_SCALE), ...flat(dealerCard('seven', 6), card * DEALER_CARD_SCALE));
-  out.push(...flat(new THREE.Vector3(RACK.x, TOP_Y, RACK.z), RACK.w / 2, RACK.d / 2));
+  out.push(...around(dealerCard('seven', 0), card * DEALER_CARD_SCALE), ...around(dealerCard('seven', 6), card * DEALER_CARD_SCALE));
+  out.push(...around(new THREE.Vector3(RACK.x, TOP_Y, RACK.z), RACK.w / 2, RACK.d / 2));
   return out;
 }
 

@@ -495,8 +495,7 @@ export function mountPaiGow(ctx: TableViewCtx): TableView {
   const frame = (): void => {
     const n = mode === 'solo' ? Math.max(1, spots.length) : 1;
     setSpotsInPlay('paigow', n);
-    const fit = (ctx.stage as { board?: (...parts: THREE.Vector3[][]) => void }).board;
-    fit?.call(ctx.stage, boardPoints(spots.length ? spots : Array.from({ length: SEAT_COUNT }, (_, i) => i)));
+    ctx.stage.board(boardPoints(spots.length ? spots : Array.from({ length: SEAT_COUNT }, (_, i) => i)));
     if (framed !== null && framed !== n && !disposed) void glideTo(ctx.stage, n > 1 ? spotsPose(spots, ctx.stage.engine.camera.aspect) : cameraPose(me ?? 0));
     framed = n;
   };

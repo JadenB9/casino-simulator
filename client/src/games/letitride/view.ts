@@ -504,8 +504,7 @@ export function mountLetItRide(ctx: TableViewCtx): TableView {
     const n = mode === 'solo' ? Math.max(1, spots.length) : 1;
     setSpotsInPlay('letitride', n);
     // the hands I play and the middle of the table stay in view at any window size (every seat's while watching)
-    const fit = (ctx.stage as { board?: (...parts: THREE.Vector3[][]) => void }).board;
-    fit?.call(ctx.stage, boardPoints(spots.length ? spots : Array.from({ length: SEAT_COUNT }, (_, i) => i)));
+    ctx.stage.board(boardPoints(spots.length ? spots : Array.from({ length: SEAT_COUNT }, (_, i) => i)));
     if (framed !== null && framed !== n && !disposed) void glideTo(ctx.stage, n > 1 ? spotsPose(spots, ctx.stage.engine.camera.aspect) : cameraPose(me ?? 0));
     framed = n;
   };
