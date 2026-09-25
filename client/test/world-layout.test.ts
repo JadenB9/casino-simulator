@@ -133,9 +133,9 @@ describe('the building', () => {
     expect(checkLayout(plan())).toEqual([]);
   });
 
-  it('stays sound with six slot islands, and with bar-top video poker', () => {
+  it('stays sound with one slot island per machine, and with bar-top video poker', () => {
     const six = planFloor(footprint, slotVariants(), { seats });
-    expect(six.banks).toHaveLength(6);
+    expect(six.banks).toHaveLength(slotVariants().length);
     expect(checkLayout(six)).toEqual([]);
     const top = plan();
     setVpMode(top, 'bartop');

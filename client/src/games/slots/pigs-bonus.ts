@@ -322,8 +322,9 @@ export async function presentBlowdown(host: BlowdownHost, bd: BlowdownView, bet:
     // the wolf, looking in from the left
     if (wolf >= 0) {
       g.save();
-      g.translate(-80 + wolf * 150, spec.height / 2 + 10);
-      wolfHead(g, 200, blowing);
+      g.translate(-120 + wolf * 200, spec.height / 2 + 20);
+      g.rotate(0.12);
+      wolfHead(g, 300, blowing);
       g.restore();
     }
     if (street > 0) {

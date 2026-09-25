@@ -713,7 +713,7 @@ function title(g: G, x: number, y: number, px: number): void {
 }
 
 function payGlass(g: G, w: number, h: number): void {
-  boards(g, w, h, '#5a1a10');
+  boards(g, w, h, '#34110a');
   strawFrame(g, w, h);
   title(g, w / 2, 54, 50);
   const colW = (w - 80) / 3;
@@ -815,7 +815,7 @@ const LAYOUT: SkinLayout = {
   ],
   bevel: 0.01,
   body: { color: BARN, metalness: 0.18, roughness: 0.4 },
-  trim: { color: '#c9a24a', metalness: 0.85, roughness: 0.4 },
+  trim: { color: '#a07a36', metalness: 0.9, roughness: 0.45 },
   plate: { w: 0.7, h: 0.54, cy: 1.17, zBack: 0.27, depth: 0.062 },
   window: { w: 0.66, h: 0.258, cy: 1.2 },
   // pitch matches the overlay's five columns between its 64 px side strips
