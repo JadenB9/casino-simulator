@@ -367,3 +367,32 @@ export function drawPatternBoards(bw: number, bh: number): HTMLCanvasElement {
   });
   return c;
 }
+
+/** The Jade Room's ceiling: a coffer of red lacquer framed in gold, a gold flower in its middle. */
+export function drawLacquerCoffer(size: number): HTMLCanvasElement {
+  const [c, ctx] = canvas(size);
+  ctx.fillStyle = '#2a0808';
+  ctx.fillRect(0, 0, size, size);
+  const g = ctx.createRadialGradient(size / 2, size / 2, size * 0.05, size / 2, size / 2, size * 0.6);
+  g.addColorStop(0, '#6a1410');
+  g.addColorStop(1, '#3a0a0a');
+  ctx.fillStyle = g;
+  ctx.fillRect(size * 0.08, size * 0.08, size * 0.84, size * 0.84);
+  ctx.strokeStyle = '#b8883a';
+  ctx.lineWidth = size * 0.02;
+  ctx.strokeRect(size * 0.08, size * 0.08, size * 0.84, size * 0.84);
+  ctx.lineWidth = size * 0.008;
+  ctx.strokeRect(size * 0.14, size * 0.14, size * 0.72, size * 0.72);
+  // the flower: eight petals round a ring
+  ctx.fillStyle = '#c8983e';
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.ellipse(size / 2 + Math.cos(a) * size * 0.1, size / 2 + Math.sin(a) * size * 0.1, size * 0.07, size * 0.03, a, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.beginPath();
+  ctx.arc(size / 2, size / 2, size * 0.04, 0, Math.PI * 2);
+  ctx.fill();
+  return c;
+}

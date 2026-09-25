@@ -10,7 +10,7 @@ import * as THREE from 'three';
 import type { Quality } from '../render/engine3d.ts';
 import { canvasTexture, drawAisle, drawCarpet, PALETTES } from './carpet.ts';
 import { drawAcoustic, drawConcrete, drawCorrugated, drawPanels, drawPlanks, drawTiles } from './textures.ts';
-import { drawBingoCarpet, drawCeilingTile, drawLandscape, drawSeigaiha, drawSlats, drawVendingFace } from './textures-themes.ts';
+import { drawBingoCarpet, drawCeilingTile, drawLacquerCoffer, drawLandscape, drawSeigaiha, drawSlats, drawVendingFace } from './textures-themes.ts';
 
 export type Tex = Partial<Record<'marbleTiles' | 'marbleBlack' | 'woodDark' | 'woodPanel' | 'velvet' | 'carpetNormal', THREE.Texture>>;
 
@@ -186,6 +186,7 @@ export class Mats {
     const tileTex = lazy(() => drawCeilingTile(128, 97));
     const cansTex = lazy(() => drawVendingFace(256, 320, 101));
     const paintingTex = lazy(() => drawLandscape(512, 103));
+    const cofferRedTex = lazy(() => drawLacquerCoffer(256));
     this.makers.set('carpet-parlour', (q) => carpet(parlourTex())(q));
     this.makers.set('carpet-jade', (q) => carpet(jadeTex())(q));
     this.makers.set('carpet-bingo', (q) => carpet(bingoTex())(q));
@@ -195,6 +196,7 @@ export class Mats {
     this.makers.set('ceiling-parlour', () => lambert({ color: '#d8d0d4', emissive: '#2a2226' }));
     this.makers.set('ceiling-bingo', () => lambert({ map: tileTex() }));
     this.makers.set('vending-face', () => new THREE.MeshBasicMaterial({ map: cansTex(), color: hdr('#ffffff', 1.1) }));
+    this.makers.set('ceiling-jade', () => lambert({ map: cofferRedTex() }));
     this.makers.set('painting', () => lambert({ map: paintingTex(), emissive: '#1a1206' }));
     this.makers.set('enamel', (q) => (hi(q) ? std({ color: '#e8e4dc', roughness: 0.35 }) : lambert({ color: '#d8d4cc' })));
     this.makers.set('vinyl', (q) => (hi(q) ? std({ color: '#7a1a22', roughness: 0.5 }) : lambert({ color: '#6a161c' })));

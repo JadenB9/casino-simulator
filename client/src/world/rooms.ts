@@ -732,7 +732,7 @@ export const ROOMS: RoomSpec[] = [
     z0: -43,
     x1: 9,
     z1: -31,
-    style: { floor: 'carpet-jade', floorUv: 2.6, wall: 'wall-crimson', wainscot: 'wainscot', rail: 'brass', ceiling: 3.8, ceilingMat: 'ceiling', kind: 'tray', downlights: 0, cove: 'warm', ambient: { sky: '#ffd6a0', ground: '#2e0c0a', k: 1.3 } },
+    style: { floor: 'carpet-jade', floorUv: 2.6, wall: 'wall-crimson', wainscot: 'wainscot', rail: 'brass', ceiling: 3.8, ceilingMat: 'ceiling-jade', kind: 'tray', downlights: 0, cove: 'warm', ambient: { sky: '#ffd6a0', ground: '#2e0c0a', k: 1.3 } },
     stations: [
       { kind: 'station', id: 'lr-1', game: 'letitride', x: -4.3, z: -2.2, yaw: 0 },
       { kind: 'station', id: 'pg-1', game: 'paigow', x: 4.3, z: -2.2, yaw: 0 },
@@ -750,6 +750,7 @@ export const ROOMS: RoomSpec[] = [
       { kind: 'table-lanterns' },
       { kind: 'moongate', x: 0, z: -5.85, ry: 0 },
       { kind: 'lattice', at: [[-8.85, -3.5], [-8.85, 3.4]], ry: Math.PI / 2, w: 2.2 },
+      { kind: 'lattice', at: [[-2.55, -5.85], [2.55, -5.85]], ry: 0, w: 1.3 },
       { kind: 'lattice', at: [[8.85, -3.5], [8.85, 3.0]], ry: -Math.PI / 2, w: 2.2 },
     ],
     hanging: [],
