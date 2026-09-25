@@ -380,6 +380,9 @@ export class Law {
   /** The HUD: your bail and how far along it you are, or the warning you're on. */
   private showState(): void {
     const now = serverNow();
+    // the cards under the HUD's right end (celebrities, happy hour) stack there: ours goes on top
+    const stack = document.querySelector('.celeb-stack');
+    if (stack && this.hud.parentElement !== stack) stack.prepend(this.hud);
     this.hud.replaceChildren();
     const jail = this.state;
     if (jail) {
