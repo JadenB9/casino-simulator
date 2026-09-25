@@ -479,7 +479,8 @@ function parts(machine: MachineId, quality: Quality): Parts {
     sharp,
     blurred,
     meterGeo: new THREE.PlaneGeometry(l.meters.w, l.meters.h),
-    meterMat: new THREE.MeshBasicMaterial({ map: meterTex, toneMapped: false }),
+    // the meters sit on the plate's face: pulled toward the eye so the plate never shows through
+    meterMat: new THREE.MeshBasicMaterial({ map: meterTex, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4 }),
     overlayGeo: video ? new THREE.PlaneGeometry(l.window.w, l.window.h) : null,
     overlayMat,
     paylineGeo: video ? null : new THREE.PlaneGeometry(l.window.w - 0.01, 0.0035),

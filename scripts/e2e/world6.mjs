@@ -179,15 +179,36 @@ if (checks.includes('zfight')) {
       // a far stand-in against itself or anything (lod.ts): ours
       far: fights.filter((f) => (kind(f.a) === 'far' || kind(f.b) === 'far') && kind(f.a) !== 'station' && kind(f.b) !== 'station' && !ownCopy(f)).map(Z.describeFight),
       // a station's model against anything: the games' own models
-      stations: fights.filter((f) => kind(f.a) === 'station' || kind(f.b) === 'station' || ownCopy(f)).map(Z.describeFight),
+      // a station's model against anything but a stand-in: the games' own models
+      stations: fights.filter((f) => (kind(f.a) === 'station' || kind(f.b) === 'station') && kind(f.a) !== 'far' && kind(f.b) !== 'far').map(Z.describeFight),
+      // a stand-in against its live model or itself: lod.ts shows one or the other, never both
+      swaps: fights.filter((f) => ((kind(f.a) === 'station' || kind(f.b) === 'station') && (kind(f.a) === 'far' || kind(f.b) === 'far')) || ownCopy(f)).length,
     };
   });
   console.log(`zfight: ${r.surfaces} surfaces, ${r.tris} triangles (${r.skinned} skinned meshes left out), ${r.ms} ms`);
   for (const f of r.building) fail(`z-fight ${f}`);
+  for (const f of r.own) fail(`z-fight inside a prop's own model ${f}`);
   for (const f of r.far) fail(`z-fight in the far stand-ins ${f}`);
-  if (r.own.length) console.log(`  inside a prop's own model: ${r.own.length} (first: ${r.own[0]})`);
   if (r.stations.length) console.log(`  inside the stations' own models (the games'): ${r.stations.length}`);
-  for (const f of r.stations.slice(0, 40)) console.log(`  station ${f}`);
+  if (r.swaps) console.log(`  a stand-in against its own live model (never drawn together): ${r.swaps}`);
+  // the distinct kinds: a station's id and an instance's number left out, a stand-in against its own station left out (never drawn together)
+  const kinds = new Map();
+  for (const f of r.stations) {
+    const m = /^\(([^)]*)\) facing [^:]*: (.*) vs (.*), ([0-9.]+) cm², ([0-9.]+) mm apart$/.exec(f);
+    if (!m) continue;
+    const [, , a, b, , mm] = m;
+    const sa = /^station ([a-z0-9-]+)/.exec(a)?.[1] ?? /^far:([a-z0-9-]+)/.exec(a)?.[1];
+    const sb = /^station ([a-z0-9-]+)/.exec(b)?.[1] ?? /^far:([a-z0-9-]+)/.exec(b)?.[1];
+    if ((a.startsWith('far:') || b.startsWith('far:')) && (a.startsWith('far:solid') || b.startsWith('far:solid') || sa === sb)) continue;
+    const k = `${a} vs ${b}`.replace(/station [a-z]+-?[a-z]*-\d+:|far:[a-z]+-\d+:/g, '').replace(/#\d+/g, '');
+    const e = kinds.get(k) ?? { n: 0, mm, eg: f };
+    e.n++;
+    kinds.set(k, e);
+  }
+  console.log(`  station kinds (${kinds.size}):`);
+  for (const [k, e] of [...kinds].sort((x, y) => y[1].n - x[1].n)) console.log(`    ${e.n}x ${k} (${e.mm} mm) e.g. ${e.eg}`);
+  if (process.env.ZFIGHT_STATIONS === '1') for (const f of r.stations) console.log(`  station ${f}`);
+  else for (const f of r.stations.slice(0, 40)) console.log(`  station ${f}`);
   if (errors.length) fail(`zfight page errors: ${errors.slice(0, 3).join(' | ')}`);
   await page.close();
 }

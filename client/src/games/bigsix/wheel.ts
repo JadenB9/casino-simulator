@@ -249,7 +249,7 @@ function buildRotor(quality: Quality, mats: Mats): THREE.Group {
   // the light over the stop that came up, moved onto it by the view (stop 0 spans φ from π/2 − S to π/2)
   const glow = new THREE.Mesh(
     new THREE.RingGeometry(BAND_IN + 0.004, FACE_R - 0.004, 6, 1, Math.PI / 2 - SECTOR, SECTOR),
-    new THREE.MeshBasicMaterial({ color: new THREE.Color(1.25, 1.05, 0.7), transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }),
+    new THREE.MeshBasicMaterial({ color: new THREE.Color(1.25, 1.05, 0.7), transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 }),
   );
   glow.name = GLOW_NAME;
   glow.position.z = 0.0022;

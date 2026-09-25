@@ -273,7 +273,11 @@ export class Props {
           if (!mesh.isMesh) return;
           const src = mesh.material as THREE.MeshStandardMaterial;
           const glow = GLOWS[src.name];
-          const material = glow ? new THREE.MeshBasicMaterial({ color: glow, map: src.map }) : src;
+          // a bulb sits in its cup and a label on its glass: drawn pulled toward the eye as well, so
+          // where their edges still touch the part under them it never shows through
+          const decal = glow || (PROUD[src.name] && file.startsWith('bottle'));
+          const material = glow ? new THREE.MeshBasicMaterial({ color: glow, map: src.map }) : decal ? src.clone() : src;
+          if (decal) Object.assign(material, { polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4 });
           material.name = src.name;
           parts.push({ geometry: PROUD[src.name] && file.startsWith('bottle') ? proud(mesh.geometry, PROUD[src.name]!) : mesh.geometry, material, matrix: mesh.matrixWorld.clone() });
         });

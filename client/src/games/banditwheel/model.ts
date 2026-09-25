@@ -255,7 +255,7 @@ function buildRotor(m: Shared, quality: Quality): THREE.Group {
   // the light over the slot that came up, moved onto it by the view (slot 0 spans φ from π/2 − S to π/2)
   const glow = new THREE.Mesh(
     new THREE.RingGeometry(RING_IN + 0.01, FACE_R - 0.01, 8, 1, Math.PI / 2 - SECTOR, SECTOR),
-    new THREE.MeshBasicMaterial({ color: new THREE.Color(1.4, 1.15, 0.75), transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }),
+    new THREE.MeshBasicMaterial({ color: new THREE.Color(1.4, 1.15, 0.75), transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 }),
   );
   glow.name = GLOW_NAME;
   glow.position.z = 0.002;

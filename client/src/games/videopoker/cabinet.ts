@@ -321,7 +321,8 @@ export function cabinetModel(): THREE.Group {
   head.position.copy(SCREEN_CENTER);
   head.rotation.x = -TILT;
   head.add(part(box, lacquer, [0.64, 0.5, 0.28], [0, 0.02, -0.14]));
-  head.add(part(box, bezel, [0.5, 0.39, 0.01], [0, 0, 0.001]));
+  // the bezel's face a few millimetres behind the screen, so the two never share a depth
+  head.add(part(box, bezel, [0.5, 0.39, 0.01], [0, 0, -0.0015]));
   const screen = new THREE.Mesh(new THREE.PlaneGeometry(SCREEN_W, SCREEN_H), new THREE.MeshBasicMaterial({ map: attractScreen() }));
   screen.name = 'vp-screen';
   screen.position.z = 0.007;
