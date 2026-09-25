@@ -13,6 +13,8 @@ import { CLOSE } from '../../shared/src/protocol.ts';
 import { LIFTS } from '../../shared/src/lifts.ts';
 import { MAX_FLOOR_PER_ADDR, type CasinoFloor } from '../src/floor/index.ts';
 import { readJson } from '../src/http.ts';
+import { signToken, verifyToken } from '../src/auth.ts';
+import { draws } from '../src/market.ts';
 
 const floor = (): DurableObjectStub<CasinoFloor> => env.FLOOR.get(env.FLOOR.idFromName('main'));
 const post = (p: Player, route: string, body: unknown) => api(route, p.token, { method: 'POST', body: JSON.stringify(body) });
@@ -66,6 +68,19 @@ describe('the production config', () => {
     expect(fair?.state ?? 'ok').toBe('ok');
     const jail = await env.DB.prepare(`SELECT 1 FROM casino_jail WHERE account_id = ?1`).bind(p.id).first();
     expect(jail).toBeNull();
+  });
+
+  it('without its token secret, the Worker refuses logins and tokens rather than sign with an empty key', async () => {
+    const bare = { ...env, CASINO_DEV: undefined, CASINO_TOKEN_SECRET: '' } as unknown as Env;
+    const login = await worker.fetch(
+      new Request('http://casino.test/casino/api/login', { method: 'POST', headers: { Origin: ORIGIN, 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'sec_nosecret', password: 'test-pass' }) }),
+      bare,
+    );
+    expect(login.status).toBe(500);
+    expect(JSON.stringify(await login.json())).not.toContain('token');
+    await expect(signToken('', 1, 'x', Date.now())).rejects.toThrow();
+    await expect(verifyToken(undefined as unknown as string, 'v2.e30.AAAA', Date.now())).rejects.toThrow();
+    await expect(draws('', 'csx', 1)).rejects.toThrow();
   });
 
   it("won't open the test fixture game (no house edge)", async () => {

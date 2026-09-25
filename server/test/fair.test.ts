@@ -64,8 +64,9 @@ describe('fair: the check', () => {
     expect([ch.w, ch.h]).toEqual([IMG_W, IMG_H]);
     const png = Uint8Array.from(atob(ch.png), (c) => c.charCodeAt(0));
     expect([...png.subarray(0, 8)]).toEqual([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-    // The answer is only on the server.
-    expect(JSON.stringify(res)).not.toMatch(/GOLD|RED|BLUE|WHITE|BLACK|PURPLE/);
+    // The answer is only on the server. (The picture's base64 is left out: random bytes spell
+    // RED or GOLD now and then.)
+    expect(JSON.stringify({ ...res, challenge: { ...ch, png: '' } })).not.toMatch(/GOLD|RED|BLUE|WHITE|BLACK|PURPLE/);
 
     const at = await solution(ch.id);
     const ok = await (await post(p, 'check', { id: ch.id, x: at.x + 5, y: at.y - 5 })).json<any>();

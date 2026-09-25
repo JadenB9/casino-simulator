@@ -6,10 +6,12 @@
 // quiet spell fills in the steps since (two at once write the same numbers, which is harmless).
 
 import { FUND_ID, FUND_START, STEPS_PER_DAY, nextPrice, stepOf } from '../../shared/src/bank.ts';
+import { needSecret } from './auth.ts';
 
 const keys = new Map<string, Promise<CryptoKey>>();
 
 function keyFor(secret: string): Promise<CryptoKey> {
+  needSecret(secret); // no secret must never mean a walk anyone can work out
   let k = keys.get(secret);
   if (!k) {
     // its own key, so the market's numbers say nothing about the token secret's other uses

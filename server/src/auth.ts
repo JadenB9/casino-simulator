@@ -49,8 +49,17 @@ export function unb64url(s: string): Uint8Array | null {
 
 const keys = new Map<string, Promise<CryptoKey>>();
 
+/**
+ * Throws when the secret isn't set: a deploy without CASINO_TOKEN_SECRET then refuses every login
+ * and token (and the market's walk) instead of signing with an empty key anybody could use.
+ */
+export function needSecret(secret: string): void {
+  if (typeof secret !== 'string' || secret === '') throw new Error('CASINO_TOKEN_SECRET is not set');
+}
+
 /** The HMAC-SHA256 key for a secret (tokens and socket tickets both sign with it). */
 export function key(secret: string): Promise<CryptoKey> {
+  needSecret(secret);
   let k = keys.get(secret);
   if (!k) {
     k = crypto.subtle.importKey('raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify']);
