@@ -173,7 +173,8 @@ describe('daily challenges', () => {
     const f = roundFacts('dice', '', { events: [], state: null }, round(100, 250), '2026-09-25');
     expect(f.tally).toMatchObject({ 'd:2026-09-25:rounds': 1, 'd:2026-09-25:won': 150, 'd:2026-09-25:wins:dice': 1, 'd:2026-09-25:best': 150 });
     const lost = roundFacts('dice', '', { events: [], state: null }, round(100, 0), '2026-09-25');
-    expect(lost.tally).toEqual({ rounds: 1, 'd:2026-09-25:rounds': 1 });
+    // (and v6 stats6's keys for the loss)
+    expect(lost.tally).toEqual({ rounds: 1, 'd:2026-09-25:rounds': 1, 'rounds:dice': 1, lost: 100, 'lost:dice': 100, worst: 100, 'worst:dice': 100 });
   });
 
   it("only the day's own are met, from the day's tallies", () => {
