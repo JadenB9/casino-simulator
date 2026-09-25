@@ -23,7 +23,7 @@ export const CAR_MATS: readonly CarMat[] = ['paint', 'trim', 'metal', 'glass', '
 type Part = Exclude<CarMat, 'gold' | 'glow'> | 'accent';
 
 /** The rounded edge, all round the body. */
-const B = 0.045;
+const B = 0.065;
 const HEAD = '#fff4dc';
 const TAIL = '#a8101a';
 const TYRE = '#131314';
@@ -120,6 +120,36 @@ class Outline {
   }
 }
 
+/**
+ * A silhouette with its corners rounded: each inside corner becomes a short curve (radius up to
+ * `r`, never more than a little under half of either side), so a bonnet flows into a windscreen
+ * and a boot into a tail the way pressed steel does.
+ */
+function rounded(pts: readonly [number, number][], r: number, steps: number): [number, number][] {
+  const out: [number, number][] = [pts[0]!];
+  for (let i = 1; i < pts.length - 1; i++) {
+    const [ax, ay] = pts[i - 1]!;
+    const [bx, by] = pts[i]!;
+    const [cx, cy] = pts[i + 1]!;
+    const l1 = Math.hypot(bx - ax, by - ay);
+    const l2 = Math.hypot(cx - bx, cy - by);
+    const d = Math.min(r, l1 * 0.45, l2 * 0.45);
+    if (d < 0.01) {
+      out.push([bx, by]);
+      continue;
+    }
+    const p0: [number, number] = [bx + ((ax - bx) / l1) * d, by + ((ay - by) / l1) * d];
+    const p2: [number, number] = [bx + ((cx - bx) / l2) * d, by + ((cy - by) / l2) * d];
+    for (let k = 0; k <= steps; k++) {
+      const t = k / steps;
+      const u = 1 - t;
+      out.push([u * u * p0[0] + 2 * u * t * bx + t * t * p2[0], u * u * p0[1] + 2 * u * t * by + t * t * p2[1]]);
+    }
+  }
+  out.push(pts.at(-1)!);
+  return out;
+}
+
 /** The plan-view pinch at the nose and the tail: 1 in the middle, less towards the ends. */
 function taper(s: CarSpec, o: Outline, z: number): number {
   let k = 1;
@@ -137,7 +167,7 @@ function sideAt(s: CarSpec, o: Outline, y: number, z: number): number {
 }
 
 /** Extrude a side silhouette across a width (the car's x) and turn it into the car's frame. */
-function extrude(shape: THREE.Shape, half: number, segments = 10, bevels = 2): THREE.BufferGeometry {
+function extrude(shape: THREE.Shape, half: number, segments = 12, bevels = 3): THREE.BufferGeometry {
   const depth = Math.max(0.05, 2 * (half - B));
   const g = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: true, bevelThickness: B, bevelSize: B, bevelSegments: bevels, curveSegments: segments, steps: 1 });
   // shape x is the car's z, shape y its height, the extrusion its width
@@ -161,7 +191,8 @@ function buildBody(s: CarSpec, o: Outline, geos: Geos, lite: boolean): void {
   shape.moveTo(pts[0]![0], pts[0]![1]);
   for (const [z, y] of pts.slice(1)) shape.lineTo(z, y);
   // down the nose and back along the sills, up and over each wheel
-  const ar = s.wheelR + 0.07;
+  // (the rounded edge grows the body outwards by B, the arch's opening inwards: allow for it)
+  const ar = s.wheelR + 0.07 + B;
   const a0 = Math.asin(THREE.MathUtils.clamp((s.sill - s.wheelR) / ar, -1, 1));
   shape.lineTo(o.zF - 0.12, s.sill);
   shape.lineTo(s.front + ar * Math.cos(a0), s.sill);
@@ -170,7 +201,7 @@ function buildBody(s: CarSpec, o: Outline, geos: Geos, lite: boolean): void {
   shape.absarc(s.rear, s.wheelR, ar, a0, Math.PI - a0, false);
   shape.lineTo(o.zR + 0.12, s.sill);
   shape.closePath();
-  const g = lite ? extrude(shape, s.half, 5, 1) : extrude(shape, s.half);
+  const g = lite ? extrude(shape, s.half, 6, 1) : extrude(shape, s.half);
   const p = g.getAttribute('position');
   for (let i = 0; i < p.count; i++) {
     const x = p.getX(i);
@@ -182,7 +213,7 @@ function buildBody(s: CarSpec, o: Outline, geos: Geos, lite: boolean): void {
   add(geos, 'paint', smooth(g), '#ffffff');
   // the wheel wells: dark, so the arches read as openings
   for (const az of [s.front, s.rear]) {
-    const well = new THREE.CylinderGeometry(ar - 0.02, ar - 0.02, 2 * s.half * taper(s, o, az) - 0.06, 20, 1, true, Math.PI / 2 - 1.2, 2.4).rotateZ(Math.PI / 2);
+    const well = new THREE.CylinderGeometry(ar - B - 0.02, ar - B - 0.02, 2 * s.half * taper(s, o, az) - 0.06, 20, 1, true, Math.PI / 2 - 1.2, 2.4).rotateZ(Math.PI / 2);
     well.translate(0, s.wheelR, az);
     // seen from under the arch: its inside faces out
     add(geos, 'trim', flipWinding(well.toNonIndexed()), '#0c0c0d');
@@ -248,7 +279,52 @@ function buildCabin(s: CarSpec, o: Outline, geos: Geos): { roofY: number; roofZ:
       add(geos, 'trim', q, DARK);
     }
   }
+  // the glass framed: a strip along its foot, and the pillars up the windscreen's and the rear
+  // window's edges (chrome on the older cars, black on the rest)
+  const frame = s.chrome ? CHROME : DARK;
+  const framePart = s.chrome ? 'metal' : 'trim';
+  const cabinX = (z: number, y: number) => half * taper(s, o, z) * (1 - (s.cabinTumble ?? 0.15) * THREE.MathUtils.clamp((y - base) / Math.max(0.05, top - base), 0, 1)) + B;
+  const front = pts.at(-1)!;
+  const rear = pts[0]!;
+  const roofF = flatPts.reduce((a, b) => (b[0] > a[0] ? b : a));
+  const roofR = flatPts.reduce((a, b) => (b[0] < a[0] ? b : a));
+  for (const side of [1, -1] as const) {
+    add(geos, framePart, sideBand(side, [rear[0] + 0.05, base + 0.035], [front[0] - 0.05, base + 0.035], 0.04, cabinX), frame);
+    add(geos, framePart, sideBand(side, [front[0] - 0.02, front[1]], roofF, 0.07, cabinX), frame);
+    add(geos, framePart, sideBand(side, [rear[0] + 0.02, rear[1]], roofR, s.sail !== undefined ? 0.04 : 0.09, cabinX), frame);
+    add(geos, framePart, sideBand(side, roofR, roofF, 0.035, cabinX), frame);
+  }
   return { roofY: top + B, roofZ: [Math.min(...zs), Math.max(...zs)] };
+}
+
+/**
+ * A narrow band laid on a car's side from a to b ([z, y] in the side view), `w` wide, standing
+ * just proud of the surface whose half-width at (z, y) is `xAt`; facing out on the `side` given.
+ */
+function sideBand(side: 1 | -1, a: [number, number], b: [number, number], w: number, xAt: (z: number, y: number) => number): THREE.BufferGeometry {
+  const n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 0.2));
+  const dz = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const len = Math.hypot(dz, dy) || 1;
+  // across the band, in the side view
+  const pz = (-dy / len) * (w / 2);
+  const py = (dz / len) * (w / 2);
+  const v: number[] = [];
+  const at = (t: number, k: number): [number, number, number] => {
+    const z = a[0] + dz * t + pz * k;
+    const y = a[1] + dy * t + py * k;
+    return [side * (xAt(z, y) + 0.006), y, z];
+  };
+  for (let i = 0; i < n; i++) {
+    const t0 = i / n;
+    const t1 = (i + 1) / n;
+    v.push(...at(t0, -1), ...at(t1, -1), ...at(t1, 1), ...at(t0, -1), ...at(t1, 1), ...at(t0, 1));
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(v, 3));
+  g.computeVertexNormals();
+  if (Math.sign(g.getAttribute('normal').getX(0)) !== side) flipWinding(g);
+  return g;
 }
 
 function flipWinding(g: THREE.BufferGeometry): THREE.BufferGeometry {
@@ -296,12 +372,13 @@ function buildOpen(s: CarSpec, o: Outline, geos: Geos): void {
   const y = o.yAt((c0 + c1) / 2) + B;
   for (const rz of rows)
     for (const sx of [0.34, -0.34]) {
-      add(geos, 'trim', box(0.44, 0.46, 0.1, sx * (s.half / 0.9), y + 0.12, rz, lean), s.interior);
-      add(geos, 'trim', box(0.24, 0.12, 0.09, sx * (s.half / 0.9), y + 0.42, rz - 0.07, lean), s.interior);
+      // sunk in the cockpit: only the tops of the backs and the headrests show over the doors
+      add(geos, 'trim', box(0.44, 0.34, 0.1, sx * (s.half / 0.9), y - 0.1, rz, lean), s.interior);
+      add(geos, 'trim', box(0.22, 0.1, 0.08, sx * (s.half / 0.9), y + 0.12, rz - 0.04, lean), shade(s.interior, 0.85));
     }
   // the driver's wheel (left-hand drive: +x)
   const wheel = new THREE.TorusGeometry(0.17, 0.018, 6, 20).rotateX(-0.5);
-  wheel.translate(0.34 * (s.half / 0.9), y + 0.18, rows.at(-1)! + 0.48);
+  wheel.translate(0.34 * (s.half / 0.9), y + 0.02, rows.at(-1)! + 0.48);
   add(geos, 'trim', wheel, '#161616');
   // the windscreen, raked back, in a chrome frame
   const w = 2 * s.half * taper(s, o, op.screenZ) * 0.86;
@@ -393,6 +470,23 @@ function buildExtras(s: CarSpec, o: Outline, geos: Geos, roof: { roofY: number; 
     const x = side * (sideAt(s, o, my, mz) + 0.08);
     add(geos, s.chrome ? 'metal' : 'paint', box(0.14, 0.08, 0.06, x, my, mz), s.chrome ? CHROME : '#ffffff');
     add(geos, 'trim', box(0.1, 0.02, 0.03, x - side * 0.08, my - 0.02, mz + 0.01), DARK);
+  }
+  // a line along each side between the wheel arches, at the shoulder: chrome on the older cars, a
+  // dark crease on the rest
+  {
+    const arch = s.wheelR + 0.07 + B + 0.08;
+    const z0 = s.rear + arch;
+    const z1 = s.front - arch;
+    const yLine = (z: number) => Math.min(s.shoulder - 0.04, o.yAt(z) - 0.1);
+    const xAt = (z: number, y: number) => sideAt(s, o, y, z);
+    for (const side of [1, -1] as const) {
+      const pts: [number, number][] = [];
+      for (let i = 0; i <= 12; i++) {
+        const z = z0 + ((z1 - z0) * i) / 12;
+        pts.push([z, yLine(z)]);
+      }
+      for (let i = 0; i < pts.length - 1; i++) add(geos, s.chrome ? 'metal' : 'trim', sideBand(side, pts[i]!, pts[i + 1]!, s.chrome ? 0.025 : 0.018, xAt), s.chrome ? CHROME : '#0e0f11');
+    }
   }
   if (s.stripes) {
     const lane = (off: number) => [(z: number) => off - 0.07, (z: number) => off + 0.07] as const;
@@ -561,8 +655,11 @@ function mergeAll(geos: Geos): Map<Part, THREE.BufferGeometry> {
 export function carKit(id: string, lite = false): CarKit {
   const cached = (lite ? liteKits : kits).get(id);
   if (cached) return cached;
-  const s = CAR_SPECS[id];
-  if (!s) throw new Error(`no car ${id}`);
+  const spec = CAR_SPECS[id];
+  if (!spec) throw new Error(`no car ${id}`);
+  // the silhouettes' corners rounded off (fewer steps in the lighter build)
+  const steps = lite ? 1 : 4;
+  const s: CarSpec = { ...spec, body: rounded(spec.body, 0.26, steps), cabin: spec.cabin && rounded(spec.cabin, 0.14, steps) };
   const o = new Outline(s.body);
   const body: Geos = new Map();
   buildBody(s, o, body, lite);
