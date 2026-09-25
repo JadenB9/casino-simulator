@@ -157,6 +157,7 @@ export function defineCityMats(mats: Mats): void {
   mats.define1('deck', () => new THREE.MeshLambertMaterial({ map: deck() }));
   // the loungers' and rails' teak: the deck's boards, oiled a shade darker
   mats.define1('teak', () => new THREE.MeshLambertMaterial({ map: deck(), color: '#c89a78' }));
+  mats.define1('lift-floor', () => new THREE.MeshLambertMaterial({ map: granite(), color: '#8a8480' }));
   mats.define1('lift-door', (q) => (hi(q) ? new THREE.MeshStandardMaterial({ color: '#b9b5ae', metalness: 0.85, roughness: 0.38 }) : new THREE.MeshLambertMaterial({ color: '#8e8b86', emissive: '#141312' })));
   mats.define1('water', (q) => (hi(q) ? new THREE.MeshStandardMaterial({ color: '#1a3a48', roughness: 0.05, metalness: 0.2 }) : new THREE.MeshLambertMaterial({ color: '#1a3440' })));
 }

@@ -15,6 +15,7 @@
 
 import * as THREE from 'three';
 import { serverNow } from '../../net/clock.ts';
+import { zoneOf } from '../../../../shared/src/zones.ts'; // v6 city6
 import type { Sfx } from '../../audio/sfx.ts';
 import type { FloorClientMsg, FloorServerMsg } from '../../../../shared/src/protocol.ts';
 import { OUTFITS, SKIN_TONES, type Body, type Look } from '../../../../shared/src/look.ts';
@@ -637,7 +638,9 @@ export class Celebs {
     }
     const me = this.deps.player.position;
     const room = this.deps.roomAt(star.x, star.z);
-    (this.sighting ??= new Sighting(this.ui())).set({ name: celeb.name, known: celeb.known, room: room?.name ?? 'On the way out', metres: Math.hypot(star.x - me.x, star.z - me.z), met: this.met.has(v.id) });
+    // v6 city6: from the ground floor or the roof the casino is a ride away, not metres
+    const away = zoneOf(me.x * 100, me.z * 100) !== 'casino';
+    (this.sighting ??= new Sighting(this.ui())).set({ name: celeb.name, known: celeb.known, room: room?.name ?? 'On the way out', metres: away ? Infinity : Math.hypot(star.x - me.x, star.z - me.z), met: this.met.has(v.id) });
   }
 
   // --- happy hour ------------------------------------------------------------------------------
