@@ -54,7 +54,7 @@ export interface RideSpec {
   toes: [number, number];
   /** How far the hips come down, knees bent (m). */
   crouch: number;
-  /** The right hand's grip in the ride's frame (the left mirrors it), for a handlebar. */
+  /** The right hand's grip in the ride's frame (the left mirrors it): a handlebar, a throne's arm. */
   grip?: [number, number, number];
   /** How much of the rider's lean the ride itself takes (a skateboard tips less than its rider). */
   tip: number;
@@ -157,11 +157,12 @@ export const RIDES: Record<string, RideSpec> = {
     deck: 0.22,
     seat: 0.43,
     feet: [
-      [0.1, 0.3],
-      [-0.1, 0.3],
+      [0.11, 0.38],
+      [-0.11, 0.38],
     ],
-    toes: [0.1, -0.1],
+    toes: [0.12, 0.12],
     crouch: 0,
+    grip: [-0.3, 0.9, 0.12],
     tip: 0.5,
     hover: '#ff6a3a',
     axles: [],
@@ -632,7 +633,7 @@ function buildThrone(parts: Parts): void {
   // legs: short scrolled feet at the corners
   for (const x of [-0.29, 0.29]) for (const z of [-0.22, 0.23]) parts.add(new THREE.SphereGeometry(0.035, 14, 10), T(x, dais + 0.03, z), GOLD);
   // the back: a tall gold frame, a buttoned velvet panel, a crest over it
-  const backZ = -0.23;
+  const backZ = -0.19;
   parts.add(new RoundedBoxGeometry(0.66, 0.68, 0.07, 3, 0.03), T(0, seat + 0.32, backZ), GOLD_SATIN);
   parts.add(new RoundedBoxGeometry(0.52, 0.56, 0.03, 3, 0.012), T(0, seat + 0.32, backZ + 0.045), VELVET);
   for (let r = 0; r < 3; r++) for (const x of r % 2 ? [-0.075, 0.075] : [-0.15, 0, 0.15]) parts.add(new THREE.SphereGeometry(0.009, 8, 6), T(x, seat + 0.14 + r * 0.18, backZ + 0.062), GOLD);
@@ -696,7 +697,7 @@ function glowMaterial(color: THREE.ColorRepresentation): THREE.MeshBasicMaterial
   g.fillRect(0, 0, 128, 128);
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
-  m = new THREE.MeshBasicMaterial({ map: tex, color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false });
+  m = new THREE.MeshBasicMaterial({ map: tex, color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
   m.name = 'ride-glow';
   glows.set(key, m);
   return m;
@@ -781,7 +782,8 @@ export class Ride {
     if (spec.hover !== undefined) {
       glowGeo ??= new THREE.PlaneGeometry(1.15, 0.62).rotateX(-Math.PI / 2).rotateY(Math.PI / 2);
       const glow = new THREE.Mesh(glowGeo, glowMaterial(spec.hover));
-      glow.position.y = 0.006;
+      // over a rug as well as the marble (the lobby's rugs stand a couple of centimetres proud)
+      glow.position.y = 0.035;
       glow.renderOrder = 2;
       glow.name = 'ride-glow';
       this.outer.add(glow);

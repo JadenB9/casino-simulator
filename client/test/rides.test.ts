@@ -99,8 +99,8 @@ describe('riding', () => {
       expect(stanceYaw(r)).toBe(r.stance === 'side' ? -Math.PI / 2 : 0);
       // a seat has a height over its footrest, nothing else does
       expect(r.seat !== undefined).toBe(r.stance === 'seat');
-      // a bar to hold means a front stance, and the other way round
-      expect(!!r.grip).toBe(r.stance === 'front');
+      // a bar to hold means a front stance (a throne's arms are held too), and the other way round
+      expect(!!r.grip).toBe(r.stance !== 'side');
       // the left foot is on the left
       expect(r.feet[0][0]).toBeGreaterThan(r.feet[1][0]);
     }
