@@ -2,6 +2,15 @@
 // Buckets live in memory, so a Durable Object waking from hibernation starts them full again,
 // which is fine: they exist to stop floods, not to meter anyone precisely.
 
+/**
+ * Every signed-in HTTP request, per account (index.ts): far above what the client sends (a page
+ * load is a dozen), so only a script hammering the reads (each is several D1 queries, /me asks
+ * tables too) meets it. Kept per isolate like the tickets' limit; routes that write keep their
+ * own limits in D1. (Here rather than in index.ts: the Worker's entry may export only handlers.)
+ */
+export const API_BURST = 60;
+export const API_PER_SEC = 10;
+
 export class Bucket {
   private tokens: number;
   private at = Date.now();

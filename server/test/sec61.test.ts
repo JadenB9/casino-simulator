@@ -6,7 +6,8 @@
 import { describe, expect, it } from 'vitest';
 import { env, exports } from 'cloudflare:workers';
 import { runInDurableObject } from 'cloudflare:test';
-import worker, { API_BURST } from '../src/index.ts';
+import worker, * as entry from '../src/index.ts';
+import { API_BURST } from '../src/ratelimit.ts';
 import { ORIGIN, api, connect, type Client } from './helpers.ts';
 import { aid, buyIn, closedWith, makeLobby, money, player, sleep, type Player } from './party.ts';
 import { CLOSE } from '../../shared/src/protocol.ts';
@@ -33,6 +34,13 @@ async function where(id: number): Promise<{ x: number; z: number } | null> {
 }
 
 describe('the production config', () => {
+  it("the Worker's entry exports only its handler and the Durable Object classes (anything else stops workerd from starting)", () => {
+    for (const [name, value] of Object.entries(entry)) {
+      if (name === 'default') expect(typeof (value as ExportedHandler).fetch).toBe('function');
+      else expect(typeof value, name).toBe('function');
+    }
+  });
+
   // What j4den/workers/casino/wrangler.toml deploys: no CASINO_DEV.
   const prod = { ...env, CASINO_DEV: undefined } as unknown as Env;
   const call = (path: string, token: string, method = 'POST', body: unknown = {}) =>

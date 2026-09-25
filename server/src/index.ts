@@ -12,7 +12,7 @@ import { notYet } from '../../shared/src/bank.ts';
 import { closeWith, corsHeaders, fail, json, originAllowed, readJson } from './http.ts';
 import { bearer, logIn, signToken, verifyToken } from './auth.ts';
 import { signTicket, ticketTarget, verifyTicket } from './tickets.ts';
-import { KeyedBuckets } from './ratelimit.ts';
+import { API_BURST, API_PER_SEC, KeyedBuckets } from './ratelimit.ts';
 import { bumpRate, escrowsOf, getAccount, loadProfile, ownedOf, setLook } from './db.ts';
 import { isFreeEmote, emoteItem } from '../../shared/src/items.ts';
 import { featsOf } from './feats.ts';
@@ -46,13 +46,7 @@ const STATION_RE = /^[a-z0-9-]{1,24}$/;
  * Kept per isolate: a burst from one client lands on one, and the objects limit connects anyway.
  */
 const ticketLimits = new KeyedBuckets(30, 1);
-/**
- * Every signed-in request, per account: far above what the client sends (a page load is a dozen),
- * so only a script hammering the reads (each is several D1 queries, /me asks tables too) meets it.
- * Kept per isolate like the tickets' limit; the routes that write keep their own limits in D1.
- */
-export const API_BURST = 60;
-export const API_PER_SEC = 10;
+/** Every signed-in request, per account (ratelimit.ts API_BURST). */
 const apiLimits = new KeyedBuckets(API_BURST, API_PER_SEC);
 
 export default {
