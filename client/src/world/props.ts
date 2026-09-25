@@ -27,6 +27,12 @@ const FILES: Record<Exclude<PropKind, 'chandelier'>, { file: string; fit: 'heigh
   door: { file: 'door.glb', fit: 'height' },
 };
 
+/**
+ * Parts drawn right on another part's surface (a bottle's label on its glass): pushed out this
+ * much across their long axis, so the two never share a plane and flicker.
+ */
+const PROUD: Record<string, number> = { LightBrown: 1.02 };
+
 /** Materials that should glow: lamp shades and bulbs. */
 const GLOWS: Record<string, THREE.Color> = {
   Light: hdr('#ffe2b0', 2.4),
@@ -250,7 +256,7 @@ export class Props {
           const glow = GLOWS[src.name];
           const material = glow ? new THREE.MeshBasicMaterial({ color: glow, map: src.map }) : src;
           material.name = src.name;
-          parts.push({ geometry: mesh.geometry, material, matrix: mesh.matrixWorld.clone() });
+          parts.push({ geometry: PROUD[src.name] && file.startsWith('bottle') ? proud(mesh.geometry, PROUD[src.name]!) : mesh.geometry, material, matrix: mesh.matrixWorld.clone() });
         });
         const box = new THREE.Box3().setFromObject(gltf.scene);
         return { parts, size: box.getSize(new THREE.Vector3()), min: box.min.clone() };
@@ -287,6 +293,20 @@ export class Props {
 }
 
 const _up = new THREE.Vector3(0, 1, 0);
+
+/** A copy of a part scaled by k about its middle across its two short axes (its long one kept). */
+function proud(g: THREE.BufferGeometry, k: number): THREE.BufferGeometry {
+  const out = g.clone();
+  out.computeBoundingBox();
+  const box = out.boundingBox!;
+  const size = box.getSize(new THREE.Vector3());
+  const c = box.getCenter(new THREE.Vector3());
+  const long = size.x >= size.y && size.x >= size.z ? 'x' : size.y >= size.z ? 'y' : 'z';
+  const s = new THREE.Vector3(k, k, k);
+  s[long] = 1;
+  out.translate(-c.x, -c.y, -c.z).scale(s.x, s.y, s.z).translate(c.x, c.y, c.z);
+  return out;
+}
 
 const GLINT_VERTEX = /* glsl */ `
 uniform float uTime;

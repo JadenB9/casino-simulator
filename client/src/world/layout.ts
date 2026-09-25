@@ -856,13 +856,17 @@ function planWalls(rooms: PlannedRoom[], doors: PlannedDoor[], windows: Window[]
       }
     }
   }
-  // extend each run over the wall thickness where it ends at a corner (not where the next run on
-  // the same line carries on), so corners close
+  // extend each run over the wall thickness where it ends at a corner, so corners close: not where
+  // the next run on the same line carries on, and not where it meets a wall running on past it (a
+  // T): there the other wall already fills the joint, and an end pushed through to its far face
+  // would sit in that face and flicker against it
   const ends = out.map((w) => ({ w, a0: w.a0, a1: w.a1 }));
   for (const e of ends) {
     const touching = (v: number) => ends.some((o) => o !== e && o.w.axis === e.w.axis && o.w.c === e.w.c && (Math.abs(o.a0 - v) < 1e-6 || Math.abs(o.a1 - v) < 1e-6));
-    if (!touching(e.a0)) e.w.a0 -= WALL / 2;
-    if (!touching(e.a1)) e.w.a1 += WALL / 2;
+    const across = (v: number, lo: number, hi: number) => ends.some((o) => o.w.axis !== e.w.axis && Math.abs(o.w.c - v) < 1e-6 && o.a0 <= lo + 1e-6 && o.a1 >= hi - 1e-6);
+    const through = (v: number) => across(v, e.w.c - 0.01, e.w.c) && across(v, e.w.c, e.w.c + 0.01);
+    if (!touching(e.a0) && !through(e.a0)) e.w.a0 -= WALL / 2;
+    if (!touching(e.a1) && !through(e.a1)) e.w.a1 += WALL / 2;
   }
   // openings: doors (a lintel stays over them) and windows (a sill below, a head above)
   const cut = (list: WallPiece[], o: { axis: 'x' | 'z'; c: number; a0: number; a1: number }, keep: [number, number][]): WallPiece[] => {
