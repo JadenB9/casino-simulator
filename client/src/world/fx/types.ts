@@ -26,6 +26,10 @@ export interface FxWorld {
   people(): Iterable<FxPerson>;
   /** The polished metals' reflections of the casino (High), for gold that looks like gold. */
   env(): THREE.Texture | null;
+  /** Every station's model (the online lounge's monitors are in there). */
+  stations: THREE.Object3D;
+  /** The slots hall's win meter, when the app has hung one (its face can be borrowed). */
+  tally(): THREE.Mesh | null;
 }
 
 /** The part of a character the effects touch. */

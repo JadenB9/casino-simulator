@@ -87,6 +87,11 @@ export const LIMITS: Partial<Record<GameId, LimitSpec>> = {
   baccarat: bets('default', ladder([5, 1_000], [10, 5_000], [50, 10_000], [100, 50_000], [1_000, 100_000], [5_000, 500_000]), TABLE_CEILING),
   threecard: bets('ante', ladder([5, 500], [10, 1_000], [25, 5_000], [100, 10_000], [1_000, 100_000], [5_000, 500_000]), TABLE_CEILING),
   war: bets('bet', ladder([5, 500], [10, 1_000], [25, 5_000], [100, 10_000], [1_000, 100_000], [5_000, 500_000]), TABLE_CEILING),
+  // v6 tables6: each of Let It Ride's three circles (a royal pays 1,000 to 1 on all three, so its
+  // top tiers stop lower than the other card tables')
+  letitride: bets('bet', ladder([5, 500], [10, 1_000], [25, 2_500], [100, 5_000], [500, 25_000], [1_000, 50_000]), WHEEL_CEILING),
+  // v6 tables6: the Pai Gow Poker bet; the Fortune bonus scales from it
+  paigow: bets('bet', ladder([5, 500], [10, 1_000], [25, 5_000], [100, 10_000], [1_000, 100_000], [5_000, 500_000]), TABLE_CEILING),
   // each spot; the most on the layout a spin is five times it
   bigsix: bets('spot', ladder([1, 100], [1, 500], [5, 1_000], [25, 5_000], [100, 25_000], [1_000, 100_000]), WHEEL_CEILING),
   // Small, Big, Odd and Even; the other bets scale from them
@@ -351,6 +356,12 @@ export function limitsDetail(cfg: TableConfig): string[] {
       break;
     case 'war':
       out.push(`Tie bet ${range(l.tie)}`);
+      break;
+    case 'letitride':
+      out.push('Three equal bets', `3-Card Bonus ${range(l.bonus)}`);
+      break;
+    case 'paigow':
+      out.push(`Fortune ${range(l.fortune)}`, '5% commission on wins');
       break;
     case 'bigsix':
       out.push(`${formatMoney(l.default.max)} a spin`);

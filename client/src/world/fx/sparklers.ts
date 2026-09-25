@@ -13,6 +13,7 @@ import { Sparks } from './particles.ts';
 import type { Stock } from './stock.ts';
 import type { Effect, FxWorld } from './types.ts';
 import { fxPoint } from './scope.ts';
+import { calm, wave } from '../../app/comfort.ts';
 
 const RING = 8;
 const RADIUS = 1.55;
@@ -56,7 +57,7 @@ export function sparklers(w: FxWorld, stock: Stock, ev: FxEvent, late: boolean):
       let heat = 0;
       units.forEach((u, i) => {
         // full for three seconds, then a chase round the ring
-        const chase = t < 3 ? 1 : 0.55 + 0.45 * Math.max(0, Math.sin(t * 2.6 - (i / units.length) * Math.PI * 2));
+        const chase = t < 3 ? 1 : 0.55 + 0.45 * Math.max(0, wave(t * 2.6 - (i / units.length) * Math.PI * 2));
         heat += chase;
         if (!burning) return;
         owed[i]! += RATE[q] * dt * (0.6 + 0.4 * chase);
@@ -70,8 +71,8 @@ export function sparklers(w: FxWorld, stock: Stock, ev: FxEvent, late: boolean):
       });
       sparks.step(dt, 9.8, 0.7);
       sparks.commit();
-      // the floor round each machine flickers with it
-      const k = burning ? (heat / Math.max(1, units.length)) * (0.85 + Math.random() * 0.3) : Math.max(0, left / 0.9) * 0.6;
+      // the floor round each machine flickers with it (calm: glows steady)
+      const k = burning ? (heat / Math.max(1, units.length)) * (calm() ? 1 : 0.85 + Math.random() * 0.3) : Math.max(0, left / 0.9) * 0.6;
       poolMat.color.copy(warm).multiplyScalar(0.5 * k);
       if (left <= 0 && stopSound) {
         stopSound();

@@ -92,7 +92,17 @@ export class FloorLife {
     deps.root.add(this.crew.group);
     this.speech = new Speech(deps.camera);
     // v6 celebs6
-    this.celebs = new Celebs({ root: deps.root, camera: deps.camera, characters: deps.characters, grid: this.grid, speech: this.speech, player: deps.player, roomAt: (x, z) => roomAt(deps.plan, x, z) });
+    this.celebs = new Celebs({
+      root: deps.root,
+      camera: deps.camera,
+      characters: deps.characters,
+      grid: this.grid,
+      speech: this.speech,
+      player: deps.player,
+      roomAt: (x, z) => roomAt(deps.plan, x, z),
+      // (made below: asked for only once the floor runs)
+      staff: () => ({ bartender: this.bartender?.m ?? null, waiters: this.waiters?.list.map((w) => w.m) ?? [] }),
+    });
     this.ctx = {
       crew: this.crew,
       speech: this.speech,

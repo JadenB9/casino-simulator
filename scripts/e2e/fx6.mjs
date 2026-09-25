@@ -190,13 +190,13 @@ async function perf(quality) {
   await page.evaluate(() => {
     const f = window.casino.fx;
     f.stranger(1.6, 0.8);
-    for (const fx of ['fx-confetti', 'fx-rain', 'fx-sparklers', 'fx-spotlight', 'fx-disco', 'fx-goldenhour']) f.play(fx);
+    for (const fx of ['fx-confetti', 'fx-rain', 'fx-sparklers', 'fx-spotlight', 'fx-disco', 'fx-takeover']) f.play(fx);
     f.play('fx-rain', { who: 'stranger' });
   });
   await wait(page, 4);
   const during = await sample();
   await shot(page, `perf-${quality}-all`);
-  console.log(`     ${quality}: floor ${before.median.toFixed(1)} ms (p95 ${before.p95.toFixed(1)}), ${before.calls} calls; with seven effects ${during.median.toFixed(1)} ms (p95 ${during.p95.toFixed(1)}), ${during.calls} calls`);
+  console.log(`     ${quality}: floor ${before.median.toFixed(1)} ms (p95 ${before.p95.toFixed(1)}), ${before.calls} calls; with seven effects (Own the Night among them) ${during.median.toFixed(1)} ms (p95 ${during.p95.toFixed(1)}), ${during.calls} calls`);
   if (during.calls - before.calls > 30) fail(`${quality} effects cost ${during.calls - before.calls} draw calls`);
   else ok(`${quality} seven effects add ${during.calls - before.calls} draw calls`);
   // everything goes when it's over
@@ -204,7 +204,14 @@ async function perf(quality) {
     for (const ev of window.casino.world.fx.known) ev.until = Date.now();
   });
   await wait(page, 3.5);
-  const after = await page.evaluate(() => ({ active: window.casino.world.fx.active.length, groups: window.casino.world.fx.group.children.length, tint: window.casino.world.fx.lightingTint?.() ?? 0 }));
+  const after = await page.evaluate(() => {
+    const c = window.casino;
+    let borrowed = 0;
+    c.world.stations.forEach((s) => s.anchor.traverse((o) => o.name === 'pc-screen' && o.material.name === 'fx-takeover-screen' && borrowed++));
+    return { active: c.world.fx.active.length, groups: c.world.fx.group.children.length, borrowed, meter: c.fx.tally.mesh.material.uniforms.uFace.value === c.fx.tally.texture };
+  });
+  if (after.borrowed || !after.meter) fail(`${quality} Own the Night kept ${after.borrowed} monitors and the meter (${after.meter ? 'given back' : 'kept'})`);
+  else ok(`${quality} the monitors and the meter get their own faces back`);
   if (after.active !== 0) fail(`${quality} ${after.active} effects still playing after their end`);
   else ok(`${quality} every effect let go after its end (${after.groups} groups left: the warm-up and the statues)`);
   if (errors.length) fail(`${quality} perf console errors: ${errors.slice(0, 5).join(' | ')}`);

@@ -11,6 +11,7 @@ import type { Closable, SessionLike, SfxLike } from '../menu/deps.ts';
 import { openSheet } from '../menu/sheet.ts';
 import { problemText } from '../menu/parts.ts';
 import type { Bar } from './bar.ts';
+import { barPriceNow, happyBanner, priceTag } from '../../world/celebs/happy.ts'; // v6 celebs6: happy hour
 
 export interface BarMenuDeps {
   root: HTMLElement;
@@ -64,7 +65,7 @@ export function openBarMenu(deps: BarMenuDeps): Closable {
       order.setAttribute('aria-label', `Order ${it.name}, ${formatMoney(it.price)}`);
       order.addEventListener('click', () => void place(it));
       buttons.set(it.id, order);
-      row.append(text, el('span', 'bar-price money', formatMoney(it.price)), order);
+      row.append(text, priceTag(it.price), order); // v6 celebs6: struck through and halved in happy hour
       box.append(row);
     }
     return box;
@@ -80,14 +81,14 @@ export function openBarMenu(deps: BarMenuDeps): Closable {
   putDown.addEventListener('click', () => void bar.drop());
   const foot = el('div', 'sheet-foot bar-foot');
   foot.append(status, putDown, done);
-  sheet.body.append(balance, cols, note, foot);
+  sheet.body.append(balance, happyBanner(), cols, note, foot); // v6 celebs6: happy hour's line
 
   const paint = () => {
     const p = session.profile;
     balVal.textContent = formatMoney(p?.balance ?? 0);
     for (const [id, b] of buttons) {
       const it = barItem(id)!;
-      b.disabled = busy !== null || (p?.balance ?? 0) < it.price;
+      b.disabled = busy !== null || (p?.balance ?? 0) < barPriceNow(it.price); // v6 celebs6
       b.textContent = busy === id ? 'Ordering' : 'Order';
     }
     const lines: string[] = [];
@@ -106,9 +107,9 @@ export function openBarMenu(deps: BarMenuDeps): Closable {
     note.className = 'bar-note';
     paint();
     try {
-      await bar.order(it.id);
+      const paid = await bar.order(it.id);
       deps.sfx?.play('chips-handle', { volume: 0.45 });
-      note.textContent = `${it.name}, ${formatMoney(it.price)}. It's on its way.`;
+      note.textContent = `${it.name}, ${formatMoney(paid.price)}. It's on its way.`; // v6 celebs6: what was paid
       note.className = 'bar-note ok';
     } catch (err) {
       note.textContent = problemText(err);

@@ -22,6 +22,7 @@ import { featOf } from '../../shared/src/feats.ts';
 import { fail, json, readJson } from './http.ts';
 import { bumpRate, orderKey, ownedOf } from './db.ts';
 import { moneyOf } from './transfer.ts';
+import { barPrice } from './happy.ts'; // v6 celebs6: happy hour
 import { FX_KEEP_MS, eventFromOrder, fxKey, statueOf, statuesQuery, type StatueRow } from './floor/fx.ts';
 import type { CasinoFloor } from './floor/index.ts';
 
@@ -98,8 +99,10 @@ export async function shopApi(request: Request, env: Env, route: string, account
     if (!item) return fail(404, 'NOT_FOUND', "The bar doesn't serve that.", cors);
     if (!isOp(body?.op)) return fail(400, 'BAD_REQUEST', 'An order needs an operation id.', cors);
     if (!(await bumpRate(db, 'casino-bar', `a${accountId}`, LIMIT, 60_000, now))) return fail(429, 'RATE_LIMITED', 'The bar is busy. Give it a minute.', cors);
-    const r = await placeOrder(db, accountId, item, body.op, now);
-    if (r.kind === 'short') return notEnough(item, r, cors);
+    // v6 celebs6: happy hour, half price, decided by the moment the order is paid (happy.ts)
+    const price = await barPrice(env, item.price, now);
+    const r = await placeOrder(db, accountId, item, body.op, now, price);
+    if (r.kind === 'short') return notEnough({ name: item.name, price }, r, cors);
     const order = { id: r.id, item: r.item, price: r.price, at: r.at, until: r.until };
     return json({ order, balance: r.balance, inPlay: r.inPlay, rev: r.rev } satisfies OrderResponse, 200, cors);
   }
@@ -270,11 +273,12 @@ export async function buyItem(db: D1Database, accountId: number, item: { id: str
 type OrderOutcome = ({ kind: 'ordered'; id: string; item: string; price: Cents; at: number; until: number } & Money) | ({ kind: 'short' } & Money);
 
 /** Order from the bar: the order row and the price off your balance, together. */
-export async function placeOrder(db: D1Database, accountId: number, item: BarItem, op: string, now: number): Promise<OrderOutcome> {
+export async function placeOrder(db: D1Database, accountId: number, item: BarItem, op: string, now: number, price: Cents = item.price): Promise<OrderOutcome> {
   const opId = orderKey(accountId, op);
   try {
-    const row = db.prepare(`INSERT INTO casino_orders (op_id, account_id, item, price, created_at) VALUES (?1, ?2, ?3, ?4, ?5)`).bind(opId, accountId, item.id, item.price, now);
-    return { kind: 'ordered', id: op, item: item.id, price: item.price, at: now, until: now + HOLD_MS, ...(await pay(db, row, accountId, item.price, now)) };
+    // (the row keeps what was paid: half the menu's price in happy hour)
+    const row = db.prepare(`INSERT INTO casino_orders (op_id, account_id, item, price, created_at) VALUES (?1, ?2, ?3, ?4, ?5)`).bind(opId, accountId, item.id, price, now);
+    return { kind: 'ordered', id: op, item: item.id, price, at: now, until: now + HOLD_MS, ...(await pay(db, row, accountId, price, now)) };
   } catch (err) {
     // The key holds the account, so a row here is this account's own order with this op: a
     // retry, answered with what was ordered the first time.

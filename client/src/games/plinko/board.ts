@@ -11,6 +11,7 @@ import { el } from '../../ui/kit.ts';
 import { SCREEN_PX } from '../online/screen.ts';
 import { MULTS, type Risk, type Rows } from '../../../../shared/src/games/plinko/rules.ts';
 import type { DropEvent, PlinkoDrop } from '../../../../shared/src/games/plinko/engine.ts';
+import { flashAllowed } from '../../app/comfort.ts';
 
 /** The page's main area: the page less the bet panel, the top bar and the foot (online.css). */
 const W = SCREEN_PX.w - 330;
@@ -219,7 +220,8 @@ export class PlinkoBoard {
         // On a peg of row seg - 1.
         const p = b.pts[b.seg]!;
         const r = b.seg - 1;
-        this.flashes.push({ x: b.geo.cx + (b.pegs[r]! - (r + 2) / 2) * b.geo.s, y: TOP + r * b.geo.g, age: 0 });
+        // calm (app/comfort.ts): no flash on every peg the ball touches
+        if (flashAllowed()) this.flashes.push({ x: b.geo.cx + (b.pegs[r]! - (r + 2) / 2) * b.geo.s, y: TOP + r * b.geo.g, age: 0 });
         b.x = p.x;
         b.y = p.y;
         this.hooks.peg(r, rows);

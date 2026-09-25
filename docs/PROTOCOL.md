@@ -475,8 +475,10 @@ folder documents the final shapes):
 | threecard | `bet {ante, pairPlus, spot?}`, `deal` (solo), `spots {n}` (solo, 1-3), `play {spot?}`, `fold {spot?}` |
 | war | `bet {bet, tie, spot?}`, `deal` (solo), `spots {n}` (solo, 1-3), `war {spot?}`, `surrender {spot?}` |
 | holdem | `fold`, `check`, `call`, `bet {amount}`, `raise {to}`, `allin`, `sitout {on}` |
+| letitride | `bet {unit, bonus, spot?}` (unit on each of the three bets), `deal` (solo), `spots {n}` (solo, 1-3), `ride {spot?}`, `pull {spot?}` (the bet up now: 1, then 2) |
+| paigow | `bet {bet, fortune, spot?}`, `deal` (solo), `spots {n}` (solo, 1-3), `set {low: [i, j], spot?}` (the two of the seven that make the low hand) |
 
-Several hands (blackjack, Three Card Poker, Casino War): a hand is played at a spot numbered like
+Several hands (blackjack, Three Card Poker, Casino War, Let It Ride, Pai Gow Poker): a hand is played at a spot numbered like
 the seats, and in these games' events and views every `seat` is a spot. At a shared table a
 player's spot is their seat; a solo player can play spots 0 to n - 1 (`spots {n}`), and `spot`
 in an action says which of them it's for. Each view's `mine` lists the viewer's spots.
