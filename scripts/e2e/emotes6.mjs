@@ -8,7 +8,7 @@
 // Vite only for poses/seated/wheel (the dev floor and the social dev page run without a server);
 // live needs the worker (PORT_BASE=<port> npm run dev).
 // Usage: node scripts/e2e/emotes6.mjs [port] [out dir] [checks...]
-//   checks: poses seated wheel live (default: all)
+//   checks: poses seated riding wheel live (default: all)
 //   EMOTES=throwback,backflip limits the poses; CLOSE=1 adds close-ups; GPU=1 draws on the GPU.
 
 import { chromium } from 'playwright';
@@ -17,7 +17,7 @@ import { execFileSync } from 'node:child_process';
 
 const [port = '6250', out = '/tmp/emotes6', ...wanted] = process.argv.slice(2);
 mkdirSync(out, { recursive: true });
-const checks = wanted.length ? wanted : ['poses', 'seated', 'wheel', 'live'];
+const checks = wanted.length ? wanted : ['poses', 'seated', 'riding', 'wheel', 'live'];
 const quality = process.env.QUALITY ?? 'high';
 const floorUrl = `http://localhost:${port}/casino/src/world/dev-floor.html`;
 const browser = await chromium.launch(
@@ -269,6 +269,48 @@ if (checks.includes('seated')) {
     console.log(`seated ${e}: ${m.map((x) => `hands ${x.handR} / ${x.handL}, head ${x.head}`).join(' | ')}`);
   }
   if (errors.length) fail(`seated: ${errors.join(' | ')}`);
+  await page.close();
+}
+
+if (checks.includes('riding')) {
+  // On a ride (looks6's stances): a skateboard side-on and a scooter at its bar. Each emote is the
+  // upper-body version on top of the stance, the feet stay on the deck and the body on the ride.
+  const { page, errors } = await openFloor();
+  const z0 = await page.evaluate(async (looks) => {
+    const c = window.casino;
+    const f = c.world.characterFactory;
+    const z0 = c.world.plan.entrance.z0 - 5;
+    const rides = ['skateboard', 'e-scooter'];
+    c.cast = [];
+    for (const [i, ride] of rides.entries()) {
+      const look = { ...looks[i], ride };
+      await f.load(look);
+      const p = f.create(look, '');
+      p.root.position.set(-0.9 + i * 1.8, 0, z0);
+      c.engine.scene.add(p.root);
+      p.update(0);
+      c.cast.push(p);
+    }
+    return z0;
+  }, LOOKS);
+  for (const [e, t] of [['throwback', 0.6], ['backflip', 0.8], ['trophy', 1.5], ['dab', 0.9], ['moneyfan', 1.8], ['moonwalk', 1.2]]) {
+    if (only && !only.includes(e)) continue;
+    const m = await page.evaluate(([e, t]) => {
+      const c = window.casino;
+      const before = c.cast.map((p) => p.model.position.toArray());
+      c.freeze(e, t);
+      return c.cast.map((p, i) => ({ riding: p.riding, pos: p.model.position.toArray().map((v) => +v.toFixed(3)), before: before[i].map((v) => +v.toFixed(3)), prop: !!p.prop }));
+    }, [e, t]);
+    await place(page, [0, 1.35, z0 + 4.2], [0, 1.0, z0]);
+    await frames(page);
+    await page.screenshot({ path: `${out}/riding-${e}.png` });
+    for (const [i, x] of m.entries()) {
+      if (!x.riding) fail(`riding ${e} ${i}: not on the ride`);
+      if (Math.abs(x.pos[0] - x.before[0]) > 0.001 || Math.abs(x.pos[2] - x.before[2]) > 0.001) fail(`riding ${e} ${i}: the body left the ride (${x.pos} from ${x.before})`);
+      if ((e === 'trophy' || e === 'moneyfan') && !x.prop) fail(`riding ${e} ${i}: nothing in hand`);
+    }
+  }
+  if (errors.length) fail(`riding: ${errors.join(' | ')}`);
   await page.close();
 }
 
