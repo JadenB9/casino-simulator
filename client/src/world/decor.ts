@@ -286,7 +286,9 @@ export function buildDecor(plan: FloorPlan, stations: WorldStation[], b: Batch, 
     const cz = (k.z0 + k.z1) / 2;
     const len = k.z1 - k.z0;
     b.box(m.get('marble-light'), cx, 0.47, cz, k.x1 - k.x0, 0.94, len, 1.2);
-    b.box(brass, cx, 0.97, cz, k.x1 - k.x0 + 0.06, 0.05, len + 0.06);
+    // a black marble top on a brass band (a slab of solid brass read as flat olive paint)
+    b.box(m.get('marble-black'), cx, 0.97, cz, k.x1 - k.x0 + 0.06, 0.05, len + 0.06);
+    b.box(brass, cx, 0.957, cz, k.x1 - k.x0 + 0.07, 0.018, len + 0.07);
     b.box(brass, k.x0 - 0.005, 0.1, cz, 0.01, 0.06, len);
     glow.box(GLOW.shelf, k.x0 - 0.02, 0.9, cz, 0.012, 0.012, len - 0.1);
     // a brass service bell on the counter's front edge, where you'd ask
