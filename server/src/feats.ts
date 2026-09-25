@@ -29,6 +29,8 @@ import { LINEUP, isSlotId } from '../../shared/src/games/slots/lineup.ts';
 import { ROYAL_FLUSH, STRAIGHT_FLUSH as VP_STRAIGHT_FLUSH, FOUR_OF_A_KIND } from '../../shared/src/games/videopoker/hands.ts';
 import { category as threeCardCategory, score as threeCardScore, STRAIGHT_FLUSH as TC_STRAIGHT_FLUSH, TRIPS as TC_TRIPS } from '../../shared/src/games/threecard/rules.ts';
 import { FULL_HOUSE, QUADS, cardInt, categoryOf, evaluate } from '../../shared/src/games/holdem/eval.ts';
+import { WHEELS, type Risk as WheelRisk, type Segments } from '../../shared/src/games/wheel/rules.ts';
+import { MAX_CHAIN } from '../../shared/src/games/pachinko/rules.ts';
 import type { Card } from '../../shared/src/cards.ts';
 import type { Cents } from '../../shared/src/money.ts';
 import { moneyOf } from './transfer.ts';
@@ -296,6 +298,47 @@ function momentsAt(
       const e = mine('cashout')[0];
       if (num(e?.at) >= 1_000) moments.push('cs-10x');
       if (num(e?.at) >= 10_000) moments.push('cs-100x');
+      break;
+    }
+    case 'coinflip': {
+      const e = any('over')[0];
+      const streak = num(e?.streak);
+      if (e && e.outcome !== 'bust' && streak >= 5) moments.push('cf-five');
+      if (e && e.outcome !== 'bust' && streak >= 10) moments.push('cf-ten');
+      break;
+    }
+    case 'wheel': {
+      const e = mine('spin')[0];
+      const mult = num(e?.mult);
+      if (mult >= 1_000) moments.push('wh-big');
+      const wheel = e ? WHEELS[e.risk as WheelRisk]?.[e.segments as Segments] : undefined;
+      if (e?.risk === 'high' && e.segments === 50 && wheel && mult === Math.max(...wheel)) moments.push('wh-top');
+      break;
+    }
+    case 'cases': {
+      const mult = num(mine('open')[0]?.mult);
+      if (mult >= 2_000) moments.push('ca-epic');
+      if (mult >= 10_000) moments.push('ca-legendary');
+      break;
+    }
+    case 'diamonds': {
+      const pattern = mine('draw')[0]?.pattern;
+      if (pattern === 'four') moments.push('dm-four');
+      if (pattern === 'five') moments.push('dm-five');
+      break;
+    }
+    case 'bingo': {
+      // Prizes are paid ball by ball, games before the round is; the cards in the engine's state
+      // hold every pattern each paid.
+      const cards = (state as { seats?: Record<string, { cards?: { won?: Record<string, unknown> }[] }> } | null)?.seats?.[String(pos)]?.cards ?? [];
+      if (cards.some((c) => c?.won && Object.values(c.won).some(Boolean))) moments.push('bg-bingo');
+      if (cards.some((c) => c?.won?.blackout)) moments.push('bg-blackout');
+      break;
+    }
+    case 'pachinko': {
+      const e = mine('launch')[0];
+      if (num(e?.jackpots) >= 1) moments.push('pa-jackpot');
+      if (Array.isArray(e?.shots) && e.shots.some((b: { chain?: unknown }) => Array.isArray(b?.chain) && b.chain.length >= MAX_CHAIN)) moments.push('pa-chain');
       break;
     }
     default: {

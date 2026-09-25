@@ -107,14 +107,8 @@ const GAME_WON_NAMES: Record<GameId, string> = {
 
 /** Games still without moments of their own: a big multiple stands in until they have some. */
 const TEN_X: Partial<Record<GameId, string>> = {
-  coinflip: 'Called It',
-  wheel: 'Top Segment',
-  cases: 'Good Case',
-  diamonds: 'Rough Diamond',
   letitride: 'Rode It Home',
   paigow: 'Dragon Hand',
-  bingo: 'Bingo',
-  pachinko: 'Jackpot Tulip',
 };
 
 /** A round that paid back this many times its stake earns the stand-in above. */
@@ -215,9 +209,24 @@ export const FEATS: readonly Feat[] = [
   A('cs-10x', 'crash', 'Liftoff', 'Cash out at 10x or higher.', { cash: $(1_000) }),
   A('cs-100x', 'crash', 'Moonshot', 'Cash out at 100x or higher.', { cash: $(25_000), title: 'Rocketeer' }),
 
+  A('cf-five', 'coinflip', 'Called It', 'Call five flips right in a row and cash out.', { cash: $(1_000) }),
+  A('cf-ten', 'coinflip', 'Heads or Tails', 'Call ten flips right in a row and cash out.', { cash: $(10_000), title: 'Lucky Coin' }),
+  A('wh-big', 'wheel', 'Big Segment', 'Land a segment paying 10x or more.', { cash: $(1_000) }),
+  A('wh-top', 'wheel', 'Top of the Wheel', 'Land the top segment of the 50-segment High wheel.', { cash: $(10_000) }),
+  A('ca-epic', 'cases', 'Epic Pull', 'Open an epic item or better (20x or more).', { cash: $(1_000) }),
+  A('ca-legendary', 'cases', 'Legendary', 'Open a legendary item or better (100x or more).', { cash: $(5_000) }),
+  A('dm-four', 'diamonds', 'Four Alike', 'Set down four gems of a colour.', { cash: $(750) }),
+  A('dm-five', 'diamonds', 'Five Alike', 'Set down five gems of one colour.', { cash: $(10_000), title: 'Jeweller' }),
+
   // --- the bandit wheel ----------------------------------------------------------------------
   A('bw-10', 'banditwheel', 'Ten to One', 'Win on the 10.', { cash: $(1_000) }),
   A('bw-20', 'banditwheel', 'Bandit Twenty', 'Win on the 20.', { cash: $(2_500) }),
+
+  // --- the bingo hall and the pachinko parlour --------------------------------------------------
+  A('bg-bingo', 'bingo', 'Bingo', 'Complete a pattern on one of your cards.', { cash: $(500) }),
+  A('bg-blackout', 'bingo', 'Blackout', 'Cover a whole card in time to be paid for it.', { cash: $(10_000), title: 'Caller' }),
+  A('pa-jackpot', 'pachinko', 'Fever', 'Hit a jackpot on the reels.', { cash: $(750) }),
+  A('pa-chain', 'pachinko', 'Eight in a Chain', 'Chain eight jackpots from one ball.', { cash: $(10_000) }),
 
   // --- the newest games: a big multiple until they have moments of their own -------------------
   ...(Object.entries(TEN_X) as [GameId, string][]).map(([g, name]) =>
