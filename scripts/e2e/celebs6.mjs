@@ -8,6 +8,7 @@
 //   gift    a gift box left in the lobby: seen by both, opened by one, gone for the other
 //   phone   a visit on a phone's screen: the notice and the card clear of the HUD
 //   happy   a happy hour started by hand: the notice, the card, the bartender, the menu at half price
+//   wing    Buddy Marlowe at a pachinko machine and the Bingo Hall's stage (not run by default)
 //   lineup  each celebrity in turn at the lobby stop, close up (not run by default)
 //
 // Usage: node scripts/e2e/celebs6.mjs [port] [outDir] [checks...]   (default: daily celeb gift)
@@ -381,6 +382,37 @@ if (checks.includes('happy')) {
   await shot(a.p, 'happy-ordered');
   await a.p.keyboard.press('Escape');
   for (const e of a.errors) fail(`happy error: ${e}`);
+  await a.ctx.close();
+}
+
+// --- the north wing: Buddy Marlowe at a pachinko machine and calling a number at the Bingo Hall ------
+
+if (checks.includes('wing')) {
+  const a = await enterAs(A);
+  await a.p.keyboard.press('Escape');
+  const tl = await a.p.evaluate(async (path) => {
+    const m = await import(path);
+    const t = m.timeline(m.ROUTES.wing);
+    return t.segs.filter((s) => s.kind === 'stop').map((s) => ({ t0: s.t0, kind: t.route.stops[s.stop].kind, at: t.route.pts[t.route.stops[s.stop].at], face: t.route.stops[s.stop].face }));
+  }, SHARED);
+  const v = (await api(a.p, 'dev/celeb', 'POST', { celeb: 'marlowe' })).body.visit;
+  for (const [i, name] of [[1, 'wing-pachinko'], [3, 'wing-bingo']]) {
+    const s = tl[i];
+    const f = (s.face * Math.PI) / 2;
+    // in front of them and to one side, where the crowd stands
+    const cx = s.at[0] + Math.sin(f + 0.5) * 3.2;
+    const cz = s.at[1] + Math.cos(f + 0.5) * 3.2;
+    await release(a.p);
+    await travel(a.p, cx, cz, f + Math.PI);
+    await a.p.waitForFunction(([st, t]) => Date.now() - st > t * 1000, [v.start, s.t0 + 6], { timeout: 400000 });
+    await hold(a.p);
+    await aim(a.p, [cx, 1.9, cz], [s.at[0], 1.1, s.at[1]]);
+    await a.p.waitForTimeout(1500);
+    await shot(a.p, name);
+    const here = await a.p.evaluate(() => window.casino.world.life.celebs.star());
+    if (!here || Math.hypot(here.x - s.at[0], here.z - s.at[1]) > 0.5) fail(`${name}: Buddy Marlowe at the stop (${JSON.stringify(here)})`);
+  }
+  for (const e of a.errors) fail(`wing error: ${e}`);
   await a.ctx.close();
 }
 
