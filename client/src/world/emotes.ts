@@ -31,7 +31,7 @@ export const OWN_BUBBLE_Y = 2.0;
 /** A clap is heard from about chest height. */
 const CLAP_Y = 1.25;
 
-const LABELS: Record<EmoteId, string> = {
+const LABELS: Partial<Record<EmoteId, string>> = {
   wave: 'waves',
   cheer: 'cheers',
   clap: 'claps',

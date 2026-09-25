@@ -10,6 +10,7 @@
 import type { Cents } from './money.ts';
 import type { GameId, TableMode, TableConfig } from './engine.ts';
 import type { Look } from './look.ts';
+import type { FxEvent, Statue } from './items.ts';
 import { isSeatId } from './seats.ts';
 import type { TableLimits } from './limits.ts';
 
@@ -143,6 +144,10 @@ export interface Profile {
   loansTaken: number;
   loans: { amount: Cents; at: number }[];
   stats: { total: GameStats; games: Partial<Record<GameId, GameStats>> };
+  /** v6: every worn item and emote the account has, bought or earned (ids from items.ts). */
+  owned?: string[];
+  /** v6: the feats earned (feats.ts), oldest first. */
+  feats?: { feat: string; at: number }[];
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -244,9 +249,14 @@ export interface LeaderboardResponse {
 
 /**
  * Quick emotes: a gesture over your character that everyone on the floor sees. No free text. New
- * ones go on the end, so each keeps its number on the wheel (1-6).
+ * ones go on the end, so each keeps its place on the wheel. Everyone has the free six; the shop
+ * sells SHOP_EMOTES and feats give REWARD_EMOTES (names and prices in items.ts EMOTE_ITEMS). The
+ * floor only passes on an emote the account has (the free ones, or a casino_items / reward row).
  */
-export const EMOTES = ['wave', 'cheer', 'clap', 'thumbs', 'shrug', 'sixseven'] as const;
+export const FREE_EMOTES = ['wave', 'cheer', 'clap', 'thumbs', 'shrug', 'sixseven'] as const;
+export const SHOP_EMOTES = ['throwback', 'griddy', 'floss', 'dab', 'robot', 'backflip', 'moneyfan', 'bow'] as const;
+export const REWARD_EMOTES = ['trophy', 'moonwalk'] as const;
+export const EMOTES = [...FREE_EMOTES, ...SHOP_EMOTES, ...REWARD_EMOTES] as const;
 export type EmoteId = (typeof EMOTES)[number];
 
 /**
@@ -305,6 +315,15 @@ export type FloorServerMsg =
   // big wins: one as it happens, and the recent ones (newest first) right after hello
   | ({ t: 'bigwin'; today: WinsToday } & BigWin)
   | { t: 'bigwins'; list: BigWin[]; today: WinsToday }
+  // v6: an effect bought in the shop (items.ts FxEvent); the ones still playing right after hello
+  | ({ t: 'fx' } & FxEvent)
+  | { t: 'fxs'; list: FxEvent[] }
+  // v6: the lobby's statues, newest first (after hello, and when someone buys one)
+  | { t: 'statues'; list: Statue[] }
+  // v6: someone earned an achievement or finished a challenge (feats.ts); for the feed
+  | { t: 'feat'; id: number; name: string; feat: string }
+  // v6: you own an emote now (bought or earned while connected): the wheel adds it
+  | { t: 'owned'; emotes: EmoteId[] }
   | { t: 'err'; code: ErrorCode; msg: string }
   | ChatServerMsg;
 
@@ -372,6 +391,11 @@ export type TableServerMsg =
   | { t: 'ev'; seq: number; events: unknown[]; view: unknown; now: number }
   | { t: 'seat'; status: SeatStatus; stack: Cents; escrow: Cents; seat: number | null }
   | { t: 'balance'; balance: Cents; inPlay: Cents; rev: number }
+  /**
+   * v6: you earned an achievement or finished a challenge at this table (feats.ts). A cash
+   * reward went to your balance (a 'grant' ledger row) and `balance` is the money after it.
+   */
+  | { t: 'feat'; feat: string; at: number; balance?: { balance: Cents; inPlay: Cents; rev: number } }
   | { t: 'closed'; reason: string }
   | { t: 'err'; ref?: string; code: ErrorCode; msg: string }
   | ChatServerMsg;

@@ -10,7 +10,7 @@
 // sends one the server would drop, and says so instead.
 
 import './social.css';
-import { EMOTES, type EmoteId } from '../../../../shared/src/protocol.ts';
+import { FREE_EMOTES as EMOTES, type EmoteId } from '../../../../shared/src/protocol.ts';
 import { el } from '../kit.ts';
 import { GLOBAL_KEYS, holdKeyboard, isTyping, overlayCount } from '../keyboard.ts';
 import { EMOTE_LABELS, emoteGlyph } from './icons.ts';
@@ -68,7 +68,7 @@ export function mountEmotes(deps: EmoteDeps): EmoteWheel {
 
   const label = (e: EmoteId | null) => {
     if (!ui) return;
-    ui.name.textContent = e ? EMOTE_LABELS[e] : 'Emotes';
+    ui.name.textContent = e ? (EMOTE_LABELS[e] ?? e) : 'Emotes';
   };
 
   const pick = (e: EmoteId) => {

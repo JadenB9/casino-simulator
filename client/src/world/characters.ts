@@ -978,7 +978,7 @@ const PALM = 0.054;
  * The emotes, each hand given for the right arm (see Hand). Everything is in the character's own
  * frame, so a seated player makes the same shapes; a cheer only hops from the floor.
  */
-const GESTURES: Record<EmoteId, Gesture> = {
+const GESTURES: Partial<Record<EmoteId, Gesture>> = {
   // the right hand up by the head, palm out, the forearm rocking side to side from the elbow
   wave: {
     dur: 2.4,

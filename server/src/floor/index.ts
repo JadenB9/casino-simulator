@@ -11,6 +11,7 @@ import { CLOSE, IDLE_MS, MAX_FLOOR_FRAME, PROTOCOL_VERSION, parseFloorMsg, parse
 import { isGameId } from '../../../shared/src/games/catalog.ts';
 import type { GameId } from '../../../shared/src/engine.ts';
 import { lookFromJson, type Look } from '../../../shared/src/look.ts';
+import { isFreeEmote } from '../../../shared/src/items.ts';
 import { Presence, type FloorAtt } from './presence.ts';
 import { Directory, ipKey } from './directory.ts';
 import { FloorChat } from './chat.ts';
@@ -260,7 +261,8 @@ export class CasinoFloor extends DurableObject<Env> {
   /** Everyone on the floor sees the gesture over this player's head. */
   private emote(ws: WebSocket, e: EmoteId): void {
     const att = ws.deserializeAttachment() as FloorAtt | null;
-    if (att) this.broadcast({ t: 'emote', id: att.accountId, e });
+    // v6 contract: only the free six until the shop slice checks what the account owns
+    if (att && isFreeEmote(e)) this.broadcast({ t: 'emote', id: att.accountId, e });
   }
 
   // --- plumbing ------------------------------------------------------------------------------

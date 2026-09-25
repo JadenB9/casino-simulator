@@ -61,7 +61,7 @@ describe('shop catalog', () => {
       expect(KIND_LABELS[k]).toBeTruthy();
     }
     for (const k of ['chain', 'grill', 'clothes'] as const) {
-      const prices = SHOP_ITEMS.filter((i) => i.kind === k).map((i) => i.price);
+      const prices = SHOP_ITEMS.filter((i) => i.kind === k && !i.reward).map((i) => i.price);
       expect([...prices].sort((a, b) => a - b), k).toEqual(prices);
     }
   });

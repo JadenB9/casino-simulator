@@ -16,7 +16,8 @@ describe('floor messages', () => {
   });
 
   it('takes every emote by its id, in the wheel order (new ones on the end), and nothing else', () => {
-    expect(EMOTES).toEqual(['wave', 'cheer', 'clap', 'thumbs', 'shrug', 'sixseven']);
+    expect(EMOTES.slice(0, 6)).toEqual(['wave', 'cheer', 'clap', 'thumbs', 'shrug', 'sixseven']);
+    expect(EMOTES.slice(6)).toEqual(['throwback', 'griddy', 'floss', 'dab', 'robot', 'backflip', 'moneyfan', 'bow', 'trophy', 'moonwalk']);
     for (const e of EMOTES) expect(parseFloorMsg({ t: 'emote', e }, isGameId)).toEqual({ t: 'emote', e });
     // the sender is whoever's socket it is: a client can't name one
     expect(parseFloorMsg({ t: 'emote', e: 'sixseven', id: 7 }, isGameId)).toEqual({ t: 'emote', e: 'sixseven' });

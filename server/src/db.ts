@@ -2,7 +2,8 @@
 
 import { STARTING_BALANCE } from '../../shared/src/money.ts';
 import { lookFromJson, type Look } from '../../shared/src/look.ts';
-import { HOLD_MS, ITEM_KINDS, shopItem } from '../../shared/src/items.ts';
+import { HOLD_MS, ITEM_KINDS, wornItem } from '../../shared/src/items.ts';
+import { featOf, titleOf } from '../../shared/src/feats.ts';
 import type { GameId, } from '../../shared/src/engine.ts';
 import type { GameStats, Profile } from '../../shared/src/protocol.ts';
 import { CATALOG, isGameId } from '../../shared/src/games/catalog.ts';
@@ -95,20 +96,43 @@ export async function setLook(db: D1Database, id: number, look: Look, now = Date
  */
 export async function wornLook(db: D1Database, accountId: number, look: Look, now: number): Promise<{ look: Look } | { error: string }> {
   const wearing = ITEM_KINDS.flatMap((k) => (look[k] ? [look[k]] : []));
-  if (wearing.length === 0 && !look.held) return { look };
-  const [owned, order] = await db.batch([
-    db.prepare(`SELECT item FROM casino_items WHERE account_id = ?1`).bind(accountId),
-    db.prepare(`SELECT item, created_at FROM casino_orders WHERE op_id = ?1`).bind(orderKey(accountId, look.held?.order ?? '')),
+  if (wearing.length === 0 && !look.held && !look.title) return { look };
+  const [owned, order] = await Promise.all([
+    ownedOf(db, accountId),
+    db.prepare(`SELECT item, created_at FROM casino_orders WHERE op_id = ?1`).bind(orderKey(accountId, look.held?.order ?? '')).first<{ item: string; created_at: number }>(),
   ]);
-  const mine = new Set((owned!.results as { item: string }[]).map((r) => r.item));
-  const missing = wearing.find((id) => !mine.has(id));
-  if (missing) return { error: `You don't own the ${shopItem(missing)?.name ?? 'item'} yet.` };
+  const missing = wearing.find((id) => !owned.items.has(id));
+  if (missing) return { error: `You don't own the ${wornItem(missing)?.name ?? 'item'} yet.` };
+  if (look.title && !owned.feats.has(look.title)) return { error: `You haven't earned the ${titleOf(look.title)?.reward.title ?? 'title'} title yet.` };
   if (!look.held) return { look };
   const { held, ...rest } = look;
-  const paid = (order!.results as { item: string; created_at: number }[])[0];
-  const until = paid ? paid.created_at + HOLD_MS : 0;
-  if (!paid || paid.item !== held.item || until <= now) return { look: rest };
+  const until = order ? order.created_at + HOLD_MS : 0;
+  if (!order || order.item !== held.item || until <= now) return { look: rest };
   return { look: { ...rest, held: { ...held, until } } };
+}
+
+export interface Owned {
+  /** Worn items and emotes, bought (casino_items) or given by a feat. */
+  items: Set<string>;
+  /** Feats earned (casino_feats): a look's title must be one of these. */
+  feats: Map<string, number>;
+}
+
+/** What an account has: its purchases, and the feats it earned with their rewards. */
+export async function ownedOf(db: D1Database, accountId: number): Promise<Owned> {
+  const [bought, earned] = await db.batch([
+    db.prepare(`SELECT item FROM casino_items WHERE account_id = ?1`).bind(accountId),
+    db.prepare(`SELECT feat, at FROM casino_feats WHERE account_id = ?1 ORDER BY at`).bind(accountId),
+  ]);
+  const items = new Set((bought!.results as { item: string }[]).map((r) => r.item));
+  const feats = new Map<string, number>();
+  for (const r of earned!.results as { feat: string; at: number }[]) {
+    feats.set(r.feat, r.at);
+    const reward = featOf(r.feat)?.reward;
+    if (reward?.item) items.add(reward.item);
+    if (reward?.emote) items.add(reward.emote);
+  }
+  return { items, feats };
 }
 
 /** Where a bar order is kept: the account is part of the key, so one player's op never matches another's. */

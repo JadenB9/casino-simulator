@@ -9,7 +9,7 @@ import type { EmoteId } from '../../../../shared/src/protocol.ts';
 
 const NS = 'http://www.w3.org/2000/svg';
 
-export const EMOTE_LABELS: Record<EmoteId, string> = {
+export const EMOTE_LABELS: Partial<Record<EmoteId, string>> = {
   wave: 'Wave',
   cheer: 'Cheer',
   clap: 'Clap',

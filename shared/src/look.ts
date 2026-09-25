@@ -2,6 +2,7 @@
 // drawn by the world from the outfit models. Every field is checked before it is stored.
 
 import { ITEM_KINDS, barItem, isOp, itemOfKind } from './items.ts';
+import { titleOf } from './feats.ts';
 
 export const BODIES = ['m', 'f'] as const;
 export type Body = (typeof BODIES)[number];
@@ -33,6 +34,10 @@ export interface Look {
   watch?: string;
   shades?: string;
   hat?: string;
+  /** A ride (skateboard, scooter...): worn, you ride it about the floor. */
+  ride?: string;
+  /** A title under your name, from a feat you earned (feats.ts FEATS[].reward.title, by feat id). */
+  title?: string;
   /** A bar order in your right hand. */
   held?: Held;
 }
@@ -86,6 +91,7 @@ export function parseLook(raw: unknown): Look | null {
   for (const kind of ITEM_KINDS) {
     if (itemOfKind(o[kind], kind)) look[kind] = o[kind] as string;
   }
+  if (titleOf(o.title)) look.title = o.title as string;
   const held = o.held as Record<string, unknown> | undefined;
   if (held && typeof held === 'object' && barItem(held.item) && isOp(held.order) && Number.isSafeInteger(held.until) && (held.until as number) > 0) {
     look.held = { item: held.item as string, order: held.order as string, until: held.until as number };

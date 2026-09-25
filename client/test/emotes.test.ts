@@ -3,7 +3,7 @@
 // the hub evenly, the first at the top.
 
 import { describe, it, expect } from 'vitest';
-import { EMOTES } from '../../shared/src/protocol.ts';
+import { FREE_EMOTES as EMOTES } from '../../shared/src/protocol.ts';
 import { emoteForKey, wheelSpot } from '../src/ui/social/emotes.ts';
 
 describe('emote wheel', () => {
