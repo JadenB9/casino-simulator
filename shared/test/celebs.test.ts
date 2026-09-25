@@ -89,10 +89,8 @@ describe('routes', () => {
 
   it('face the way they walk', () => {
     const tl = timeline(ROUTES.bar);
-    // the first walk runs in from the doors toward the fountain's east side: heading along it (pi faces -z)
-    const [x0, z0] = ROUTES.bar.pts[0]!;
-    const [x1, z1] = ROUTES.bar.pts[1]!;
-    expect(poseOn(tl, 2).heading).toBeCloseTo(Math.atan2(x1 - x0, z1 - z0), 9);
+    // the first walk runs north from the doors: heading pi faces -z
+    expect(poseOn(tl, 2).heading).toBeCloseTo(Math.PI, 9);
     // the door's stop faces the street
     expect(faceYaw(0)).toBe(0);
     expect(faceYaw(1)).toBeCloseTo(Math.PI / 2, 12);
