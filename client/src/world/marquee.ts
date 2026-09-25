@@ -9,6 +9,10 @@
 // has none). The faces read a "tape" (ledfont.ts), one texel per LED, from a fixed 4096 x 9 canvas
 // texture that is repainted only when the message changes; scrolling is a uniform, stepped a
 // whole LED at a time the way a real sign moves.
+//
+// Someone who buys the Headline (fx/) owns the sign for two minutes: their name blinks, holds and
+// runs as tonight's headliner, over and over, instead of the list (a big win still interrupts it,
+// then the headline carries on).
 
 import * as THREE from 'three';
 import type { Quality } from '../render/engine3d.ts';
@@ -55,6 +59,8 @@ const IDLE: Run[] = [
 interface Act {
   tape: Tape;
   mode: 'loop' | 'once' | 'hold';
+  /** Part of a headline (taken down with it). */
+  headline?: boolean;
   /** hold: seconds on the sign. */
   hold?: number;
   /** hold: seconds per blink, 0 for steady. */
@@ -82,6 +88,8 @@ export class Marquee {
   private act: Act;
   private t = 0;
   private pos = 0;
+  /** The Headline's buyer and the seconds it has left on the sign. */
+  private headliner: { name: string; left: number } | null = null;
 
   constructor(plan: FloorPlan, quality: Quality) {
     this.canvas = document.createElement('canvas');
@@ -147,8 +155,28 @@ export class Marquee {
     if (this.act.mode === 'loop') this.next();
   }
 
+  /**
+   * Put a name up as tonight's headliner for `secs` seconds (null takes it down). It takes over as
+   * soon as whatever is on the sign now has finished; a list that's only scrolling gives way at once.
+   */
+  headline(name: string | null, secs = 0): void {
+    const was = this.headliner?.name ?? null;
+    this.headliner = name && secs > 0 ? { name, left: secs } : null;
+    if (name && name !== was && this.act.mode === 'loop' && this.queue.length === 0) this.next();
+    if (!name && was) {
+      this.queue = this.queue.filter((a) => !a.headline);
+      if (this.act.headline) this.next();
+    }
+  }
+
+  /** The headliner's name while it's up. */
+  get headlining(): string | null {
+    return this.headliner?.name ?? null;
+  }
+
   update(dt: number): void {
     this.t += dt;
+    if (this.headliner && (this.headliner.left -= dt) <= 0) this.headliner = null;
     const act = this.act;
     if (act.mode === 'hold') {
       this.uniforms.uScroll.value = 0;
@@ -182,8 +210,21 @@ export class Marquee {
   // --- the program -------------------------------------------------------------------------------
 
   private next(): void {
+    // with a headliner up, the headline plays whenever nothing else is waiting
+    if (this.queue.length === 0 && this.headliner) this.queue.push(...this.headlineActs(this.headliner.name));
     this.act = this.queue.shift() ?? this.loopAct();
     this.show(this.act);
+  }
+
+  /** The headline: the name blinks, "HEADLINER" holds, then the whole line runs once. */
+  private headlineActs(name: string): Act[] {
+    const nameW = textWidth(name);
+    const word = 'HEADLINER';
+    return [
+      { tape: layoutTape([{ text: name, color: GOLD }], { lead: centred(nameW, this.cols), minWidth: this.cols }), mode: 'hold', hold: 3, blink: 0.5, headline: true },
+      { tape: layoutTape([{ text: word, color: AMBER }], { lead: centred(textWidth(word), this.cols), minWidth: this.cols }), mode: 'hold', hold: 1.6, headline: true },
+      { ...this.onceAct(headlineRuns(name)), headline: true },
+    ];
   }
 
   private show(act: Act): void {
@@ -229,6 +270,17 @@ export class Marquee {
     const tape = layoutTape(runs, { lead: this.cols, maxWidth: TAPE_W });
     return { tape, mode: 'once', end: tape.width };
   }
+}
+
+/** The headline's running line. */
+export function headlineRuns(name: string): Run[] {
+  return [
+    { text: "TONIGHT'S HEADLINER", color: AMBER },
+    { text: '   ◆   ', color: RED },
+    { text: name, color: GOLD },
+    { text: '   ◆   ', color: RED },
+    { text: 'LIVE ON THE FLOOR', color: DEEP },
+  ];
 }
 
 function gainFor(q: Quality): number {

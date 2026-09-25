@@ -63,7 +63,7 @@ function canvasTexture(w: number, h: number, paint: (g: CanvasRenderingContext2D
  * A jeweller's room: a black lacquered plinth with a brass edge, a deep oxblood backdrop with
  * out-of-focus lights, and spotlights with a short reach (60 m down, they never touch the floor).
  */
-function room(at: THREE.Vector3): { group: THREE.Group; pivot: THREE.Group; mood(m: Mood, t: number): void; dispose(): void } {
+function room(at: THREE.Vector3): { group: THREE.Group; pivot: THREE.Group; vitrine: THREE.Group; mood(m: Mood, t: number): void; dispose(): void } {
   const group = new THREE.Group();
   group.name = 'showroom';
   group.position.copy(at);
@@ -165,22 +165,47 @@ function room(at: THREE.Vector3): { group: THREE.Group; pivot: THREE.Group; mood
   pool.position.y = PODIUM_TOP + 0.003;
   beam.visible = pool.visible = false;
   group.add(spot, spot.target, gold, ball, beam, pool);
+
+  // the private collection's vitrine: a glass cylinder on the plinth, brass rings top and foot, a
+  // cap, and a streak of reflected light down the glass so it reads as glass from every side
+  const vitrine = new THREE.Group();
+  const brass = new THREE.MeshStandardMaterial({ color: '#c9a24b', metalness: 1, roughness: 0.28 });
+  const glassMat = new THREE.MeshStandardMaterial({ color: '#9fb6be', transparent: true, opacity: 0.05, roughness: 0.04, metalness: 0.2, depthWrite: false, side: THREE.DoubleSide });
+  const H = 2.3;
+  const R = 0.6;
+  const glass = new THREE.Mesh(new THREE.CylinderGeometry(R, R, H, 72, 1, true), glassMat);
+  glass.position.y = PODIUM_TOP + H / 2;
+  const streakMat = new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.1, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  const streak = new THREE.Mesh(new THREE.CylinderGeometry(R + 0.002, R + 0.002, H * 0.94, 12, 1, true, -0.55, 0.16), streakMat);
+  streak.position.y = PODIUM_TOP + H / 2;
+  const foot = new THREE.Mesh(new THREE.TorusGeometry(R, 0.018, 10, 96), brass);
+  foot.rotation.x = Math.PI / 2;
+  foot.position.y = PODIUM_TOP + 0.018;
+  const top = foot.clone();
+  top.position.y = PODIUM_TOP + H;
+  const cap = new THREE.Mesh(new THREE.CircleGeometry(R, 72).rotateX(Math.PI / 2), glassMat);
+  cap.position.y = PODIUM_TOP + H;
+  vitrine.add(glass, streak, foot, top, cap);
+  vitrine.visible = false;
+  group.add(vitrine);
   const base = { key: key.intensity, rim: rim.intensity, fill: fill.intensity };
 
   return {
     group,
     pivot,
+    vitrine,
     mood(m: Mood, clock: number) {
       // calm (app/comfort.ts): the disco's lights and ball turn at a third of the pace
       const t = clock * calmScale(1 / 3);
-      const dim = m === 'spot' ? 0.12 : m === 'disco' ? 0.18 : m === 'gold' ? 0.55 : 1;
+      const dim = m === 'spot' ? 0.12 : m === 'disco' ? 0.18 : m === 'gold' ? 0.55 : m === 'vault' ? 0.45 : 1;
       key.intensity = base.key * dim;
       rim.intensity = base.rim * (m === 'gold' ? 0.9 : dim);
       fill.intensity = base.fill * dim;
-      spot.intensity = m === 'spot' ? 140 : 0;
+      spot.intensity = m === 'spot' ? 140 : m === 'vault' ? 70 : 0;
       gold.intensity = m === 'gold' ? 60 : 0;
       ball.visible = m === 'disco';
-      beam.visible = pool.visible = m === 'spot';
+      beam.visible = m === 'spot';
+      pool.visible = m === 'spot' || m === 'vault';
       ball.rotation.y = t * 0.8;
       disco.forEach((l, i) => {
         const a = t * 1.3 + (i * Math.PI) / 2;
@@ -204,7 +229,7 @@ function room(at: THREE.Vector3): { group: THREE.Group; pivot: THREE.Group; mood
 }
 
 /** The room's light for an effect's preview. */
-export type Mood = 'none' | 'spot' | 'disco' | 'gold';
+export type Mood = 'none' | 'spot' | 'disco' | 'gold' | 'vault';
 
 /** What falls or flies round the plinth in an effect's preview. */
 export type Shower = 'confetti' | 'bills' | 'sparks' | 'coins';
@@ -358,6 +383,7 @@ export class Showroom {
   private readonly camLook = new THREE.Vector3();
   private placed = false;
   private mood: Mood = 'none';
+  private cased = false;
   private shower: Particles | null = null;
   private gold: THREE.MeshStandardMaterial | null = null;
   /** The materials the character wore before it was cast in gold. */
@@ -402,6 +428,14 @@ export class Showroom {
       this.shower = shower ? new Particles(shower) : null;
       if (this.shower) this.built.group.add(this.shower.mesh);
     }
+  }
+
+  /**
+   * v6: a piece of the private collection stands in a glass case, lit from above. A close-up (a
+   * chain, a crown) puts the camera inside the glass, so there it keeps only the light.
+   */
+  vitrine(on: boolean): void {
+    this.cased = on;
   }
 
   /** v6: cast the figure in gold (the statue's preview), or give it its own clothes back. */
@@ -454,7 +488,8 @@ export class Showroom {
         m.material = gold;
       });
     }
-    this.built.mood(this.mood, this.clock);
+    this.built.vitrine.visible = this.cased && this.framing === 'full';
+    this.built.mood(this.mood === 'none' && this.cased ? 'vault' : this.mood, this.clock);
     this.shower?.update(dt, this.clock);
     this.place(dt);
   }
