@@ -95,6 +95,11 @@ async function enterAs(name) {
   }
   await p.waitForSelector('.hud', { timeout: 30_000 });
   await p.waitForTimeout(1500);
+  // put away whatever greets a player on arrival (the daily bonus)
+  for (let i = 0; i < 4 && (await p.$('.sheet-scrim')); i++) {
+    await p.keyboard.press('Escape');
+    await p.waitForTimeout(400);
+  }
   return { p, errors };
 }
 
