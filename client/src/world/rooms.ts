@@ -170,7 +170,9 @@ export type FixtureItem =
   /** Lattice screens on a wall face, each `w` wide (room-local middles on the face). */
   | { kind: 'lattice'; at: [number, number][]; ry: number; w: number }
   /** Bingo pattern boards on a wall: lit 5 x 5 grids of the patterns that pay (room-local middles on the face). */
-  | { kind: 'patterns'; at: [number, number][]; ry: number };
+  | { kind: 'patterns'; at: [number, number][]; ry: number }
+  /** Stage drapes on a wall: velvet curtains either side of a stage `w` wide, a pelmet across (room-local middle on the face). */
+  | { kind: 'drapes'; x: number; z: number; ry: number; w: number };
 
 /** A sign box hung from the ceiling: its text (or wayfinding segments), both faces. */
 export interface HangItem {
@@ -569,8 +571,7 @@ export const ROOMS: RoomSpec[] = [
       { x: -5.1, z: 0.6, tx: -5.1, tz: -0.6, k: 22, angle: 1.0, color: '#cfdcff' },
       { x: 5.1, z: 0.6, tx: 5.1, tz: -0.6, k: 22, angle: 1.0, color: '#cfdcff' },
     ],
-    // the lane between the islands, from the pit's side to the parlour's door
-    aisles: [{ x0: -1.05, z0: -5.85, x1: 1.05, z1: 3.2 }],
+    aisles: [],
     plants: [
       [-10.4, 5.4],
       [10.4, -5.4],
@@ -702,9 +703,10 @@ export const ROOMS: RoomSpec[] = [
     fixtures: [
       { kind: 'prizes', x0: -9.75, x1: -9.05, z0: -3.4, z1: 1.8 },
       { kind: 'neon', text: 'PACHINKO', color: '#ff4fa8', x: 0, y: 2.5, z: -5.85, ry: 0, w: 4.4, h: 0.74, font: 'Tilt Neon' },
-      { kind: 'lanterns', from: [0, -4.9], to: [0, 4.9], n: 8, color: '#e8352c' },
-      { kind: 'lanterns', from: [-6.2, -4.6], to: [-6.2, 4.6], n: 6, color: '#e8352c' },
-      { kind: 'lanterns', from: [6.2, -3.9], to: [6.2, 4.6], n: 6, color: '#e8352c' },
+      // strung across the room, over the islands and the aisles between them
+      { kind: 'lanterns', from: [-8.2, -3.6], to: [8.2, -3.6], n: 9, color: '#e8352c' },
+      { kind: 'lanterns', from: [-8.2, 0.4], to: [8.2, 0.4], n: 9, color: '#e8352c' },
+      { kind: 'lanterns', from: [-8.2, 4.2], to: [8.2, 4.2], n: 9, color: '#e8352c' },
     ],
     hanging: [],
     spots: [
@@ -787,6 +789,8 @@ export const ROOMS: RoomSpec[] = [
     ],
     fixtures: [
       { kind: 'snack', x0: 8.15, x1: 8.85, z0: -3.6, z1: 1.4 },
+      // velvet either side of the stage's wall, a pelmet across the top: the hall's proscenium
+      { kind: 'drapes', x: 0, z: -5.85, ry: 0, w: 4.9 },
       { kind: 'patterns', at: [[-10.85, -4.6], [-10.85, -3.3], [-10.85, -2.0]], ry: Math.PI / 2 },
       { kind: 'neon', text: 'BINGO', color: '#ffcf3a', x: -10.85, y: 2.5, z: 3.4, ry: Math.PI / 2, w: 2.8, h: 0.9, font: 'Limelight' },
     ],

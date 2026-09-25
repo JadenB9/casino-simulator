@@ -125,22 +125,22 @@ export function drawBingoCarpet(size: number, seed: number): HTMLCanvasElement {
   const rand = rng(seed);
   ctx.fillStyle = '#16183a';
   ctx.fillRect(0, 0, size, size);
-  const colours = ['#1fb5b0', '#f0662a', '#c23a8e', '#f2c230', '#6a5acd', '#3aa04a'];
+  const colours = ['#178a86', '#c0522a', '#962e72', '#c89a28', '#5446a8', '#2a7a3a'];
   const s = size / 1024;
   // every shape is drawn at its spot and again across any edge it crosses, so the tile repeats
   const wrap = (x: number, y: number, r: number, fn: (x: number, y: number) => void) => {
     for (const ox of [-size, 0, size]) for (const oy of [-size, 0, size]) if (x + ox > -r && x + ox < size + r && y + oy > -r && y + oy < size + r) fn(x + ox, y + oy);
   };
-  for (let i = 0; i < 260; i++) {
+  for (let i = 0; i < 520; i++) {
     const x = rand() * size;
     const y = rand() * size;
     const col = colours[Math.floor(rand() * colours.length)]!;
     const kind = rand();
-    const r = (14 + rand() * 26) * s;
+    const r = (9 + rand() * 15) * s;
     const rot = rand() * Math.PI * 2;
     ctx.strokeStyle = col;
     ctx.fillStyle = col;
-    ctx.lineWidth = 7 * s;
+    ctx.lineWidth = 4.5 * s;
     ctx.lineCap = 'round';
     wrap(x, y, r * 2, (px, py) => {
       ctx.save();

@@ -11,7 +11,7 @@ import type { Batch } from './batch.ts';
 import type { Mats } from './materials.ts';
 import { hdr } from './materials.ts';
 import { GLOW, type GlowMerge } from './lighting.ts';
-import { ISLAND_CAP, ISLAND_TOP, LANTERN, MOONGATE, PATTERN_BOARD, TABLE_LANTERN, WALL, WALL_COUNTER, ceilingAt, type FloorPlan, type WallMount } from './layout.ts';
+import { DRAPES, ISLAND_CAP, ISLAND_TOP, LANTERN, MOONGATE, PATTERN_BOARD, TABLE_LANTERN, WALL, WALL_COUNTER, ceilingAt, type FloorPlan, type WallMount } from './layout.ts';
 import { BOARD_PATTERNS, drawPatternBoards } from './textures-themes.ts';
 import { canvasTexture } from './carpet.ts';
 import type { Decor } from './decor.ts';
@@ -29,6 +29,11 @@ export function buildThemes(plan: FloorPlan, b: Batch, m: Mats, glow: GlowMerge,
     glow.room = room;
   };
 
+  const prizeMats = ['#e8467a', '#3a86e0', '#f2c230', '#34b27a', '#f06a2a', '#9a5ad8'].map((c, i) => {
+    m.define1(`prize-${i}`, () => new THREE.MeshLambertMaterial({ color: c }));
+    return m.get(`prize-${i}`);
+  });
+
   // --- the pachinko islands: end caps, the crown over the machines --------------------------------
   for (const isl of plan.machineIslands) {
     into(isl.room);
@@ -44,23 +49,26 @@ export function buildThemes(plan: FloorPlan, b: Batch, m: Mats, glow: GlowMerge,
     const L = isl.length;
     const D = isl.depth;
     const pink = hdr(SAKURA, 2.6);
-    // the crown over both rows: lacquer, chrome edges, a pink strip along each face's foot
+    // the crown over both rows: black lacquer, chrome edges, a pink strip along each face's foot
     const y0 = 2.07;
-    box(red, 0, (y0 + ISLAND_TOP) / 2, 0, L + 2 * ISLAND_CAP, ISLAND_TOP - y0, D + 0.04);
+    box(lacquer, 0, (y0 + ISLAND_TOP) / 2, 0, L + 2 * ISLAND_CAP, ISLAND_TOP - y0, D + 0.04);
     for (const e of [-1, 1]) {
       box(chrome, 0, ISLAND_TOP - 0.015, e * (D / 2 + 0.03), L + 2 * ISLAND_CAP + 0.02, 0.03, 0.02);
       box(pink, 0, y0 + 0.02, e * (D / 2 + 0.028), L + 2 * ISLAND_CAP - 0.04, 0.02, 0.012);
     }
-    // the end caps, from the floor to the crown: white enamel, chrome corners, light bars down the faces
+    // the end caps, from the floor to the crown: black lacquer, chrome corners, a pink panel with
+    // its light bar, the machine's name lit over it
     for (const e of [-1, 1]) {
       const x = e * (L / 2 + ISLAND_CAP / 2);
-      box(m.get('enamel'), x, y0 / 2, 0, ISLAND_CAP - 0.02, y0, D);
+      box(lacquer, x, y0 / 2, 0, ISLAND_CAP - 0.02, y0, D);
       box(lacquer, x, 0.04, 0, ISLAND_CAP, 0.08, D + 0.02);
       for (const f of [-1, 1]) box(chrome, x, y0 / 2, f * (D / 2 - 0.02), ISLAND_CAP + 0.004, y0 - 0.1, 0.04);
       // a panel in the island's pink on the cap's face, and its light bar
       const face = e * (L / 2 + ISLAND_CAP);
-      box(red, face + e * 0.006, 1.1, 0, 0.012, 1.3, D - 0.3);
-      box(pink, face + e * 0.014, 1.1, 0, 0.006, 1.26, 0.03);
+      box(m.get('prize-0'), face + e * 0.006, 1.02, 0, 0.012, 1.3, D - 0.36);
+      box(chrome, face + e * 0.004, 1.02, 0, 0.008, 1.36, D - 0.3);
+      for (const f of [-1, 1]) box(pink, face + e * 0.014, 1.02, f * (D / 2 - 0.1), 0.006, 1.26, 0.025);
+      for (let k = 0; k < 5; k++) box(new THREE.Color('#fff0f6').multiplyScalar(2.2), face + e * 0.014, 0.52 + k * 0.25, 0, 0.006, 0.05, 0.05);
       const sign = at(face + e * 0.02, 0);
       out.signs.push({ kind: 'lit', text: 'SAKURA STORM', color: '#ffc4e0', font: 'Limelight', at: [sign.x, 1.9, sign.z], ry: isl.yaw + (e > 0 ? Math.PI / 2 : -Math.PI / 2), w: D - 0.16, h: 0.24 });
     }
@@ -68,10 +76,6 @@ export function buildThemes(plan: FloorPlan, b: Batch, m: Mats, glow: GlowMerge,
   }
 
   // --- counters along a wall: the parlour's prizes, the bingo hall's snack bar --------------------
-  const prizeMats = ['#e8467a', '#3a86e0', '#f2c230', '#34b27a', '#f06a2a', '#9a5ad8'].map((c, i) => {
-    m.define1(`prize-${i}`, () => new THREE.MeshLambertMaterial({ color: c }));
-    return m.get(`prize-${i}`);
-  });
   for (const k of plan.counters) {
     into(k.room);
     const r = k.counter;
@@ -243,20 +247,20 @@ export function buildThemes(plan: FloorPlan, b: Batch, m: Mats, glow: GlowMerge,
     const ym = (y0 + y1) / 2;
     // the lit paper, then the fretwork in front of it, then the frame round both
     const paper = wallPoint(l, 0.085);
-    glow.box(new THREE.Color('#ffd8a0').multiplyScalar(1.25), paper.x, ym, paper.z, w - 0.16, h - 0.16, 0.01, l.ry);
+    glow.box(new THREE.Color('#e8a860').multiplyScalar(0.62), paper.x, ym, paper.z, w - 0.16, h - 0.16, 0.01, l.ry);
     const bars: [number, number, number, number][] = [];
-    const cols = Math.max(3, Math.round((w - 0.16) / 0.3));
-    const rows = Math.max(4, Math.round((h - 0.16) / 0.3));
-    for (let i = 1; i < cols; i++) bars.push([-w / 2 + 0.08 + (i * (w - 0.16)) / cols, ym, 0.025, h - 0.16]);
-    for (let j = 1; j < rows; j++) bars.push([0, y0 + 0.08 + (j * (h - 0.16)) / rows, w - 0.16, 0.025]);
+    const cols = Math.max(3, Math.round((w - 0.16) / 0.22));
+    const rows = Math.max(4, Math.round((h - 0.16) / 0.22));
+    for (let i = 1; i < cols; i++) bars.push([-w / 2 + 0.08 + (i * (w - 0.16)) / cols, ym, 0.034, h - 0.16]);
+    for (let j = 1; j < rows; j++) bars.push([0, y0 + 0.08 + (j * (h - 0.16)) / rows, w - 0.16, 0.034]);
     // a smaller square set into every other cell: the fret
     for (let i = 0; i < cols; i++) {
       for (let j = 0; j < rows; j++) {
         if ((i + j) % 2) continue;
         const cx = -w / 2 + 0.08 + ((i + 0.5) * (w - 0.16)) / cols;
         const cy = y0 + 0.08 + ((j + 0.5) * (h - 0.16)) / rows;
-        const q = 0.07;
-        bars.push([cx, cy + q, 2 * q + 0.018, 0.018], [cx, cy - q, 2 * q + 0.018, 0.018], [cx - q, cy, 0.018, 2 * q - 0.018], [cx + q, cy, 0.018, 2 * q - 0.018]);
+        const q = 0.05;
+        bars.push([cx, cy + q, 2 * q + 0.022, 0.022], [cx, cy - q, 2 * q + 0.022, 0.022], [cx - q, cy, 0.022, 2 * q - 0.022], [cx + q, cy, 0.022, 2 * q - 0.022]);
       }
     }
     for (const [a, y, bw, bh] of bars) {
@@ -309,6 +313,32 @@ export function buildThemes(plan: FloorPlan, b: Batch, m: Mats, glow: GlowMerge,
       }
       out.pools.push({ ...wallPoint(p, 1.0), r: 1.3, room: p.room });
     });
+  }
+
+  // --- stage drapes: gathered velvet either side of the stage, a pelmet with a gold fringe --------
+  for (const d of plan.drapes) {
+    into(d.room);
+    const top = ceilingAt(plan, d.x, d.z) - 0.02;
+    const h = top - DRAPES.pelmet;
+    for (const e of [-1, 1]) {
+      // folds: the cloth swings in and out across its width, deepest at the gathered outer edge
+      const g = new THREE.PlaneGeometry(DRAPES.w, h - 0.02, 40, 1);
+      const pos = g.getAttribute('position');
+      for (let i = 0; i < pos.count; i++) {
+        const u = pos.getX(i) / DRAPES.w + 0.5;
+        const k = e > 0 ? u : 1 - u;
+        pos.setZ(i, 0.05 * Math.sin(u * Math.PI * 14) * (0.55 + 0.45 * k));
+      }
+      g.computeVertexNormals();
+      const p = wallPoint(d, 0.1, e * (d.w / 2 + DRAPES.w / 2));
+      b.add(g, m.get('velvet'), { x: p.x, y: (h - 0.02) / 2 + 0.01, z: p.z, ry: d.ry });
+    }
+    const pw = d.w + 2 * DRAPES.w + 0.2;
+    const pel = wallPoint(d, (DRAPES.d + 0.08) / 2 + 0.004);
+    b.box(m.get('velvet'), pel.x, top - DRAPES.pelmet / 2, pel.z, pw, DRAPES.pelmet, DRAPES.d + 0.08 - 0.008, 1.2, d.ry);
+    const fringe = wallPoint(d, DRAPES.d + 0.084);
+    b.box(m.get('lacquer-gold'), fringe.x, top - DRAPES.pelmet + 0.03, fringe.z, pw + 0.01, 0.06, 0.012, undefined, d.ry);
+    b.box(m.get('lacquer-gold'), fringe.x, top - 0.03, fringe.z, pw + 0.01, 0.025, 0.012, undefined, d.ry);
   }
 
   // --- noren over the parlour's doorways: navy cloth panels with a white blossom crest ------------

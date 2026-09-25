@@ -349,6 +349,8 @@ export interface FloorPlan {
   moongates: WallMount[];
   lattices: WallMount[];
   patternBoards: WallMount[];
+  /** Stage drapes: `w` is the stage's width between the two curtains. */
+  drapes: WallMount[];
   columns: (Column & { room: RoomId })[];
   plants: Plant[];
   palms: Palm[];
@@ -424,6 +426,8 @@ export const PATTERN_BOARD = { w: 1.08, h: 1.3, y: 1.72 };
 export const LANTERN = { r: 0.2, h: 0.46 };
 /** The big lanterns over the Jade Room's tables. */
 export const TABLE_LANTERN = { r: 0.36, h: 0.62, y: 2.35 };
+/** Stage drapes: each curtain's width, how far it stands off the wall, and the pelmet across the top. */
+export const DRAPES = { w: 2.0, d: 0.2, pelmet: 0.36 };
 /** A counter along a wall (the prizes, the snack bar): its height, and the shelves' depth and height behind it. */
 export const WALL_COUNTER = { h: 1.02, shelf: 0.42, back: 2.3 };
 
@@ -679,6 +683,7 @@ export function planFloor(footprint: (game: GameId) => Footprint, slots: readonl
   const moongates: WallMount[] = [];
   const lattices: WallMount[] = [];
   const patternBoards: WallMount[] = [];
+  const drapes: WallMount[] = [];
   for (const spec of ROOMS) {
     const r = room(spec.id);
     for (const fx of spec.fixtures) fixture(fx, r);
@@ -768,6 +773,9 @@ export function planFloor(footprint: (game: GameId) => Footprint, slots: readonl
         break;
       case 'lattice':
         for (const [x, z] of fx.at) lattices.push({ x: r.cx + x, z: r.cz + z, ry: fx.ry, w: fx.w, room: r.id });
+        break;
+      case 'drapes':
+        drapes.push({ x: r.cx + fx.x, z: r.cz + fx.z, ry: fx.ry, w: fx.w, room: r.id });
         break;
       case 'patterns':
         for (const [x, z] of fx.at) patternBoards.push({ x: r.cx + x, z: r.cz + z, ry: fx.ry, w: PATTERN_BOARD.w, room: r.id });
@@ -878,6 +886,7 @@ export function planFloor(footprint: (game: GameId) => Footprint, slots: readonl
     moongates,
     lattices,
     patternBoards,
+    drapes,
     deskIslands,
     columns,
     plants: [],
@@ -1241,6 +1250,11 @@ function baseSolids(plan: FloorPlan): Solid[] {
   };
   plan.moongates.forEach((m, i) => onWall(`moongate-${i + 1}`, m, 0.16, 0, MOONGATE.y + MOONGATE.r + 0.62));
   plan.lattices.forEach((m, i) => onWall(`lattice-${i + 1}`, m, 0.07, 0.3, 2.62));
+  plan.drapes.forEach((m, i) => {
+    const top = ceilingAt(plan, m.x, m.z) - 0.02;
+    for (const e of [-1, 1]) onWall(`drape-${i + 1}-${e > 0 ? 'e' : 'w'}`, { ...m, x: m.x + Math.cos(m.ry) * e * (m.w / 2 + DRAPES.w / 2), z: m.z - Math.sin(m.ry) * e * (m.w / 2 + DRAPES.w / 2), w: DRAPES.w }, DRAPES.d, 0, top - DRAPES.pelmet);
+    onWall(`pelmet-${i + 1}`, { ...m, w: m.w + 2 * DRAPES.w + 0.2 }, DRAPES.d + 0.08, top - DRAPES.pelmet, top);
+  });
   plan.patternBoards.forEach((m, i) => onWall(`pattern-board-${i + 1}`, m, 0.09, PATTERN_BOARD.y - PATTERN_BOARD.h / 2 - 0.05, PATTERN_BOARD.y + PATTERN_BOARD.h / 2 + 0.05));
 
   // lamps low over the poker tables, and the yard's string of bulbs overhead
@@ -1511,6 +1525,10 @@ export function checkLayout(plan: FloorPlan): string[] {
   const out: string[] = [];
   const PAD = 0.05;
   const boxes = plan.stations.map((s) => ({ s, poly: corners(s.x, s.z, s.fp.width + PAD, s.fp.depth + PAD, s.yaw) }));
+  // an island's machines stand shoulder to shoulder on purpose: each is its slice of the island
+  const island = new Map<string, number>();
+  for (const isl of plan.machineIslands) for (const id of isl.ids) island.set(id, isl.n);
+  const together = (a: string, b: string) => island.has(a) && island.get(a) === island.get(b);
   for (let i = 0; i < boxes.length; i++) {
     const a = boxes[i]!;
     const r = plan.rooms.find((x) => x.id === a.s.room);
@@ -1518,7 +1536,7 @@ export function checkLayout(plan: FloorPlan): string[] {
     for (const [x, z] of a.poly) if (!inRect(inner, x, z, 0.01)) out.push(`${a.s.id} pokes through a wall`);
     for (let j = i + 1; j < boxes.length; j++) {
       const b = boxes[j]!;
-      if (overlaps(a.poly, b.poly)) out.push(`${a.s.id} overlaps ${b.s.id}`);
+      if (overlaps(a.poly, b.poly) && !together(a.s.id, b.s.id)) out.push(`${a.s.id} overlaps ${b.s.id}`);
     }
     for (const [k, aisle] of plan.aisles.entries()) if (overlaps(a.poly, rectPoly(aisle))) out.push(`${a.s.id} stands in aisle ${k}`);
     const front = playerStrip(a.s);
