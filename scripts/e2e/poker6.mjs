@@ -93,6 +93,12 @@ async function player(name) {
   return { page, name, login };
 }
 
+/** Click the first element matching `sel` whose text includes `text`, in the page (no waiting on animations). */
+const clickText = async (page, sel, text) => {
+  await page.waitForFunction(([sel, text]) => [...document.querySelectorAll(sel)].some((e) => e.textContent.includes(text)), [sel, text], { timeout: 30_000 });
+  await page.$$eval(sel, (es, text) => es.find((e) => e.textContent.includes(text)).click(), text);
+};
+
 const shot = async (page, file) => {
   const path = `${out}/${file}.png`;
   await page.screenshot({ path });
@@ -113,9 +119,12 @@ const me = (page) =>
 
 /** Pick a stake in the picker by its label ("$0.50/$1"). */
 const pickStake = async (page, label) => {
-  const i = await page.$$eval('.lim-opt', (bs, label) => bs.findIndex((b) => b.querySelector('.lim-opt-name')?.textContent === label), label);
-  if (i < 0) throw new Error(`no stake ${label}`);
-  await page.click(`.lim-opt >> nth=${i}`);
+  const ok = await page.$$eval('.lim-opt', (bs, label) => {
+    const b = bs.find((x) => x.querySelector('.lim-opt-name')?.textContent === label);
+    b?.click();
+    return !!b;
+  }, label);
+  if (!ok) throw new Error(`no stake ${label}`);
 };
 
 async function buyIn(page, dollars) {
@@ -137,26 +146,32 @@ const autoplay = (page, raiseOnce = false) =>
     s.__hands = new Set();
     s.__errs = [];
     s.__raised = null;
-    let pending = 0;
+    s.__view = s.snapshot?.view ?? null;
     const orig = s.onMessage.bind(s);
     s.onMessage = (m) => {
       orig(m);
       if (m.t === 'err') s.__errs.push(m.msg);
-      const v = m.view;
+      if (m.view) s.__view = m.view;
+    };
+    // Every so often: if it's our turn and we haven't answered this spot, answer it.
+    let answered = '';
+    clearInterval(s.__timer);
+    s.__timer = setInterval(() => {
+      const v = s.__view;
       if (!v) return;
       if (v.handId) s.__hands.add(v.handId);
+      if (v.you?.sittingOut) s.link.act({ type: 'sitout', on: false });
       const l = v.you?.legal;
-      if (!l || Date.now() - pending < 600) return;
-      pending = Date.now();
-      setTimeout(() => {
-        const range = l.bet ?? l.raise;
-        if (raiseOnce && !s.__raised && range && range.min + l.step < range.max) {
-          const to = range.min + l.step;
-          s.__raised = { to, step: l.step };
-          s.link.act(l.bet ? { type: 'bet', amount: to } : { type: 'raise', to });
-        } else s.link.act(l.check ? { type: 'check' } : { type: 'call' });
-      }, 250);
-    };
+      const key = `${v.handId}|${v.street}|${v.total}|${v.bet}`;
+      if (!l || key === answered) return;
+      answered = key;
+      const range = l.bet ?? l.raise;
+      if (raiseOnce && !s.__raised && range && range.min + l.step < range.max) {
+        const to = range.min + l.step;
+        s.__raised = { to, step: l.step };
+        s.link.act(l.bet ? { type: 'bet', amount: to } : { type: 'raise', to });
+      } else s.link.act(l.check ? { type: 'check' } : { type: 'call' });
+    }, 700);
   }, raiseOnce);
 
 const handsSeen = (page) => page.evaluate(() => window.casino.app.table.session.__hands.size);
@@ -189,7 +204,7 @@ if (wanted('micro')) try {
   await a.page.waitForTimeout(300);
   check((await a.page.textContent('.lim-buyin')) === 'Buy-in $20–$250', 'the micro table takes $20 to $250');
   await shot(a.page, 'poker6-1-picker-micro');
-  await a.page.click('.lim-opt:has-text("Custom")');
+  await a.clickText(page, '.lim-opt', 'Custom');
   await a.page.waitForTimeout(300);
   await shot(a.page, 'poker6-2-picker-custom');
   await pickStake(a.page, '$0.50/$1');
@@ -222,7 +237,7 @@ if (wanted('nosebleed')) try {
   await b.login();
   await walkUp(b.page);
   await b.page.waitForSelector('.lim-opt', { timeout: 20_000 });
-  await b.page.click('.lim-opt:has-text("Custom")');
+  await b.clickText(page, '.lim-opt', 'Custom');
   await b.page.fill('.lim-input >> nth=0', '25000');
   await b.page.fill('.lim-input >> nth=1', '50000');
   await b.page.waitForTimeout(300);
@@ -257,10 +272,10 @@ async function multi(label, names, pick, buy, file) {
   await c.page.waitForSelector('.lobby-pin-input', { timeout: 10_000 });
   await pick(c.page);
   await c.page.waitForTimeout(300);
-  await c.page.click('.lobby-actions .btn:has-text("Public")');
+  await clickText(c.page, '.lobby-actions .btn', 'Public');
   await c.page.waitForSelector('.party-limits', { timeout: 15_000 });
   const shown = await c.page.textContent('.party-limits');
-  await c.page.click('.party-row .btn:has-text("Sit down")');
+  await clickText(c.page, '.party-row .btn', 'Sit down');
   await buyIn(c.page, buy);
   const tableId = await c.page.evaluate(() => window.casino.app.table.session.snapshot.meta.tableId);
   await walkUp(d.page);
@@ -270,13 +285,13 @@ async function multi(label, names, pick, buy, file) {
   await d.page.waitForSelector(row, { timeout: 20_000 });
   const cell = (await d.page.textContent(`${row} .lobby-limits-cell`)).trim();
   check(cell === shown.trim(), `${label}: the second player sees the blinds before joining: "${cell}"`);
-  await d.page.click(row);
+  await d.page.$eval(row, (e) => e.click());
   await d.page.waitForSelector('.party-limits', { timeout: 15_000 });
-  await d.page.click('.party-row .btn:has-text("Sit down")');
+  await clickText(d.page, '.party-row .btn', 'Sit down');
   await buyIn(d.page, buy);
   await autoplay(c.page);
   await autoplay(d.page);
-  await c.page.click('.party-row .btn:has-text("Start")');
+  await clickText(c.page, '.party-row .btn', 'Start');
   const hands = await playHands(c.page, 3);
   check(hands >= 3, `${label}: hands played between two people: ${hands}`);
   await c.page.waitForTimeout(800);
@@ -309,7 +324,7 @@ if (wanted('multi')) {
       '$25,000/$50,000 lobby',
       ['poker6_e2e_e', 'poker6_e2e_f'],
       async (p) => {
-        await p.click('.lim-opt:has-text("Custom")');
+        await clickText(p, '.lim-opt', 'Custom');
         await p.fill('.lim-input >> nth=0', '25000');
         await p.fill('.lim-input >> nth=1', '50000');
       },
