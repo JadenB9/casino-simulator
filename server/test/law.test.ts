@@ -5,7 +5,7 @@
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { env } from 'cloudflare:workers';
-import { runInDurableObject } from 'cloudflare:test';
+import { evictDurableObject, runInDurableObject } from 'cloudflare:test';
 import { api, connect, type Client } from './helpers.ts';
 import { clockAt, closedWith, floor, player, sleep, type Player } from './party.ts';
 import { CLOSE } from '../../shared/src/protocol.ts';
@@ -193,6 +193,21 @@ describe('punches', { timeout: 20_000 }, () => {
   });
 });
 
+describe('punching staff', { timeout: 20_000 }, () => {
+  it('lands on him, he shrugs it off, and he saw it: a warning from him', async () => {
+    const v = await inView('guard', 0.9);
+    const a = await player('lw_staff');
+    // right in front of him, facing him
+    const ca = await onFloor(a, v.x, v.z, v.yaw + Math.PI);
+    ca.send({ t: 'punch', r: yawByte(v.yaw + Math.PI) });
+    const m = await ca.next((m) => m.t === 'punch' && m.id === a.id);
+    expect(m.hit).toBe(v.spec.id);
+    const law = await ca.next((m) => m.t === 'law' && m.ev.id === a.id);
+    expect(law.ev).toMatchObject({ k: 'warn', staff: v.spec.id, why: 'punch' });
+    await leave(ca);
+  });
+});
+
 describe('the pit boss', { timeout: 20_000 }, () => {
   it('catches someone winning too much where he can see them, and nobody out of his sight', async () => {
     const v = await inView('boss');
@@ -347,6 +362,48 @@ describe('jail', { timeout: 20_000 }, () => {
     const { client: free } = await connect('solo/roulette', a.token, '', a.ip);
     await free!.next((m) => m.t === 'table');
     await leave(ca, free!);
+  });
+
+  it('outlasts the floor sleeping: woken, it still knows who is inside', async () => {
+    const a = await player('lw_nap');
+    const hidden = outOfSight();
+    const ca = await onFloor(a, hidden.x, hidden.z);
+    await arrest(a);
+    await ca.next((m) => m.t === 'tp', 10_000);
+    await leave(ca);
+    await evictDurableObject(floor());
+    expect(await runInDurableObject(floor(), (f: CasinoFloor) => f.law.isConfined(a.id) || f.law.jailOf(a.id) !== null)).toBe(true);
+    const { client } = await connect('floor', a.token, '', a.ip);
+    await client!.next((m) => m.t === 'jail' && m.jail);
+    const tp = await client!.next((m) => m.t === 'tp');
+    expect(inRect(JAIL_RECT, tp.x, tp.z)).toBe(true);
+    await leave(client!);
+  });
+
+  it("counts a real round at the jail's Sic Bo toward bail: its net, never below nothing", async () => {
+    const a = await player('lw_round');
+    const hidden = outOfSight();
+    const ca = await onFloor(a, hidden.x, hidden.z);
+    await arrest(a);
+    const { client } = await connect('solo/sicbo', a.token, '', a.ip);
+    const t = client!;
+    await t.next((m) => m.t === 'table');
+    t.send({ t: 'buyin', aid: 'sb1', amount: 20_000 });
+    await t.next((m) => m.t === 'seat' && m.status === 'seated');
+    t.send({ t: 'act', aid: 'bet1', a: { type: 'bet', bets: [{ spot: 'big', amount: 2_000 }] } });
+    await t.next((m) => m.t === 'seat' && m.stack === 18_000);
+    t.send({ t: 'act', aid: 'roll1', a: { type: 'roll' } });
+    const settled = await t.next((m) => m.t === 'seat' && m.stack !== 18_000, 5_000).catch(() => null);
+    const stack = settled?.stack ?? 18_000;
+    const net = stack - 20_000;
+    let won = -1;
+    for (let i = 0; i < 40; i++) {
+      won = (await jailRow(a.id))!.won;
+      if (won === Math.max(0, net)) break;
+      await sleep(50);
+    }
+    expect(won).toBe(Math.max(0, net));
+    await leave(ca, t);
   });
 
   it('is only ever one open stay: a second arrest while inside changes nothing', async () => {
