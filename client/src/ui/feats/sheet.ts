@@ -248,7 +248,11 @@ export function openFeats(deps: FeatsSheetDeps): FeatsSheet {
     // the list's feats; a day's challenges come and go
     sEarned.textContent = `${FEATS.filter((f) => earned.has(f.id)).length} of ${FEATS.length}`;
     let paid = 0;
-    for (const id of earned.keys()) paid += featOf(id)?.reward.cash ?? 0;
+    // what each paid, as the server says; a feat whose cash doesn't scale paid what it lists
+    for (const id of earned.keys()) {
+      const f = featOf(id);
+      paid += paidOf.get(id) ?? (f && f.odds === undefined && !f.comp ? (f.reward.cash ?? 0) : 0);
+    }
     sPaid.textContent = dollars(paid);
     sWon.textContent = tally ? dollars(tally.won ?? 0) : '…';
     sGames.textContent = tally ? `${tallyValue(tally, 'games')} of ${FEAT_GAMES.length}` : '…';
