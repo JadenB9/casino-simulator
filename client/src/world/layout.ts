@@ -1211,7 +1211,8 @@ function baseSolids(plan: FloorPlan): Solid[] {
     room = ch.room;
     const k = CHAIRS[ch.kind];
     const g = `chairs-${ch.station}`;
-    if (k.round) round(`chair-${ch.station}-${ch.slot + 1}`, g, ch.x, ch.z, k.w / 2, 0, ch.top + 0.06, { of: ch.station });
+    // (a round seat is its cushion, or its back where it has one: the pachinko stool's)
+    if (k.round) round(`chair-${ch.station}-${ch.slot + 1}`, g, ch.x, ch.z, k.w / 2, 0, Math.max(ch.top + 0.06, k.h), { of: ch.station });
     else turned(`chair-${ch.station}-${ch.slot + 1}`, g, ch.x, ch.z, k.w, k.d, ch.yaw, 0, k.h, { of: ch.station });
   }
 

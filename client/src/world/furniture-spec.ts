@@ -83,9 +83,9 @@ export const FURNITURE: Record<FurnitureKind, FurnitureSpec> = {
   lamp: { w: 0.84, d: 0.84, h: 1.45, round: true },
   palm: { w: 1.0, d: 1.0, h: 0.62, round: true },
   // the parlour's drinks machine: a lit front of cans behind glass
-  vending: { w: 1.0, d: 0.8, h: 1.9 },
+  vending: { w: 1.0, d: 0.86, h: 1.9 },
   // the Jade Room's lacquer sideboard, porcelain on it
-  cabinet: { w: 1.8, d: 0.5, h: 1.3 },
+  cabinet: { w: 1.8, d: 0.5, h: 1.4 },
 };
 
 /** The chairs and stools at the tables, drawn at every seat the game's module lists. */

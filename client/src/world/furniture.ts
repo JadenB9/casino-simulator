@@ -474,10 +474,12 @@ function parlourStool(): Part[] {
 /** A drinks machine: an enamel cabinet, the lit window of cans, the buttons and the drop. */
 function vending(): Part[] {
   const s = FURNITURE.vending;
-  const f = s.d / 2;
+  // the cabinet a little shallower than the spec: its front's buttons and trims stand proud of it
+  const d = s.d - 0.06;
+  const f = d / 2;
   return [
-    box('enamel', s.w, s.h - 0.06, s.d, { y: 0.06 + (s.h - 0.06) / 2 }),
-    box('lacquer', s.w - 0.04, 0.06, s.d - 0.04, { y: 0.03 }),
+    box('enamel', s.w, s.h - 0.06, d, { y: 0.06 + (s.h - 0.06) / 2 }),
+    box('lacquer', s.w - 0.04, 0.06, d - 0.04, { y: 0.03 }),
     // the window (its picture of cans), a hand's width proud of the cabinet's face, and the frame round it
     box('vending-face', s.w - 0.2, 1.06, 0.01, { y: 1.22, z: f + 0.008 }),
     box('chrome', s.w - 0.16, 0.02, 0.02, { y: 1.76, z: f + 0.012 }),
