@@ -4,6 +4,7 @@
 //   directory.ts  the lobby list and private-lobby PINs
 //   chat.ts       the floor's chat room
 //   fx.ts         effects bought in the shop, and the lobby's statues
+//   invites.ts    invites to a lobby table (v6 invite6)
 // Each keeps anything that must survive hibernation in this object's SQLite storage or in the
 // sockets' attachments; memory is only a cache. The object's one alarm closes idle sockets.
 
@@ -20,9 +21,12 @@ import { Wins, type BigWinReport } from './wins.ts';
 import { Effects, Statues, fxKey, type Reserve } from './fx.ts';
 import { Bucket, KeyedBuckets } from '../ratelimit.ts';
 import { spendTicket } from '../tickets.ts';
+import { Invites } from './invites.ts'; // v6 invite6
+import type { CasinoTable } from '../table/host.ts'; // v6 invite6
 // v6 celebs6: celebrities and the gift box
 import { Celebs } from './celebs.ts';
 import { parseCelebMsg, type CelebServerMsg, type GiftBox, type Visit } from '../../../shared/src/celebs.ts';
+import type { HappyHour } from '../../../shared/src/happyhour.ts';
 
 /** A hard cap on floor connections; a busy night past this gets a polite "casino is full". */
 export const MAX_FLOOR = 150;
@@ -60,6 +64,8 @@ export class CasinoFloor extends DurableObject<Env> {
   /** v6: effects bought in the shop, and the lobby's statues (fx.ts) */
   readonly fx: Effects;
   readonly statues: Statues;
+  /** v6 invite6: invites to a lobby table (invites.ts) */
+  readonly invites: Invites;
   /** v6 celebs6: celebrity visits and the gift box (celebs.ts) */
   readonly celebs: Celebs;
   private buckets = new Map<WebSocket, FloorLimits>();
@@ -75,6 +81,17 @@ export class CasinoFloor extends DurableObject<Env> {
     this.wins = new Wins(ctx, (msg) => this.broadcast(msg));
     this.fx = new Effects(ctx, (msg) => this.broadcast(msg));
     this.statues = new Statues(ctx, (msg) => this.broadcast(msg));
+    // v6 invite6: a table's own list row is how an invite checks the table is open and has room
+    this.invites = new Invites(ctx, {
+      presence: this.presence,
+      directory: this.directory,
+      summary: (tableId) => {
+        const ns = env.TABLE as unknown as DurableObjectNamespace<CasinoTable>;
+        return ns.get(ns.idFromName(tableId)).summary();
+      },
+      socketsOf: (accountId) => this.ctx.getWebSockets(`a:${accountId}`),
+      sockets: () => this.ctx.getWebSockets(),
+    });
     // v6 celebs6
     this.celebs = new Celebs({
       sql: ctx.storage.sql,
@@ -203,6 +220,10 @@ export class CasinoFloor extends DurableObject<Env> {
     } else if (msg.t === 'stand') {
       this.presence.stand(ws);
       this.presence.touch(ws, Date.now());
+    } else if (msg.t === 'invite' || msg.t === 'invite.take' || msg.t === 'invite.dnd') {
+      // v6 invite6: sending, joining with and turning off invites (invites.ts)
+      if (msg.t !== 'invite.dnd') this.presence.touch(ws, Date.now());
+      await this.invites.onMessage(ws, msg);
     } else if (msg.t === 'lift') {
       // v6 contract: the city slice checks you're at an elevator and moves you (presence.teleport)
       this.presence.touch(ws, Date.now());
@@ -388,8 +409,8 @@ export class CasinoFloor extends DurableObject<Env> {
   }
 
   /** v6 celebs6: the dev stack's celebrity and gift box on demand (celebs.ts celebsDevApi). */
-  celebDev(kind: 'celeb' | 'gift', arg?: string | number): Visit | GiftBox {
-    return this.celebs.force(kind, Date.now(), arg);
+  celebDev(kind: 'celeb' | 'gift' | 'happy', arg?: string | number, from?: number): Visit | GiftBox | HappyHour {
+    return this.celebs.force(kind, Date.now(), arg, from);
   }
 
   /** Everyone on the floor sees the gesture over this player's head. */

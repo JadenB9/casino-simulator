@@ -19,6 +19,8 @@ export const SHORTCUTS: readonly { title: string; rows: readonly Row[] }[] = [
       ['E', 'Whatever the prompt offers; again to stand up'],
       ['F', 'First or third person'],
       ['B', 'Step off your ride, and back on'],
+      ['V', 'Throw a punch'],
+      ['Q', 'Take a sip or a bite of what you hold'],
       ['N', 'Map of the casino'],
       ['T or Enter', 'Chat'],
     ],
@@ -29,6 +31,7 @@ export const SHORTCUTS: readonly { title: string; rows: readonly Row[] }[] = [
       ['G', 'Emotes, on the floor or at a table'],
       ['1-6', 'Pick a free emote while the emotes are open'],
       ['Q-P', 'Pick a boutique or reward emote (a locked one shows its price)'],
+      ['⇧ J', 'Join the newest invite'], // v6 invite6
       ['Esc', 'Free the mouse, close a panel, stand up, leave'],
       ['J', 'Achievements and challenges'],
       ['M', 'Mute or unmute'],

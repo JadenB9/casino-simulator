@@ -268,7 +268,7 @@ export const STATUES = 3;
 // The bar
 
 /** The model an order is held as: what the waiter brings and your right hand carries. */
-export type BarModel = 'bottle' | 'martini' | 'flute' | 'magnum' | 'rocks' | 'wine' | 'cup' | 'plate';
+export type BarModel = 'bottle' | 'martini' | 'flute' | 'magnum' | 'rocks' | 'wine' | 'cup' | 'plate' | 'margarita' | 'can' | 'cake';
 
 export interface BarItem {
   id: string;
@@ -293,6 +293,12 @@ export const BAR_MENU: readonly BarItem[] = [
   { id: 'shrimp-cocktail', kind: 'food', name: 'Shrimp Cocktail', price: 28 * DOLLAR, about: 'Five jumbo prawns on ice.', model: 'plate' },
   { id: 'lobster', kind: 'food', name: 'Lobster', price: 95 * DOLLAR, about: 'A whole Maine lobster with drawn butter.', model: 'plate' },
   { id: 'caviar', kind: 'food', name: 'Caviar', price: 350 * DOLLAR, about: 'Ossetra, with blinis and crème fraîche.', model: 'plate' },
+  // v6: more on the menu
+  { id: 'margarita', kind: 'drink', name: 'Margarita', price: 19 * DOLLAR, about: 'Blanco tequila and fresh lime, a salted rim.', model: 'margarita' },
+  { id: 'energy-drink', kind: 'drink', name: 'Energy Drink', price: 8 * DOLLAR, about: 'An ice-cold can, for the all-nighters.', model: 'can' },
+  { id: 'ribeye', kind: 'food', name: 'Sliced Ribeye', price: 78 * DOLLAR, about: 'Prime ribeye, sliced, with flaky salt and chimichurri.', model: 'plate' },
+  { id: 'macarons', kind: 'food', name: 'Macarons', price: 16 * DOLLAR, about: 'Six Parisian macarons, pistachio to raspberry.', model: 'plate' },
+  { id: 'birthday-cake', kind: 'food', name: 'Birthday Cake', price: 60 * DOLLAR, about: 'Chocolate layer cake, brought out with its candles lit.', model: 'cake' },
 ];
 
 const BAR_BY_ID = new Map(BAR_MENU.map((i) => [i.id, i]));

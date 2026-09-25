@@ -15,6 +15,7 @@ import { formatDuration } from '../menu/parts.ts';
 import { openSettings } from './settings.ts';
 import { openShortcuts } from './shortcuts.ts';
 import { netStart, sessionNet } from './net.ts';
+import { calm } from '../../app/comfort.ts';
 
 export interface HudDeps {
   root: HTMLElement;
@@ -54,8 +55,6 @@ function iconButton(name: Parameters<typeof icon>[0], label: string, onClick: ()
   return b;
 }
 
-const reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
-
 /** Rolls a money readout to its new value instead of jumping. */
 function roller(target: HTMLElement): (to: Cents) => void {
   let shown: Cents | null = null;
@@ -63,7 +62,7 @@ function roller(target: HTMLElement): (to: Cents) => void {
   return (to) => {
     cancelAnimationFrame(raf);
     const from = shown;
-    if (from === null || from === to || reduceMotion()) {
+    if (from === null || from === to || calm()) {
       shown = to;
       target.textContent = formatMoney(to);
       return;

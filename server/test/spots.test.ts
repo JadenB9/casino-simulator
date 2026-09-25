@@ -5,7 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import { env } from 'cloudflare:workers';
 import { evictDurableObject } from 'cloudflare:test';
-import { connect, login, type Client } from './helpers.ts';
+import { connect, featsHad, login, type Client } from './helpers.ts';
 
 const BALANCE = 5_000_000;
 const BUY_IN = 200_000;
@@ -62,6 +62,8 @@ async function open(game: string, token: string): Promise<{ c: Client; snap: any
 
 async function sitDown(game: string, name: string): Promise<{ c: Client; token: string; id: number }> {
   const { token, profile } = await login(name);
+  // the money here is checked to the cent: no feat pays beside the play
+  await featsHad(profile.id);
   const { c } = await open(game, token);
   c.send({ t: 'buyin', aid: 'b1', amount: BUY_IN });
   await c.next((m) => m.t === 'seat' && m.status === 'seated');

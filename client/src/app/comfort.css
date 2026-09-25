@@ -1,0 +1,50 @@
+/* "Reduce flashing & motion" (comfort.ts): <body> has the class `calm` while it's on. The shared
+   overrides live here; a module's own CSS keys on `body.calm` too. No rule asks the system
+   for reduced motion directly: that setting only picks the switch's default, so Full means full on
+   any system. Calm keeps the light and the colour of a moment and takes out the strobing and
+   the shaking: a flashing row holds its lit colours, a shake doesn't happen, a halo stands still. */
+
+/* Shakes: the login field that refused, Mines' board on a mine, the Tower on the dragon, a full
+   keno card. The colours already say it. */
+body.calm .name-row.shake,
+body.calm .mn-grid.shake,
+body.calm .tw-tower.shake,
+body.calm .kn-tile.full { animation: none; }
+
+/* The Bandit Wheel's winning slot: its gold ring stays lit (no four quick blinks). */
+body.calm .bw-slot.won .bw-slot-face { animation: none; }
+
+/* Plinko's bin: a small dip where the ball lands, without the flash of brightness. */
+body.calm .pk-bin.hit { animation-name: calm-dip; }
+@keyframes calm-dip { 35% { translate: 0 3px; } }
+
+/* A coin that lands, a gem that lights: a scale pop is fine, a brightness flash isn't. */
+body.calm .cf-coin.land .cf-side { animation: none; }
+
+/* The map's "you are here" halo stops pulsing; the menu's painted backdrop stops drifting. */
+body.calm .map-you .map-you-halo { animation: none; transform: scale(1.2); opacity: 0.6; }
+body.calm .backdrop-canvas { animation: none; }
+
+/* The celebration banner fades in where it stands instead of rising into place. (Each module's
+   own CSS keys the rest on body.calm too: the bubbles, video poker's rows, the emote wheel.) */
+body.calm .celebrate { animation: calm-fade-in 0.35s both; }
+body.calm .celebrate.out { transform: translate(-50%, -50%); }
+@keyframes calm-fade-in { from { opacity: 0; } }
+
+/* The switch itself on the login screen: a quiet row under the note. */
+.calm-switch {
+  display: inline-flex; align-items: center; gap: 10px; margin-top: 10px; padding: 6px 0; border: 0; background: none;
+  color: var(--ink-3); font: 600 13px/1.2 var(--ui); letter-spacing: 0.12em; text-transform: uppercase; cursor: pointer;
+  transition: color 0.15s;
+}
+.calm-switch:hover, .calm-switch[aria-checked='true'] { color: var(--ink-2); }
+.calm-switch:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.calm-box { position: relative; width: 16px; height: 16px; flex: none; border: 1px solid var(--line-strong); border-radius: 3px; }
+.calm-switch[aria-checked='true'] .calm-box { border-color: var(--brass-hi); background: var(--brass); }
+.calm-switch[aria-checked='true'] .calm-box::after {
+  content: ''; position: absolute; left: 4px; top: 1px; width: 5px; height: 9px;
+  border: solid #1d140a; border-width: 0 2px 2px 0; rotate: 45deg;
+}
+@media (pointer: coarse) {
+  .calm-switch { min-height: 44px; }
+}

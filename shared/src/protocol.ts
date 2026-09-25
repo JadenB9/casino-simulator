@@ -228,9 +228,18 @@ export interface HttpError {
   inPlay?: Cents;
 }
 
-/** The leaderboards (GET /leaderboard), in the order the sheet shows them. */
-export const LEADERBOARDS = ['richest', 'biggestWin', 'rounds'] as const;
+// v6 stats6: the leaderboards (GET /leaderboard), in the order the sheet shows them, grouped
+// money, play, then today and this week. What each one counts is in shared/src/stats.ts.
+export const LEADERBOARDS = [
+  'richest', 'netUp', 'netDown', 'won', 'lost', 'wagered', 'biggestWin', 'biggestLoss',
+  'rounds', 'winRate', 'streak', 'feats', 'celebs', 'collection',
+  'today', 'todayDown', 'week', 'weekDown',
+] as const;
 export type LeaderboardId = (typeof LEADERBOARDS)[number];
+
+/** The boards one game has (GET /leaderboard?game=<id>), in the order the sheet shows them. */
+export const GAME_LEADERBOARDS = ['netUp', 'netDown', 'won', 'lost', 'biggestWin', 'biggestLoss', 'rounds', 'winRate'] as const satisfies readonly LeaderboardId[];
+export type GameLeaderboardId = (typeof GAME_LEADERBOARDS)[number];
 
 /** How many places each board lists. */
 export const LEADERBOARD_TOP = 10;
@@ -239,8 +248,13 @@ export interface LeaderboardRow {
   /** 1 is first; players on the same value share a place (1, 2, 2, 4). */
   rank: number;
   name: string;
-  /** Cents on richest (balance plus chips on tables) and biggestWin; a count on rounds. */
+  /**
+   * Cents on the money boards (negative on netDown, todayDown and weekDown), a count on rounds,
+   * streak, feats and celebs, basis points (5234 = 52.34%) on winRate.
+   */
   value: number;
+  /** winRate: the rounds the rate is out of. */
+  of?: number;
   /** The player who asked. */
   you?: true;
 }
@@ -249,16 +263,56 @@ export interface Leaderboard {
   top: LeaderboardRow[];
   /**
    * The asker's own place when it isn't in `top` (null when it is). `rank` is null while there
-   * is nothing to rank: no money, no win yet, no rounds yet.
+   * is nothing to rank: no money, no win yet, too few rounds for a win rate...
    */
-  you: { rank: number | null; name: string; value: number } | null;
+  you: { rank: number | null; name: string; value: number; of?: number } | null;
 }
 
 export interface LeaderboardResponse {
-  boards: Record<LeaderboardId, Leaderboard>;
+  /** Every board in LEADERBOARDS, or with `game`, every board in GAME_LEADERBOARDS. */
+  boards: Partial<Record<LeaderboardId, Leaderboard>>;
+  /** The game these boards are for; absent for the casino-wide boards. */
+  game?: GameId;
   /** How old the boards are, in ms: the server reads them at most about once a minute. */
   age: number;
 }
+
+/** One line of a player's record (GET /stats): all games, or one. */
+export interface StatLine {
+  /** Lifetime, from the cash-outs (casino_stats): every round ever played. */
+  rounds: number;
+  wagered: Cents;
+  net: Cents;
+  biggestWin: Cents;
+  /**
+   * From the round tallies, which began with v6 (casino_tally): rounds with money on them,
+   * those that made a profit, what the winning rounds won and the losing rounds lost, and the
+   * worst single round.
+   */
+  counted: number;
+  wins: number;
+  won: Cents;
+  lost: Cents;
+  biggestLoss: Cents;
+}
+
+/** GET /stats: the asker's own record for the stats sheet. Nobody else's is ever sent. */
+export interface StatsResponse {
+  name: string;
+  createdAt: number;
+  worth: { balance: Cents; inPlay: Cents; total: Cents };
+  total: StatLine;
+  games: Partial<Record<GameId, StatLine>>;
+  /** Net per casino day (Las Vegas), oldest first, STATS_DAYS of them ending today; 0 on a quiet day. */
+  days: { day: string; net: Cents }[];
+  /** Longest run of winning rounds at one table. */
+  streak: number;
+  feats: number;
+  celebs: number;
+  /** What the things you keep cost: worn pieces, rides, cars, the statue. */
+  collection: Cents;
+}
+// v6 stats6: end
 
 // ---------------------------------------------------------------------------------------------
 // Floor socket
@@ -314,7 +368,8 @@ export type FloorClientMsg =
   /** The player is at the keyboard (see HERE_MS); keeps the socket from going idle. */
   | { t: 'here' }
   // v6: take the elevator to another zone (zones.ts); only from beside an elevator door
-  | { t: 'lift'; to: ZoneId };
+  | { t: 'lift'; to: ZoneId }
+  | InviteClientMsg; // v6 invite6
 
 export type FloorServerMsg =
   | { t: 'hello'; v: number; you: PlayerInfo; players: PlayerInfo[]; online: number; now: number }
@@ -344,6 +399,7 @@ export type FloorServerMsg =
   | { t: 'owned'; emotes: EmoteId[] }
   // v6: the server moved you (the elevator, jail, release): go there at once (cm, yaw byte)
   | { t: 'tp'; x: number; z: number; r: number }
+  | InviteServerMsg // v6 invite6
   // v6 bank6: another player sent you money (shared/src/bank.ts); only to you
   | { t: 'bank.in'; id: string; from: string; amount: Cents; note: string | null; at: number }
   | { t: 'err'; code: ErrorCode; msg: string }
@@ -351,10 +407,10 @@ export type FloorServerMsg =
 
 /**
  * Floor bounds in centimetres; positions outside are clamped. The building's outer walls
- * (client/src/world/rooms.ts): x from -31.15 m to 31.15 m, z from -31.15 m (the back rooms) to
- * 15.15 m (the doors).
+ * (client/src/world/rooms.ts): x from -31.15 m to 31.15 m, z from -43.15 m (the north wing:
+ * pachinko, the Jade Room, bingo) to 15.15 m (the doors).
  */
-export const FLOOR_BOUNDS = { minX: -3120, maxX: 3120, minZ: -3120, maxZ: 1520 } as const;
+export const FLOOR_BOUNDS = { minX: -3120, maxX: 3120, minZ: -4320, maxZ: 1520 } as const;
 
 export function parseFloorMsg(raw: unknown, isGame: (g: unknown) => g is GameId): FloorClientMsg | null {
   if (!isObj(raw)) return null;
@@ -380,9 +436,88 @@ export function parseFloorMsg(raw: unknown, isGame: (g: unknown) => g is GameId)
     case 'here':
       return { t: 'here' };
     default:
+      return parseInviteMsg(raw); // v6 invite6
+  }
+}
+
+// v6 invite6: ----------------------------------------------------------------------------------
+// Invites to a lobby table (server/src/floor/invites.ts). A player at a lobby table invites some
+// of the players on the floor, or everyone; each invitee hears `invited` with what the table is
+// and who asked. Joining is `invite.take`: the floor checks the invite is theirs and still good,
+// that the table is open and has room, moves them next to it, and answers `invite.go` with the
+// table (and a private table's current PIN, which only an invitee ever gets this way). A decline
+// is saying nothing. The PIN never rides in `invited`.
+
+/** An invite is good for this long. */
+export const INVITE_MS = 2 * 60_000;
+/** The most players one invite names. */
+export const INVITE_MAX_TO = 10;
+
+export interface Invite {
+  id: string;
+  from: { id: number; name: string };
+  tableId: string;
+  game: GameId;
+  variant: string;
+  private: boolean;
+  /** "Invite everyone" rather than you by name. */
+  all: boolean;
+  /** Leader, seats and limits as the table said when the invite went out. */
+  lobby: LobbySummary;
+  /** The floor station the table stands at (the inviter's), when the floor knows it. */
+  station: string | null;
+  at: number;
+  until: number;
+}
+
+/** Why an invite didn't reach someone it named. */
+export type InviteSkip = 'offline' | 'away' | 'dnd' | 'recent' | 'busy';
+
+export type InviteClientMsg =
+  /** Invite players by id, or everyone on the floor; a private table's PIN proves you can. */
+  | { t: 'invite'; table: string; pin?: string; to: number[] | 'all' }
+  /** Join the table an invite is for; (x, z, r) is where to stand, beside it (cm, yaw byte). */
+  | { t: 'invite.take'; id: string; x: number; z: number; r: number }
+  /** Do not disturb: no invites reach you while it's on (the client says so after every hello). */
+  | { t: 'invite.dnd'; on: boolean };
+
+export type InviteServerMsg =
+  | { t: 'invited'; invite: Invite }
+  /** To the inviter: how many it reached, and why any it named it didn't. `again`: when "everyone" is open again. */
+  | { t: 'invite.sent'; table: string; all: boolean; sent: number; skipped: { id: number; name: string; why: InviteSkip }[]; again?: number }
+  /** An invite or a join refused; `id` is the invite a join was for. `again`: when to try again. */
+  | { t: 'invite.no'; id?: string; table?: string; code: ErrorCode; msg: string; again?: number }
+  /** Yours to join: the table, its PIN if private, and where the floor has put you (cm, yaw byte). */
+  | { t: 'invite.go'; id: string; tableId: string; game: GameId; variant: string; pin?: string; station: string | null; x: number; z: number; r: number };
+
+const INVITE_ID_RE = /^[a-z0-9]{12}$/;
+
+export function isInviteId(x: unknown): x is string {
+  return typeof x === 'string' && INVITE_ID_RE.test(x);
+}
+
+function parseInviteMsg(raw: Record<string, unknown>): InviteClientMsg | null {
+  switch (raw.t) {
+    case 'invite': {
+      if (typeof raw.table !== 'string' || raw.table.length > 40) return null;
+      if (raw.pin !== undefined && (typeof raw.pin !== 'string' || !/^\d{4}$/.test(raw.pin))) return null;
+      let to: number[] | 'all';
+      if (raw.to === 'all') to = 'all';
+      else if (Array.isArray(raw.to) && raw.to.length >= 1 && raw.to.length <= INVITE_MAX_TO && raw.to.every((id) => isInt(id) && id > 0)) to = [...new Set(raw.to as number[])];
+      else return null;
+      return { t: 'invite', table: raw.table, ...(raw.pin !== undefined ? { pin: raw.pin as string } : {}), to };
+    }
+    case 'invite.take':
+      if (!isInviteId(raw.id) || !isInt(raw.x) || !isInt(raw.z) || !isInt(raw.r) || raw.r < 0 || raw.r > 255) return null;
+      return { t: 'invite.take', id: raw.id, x: raw.x, z: raw.z, r: raw.r };
+    case 'invite.dnd':
+      if (typeof raw.on !== 'boolean') return null;
+      return { t: 'invite.dnd', on: raw.on };
+    default:
       return null;
   }
 }
+// ---------------------------------------------------------------------------------- v6 invite6
 
 // ---------------------------------------------------------------------------------------------
 // Table socket

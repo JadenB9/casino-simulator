@@ -274,6 +274,14 @@ if (checks.includes('live')) {
       await page.click('.menu-item >> nth=0');
     }
     await page.waitForSelector('.hud');
+    // anything that greets you on arrival (the daily bonus) is put away: it holds the keyboard
+    await page.waitForTimeout(1500);
+    for (let i = 0; i < 3; i++) {
+      const held = await page.evaluate(async () => (await import('/casino/src/ui/keyboard.ts')).overlayCount());
+      if (!held) break;
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(400);
+    }
     await page.evaluate(async () => {
       const c = window.casino;
       // every clap the floor plays, and whether it came from somewhere (someone else's)
@@ -368,8 +376,14 @@ if (checks.includes('live')) {
 
   // Far off: B hears nothing of it, A still hears its own.
   await b.page.waitForTimeout(2200);
-  await a.page.evaluate(() => window.casino.world.teleport(0.5, -8, 0));
-  await b.page.waitForFunction((id) => window.casino.app.remotes.character(id)?.root.position.z < -7, a.id, { timeout: 20000 }).catch(() => {});
+  // The floor only lets a player move as far as they could have walked (server/src/floor/presence.ts:
+  // 9.5 m banked, refilling at 9 m/s), so A goes there in hops a second apart, not one jump.
+  for (const z of [1.4, -6.6, -8]) {
+    await a.page.evaluate((z) => window.casino.world.teleport(0.5, z, 0), z);
+    await a.page.waitForTimeout(1200);
+  }
+  // (B's copy of A has to have got there: a clap while it's still drawn on its way is in earshot)
+  await b.page.waitForFunction((id) => window.casino.app.remotes.character(id)?.root.position.z < -7, a.id, { timeout: 20000 }).catch(() => fail("B's copy of A never got far off"));
   await a.page.evaluate(() => window.casino.app.link.emote('clap'));
   await b.page.waitForTimeout(1500);
   const far = { a: await a.page.evaluate(() => window.clapCalls.length), b: await b.page.evaluate(() => window.clapCalls.length) };

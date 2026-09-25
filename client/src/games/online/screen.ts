@@ -13,6 +13,7 @@ import * as THREE from 'three';
 import './online.css';
 import { DOLLAR, formatMoney, type Cents } from '../../../../shared/src/money.ts';
 import { el } from '../../ui/kit.ts';
+import { fitOf } from '../../table/fit.ts';
 import { session } from '../../app/session.ts';
 import type { SeatMsg, TableSnapshot, TableViewCtx } from '../contract.ts';
 
@@ -39,6 +40,8 @@ export class OnlineScreen {
     body.append(this.side, this.main);
     this.root.append(top, body, this.foot);
     this.root.hidden = true;
+    // the monitor's page is the board the table keeps in view, not a control over it (table/fit.ts)
+    this.root.dataset.fit = 'ignore';
   }
 
   setStack(cents: Cents): void {
@@ -85,10 +88,20 @@ export class OnlineScreen {
     if (t !== this.transform) this.root.style.transform = this.transform = t;
   }
 
-  /** Call from the view's update(): keeps the page on the monitor's glass as the camera moves. */
+  /**
+   * Call from the view's update(): keeps the page on the monitor's glass as the camera moves. The
+   * glass is the board the table keeps in view (table/fit.ts), so on a small window the camera's
+   * lens takes in the whole monitor clear of the HUD and the page shrinks with it.
+   */
   follow(root: THREE.Object3D, camera: THREE.Camera, corners: THREE.Vector3[]): void {
+    if (!this.boarded) {
+      this.boarded = true;
+      fitOf(root)?.setBoard(corners);
+    }
     this.place(corners.map((c) => toScreen(c, root, camera)));
   }
+
+  private boarded = false;
 
   dispose(): void {
     this.root.remove();

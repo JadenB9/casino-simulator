@@ -2,7 +2,8 @@
 // where the eyes are over the head bone as the look nods, and the choice kept for next time.
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { HEAD_Y, clampPitch, eyeOffset, headHeight, stepToward } from '../src/world/player.ts';
+import { HEAD_Y, clampPitch, eyeOffset, headHeight, jabPull, showsFromFront, stepToward } from '../src/world/player.ts';
+import { EMOTES } from '../../shared/src/protocol.ts';
 
 /** The walker's circle (player.ts RADIUS) and the near plane's reach from the camera (0.05 m out, under 0.09 m across). */
 const WALKER = 0.3;
@@ -76,6 +77,27 @@ describe('the eyes', () => {
       expect(o.ahead).toBeGreaterThanOrEqual(0);
       expect(o.ahead + NEAR_REACH).toBeLessThanOrEqual(WALKER);
     }
+  });
+});
+
+describe('your own gestures in first person', () => {
+  it('swings out in front for every emote, free, bought or earned', () => {
+    for (const e of EMOTES) expect(showsFromFront(e)).toBe(true);
+  });
+
+  it('keeps the eyes put for a punch thrown or taken, and anything else', () => {
+    for (const g of ['punch', 'hit', 'brush', 'deal', 'sweep', 'pay', '']) expect(showsFromFront(g)).toBe(false);
+  });
+
+  it('draws the eyes back for a punch you throw, so the fist goes out to arm\'s length, and forward again', () => {
+    for (const t of [0, -1, Number.NaN, 0.62, 5]) expect(jabPull(t)).toBe(0);
+    // all the way back before the fist starts out (the wind-up is 0.12 s), held while it's out
+    expect(jabPull(0.12)).toBe(1);
+    expect(jabPull(0.3)).toBe(1);
+    expect(jabPull(0.06)).toBeGreaterThan(0);
+    expect(jabPull(0.06)).toBeLessThan(1);
+    // and forward again as it comes home
+    expect(jabPull(0.55)).toBeLessThan(jabPull(0.45));
   });
 });
 

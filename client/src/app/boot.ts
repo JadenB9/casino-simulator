@@ -17,6 +17,7 @@ import { RemotePlayers, type SeatPose } from '../world/remote-players.ts';
 import { FloorLink, byteToYaw } from '../net/presence.ts';
 import { GAMES } from '../games/index.ts';
 import { openTableFlow, PartyPanel, withParty, type TableChoice } from '../ui/lobby/index.ts';
+import { closeTableFlows, InviteHub } from '../ui/lobby/index.ts'; // v6 invite6
 import { ensureOwnLook, isNewPlayer, mountHud, mountLogin, mountMenu, openBank, openEditor, openOnboarding, openProfile, openSettings, overlayCount, type Hud, type MenuHandle } from '../ui/menu/index.ts';
 import { isTyping } from '../ui/keyboard.ts';
 import { mountEmotes, openLeaderboard, socialApi, socialButton, type EmoteWheel } from '../ui/social/index.ts';
@@ -27,13 +28,16 @@ import { openEffects } from '../ui/shop/index.ts'; // v6 shop6: effects from any
 import { button, modal, toast } from '../ui/kit.ts';
 import { showAway, showIdleWarning, type AwayHandle, type WarningHandle } from '../ui/away/away.ts';
 import { IdleWatch } from './idle.ts';
-import { rideKey } from '../world/rides.ts';
+import { RideSound, rideKey } from '../world/rides.ts';
+import { mountFeats, type FeatsUi } from '../ui/feats/index.ts'; // v6 feats6
 import { ENGINES } from '../../../shared/src/games/index.ts';
 import { mountDaily, dailyApi, type DailyHandle } from '../ui/daily/index.ts'; // v6 celebs6
 // v6 bank6: the bank's calls and its transfer notices
 import * as bankApi from '../ui/bank/api.ts';
 import { bankNotices } from '../ui/bank/notices.ts';
 import { CLOSE, type Profile } from '../../../shared/src/protocol.ts';
+// v6 dine6: drinking and eating what the bar brings
+import { Diner } from '../world/consumables/diner.ts';
 
 export async function boot(): Promise<void> {
   const ui = document.getElementById('ui')!;
@@ -110,10 +114,16 @@ class App {
   private awayWalking = false;
   /** v6 bank6: money from other players, told on the floor, while the floor is connected. */
   private bankOff: (() => void) | null = null;
+  /** v6 invite6: invites to lobby tables (ui/lobby/invites.ts), while the floor is connected. */
+  private invites: InviteHub | null = null;
   /** v6 celebs6: the daily bonus's HUD button and sheet, while the HUD is up. */
   private daily: DailyHandle | null = null;
   /** Where each station's n-th seated player is drawn; stations never move. */
   private readonly seatCache = new Map<string, SeatPose | null>();
+  /** v6 dine6: you, drinking and eating what the bar brings (world/consumables/). */
+  readonly diner: Diner;
+  /** v6 feats6: the achievements (HUD cup, J, the sheet, the card when you earn one). */
+  private feats: FeatsUi | null = null;
 
   constructor(
     private readonly engine: Engine3D,
@@ -163,6 +173,8 @@ class App {
       allowed: (e) => !isTyping(e) && overlayCount() === 0 && this.hud !== null && this.table === null && this.world.seated === null,
       say: (text) => toast(text),
     });
+    const rideSound = new RideSound(sfx);
+    engine.onFrame((dt) => rideSound.update(dt, world.player.character, this.hud !== null && this.table === null && this.world.seated === null && !this.away));
     this.idle = new IdleWatch({
       showWarning: (at) => {
         this.idleWarning?.close();
@@ -177,6 +189,18 @@ class App {
       // Straight to the sockets: a table session's own send() would toast while it reconnects.
       here: () => (this.link?.send({ t: 'here' }) ?? true) && (this.table?.session.socket.send({ t: 'here' }) ?? true),
     });
+    // v6 dine6: sips and bites (Q), what they do for you, the empty taken away
+    this.diner = new Diner({
+      ui,
+      camera: engine.camera,
+      character: world.player.character,
+      look: () => session.profile?.look ?? null,
+      drop: () => void this.bar?.drop(),
+      onFloor: () => this.hud !== null && this.table === null && this.world.seated === null,
+      waiters: world.life.waiters,
+      sound: sfx,
+    });
+    engine.onFrame((dt) => this.diner.update(dt));
   }
 
   async start(saved: Promise<Profile | null>): Promise<void> {
@@ -316,8 +340,15 @@ class App {
     // Big wins are announced to people out on the floor, never to the winner at their table.
     this.lifeOff = this.life.connect(link, { onFloor: () => this.hud !== null && this.table === null && this.world.seated === null });
     link.on('emote', (id, e) => void this.world.showEmote(id === link.you?.id ? 'me' : id, e));
+    // v6 emotes6: an emote bought or earned while you're on the floor is yours at once: in the
+    // profile (the wheel reads it there next time) and unlocked on a wheel that's up now
+    link.on('owned', (emotes) => {
+      const p = session.profile;
+      if (p) session.set({ ...p, owned: [...new Set([...(p.owned ?? []), ...emotes])] });
+      this.emotes?.grant(emotes);
+    });
     // v6 fx6: the shop's effects and the lobby's statues, for everyone on the floor (world/fx/)
-    this.world.useFx({ self: () => link.you?.id ?? null, marquee: this.life.marquee });
+    this.world.useFx({ self: () => link.you?.id ?? null, marquee: this.life.marquee, tally: this.life.tally });
     link.on('fx', (ev) => this.world.playFx(ev));
     link.on('fxs', (list) => this.world.syncFx(list));
     link.on('statues', (list) => void this.world.setStatues(list));
@@ -332,6 +363,8 @@ class App {
       this.menu?.setOnline(n);
     });
     link.on('state', (_s, code) => void this.endsSession(code));
+    // v6 feats6: a feat of yours the floor heard of before any table said (earned as you left)
+    link.subscribe((m) => m.t === 'feat' && this.feats?.floorFeat(m));
     // Kept through away and back, with whatever is paid for and on its way.
     this.bar ??= new Bar({
       session,
@@ -344,6 +377,7 @@ class App {
     // by the waiters, and the staff's greetings by name.
     this.world.life.useLink(link);
     this.world.life.useBar(this.bar);
+    this.invites = this.inviteHub(link); // v6 invite6
     this.world.life.useApp({
       name: () => session.profile?.name ?? null,
       openBarMenu: () => this.openBarMenu(),
@@ -376,6 +410,8 @@ class App {
     }
     this.lifeOff?.();
     this.lifeOff = null;
+    this.invites?.dispose(); // v6 invite6
+    this.invites = null;
     this.chat?.dispose();
     this.chat = null;
     this.world.useRemotes(null);
@@ -417,16 +453,24 @@ class App {
     });
     this.hud.setOnline(this.link?.onlineCount ?? null);
     // Emotes (G) and the leaderboards, in the HUD's right-hand bar ahead of the tips bulb.
-    this.emotes = mountEmotes({ root: this.ui, send: (e) => void this.link?.emote(e) });
+    // v6 emotes6: the wheel shows what you own; a locked one opens the boutique at it
+    this.emotes = mountEmotes({ root: this.ui, send: (e) => void this.link?.emote(e), owned: () => session.profile?.owned, shop: (e) => this.openShop(e) });
     const bar = this.hud.root.querySelector('.hud-right')!;
     const first = bar.querySelector('.hud-btn');
     bar.insertBefore(socialButton('emotes', 'Emotes (G)', () => this.emotes?.toggle()), first);
-    bar.insertBefore(socialButton('leaderboard', 'Leaderboards', () => openLeaderboard({ root: this.ui, api: socialApi })), first);
+    // v6 stats6: at a table, the leaderboards open on its game's boards
+    const boards = () => openLeaderboard({ root: this.ui, api: socialApi, ...(this.table ? { game: this.table.station.game } : {}) });
+    bar.insertBefore(socialButton('leaderboard', 'Leaderboards', boards), first);
     bar.insertBefore(shopButton('boutique', 'Boutique', () => this.openShop()), first);
     bar.insertBefore(shopButton('effects', 'Effects', () => this.openEffects()), first); // v6 shop6
     bar.insertBefore(shopButton('bar', 'Bar', () => this.openBarMenu()), first);
     // v6 celebs6: the daily bonus (its button, and its sheet on arrival while today's is waiting)
     this.daily = mountDaily({ root: this.ui, bar, before: first, api: dailyApi, money: (m) => session.balance(m.balance, m.inPlay, m.rev), sfx: this.sfx });
+    // v6 feats6: the achievements, their cup in the bar and your title under your name
+    this.feats?.dispose();
+    this.feats = mountFeats({ root: this.ui, session, sfx: this.sfx, game: () => this.table?.station.game ?? null });
+    bar.insertBefore(this.feats.button, first);
+    this.feats.useHud(this.hud.root);
     this.chat?.setVisible(true);
   }
 
@@ -437,6 +481,8 @@ class App {
     this.emotes = null;
     this.daily?.dispose(); // v6 celebs6
     this.daily = null;
+    this.feats?.dispose(); // v6 feats6
+    this.feats = null;
     this.chat?.setVisible(false);
     this.hud?.close();
     this.hud = null;
@@ -531,7 +577,8 @@ class App {
   // --- tables ---------------------------------------------------------------------------------
 
   private async sitDown(station: WorldStation): Promise<void> {
-    const choice = await openTableFlow({
+    // v6 invite6: an invite being joined sits straight down at its table
+    const choice = this.invites?.claim(station) ?? await openTableFlow({
       game: station.game,
       variant: station.variant,
       floor: this.link,
@@ -565,6 +612,7 @@ class App {
             leave: () => void this.leaveTable(),
             sit: () => void table?.promptBuyIn(),
             root: this.ui,
+            invites: this.invites, // v6 invite6
           })
         : null;
     const module = party ? withParty(GAMES[station.game], party) : GAMES[station.game];
@@ -606,6 +654,8 @@ class App {
           if (seated) this.poseForSeat(m.seat);
         },
         onChat: (m) => current() && this.chat?.tableMessage(m),
+        // v6 feats6: earned here; shown once the round behind it has played out
+        onFeat: (m) => this.feats?.tableFeat(m, current() ? (fn) => table!.afterShown(fn) : undefined),
       },
     );
     this.table = { station, session: table, party, seated: false, posed: null };
@@ -704,6 +754,40 @@ class App {
     void this.world.exitTable();
   }
 
+  // --- v6 invite6: invites ----------------------------------------------------------------------
+
+  /** The invite hub over this floor link: what it needs to know and do on the floor. */
+  private inviteHub(link: FloorLink): InviteHub {
+    return new InviteHub({
+      floor: link,
+      root: this.ui,
+      stations: this.world.stations,
+      collider: this.world.collider,
+      where: () => (link.you ? { x: this.world.player.position.x, z: this.world.player.position.z } : null),
+      onFloor: () => this.hud !== null && !this.away && !this.stopped,
+      covered: () => overlayCount() > 0,
+      atTable: () => {
+        const open = this.table;
+        if (open) return { tableId: open.session.target.kind === 'lobby' ? (open.session.target.tableId ?? null) : null, seated: open.seated, game: open.station.game };
+        const at = this.world.seated;
+        return at ? { tableId: null, seated: false, game: at.game } : null;
+      },
+      standUp: async () => {
+        if (this.table) await this.leaveTable();
+        else if (closeTableFlows() || this.world.seated) await this.world.exitTable();
+        this.world.life.seating.stand({ walk: true });
+      },
+      hold: (on) => {
+        if (!this.table && !this.world.seated) this.world.player.setEnabled(!on);
+      },
+      sitAt: (station, x, z, heading) => {
+        this.world.player.teleport(x, z, heading);
+        this.world.enter(station);
+      },
+      sfx: this.sfx,
+    });
+  }
+
   // --- the ways a whole session ends ------------------------------------------------------------
 
   /**
@@ -734,6 +818,8 @@ class App {
     this.table?.session.close();
     this.emotes?.dispose();
     this.emotes = null;
+    this.feats?.dispose(); // v6 feats6
+    this.feats = null;
     this.disconnectFloor();
     this.world.player.setEnabled(false);
     modal(title, [text], [button('Reload', () => location.reload(), { cls: 'primary' })]);

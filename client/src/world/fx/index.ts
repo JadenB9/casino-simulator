@@ -66,6 +66,8 @@ export interface FxOptions {
   hangers: Hanger[];
   /** The casino's own reflections (High), for the gold. */
   env(): THREE.Texture | null;
+  /** Every station's model. */
+  stations: THREE.Object3D;
 }
 
 interface Playing {
@@ -89,6 +91,7 @@ export class FxPlayer {
   private self: () => number | null = () => null;
   private remotes: CharacterSource | null = null;
   private marquee: Marquee | null = null;
+  private tallySign: THREE.Mesh | null = null;
   private captionIn = 0;
   private readonly me: Person;
   private readonly warm: THREE.Object3D;
@@ -121,6 +124,8 @@ export class FxPlayer {
       where,
       people: () => o.characters.people(),
       env: o.env,
+      stations: o.stations,
+      tally: () => this.tallySign,
     };
   }
 
@@ -136,6 +141,11 @@ export class FxPlayer {
   /** The pit's LED sign, for the Headline (the app's floor life owns it). */
   useMarquee(m: Marquee | null): void {
     this.marquee = m;
+  }
+
+  /** The slots hall's win meter (the app's floor life owns it), for Own the Night. */
+  useTally(mesh: THREE.Mesh | null): void {
+    this.tallySign = mesh;
   }
 
   /** An effect bought just now (the floor's `fx`). */
@@ -270,7 +280,7 @@ export class FxPlayer {
           effect = golden(w, s, ev, late);
           break;
         case 'fx-takeover':
-          effect = takeover(w, s, ev, late, () => this.marquee);
+          effect = takeover(w, s, ev, late, () => this.marquee, this.o.hangers);
           break;
       }
     } catch (err) {

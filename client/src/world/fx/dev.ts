@@ -9,6 +9,7 @@ import { DEFAULT_LOOK, type Look } from '../../../../shared/src/look.ts';
 import type { Engine3D } from '../../render/engine3d.ts';
 import { serverNow } from '../../net/clock.ts';
 import { Marquee, marqueePlacement } from '../marquee.ts';
+import { Tally } from '../tally.ts';
 import type { FloorWorld } from '../index.ts';
 import type { Person } from '../characters.ts';
 
@@ -27,8 +28,9 @@ export interface FxDev {
   statues(n?: number): Promise<void>;
   stranger(x: number, z: number): Person;
   marquee: Marquee;
-  /** Where the pit's sign hangs. */
+  /** Where the pit's sign hangs, and the slots hall's meter. */
   sign: { x: number; z: number };
+  tally: Tally;
 }
 
 export function fxDev(world: FloorWorld, engine: Engine3D, params: URLSearchParams): FxDev {
@@ -36,7 +38,11 @@ export function fxDev(world: FloorWorld, engine: Engine3D, params: URLSearchPara
   const marquee = new Marquee(world.plan, world.quality);
   engine.scene.add(marquee.mesh);
   engine.onFrame((dt) => marquee.update(dt));
-  world.useFx({ self: () => ME, marquee });
+  // and the slots hall's win meter, for Own the Night
+  const tally = new Tally(world.plan, world.quality);
+  tally.set(1_234_500_00, 18, false);
+  engine.scene.add(tally.mesh);
+  world.useFx({ self: () => ME, marquee, tally });
   let stranger: Person | null = null;
   world.useRemotes({ character: (id) => (id === STRANGER && stranger ? stranger : undefined) });
   engine.onFrame((dt) => stranger?.update(dt));
@@ -44,6 +50,7 @@ export function fxDev(world: FloorWorld, engine: Engine3D, params: URLSearchPara
   const dev: FxDev = {
     marquee,
     sign: marqueePlacement(world.plan),
+    tally,
     play(fx, o = {}) {
       const item = effectItem(fx) ?? EFFECTS[0]!;
       const who = o.who === 'stranger' && stranger ? stranger.root.position : null;

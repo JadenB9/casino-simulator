@@ -2,7 +2,7 @@
 // verifies tokens, answers the account HTTP API, and forwards WebSocket upgrades to the right
 // Durable Object with headers only it can set.
 
-import { CLOSE, PROTOCOL_VERSION, type CreateTableResponse, type JoinByPinResponse, type LoanResponse, type LoginResponse, type MeResponse, type TicketResponse } from '../../shared/src/protocol.ts';
+import { CLOSE, PROTOCOL_VERSION, type CreateTableResponse, type JoinByPinResponse, type LoanResponse, type LoginResponse, type MeResponse, type StatsResponse, type TicketResponse } from '../../shared/src/protocol.ts';
 import { isValidName } from '../../shared/src/names.ts';
 import { PASSWORD_MAX, PASSWORD_MIN, isValidPassword } from '../../shared/src/password.ts';
 import { parseLook, lookFromJson } from '../../shared/src/look.ts';
@@ -15,12 +15,15 @@ import { signTicket, ticketTarget, verifyTicket } from './tickets.ts';
 import { KeyedBuckets } from './ratelimit.ts';
 import { bumpRate, escrowsOf, getAccount, loadProfile, ownedOf, setLook } from './db.ts';
 import { isFreeEmote, emoteItem } from '../../shared/src/items.ts';
+import { featsOf } from './feats.ts';
+import type { FeatsResponse } from '../../shared/src/feats.ts';
 import { refillCounted, takeLoan } from './transfer.ts';
 // v6 bank6
 import { bankApi, settleSavings } from './bank.ts';
 import { priceNow } from './market.ts';
 import { shopApi } from './shop.ts';
 import { leaderboard } from './leaderboard.ts';
+import { statsOf } from './stats.ts'; // v6 stats6
 // v6 celebs6: the daily bonus, and the dev stack's celebrity trigger
 import { dailyApi } from './daily.ts';
 import { celebsDevApi } from './floor/celebs.ts';
@@ -115,9 +118,22 @@ async function handleApi(request: Request, env: Env, route: string, cors: Record
     return json({ profile } satisfies MeResponse, 200, cors);
   }
 
+  // v6 feats: what you've earned and how far along each challenge is (feats.ts)
+  if (route === 'feats' && request.method === 'GET') {
+    return json((await featsOf(env.DB, claims.a)) satisfies FeatsResponse, 200, cors);
+  }
+
   // Names and numbers only; the boards are kept for a minute (see leaderboard.ts).
+  // v6 stats6: ?game=<id> for one game's boards; GET /stats for your own record
   if (route === 'leaderboard' && request.method === 'GET') {
-    return json(await leaderboard(env.DB, { id: claims.a, name: claims.n }, now), 200, cors);
+    const game = new URL(request.url).searchParams.get('game');
+    if (game !== null && (!isGameId(game) || CATALOG[game].dev)) return fail(400, 'BAD_REQUEST', 'No such game.', cors);
+    return json(await leaderboard(env.DB, { id: claims.a, name: claims.n }, now, game), 200, cors);
+  }
+  if (route === 'stats' && request.method === 'GET') {
+    const stats = await statsOf(env.DB, claims.a, now);
+    if (!stats) return fail(401, 'UNAUTHORIZED', 'That account is gone.', cors);
+    return json(stats satisfies StatsResponse, 200, cors);
   }
 
   if (route === 'me/look' && request.method === 'PUT') {
@@ -206,7 +222,7 @@ async function handleApi(request: Request, env: Env, route: string, cors: Record
   // v6 celebs6: the daily bonus (daily.ts); on the dev stack only, a celebrity or a gift box on demand
   if (route === 'daily' || route === 'daily/claim') return dailyApi(request, env, route, claims.a, cors);
   if (route === 'dev/bank/clock') return bankApi(request, env, route, { id: claims.a, name: claims.n }, cors); // v6 bank6
-  if (route.startsWith('dev/') && env.CASINO_DEV === '1') return celebsDevApi(request, route, cors, floor(env));
+  if (route.startsWith('dev/') && env.CASINO_DEV === '1') return celebsDevApi(request, env, route, cors, floor(env));
 
   // v6 bank6: savings, deposits, the Casino Index, transfers and the statement (bank.ts)
   if (route === 'bank' || route.startsWith('bank/')) return bankApi(request, env, route, { id: claims.a, name: claims.n }, cors);

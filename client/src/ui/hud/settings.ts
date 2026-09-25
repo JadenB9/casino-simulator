@@ -1,9 +1,10 @@
-// Settings: table tips, graphics quality, sound, and the camera and mouse (menu/controls.ts).
+// Settings: table tips, graphics quality and flashing, sound, and the camera and mouse (menu/controls.ts).
 // Quality picks how the one renderer is built, so a change is saved now and used from the next
 // load; everything else applies straight away.
 
 import './hud.css';
 import { tips } from '../../app/tips.ts';
+import { calm, setCalm } from '../../app/comfort.ts';
 import { savedQuality, saveQuality, type Quality } from '../../render/engine3d.ts';
 import { el } from '../kit.ts';
 import type { Closable, SfxLike } from '../menu/deps.ts';
@@ -11,6 +12,7 @@ import { openSheet } from '../menu/sheet.ts';
 import { segmented } from '../menu/parts.ts';
 import { bigWinSettings } from '../feed/settings.ts'; // features: big-win toasts
 import { controlSettings } from '../menu/controls.ts'; // world: the camera and mouse look
+import { inviteSettings } from '../lobby/invite-settings.ts'; // v6 invite6: do not disturb
 
 export interface SettingsDeps {
   root: HTMLElement;
@@ -63,6 +65,9 @@ export function openSettings(deps: SettingsDeps): Closable {
   const qBox = el('div');
   qBox.append(qNote, pending);
 
+  // flashing and motion (app/comfort.ts): applies at once, everywhere
+  const calmCtl = segmented<'full' | 'reduced'>('Reduce flashing & motion', [{ id: 'full', label: 'Full' }, { id: 'reduced', label: 'Reduced' }], calm() ? 'reduced' : 'full', (v) => setCalm(v === 'reduced'));
+
   // sound
   const sound = segmented<'on' | 'off'>('Sound', [{ id: 'on', label: 'On' }, { id: 'off', label: 'Off' }], deps.sfx.muted ? 'off' : 'on', (v) => {
     deps.sfx.setMuted(v === 'off');
@@ -95,8 +100,10 @@ export function openSettings(deps: SettingsDeps): Closable {
     el('h3', 'section-label', 'Tables'),
     row('Tips', tipsCtl.root, el('p', 'set-note', 'Shows the best play where a game has one (basic strategy, the video poker holds, Q-6-4) and which bets are better elsewhere.')),
     ...bigWinSettings(row), // features: big-win toasts
+    ...inviteSettings(row), // v6 invite6: do not disturb
     el('h3', 'section-label', 'Graphics'),
     row('Quality', quality.root, qBox),
+    row('Flashing & motion', calmCtl.root, el('p', 'set-note', 'Reduced: steady lights instead of flashing and chasing, fewer particles, no camera shake.')),
     el('h3', 'section-label', 'Audio'),
     row('Sound', sound.root, el('p', 'set-note', 'M mutes and unmutes anywhere.')),
     row('Volume', volWrap),

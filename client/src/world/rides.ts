@@ -18,6 +18,7 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 import { itemOfKind, withItem, type ShopItem } from '../../../shared/src/items.ts';
 import type { Look } from '../../../shared/src/look.ts';
 import { GOLD, beforeDraw, fin, reflect, type Finish } from './wearables.ts';
+import { calm } from '../app/comfort.ts';
 
 type V3 = THREE.Vector3;
 const V = (x = 0, y = 0, z = 0): V3 => new THREE.Vector3(x, y, z);
@@ -53,7 +54,7 @@ export interface RideSpec {
   toes: [number, number];
   /** How far the hips come down, knees bent (m). */
   crouch: number;
-  /** The right hand's grip in the ride's frame (the left mirrors it), for a handlebar. */
+  /** The right hand's grip in the ride's frame (the left mirrors it): a handlebar, a throne's arm. */
   grip?: [number, number, number];
   /** How much of the rider's lean the ride itself takes (a skateboard tips less than its rider). */
   tip: number;
@@ -156,11 +157,12 @@ export const RIDES: Record<string, RideSpec> = {
     deck: 0.22,
     seat: 0.43,
     feet: [
-      [0.1, 0.3],
-      [-0.1, 0.3],
+      [0.11, 0.38],
+      [-0.11, 0.38],
     ],
-    toes: [0.1, -0.1],
+    toes: [0.12, 0.12],
     crouch: 0,
+    grip: [-0.3, 0.9, 0.12],
     tip: 0.5,
     hover: '#ff6a3a',
     axles: [],
@@ -631,7 +633,7 @@ function buildThrone(parts: Parts): void {
   // legs: short scrolled feet at the corners
   for (const x of [-0.29, 0.29]) for (const z of [-0.22, 0.23]) parts.add(new THREE.SphereGeometry(0.035, 14, 10), T(x, dais + 0.03, z), GOLD);
   // the back: a tall gold frame, a buttoned velvet panel, a crest over it
-  const backZ = -0.23;
+  const backZ = -0.19;
   parts.add(new RoundedBoxGeometry(0.66, 0.68, 0.07, 3, 0.03), T(0, seat + 0.32, backZ), GOLD_SATIN);
   parts.add(new RoundedBoxGeometry(0.52, 0.56, 0.03, 3, 0.012), T(0, seat + 0.32, backZ + 0.045), VELVET);
   for (let r = 0; r < 3; r++) for (const x of r % 2 ? [-0.075, 0.075] : [-0.15, 0, 0.15]) parts.add(new THREE.SphereGeometry(0.009, 8, 6), T(x, seat + 0.14 + r * 0.18, backZ + 0.062), GOLD);
@@ -695,7 +697,7 @@ function glowMaterial(color: THREE.ColorRepresentation): THREE.MeshBasicMaterial
   g.fillRect(0, 0, 128, 128);
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
-  m = new THREE.MeshBasicMaterial({ map: tex, color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false });
+  m = new THREE.MeshBasicMaterial({ map: tex, color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
   m.name = 'ride-glow';
   glows.set(key, m);
   return m;
@@ -780,7 +782,8 @@ export class Ride {
     if (spec.hover !== undefined) {
       glowGeo ??= new THREE.PlaneGeometry(1.15, 0.62).rotateX(-Math.PI / 2).rotateY(Math.PI / 2);
       const glow = new THREE.Mesh(glowGeo, glowMaterial(spec.hover));
-      glow.position.y = 0.006;
+      // over a rug as well as the marble (the lobby's rugs stand a couple of centimetres proud)
+      glow.position.y = 0.035;
       glow.renderOrder = 2;
       glow.name = 'ride-glow';
       this.outer.add(glow);
@@ -798,7 +801,8 @@ export class Ride {
     this.lean += (leanFor(speed, yawRate) - this.lean) * k;
     const pitch = this.id === 'segway' ? segwayPitch(speed) : 0;
     this.pitch += (pitch - this.pitch) * k;
-    this.bob = this.spec.hover !== undefined ? hoverBob(this.t) : 0;
+    // with Reduce flashing & motion on, a hoverboard floats still and its glow holds steady
+    this.bob = this.spec.hover !== undefined && !calm() ? hoverBob(this.t) : 0;
     // one angle for every wheel, turned by the first axle's radius: the axles differ in size only on paper
     const r = this.spec.axles[0]?.r ?? 0;
     this.wheel = (this.wheel + wheelTurn(speed, dt, r)) % (Math.PI * 2);
@@ -838,7 +842,10 @@ export class Ride {
 /** Where the last ride you stepped off is remembered on this device (a convenience only). */
 const LAST_KEY = 'casino.lastRide';
 
+let remembered: string | null | undefined;
+
 function rememberRide(id: string): void {
+  remembered = id;
   try {
     localStorage.setItem(LAST_KEY, id);
   } catch {
@@ -847,11 +854,13 @@ function rememberRide(id: string): void {
 }
 
 function lastRide(): string | null {
+  if (remembered !== undefined) return remembered;
   try {
-    return localStorage.getItem(LAST_KEY);
+    remembered = localStorage.getItem(LAST_KEY);
   } catch {
-    return null;
+    remembered = null;
   }
+  return remembered;
 }
 
 /**
@@ -876,8 +885,23 @@ export interface RideKeyDeps {
   say(text: string): void;
 }
 
+/** The app's profile, as rideKey was given it (for the touch controls' ride button). */
+let keyDeps: RideKeyDeps | null = null;
+
+/**
+ * What B would do now, for a button that does the same: step off ('off'), step onto a ride
+ * ('on'), or nothing (no ride to step onto).
+ */
+export function rideChoice(): 'on' | 'off' | null {
+  const p = keyDeps?.profile();
+  if (!p) return null;
+  if (itemOfKind(p.look.ride, 'ride')) return 'off';
+  return toggledRide(p.look, p.owned, lastRide()) ? 'on' : null;
+}
+
 /** B steps off your ride and back on again. Returns a function that stops listening. */
 export function rideKey(deps: RideKeyDeps): () => void {
+  keyDeps = deps;
   let busy = false;
   const onKey = (e: KeyboardEvent) => {
     if (e.code !== 'KeyB' || e.repeat || e.ctrlKey || e.metaKey || e.altKey || busy || !deps.allowed(e)) return;
@@ -901,5 +925,89 @@ export function rideKey(deps: RideKeyDeps): () => void {
       .finally(() => (busy = false));
   };
   addEventListener('keydown', onKey);
-  return () => removeEventListener('keydown', onKey);
+  return () => {
+    removeEventListener('keydown', onKey);
+    if (keyDeps === deps) keyDeps = null;
+  };
+}
+
+// --- the sound of your own ride -----------------------------------------------------------------------
+
+/**
+ * Your own ride, heard: wheels on carpet as a soft rolling hiss that opens up with speed, a quiet
+ * motor whine on the electric ones, and the floating ones' low hum. Synthesized (filtered noise and
+ * two oscillators), through the game's master gain so mute and the volume setting apply. Only
+ * yours: a floor full of other riders would be a roar.
+ */
+export class RideSound {
+  private nodes: { roll: GainNode; tone: BiquadFilterNode; whine: OscillatorNode; whineGain: GainNode; hum: OscillatorNode; hum2: OscillatorNode; humGain: GainNode } | null = null;
+  private last: { x: number; z: number } | null = null;
+  private speed = 0;
+
+  constructor(private readonly sfx: { readonly audio: AudioContext; readonly out: GainNode }) {}
+
+  /** Every frame: the character you play as, and whether you're out on the floor (not at a table or away). */
+  update(dt: number, character: { root: THREE.Object3D; riding?: string | null }, onFloor: boolean): void {
+    const spec = onFloor ? rideSpec(character.riding) : null;
+    const at = character.root.position;
+    if (spec && this.last && dt > 0) {
+      const v = Math.hypot(at.x - this.last.x, at.z - this.last.z) / dt;
+      this.speed += ((v < 20 ? v : 0) - this.speed) * Math.min(1, dt * 6);
+    } else if (!spec) this.speed = 0;
+    this.last = { x: at.x, z: at.z };
+    if (!spec && !this.nodes) return;
+    const n = (this.nodes ??= this.build());
+    const ctx = this.sfx.audio;
+    const t = ctx.currentTime;
+    const v = spec ? Math.min(1, this.speed / spec.run) : 0;
+    const floats = spec?.hover !== undefined;
+    const wheels = !!spec && !floats && v > 0.02;
+    const motor = wheels && (character.riding === 'e-scooter' || character.riding === 'segway');
+    n.roll.gain.setTargetAtTime(wheels ? 0.05 + 0.2 * v : 0, t, 0.08);
+    n.tone.frequency.setTargetAtTime(220 + 1400 * v, t, 0.1);
+    n.whineGain.gain.setTargetAtTime(motor ? 0.012 + 0.02 * v : 0, t, 0.1);
+    n.whine.frequency.setTargetAtTime(260 + 900 * v, t, 0.1);
+    n.humGain.gain.setTargetAtTime(floats ? 0.035 + 0.05 * v : 0, t, 0.15);
+    n.hum.frequency.setTargetAtTime(62 + 30 * v, t, 0.2);
+    n.hum2.frequency.setTargetAtTime(124.7 + 60 * v, t, 0.2);
+  }
+
+  private build(): NonNullable<RideSound['nodes']> {
+    const ctx = this.sfx.audio;
+    // two seconds of noise, looped, low-passed: carpet under urethane
+    const buf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    let brown = 0;
+    for (let i = 0; i < data.length; i++) {
+      brown = (brown + 0.02 * (Math.random() * 2 - 1)) / 1.02;
+      data[i] = brown * 3.5;
+    }
+    const noise = ctx.createBufferSource();
+    noise.buffer = buf;
+    noise.loop = true;
+    const tone = ctx.createBiquadFilter();
+    tone.type = 'lowpass';
+    tone.frequency.value = 220;
+    const roll = ctx.createGain();
+    roll.gain.value = 0;
+    noise.connect(tone).connect(roll).connect(this.sfx.out);
+    noise.start();
+    const whine = ctx.createOscillator();
+    whine.type = 'triangle';
+    const whineGain = ctx.createGain();
+    whineGain.gain.value = 0;
+    whine.connect(whineGain).connect(this.sfx.out);
+    whine.start();
+    const hum = ctx.createOscillator();
+    const hum2 = ctx.createOscillator();
+    hum2.type = 'triangle';
+    const humGain = ctx.createGain();
+    humGain.gain.value = 0;
+    hum.connect(humGain);
+    hum2.connect(humGain);
+    humGain.connect(this.sfx.out);
+    hum.start();
+    hum2.start();
+    return { roll, tone, whine, whineGain, hum, hum2, humGain };
+  }
 }

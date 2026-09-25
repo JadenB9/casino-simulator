@@ -19,6 +19,10 @@ const CHINA: RGB = [0.86, 0.85, 0.8];
 const COFFEE: RGB = [0.08, 0.035, 0.015];
 const OLIVE: RGB = [0.2, 0.3, 0.05];
 const FOOD: RGB = [0.62, 0.36, 0.14];
+const MARGARITA: RGB = [0.62, 0.7, 0.3];
+const CAN: RGB = [0.03, 0.03, 0.035];
+const CAN_WRAP: RGB = [0.25, 0.9, 0.05];
+const CAKE: RGB = [0.14, 0.05, 0.02];
 
 function paint(g: THREE.BufferGeometry, c: RGB): THREE.BufferGeometry {
   const n = g.getAttribute('position').count;
@@ -52,6 +56,19 @@ function item(model: BarModel, x: number, z: number): THREE.BufferGeometry[] {
       return [at(lathe([[0.0001, 0], [0.058, 0.002], [0.06, 0.008], [0.0001, 0.006]], CHINA, 20), x, y, z), at(lathe([[0.0001, 0.006], [0.022, 0.006], [0.028, 0.03], [0.03, 0.052], [0.027, 0.052], [0.0001, 0.034]], CHINA, 20), x, y, z), at(lathe([[0.0001, 0.045], [0.027, 0.045]], COFFEE, 20), x, y, z)];
     case 'plate':
       return [at(lathe([[0.0001, 0], [0.075, 0], [0.1, 0.008], [0.104, 0.012], [0.1, 0.012], [0.075, 0.004], [0.0001, 0.004]], CHINA, 24), x, y, z), at(paint(new THREE.SphereGeometry(0.055, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.55, 1), FOOD), x, y + 0.004, z)];
+    case 'margarita':
+      return [
+        at(lathe([[0.0001, 0], [0.03, 0], [0.004, 0.006], [0.0035, 0.065], [0.016, 0.075], [0.02, 0.093], [0.03, 0.105], [0.056, 0.125], [0.058, 0.131], [0.0555, 0.131], [0.029, 0.109], [0.013, 0.079]], GLASS), x, y, z),
+        at(lathe([[0.0001, 0.079], [0.018, 0.096], [0.029, 0.109], [0.05, 0.123], [0.0001, 0.123]], MARGARITA), x, y, z),
+      ];
+    case 'can':
+      return [at(lathe([[0.0001, 0], [0.0265, 0], [0.0265, 0.13], [0.022, 0.138], [0.0001, 0.138]], CAN), x, y, z), at(lathe([[0.02655, 0.04], [0.02655, 0.09]], CAN_WRAP), x, y, z)];
+    case 'cake':
+      return [
+        at(lathe([[0.0001, 0], [0.075, 0], [0.1, 0.008], [0.104, 0.012], [0.1, 0.012], [0.075, 0.004], [0.0001, 0.004]], CHINA, 24), x, y, z),
+        at(lathe([[0.0001, 0.004], [0.052, 0.004], [0.054, 0.054], [0.0001, 0.054]], CAKE, 16), x, y, z),
+        ...[0, 2.1, 4.2].map((a) => at(paint(new THREE.CylinderGeometry(0.0022, 0.0022, 0.03, 6), CHINA), x + Math.sin(a) * 0.028, y + 0.069, z + Math.cos(a) * 0.028)),
+      ];
   }
 }
 

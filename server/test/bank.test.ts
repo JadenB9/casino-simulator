@@ -476,7 +476,7 @@ describe('the same operation fired many times at once', () => {
   const times = <T>(n: number, f: () => Promise<T>) => Promise.all(Array.from({ length: n }, f));
 
   it('lands once, for every kind, with the identity after', async () => {
-    const [s, d, c, f, x, to] = await Promise.all(['burs', 'burd', 'burc', 'burf', 'burx', 'burto'].map((t) => veteran(t, 100_000 * DOLLAR)));
+    const [s, d, c, f, x, to] = (await Promise.all(['burs', 'burd', 'burc', 'burf', 'burx', 'burto'].map((t) => veteran(t, 100_000 * DOLLAR)))) as [Player, Player, Player, Player, Player, Player];
     // savings (after a first move, so every copy races on the same `since`)
     await ok(await save(s, 'in', 1_000 * DOLLAR));
     const sid = op();

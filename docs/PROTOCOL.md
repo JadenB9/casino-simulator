@@ -106,7 +106,9 @@ every request).
 | POST | `/tables` | `{ game, variant?, visibility, limits?: { min, max } }` | `{ tableId, pin? }` | 400, 429 |
 | POST | `/tables/join` | `{ pin }` | `{ tableId, game, lobby?: LobbySummary }` | 404 `BAD_PIN`, 429 |
 | POST | `/ticket` | `{ target }` | `{ ticket, exp }` | 400 (not a socket path), 401, 429 |
-| GET | `/leaderboard` | | `LeaderboardResponse` | 401 |
+| GET | `/leaderboard` | `?game=<id>` (optional) | `LeaderboardResponse` | 400 (not a game on the floor), 401 |
+| GET | `/stats` | | `StatsResponse` | 401 |
+| GET | `/feats` | | `FeatsResponse` | 401 |
 | GET | `/shop` | | `ShopResponse` | 401 |
 | POST | `/shop/buy` | `{ item, op }` | `BuyResponse` | 400 (op), 404 `NOT_FOUND`, 409 `INSUFFICIENT_FUNDS {balance, inPlay}`, 409 `NOT_ELIGIBLE` (already yours), 429 |
 | POST | `/bar/order` | `{ item, op }` | `OrderResponse` | 400 (op), 404 `NOT_FOUND`, 409 `INSUFFICIENT_FUNDS {balance, inPlay}`, 429 |
@@ -138,6 +140,18 @@ $50,000 and records the difference as a loan: `loan.amount` is that difference, 
 whose `msg` says what the bank counted; `balance` and `inPlay` are the profile's. While chips
 are moving between a table and D1 (a buy-in, top-up or cash-out in flight) it is `409 BUSY`:
 ask again in a moment.
+
+**Achievements and challenges** (`shared/src/feats.ts`). The tables decide them from the rounds
+they settle (`server/src/feats.ts`); each is earned once per account and paid once, in one D1
+batch: the `casino_feats` row and, for a cash reward, a `'grant'` ledger row with op id
+`feat:<account>:<feat>` and the balance change. The player hears `{ t: 'feat', feat, at,
+balance? }` on the table's socket (the balance after a cash reward) and everyone on the floor
+`{ t: 'feat', id, name, feat }`. Reward pieces, emotes and titles need no row of their own: they
+come with the feat (`profile.owned`, and `look.title` may name a feat whose reward has a
+title). `GET /feats` is `{ feats: [{ feat, at }], tally }`: the tallies challenges are measured on
+(`won`, `best`, `rounds`, `won:<game>`, `wins:<game>`, `bj:naturals`), as D1 has them. Tables
+send their tallies now and then (two minutes after the first unsent one, when the player stands
+up, and before paying a feat), so the numbers can trail a table still in play.
 
 ```ts
 type Profile = {
@@ -181,22 +195,45 @@ type OrderResponse = { order: BarOrder; balance: number; inPlay: number; rev: nu
 ```
 
 ```ts
-type LeaderboardId = "richest" | "biggestWin" | "rounds";       // LEADERBOARDS, in tab order
-type LeaderboardRow = { rank: number; name: string; value: number; you?: true };
+type LeaderboardId =                                            // LEADERBOARDS, in the sheet's order
+  | "richest" | "netUp" | "netDown" | "won" | "lost" | "wagered" | "biggestWin" | "biggestLoss"
+  | "rounds" | "winRate" | "streak" | "feats" | "celebs" | "collection"
+  | "today" | "todayDown" | "week" | "weekDown";
+// GAME_LEADERBOARDS, one game's: netUp netDown won lost biggestWin biggestLoss rounds winRate
+type LeaderboardRow = { rank: number; name: string; value: number; of?: number; you?: true };
 type Leaderboard = {
   top: LeaderboardRow[];                                       // at most LEADERBOARD_TOP (10), best first
-  you: { rank: number | null; name: string; value: number } | null;  // only when you're not in top
+  you: { rank: number | null; name: string; value: number; of?: number } | null;  // only when you're not in top
 };
-type LeaderboardResponse = { boards: Record<LeaderboardId, Leaderboard>; age: number };
+type LeaderboardResponse = { boards: Partial<Record<LeaderboardId, Leaderboard>>; game?: GameId; age: number };
+type StatLine = { rounds; wagered; net; biggestWin;             // lifetime, from the cash-outs
+                  counted; wins; won; lost; biggestLoss };      // from the round tallies (v6 on)
+type StatsResponse = { name; createdAt; worth: { balance; inPlay; total }; total: StatLine;
+                       games: Partial<Record<GameId, StatLine>>;
+                       days: { day: string; net: number }[];    // STATS_DAYS (14) Las Vegas days, oldest first
+                       streak; feats; celebs; collection };
 ```
 
-Leaderboards. `richest` is balance plus chips taken to tables (`inPlay`, what the buy-ins took;
-a stack's wins count once it cashes out), in cents. `biggestWin` is the largest single-round
-profit in any one game, in cents. `rounds` is rounds played over every game, a count. Places
-are shared on a tie (1, 2, 2, 4), and ties are listed oldest account first. `you.rank` is null
-when there's nothing to rank yet (no money, no win, no rounds). Names only: no account ids.
-Each Worker isolate reads the boards from D1 at most once a minute and `age` says how old they
-are (ms); a player outside a top ten has their own place read once per such read.
+Leaderboards (`server/src/leaderboard.ts`; what each counts is `shared/src/stats.ts`). Money in
+cents, counts as counts, `winRate` in basis points (5234 = 52.34%) with `of` the rounds it's out
+of. `richest` is balance plus chips taken to tables (`inPlay`, what the buy-ins took; a stack's
+wins count once it cashes out). `netUp` / `netDown` are lifetime net over every game (the losers'
+board holds only players who are down, most down first, values negative), `wagered` everything
+bet, `rounds` rounds played, all from the cash-outs. `biggestWin` is the largest single-round
+profit in any one game. From the round tallies, which begin with v6 and reach D1 with the feats'
+flush (every couple of minutes at a table, and at cash-out): `won` / `lost` (the profit of winning
+rounds, what losing rounds cost), `biggestLoss` (most lost on one round), `winRate` (rounds that
+made a profit, out of `WIN_RATE_MIN` = 100 or more; a push is not a win), `streak` (winning rounds
+in a row at one table; a push keeps it), `today` / `week` and their `Down` twins (net since
+midnight / Monday midnight, Las Vegas time). `feats` counts achievements earned, `celebs` the
+different celebrities met, `collection` what the kept items cost. `?game=<id>` answers that game's
+eight boards instead (win rate over `WIN_RATE_MIN_GAME` = 50 rounds). Places are shared on a tie
+(1, 2, 2, 4), ties listed oldest account first (newest first on the losers' boards). `you.rank`
+is null when there's nothing to rank yet. Names only: no account ids. Each Worker isolate reads a
+set of boards from D1 at most once a minute (each game's are a set of their own) and `age` says
+how old they are (ms); a player outside a top ten has their own places read once per such read.
+
+`GET /stats` is the asker's own record for the stats sheet, and nobody else's is ever sent.
 
 **The daily bonus** (`server/src/daily.ts`, `shared/src/celebs.ts`). `GET /daily` says where your
 streak stands; `POST /daily/claim` takes today's. Days are Las Vegas days. The first claim pays
@@ -522,8 +559,10 @@ folder documents the final shapes):
 | threecard | `bet {ante, pairPlus, spot?}`, `deal` (solo), `spots {n}` (solo, 1-3), `play {spot?}`, `fold {spot?}` |
 | war | `bet {bet, tie, spot?}`, `deal` (solo), `spots {n}` (solo, 1-3), `war {spot?}`, `surrender {spot?}` |
 | holdem | `fold`, `check`, `call`, `bet {amount}`, `raise {to}`, `allin`, `sitout {on}` |
+| letitride | `bet {unit, bonus, spot?}` (unit on each of the three bets), `deal` (solo), `spots {n}` (solo, 1-3), `ride {spot?}`, `pull {spot?}` (the bet up now: 1, then 2) |
+| paigow | `bet {bet, fortune, spot?}`, `deal` (solo), `spots {n}` (solo, 1-3), `set {low: [i, j], spot?}` (the two of the seven that make the low hand) |
 
-Several hands (blackjack, Three Card Poker, Casino War): a hand is played at a spot numbered like
+Several hands (blackjack, Three Card Poker, Casino War, Let It Ride, Pai Gow Poker): a hand is played at a spot numbered like
 the seats, and in these games' events and views every `seat` is a spot. At a shared table a
 player's spot is their seat; a solo player can play spots 0 to n - 1 (`spots {n}`), and `spot`
 in an action says which of them it's for. Each view's `mine` lists the viewer's spots.
