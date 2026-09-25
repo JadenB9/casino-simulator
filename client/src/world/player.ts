@@ -72,9 +72,11 @@ const SHRUNK = 1e-3;
  * above, at a three-quarter angle with room enough (the ways round to try, nearest first), for as
  * long as the bubble is up.
  */
-const SHOW_DIST = 2.4;
+const SHOW_DIST = 2.8;
 const SHOW_PITCH = 0.14;
-const SHOW_ROOM = 1.6;
+/** The emote view looks at this share of the head's height. */
+const SHOW_AT = 0.74;
+const SHOW_ROOM = 1.8;
 const SHOW_TRIES = [0.55, -0.55, 0.95, -0.95, 0.2, -0.2, 1.4, -1.4, 1.9, -1.9];
 const SHOW_S = EMOTE_S + 0.2;
 /** Looking this far (radians) while an emote is shown brings the eyes back. */
@@ -421,10 +423,13 @@ export class Player {
     this.character.root.rotation.y = this.heading;
   }
 
-  /** The follow camera looking at the head from `yaw` and `pitch`, `far` away or nearer where something's in the way. */
-  private computeCamera(yaw: number, pitch: number, far: number): void {
+  /**
+   * The follow camera looking at a point over the walker (the head, unless `at` says how high) from
+   * `yaw` and `pitch`, `far` away or nearer where something's in the way.
+   */
+  private computeCamera(yaw: number, pitch: number, far: number, at = EYE): void {
     // (a ride lifts the walker, and the head with it)
-    this.target.set(this.position.x, EYE + this.position.y, this.position.z);
+    this.target.set(this.position.x, at + this.position.y, this.position.z);
     const cp = Math.cos(pitch);
     this.dir.set(Math.sin(yaw) * cp, Math.sin(pitch), Math.cos(yaw) * cp);
     // back off along the ray until something solid is in the way
@@ -449,7 +454,7 @@ export class Player {
     if (k < 1) {
       // behind you, or out in front while an emote is shown
       const s = this.showing;
-      if (s) this.computeCamera(s.yaw, SHOW_PITCH, SHOW_DIST);
+      if (s) this.computeCamera(s.yaw, SHOW_PITCH, SHOW_DIST, this.showAt());
       else this.computeCamera(this.camYaw, clampPitch(this.camPitch, 'third'), this.camDist);
       // pull in fast when blocked, ease back out when clear
       const d = this.lastAllowed;
@@ -525,9 +530,14 @@ export class Player {
     this.showLook = 0;
   }
 
+  /** Where an emote is framed: the middle of the body, from the feet to hands thrown up, standing or seated. */
+  private showAt(): number {
+    return (Number.isFinite(this.headY) ? this.headY - this.position.y : HEAD_Y) * SHOW_AT;
+  }
+
   /** Out in front for an emote: a three-quarter view with room to stand back, or the roomiest way round. */
   private showYaw(): number {
-    const o = { x: this.position.x, y: EYE + this.position.y, z: this.position.z };
+    const o = { x: this.position.x, y: this.showAt() + this.position.y, z: this.position.z };
     const cp = Math.cos(SHOW_PITCH);
     let best = this.heading;
     let most = -Infinity;
