@@ -24,7 +24,7 @@ import { GlowMerge, Lighting, buildPools } from './lighting.ts';
 import { Props } from './props.ts';
 import { Characters } from './characters.ts';
 import { Player } from './player.ts';
-import { Interact } from './interact.ts';
+import { Interact, type SpotProvider } from './interact.ts';
 import { TouchControls } from './touch.ts';
 import { StationLod } from './lod.ts';
 import { Bloom, FLOOR_BLOOM, MACHINE_BLOOM, PixelRatio, STUDIO_BELOW, STUDIO_BLOOM, TABLE_BLOOM, type BloomLook } from './bloom.ts';
@@ -157,6 +157,8 @@ export interface FloorWorld extends World {
   readonly zone: ZoneId;
   /** v6 city6: the floor socket, for the elevator and the server's moves (`tp`); null to forget. */
   useFloor(link: CityLink | null): void;
+  /** v6 city6: more "Press E" spots (the valet, the jail's desk); the returned function takes them back. */
+  spots(fn: SpotProvider): () => void;
 }
 
 /** v6 city6: no rooms of the casino are seen from another zone. */
@@ -520,6 +522,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
       return city.zone;
     },
     useFloor: (link) => city.useLink(link),
+    spots: (fn) => interact.spots(fn),
     dispose() {
       city.dispose();
       map.dispose();

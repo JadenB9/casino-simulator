@@ -64,10 +64,11 @@ export const PICKUP = { x: 132.2, z: 2.0, yaw: Math.PI };
 
 /**
  * The lots' front doors on the east sidewalk (the jail's and the garage's buildings put theirs
- * here, facing the street), nearest the crosswalk.
+ * here, facing the street): the garage's by the plaza's crosswalk, the jail's with a crosswalk of
+ * its own.
  */
 export const ENTRANCES = {
-  jail: { x: m(LOTS.jail.minX), z: -8, yaw: -Math.PI / 2 },
+  jail: { x: m(LOTS.jail.minX), z: -25, yaw: -Math.PI / 2 },
   garage: { x: m(LOTS.garage.minX), z: 8, yaw: -Math.PI / 2 },
 };
 

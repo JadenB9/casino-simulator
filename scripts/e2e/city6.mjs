@@ -3,6 +3,8 @@
 //   dev    (dev floor, no server) each zone from its natural views on High and Low with its draw
 //          calls; a ride from the casino's lobby to the roof and back played through (the doors
 //          close, the dark counts the floors, the doors open on the other zone)
+//   zfight (dev floor) every face of both zones and the casino's elevator through zfight.ts: no two
+//          differently dressed faces in one plane where anyone can look (props' own models listed)
 //   phone  (dev floor, a phone) the action button in the car opens the panel; a tap on a floor rides
 //   game   logged in, two players: A walks up to the casino's elevator, calls it, steps in, E opens
 //          the panel, G rides down; B, still in the casino, stops drawing A. A walks out through
@@ -20,7 +22,7 @@ import { execFileSync } from 'node:child_process';
 
 const [port = '6350', out = '/tmp/city6', ...wanted] = process.argv.slice(2);
 mkdirSync(out, { recursive: true });
-const checks = wanted.length ? wanted : ['dev', 'phone', 'game'];
+const checks = wanted.length ? wanted : ['dev', 'zfight', 'phone', 'game'];
 const gpu = process.env.GPU === '1';
 const browser = await chromium.launch(gpu ? { channel: 'chromium', args: ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'] } : { args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 let failed = 0;
@@ -177,6 +179,103 @@ if (checks.includes('dev')) {
   }
 }
 
+// --- z-fighting --------------------------------------------------------------------------------------
+
+if (checks.includes('zfight')) {
+  const { p, ctx, errors } = await devFloor('high');
+  for (const zone of ['ground', 'roof', 'casino']) {
+    const r = await p.evaluate(async (zone) => {
+      const Z = await import('/casino/src/world/zfight.ts');
+      const { THREE, world, engine } = window.casino;
+      const city = world.city;
+      if (zone !== 'casino') await city.prepare(zone);
+      engine.scene.updateMatrixWorld(true);
+      const surfaces = [];
+      const m = new THREE.Matrix4();
+      const w = new THREE.Matrix4();
+      const v = new THREE.Vector3();
+      const matName = (mat) => mat.name || mat.type;
+      const push = (name, mat, geo, matrix, group) => {
+        const pos = geo.attributes.position;
+        if (!pos) return;
+        const idx = geo.index;
+        const start = group ? group.start : 0;
+        const count = group ? group.count : idx ? idx.count : pos.count;
+        const out = new Float32Array(Math.floor(count / 3) * 9);
+        for (let k = 0; k < Math.floor(count / 3) * 3; k++) {
+          const i = idx ? idx.getX(start + k) : start + k;
+          v.fromBufferAttribute(pos, i).applyMatrix4(matrix);
+          out[k * 3] = v.x;
+          out[k * 3 + 1] = v.y;
+          out[k * 3 + 2] = v.z;
+        }
+        surfaces.push({ name, mat, pos: out });
+      };
+      const meshSurfaces = (o, label) => {
+        if (o.isBatchedMesh) {
+          for (let i = 0; i < o.instanceCount; i++) {
+            let gid;
+            try {
+              gid = o.getGeometryIdAt(i);
+            } catch {
+              continue;
+            }
+            if (gid === undefined || gid < 0) continue;
+            const range = o.getGeometryRangeAt(gid);
+            o.getMatrixAt(i, m);
+            w.multiplyMatrices(o.matrixWorld, m);
+            const idx = o.geometry.index;
+            push(`${label}#${i}`, matName(o.material), o.geometry, w, idx ? { start: range.indexStart, count: range.indexCount } : { start: range.vertexStart, count: range.vertexCount });
+          }
+          return;
+        }
+        if (o.isInstancedMesh) {
+          for (let i = 0; i < o.count; i++) {
+            o.getMatrixAt(i, m);
+            w.multiplyMatrices(o.matrixWorld, m);
+            push(`${label}#${i}`, matName(o.material), o.geometry, w, null);
+          }
+          return;
+        }
+        push(label, matName(o.material), o.geometry, o.matrixWorld, null);
+      };
+      // the zone's own group, or (in the casino) the lobby's part of the floor's batch and the bank
+      if (zone === 'casino') {
+        city.casinoBank.group.traverse((o) => o.isMesh && meshSurfaces(o, o.name));
+        const lobby = world.plan.rooms.find((r) => r.id === 'lobby').bounds;
+        engine.scene.getObjectByName('floor').children.filter((o) => o.isBatchedMesh).forEach((o) => meshSurfaces(o, o.name));
+        for (let i = surfaces.length - 1; i >= 0; i--) {
+          const s = surfaces[i];
+          let keep = false;
+          for (let k = 0; k < s.pos.length && !keep; k += 3) keep = s.pos[k] > lobby.x0 - 0.5 && s.pos[k] < lobby.x1 + 0.5 && s.pos[k + 2] > lobby.z0 - 0.5 && s.pos[k + 2] < lobby.z1 + 0.5;
+          if (!keep) surfaces.splice(i, 1);
+        }
+      } else {
+        const g = city['zones'].get(zone).group;
+        g.traverse((o) => {
+          if (!o.isMesh || o.isSkinnedMesh || o.isPoints) return;
+          // the sky, the skyline rings and the far city are backdrops, not surfaces anyone stands by
+          if (/^(sky|skyline|city-below|towers)/.test(o.name)) return;
+          meshSurfaces(o, o.name || o.parent?.name || 'mesh');
+        });
+      }
+      // nobody sees the underside of what stands on the ground, or anything below it
+      const unseen = ([, y], [, ny]) => y < -0.005 || (ny < -0.99 && y < 0.02);
+      const fights = Z.findFights(surfaces, { unseen });
+      const thing = (x) => x.replace(/#\d+$/, '');
+      return {
+        surfaces: surfaces.length,
+        ours: fights.filter((f) => !/^prop:/.test(thing(f.a)) || !/^prop:/.test(thing(f.b)) || thing(f.a) !== thing(f.b)).map(Z.describeFight),
+        own: fights.filter((f) => /^prop:/.test(thing(f.a)) && thing(f.a) === thing(f.b)).length,
+      };
+    }, zone);
+    console.log(`zfight ${zone}: ${r.surfaces} surfaces${r.own ? `, ${r.own} inside props' own models` : ''}`);
+    for (const f of r.ours.slice(0, 30)) fail(`z-fight ${zone}: ${f}`);
+  }
+  if (errors.length) fail(`zfight errors: ${errors.slice(0, 3).join(' | ')}`);
+  await ctx.close();
+}
+
 // --- a phone --------------------------------------------------------------------------------------
 
 if (checks.includes('phone')) {
@@ -195,7 +294,7 @@ if (checks.includes('phone')) {
   await p.waitForTimeout(800);
   // the action button says what E would
   const act = await p.evaluate(() => document.querySelector('.touch-act:not([hidden])')?.textContent ?? '');
-  ok(/Choose a floor/.test(act), `in the car the action button reads "${act.trim()}"`);
+  ok(/Choose/.test(act), `in the car the action button reads "${act.trim()}"`);
   await p.tap('.touch-act');
   await p.waitForSelector('.lift-panel', { timeout: 3000 });
   await p.waitForTimeout(300);

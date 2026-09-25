@@ -63,7 +63,7 @@ function merge(parts: THREE.BufferGeometry[]): THREE.BufferGeometry {
 function bodyGeometry(): THREE.BufferGeometry {
   // the body, and the roof's painted skin over the glass
   const roof = new THREE.BoxGeometry(CAR.w - 0.3, 0.05, 1.1);
-  roof.translate(0, 1.345, -0.18);
+  roof.translate(0, 1.38, -0.18);
   return merge([profile(SIDE, CAR.w), roof]);
 }
 
