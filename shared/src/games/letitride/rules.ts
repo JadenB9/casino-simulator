@@ -170,50 +170,62 @@ function straightDraw(ranks: readonly number[]): { gaps: number; highs: number; 
   return best;
 }
 
+/** Why a bet is worth letting ride, as the strategy card puts it. */
+export type RideReason = 'pays' | 'royal' | 'run' | 'one-gap' | 'two-gaps' | 'flush-draw' | 'open-straight';
+
 /**
  * Bet 1, on your three cards: let it ride with a paying hand already (a pair of tens or better,
  * three of a kind), or three to a royal flush, or three suited cards in a row but 2-3-4 and A-2-3,
  * or three to a straight flush with one gap and a high card, or with two gaps and two high cards.
- * Pull it back otherwise. Wizard of Odds' strategy, and every hand of it is the best play by the
- * exact enumeration in letitride-exact.test.ts.
+ * Pull it back otherwise (null). Wizard of Odds' strategy, and every hand of it is the best play
+ * by the exact enumeration in letitride-exact.test.ts.
  */
-export function rideFirst(cards: readonly Card[]): boolean {
+export function firstReason(cards: readonly Card[]): RideReason | null {
   const { ranks, suited } = shape(cards);
   if (ranks[0] === ranks[1] || ranks[1] === ranks[2]) {
     // a pair (or three) of tens or better; a lower pair only pays if it improves
-    return ranks[1]! >= TEN || ranks[0] === ranks[2];
+    return ranks[1]! >= TEN || ranks[0] === ranks[2] ? 'pays' : null;
   }
-  if (!suited) return false;
+  if (!suited) return null;
   const d = straightDraw(ranks);
-  if (!d) return false;
-  if (ranks.every((r) => r >= TEN)) return true;
-  if (d.gaps === 0) return !(ranks.join() === '0,1,2' || ranks.join() === '0,1,12');
-  if (d.gaps === 1) return d.highs >= 1;
-  return d.highs >= 2;
+  if (!d) return null;
+  if (ranks.every((r) => r >= TEN)) return 'royal';
+  if (d.gaps === 0) return ranks.join() === '0,1,2' || ranks.join() === '0,1,12' ? null : 'run';
+  if (d.gaps === 1) return d.highs >= 1 ? 'one-gap' : null;
+  return d.highs >= 2 ? 'two-gaps' : null;
+}
+
+export function rideFirst(cards: readonly Card[]): boolean {
+  return firstReason(cards) !== null;
 }
 
 /**
  * Bet 2, on your three cards and the first community card: let it ride with a paying hand, four
- * to a flush, or four to an open straight with a high card. Pull it back otherwise. Every
+ * to a flush, or four to an open straight with a high card. Pull it back otherwise (null). Every
  * four-card hand of it is the best play by the exact enumeration in letitride-exact.test.ts. A few
  * hands are an exact tie, riding or not (four to an open straight with no high card, like 5-6-7-8,
  * and four high cards to an inside straight, like 10-J-Q-A): some strategy cards ride those, this
  * one pulls them back, and the house edge is the same either way.
  */
-export function rideSecond(cards: readonly Card[]): boolean {
+export function secondReason(cards: readonly Card[]): RideReason | null {
   const { ranks, suited } = shape(cards);
   const distinct = new Set(ranks).size;
   if (distinct < 4) {
     // two pair or better pays already; one pair pays from tens up
-    if (distinct < 3) return true;
+    if (distinct < 3) return 'pays';
     const pair = ranks.find((r, i) => ranks.indexOf(r) !== i)!;
-    return pair >= TEN || ranks.filter((r) => r === pair).length === 3 || new Set(ranks.filter((r) => r !== pair)).size === 1;
+    const pays = pair >= TEN || ranks.filter((r) => r === pair).length === 3 || new Set(ranks.filter((r) => r !== pair)).size === 1;
+    return pays ? 'pays' : null;
   }
-  if (suited) return true;
+  if (suited) return 'flush-draw';
   const d = straightDraw(ranks);
-  if (!d) return false;
+  if (!d) return null;
   // open at both ends (A-2-3-4 and J-Q-K-A fill only one way) with a high card to pair
-  return d.gaps === 0 && !ranks.includes(12) && d.highs >= 1;
+  return d.gaps === 0 && !ranks.includes(12) && d.highs >= 1 ? 'open-straight' : null;
+}
+
+export function rideSecond(cards: readonly Card[]): boolean {
+  return secondReason(cards) !== null;
 }
 
 // ---------------------------------------------------------------------------------------------

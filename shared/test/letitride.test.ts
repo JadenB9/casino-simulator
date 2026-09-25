@@ -469,3 +469,21 @@ describe('let it ride and pai gow at chosen limits', () => {
     expect(p.act(0, { type: 'bet', bet: 300_000, fortune: 30_000 }, { allowRefusal: true }).refused).toBeUndefined();
   });
 });
+
+describe('let it ride tips', () => {
+  it('says ride or pull with the reason, and agrees with the strategy', async () => {
+    const { rideAdvice } = await import('../src/games/letitride/advice.ts');
+    expect(rideAdvice(cards('Qs Qh 4d'))).toEqual({ ride: true, text: 'Let it ride: a Pair of Queens pays already' });
+    expect(rideAdvice(cards('5s 5h 5d'))).toEqual({ ride: true, text: 'Let it ride: Three Fives pays already' });
+    expect(rideAdvice(cards('Js Qs As')).text).toBe('Let it ride: three to a royal flush');
+    expect(rideAdvice(cards('9s 9h 4d')).text).toBe('Pull it back: a Pair of Nines, not enough to ride on three cards');
+    expect(rideAdvice(cards('2s 7s 9s Ks')).text).toBe('Let it ride: four to a flush');
+    expect(rideAdvice(cards('Ks 9h 4d 2c'))).toEqual({ ride: false, text: 'Pull it back: King high, no draw worth the bet' });
+    const rng = seededRng(21);
+    for (let i = 0; i < 2_000; i++) {
+      const { hands, board } = dealHands(rng, 1);
+      expect(rideAdvice(hands[0]!).ride).toBe(rideFirst(hands[0]!));
+      expect(rideAdvice([...hands[0]!, board[0]!]).ride).toBe(rideSecond([...hands[0]!, board[0]!]));
+    }
+  });
+});
