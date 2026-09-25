@@ -419,7 +419,7 @@ if (checks.includes('poses')) {
     }
     await a.p.keyboard.press('KeyE');
     await a.p.waitForFunction(() => window.casino.world.life.seating.seated, null, { timeout: 8000 }).catch(() => {});
-    check(await a.p.evaluate(() => !!window.casino.world.life.seating.seated), 'sat down on the sofa, the glass still in hand');
+    check(await a.p.evaluate(() => !!window.casino.world.life.seating.seated), 'sat down on the bench, the glass still in hand');
     await a.p.waitForTimeout(1500);
     await hold(a.p);
     const f = [Math.sin(seat.yaw), Math.cos(seat.yaw)];
@@ -429,7 +429,7 @@ if (checks.includes('poses')) {
       else await pose(a.p, wine.order, 1, phase);
       await aim(a.p, eye, [seat.x, 0.95, seat.z]);
       await a.p.waitForTimeout(700);
-      await shot(a.p, `sofa-${name}`);
+      await shot(a.p, `bench-${name}`);
     }
     await pin(a.p);
     await free(a.p);
