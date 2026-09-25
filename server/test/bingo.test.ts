@@ -17,6 +17,9 @@ import { BUY_MS } from '../../shared/src/games/bingo/engine.ts';
 import { PATTERNS, completions, prizeFor } from '../../shared/src/games/bingo/rules.ts';
 import type { CardView } from '../../shared/src/games/bingo/protocol.ts';
 import type { Member } from '../../shared/src/protocol.ts';
+import { engineFor } from '../../shared/src/games/index.ts';
+import { hasLimitChoice, standardLimits } from '../../shared/src/limits.ts';
+import { describeWin } from '../src/floor/wins.ts';
 
 interface Player {
   id: number;
@@ -261,5 +264,22 @@ describe('bingo at the table host', () => {
     expect(await escrow(a.id, tableId)).toBeNull();
     expect(await money(a.id)).toEqual({ balance: before.a.balance - 4_000 + won, in_play: 0 });
     cb.ws.close();
+  });
+});
+
+describe('the big-win feed and the limits know the parlour games', () => {
+  it('names what paid', () => {
+    expect(describeWin('bingo', '', [{ type: 'ball', call: 44, ball: 7 }, { type: 'win', seat: 0, card: 3, pattern: 'blackout', call: 44, mult: 2_000_000, paid: 2_000_000 }, { type: 'win', seat: 0, card: 3, pattern: 'line', call: 44, mult: 40, paid: 40 }], 0, 100, 2_000_040)).toBe('Blackout on ball 44, 20,000x');
+    expect(describeWin('bingo', '', [{ type: 'end', round: 1, calls: 40, seats: {} }], 0, 100, 5_000)).toBe('Bingo, 50x');
+    expect(describeWin('pachinko', '', [{ type: 'launch', seat: 0, jackpots: 5, balls: 780 }], 0, 2_500, 78_000)).toBe('5-jackpot chain, 780 balls');
+    expect(describeWin('pachinko', '', [{ type: 'launch', seat: 0, jackpots: 0, balls: 30 }], 0, 100, 120)).toBe('1x');
+  });
+
+  it('their limits are chosen like the online games', () => {
+    for (const game of ['bingo', 'pachinko'] as const) {
+      expect(hasLimitChoice(game)).toBe(true);
+      const cfg = engineFor(game).config('', 'multi').limits.default;
+      expect(standardLimits(game)).toEqual({ min: cfg.min, max: cfg.max });
+    }
   });
 });
