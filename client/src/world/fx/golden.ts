@@ -57,7 +57,7 @@ export function golden(w: FxWorld, stock: Stock, ev: FxEvent, late: boolean): Ef
         shaftRoom = view.here;
         placeShafts(w, shafts, shaftRoom);
       }
-      shaftMat.uniforms.uK!.value = (q === 'high' ? 0.2 : 0.28) * k * (0.85 + 0.15 * Math.sin(t * 0.7));
+      shaftMat.uniforms.uK!.value = (q === 'high' ? 0.2 : 0.17) * k * (0.85 + 0.15 * Math.sin(t * 0.7));
       shaftMat.uniforms.uTime!.value = t;
       if (left > 1.5) {
         owed += RATE[q] * dt * Math.min(1, t / 1.5 + 0.2);
