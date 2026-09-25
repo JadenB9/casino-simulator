@@ -131,7 +131,7 @@ try {
   const card = await b.page.textContent('.inv-card');
   check(card.includes(a.name) && card.includes('Blackjack') && /seats? left/.test(card), `B's card: "${card.replace(/\s+/g, ' ')}"`);
   await shot(b, 'invite6-1-card-floor');
-  await b.page.keyboard.press('j');
+  await b.page.keyboard.press('Shift+J');
   await b.page.waitForFunction(() => window.casino.app.table?.session.target.kind === 'lobby', null, { timeout: 20_000 });
   await a.page.waitForFunction(() => document.querySelectorAll('.party-member').length === 2, null, { timeout: 15_000 });
   check((await station(b)) === 'bj-1', `J took ${b.name} to bj-1 (${await station(b)})`);

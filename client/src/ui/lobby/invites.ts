@@ -356,7 +356,8 @@ export class InviteHub {
   // --- the cards --------------------------------------------------------------------------------
 
   private onKey = (e: KeyboardEvent): void => {
-    if (e.key !== 'j' && e.key !== 'J') return;
+    // Shift+J: plain J opens the achievements (ui/feats)
+    if (e.code !== 'KeyJ' || !e.shiftKey) return;
     if (e.metaKey || e.ctrlKey || e.altKey || e.repeat || isTyping(e) || this.picker) return;
     const newest = this.inbox.items[0];
     if (!newest || !this.app.onFloor() || this.box.hidden) return;
@@ -419,7 +420,7 @@ export class InviteHub {
     const join = el('button', 'btn primary');
     join.type = 'button';
     join.disabled = busy || this.joining !== null;
-    if (newest && !busy) join.append(el('span', 'key', 'J'));
+    if (newest && !busy) join.append(el('span', 'key', '⇧J'));
     join.append(el('span', '', busy ? 'Joining…' : 'Join'));
     join.addEventListener('click', () => void this.join(inv.id));
     const later = el('button', 'btn ghost', 'Dismiss');
