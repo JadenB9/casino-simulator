@@ -259,7 +259,8 @@ export class Person implements Character {
   /** Bones this frame's gesture turned, and the mixer's pose for them (put back next frame). */
   private readonly posed = new Map<THREE.Object3D, THREE.Quaternion>();
   private readonly spare = new Map<THREE.Object3D, THREE.Quaternion>();
-  private act: { e: EmoteId | StaffGesture; t: number } | null = null;
+  /** The emote being acted out, how far in, and (walked off) how much of it is left as it fades. */
+  private act: { e: EmoteId | StaffGesture; t: number; fade: number } | null = null;
   /** Bones this frame's emote moved (the hips, the feet), and where the mixer had them. */
   private readonly moved = new Map<THREE.Object3D, THREE.Vector3>();
   private readonly spareAt = new Map<THREE.Object3D, THREE.Vector3>();
@@ -372,7 +373,7 @@ export class Person implements Character {
 
   /** Act out an emote, or one of a dealer's motions (StaffGesture). */
   gesture(e: EmoteId | StaffGesture): void {
-    this.act = { e, t: 0 };
+    this.act = { e, t: 0, fade: 1 };
     if (this.prop && gestureOf(e)?.prop !== this.prop.id) this.dropProp();
   }
 
@@ -408,7 +409,7 @@ export class Person implements Character {
     }
     const mesh = prop.mesh;
     mesh.visible = true;
-    mesh.scale.setScalar(Math.max(0.001, smooth(Math.min(1, act.t / 0.3, (g.dur - act.t) / 0.25))));
+    mesh.scale.setScalar(Math.max(0.001, smooth(Math.min(1, act.t / 0.3, (g.dur - act.t) / 0.25, act.fade))));
     if (prop.id === 'bills') {
       const q = spin(r.wrist, _qa);
       const palm = _pn.copy(r.palm).applyQuaternion(q);
@@ -527,15 +528,19 @@ export class Person implements Character {
       return null;
     }
     const seated = this.seatTop !== null;
-    let pose = g.pose(act.t, seated);
+    const pose = g.pose(act.t, seated);
     const legs = !seated && movesLegs(pose);
-    // walking off ends a dance: it eases out from wherever it had got to
-    if (legs && this.speed > DANCE_WALK && act.t < g.dur - 0.3) {
-      act.t = g.dur - 0.3;
-      pose = g.pose(act.t, seated);
+    // walking off ends a dance: it fades from wherever it had got to (not in mid-air)
+    if (act.fade < 1 || (legs && this.speed > DANCE_WALK && !pose.flip)) {
+      act.fade -= dt / 0.3;
+      if (act.fade <= 0) {
+        this.act = null;
+        this.dropProp();
+        return null;
+      }
     }
     // ease into the pose and back out of it
-    const k = smooth(Math.min(1, act.t / 0.22)) * smooth(Math.min(1, (g.dur - act.t) / 0.3));
+    const k = smooth(Math.min(1, act.t / 0.22)) * smooth(Math.min(1, (g.dur - act.t) / 0.3)) * smooth(act.fade);
     // the legs' lengths, from the pose the mixer gave them, before the hips move
     const lens = legs ? this.legLengths() : null;
     if (legs && pose.pelvis) {

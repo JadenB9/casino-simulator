@@ -171,6 +171,28 @@ if (checks.includes('poses')) {
       if (x.prop) fail(`${e} ${names[i]}: prop still in hand after it ended`);
       if (Math.abs(x.pos[0]) > 0.001 || Math.abs(x.pos[2]) > 0.001 || x.up[1] < 0.999) fail(`${e} ${names[i]}: body not back in place (${x.pos} up ${x.up})`);
     }
+    // walking off fades a dance out (not in a backflip's air): gone in a third of a second, the body home
+    const walked = await page.evaluate((e) => {
+      const c = window.casino;
+      c.freeze(e, 1.5);
+      const p = c.cast[0];
+      const glideAt = p.model.position.z;
+      p.setMotion(1);
+      const mid = [];
+      for (let i = 0; i < 12; i++) {
+        p.update(1 / 30);
+        mid.push(+p.model.position.z.toFixed(3));
+      }
+      p.setMotion(0);
+      for (let i = 0; i < 30; i++) p.update(1 / 30);
+      return { glideAt: +glideAt.toFixed(3), act: !!p.act, z: +p.model.position.z.toFixed(3), mid };
+    }, e);
+    if (['throwback', 'griddy', 'floss', 'robot', 'moonwalk'].includes(e)) {
+      if (walked.act || Math.abs(walked.z) > 0.001) fail(`${e}: walking off did not end it (${JSON.stringify(walked)})`);
+      // no snap: each frame of the fade moves the body a little
+      const steps = walked.mid.map((z, i) => Math.abs(z - (i ? walked.mid[i - 1] : walked.glideAt)));
+      if (Math.max(...steps) > 0.12) fail(`${e}: the body jumps as it fades (${walked.mid})`);
+    }
   }
   const props = await page.evaluate(async () => (await import('/casino/src/world/emote-props.ts')).propsOut());
   if (props !== 0) fail(`poses: ${props} prop kit(s) still built with nobody holding one`);
@@ -379,6 +401,7 @@ if (checks.includes('live')) {
   // the wheel in the game: everything shown, the free six playable
   await a.page.keyboard.press('g');
   await a.page.waitForSelector('.emo-wheel');
+  await a.page.waitForTimeout(400);
   await a.page.screenshot({ path: `${out}/live-wheel.png` });
   const n = await a.page.evaluate(() => document.querySelectorAll('.emo-btn').length);
   if (n !== 16) fail(`live wheel: ${n} buttons`);

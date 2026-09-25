@@ -321,12 +321,12 @@ const SHOP: Record<Exclude<EmoteId, FreeEmote>, Gesture> = {
         const l: Hand = { upper: [0.05, -1, 0.35], fore: [-0.7 * s, 0.1, 1], palm: [0, 0, 1], fist: 0.4 };
         return { handR: r, handL: l, torso: [0.05, 0.12 * s, 0], head: [0, 0, 0.1 * s] };
       }
-      const r: Vec = [0.62 * s, -1, 0.42 * s];
-      const l: Vec = [-0.62 * s, -1, -0.42 * s];
+      const r: Vec = [0.85 * s, -1, 0.5 * s];
+      const l: Vec = [-0.85 * s, -1, -0.5 * s];
       return {
         handR: { upper: r, fore: r, palm: [1, 0, 0] },
         handL: { upper: l, fore: l, palm: [1, 0, 0] },
-        pelvis: [-0.07 * s, -0.04, 0],
+        pelvis: [-0.09 * s, -0.05, 0],
         hips: [0, 0.14 * s, -0.12 * s],
         head: [0, -0.1 * s, 0.08 * s],
         footR: STANCE,
