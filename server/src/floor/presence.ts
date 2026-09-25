@@ -255,6 +255,12 @@ export class Presence {
     this.save(ws, w.att);
   }
 
+  /** v6 celebs6: where this socket's player stands now (cm), for celebs.ts's near checks; null if nobody. */
+  where(ws: WebSocket): { accountId: number; name: string; x: number; z: number } | null {
+    const a = this.live.get(ws)?.att;
+    return a ? { accountId: a.accountId, name: a.name, x: a.x, z: a.z } : null;
+  }
+
   /** When this socket's player last did something, or null for a socket that isn't a player's. */
   activeAt(ws: WebSocket): number | null {
     const w = this.live.get(ws);

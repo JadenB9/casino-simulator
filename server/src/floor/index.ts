@@ -18,6 +18,9 @@ import { FloorChat } from './chat.ts';
 import { Wins, type BigWinReport } from './wins.ts';
 import { Bucket, KeyedBuckets } from '../ratelimit.ts';
 import { spendTicket } from '../tickets.ts';
+// v6 celebs6: celebrities and the gift box
+import { Celebs } from './celebs.ts';
+import { parseCelebMsg, type CelebServerMsg, type GiftBox, type Visit } from '../../../shared/src/celebs.ts';
 
 /** A hard cap on floor connections; a busy night past this gets a polite "casino is full". */
 export const MAX_FLOOR = 150;
@@ -52,6 +55,8 @@ export class CasinoFloor extends DurableObject<Env> {
   readonly chat: FloorChat;
   /** features: big-win announcements (wins.ts) */
   readonly wins: Wins;
+  /** v6 celebs6: celebrity visits and the gift box (celebs.ts) */
+  readonly celebs: Celebs;
   private buckets = new Map<WebSocket, FloorLimits>();
   private connects = new KeyedBuckets(FLOOR_CONNECT_BURST, FLOOR_CONNECT_PER_SEC);
   private addrConnects = new KeyedBuckets(ADDR_CONNECT_BURST, ADDR_CONNECT_PER_SEC);
@@ -63,6 +68,13 @@ export class CasinoFloor extends DurableObject<Env> {
     this.directory = new Directory(ctx, (msg, game) => this.toWatchers(msg, game));
     this.chat = new FloorChat(ctx, (msg) => this.broadcast(msg));
     this.wins = new Wins(ctx, (msg) => this.broadcast(msg));
+    // v6 celebs6
+    this.celebs = new Celebs({
+      sql: ctx.storage.sql,
+      db: () => env.DB,
+      where: (ws) => this.presence.where(ws),
+      broadcast: (msg: CelebServerMsg) => this.broadcast(msg as unknown as FloorServerMsg),
+    });
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -104,6 +116,7 @@ export class CasinoFloor extends DurableObject<Env> {
     this.presence.onConnect(server, { accountId, name, look });
     this.chat.join(server);
     this.wins.greet(server); // features: the recent big wins, after hello
+    this.celebs.greet(server, Date.now()); // v6 celebs6: the visit and the gift box, after hello
     // Everyone already here is due for the idle sweep no later than this newcomer, so a sweep
     // already set comes first; with none set (nobody here, or a floor from before idling), set one.
     if ((await this.ctx.storage.getAlarm()) === null) await this.ctx.storage.setAlarm(Date.now() + IDLE_MS);
@@ -124,6 +137,15 @@ export class CasinoFloor extends DurableObject<Env> {
       } catch {
         /* not JSON */
       }
+    }
+    // v6 celebs6: anyone doing anything moves the celebrities' clock on (celebs.ts); a word with
+    // one, or a gift box opened, counts against the misc limit like a lobby list.
+    this.celebs.tick(Date.now());
+    const celeb = parseCelebMsg(data);
+    if (celeb) {
+      if (!b.misc.take()) return this.strike(ws, b);
+      this.presence.touch(ws, Date.now());
+      return this.celebs.message(ws, celeb, Date.now());
     }
     // Chat keeps its own limits and mutes (chat.ts) on top of the frame count.
     const say = parseSay(data);
@@ -271,6 +293,11 @@ export class CasinoFloor extends DurableObject<Env> {
   /** v6: someone earned a feat (feats.ts): a line in everyone's feed. Called by tables over RPC. */
   featEarned(accountId: number, name: string, feat: string): void {
     this.broadcast({ t: 'feat', id: accountId, name, feat });
+  }
+
+  /** v6 celebs6: the dev stack's celebrity and gift box on demand (celebs.ts celebsDevApi). */
+  celebDev(kind: 'celeb' | 'gift', arg?: string | number): Visit | GiftBox {
+    return this.celebs.force(kind, Date.now(), arg);
   }
 
   /** Everyone on the floor sees the gesture over this player's head. */
