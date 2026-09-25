@@ -50,7 +50,6 @@ import {
   SEAT_COUNT,
   CIRCLE_RADIUS,
   BONUS_RADIUS,
-  CIRCLE_NAMES,
   type Circle,
   boardPoints,
   boardSlot,
@@ -89,11 +88,6 @@ function money(n: Cents): string {
 
 function signed(n: Cents): string {
   return n === 0 ? '$0' : formatMoney(n, { sign: true });
-}
-
-/** "a Pair of Kings", "Three Fives", "King high". */
-function withArticle(name: string): string {
-  return name.startsWith('Pair') || name === 'Flush' || name === 'Straight' ? `a ${name}` : name;
 }
 
 /** The limits sign on its little stand by the rack, painted from the table's config. */

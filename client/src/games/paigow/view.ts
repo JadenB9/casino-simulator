@@ -52,8 +52,6 @@ import {
   FORTUNE_RADIUS,
   FORTUNE_R,
   BET_R,
-  HIGH_R,
-  LOW_R,
   betPoint,
   boardPoints,
   cameraPose,
@@ -393,8 +391,13 @@ export function mountPaiGow(ctx: TableViewCtx): TableView {
       dropLabel(`hand:${seat}`);
       return;
     }
-    const parts: { text: string; cls?: string }[] = [{ text: highName(highScore(s.high)) }, { text: lowName(lowScore(s.low)), cls: 'low' }];
     const r = sv.result;
+    // once compared, each hand in the colour of how it did against the dealer's
+    const how = (won: boolean) => (r && r.outcome !== null ? (won ? ' won' : ' lost') : '');
+    const parts: { text: string; cls?: string }[] = [
+      { text: highName(highScore(s.high)), cls: `high${how(!!r?.highWins)}` },
+      { text: lowName(lowScore(s.low)), cls: `low${how(!!r?.lowWins)}` },
+    ];
     if (r) {
       const net = r.returned - r.wagered;
       parts.push({ text: r.outcome === 'push' && r.fortune === 0 ? 'Push' : signed(net), cls: net > 0 ? 'net up' : net < 0 ? 'net down' : 'net' });
@@ -814,9 +817,7 @@ export function mountPaiGow(ctx: TableViewCtx): TableView {
       else lost.push('fortune');
     }
     if (owns(seat)) {
-      // each hand's comparison where it lies, then the money
-      pill(onSeat(seat, HIGH_R, -0.13), r.highWins ? 'HIGH WINS' : 'HIGH LOSES', r.highWins ? 'win' : 'lose');
-      pill(onSeat(seat, LOW_R, -0.1), r.lowWins ? 'LOW WINS' : 'LOW LOSES', r.lowWins ? 'win' : 'lose');
+      // the money where it lies (the hand's label says how each hand did)
       const at = onSeat(seat, BET_R + 0.08, 0);
       if (r.outcome === 'win') pill(at, `${signed(r.bet - bets.bet)} · 5% ${money(r.commission)}`, 'win');
       else if (r.outcome === 'push') pill(at, 'PUSH', 'push');
@@ -937,8 +938,8 @@ export function mountPaiGow(ctx: TableViewCtx): TableView {
           }
           if (!sv) break;
           settled = true;
-          await settleSeat(e.seat, e.result, { bet: sv.bet, fortune: sv.fortune });
           handLabel(e.seat, sv);
+          await settleSeat(e.seat, e.result, { bet: sv.bet, fortune: sv.fortune });
           if (owns(e.seat) && sv.setting) {
             celebrateHand(e.seat, e.result, sv.setting);
             if (dealerSetting) await callResult(e.result, sv.setting, dealerSetting, spots.length > 1);
