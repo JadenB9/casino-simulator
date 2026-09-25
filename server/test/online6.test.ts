@@ -6,6 +6,8 @@ import { isRefusal } from '../../shared/src/engine.ts';
 import { engineFor } from '../../shared/src/games/index.ts';
 import { TableSim } from '../../shared/test/helpers/table-sim.ts';
 import { seededRng } from '../../shared/test/helpers/seeded.ts';
+import { hasLimitChoice, standardLimits } from '../../shared/src/limits.ts';
+import { describeWin } from '../src/floor/wins.ts';
 
 // Coinflip, Wheel, Cases and Diamonds on the real table host: every chip that moves at the table
 // shows up in D1 exactly at the edges (buy-in and cash-out), a replayed action id is applied once,
@@ -203,4 +205,22 @@ describe('hostile actions at the four new online games', () => {
       expect(Number.isSafeInteger(sim.stack(0)) && sim.stack(0) >= 0).toBe(true);
     });
   }
+});
+
+describe('the big-win feed and the limits know the four new games', () => {
+  it('names what paid, to the hundredth of the multiplier', () => {
+    expect(describeWin('coinflip', '', [{ type: 'flip' }, { type: 'over', outcome: 'cashout', streak: 7, mult: 12_672, payout: 126_720, bet: 1_000 }], 0, 1_000, 126_720)).toBe('7 right calls, 126.72x');
+    expect(describeWin('wheel', '', [{ type: 'spin', seat: 0, risk: 'high', segments: 50, segment: 0, mult: 4_950, payout: 49_500 }], 0, 1_000, 49_500)).toBe('50 segments High, 49.50x');
+    expect(describeWin('cases', '', [{ type: 'open', seat: 0, case: 'vault', item: 10, mult: 100_000, payout: 1_000_000 }], 0, 1_000, 1_000_000)).toBe('Briefcase of Cash, Vault case, 1,000x');
+    expect(describeWin('diamonds', '', [{ type: 'draw', seat: 0, gems: [2, 2, 2, 2, 2], pattern: 'five', mult: 6_699, payout: 66_990 }], 0, 1_000, 66_990)).toBe('Five of a kind, 66.99x');
+    // junk falls back to the plain multiple
+    expect(describeWin('cases', '', [{ type: 'open', seat: 0, case: 'safe', item: 99 }], 0, 1_000, 20_000)).toBe('20x');
+  });
+
+  it('their limits are chosen like the other online games', () => {
+    for (const game of ['coinflip', 'wheel', 'cases', 'diamonds'] as GameId[]) {
+      expect(hasLimitChoice(game)).toBe(true);
+      expect(standardLimits(game)).toEqual({ min: engineFor(game).config('', 'solo').limits.default.min, max: engineFor(game).config('', 'solo').limits.default.max });
+    }
+  });
 });
