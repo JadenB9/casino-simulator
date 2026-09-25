@@ -23,7 +23,7 @@ requests to the dev routes.
 | 6 | Low | Signed-in GETs (`/me`, `/bank`, `/bank/statement`, `/shop`, `/feats`, `/stats`, `/daily`, `/leaderboard`) and `bank/seen` had no limit. Each call is several D1 queries, and `/me` also asks tables. | **Fixed.** Every signed-in request now takes from a per-account bucket: 60 in a burst, then 10 a second, per isolate (`sec61` "signed-in requests...") |
 | 7 | Low | The floor capped total connections (150) but not per address, so one person with a pile of accounts could fill the casino. | **Fixed.** At most 20 floor connections per address (/64 for IPv6); a second tab of an account already here doesn't count (`sec61` "one address holds at most 20...") |
 | 8 | Low | A missing `CASINO_TOKEN_SECRET` would have signed tokens, tickets and the market's walk with an empty key (`TextEncoder().encode(undefined)` is empty). | **Fixed.** No secret now throws: logins return 500 and nothing is signed (`sec61` "without its token secret...") |
-| 9 | Info | Two local branches, `v6/pigs6` (f55099e) and `backup/pre-nm-rewrite`, contain commit c570a10. It commits `node_modules` as a symlink whose target is the home-directory path. Neither is on GitHub, and main already has the rewritten work. | **Owner/orchestrator:** never push or merge them; delete them (`git branch -D v6/pigs6 backup/pre-nm-rewrite`) |
+| 9 | Info | Two local branches, `v6/pigs6` (f55099e) and `backup/pre-nm-rewrite`, contain commit c570a10. It commits `node_modules` as a symlink whose target is the home-directory path. Neither is on GitHub, and main already has the rewritten work. | **Resolved.** The orchestrator deleted both branches and filter-branch's `refs/original`, expired the reflog and ran gc; c570a10 no longer exists in the repo |
 | 10 | Info | `fair.test.ts` failed now and then: the check's picture is base64 that sometimes spells RED or GOLD, which the "answer never leaks" assertion matched. | **Fixed:** the assertion leaves the picture out |
 | 11 | Info | The pit boss sees only players on the floor. A script playing through a table socket with no floor socket is never "seen" (`law.hot` returns `unseen`). | Left for law6 or the owner. Honest clients always have the floor open, so the only effect is on scripts |
 | 12 | Info | Passwords can be 4 characters. Per-name lockouts cap guessing at 60 tries per 15 minutes from any number of addresses, which is still about 5,700 a day against one name. | Owner decision (see below) |
@@ -35,7 +35,7 @@ Nothing else turned up. The rest of this file is what was checked.
 | Check | Result | How |
 |---|---|---|
 | Secrets in either repo's history (private keys, AWS/GitHub/Slack/`sk-` tokens, JWTs, `SECRET=`/`TOKEN=`/`PASSWORD=` assignments, `.dev.vars`, `.env`, `.pem`, `.key`, `.map`) | **Clean.** Every blob reachable from every ref of both repos was scanned (3,929 in casino-simulator, 1,128 in j4den). The only hit is the tests' `TOKEN_SECRET: 'test-secret-not-for-production'` | a blob scanner over `git rev-list --all --objects` |
-| Private details (home paths, Tailscale addresses, the school domain and the other `.planning/privacy-patterns.txt` patterns) in casino-simulator | **Clean** on `main` and `origin/main`, history included; `npm run privacy` passes. The only hit anywhere is finding 9 (local branches only) | same scanner, plus `npm run privacy` |
+| Private details (home paths, Tailscale addresses, the school domain and the other `.planning/privacy-patterns.txt` patterns) in casino-simulator | **Clean** on `main` and `origin/main`, history included; `npm run privacy` passes. The only hit anywhere was finding 9 (local branches only, since deleted) | same scanner, plus `npm run privacy` |
 | Authorship | All 584 commits on `origin/main` are `JadenB9 <jadenb9944@gmail.com>` with no tool trailers | `git log` |
 | j4den | Its public pages carry the owner's school email and resume on purpose (a personal site). Its Turnstile keys in HTML are site keys, which are public by design. No secrets in its history | scanner |
 | `.dev.vars`, `.env*`, `dist/`, `.wrangler/` | Ignored in both repos; never committed | `.gitignore`, history scan |
@@ -205,6 +205,5 @@ these e2e scripts: `smoke.mjs` (the dev harness still works on the dev server), 
 4. **Passwords.** Consider 8 or more characters for new accounts (finding 12); existing ones can keep
    theirs. Tokens can't be revoked before their 30 days are up, and there is no password change.
    Both would be worth adding if accounts ever hold anything real.
-5. **Branches.** Delete `v6/pigs6` and `backup/pre-nm-rewrite` locally (finding 9), and never push them.
-6. **Zone headers.** Optional: find the zone rule that rewrites `X-Frame-Options` and
+5. **Zone headers.** Optional: find the zone rule that rewrites `X-Frame-Options` and
    `Referrer-Policy` so the live headers match `_headers`.
