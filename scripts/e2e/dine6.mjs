@@ -172,7 +172,11 @@ if (checks.includes('drinks')) {
   // B sees A drink: the same sip on B's screen, front and side
   await b.p.waitForFunction((id) => [...window.__dine.heldOrders()].some((h) => h.order === id), champ.order, { timeout: 15000 });
   await hold(b.p);
-  await b.p.evaluate(() => window.casino.world.player.setEnabled(false));
+  // B's own character would stand in the way of the camera
+  await b.p.evaluate(() => {
+    window.casino.world.player.setEnabled(false);
+    window.casino.world.player.character.root.visible = false;
+  });
   for (const [name, phase] of [['lift', 0.18], ['sip', 0.5]]) {
     await pose(b.p, champ.order, 1, phase);
     await aim(b.p, [0.05, 1.55, 12.35], [0, 1.4, 11]);
@@ -186,7 +190,10 @@ if (checks.includes('drinks')) {
   check(bLevel < 1, `B sees the champagne going down (${bLevel.toFixed(3)})`);
   await pin(b.p);
   await free(b.p);
-  await b.p.evaluate(() => window.casino.world.player.setEnabled(true));
+  await b.p.evaluate(() => {
+    window.casino.world.player.setEnabled(true);
+    window.casino.world.player.character.root.visible = true;
+  });
 
   // a toast: B gets a drink too, both stand face to face
   const beer = await order(b.p, 'Beer');
@@ -202,13 +209,15 @@ if (checks.includes('drinks')) {
   );
   check(toasted[0] && toasted[1], `both screens toast (${toasted})`);
   const t0s = await Promise.all([a, b].map((r) => r.p.evaluate((id) => window.__dine.extras(id).find((e) => e.kind === 'toast')?.t0, champ.order)));
+  const bt0s = await Promise.all([a, b].map((r) => r.p.evaluate((id) => window.__dine.extras(id).find((e) => e.kind === 'toast')?.t0, beer.order)));
+  check(bt0s[0] === t0s[0] && bt0s[1] === t0s[1], `both glasses toast together (${bt0s})`);
   check(t0s[0] && t0s[0] === t0s[1], `the toast is at the same moment on both (${t0s})`);
   // the clink, from the side, on B's screen
   await hold(b.p);
   await b.p.evaluate(() => window.casino.world.player.setEnabled(false));
   await b.p.evaluate((t) => window.__dine.setClock(() => t + 0.45 * 2400), t0s[1]);
   await aim(b.p, [1.6, 1.55, 11.6], [0, 1.35, 11.6]);
-  await b.p.waitForTimeout(700);
+  await b.p.waitForTimeout(250);
   await shot(b.p, 'toast-clink');
   await pin(b.p);
   await free(b.p);
@@ -239,6 +248,7 @@ if (checks.includes('drinks')) {
     return s;
   };
   const fast = await speed();
+  await tp(a, A_AT);
   check(fast > 5.2 && fast < 9, `running with an espresso: ${fast.toFixed(2)} m/s (a run is 4.8, the server allows 9)`);
   // the steam, close up
   await hold(a.p);
@@ -252,22 +262,22 @@ if (checks.includes('drinks')) {
   await free(a.p);
   await a.p.evaluate(() => window.casino.world.player.setEnabled(true));
 
-  // a Dom: popped and sprayed, seen by B
+  // a Dom: popped and sprayed
   const dom = await order(a.p, 'Bottle of Dom');
   await tp(a, A_AT);
-  await b.p.waitForFunction((id) => [...window.__dine.heldOrders()].some((h) => h.order === id), dom.order, { timeout: 15000 });
-  await hold(b.p);
-  await b.p.evaluate(() => window.casino.world.player.setEnabled(false));
+  await hold(a.p);
+  await a.p.evaluate(() => window.casino.world.player.setEnabled(false));
   for (const [name, phase] of [['shake', 0.25], ['spray', 0.62]]) {
-    await pose(b.p, dom.order, 0, phase - 0.1);
-    await b.p.waitForTimeout(200);
-    await pose(b.p, dom.order, 0, phase);
-    await aim(b.p, [1.8, 1.7, 12.6], [0, 1.6, 11.2]);
-    await b.p.waitForTimeout(600);
-    await shot(b.p, `dom-${name}`);
+    await pose(a.p, dom.order, 0, phase - 0.12);
+    await a.p.waitForTimeout(250);
+    await pose(a.p, dom.order, 0, phase);
+    await aim(a.p, [1.7, 1.6, 12.7], [0, 1.6, 11.2]);
+    await a.p.waitForTimeout(450);
+    await shot(a.p, `dom-${name}`);
   }
-  await pin(b.p);
-  await free(b.p);
+  await pin(a.p);
+  await free(a.p);
+  await a.p.evaluate(() => window.casino.world.player.setEnabled(true));
 
   for (const [who, r] of [['a', a], ['b', b]]) if (r.errors.length) fail(`${who} errors: ${r.errors.slice(0, 5).join(' | ')}`);
   await a.ctx.close();

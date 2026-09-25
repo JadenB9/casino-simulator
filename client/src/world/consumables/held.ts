@@ -390,7 +390,7 @@ export class HeldOrder {
         // a jet of foam and drops, out of the neck along the bottle
         const at = spout();
         const dir = upAxis().clone();
-        const n = Math.max(1, Math.round(dt * 160));
+        const n = Math.max(1, Math.round(dt * 240));
         sparks.burst({ at, vel: dir.clone().multiplyScalar(3.2), spread: 0.55, n, color: [new THREE.Color(1, 0.95, 0.8), new THREE.Color(0.95, 0.85, 0.55)], size: [0.012, 0.03], life: [0.5, 0.9], gravity: 5, drag: 0.8, alpha: 0.75 });
         sparks.burst({ at, vel: dir.clone().multiplyScalar(2.6), spread: 0.7, n: Math.max(1, n >> 2), color: new THREE.Color(1, 0.9, 0.6), size: [0.012, 0.004], life: [0.3, 0.6], gravity: 3, glow: true, twinkle: true });
       }
@@ -409,9 +409,9 @@ export class HeldOrder {
     if (m.model === 'cup' && s.level > 0.02 && t - this.plan.at[0]! < 150_000) {
       this.emitAt -= dt;
       if (this.emitAt <= 0) {
-        this.emitAt = 0.28;
+        this.emitAt = 0.1;
         const at = spout();
-        sparks.burst({ at, vel: new THREE.Vector3(0, 0.1, 0), spread: 0.025, scatter: 0.01, n: 1, color: new THREE.Color(0.9, 0.9, 0.9), size: [0.012, 0.06], life: [1.4, 2.0], alpha: 0.16, drag: 0.3 });
+        sparks.burst({ at, vel: new THREE.Vector3(0, 0.09, 0), spread: 0.018, scatter: 0.008, n: 1, color: new THREE.Color(0.92, 0.92, 0.9), size: [0.012, 0.075], life: [1.6, 2.4], alpha: 0.075, drag: 0.35 });
       }
     }
     // someone who's had champagne sparkles a little (your own comes from your effects: diner.ts)
@@ -430,7 +430,7 @@ export class HeldOrder {
         const a = this.glassAt(new THREE.Vector3());
         const at = partner ? a.add(partner.glassAt(new THREE.Vector3())).multiplyScalar(0.5) : a;
         play('clink', at);
-        sparks.burst({ at, vel: new THREE.Vector3(0, 0.3, 0), spread: 0.5, n: 26, color: [new THREE.Color(1, 0.9, 0.6), new THREE.Color(1, 1, 1)], size: [0.014, 0.004], life: [0.35, 0.7], glow: true, drag: 2 });
+        sparks.burst({ at, vel: new THREE.Vector3(0, 0.25, 0), spread: 0.6, n: 34, color: [new THREE.Color(1, 0.9, 0.6), new THREE.Color(1, 1, 1)], size: [0.02, 0.005], life: [0.5, 1.0], glow: true, twinkle: true, drag: 2.2 });
       }
     }
   }
