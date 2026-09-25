@@ -279,7 +279,7 @@ describe('POST /shop/fx', () => {
     const before = await money(p.id);
     const res = await fx(p, DISCO.id); // $100,000 on a $50,000 balance
     expect(res.status).toBe(409);
-    expect(await res.json<any>()).toMatchObject({ error: 'INSUFFICIENT_FUNDS', balance: before.balance, msg: 'Not enough: the Disco Night is $100,000 and your balance is $50,000.' });
+    expect(await res.json<any>()).toMatchObject({ error: 'INSUFFICIENT_FUNDS', balance: before.balance, msg: 'Not enough: Disco Night is $100,000 and your balance is $50,000.' });
     expect(await money(p.id)).toEqual(before);
     expect(await count(`SELECT count(*) AS n FROM casino_orders WHERE account_id = ?1`, p.id)).toBe(0);
     await expectBalanced(p.id);
@@ -422,6 +422,55 @@ describe('POST /shop/fx', () => {
     expect((await res.json<any>()).fx).toMatchObject({ fx: CONFETTI.id, x: 1200, z: 900 });
     expect(await c.next((m) => m.t === 'fx')).toMatchObject({ fx: CONFETTI.id, id: p.id });
     expect(await money(p.id)).toEqual(before);
+    await expectBalanced(p.id);
+    c.ws.close(1000, 'bye');
+  });
+});
+
+describe('the private collection ($1B and up)', () => {
+  it('sells pieces worth billions to the cent, plays Own the Night, and every cent is still accounted for', async () => {
+    // after the casino queue the tests above booked: well past it
+    clockAt(Date.now() + 2 * FX_MAX_WAIT_MS);
+    const start = 12_000_000_000 * DOLLAR + 55; // $12B and 55 cents
+    const { p, c } = await rich('s6vault', start, SALON);
+    let balance = 50_000 * DOLLAR + start;
+    for (const id of ['billionaire-chain', 'emperor-robe', 'hover-throne']) {
+      const item = shopItem(id)!;
+      const res = await buy(p, id);
+      expect(res.status).toBe(200);
+      balance -= item.price;
+      expect(await res.json<any>()).toMatchObject({ item: id, price: item.price, balance });
+    }
+    expect(balance).toBe(7_000_050_000 * DOLLAR + 55);
+    // the crown is $5B: $7B covers it, and a second one is refused as owned
+    expect((await buy(p, 'imperial-crown')).status).toBe(200);
+    balance -= 5_000_000_000 * DOLLAR;
+    expect((await buy(p, 'imperial-crown')).status).toBe(409);
+    expect(balance).toBe(2_000_050_000 * DOLLAR + 55);
+    // someone on the starting $50,000 is refused it, uncharged
+    const poor = await player('s6vaultpoor');
+    const pc = await onFloor(poor, ...SALON);
+    const short = await fx(poor, 'fx-takeover');
+    expect(short.status).toBe(409);
+    expect(await short.json<any>()).toMatchObject({ error: 'INSUFFICIENT_FUNDS', msg: 'Not enough: Own the Night is $1,000,000,000 and your balance is $50,000.' });
+    pc.ws.close(1000, 'bye');
+    const t0 = Date.now();
+    const played = await fx(p, 'fx-takeover');
+    expect(played.status).toBe(200);
+    const body = await played.json<any>();
+    balance -= 1_000_000_000 * DOLLAR;
+    expect(body.balance).toBe(balance);
+    expect(body.fx).toMatchObject({ fx: 'fx-takeover', id: p.id });
+    expect(body.fx.at).toBeLessThan(t0 + 1000);
+    expect(body.fx.until - body.fx.at).toBe(60_000);
+    // riding the throne, wearing the robe and the crown
+    const look = await putLook(p, { ...DEFAULT_LOOK, ride: 'hover-throne', clothes: 'emperor-robe', hat: 'imperial-crown', chain: 'billionaire-chain' });
+    expect(look.status).toBe(200);
+    expect((await money(p.id)).balance).toBe(balance);
+    expect(Number.isSafeInteger(balance)).toBe(true);
+    const shop = await (await api('shop', p.token)).json<any>();
+    expect(shop.balance).toBe(balance);
+    expect(shop.owned.map((o: any) => o.item).sort()).toEqual(['billionaire-chain', 'emperor-robe', 'hover-throne', 'imperial-crown']);
     await expectBalanced(p.id);
     c.ws.close(1000, 'bye');
   });

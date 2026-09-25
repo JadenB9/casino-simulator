@@ -228,10 +228,55 @@
 .chat-send:hover { border-color: var(--brass-hi); }
 .chat.silenced .chat-send { opacity: 0.4; cursor: default; }
 
+/* The pin: brass while the chat is kept up. */
+.chat-pin[aria-pressed='true'] { color: var(--brass-hi); }
+
+/* Pinned and not typing (panel.ts `idle`): the log stays up while you walk, look round, sit and
+   play, lighter, and lets clicks and drags through to the game underneath; the head's buttons and
+   the line still take theirs. T or Enter makes it whole again. */
+.chat.idle .chat-box {
+  pointer-events: none;
+  background: rgba(14, 12, 10, 0.52);
+  border-color: rgba(241, 213, 154, 0.1);
+  box-shadow: none;
+  animation: none;
+}
+.chat.idle .chat-box::before { opacity: 0.35; }
+.chat.idle .chat-head, .chat.idle .chat-line-in { pointer-events: auto; }
+.chat.idle .chat-head { border-bottom-color: rgba(241, 213, 154, 0.08); }
+.chat.idle .chat-line-in { border-top-color: rgba(241, 213, 154, 0.08); opacity: 0.75; }
+.chat.idle .chat-log { scrollbar-width: none; }
+.chat.idle .chat-log::-webkit-scrollbar { display: none; }
+.chat.idle .chat-line { text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85); }
+html:not(.touch-ui) .chat.idle .chat-dock { display: none; }
+
+/* On a touch screen, idle is the newest few lines only, touched through, beside the action button
+   (world/touch.css: 80 px wide, 22 px in) and clear of the stick on the left; the dock stays under
+   it, and a tap there starts typing. */
+html.touch-ui .chat.idle .chat-box {
+  position: absolute;
+  right: 96px;
+  bottom: 0;
+  width: min(300px, calc(100vw - 290px));
+  background: rgba(14, 12, 10, 0.42);
+}
+html.touch-ui .chat.idle .chat-head, html.touch-ui .chat.idle .chat-line-in, html.touch-ui .chat.idle .chat-box::before, html.touch-ui .chat.idle .chat-note { display: none; }
+html.touch-ui .chat.idle .chat-log {
+  height: auto;
+  max-height: 106px;
+  padding: 6px 10px;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(transparent, #000 22px);
+  mask-image: linear-gradient(transparent, #000 22px);
+}
+html.touch-ui .chat.idle .chat-line { font-size: 15px; }
+
 /* Narrow screens: clear of the site's back chip along the bottom edge. */
 @media (max-width: 520px) {
   .chat { --chat-base: 56px; }
   .chat-kc { display: none; }
+  /* upright, the idle lines go over the action button and its caption (world/touch.css), above the stick */
+  html.touch-ui .chat.idle .chat-box { right: 0; bottom: 194px; width: min(300px, calc(100vw - 32px)); }
 }
 
 /* ---------------------------------------------------------------- speech bubbles */

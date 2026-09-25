@@ -128,7 +128,7 @@ export function openEffects(deps: EffectsDeps): Closable {
       armed = { id: fx.id, until: Date.now() + ARM_MS };
       const wait = deps.where() ? waitFor(deps.floor?.effects() ?? [], fx, me(), deps.where()!.x, deps.where()!.z, serverNow()) : null;
       const later = wait && wait.at - serverNow() > 1500 ? ` It starts in ${clockText(wait.at - serverNow())}.` : '';
-      note.textContent = `Press again to pay ${formatMoney(fx.price)} for the ${fx.name}.${later}`;
+      note.textContent = `Press again to pay ${formatMoney(fx.price)} for ${fx.name}.${later}`;
       note.className = 'bar-note';
       deps.sfx?.play('ui-click', { volume: 0.3 });
       paint();
@@ -145,7 +145,7 @@ export function openEffects(deps: EffectsDeps): Closable {
       applyMoney(session, r, fx.price);
       deps.sfx?.play('chips-stack', { volume: 0.45 });
       const wait = r.fx.at - serverNow();
-      note.textContent = wait > 1500 ? `Paid. The ${fx.name} starts in ${clockText(wait)}.` : `${fx.name}: it's going off.`;
+      note.textContent = wait > 1500 ? `Paid. ${fx.name} starts in ${clockText(wait)}.` : `${fx.name}: it's going off.`;
       note.className = 'bar-note ok';
       toast(`${fx.name}, ${formatMoney(fx.price)}.`);
     } catch (err) {

@@ -6,6 +6,10 @@
 // The hemisphere takes the colour of the room you're in, a little at a time. Warm pools on the
 // floor under tables, banks and lamps are additive decals, not lights.
 //
+// The shop's effects (fx/) change the light at run time without adding a light: a tint pulls the
+// ambient toward a colour and dims or brightens the room (the disco's dark violet, golden hour's
+// gold), and a follow spot borrows the focus spot while no table has it.
+//
 // The spots are set so the brightest lit surface in the pit (white printing, a white chip in the
 // rack) stays under about 1.5: past the floor's bloom threshold (bloom.ts) only real light
 // sources go, and those are all brighter than 2 (the GLOW colours here, the signs, the LEDs).
@@ -25,6 +29,22 @@ const PIT_SPOT = 50;
 const FOCUS_SPOT = 11;
 /** The rooms' spots, unless a room asks for its own colour. */
 const SPOT_COLOR = '#ffcf94';
+/** A follow spot (fx/spotlight.ts) on the focus light: a tight beam, bright on the one it follows. */
+const FOLLOW_SPOT = 42;
+const FOLLOW_ANGLE = 0.2;
+
+/** An effect's tint (Lighting.setTint). */
+export interface Tint {
+  color: THREE.ColorRepresentation;
+  /** How far toward `color` the ambient goes, 0-1. */
+  k: number;
+  /** The room's light scaled by this (default 1). */
+  dim?: number;
+}
+
+const _c = new THREE.Color();
+const _sky = new THREE.Color();
+const _ground = new THREE.Color();
 
 export class Lighting {
   readonly group = new THREE.Group();
@@ -42,6 +62,13 @@ export class Lighting {
   private room = '';
   private fade = 1;
   private pending: string | null = null;
+  /** The effects' tints by name, and the one blended in now (eased toward, so nothing snaps). */
+  private readonly tints = new Map<string, Tint>();
+  private readonly tintNow = { color: new THREE.Color(), k: 0, dim: 1 };
+  private readonly tintColor = new THREE.Color();
+  /** Where a follow spot wants the focus light (its fixture and its target), while no table has it. */
+  private followAt: { from: THREE.Vector3; to: THREE.Vector3 } | null = null;
+  private followOn = false;
 
   constructor(plan: FloorPlan, quality: Quality) {
     this.group.name = 'lights';
@@ -93,6 +120,30 @@ export class Lighting {
     this.pending = room;
   }
 
+  /**
+   * An effect's tint (fx/): pull the ambient `k` of the way (0-1) toward `color` and scale the
+   * room's light by `dim` (below 1 darker, above brighter). Several at once blend in the order
+   * they were set. Null lifts it; either way the light eases there over a second or so.
+   */
+  setTint(id: string, tint: Tint | null): void {
+    if (tint) this.tints.set(id, tint);
+    else this.tints.delete(id);
+  }
+
+  /**
+   * A follow spot: the focus light, from `from` (the fixture on the ceiling) onto `to`, whenever no
+   * table has it (High only; on Low the effect's beam and pool stand in). Null gives it back.
+   */
+  follow(from: THREE.Vector3 | null, to?: THREE.Vector3): void {
+    if (!from || !to) {
+      this.followAt = null;
+      return;
+    }
+    if (!this.followAt) this.followAt = { from: new THREE.Vector3(), to: new THREE.Vector3() };
+    this.followAt.from.copy(from);
+    this.followAt.to.copy(to);
+  }
+
   /** Aim the focus spot at a table (null lets it fade out). */
   setFocus(p: THREE.Vector3 | null): void {
     if (!p) {
@@ -109,12 +160,47 @@ export class Lighting {
 
   update(dt: number): void {
     const k = 1 - Math.exp(-dt * 3);
-    this.focusFrom.lerp(this.focusTo, k);
-    this.focus.target.position.set(this.focusFrom.x, 0.78, this.focusFrom.z);
-    this.focus.position.set(this.focusFrom.x + 0.3, 3.2, this.focusFrom.z + 0.9);
+    // the effects' tints, eased: several blend one over the other
+    const tk = 1 - Math.exp(-dt * 2);
+    let tintK = 0;
+    let dim = 1;
+    this.tintColor.setRGB(0, 0, 0);
+    for (const t of this.tints.values()) {
+      this.tintColor.lerp(_c.set(t.color), tintK === 0 ? 1 : t.k / (tintK + t.k));
+      tintK = Math.min(1, tintK + t.k * (1 - tintK));
+      dim *= t.dim ?? 1;
+    }
+    const now = this.tintNow;
+    if (tintK > 0) now.color.lerp(this.tintColor, now.k < 0.01 ? 1 : tk);
+    now.k += (tintK - now.k) * tk;
+    now.dim += (dim - now.dim) * tk;
+
+    // the focus spot: a table's, or a follow spot's while no table has it
+    const following = !this.focusOn && this.followAt !== null;
+    if (following !== this.followOn) {
+      this.followOn = following;
+      // the light fades out where it was and comes up where it's going
+      if (following && this.focus.intensity < 1) this.focusFrom.copy(this.followAt!.to);
+    }
+    if (following) {
+      const f = this.followAt!;
+      this.focusFrom.lerp(f.to, 1 - Math.exp(-dt * 6));
+      this.focus.position.copy(f.from);
+      this.focus.target.position.set(this.focusFrom.x, 0.9, this.focusFrom.z);
+      this.focus.angle = FOLLOW_ANGLE;
+      this.focus.penumbra = 0.3;
+      this.focus.distance = f.from.distanceTo(this.focus.target.position) + 3;
+    } else {
+      this.focusFrom.lerp(this.focusTo, k);
+      this.focus.target.position.set(this.focusFrom.x, 0.78, this.focusFrom.z);
+      this.focus.position.set(this.focusFrom.x + 0.3, 3.2, this.focusFrom.z + 0.9);
+      this.focus.angle = 0.62;
+      this.focus.penumbra = 0.55;
+      this.focus.distance = 9;
+    }
     // Bright enough to lift the table out of the room, not so bright that gold felt printing and
     // brass pass the bloom threshold when the camera is a metre away.
-    const want = this.focusOn ? FOCUS_SPOT : 0;
+    const want = this.focusOn ? FOCUS_SPOT : following ? FOLLOW_SPOT : 0;
     this.focus.intensity += (want - this.focus.intensity) * (1 - Math.exp(-dt * 4));
 
     // the room's spots: fade out, move to the new room, fade up
@@ -129,16 +215,22 @@ export class Lighting {
       this.fade = Math.min(1, this.fade + dt / 0.35);
     }
     const list = this.roomSpots.get(this.room) ?? [];
-    this.spots.slice(0, SPOTS).forEach((s, i) => (s.intensity = (list[i]?.k ?? 0) * this.fade));
-    // the ambient drifts to the room's colour
+    this.spots.slice(0, SPOTS).forEach((s, i) => (s.intensity = (list[i]?.k ?? 0) * this.fade * now.dim));
+    // the ambient drifts to the room's colour (and whatever an effect has tinted it)
     const a = this.ambient.get(this.pending ?? this.room);
     if (a) {
       const t = 1 - Math.exp(-dt * 2.5);
-      this.hemi.color.lerp(a.sky, t);
-      this.hemi.groundColor.lerp(a.ground, t);
-      const target = a.k * (this.quality === 'high' ? 1 : 1.4);
+      this.hemi.color.lerp(_sky.copy(a.sky).lerp(now.color, now.k), t);
+      this.hemi.groundColor.lerp(_ground.copy(a.ground).lerp(_c.copy(now.color).multiplyScalar(0.3), now.k * 0.6), t);
+      const target = a.k * (this.quality === 'high' ? 1 : 1.4) * now.dim;
       this.hemi.intensity += (target - this.hemi.intensity) * t;
     }
+    this.sun.intensity = (this.quality === 'high' ? 0.55 : 0.8) * Math.min(1, now.dim);
+  }
+
+  /** How far an effect's tint has got (0: none), for the checks. */
+  get tinted(): number {
+    return this.tintNow.k;
   }
 
   private place(room: string): void {

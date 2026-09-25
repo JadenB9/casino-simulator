@@ -8,6 +8,8 @@ is the summary. The full rules, every paytable, the strategy charts and the sour
 - [rules/cards-and-machines.md](rules/cards-and-machines.md): Three Card Poker, video poker,
   slots, Texas Hold'em
 - [rules/online-games.md](rules/online-games.md): the online games on the lounge computers
+- [rules/parlour-games.md](rules/parlour-games.md): bingo in the bingo hall and pachinko in the
+  parlour
 - [rules/limits.md](rules/limits.md): table limits chosen at every table (tiers up to $500,000 a
   bet, custom to $1,000,000), buy-ins, Max, and the machines' coin values
 - [math/](math/): the dependency-free Node scripts that enumerate each game exactly
@@ -111,6 +113,8 @@ inside 3. Seeds are fixed, so `npm run test:mc` reproduces these exactly.
 | Wheel (online) | 10 to 50 segments at Low, Medium or High (Stake's shapes: Low 1.2×/1.5×, High one segment at 0.99 × segments, 49.50× on 50) | Every wheel | 99.000% RTP | all 15 wheels within 1.6 SE (2M spins each); Medium 30 through the engine 99.014% (300K spins, z +0.07) |
 | Cases (online) | four cases of weighted items (1,000,000 weights each), Starter to 10×, Classic 50×, High Roller 250×, Vault 1,000× | Every case | 99.000% RTP | 98.984%, 99.250%, 99.204%, 99.496% (5M cases each, z −0.33, +2.01, +0.83, +0.99) |
 | Diamonds (online) | five gems of seven colours; five of a kind 66.99×, four 5×, full house 4×, three 3×, two pair 2×, pair 0.1× (Stake's table, five of a kind raised from 50×) | Every hand | 99.000% RTP | 99.127% (10M hands, z +2.14); all 16,807 hands enumerated exactly |
+| Bingo | 75 balls, 1 to 4 cards a game; line, four corners and blackout each pay a fixed multiple of the card by the call it is completed on (line 50× to 0.4× by call 40, corners 100× to 0.5× by call 35, blackout 20,000× within 45 calls, 2,500× within 50, 200× within 55) | Every card, any number of players | 96.710234% RTP | 96.9530% (3M cards, z −0.31); line, corners and blackout shares within 1.2 SE; through the engine 95.0803% (15K games, z +0.94) |
+| Pachinko | batches of 25 balls; start pocket 1 in 20 pays 4 and spins the reels, tulips 1 in 20 each pay 3; jackpot 1 in 32 spins pays 150 and chains on an odd number, up to 8 | Every batch, any power | 96.69189453125% RTP | 96.5720% (2M batches, z +0.59); through the engine 96.8248% (200K batches, z −0.21) |
 
 The blackjack figure is for exactly these rules. The often-quoted 0.26-0.28% assumes aces can be
 resplit, which this table doesn't allow, and a cut card adds about 0.02 points over dealing each
