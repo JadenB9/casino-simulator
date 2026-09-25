@@ -12,6 +12,7 @@ import type { CasinoTable } from '../src/table/host.ts';
 import type { GameEvent, Step } from '../../shared/src/engine.ts';
 import { DOLLAR, STARTING_BALANCE } from '../../shared/src/money.ts';
 import { FEAT_GAMES, casinoDay, dailyFeats, featOf } from '../../shared/src/feats.ts';
+import { dayKey, weekKey, weekOf } from '../../shared/src/stats.ts'; // v6 stats6
 import { DEFAULT_LOOK } from '../../shared/src/look.ts';
 import { featOpId, flushStatements, unlockFeat } from '../src/feats.ts';
 import { ORIGIN, TEST_PASSWORD, api, connect, type Client } from './helpers.ts';
@@ -155,10 +156,13 @@ describe('a feat earned at a table', () => {
     );
     expect(got.feats.map((f: any) => f.feat).sort()).toEqual(['first-win', 'lb-100x', 'lb-10x']);
     const d = `d:${casinoDay(Date.now())}:`;
+    const day = casinoDay(Date.now());
     expect(got.tally).toEqual({
       rounds: 1, won: 990_000, 'won:limbo': 990_000, 'wins:limbo': 1, best: 990_000,
       // the day's own copies, for the daily challenges
       [`${d}rounds`]: 1, [`${d}won`]: 990_000, [`${d}wins:limbo`]: 1, [`${d}best`]: 990_000,
+      // v6 stats6: the leaderboards' keys, and the three feats counted
+      wins: 1, 'rounds:limbo': 1, streak: 1, [dayKey(day)]: 990_000, [weekKey(weekOf(day))]: 990_000, feats: 3,
     });
     // $9,900 won: not yet the $10,000 challenge
     expect(got.feats.some((f: any) => f.feat === 'won-10k')).toBe(false);
@@ -278,8 +282,8 @@ describe('tallies', () => {
     await play(stub, 1_000, 0);
     await play(stub, 500, 5_000);
     await new Promise((r) => setTimeout(r, 200));
-    // nothing in D1 yet but the marker-free nothing
-    expect(await tally(me.id)).toEqual({});
+    // nothing in D1 yet but the marker-free nothing (and v6 stats6's count of feats earned)
+    expect(await tally(me.id)).toEqual({ feats: 1 });
 
     await evictDurableObject(stub);
     // the socket went with the eviction: back again, then stand up
@@ -294,9 +298,13 @@ describe('tallies', () => {
     expect(marker).toHaveLength(1);
     delete t[marker[0]!];
     const d = `d:${casinoDay(Date.now())}:`;
+    const day = casinoDay(Date.now());
     expect(t).toEqual({
       rounds: 4, won: 900 + 4_500 + 2_000, 'won:dice': 7_400, 'wins:dice': 3, best: 4_500,
       [`${d}rounds`]: 4, [`${d}won`]: 7_400, [`${d}wins:dice`]: 3, [`${d}best`]: 4_500,
+      // v6 stats6: the leaderboards' keys ride along; the run of wins survived the eviction too
+      feats: 1, wins: 3, 'rounds:dice': 4, lost: 1_000, 'lost:dice': 1_000, worst: 1_000, 'worst:dice': 1_000, streak: 2,
+      [dayKey(day)]: 6_400, [weekKey(weekOf(day))]: 6_400,
     });
     // GET /feats never shows the marker
     expect(Object.keys((await (await api('feats', me.token)).json<any>()).tally).some((k) => k.startsWith('flush:'))).toBe(false);

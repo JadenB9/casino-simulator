@@ -37,6 +37,7 @@ import type { Card } from '../../shared/src/cards.ts';
 import type { Cents } from '../../shared/src/money.ts';
 import { moneyOf } from './transfer.ts';
 import { revealAt } from './floor/wins.ts';
+import { addRoundStats } from '../../shared/src/stats.ts'; // v6 stats6
 
 /** Unsent tallies wait at most this long after the first of them before going to D1. */
 export const FLUSH_MS = 120_000;
@@ -81,6 +82,8 @@ export function roundFacts(game: GameId, variant: string, step: Pick<Step<unknow
     }
     out.moments.push('first-win');
   }
+  // v6 stats6: losses, the worst round, wins in all and rounds per game, for the leaderboards
+  addRoundStats(out.tally, game, profit);
   // A solo player's extra spots are named in the events by their spot, not the seat.
   const pos = r.spot ?? r.seat;
   try {
@@ -428,6 +431,10 @@ export function unlockStatements(db: D1Database, accountId: number, feat: string
       db.prepare(`UPDATE casino_accounts SET balance = balance + ?2, rev = rev + 1 WHERE id = ?1 RETURNING balance, in_play, rev`).bind(accountId, cash),
     );
   }
+  // v6 stats6: the count the "most achievements" board reads, last so the money stays results[2]
+  stmts.push(
+    db.prepare(`INSERT INTO casino_tally (account_id, key, n) VALUES (?1, 'feats', 1) ON CONFLICT (account_id, key) DO UPDATE SET n = n + 1`).bind(accountId),
+  );
   return stmts;
 }
 
