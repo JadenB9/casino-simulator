@@ -1,0 +1,45 @@
+/* Wheel on the online site: recent spins along the top, the wheel in the middle with its pointer
+   and the result in the hub, and a key of the wheel's multipliers along the bottom. Design pixels
+   of the 1280 x 800 page (the board is 950 x 702). */
+
+.wh-board { position: absolute; inset: 0; }
+.wh-strip { position: absolute; top: 22px; left: 24px; right: 24px; }
+
+.wh-wheel { position: absolute; left: 50%; top: 72px; width: 480px; height: 480px; margin-left: -240px; }
+.wh-canvas { position: absolute; inset: 0; width: 480px; height: 480px; will-change: transform; }
+.wh-pointer {
+  position: absolute; left: 50%; top: -8px; width: 34px; height: 44px; margin-left: -17px; z-index: 2;
+  background: #ff4d6d; clip-path: polygon(0 0, 100% 0, 100% 38%, 50% 100%, 0 38%);
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.5)); transform-origin: 50% 20%;
+}
+.wh-pointer.flick { animation: wh-flick 0.12s ease-out; }
+@keyframes wh-flick { 40% { rotate: -9deg; } }
+.wh-hub { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 6px; pointer-events: none; }
+.wh-hub-mult { font-family: var(--os-num); font-size: 76px; line-height: 1; font-weight: 600; font-variant-numeric: tabular-nums; }
+.wh-hub-note { font-size: 16px; color: var(--os-ink-3); font-weight: 600; }
+.wh-hub.shown .wh-hub-mult { animation: wh-hub-in 0.32s var(--ease, ease-out); }
+@keyframes wh-hub-in { from { opacity: 0; scale: 0.7; } }
+
+/* The key: one tile per multiplier on this wheel, lowest first */
+.wh-key { position: absolute; left: 24px; right: 24px; bottom: 26px; display: flex; gap: 8px; }
+.wh-key-item {
+  flex: 1; min-width: 0; height: 64px; display: grid; align-content: center; justify-items: center; gap: 3px;
+  border-radius: 6px; background: var(--os-card); border-bottom: 5px solid var(--wh-face); cursor: default;
+  transition: background 0.15s, translate 0.15s;
+}
+.wh-key-item:hover { background: var(--os-line); }
+.wh-key-mult { font-family: var(--os-num); font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.wh-key-count { font-size: 12px; font-weight: 600; color: var(--os-ink-3); }
+.wh-key-item.hit { background: var(--wh-face); translate: 0 -4px; }
+.wh-key-item.hit .wh-key-mult, .wh-key-item.hit .wh-key-count { color: var(--wh-ink); }
+
+/* Hovering a key tile: what it pays at the current bet, and how often */
+.wh-card {
+  position: absolute; margin: 0; translate: -50% -100%; z-index: 3;
+  display: grid; grid-template-columns: auto auto; gap: 6px 18px; align-items: baseline;
+  padding: 10px 14px; border-radius: 6px; background: var(--os-card); border: 1px solid var(--os-line);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4); pointer-events: none; white-space: nowrap;
+}
+.wh-card[hidden] { display: none; }
+.wh-card dt { font-size: 13px; font-weight: 600; color: var(--os-ink-3); }
+.wh-card dd { margin: 0; text-align: right; font-family: var(--os-num); font-size: 18px; font-variant-numeric: tabular-nums; }

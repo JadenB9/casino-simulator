@@ -22,7 +22,8 @@ is the summary. The full rules, every paytable, the strategy charts and the sour
   the button. Online Dice, whose multiplier (99 over the win chance) is rarely a whole number of
   cents, floors each win to the cent, and its published return includes that floor exactly. Tower,
   Mines and Hi-Lo floor their multipliers to the cent the same way (Hi-Lo only when it pays), and
-  their published returns include that floor exactly too.
+  their published returns include that floor exactly too. Coinflip, Wheel, Cases and Diamonds pay
+  two-decimal multipliers, so they never round at all.
 - **The server draws every card and number** with `crypto.getRandomValues` and rejection
   sampling (no modulo bias), and shuffles shoes with Fisher-Yates.
 - **Rule tables are tested cell by cell** (the blackjack chart, the baccarat drawing rules, the
@@ -106,6 +107,10 @@ inside 3. Seeds are fixed, so `npm run test:mc` reproduces these exactly.
 | | | Skip to an A, 3, 5, 9, J or K, then one guess | 99.000% RTP | exact (enumerated) |
 | | | Each further guess | 99% of what rides | two guesses 97.822%, three 96.824% (10M rounds, z +0.20, −0.18) |
 | Crash (online) | shared rounds, m(t) = e^(0.00006 t); P(crash point > x) = 0.99/x, so 1% of rounds end at 1.00×; paid only below the crash point | Every cash-out, auto or pressed | 99.000% RTP | 98.968% at 2× (10M rounds, z −1.03); 5 targets to 100× within 1.6 SE; presses through the engine 99.152% (60K rounds, z +0.39) |
+| Coinflip (online) | call heads or tails on a fair coin; k right calls in a row pay 0.99 × 2^k (1.98×, 3.96×, ...), cash out any time, twenty at most | Every stop, and any plan of when to stop | 99.000% RTP | 98.925% after one call, 98.888% after three (10M rounds, z −2.39, −1.36); after 6 and 10 within 1 SE; through the engine 99.141% (300K rounds, z +0.45) |
+| Wheel (online) | 10 to 50 segments at Low, Medium or High (Stake's shapes: Low 1.2×/1.5×, High one segment at 0.99 × segments, 49.50× on 50) | Every wheel | 99.000% RTP | all 15 wheels within 1.6 SE (2M spins each); Medium 30 through the engine 99.014% (300K spins, z +0.07) |
+| Cases (online) | four cases of weighted items (1,000,000 weights each), Starter to 10×, Classic 50×, High Roller 250×, Vault 1,000× | Every case | 99.000% RTP | 98.984%, 99.250%, 99.204%, 99.496% (5M cases each, z −0.33, +2.01, +0.83, +0.99) |
+| Diamonds (online) | five gems of seven colours; five of a kind 66.99×, four 5×, full house 4×, three 3×, two pair 2×, pair 0.1× (Stake's table, five of a kind raised from 50×) | Every hand | 99.000% RTP | 99.127% (10M hands, z +2.14); all 16,807 hands enumerated exactly |
 
 The blackjack figure is for exactly these rules. The often-quoted 0.26-0.28% assumes aces can be
 resplit, which this table doesn't allow, and a cut card adds about 0.02 points over dealing each
