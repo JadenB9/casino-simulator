@@ -23,7 +23,7 @@
 
 import type { GameEvent, GameId, RoundResult, Step } from '../../shared/src/engine.ts';
 import { CATALOG, isGameId } from '../../shared/src/games/catalog.ts';
-import { DAILY_KEEP_DAYS, FEATS, TEN_X_MULTIPLE, casinoDay, dailyFeats, featOf, isMaxTally, tallyValue } from '../../shared/src/feats.ts';
+import { DAILY_KEEP_DAYS, FEATS, casinoDay, dailyFeats, featOf, isMaxTally, tallyValue } from '../../shared/src/feats.ts';
 import type { EmoteId, TableServerMsg } from '../../shared/src/protocol.ts';
 import { LINEUP, isSlotId } from '../../shared/src/games/slots/lineup.ts';
 import { ROYAL_FLUSH, STRAIGHT_FLUSH as VP_STRAIGHT_FLUSH, FOUR_OF_A_KIND } from '../../shared/src/games/videopoker/hands.ts';
@@ -31,6 +31,8 @@ import { category as threeCardCategory, score as threeCardScore, STRAIGHT_FLUSH 
 import { FULL_HOUSE, QUADS, cardInt, categoryOf, evaluate } from '../../shared/src/games/holdem/eval.ts';
 import { WHEELS, type Risk as WheelRisk, type Segments } from '../../shared/src/games/wheel/rules.ts';
 import { MAX_CHAIN } from '../../shared/src/games/pachinko/rules.ts';
+import { STRAIGHT_FLUSH as LR_STRAIGHT_FLUSH } from '../../shared/src/games/letitride/rules.ts';
+import { FORTUNE_NAMES } from '../../shared/src/games/paigow/rules.ts';
 import type { Card } from '../../shared/src/cards.ts';
 import type { Cents } from '../../shared/src/money.ts';
 import { moneyOf } from './transfer.ts';
@@ -341,11 +343,22 @@ function momentsAt(
       if (Array.isArray(e?.shots) && e.shots.some((b: { chain?: unknown }) => Array.isArray(b?.chain) && b.chain.length >= MAX_CHAIN)) moments.push('pa-chain');
       break;
     }
-    default: {
-      // the newest games have one stand-in each until their own moments are written
-      const id = `${CATALOG[game].prefix}-10x`;
-      if (featOf(id) && returned >= TEN_X_MULTIPLE * wagered) moments.push(id);
+    case 'letitride': {
+      const r = mine('result')[0]?.result as { hand?: number; pulled?: boolean[]; bets?: number[] } | undefined;
+      if (r?.pulled?.every((p) => p === false) && (r.bets?.[0] ?? 0) > 0) moments.push('lr-ride');
+      if (typeof r?.hand === 'number' && r.hand >= LR_STRAIGHT_FLUSH) moments.push('lr-straight-flush');
+      break;
     }
+    case 'paigow': {
+      // the Fortune line hit, if any (FORTUNE_NAMES: four of a kind is line 6, five aces line 3)
+      const r = mine('result')[0]?.result as { fortuneLine?: number; fortune?: number } | undefined;
+      const line = typeof r?.fortuneLine === 'number' ? r.fortuneLine : -1;
+      if (line >= 0 && line <= FORTUNE_NAMES.indexOf('Four of a kind') && (r?.fortune ?? 0) > 0) moments.push('pg-fortune');
+      if (line === FORTUNE_NAMES.indexOf('Five aces')) moments.push('pg-aces');
+      break;
+    }
+    default:
+      break;
   }
   return { moments, counts };
 }

@@ -21,7 +21,9 @@
   .map-directory .sheet-body { grid-template-columns: 1fr; }
 }
 
-.map-svg { display: block; width: 100%; height: auto; background: #0c0a08; border: 1px solid var(--line); border-radius: 4px; }
+/* The whole plan in view, however tall the building grows: as wide as there's room, never taller than the window allows */
+.map-svg { display: block; width: auto; max-width: 100%; height: auto; max-height: calc(100dvh - 230px); margin: 0 auto; background: #0c0a08; border: 1px solid var(--line); border-radius: 4px; }
+.map-directory .map-svg { max-height: calc(100dvh - 170px); }
 .map-room { stroke: rgba(0, 0, 0, 0.35); stroke-width: 0.1; opacity: 0.62; cursor: pointer; transition: opacity 0.15s; }
 .map-room:hover { opacity: 0.8; }
 .map-room.here { opacity: 0.78; }
@@ -42,6 +44,5 @@
 .map-games { margin: 4px 0 0; font-size: 15px; letter-spacing: 0.02em; color: var(--ink-3); }
 .map-hint { margin: 0; color: var(--ink-3); }
 
-@media (prefers-reduced-motion: reduce) {
-  .map-you .map-you-halo { animation: none; }
-}
+/* Reduce flashing & motion (app/comfort.ts) */
+body.calm .map-you .map-you-halo { animation: none; }

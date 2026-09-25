@@ -454,13 +454,18 @@ describe('the online games', () => {
     expect(moments('pachinko', [launch(0, [])])).toEqual([]);
   });
 
-  it("the tables still being built: ten times the stake, until they have moments of their own", () => {
-    for (const g of ['letitride', 'paigow'] as const) {
-      const id = `${CATALOG[g].prefix}-10x`;
-      expect(featOf(id)?.game).toBe(g);
-      expect(moments(g, [], round(100, 1_000))).toEqual([id]);
-      expect(moments(g, [], round(100, 999))).toEqual([]);
-    }
+  it("let it ride and pai gow read the spot's settlement", () => {
+    const lr = (hand: number, pulled: [boolean, boolean], first: number) => ({ type: 'result', seat: 0, result: { hand, pulled, bets: [first, 2_000, 2_000], bonus: 0, wagered: 3_000, returned: 6_000 } });
+    expect(moments('letitride', [lr(1, [false, false], 2_000)])).toEqual(['lr-ride']);
+    expect(moments('letitride', [lr(1, [true, false], 0)])).toEqual([]);
+    expect(moments('letitride', [lr(0, [false, false], 0)], round(3_000, 0))).toEqual([]);
+    expect(moments('letitride', [lr(8, [true, true], 0)])).toEqual(['lr-straight-flush']);
+    expect(moments('letitride', [lr(9, [false, false], 1_001_000)])).toEqual(['lr-ride', 'lr-straight-flush']);
+    const pg = (fortuneLine: number, fortune: number) => ({ type: 'result', seat: 0, result: { outcome: 'push', highWins: true, lowWins: false, bet: 1_000, commission: 0, fortune, fortuneLine, wagered: 1_500, returned: 1_000 + fortune } });
+    expect(moments('paigow', [pg(6, 13_000)])).toEqual(['pg-fortune']);
+    expect(moments('paigow', [pg(3, 200_000)])).toEqual(['pg-fortune', 'pg-aces']);
+    expect(moments('paigow', [pg(7, 3_000)])).toEqual([]);
+    expect(moments('paigow', [pg(-1, 0)], round(1_500, 1_000))).toEqual([]);
   });
 
   it('junk in the events costs the moment, never the tallies', () => {

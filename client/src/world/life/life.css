@@ -48,12 +48,11 @@
 .staff-say-bubble.leaving { animation: staff-say-out 0.4s ease-in forwards; }
 @keyframes staff-say-in { from { opacity: 0; transform: translateY(8px) scale(0.92); } }
 @keyframes staff-say-out { to { opacity: 0; transform: translateY(-10px); } }
-@media (prefers-reduced-motion: reduce) {
-  .staff-say-bubble { animation: staff-say-fade 0.2s both; }
-  .staff-say-bubble.leaving { animation: staff-say-gone 0.4s forwards; }
-  @keyframes staff-say-fade { from { opacity: 0; } }
-  @keyframes staff-say-gone { to { opacity: 0; } }
-}
+/* Reduce flashing & motion (app/comfort.ts) */
+body.calm .staff-say-bubble { animation: staff-say-fade 0.2s both; }
+body.calm .staff-say-bubble.leaving { animation: staff-say-gone 0.4s forwards; }
+@keyframes staff-say-fade { from { opacity: 0; } }
+@keyframes staff-say-gone { to { opacity: 0; } }
 
 /* At a teller window the bank's sheet stands to the right of the banker instead of over them,
    and the floor behind stays lit: you watch the banker count your money out. Wide screens only. */

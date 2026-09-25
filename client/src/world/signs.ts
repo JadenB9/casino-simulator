@@ -48,6 +48,9 @@ const DOOR_SIGNS: Record<string, { kind: 'lit' | 'neon'; color: string; font: Si
   yard: { kind: 'neon', color: '#ff8a2a', font: 'Tilt Neon' },
   bank: { kind: 'lit', color: '#ffe2a8', font: 'Cinzel' },
   boutique: { kind: 'lit', color: '#f6dca0', font: 'Limelight' },
+  parlour: { kind: 'neon', color: '#ff4fa8', font: 'Tilt Neon' },
+  cardroom: { kind: 'lit', color: '#f2cf7c', font: 'Cinzel' },
+  bingo: { kind: 'neon', color: '#ffcf3a', font: 'Limelight' },
 };
 
 /**
