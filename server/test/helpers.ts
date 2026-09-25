@@ -1,5 +1,6 @@
-import { exports } from 'cloudflare:workers';
+import { env, exports } from 'cloudflare:workers';
 import type { TableServerMsg } from '../../shared/src/protocol.ts';
+import { FEATS } from '../../shared/src/feats.ts';
 
 export const ORIGIN = 'http://localhost:5173';
 
@@ -97,4 +98,13 @@ export async function connectRaw(path: string, query: string, ip?: string): Prom
 export async function connect(path: string, token: string, extra = '', ip?: string): Promise<{ res: Response; client: Client | null }> {
   const ticket = await ticketFor(path, token, ip);
   return connectRaw(path, `${ticket ? `&ticket=${encodeURIComponent(ticket)}` : ''}${extra}`, ip);
+}
+
+/**
+ * Mark every feat as already earned by this account, so its rounds pay no feat's cash. For the
+ * tests that check a table's money to the cent: feats pay beside the play (feats.test.ts), on
+ * their own time.
+ */
+export async function featsHad(accountId: number): Promise<void> {
+  await env.DB.batch(FEATS.map((f) => env.DB.prepare(`INSERT OR IGNORE INTO casino_feats (account_id, feat, at) VALUES (?1, ?2, 0)`).bind(accountId, f.id)));
 }

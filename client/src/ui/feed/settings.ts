@@ -11,6 +11,6 @@ export function bigWinSettings(row: Row): HTMLElement[] {
   const ctl = segmented<'on' | 'off'>('Big-win toasts', [{ id: 'on', label: 'On' }, { id: 'off', label: 'Off' }], bigWinToasts() ? 'on' : 'off', (v) => setBigWinToasts(v === 'on'));
   return [
     el('h3', 'section-label', 'Floor'),
-    row('Big wins', ctl.root, el('p', 'set-note', 'A note at the top of the screen when someone on the floor wins big. The sign over the pit shows every one either way.')),
+    row('Big wins', ctl.root, el('p', 'set-note', 'A note at the top of the screen when someone on the floor wins big or earns an achievement. The sign over the pit shows every big win either way.')),
   ];
 }

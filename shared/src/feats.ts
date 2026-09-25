@@ -7,10 +7,25 @@
 //
 // Ids are stored in D1 (casino_feats) and in saved looks (look.title), so an id never changes
 // once it has shipped.
+//
+// Tallies (casino_tally, one row per account and key) are what challenges are measured on:
+//   won            cents won in rounds that made a profit (a round's profit: returned - wagered)
+//   rounds         rounds played with money on them
+//   best           the biggest profit on one round (kept as a maximum, not a sum)
+//   won:<game>     cents won at that game
+//   wins:<game>    rounds won at that game (games with one are the "games" count below)
+//   bj:naturals    blackjacks dealt to you and paid
+// `games` isn't stored: it's how many of the casino's games have a `wins:` row above zero.
+//
+// Daily challenges: three a day, the same three for everyone, new at midnight Las Vegas time
+// (dailyFeats). They're measured on the day's own copies of the tallies, `d:<YYYY-MM-DD>:won`,
+// `d:<day>:rounds`, `d:<day>:best`, `d:<day>:wins:<game>`, and their ids name the day
+// (`daily:<day>:<0-2>`), so each is earned once per day. Tables drop day rows a few days old.
 
-import type { Cents } from './money.ts';
+import { DOLLAR, type Cents } from './money.ts';
 import type { GameId } from './engine.ts';
 import type { EmoteId } from './protocol.ts';
+import { CATALOG } from './games/catalog.ts';
 
 export type FeatKind = 'achievement' | 'challenge';
 
@@ -40,23 +55,327 @@ export interface Feat {
   goal?: number;
   tally?: string;
   reward: Reward;
+  /** A daily challenge: the casino day (YYYY-MM-DD) it belongs to. */
+  daily?: string;
 }
 
-/** The list; the feats slice fills it in (every id here is final once shipped). */
+const $ = (n: number): Cents => n * DOLLAR;
+
+/** Keys kept as the largest value seen rather than a running sum. */
+export function isMaxTally(key: string): boolean {
+  return key === 'best' || key.endsWith(':best');
+}
+
+/** The games "every game" means: everything the floor offers (the dev fixture isn't one). */
+export const FEAT_GAMES: readonly GameId[] = (Object.keys(CATALOG) as GameId[]).filter((g) => !CATALOG[g].dev);
+
+/** How much a game's own amount challenge asks you to win there. */
+export const GAME_WON_GOAL: Cents = $(50_000);
+
+/** Each game's amount challenge: its id, name and the title it gives (none). */
+const GAME_WON_NAMES: Record<GameId, string> = {
+  blackjack: 'Card Counter',
+  roulette: 'Wheel Watcher',
+  craps: 'Hot Hand',
+  baccarat: 'Punto Banco',
+  slots: 'One-Armed Bandit',
+  videopoker: 'Pay Table',
+  threecard: 'Three of a Trade',
+  holdem: 'Card Room Shark',
+  war: 'War Chest',
+  bigsix: 'Money Wheel',
+  sicbo: 'Tai Sai',
+  plinko: 'Peg Board',
+  tower: 'Climber',
+  mines: 'Prospector',
+  dice: 'Dice Roller',
+  limbo: 'Under the Bar',
+  keno: 'Ticket Writer',
+  hilo: 'Card Reader',
+  crash: 'Flight Plan',
+  banditwheel: 'Camp Regular',
+  coinflip: 'Heads or Tails',
+  wheel: 'Round and Round',
+  cases: 'Case Closed',
+  diamonds: 'Gem Cutter',
+  letitride: 'Let It Ride',
+  paigow: 'Two Hands',
+  bingo: 'Full Card',
+  pachinko: 'Silver Balls',
+  highcard: 'High Card',
+};
+
+/** Games still without moments of their own: a big multiple stands in until they have some. */
+const TEN_X: Partial<Record<GameId, string>> = {
+  letitride: 'Rode It Home',
+  paigow: 'Dragon Hand',
+};
+
+/** A round that paid back this many times its stake earns the stand-in above. */
+export const TEN_X_MULTIPLE = 10;
+
+const A = (id: string, game: GameId | undefined, name: string, about: string, reward: Reward): Feat => ({ id, kind: 'achievement', ...(game ? { game } : {}), name, about, reward });
+const C = (id: string, game: GameId | undefined, name: string, about: string, tally: string, goal: number, reward: Reward): Feat => ({
+  id,
+  kind: 'challenge',
+  ...(game ? { game } : {}),
+  name,
+  about,
+  tally,
+  goal,
+  reward,
+});
+
 export const FEATS: readonly Feat[] = [
-  { id: 'won-1m', kind: 'challenge', name: 'Millionaire', about: 'Win $1,000,000 in all.', goal: 100_000_000, tally: 'won', reward: { emote: 'trophy', title: 'Millionaire' } },
+  // --- everywhere: amounts won, the biggest single rounds, rounds played, games won at -----------
+  C('won-10k', undefined, 'On the Board', 'Win $10,000 in all.', 'won', $(10_000), { cash: $(1_000) }),
+  C('won-100k', undefined, 'Six Figures', 'Win $100,000 in all.', 'won', $(100_000), { cash: $(5_000) }),
+  C('won-1m', undefined, 'Millionaire', 'Win $1,000,000 in all.', 'won', $(1_000_000), { emote: 'trophy', title: 'Millionaire' }),
+  C('won-10m', undefined, 'Tycoon', 'Win $10,000,000 in all.', 'won', $(10_000_000), { item: 'golden-board', title: 'Tycoon' }),
+  C('won-100m', undefined, 'House Money', 'Win $100,000,000 in all.', 'won', $(100_000_000), { cash: $(1_000_000), title: 'Legend' }),
+  C('round-10k', undefined, 'Big Night', 'Win $10,000 in one round.', 'best', $(10_000), { cash: $(2_500) }),
+  C('round-50k', undefined, 'Smooth Operator', 'Win $50,000 in one round.', 'best', $(50_000), { emote: 'moonwalk' }),
+  C('round-1m', undefined, 'High Roller', 'Win $1,000,000 in one round.', 'best', $(1_000_000), { item: 'high-roller-shades', title: 'High Roller' }),
+  C('rounds-100', undefined, 'Regular', 'Play 100 rounds.', 'rounds', 100, { cash: $(1_000) }),
+  C('rounds-1000', undefined, 'Fixture', 'Play 1,000 rounds.', 'rounds', 1_000, { cash: $(5_000), title: 'Regular' }),
+  C('rounds-10000', undefined, 'Part of the Furniture', 'Play 10,000 rounds.', 'rounds', 10_000, { cash: $(25_000), title: 'Lifer' }),
+  A('first-win', undefined, "Beginner's Luck", 'Win a round at any game.', { cash: $(500) }),
+  C('games-5', undefined, 'Tour of the Floor', 'Win at five different games.', 'games', 5, { cash: $(5_000) }),
+  C('games-all', undefined, 'Champion', 'Win at every game in the house.', 'games', FEAT_GAMES.length, { item: 'champion-jacket', title: 'Champion' }),
+
+  // --- blackjack -----------------------------------------------------------------------------
+  A('bj-blackjack', 'blackjack', 'Twenty-One', 'Get a blackjack.', { cash: $(500) }),
+  A('bj-double', 'blackjack', 'Doubled Up', 'Win a hand you doubled down on.', { cash: $(750) }),
+  A('bj-split', 'blackjack', 'Two for Two', 'Split a pair and win both hands.', { cash: $(2_500) }),
+  C('bj-naturals', 'blackjack', 'Blackjack Royalty', 'Get 21 blackjacks.', 'bj:naturals', 21, { item: 'twentyone-pendant', title: 'Twenty-One' }),
+
+  // --- roulette ------------------------------------------------------------------------------
+  A('rl-straight', 'roulette', 'Straight Up', 'Hit a number straight up.', { cash: $(1_000) }),
+  A('rl-zero', 'roulette', 'Green', 'Hit 0 or 00 straight up.', { cash: $(5_000), title: 'Green' }),
+
+  // --- craps ---------------------------------------------------------------------------------
+  A('cr-point', 'craps', 'Point Made', 'Win a pass line bet when the shooter makes the point.', { cash: $(750) }),
+  A('cr-hard', 'craps', 'The Hard Way', 'Win a hardway bet.', { cash: $(2_500) }),
+  A('cr-long', 'craps', 'Long Shot', 'Win on aces or boxcars at 30 to 1.', { cash: $(5_000) }),
+
+  // --- baccarat ------------------------------------------------------------------------------
+  A('bc-natural', 'baccarat', 'Natural Nine', 'Win a bet on a hand dealt a natural nine.', { cash: $(1_000) }),
+  A('bc-tie', 'baccarat', 'Dead Heat', 'Win a tie bet.', { cash: $(2_500) }),
+  A('bc-pair', 'baccarat', 'Pair Dealt', 'Win a Player or Banker pair bet.', { cash: $(2_500) }),
+
+  // --- slots ---------------------------------------------------------------------------------
+  A('sl-bonus', 'slots', 'Bonus Round', 'Start free games or the Cherry Wheel.', { cash: $(1_000) }),
+  A('sl-hundred', 'slots', 'Hundred Times', 'Win 100 times your bet on one spin.', { cash: $(5_000) }),
+  A('sl-jackpot', 'slots', 'Jackpot', "Hit a machine's top award.", { item: 'horseshoe-pendant', cash: $(25_000), title: 'Jackpot' }),
+
+  // --- video poker ---------------------------------------------------------------------------
+  A('vp-quads', 'videopoker', 'Four of a Kind', 'Draw four of a kind.', { cash: $(2_500) }),
+  A('vp-straight-flush', 'videopoker', 'Straight Flush', 'Draw a straight flush.', { cash: $(10_000) }),
+  A('vp-royal', 'videopoker', 'Royal Flush', 'Draw a royal flush.', { item: 'royal-pendant', cash: $(50_000), title: 'Royal' }),
+
+  // --- three card poker ----------------------------------------------------------------------
+  A('tc-trips', 'threecard', 'Trips', 'Get three of a kind at Three Card Poker.', { cash: $(2_500) }),
+  A('tc-straight-flush', 'threecard', 'Three-Card Straight Flush', 'Get a straight flush at Three Card Poker.', { cash: $(5_000) }),
+
+  // --- hold'em -------------------------------------------------------------------------------
+  A('he-pot', 'holdem', 'Take It Down', "Win a pot at Hold'em.", { cash: $(500) }),
+  A('he-boat', 'holdem', 'Full Boat', 'Win a showdown with a full house or better.', { cash: $(2_500) }),
+  A('he-quads', 'holdem', 'Quads', 'Win a showdown with four of a kind or better.', { cash: $(10_000), title: 'Shark' }),
+
+  // --- casino war ----------------------------------------------------------------------------
+  A('wr-war', 'war', 'Going to War', 'Go to war and win.', { cash: $(750) }),
+  A('wr-tie', 'war', 'Tie Breaker', 'Win the tie bet.', { cash: $(2_500) }),
+
+  // --- big six -------------------------------------------------------------------------------
+  A('b6-twenty', 'bigsix', 'Twenty Dollar Bill', 'Win on the $20.', { cash: $(1_000) }),
+  A('b6-star', 'bigsix', 'Star Turn', 'Win on the Star or the Crown at 40 to 1.', { cash: $(5_000) }),
+
+  // --- sic bo --------------------------------------------------------------------------------
+  A('sb-total', 'sicbo', 'Four or Seventeen', 'Win a bet on a total of 4 or 17.', { cash: $(2_500) }),
+  A('sb-triple', 'sicbo', 'Triple', 'Win a triple bet.', { cash: $(5_000) }),
+
+  // --- the online games ----------------------------------------------------------------------
+  A('pk-edge', 'plinko', 'Edge of the Board', 'Land a Plinko ball in an end bin.', { cash: $(1_000) }),
+  A('pk-top', 'plinko', 'Top Bin', 'Land in an end bin of the 16-row board on High.', { cash: $(25_000), title: 'Plinko King' }),
+  A('tw-top', 'tower', 'Top of the Tower', 'Climb all nine rows.', { cash: $(2_500) }),
+  A('mn-gems', 'mines', 'Gem Hunter', 'Cash out with ten gems or more.', { cash: $(1_000) }),
+  A('mn-clear', 'mines', 'Clean Sweep', 'Clear every gem off the board.', { cash: $(10_000), title: 'Minesweeper' }),
+  A('dc-long', 'dice', 'Long Odds', 'Win a roll at a 5% chance or less.', { cash: $(1_000) }),
+  A('lb-10x', 'limbo', 'Ten Times', 'Win at a 10x target or higher.', { cash: $(1_000) }),
+  A('lb-100x', 'limbo', 'Hundred Times', 'Win at a 100x target or higher.', { cash: $(10_000) }),
+  A('kn-catch', 'keno', 'Big Catch', 'Hit six numbers or more in one game.', { cash: $(2_500) }),
+  A('kn-sweep', 'keno', 'Every Pick', 'Hit every number with five picks or more.', { cash: $(10_000) }),
+  A('hl-streak', 'hilo', 'On a Roll', 'Call eight cards right in a row and cash out.', { cash: $(2_500) }),
+  A('cs-10x', 'crash', 'Liftoff', 'Cash out at 10x or higher.', { cash: $(1_000) }),
+  A('cs-100x', 'crash', 'Moonshot', 'Cash out at 100x or higher.', { cash: $(25_000), title: 'Rocketeer' }),
+
+  A('cf-five', 'coinflip', 'Called It', 'Call five flips right in a row and cash out.', { cash: $(1_000) }),
+  A('cf-ten', 'coinflip', 'Heads or Tails', 'Call ten flips right in a row and cash out.', { cash: $(10_000), title: 'Lucky Coin' }),
+  A('wh-big', 'wheel', 'Big Segment', 'Land a segment paying 10x or more.', { cash: $(1_000) }),
+  A('wh-top', 'wheel', 'Top of the Wheel', 'Land the top segment of the 50-segment High wheel.', { cash: $(10_000) }),
+  A('ca-epic', 'cases', 'Epic Pull', 'Open an epic item or better (20x or more).', { cash: $(1_000) }),
+  A('ca-legendary', 'cases', 'Legendary', 'Open a legendary item or better (100x or more).', { cash: $(5_000) }),
+  A('dm-four', 'diamonds', 'Four Alike', 'Set down four gems of a colour.', { cash: $(750) }),
+  A('dm-five', 'diamonds', 'Five Alike', 'Set down five gems of one colour.', { cash: $(10_000), title: 'Jeweller' }),
+
+  // --- the bandit wheel ----------------------------------------------------------------------
+  A('bw-10', 'banditwheel', 'Ten to One', 'Win on the 10.', { cash: $(1_000) }),
+  A('bw-20', 'banditwheel', 'Bandit Twenty', 'Win on the 20.', { cash: $(2_500) }),
+
+  // --- the bingo hall and the pachinko parlour --------------------------------------------------
+  A('bg-bingo', 'bingo', 'Bingo', 'Complete a pattern on one of your cards.', { cash: $(500) }),
+  A('bg-blackout', 'bingo', 'Blackout', 'Cover a whole card in time to be paid for it.', { cash: $(10_000), title: 'Caller' }),
+  A('pa-jackpot', 'pachinko', 'Fever', 'Hit a jackpot on the reels.', { cash: $(750) }),
+  A('pa-chain', 'pachinko', 'Eight in a Chain', 'Chain eight jackpots from one ball.', { cash: $(10_000) }),
+
+  // --- the newest games: a big multiple until they have moments of their own -------------------
+  ...(Object.entries(TEN_X) as [GameId, string][]).map(([g, name]) =>
+    A(`${CATALOG[g].prefix}-10x`, g, name, `Win ${TEN_X_MULTIPLE} times your stake in one round of ${CATALOG[g].name}.`, { cash: $(1_000) }),
+  ),
+
+  // --- each game's amount won ------------------------------------------------------------------
+  ...FEAT_GAMES.map((g) => C(`won-${g}`, g, GAME_WON_NAMES[g], `Win $50,000 at ${CATALOG[g].name}.`, `won:${g}`, GAME_WON_GOAL, { cash: $(2_500) })),
 ];
 
 const BY_ID = new Map(FEATS.map((f) => [f.id, f]));
+const DAILY_ID = /^daily:(\d{4}-\d{2}-\d{2}):(\d)$/;
 
 export function featOf(id: unknown): Feat | null {
-  return typeof id === 'string' ? (BY_ID.get(id) ?? null) : null;
+  if (typeof id !== 'string') return null;
+  const known = BY_ID.get(id);
+  if (known) return known;
+  const m = DAILY_ID.exec(id);
+  return m ? (dailyFeats(m[1]!)[Number(m[2])] ?? null) : null;
 }
 
 /** The feat whose title this is (a look's `title` is a feat id), or null. */
 export function titleOf(id: unknown): Feat | null {
   const f = featOf(id);
   return f?.reward.title ? f : null;
+}
+
+/** A game's feats, in list order (achievements first where the list has them so). */
+export function featsAt(game: GameId | null): Feat[] {
+  return FEATS.filter((f) => (f.game ?? null) === game);
+}
+
+/**
+ * A tally as challenges read it, from the stored rows: `games` counts the casino's games with a
+ * win; anything else is its row (0 when there isn't one).
+ */
+export function tallyValue(tally: Readonly<Record<string, number>>, key: string): number {
+  // `games`, or a day's `d:<day>:games`: the games with a win (that day)
+  const games = /^(d:\d{4}-\d{2}-\d{2}:)?games$/.exec(key);
+  if (games) return FEAT_GAMES.filter((g) => (tally[`${games[1] ?? ''}wins:${g}`] ?? 0) > 0).length;
+  return tally[key] ?? 0;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Daily challenges
+
+/** How many a day. */
+export const DAILY_COUNT = 3;
+/** Day rows a table keeps sending and D1 keeps, counting today. */
+export const DAILY_KEEP_DAYS = 3;
+
+interface DailySpec {
+  /** The tally, after `d:<day>:` (`wins:*` picks a game). */
+  key: 'won' | 'rounds' | 'games' | 'best' | 'wins:*';
+  goal: number;
+  name: string;
+  about: string;
+  cash: Cents;
+}
+
+/**
+ * The pool, in kinds; a day takes one from each of three kinds. A daily's id is its day and slot,
+ * and what it asks is worked out again from the day, so entries are only ever added at the end.
+ */
+const DAILY_POOL: readonly (readonly DailySpec[])[] = [
+  [
+    { key: 'won', goal: $(2_500), name: 'Good Day', about: 'Win $2,500 today.', cash: $(500) },
+    { key: 'won', goal: $(10_000), name: 'Big Day', about: 'Win $10,000 today.', cash: $(1_500) },
+  ],
+  [
+    { key: 'rounds', goal: 50, name: 'Keep Playing', about: 'Play 50 rounds today.', cash: $(500) },
+    { key: 'rounds', goal: 150, name: 'All Day', about: 'Play 150 rounds today.', cash: $(1_000) },
+  ],
+  [
+    { key: 'games', goal: 3, name: 'Three Tables', about: 'Win at three different games today.', cash: $(750) },
+    { key: 'games', goal: 5, name: 'Around the Floor', about: 'Win at five different games today.', cash: $(1_500) },
+  ],
+  [
+    { key: 'best', goal: $(1_000), name: 'One Good Round', about: 'Win $1,000 in one round today.', cash: $(750) },
+    { key: 'best', goal: $(5_000), name: 'One Big Round', about: 'Win $5,000 in one round today.', cash: $(1_500) },
+  ],
+  [{ key: 'wins:*', goal: 5, name: 'Five at the Table', about: 'Win five rounds of one game today.', cash: $(750) }],
+];
+
+/** The games a "five wins" daily picks from: the ones with a table or a machine to walk up to. */
+const DAILY_GAMES: readonly GameId[] = ['blackjack', 'roulette', 'craps', 'baccarat', 'slots', 'videopoker', 'threecard', 'war', 'bigsix', 'sicbo', 'banditwheel', 'plinko', 'dice', 'mines'];
+
+/** A small hash of the day: the same picks for everyone, every time it's asked. */
+function daySeed(day: string): () => number {
+  let h = 2166136261;
+  for (let i = 0; i < day.length; i++) h = Math.imul(h ^ day.charCodeAt(i), 16777619);
+  return () => {
+    h = Math.imul(h ^ (h >>> 15), 2246822507);
+    h = Math.imul(h ^ (h >>> 13), 3266489909);
+    h ^= h >>> 16;
+    return (h >>> 0) / 4294967296;
+  };
+}
+
+const DAILY_CACHE = new Map<string, Feat[]>();
+
+/** A casino day's three challenges (the day as casinoDay writes it). */
+export function dailyFeats(day: string): Feat[] {
+  const known = DAILY_CACHE.get(day);
+  if (known) return known;
+  const rand = daySeed(day);
+  const kinds = DAILY_POOL.map((_, i) => i);
+  const picked: Feat[] = [];
+  for (let slot = 0; slot < DAILY_COUNT; slot++) {
+    const kind = kinds.splice(Math.floor(rand() * kinds.length), 1)[0]!;
+    const opts = DAILY_POOL[kind]!;
+    const spec = opts[Math.floor(rand() * opts.length)]!;
+    const game = spec.key === 'wins:*' ? DAILY_GAMES[Math.floor(rand() * DAILY_GAMES.length)]! : undefined;
+    picked.push({
+      id: `daily:${day}:${slot}`,
+      kind: 'challenge',
+      ...(game ? { game } : {}),
+      name: game ? `Five at ${CATALOG[game].name}` : spec.name,
+      about: game ? `Win five rounds of ${CATALOG[game].name} today.` : spec.about,
+      tally: `d:${day}:${game ? `wins:${game}` : spec.key}`,
+      goal: spec.goal,
+      reward: { cash: spec.cash },
+      daily: day,
+    });
+  }
+  if (DAILY_CACHE.size > 16) DAILY_CACHE.clear();
+  DAILY_CACHE.set(day, picked);
+  return picked;
+}
+
+const DAY_FORMAT = (() => {
+  try {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit' });
+  } catch {
+    return null;
+  }
+})();
+
+/** The casino's date (Las Vegas time), YYYY-MM-DD: when the dailies turn over (as floor/wins.ts counts its days). */
+export function casinoDay(now: number): string {
+  if (DAY_FORMAT) {
+    const parts = DAY_FORMAT.formatToParts(new Date(now));
+    const get = (t: string) => parts.find((p) => p.type === t)?.value;
+    const y = get('year');
+    const m = get('month');
+    const d = get('day');
+    if (y && m && d) return `${y}-${m}-${d}`;
+  }
+  return new Date(now).toISOString().slice(0, 10);
 }
 
 /** GET /feats: what you've earned and how far along each tally is. */
