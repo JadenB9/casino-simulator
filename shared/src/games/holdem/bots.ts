@@ -745,8 +745,10 @@ function postflop(sit: BotSituation, st: Style, rng: Rng): BotDecision {
     }
     // Checked to in position: a stab at the pot.
     if (sit.ip && n === 1 && !initiative && sit.streetRaises === 0 && u < 0.18 * st.bluff * Math.min(1.5, fold)) return aggressive(sit, pot * betSize(sit, tex.wet, rng));
-    // River bluffs, balanced against the value bets: missed draws and air, more with the initiative.
-    if (river && n === 1 && eq < 0.3 && u < 0.26 * st.bluff * Math.min(1.6, fold) * (initiative ? 1.2 : 0.6)) return aggressive(sit, pot * (0.6 + randUnit(rng) * 0.4));
+    // River bluffs, balanced against the value bets: missed draws and air, more with the initiative
+    // and with a card that blocks the hands that would call (a skilled player's choice of bluffs).
+    const blocking = st.skill > 0.5 && blocks(sit) ? 1.6 : 1;
+    if (river && n === 1 && eq < 0.3 && u < 0.26 * st.bluff * Math.min(1.6, fold) * (initiative ? 1.2 : 0.6) * blocking) return aggressive(sit, pot * (0.6 + randUnit(rng) * 0.4));
     return { kind: 'check' };
   }
 
@@ -778,6 +780,20 @@ function postflop(sit: BotSituation, st: Style, rng: Rng): BotDecision {
   const small = l.toCall <= pot * 0.35;
   if (small && st.skill > 0.5 && eq >= need * 0.82 && me.made >= 0.3 && randUnit(rng) < 0.4) return call(sit);
   return passive(sit);
+}
+
+/**
+ * Blockers: holding the ace (or the best king) of a suit with three on the board takes the nut
+ * flush out of the other player's hands, which makes a bluff likelier to work.
+ */
+function blocks(sit: BotSituation): boolean {
+  const suits = [0, 0, 0, 0];
+  for (const c of sit.board) suits[c & 3]!++;
+  for (const c of sit.hole) {
+    const r = c >> 2;
+    if (suits[c & 3]! >= 3 && r >= 11 && !sit.board.some((b) => (b & 3) === (c & 3) && b >> 2 > r)) return true;
+  }
+  return false;
 }
 
 function lastPreRaiser(sit: BotSituation): number | null {
