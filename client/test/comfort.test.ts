@@ -244,6 +244,7 @@ const FLASHING = [
   'world/consumables/diner.ts',
   // v6 city6: the towers' blinking beacons
   'world/city/sky.ts',
+  'world/city/index.ts',
   // v6 law6: taking a punch shakes the view
   'world/law/index.ts',
 ];
@@ -279,7 +280,7 @@ describe('every module known to flash reads the switch', () => {
 
   it('the stylesheets turn off every flashing and shaking animation under body.calm', () => {
     const css = cssFiles().map((f) => readFileSync(f, 'utf8')).join('\n');
-    for (const sel of ['.vp-row.win', '.vp-status.win', '.bw-slot.won', '.name-row.shake', '.mn-grid.shake', '.tw-tower.shake', '.kn-tile.full', '.map-you .map-you-halo', '.pk-bin.hit', '.emote-bubble', '.staff-say-bubble'])
+    for (const sel of ['.vp-row.win', '.vp-status.win', '.bw-slot.won', '.name-row.shake', '.mn-grid.shake', '.tw-tower.shake', '.kn-tile.full', '.map-you .map-you-halo', '.pk-bin.hit', '.emote-bubble', '.staff-say-bubble', '.celeb-flash', '.celeb-sighting-tag::before', '.daily-btn.waiting .daily-dot', '.ft-row.fresh', '.inv-fade', '.dine-card', '.lift-panel'])
       expect(css).toContain(`body.calm ${sel}`);
   });
 

@@ -355,6 +355,8 @@ export class Law {
     const p = this.deps.world.player.position;
     this.staff.update(dt, now, this._watch.set(p.x, 1.6, p.z));
     this.speech.update(dt);
+    // calm turned on mid-shake stops it there
+    if (this.shake > 0 && calm()) this.shake = 0;
     if (this.shake > 0) {
       this.shake = Math.max(0, this.shake - dt);
       const k = (this.shake / SHAKE_S) * SHAKE;
