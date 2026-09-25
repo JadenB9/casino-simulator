@@ -398,6 +398,28 @@ if (checks.includes('floor')) {
   const extra = Object.fromEntries(RIDE_IDS.map((id) => [id, calls[id] - calls.foot]));
   console.log(`draw calls on foot ${calls.foot}; a ride adds ${JSON.stringify(extra)}`);
   for (const [id, n] of Object.entries(extra)) if (n > 2) fail(`${id} adds ${n} draw calls`);
+  // a floating ride's glow over the edge of the lobby's runner: a soft pool over rug and marble alike
+  for (const ride of ['hoverboard', 'hover-throne']) {
+    await a.p.evaluate((id) => {
+      const { engine, world, session } = window.casino;
+      world.player.teleport(-2.2, 12.6, Math.PI);
+      world.player.character.setLook({ ...session.profile.look, ride: id });
+      world.player.setEnabled(false);
+      window.__watch?.();
+      window.__watch = engine.onFrame(() => {
+        engine.camera.position.set(-3.6, 1.35, 11.1);
+        engine.camera.lookAt(-2.2, 0.35, 12.6);
+      });
+    }, ride);
+    await a.p.waitForTimeout(900);
+    await shot(a.p, `glow-rug-edge-${ride}`);
+  }
+  await a.p.evaluate(() => {
+    const { world, session } = window.casino;
+    world.player.character.setLook(session.profile.look);
+    window.__watch?.();
+    world.player.setEnabled(true);
+  });
   // the boutique's forms in the new pieces, one standing on a hoverboard
   await a.p.evaluate(() => window.casino.world.player.teleport(12.5, 8, Math.PI));
   await a.p.waitForTimeout(800);
