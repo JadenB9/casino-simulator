@@ -6,7 +6,7 @@ import type { Closable } from '../menu/deps.ts';
 import { openSheet } from '../menu/sheet.ts';
 import { keycap } from '../menu/parts.ts';
 
-/** Keys as keycaps; "/" between keys means "or", "-" joins a range. */
+/** Keys as keycaps; "/" between keys means "or", "-" joins a range (1-6, Q-P). */
 type Row = [keys: string, action: string];
 
 export const SHORTCUTS: readonly { title: string; rows: readonly Row[] }[] = [
@@ -18,6 +18,7 @@ export const SHORTCUTS: readonly { title: string; rows: readonly Row[] }[] = [
       ['⇧', 'Run, held while walking'],
       ['E', 'Whatever the prompt offers; again to stand up'],
       ['F', 'First or third person'],
+      ['B', 'Step off your ride, and back on'],
       ['N', 'Map of the casino'],
       ['T or Enter', 'Chat'],
     ],
@@ -26,7 +27,8 @@ export const SHORTCUTS: readonly { title: string; rows: readonly Row[] }[] = [
     title: 'Anywhere',
     rows: [
       ['G', 'Emotes, on the floor or at a table'],
-      ['1-6', 'Pick one while the emotes are open'],
+      ['1-6', 'Pick a free emote while the emotes are open'],
+      ['Q-P', 'Pick a boutique or reward emote (a locked one shows its price)'],
       ['Esc', 'Free the mouse, close a panel, stand up, leave'],
       ['M', 'Mute or unmute'],
       ['?', 'This list'],
@@ -80,7 +82,7 @@ function keys(spec: string): HTMLElement {
   const box = el('span', 'sc-keys');
   spec.split(' / ').forEach((alt, i) => {
     if (i > 0) box.append(el('span', 'sc-or', 'or'));
-    const range = alt.match(/^(\d)-(\d)$/);
+    const range = alt.match(/^([0-9A-Z])-([0-9A-Z])$/);
     if (range) {
       box.append(keycap(range[1]!), el('span', 'sc-or', 'to'), keycap(range[2]!));
       return;
