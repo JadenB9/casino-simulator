@@ -10,6 +10,9 @@
 // yours (world.holdItem). Then back to their round. At a game table the drink waits at the bar until
 // you stand up. Those walks are this screen's own: everyone else sees the waiter's round, and the
 // drink in your hand once you have it.
+//
+// Finished, the nearest free waiter comes by to take the empty glass or plate off you (collect()),
+// and one passing someone who's just eaten well greets them by name.
 
 import * as THREE from 'three';
 import type { BarModel, BarOrder } from '../../../../shared/src/items.ts';
@@ -36,9 +39,13 @@ const AHEAD_M = 1.5;
 const SIDESTEP = 0.55;
 /** How long a waiter waits for you to pick from the menu before going back to work (s). */
 const ATTEND_S = 45;
+/** A waiter greets you by name when you've eaten well and they pass within this (m), once in this long (s). */
+const GREET_M = 2.4;
+const GREET_S = 90;
 
 type Job =
   | { kind: 'attend'; t: number; order: BarOrder | null }
+  | { kind: 'collect'; model: BarModel; taken: () => void; phase: 'guest' | 'hand'; t: number; goal: Pt | null; handed: boolean; replan: number }
   | { kind: 'deliver'; order: BarOrder; ready: () => boolean; taken?: () => void; phase: 'bar' | 'wait' | 'guest' | 'hand' | 'back'; t: number; goal: Pt | null; handed: boolean; replan: number };
 
 export interface Waiter {
@@ -56,11 +63,16 @@ export interface Waiter {
   rejoin: { x: number; z: number; yaw: number; t: number } | null;
   served: string;
   said: number;
+  /** Carrying an empty back to the bar. */
+  empty: BarModel | null;
 }
 
 export class Waiters {
   readonly list: Waiter[] = [];
   private n = 0;
+  /** Whether you've eaten well lately (the diner's effects): a waiter passing greets you by name. */
+  fed: () => boolean = () => false;
+  private greeted = -Infinity;
 
   constructor(
     private readonly ctx: LifeCtx,
@@ -74,7 +86,7 @@ export class Waiters {
       m.hold = TRAY;
       const tray = trays.mesh();
       parent.add(tray);
-      this.list.push({ m, round: r.round, offset: r.offset, tray, load: '', job: null, walk: null, side: 0, rejoin: null, served: '', said: 0 });
+      this.list.push({ m, round: r.round, offset: r.offset, tray, load: '', job: null, walk: null, side: 0, rejoin: null, served: '', said: 0, empty: null });
     }
   }
 
@@ -82,7 +94,7 @@ export class Waiters {
   spots = (p: { x: number; z: number }): Spot[] => {
     const out: Spot[] = [];
     for (const [i, w] of this.list.entries()) {
-      if (w.job?.kind === 'deliver' || !w.m.shown) continue;
+      if (w.job?.kind === 'deliver' || w.job?.kind === 'collect' || !w.m.shown) continue;
       const d = Math.hypot(w.m.x - p.x, w.m.z - p.z) - 0.3;
       if (d > REACH) continue;
       out.push({ key: `waiter:${i}`, x: w.m.x, z: w.m.z, d: Math.max(0, d), label: 'Order a drink', use: () => this.attend(w) });
@@ -137,6 +149,39 @@ export class Waiters {
     return true;
   }
 
+  /**
+   * Come and take your empty (a glass or plate of `model`): the free waiter nearest you walks over,
+   * holds out a hand, and `taken` hears when it's theirs. False when every waiter is busy.
+   */
+  collect(model: BarModel, taken: () => void): boolean {
+    const me = this.ctx.player.position;
+    let w: Waiter | null = null;
+    let best = Infinity;
+    for (const c of this.list) {
+      if (c.job || !c.m.shown) continue;
+      const d = Math.hypot(c.m.x - me.x, c.m.z - me.z);
+      if (d < best) {
+        best = d;
+        w = c;
+      }
+    }
+    if (!w || best > 22) return false;
+    this.local(w);
+    w.job = { kind: 'collect', model, taken, phase: 'guest', t: 0, goal: null, handed: false, replan: 0 };
+    w.job.goal = this.besideYou(w);
+    w.walk = w.job.goal ? this.pathTo(w, w.job.goal) : null;
+    if (!w.walk && Math.hypot(me.x - w.m.x, me.z - w.m.z) > HAND_M + 0.3) {
+      w.job = null;
+      return false;
+    }
+    return true;
+  }
+
+  /** A waiter is on the way to take your empty. */
+  collecting(): boolean {
+    return this.list.some((w) => w.job?.kind === 'collect');
+  }
+
   /** Every frame, before the crew draws them. */
   update(dt: number): void {
     const now = this.ctx.now();
@@ -146,8 +191,22 @@ export class Waiters {
       } else {
         this.follow(w, dt, now);
         this.avoid(w, dt);
+        this.greet(w, now);
       }
     }
+  }
+
+  /** Passing someone who's eaten well: "Enjoy your evening, Sam." */
+  private greet(w: Waiter, now: number): void {
+    if (now - this.greeted < GREET_S || !w.m.shown) return;
+    const app = this.ctx.app();
+    const name = app?.name();
+    if (!name || app?.atTable() || !this.fed()) return;
+    const me = this.ctx.player.position;
+    if (Math.hypot(me.x - w.m.x, me.z - w.m.z) > GREET_M) return;
+    this.greeted = now;
+    w.m.look = headOf(me);
+    this.ctx.speech.say(w.m.ch.root, waiterFed(name, this.n++), 'Waiter');
   }
 
   /** After the crew has posed them: each tray onto its waiter's hand, level, with its load. */
@@ -224,6 +283,10 @@ export class Waiters {
       return;
     }
     const app = this.ctx.app();
+    if (job.kind === 'collect') {
+      this.clear(w, job, dt, app);
+      return;
+    }
     // the drink's time ran out, or nobody's here to take it
     if (job.order.until <= now * 1000 || !app) {
       this.back(w);
@@ -289,6 +352,41 @@ export class Waiters {
         this.walk(w, dt);
         break;
     }
+  }
+
+  /** Over to you, a hand out for the empty, and back to the round with it on the tray. */
+  private clear(w: Waiter, job: Extract<Job, { kind: 'collect' }>, dt: number, app: ReturnType<LifeCtx['app']>): void {
+    const me = this.ctx.player.position;
+    if (!app || app.atTable() || job.t > 40) {
+      this.back(w);
+      return;
+    }
+    if (job.phase === 'guest') {
+      job.replan -= dt;
+      if (job.goal && job.replan <= 0 && Math.hypot(me.x - job.goal.x, me.z - job.goal.z) > HAND_M + 0.9) {
+        job.replan = 0.6;
+        job.goal = this.besideYou(w);
+        w.walk = job.goal ? this.pathTo(w, job.goal) : null;
+      }
+      const close = Math.hypot(me.x - w.m.x, me.z - w.m.z) <= HAND_M + 0.15;
+      if (!w.walk || this.walk(w, dt) || close) {
+        w.walk = null;
+        job.phase = 'hand';
+        job.t = 0;
+        this.ctx.crew.play(w.m, 'handOver');
+        this.ctx.speech.say(w.m.ch.root, waiterClears(app.name(), this.n++), 'Waiter');
+      }
+      return;
+    }
+    this.face(w, me.x, me.z, dt);
+    w.m.motion = 0;
+    w.m.look = headOf(me);
+    if (!job.handed && job.t > 0.7) {
+      job.handed = true;
+      job.taken();
+      w.empty = job.model;
+    }
+    if (job.t > 1.7) this.back(w);
   }
 
   /** Back to the round: walk to where it will have got to, then ease onto it. */
@@ -429,6 +527,11 @@ export class Waiters {
   /** What's on the tray now: the round's drinks, an order being brought, or nothing. */
   private loadOf(w: Waiter): BarModel[] {
     const job = w.job;
+    // an empty taken off someone rides back to the bar
+    if (w.empty) {
+      if (!job || job.kind === 'attend') w.empty = null;
+      else return [w.empty];
+    }
     if (job?.kind === 'deliver' && job.phase !== 'back') {
       const onTray = job.phase === 'guest' || (job.phase === 'hand' && !job.handed);
       const model = barItem(job.order.item)?.model;
@@ -449,4 +552,16 @@ const TRAY_UP = 0.045;
 const _head = new THREE.Vector3();
 function headOf(p: THREE.Vector3): THREE.Vector3 {
   return _head.set(p.x, 1.5, p.z);
+}
+
+const pick = (list: readonly string[], n: number) => list[((n % list.length) + list.length) % list.length]!;
+
+/** Taking an empty off you. */
+function waiterClears(name: string | null, n: number): string {
+  return pick(name ? ['Let me take that for you.', `All done, ${name}?`, 'I can take that.', `Another, ${name}?`] : ['Let me take that for you.', 'All done?', 'I can take that.'], n);
+}
+
+/** Passing someone who's just eaten well. */
+function waiterFed(name: string, n: number): string {
+  return pick([`Enjoy the rest of your evening, ${name}.`, `Everything to your liking, ${name}?`, `Good to see you, ${name}.`, `${name}. Glad you enjoyed it.`], n);
 }

@@ -5,38 +5,79 @@
 /* ---------------------------------------------------------------- leaderboards */
 
 /* Hung from the top rather than centred, so a longer board grows downward instead of moving the
-   tabs under the pointer. */
-.lb-sheet { --lb-top: clamp(0px, 7vh - 24px, 48px); width: min(540px, 100%); align-self: start; margin-top: var(--lb-top); max-height: calc(100vh - 48px - var(--lb-top)); }
-.lb-tabs { display: flex; width: 100%; margin-bottom: 16px; }
-.lb-tabs .seg-btn { flex: 1; padding: 0 10px; }
-.lb-tabs .seg-btn[aria-selected='true'] { background: rgba(226, 190, 118, 0.16); color: var(--brass-hi); }
+   list under the pointer. The boards down the left, the chosen one on the right. */
+.lb-sheet { --lb-top: clamp(0px, 7vh - 24px, 48px); width: min(860px, 100%); align-self: start; margin-top: var(--lb-top); max-height: calc(100vh - 48px - var(--lb-top)); }
+.lb-sheet .sheet-body { padding-top: 14px; }
+
+.lb-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+.lb-scope-label { display: flex; align-items: center; gap: 12px; font-size: 13px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-3); }
+.lb-scope { height: 34px; min-width: 220px; padding: 0 34px 0 12px; border: 1px solid var(--line-strong); border-radius: 4px; background: #16120e; color: var(--ink); font: 600 16px/1 var(--ui); letter-spacing: 0.04em; cursor: pointer; appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--brass) 50%), linear-gradient(135deg, var(--brass) 50%, transparent 50%);
+  background-position: calc(100% - 17px) 15px, calc(100% - 12px) 15px; background-size: 5px 5px; background-repeat: no-repeat; }
+.lb-scope:hover { border-color: var(--brass-hi); }
+.lb-scope:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.lb-scope option, .lb-scope optgroup { background: #16120e; color: var(--ink); }
+
+.lb-cols { display: grid; grid-template-columns: 212px minmax(0, 1fr); gap: 26px; align-items: start; }
+
+/* The list: grouped board names, your place right-aligned beside each. */
+.lb-nav { display: flex; flex-direction: column; }
+.lb-group { margin: 12px 0 3px; font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-3); }
+.lb-group:first-child { margin-top: 0; }
+.lb-item { display: flex; align-items: baseline; gap: 10px; width: 100%; padding: 4px 10px 4px 12px; border: 0; border-radius: 3px; background: none; color: var(--ink-2); font: 500 16px/1.25 var(--ui); letter-spacing: 0.03em; text-align: left; cursor: pointer; transition: background 0.12s, color 0.12s; }
+.lb-item:hover { color: var(--ink); background: rgba(226, 190, 118, 0.05); }
+.lb-item:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.lb-item[aria-selected='true'] { background: rgba(226, 190, 118, 0.13); color: var(--brass-hi); box-shadow: inset 2px 0 0 var(--brass-hi); }
+.lb-item-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lb-place { font-size: 14px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.lb-place.top { color: var(--brass); }
+.lb-item[aria-selected='true'] .lb-place { color: var(--brass-hi); }
+
+.lb-head { margin-bottom: 12px; }
+.lb-title { margin: 0; font-family: var(--serif); font-size: 17px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink); }
+.lb-note { margin: 3px 0 0; font-size: 15px; letter-spacing: 0.02em; color: var(--ink-3); }
 
 .lb-table { table-layout: fixed; }
 .lb-table th.lb-rank, .lb-table td.lb-rank { width: 52px; padding-left: 12px; text-align: left; }
 .lb-table th.lb-name, .lb-table td.lb-name { text-align: left; overflow: hidden; text-overflow: ellipsis; }
 .lb-table th.lb-value, .lb-table td.lb-value { width: 168px; padding-right: 12px; }
+.lb-table th.lb-of, .lb-table td.lb-of { width: 96px; }
 .lb-table td { padding-top: 9px; padding-bottom: 9px; }
 .lb-table td.lb-rank { font-size: 17px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
 .lb-table td.lb-name { color: var(--ink); }
 .lb-table td.lb-value { color: var(--ink); }
+.lb-table td.lb-of { color: var(--ink-3); }
+.lb-table td.lb-value.win { color: var(--win); }
+.lb-table td.lb-value.lose { color: var(--lose); }
 .lb-table tr.podium td.lb-rank { color: var(--brass); }
 .lb-table tr.p1 td.lb-rank { color: var(--brass-hi); }
 
 /* Your row: lit, with a brass edge. */
 .lb-table tr.you td { background: rgba(226, 190, 118, 0.1); color: var(--brass-hi); border-bottom-color: rgba(226, 190, 118, 0.3); }
+.lb-table tr.you td.lb-value.win { color: var(--win); }
+.lb-table tr.you td.lb-value.lose { color: var(--lose); }
 .lb-table tr.you td.lb-rank { color: var(--brass-hi); box-shadow: inset 2px 0 0 var(--brass-hi); }
 .lb-you { display: inline-block; margin-left: 10px; padding: 0 6px; border: 1px solid rgba(241, 213, 154, 0.45); border-radius: 3px; font-size: 11px; line-height: 16px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--brass-hi); vertical-align: 2px; }
 
 /* The break between the top ten and your own place further down. */
 .lb-table tr.lb-gap td { height: 16px; padding: 0; border-bottom: 1px dashed rgba(214, 178, 110, 0.3); }
 
-.lb-note { margin: 14px 0 0; font-size: 14px; letter-spacing: 0.03em; color: var(--ink-3); }
 .lb-foot { margin-top: 12px; }
 .lb-problem { color: var(--lose); }
 
+/* Narrow: the list becomes a strip of names across the top that scrolls sideways. */
+@media (max-width: 700px) {
+  .lb-cols { grid-template-columns: 1fr; gap: 14px; }
+  .lb-nav { flex-direction: row; gap: 4px; overflow-x: auto; padding-bottom: 6px; scrollbar-width: thin; }
+  .lb-group { display: none; }
+  .lb-item { flex: none; width: auto; border: 1px solid var(--line); }
+  .lb-item[aria-selected='true'] { box-shadow: none; border-color: var(--brass-hi); }
+  .lb-scope { min-width: 0; flex: 1; }
+  .lb-scope-label { flex: 1; }
+}
 @media (max-width: 520px) {
   .lb-table th.lb-value, .lb-table td.lb-value { width: 124px; }
-  .lb-tabs .seg-btn { font-size: 13px; letter-spacing: 0.04em; }
+  .lb-table th.lb-of, .lb-table td.lb-of { width: 64px; }
 }
 
 /* ---------------------------------------------------------------- emote wheel */
@@ -79,10 +120,9 @@
 .emo-wheel.cooling .emo-hint { color: var(--lose); }
 
 @keyframes emo-in { from { opacity: 0; transform: scale(0.94); } }
-@media (prefers-reduced-motion: reduce) {
-  .emo-wheel { animation: none; }
-  .emo-btn { transition: none; }
-}
+/* Reduce flashing & motion (app/comfort.ts) */
+body.calm .emo-wheel { animation: none; }
+body.calm .emo-btn { transition: none; }
 
 /* Touch screens: measured against the visible height (a phone browser's 100vh reaches behind its
    toolbars). */

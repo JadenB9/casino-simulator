@@ -372,32 +372,63 @@ if (checks.includes('floor')) {
   // what a ride costs to draw: A's own view standing still, on foot and on each ride (drawn only
   // on this screen, nothing saved)
   await a.p.evaluate(() => window.casino.world.player.teleport(0, 9, Math.PI));
-  const calls = await a.p.evaluate(async (ids) => {
+  const extra = await a.p.evaluate(async (ids) => {
     const { world } = window.casino;
     const ch = world.player.character;
     const look = window.casino.session.profile.look;
     const settle = () => new Promise((r) => { let i = 0; const f = () => (++i >= 20 ? r() : requestAnimationFrame(f)); requestAnimationFrame(f); });
-    const out = {};
-    for (const id of [null, ...ids]) {
-      const l = { ...look };
-      if (id) l.ride = id;
-      else delete l.ride;
-      ch.setLook(l);
-      await settle();
-      // the least over a few frames: a waiter walking into view isn't the ride's
-      let least = Infinity;
-      for (let i = 0; i < 8; i++) {
+    // the least over a few frames (a waiter walking into view isn't the ride's), on foot and on the
+    // ride one after the other, so the floor's own comings and goings don't count
+    const least = async () => {
+      let n = Infinity;
+      for (let i = 0; i < 12; i++) {
         await new Promise((r) => requestAnimationFrame(r));
-        least = Math.min(least, world.stats().calls);
+        n = Math.min(n, world.stats().calls);
       }
-      out[id ?? 'foot'] = least;
+      return n;
+    };
+    const out = {};
+    for (const id of ids) {
+      let best = Infinity;
+      for (let tries = 0; tries < 3; tries++) {
+        const l = { ...look };
+        delete l.ride;
+        ch.setLook(l);
+        await settle();
+        const foot = await least();
+        ch.setLook({ ...look, ride: id });
+        await settle();
+        best = Math.min(best, Math.abs((await least()) - foot));
+      }
+      out[id] = best;
     }
     ch.setLook(look);
     return out;
   }, RIDE_IDS);
-  const extra = Object.fromEntries(RIDE_IDS.map((id) => [id, calls[id] - calls.foot]));
-  console.log(`draw calls on foot ${calls.foot}; a ride adds ${JSON.stringify(extra)}`);
+  console.log(`a ride adds draw calls ${JSON.stringify(extra)}`);
   for (const [id, n] of Object.entries(extra)) if (n > 2) fail(`${id} adds ${n} draw calls`);
+  // a floating ride's glow over the edge of the lobby's runner: a soft pool over rug and marble alike
+  for (const ride of ['hoverboard', 'hover-throne']) {
+    await a.p.evaluate((id) => {
+      const { engine, world, session } = window.casino;
+      world.player.teleport(-2.2, 12.6, Math.PI);
+      world.player.character.setLook({ ...session.profile.look, ride: id });
+      world.player.setEnabled(false);
+      window.__watch?.();
+      window.__watch = engine.onFrame(() => {
+        engine.camera.position.set(-3.6, 1.35, 11.1);
+        engine.camera.lookAt(-2.2, 0.35, 12.6);
+      });
+    }, ride);
+    await a.p.waitForTimeout(900);
+    await shot(a.p, `glow-rug-edge-${ride}`);
+  }
+  await a.p.evaluate(() => {
+    const { world, session } = window.casino;
+    world.player.character.setLook(session.profile.look);
+    window.__watch?.();
+    world.player.setEnabled(true);
+  });
   // the boutique's forms in the new pieces, one standing on a hoverboard
   await a.p.evaluate(() => window.casino.world.player.teleport(12.5, 8, Math.PI));
   await a.p.waitForTimeout(800);

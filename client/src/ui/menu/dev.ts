@@ -15,6 +15,7 @@ import * as realApi from '../../net/api.ts';
 import { session } from '../../app/session.ts';
 import { el } from '../kit.ts';
 import { broke, fixtureApi, newcomer, regular } from './fixtures.ts';
+import { fixtureApi as socialFixtureApi } from '../social/fixtures.ts'; // v6 stats6
 import { isNewPlayer, mountHud, mountLogin, mountMenu, openBank, openEditor, openOnboarding, openProfile, openSettings, openShortcuts, type AccountApi, type Hud } from './index.ts';
 
 const q = new URLSearchParams(location.search);
@@ -56,6 +57,7 @@ const orbit = () => {
 const backdrop = q.get('backdrop') === '3d' ? orbit : undefined;
 
 const fixture = q.get('fixture') === '1';
+const socialFixtures = socialFixtureApi(); // v6 stats6
 const api: AccountApi = fixture
   ? fixtureApi(q.get('new') === '1' ? newcomer() : q.get('broke') === '1' ? broke() : regular(), { lastName: q.has('last') ? q.get('last') || null : undefined })
   : realApi;
@@ -163,7 +165,8 @@ async function start(): Promise<void> {
       break;
     case 'profile':
       await ensureSession();
-      openProfile({ root: ui, api, session });
+      // v6 stats6: the stats sheet's record and places from the social fixtures too
+      openProfile({ root: ui, api, session, ...(fixture ? { stats: socialFixtures.stats, boards: () => socialFixtures.leaderboard() } : {}) });
       break;
     case 'editor':
       await ensureSession();

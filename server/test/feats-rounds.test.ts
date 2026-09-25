@@ -201,12 +201,23 @@ describe('tallies', () => {
       'won:roulette': 2_600,
       'wins:roulette': 1,
       best: 2_600,
+      // v6 stats6: the leaderboards' keys (shared/src/stats.ts)
+      wins: 1,
+      'rounds:roulette': 1,
     });
-    expect(roundFacts('roulette', 'american', { events: [], state: null }, round(1_000, 0)).tally).toEqual({ rounds: 1, theo: 27 });
-    // a push is no win; 0.3% of $10 at blackjack is 3 cents
-    expect(roundFacts('blackjack', '', { events: [], state: null }, round(1_000, 1_000)).tally).toEqual({ rounds: 1, theo: 3 });
+    expect(roundFacts('roulette', 'american', { events: [], state: null }, round(1_000, 0)).tally).toEqual({
+      rounds: 1,
+      theo: 27,
+      'rounds:roulette': 1,
+      lost: 1_000,
+      'lost:roulette': 1_000,
+      worst: 1_000,
+      'worst:roulette': 1_000,
+    });
+    // a push is no win (and no loss); 0.3% of $10 at blackjack is 3 cents
+    expect(roundFacts('blackjack', '', { events: [], state: null }, round(1_000, 1_000)).tally).toEqual({ rounds: 1, theo: 3, 'rounds:blackjack': 1 });
     // Hold'em has no house edge: no theo
-    expect(roundFacts('holdem', '', { events: [], state: null }, round(1_000, 0)).tally).toEqual({ rounds: 1 });
+    expect(roundFacts('holdem', '', { events: [], state: null }, round(1_000, 1_000)).tally).toEqual({ rounds: 1, 'rounds:holdem': 1 });
   });
 
   it('first-win comes with any profit, at any game', () => {
@@ -275,7 +286,8 @@ describe('daily challenges', () => {
     const f = roundFacts('dice', '', { events: [], state: null }, round(100, 250), '2026-09-25');
     expect(f.tally).toMatchObject({ 'd:2026-09-25:rounds': 1, 'd:2026-09-25:won': 150, 'd:2026-09-25:wins:dice': 1, 'd:2026-09-25:best': 150 });
     const lost = roundFacts('dice', '', { events: [], state: null }, round(100, 0), '2026-09-25');
-    expect(lost.tally).toEqual({ rounds: 1, 'd:2026-09-25:rounds': 1, theo: 1, 'd:2026-09-25:theo': 1 });
+    // (and v6 stats6's keys for the loss)
+    expect(lost.tally).toEqual({ rounds: 1, 'd:2026-09-25:rounds': 1, theo: 1, 'd:2026-09-25:theo': 1, 'rounds:dice': 1, lost: 100, 'lost:dice': 100, worst: 100, 'worst:dice': 100 });
   });
 
   it("only the day's own are met, from the day's tallies", () => {

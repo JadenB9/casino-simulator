@@ -1,17 +1,65 @@
-/* Profile: a wide sheet, summary tiles across the top, the per-game table on the left, where
-   your chips are and your loans on the right. */
+/* The stats sheet: a wide sheet. Key figures across the top; the fortnight chart beside the
+   record; every game in one table; best places, chips on tables and loans along the bottom. */
 
-.profile-sheet { width: min(1000px, 100%); }
-.profile-stats { margin-bottom: 24px; }
-.profile-cols { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 36px; align-items: start; }
-.profile-main, .profile-side { min-width: 0; }
-.profile-side .data td { font-size: 15px; }
+.profile-sheet { width: min(1080px, 100%); }
+.pf-strip { margin-bottom: 22px; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); }
+.pf-strip .stat.lead { background: rgba(226, 190, 118, 0.07); }
+.pf-strip .stat.lead .stat-value { color: var(--brass-hi); }
+.pf-strip .stat-value { font-size: 21px; }
+
+.pf-upper { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 32px; align-items: start; }
+.pf-lower { display: grid; margin-top: 26px; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr) minmax(0, 1fr); gap: 32px; align-items: start; }
+.pf-col { min-width: 0; }
+.pf-problem { color: var(--lose); }
+
+/* The chart: the fortnight's total and its best and worst days above fourteen bars. */
+.pf-chart-head { display: flex; align-items: baseline; gap: 14px; margin: -2px 0 6px; }
+.pf-chart-total { font-size: 22px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.pf-chart-total.win { color: var(--win); }
+.pf-chart-total.lose { color: var(--lose); }
+.pf-chart-facts { font-size: 14px; letter-spacing: 0.03em; color: var(--ink-3); }
+.pf-svg { display: block; width: 100%; height: auto; overflow: visible; }
+.pf-grid { stroke: rgba(214, 178, 110, 0.08); stroke-width: 1; }
+.pf-zero { stroke: rgba(214, 178, 110, 0.4); stroke-width: 1; }
+.pf-bar.up { fill: var(--win); fill-opacity: 0.78; }
+.pf-bar.down { fill: var(--lose); fill-opacity: 0.78; }
+.pf-bar.today { fill-opacity: 1; stroke: var(--brass-hi); stroke-width: 1.2; }
+.pf-bar:hover { fill-opacity: 1; }
+.pf-tick { fill: var(--ink-3); font: 500 11px var(--ui); letter-spacing: 0.08em; }
+.pf-tick.date { fill: var(--ink-2); font-size: 12px; }
+.pf-tick.today { fill: var(--brass-hi); }
+
+/* The record: label left, figure right, rows ruled like the tables. */
+.pf-record { margin: 0; }
+.pf-rec { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 1px solid rgba(214, 178, 110, 0.09); }
+.pf-rec dt { font-size: 15px; color: var(--ink-3); letter-spacing: 0.02em; }
+.pf-rec dd { margin: 0; font-size: 16px; color: var(--ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pf-rec dd.win { color: var(--win); }
+.pf-rec dd.lose { color: var(--lose); }
+
+/* Every game: sortable headings. */
+.pf-scroll { overflow-x: auto; }
+.pf-games td { font-size: 15px; padding-top: 7px; padding-bottom: 7px; }
+.pf-games th { padding-left: 6px; padding-right: 6px; }
+.pf-sort { padding: 0; border: 0; background: none; color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; cursor: pointer; }
+.pf-sort:hover { color: var(--ink); }
+.pf-sort:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.pf-sort.asc, .pf-sort.desc { color: var(--brass-hi); }
+.pf-sort.desc::after { content: ' \25BE'; }
+.pf-sort.asc::after { content: ' \25B4'; }
+.pf-foot { margin: 10px 0 0; font-size: 14px; line-height: 1.4; color: var(--ink-3); }
+
+.pf-places tr.top td:last-child { color: var(--brass-hi); }
+.pf-lower .data td { font-size: 15px; }
 .data td .where { margin-left: 8px; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); }
 
-@media (max-width: 860px) {
-  .profile-cols { grid-template-columns: 1fr; gap: 6px; }
-  .profile-side .section-label:first-child { margin-top: 22px; }
+@media (max-width: 900px) {
+  .pf-upper { grid-template-columns: 1fr; gap: 6px; }
+  .pf-lower { grid-template-columns: 1fr 1fr; gap: 6px 28px; }
+  .pf-lower .pf-col:last-child { grid-column: 1 / -1; }
 }
-@media (max-width: 560px) {
-  .profile-sheet .data th:nth-child(3), .profile-sheet .games td:nth-child(3) { display: none; }
+@media (max-width: 600px) {
+  .pf-lower { grid-template-columns: 1fr; }
+  .pf-chart-head { flex-wrap: wrap; gap: 4px 12px; }
+  .pf-games th:nth-child(4), .pf-games td:nth-child(4), .pf-games th:nth-child(6), .pf-games td:nth-child(6), .pf-games th:nth-child(7), .pf-games td:nth-child(7) { display: none; }
 }

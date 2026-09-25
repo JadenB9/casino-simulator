@@ -104,10 +104,11 @@
 @keyframes ft-in { from { opacity: 0; transform: translateX(24px); } }
 @keyframes ft-medal { from { transform: rotate(-90deg) scale(0.6); opacity: 0; } }
 
-@media (prefers-reduced-motion: reduce) {
-  .ft-card, .ft-card .ft-medal, .ft-row.fresh { animation: none; }
-  .ft-bar i { transition: none; }
-}
+/* Reduce flashing & motion (app/comfort.ts): the unlock card and the fresh row don't animate */
+body.calm .ft-card,
+body.calm .ft-card .ft-medal,
+body.calm .ft-row.fresh { animation: none; }
+body.calm .ft-bar i { transition: none; }
 
 @media (max-width: 720px) {
   .ft-cards { right: 8px; }

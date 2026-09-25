@@ -43,6 +43,16 @@ export function openTableFlow(opts: TableFlowOpts): Promise<TableChoice | null> 
   return new Promise((resolve) => new TableFlow(opts, resolve));
 }
 
+/** v6 invite6: the panels open now, so joining an invite can close one as if Esc were pressed. */
+const openFlows = new Set<TableFlow>();
+
+/** v6 invite6: close any open station panel as walking away does (its promise resolves null). */
+export function closeTableFlows(): boolean {
+  const had = openFlows.size > 0;
+  for (const f of [...openFlows]) f.cancel();
+  return had;
+}
+
 const ERRORS: Record<string, string> = {
   BAD_PIN: 'No table has that PIN.',
   RATE_LIMITED: 'Too many tries. Wait a minute, then try again.',
@@ -88,7 +98,13 @@ class TableFlow {
       this.watch.on((list) => (this.step === 'choose' ? this.renderCount() : this.renderList(this.sameVariant(list))));
     }
     addEventListener('keydown', this.onKey, true);
+    openFlows.add(this);
     this.showChoose();
+  }
+
+  /** v6 invite6: walk away (closeTableFlows). */
+  cancel(): void {
+    this.finish(null);
   }
 
   private header(): HTMLElement {
@@ -464,6 +480,7 @@ class TableFlow {
   };
 
   private finish(choice: TableChoice | null): void {
+    openFlows.delete(this);
     removeEventListener('keydown', this.onKey, true);
     this.watch?.close();
     this.box.remove();

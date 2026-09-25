@@ -28,6 +28,7 @@ import { DOLLAR, type Cents } from './money.ts';
 import type { GameId } from './engine.ts';
 import type { EmoteId } from './protocol.ts';
 import { CATALOG } from './games/catalog.ts';
+import { isStatMaxTally } from './stats.ts'; // v6 stats6
 
 export type FeatKind = 'achievement' | 'challenge';
 
@@ -74,7 +75,7 @@ const $ = (n: number): Cents => n * DOLLAR;
 
 /** Keys kept as the largest value seen rather than a running sum. */
 export function isMaxTally(key: string): boolean {
-  return key === 'best' || key.endsWith(':best');
+  return key === 'best' || key.endsWith(':best') || isStatMaxTally(key); // v6 stats6: worst, worst:<game>, streak
 }
 
 /** The games "every game" means: everything the floor offers (the dev fixture isn't one). */

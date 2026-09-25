@@ -10,8 +10,10 @@ import { formatMoney } from '../../../../shared/src/money.ts';
 import { hasLimitChoice, limitsLabel, limitsOf } from '../../../../shared/src/limits.ts';
 import type { GameClientModule, MembersMsg, TableSnapshot, TableView } from '../../games/contract.ts';
 import { el, toast } from '../kit.ts';
-import { chevron, crown, lock, unlock } from './icons.ts';
+import { chevron, crown, invite, lock, unlock } from './icons.ts';
+import type { InviteTable } from './invite-picker.ts';
 import './lobby.css';
+import './invites.css'; // v6 invite6
 
 export interface PartyPanelOpts {
   /** My account id. */
@@ -25,9 +27,22 @@ export interface PartyPanelOpts {
   sit?: () => void;
   /** Where the panel goes; defaults to #ui. */
   root?: HTMLElement;
+  /** v6 invite6: invites (ui/lobby/invites.ts); without it there is no Invite button. */
+  invites?: PartyInvites | null;
+}
+
+/** v6 invite6: what the party panel asks of the invite hub. */
+export interface PartyInvites {
+  openPicker(table: InviteTable): void;
+  closePicker(tableId?: string): void;
+  /** Who is at the table changed: an open picker stops offering them. */
+  tableChanged(table: InviteTable): void;
+  noteMet(people: { id: number; name: string }[]): void;
 }
 
 interface Party {
+  tableId: string;
+  variant: string;
   members: Member[];
   leader: number | null;
   visibility: 'public' | 'private';
@@ -65,6 +80,8 @@ export class PartyPanel {
       return;
     }
     this.update({
+      tableId: m.tableId,
+      variant: m.variant,
       members: snap.members,
       leader: snap.leader,
       visibility: m.visibility,
@@ -77,6 +94,8 @@ export class PartyPanel {
 
   onMembers(msg: MembersMsg): void {
     this.update({
+      tableId: this.party?.tableId ?? '',
+      variant: this.party?.variant ?? '',
       members: msg.members,
       leader: msg.leader,
       visibility: msg.visibility,
@@ -94,6 +113,7 @@ export class PartyPanel {
 
   dispose(): void {
     clearTimeout(this.pendingTimer);
+    if (this.party) this.opts.invites?.closePicker(this.party.tableId);
     this.root.remove();
   }
 
@@ -117,6 +137,9 @@ export class PartyPanel {
     // header, out of the way of the table.
     if (next.started && !this.party?.started) this.setCollapsed(true, false);
     this.party = next;
+    // the people you play with come first in the invite list next time
+    this.opts.invites?.noteMet(next.members.map((m) => ({ id: m.accountId, name: m.name })));
+    if (next.tableId) this.opts.invites?.tableChanged(this.inviteTable(next));
     this.root.hidden = false;
     this.settle();
   }
@@ -189,6 +212,19 @@ export class PartyPanel {
       controls.append(seg);
     }
 
+    // v6 invite6: invite players on the floor (a private table's invite carries the way in)
+    const invites = this.opts.invites;
+    if (invites && p.tableId) {
+      const full = p.members.length >= p.maxSeats;
+      if (p.members.length === 1 && !p.started) controls.append(el('p', 'party-alone', p.pin ? 'Nobody else here yet. Invite players, or share the PIN.' : 'Nobody else here yet. Invite players to join you.'));
+      const inv = el('button', 'btn party-invite');
+      inv.type = 'button';
+      inv.append(invite(), el('span', '', full ? 'Table full' : 'Invite players'));
+      inv.disabled = full;
+      inv.addEventListener('click', () => invites.openPicker(this.inviteTable(p)));
+      controls.append(inv);
+    }
+
     const row = el('div', 'party-row');
     if (this.opts.sit && mine?.status === 'watching') {
       const sit = el('button', 'btn', 'Sit down');
@@ -216,6 +252,18 @@ export class PartyPanel {
     controls.append(row);
     parts.push(controls);
     this.body.replaceChildren(...parts);
+  }
+
+  /** v6 invite6: the table as the invite picker needs it. */
+  private inviteTable(p: Party): InviteTable {
+    return {
+      tableId: p.tableId,
+      ...(p.pin ? { pin: p.pin } : {}),
+      game: this.opts.game,
+      variant: p.variant,
+      members: p.members.map((m) => m.accountId),
+      seatsLeft: Math.max(0, p.maxSeats - p.members.length),
+    };
   }
 
   private memberRow(m: Member, isLeader: boolean, isMe: boolean): HTMLLIElement {

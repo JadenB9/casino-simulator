@@ -10,6 +10,7 @@ import * as THREE from 'three';
 import type { Quality } from '../render/engine3d.ts';
 import { canvasTexture, drawAisle, drawCarpet, PALETTES } from './carpet.ts';
 import { drawAcoustic, drawConcrete, drawCorrugated, drawPanels, drawPlanks, drawTiles } from './textures.ts';
+import { drawBingoCarpet, drawCeilingTile, drawLacquerCoffer, drawLandscape, drawSeigaiha, drawSlats, drawVendingFace } from './textures-themes.ts';
 
 export type Tex = Partial<Record<'marbleTiles' | 'marbleBlack' | 'woodDark' | 'woodPanel' | 'velvet' | 'carpetNormal', THREE.Texture>>;
 
@@ -175,6 +176,34 @@ export class Mats {
     this.makers.set('marble-light', (q) =>
       hi(q) ? std({ map: t.marbleTiles ?? null, color: '#e8e0d4', roughness: 0.2, metalness: 0 }) : lambert({ map: t.marbleTiles ?? null, color: '#e8e0d4' }),
     );
+    // the north wing: the pachinko parlour, the Jade Room and the bingo hall
+    const parlourTex = lazy(() => drawCarpet(small, PALETTES.parlour, 67));
+    const jadeTex = lazy(() => drawCarpet(small, PALETTES.jade, 71));
+    const crimsonTex = lazy(() => drawCarpet(512, CRIMSON_WALL, 73));
+    const waveTex = lazy(() => drawSeigaiha(512, 79));
+    const bingoTex = lazy(() => drawBingoCarpet(small, 83));
+    const slatTex = lazy(() => drawSlats(512, 89));
+    const tileTex = lazy(() => drawCeilingTile(128, 97));
+    const cansTex = lazy(() => drawVendingFace(256, 320, 101));
+    const paintingTex = lazy(() => drawLandscape(512, 103));
+    const cofferRedTex = lazy(() => drawLacquerCoffer(256));
+    this.makers.set('carpet-parlour', (q) => carpet(parlourTex())(q));
+    this.makers.set('carpet-jade', (q) => carpet(jadeTex())(q));
+    this.makers.set('carpet-bingo', (q) => carpet(bingoTex())(q));
+    this.makers.set('wall-crimson', () => lambert({ map: crimsonTex() }));
+    this.makers.set('wall-parlour', () => lambert({ map: waveTex() }));
+    this.makers.set('wall-bingo', () => lambert({ map: slatTex() }));
+    this.makers.set('ceiling-parlour', () => lambert({ color: '#d8d0d4', emissive: '#2a2226' }));
+    this.makers.set('ceiling-bingo', () => lambert({ map: tileTex() }));
+    this.makers.set('vending-face', () => new THREE.MeshBasicMaterial({ map: cansTex(), color: hdr('#ffffff', 1.1) }));
+    this.makers.set('ceiling-jade', () => lambert({ map: cofferRedTex() }));
+    this.makers.set('painting', () => lambert({ map: paintingTex(), emissive: '#1a1206' }));
+    this.makers.set('enamel', (q) => (hi(q) ? std({ color: '#e8e4dc', roughness: 0.35 }) : lambert({ color: '#d8d4cc' })));
+    this.makers.set('vinyl', (q) => (hi(q) ? std({ color: '#7a1a22', roughness: 0.5 }) : lambert({ color: '#6a161c' })));
+    this.makers.set('porcelain', (q) => (hi(q) ? std({ color: '#eef0f4', roughness: 0.18 }) : lambert({ color: '#e0e4ea' })));
+    this.makers.set('jade', (q) => (hi(q) ? std({ color: '#3a9a78', roughness: 0.22 }) : lambert({ color: '#2e8a6a' })));
+    this.makers.set('lacquer-gold', (q) => (hi(q) ? std({ color: '#b8862e', metalness: 0.9, roughness: 0.38 }) : lambert({ color: '#8c6424', emissive: '#241806' })));
+    this.makers.set('silk-red', () => lambert({ color: '#b01e1e', emissive: '#5a0c08', side: THREE.DoubleSide }));
     this.makers.set('ceiling-dark', () => lambert({ color: '#0c0c10' }));
     this.makers.set('ceiling-light', () => lambert({ color: '#c8b69a', emissive: '#1e1710' }));
     this.makers.set('steel', (q) => (hi(q) ? std({ color: '#3a3c40', metalness: 0.8, roughness: 0.45 }) : lambert({ color: '#34363a' })));
@@ -205,6 +234,9 @@ export class Mats {
       hi(q) ? std({ map: t.woodDark ?? null, color: t.woodDark ? '#c9a58f' : '#4a2616', roughness: 0.42 }) : lambert({ map: t.woodDark ?? null, color: t.woodDark ? '#c9a58f' : '#4a2616' }),
     );
     this.makers.set('beam', (q) => (hi(q) ? std({ map: t.woodDark ?? null, color: '#8a6a5a', roughness: 0.5 }) : lambert({ map: t.woodDark ?? null, color: '#8a6a5a' })));
+    // brass set flush into a floor (the runners' edging, the lobby's compass rose): rough and dull,
+    // so looking along it toward the lights it reads as an inlay, never as a strip of light
+    this.makers.set('brass-inlay', (q) => (hi(q) ? std({ color: '#9c7a3c', metalness: 0.7, roughness: 0.62, envMapIntensity: 0.35 }) : lambert({ color: '#8a6a30', emissive: '#1e1405' })));
     this.makers.set('brass', (q) => (hi(q) ? std({ color: '#c9a24a', metalness: 1, roughness: 0.3 }) : lambert({ color: '#9c7632', emissive: '#2b1c07' })));
     this.makers.set('chrome', (q) => (hi(q) ? std({ color: '#cfd0d6', metalness: 1, roughness: 0.18 }) : lambert({ color: '#8e8f96', emissive: '#1a1a1c' })));
     this.makers.set('marble-black', (q) =>
@@ -251,6 +283,18 @@ const EMERALD_WALL = {
   accentDark: '#123024',
   spark: '#24483a',
   cream: '#2c5242',
+};
+/** The Jade Room's: lacquer-red silk damask. */
+const CRIMSON_WALL = {
+  ground: '#5a0e12',
+  groundDark: '#480a0e',
+  groundLight: '#661216',
+  gold: '#7a2a1c',
+  goldDark: '#6a2018',
+  accent: '#6e1c18',
+  accentDark: '#5e1414',
+  spark: '#8a3a22',
+  cream: '#9a4a2a',
 };
 /** The bar's and the lounge's: deep wine. */
 const WINE_WALL = {
