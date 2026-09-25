@@ -16,7 +16,7 @@ describe('the boutique lists', () => {
       expect(sold.map((e) => e.price)).toEqual([...sold.map((e) => e.price)].sort((a, b) => a - b));
       expect(list.findIndex((e) => e.reward)).toBe(list.some((e) => e.reward) ? sold.length : -1);
     }
-    expect(entries('ride').map((e) => e.id)).toEqual(['skateboard', 'e-scooter', 'hoverboard', 'segway', 'golden-board']);
+    expect(entries('ride').map((e) => e.id)).toEqual(['skateboard', 'e-scooter', 'hoverboard', 'segway', 'hover-throne', 'golden-board']);
   });
 
   it('list the emotes the shop sells and the ones feats give, never the free six', () => {

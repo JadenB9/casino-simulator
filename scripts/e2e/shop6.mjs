@@ -6,7 +6,8 @@
 //
 // Usage: node scripts/e2e/shop6.mjs [port] [outDir]    (--sw: SwiftShader instead of the GPU)
 // Logs in as fixed names (shop6_e2e_a, shop6_e2e_b) and gives A winnings straight in the local
-// database. A rerun finds A already owning things and wears or skips them instead.
+// database. Each run starts A over: what an earlier run bought is taken back and its price put back
+// on the balance (so the money identity still holds) and A gets off the ride.
 
 import { chromium } from 'playwright';
 import { mkdirSync } from 'node:fs';
@@ -125,6 +126,19 @@ async function buyPicked(p) {
   return true;
 }
 
+/** Take back what an earlier run bought (refunded, so ledger - items - orders = balance still holds). */
+function startOver(name) {
+  const items = "('skateboard', 'throwback', 'statue')";
+  sql(`UPDATE casino_accounts SET balance = balance + (SELECT COALESCE(SUM(price), 0) FROM casino_items WHERE account_id = casino_accounts.id AND item IN ${items}),
+         look = json_remove(look, '$.ride') WHERE name = '${name}';
+       DELETE FROM casino_items WHERE item IN ${items} AND account_id = (SELECT id FROM casino_accounts WHERE name = '${name}');`);
+}
+try {
+  startOver('shop6_e2e_a');
+} catch {
+  /* a fresh database: nobody to start over */
+}
+
 const a = await enterAs('shop6_e2e_a');
 const b = await enterAs('shop6_e2e_b');
 grant('shop6_e2e_a', 12_000_000);
@@ -154,6 +168,7 @@ await a.p.click('.bq-item[data-id="throwback"]');
 await a.p.waitForTimeout(800);
 await shot(a.p, 'emotes');
 const boughtEmote = await buyPicked(a.p);
+check(boughtEmote, 'A buys the Throw It Back');
 if (boughtEmote) await waitHeard(a.p, { t: 'owned', has: ['emotes', 'throwback'] }).then(() => check(true, 'A hears owned: throwback'), () => fail('A hears owned: throwback'));
 await shot(a.p, 'emotes-bought');
 await a.p.keyboard.press('Escape');
@@ -189,6 +204,7 @@ await openAt(a.p, 'statue');
 await a.p.waitForTimeout(1200);
 await shot(a.p, 'statue');
 const boughtStatue = await buyPicked(a.p);
+check(boughtStatue, 'A buys the statue');
 if (boughtStatue) await waitHeard(b.p, { t: 'statues', statue: 'shop6_e2e_a' }).then(() => check(true, 'B sees the statue line-up change'), () => fail('B sees the statue line-up change'));
 await a.p.waitForTimeout(800);
 await shot(a.p, 'statue-bought');

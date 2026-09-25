@@ -77,7 +77,11 @@ const FX_PREVIEW: Record<string, { mood: Mood; shower: Shower | null; cheer?: tr
   'fx-disco': { mood: 'disco', shower: null },
   'fx-marquee': { mood: 'spot', shower: null },
   'fx-goldenhour': { mood: 'gold', shower: 'coins', cheer: true },
+  'fx-takeover': { mood: 'gold', shower: 'sparks', cheer: true },
 };
+
+/** The effects that put your name up in lights: the caption shows it that way. */
+const NAME_IN_LIGHTS = new Set(['fx-marquee', 'fx-takeover']);
 
 /** A ride is ridden, not worn. */
 const wearWords = (e: Entry) => (e.kind === 'ride' ? { on: 'Ride it', off: 'Get off', ing: 'Riding', now: "You're riding it" } : { on: 'Wear', off: 'Take off', ing: 'Wearing', now: "You're wearing it" });
@@ -359,8 +363,8 @@ export function openShop(deps: ShopDeps): Closable {
     ownVal.textContent = owned ? (n ? `${n} owned` : 'Nothing owned yet') : '';
     sub.textContent = section === 'fx' ? 'Paid each time. It plays where you stand, for everyone to see.' : 'Paid from your balance. Yours to keep.';
     kinds.root.hidden = section !== 'wear';
-    capName.textContent = e.id === 'fx-marquee' ? (session.profile?.name ?? e.name) : e.name;
-    capName.classList.toggle('led', e.id === 'fx-marquee');
+    capName.textContent = NAME_IN_LIGHTS.has(e.id) ? (session.profile?.name ?? e.name) : e.name;
+    capName.classList.toggle('led', NAME_IN_LIGHTS.has(e.id));
     capLine.textContent = capLineOf(e);
     selName.textContent = e.name;
     selPrice.textContent = e.reward ? 'Reward' : formatMoney(e.price);

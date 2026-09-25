@@ -42,7 +42,8 @@ export interface Entry {
 /** New in the shop this season: marked until you own them. */
 export const NEW_IDS: ReadonlySet<string> = new Set([
   'tennis-chain', 'rose-watch', 'round-shades', 'diamond-shades', 'top-hat', 'cowboy-hat', 'gold-crown', 'leather-jacket', 'sequin-suit',
-  'skateboard', 'e-scooter', 'hoverboard', 'segway',
+  'billionaire-chain', 'emperor-robe', 'imperial-crown',
+  'skateboard', 'e-scooter', 'hoverboard', 'segway', 'hover-throne',
   'throwback', 'griddy', 'floss', 'dab', 'robot', 'backflip', 'moneyfan', 'bow',
   ...EFFECTS.map((e) => e.id),
   STATUE.id,
