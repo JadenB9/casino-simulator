@@ -410,6 +410,8 @@ export function mountBingo(ctx: TableViewCtx): TableView {
     (riser.material as THREE.MeshStandardMaterial).color.set(COLUMN_COLOURS[columnOf(n)]!);
     riser.visible = true;
     riser.scale.setScalar(1.4);
+    // the caller, when the hall has one, reaches for the ball
+    stage.gesture('deal');
     ctx.sfx.play('dice-shake', { volume: 0.25, rate: 1.6 });
     await tween(RISE_MS, (k) => riser.position.copy(chute.getPoint(k)), ease.inOut);
     riser.visible = false;

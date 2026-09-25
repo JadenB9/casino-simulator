@@ -223,4 +223,128 @@ async function bingoSolo() {
   if (!results.bingoSolo.ok) failed = true;
   await page.close();
 }
-async function bingoMulti() {}
+/**
+ * Two players at one hall through the real table host, raw sockets from inside pages (so the
+ * Origin is the dev site's): nobody presses Start, both buy cards in the sale, the clock calls the
+ * balls, both seats settle to the cent; spectators and the other seat never see a card's numbers
+ * or a ball before it is called. Then the view is shown a busy hall for a screenshot.
+ */
+async function bingoMulti() {
+  const page = await newPage();
+  const ctxB = await browser.newContext();
+  const pageB = await ctxB.newPage();
+  for (const p of [page, pageB]) await p.goto(`${base}/casino/fonts/cinzel/OFL.txt`);
+  const login = (p, name) => p.evaluate(async (n) => (await (await fetch('/casino/api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: n, password: 'casino-dev' }) })).json()).token, name);
+  const tA = await login(page, 'parlor6_e2e_ann');
+  const tB = await login(pageB, 'parlor6_e2e_bo');
+  if (!tA || !tB) throw new Error('login failed (new-account limit?)');
+  const made = await page.evaluate(async (t) => (await (await fetch('/casino/api/tables', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${t}` }, body: JSON.stringify({ game: 'bingo', variant: '', visibility: 'public' }) })).json()), tA);
+  const tableId = made.tableId;
+  if (!tableId) throw new Error(`no table: ${JSON.stringify(made)}`);
+  const open = (p, t) =>
+    p.evaluate(async ([id, tok]) => {
+      const { ticket } = await (await fetch('/casino/api/ticket', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${tok}` }, body: JSON.stringify({ target: `table/${id}` }) })).json();
+      return new Promise((res, rej) => {
+        const ws = new WebSocket(`${location.origin.replace('http', 'ws')}/casino/ws/table/${id}?v=1&ticket=${encodeURIComponent(ticket)}`);
+        window.bg = { ws, msgs: [], aid: 0, send: (m) => ws.send(JSON.stringify(m)), act: (a) => ws.send(JSON.stringify({ t: 'act', aid: `x${window.bg.aid++}`, a })) };
+        ws.onmessage = (e) => window.bg.msgs.push(JSON.parse(e.data));
+        ws.onopen = () => res(true);
+        ws.onerror = () => rej(new Error('socket failed'));
+      });
+    }, [tableId, t]);
+  await open(page, tA);
+  await open(pageB, tB);
+  const wait = (p, pred, ms = 60000, arg) => p.waitForFunction(pred, arg, { timeout: ms, polling: 100 });
+  for (const p of [page, pageB]) await p.evaluate(() => window.bg.send({ t: 'buyin', aid: 'b1', amount: 50000 }));
+  for (const p of [page, pageB]) await wait(p, () => window.bg.msgs.some((m) => m.t === 'seat' && m.status === 'seated'));
+  // no Start: the first seat opens the sale
+  for (const p of [page, pageB]) await wait(p, () => window.bg.msgs.some((m) => m.t === 'ev' && m.events.some((e) => e.type === 'buying')));
+  const started = await page.evaluate(() => window.bg.msgs.find((m) => m.t === 'table').meta.started);
+  const seatOf = (p) => p.evaluate(() => window.bg.msgs.filter((m) => m.t === 'seat').at(-1).seat);
+  const [sa, sb] = [await seatOf(page), await seatOf(pageB)];
+  await page.evaluate(() => window.bg.act({ type: 'buy', count: 3, stake: 500 }));
+  await pageB.evaluate(() => window.bg.act({ type: 'max', count: 2 }));
+  await pageB.evaluate(() => window.bg.act({ type: 'call' })); // nobody starts a shared hall
+  await pageB.evaluate(() => window.bg.act({ type: 'buy', count: 5, stake: 100 })); // malformed: five cards
+  await wait(pageB, () => window.bg.msgs.filter((m) => m.t === 'err').length >= 2);
+  const errsB = await pageB.evaluate(() => window.bg.msgs.filter((m) => m.t === 'err').map((m) => m.code));
+  // the whole game on the clock
+  for (const p of [page, pageB]) await wait(p, () => window.bg.msgs.some((m) => m.t === 'ev' && m.events.some((e) => e.type === 'end')), 200000);
+  const report = (p, seat) =>
+    p.evaluate((s) => {
+      const evs = window.bg.msgs.filter((m) => m.t === 'ev').flatMap((m) => m.events);
+      const mine = evs.filter((e) => e.type === 'cards').flatMap((e) => e.cards);
+      const others = evs.filter((e) => e.type === 'cards' && e.seat !== s).length;
+      const balls = evs.filter((e) => e.type === 'ball').map((e) => e.ball);
+      const wins = evs.filter((e) => e.type === 'win');
+      const end = evs.find((e) => e.type === 'end');
+      const stacks = window.bg.msgs.filter((m) => m.t === 'seat').map((m) => m.stack);
+      // what a view said was called, at each point, never ran ahead of the balls told so far
+      let told = 0;
+      let ahead = 0;
+      for (const m of window.bg.msgs) {
+        if (m.t === 'ev') {
+          told += m.events.filter((e) => e.type === 'ball').length;
+          if (m.view.called.length > told) ahead++;
+          if (JSON.stringify(m).includes('"order"')) ahead++;
+        }
+      }
+      return { mine, others, balls, wins, end, stacks, ahead };
+    }, seat);
+  const ra = await report(page, sa);
+  const rb = await report(pageB, sb);
+  const rules = await import('../../shared/src/games/bingo/rules.ts');
+  const check = (r, seat) => {
+    const at = new Array(76).fill(Infinity);
+    r.balls.forEach((b, i) => (at[b] = i + 1));
+    let expected = 0;
+    for (const c of r.mine) {
+      const done = rules.completions(c.nums, at);
+      for (const p of rules.PATTERNS) if (done[p] <= r.balls.length) expected += rules.prizeFor(p, done[p], c.stake);
+    }
+    const res = r.end.seats[seat];
+    const cost = r.mine.reduce((n, c) => n + c.stake, 0);
+    const paid = r.wins.filter((w) => w.seat === seat).reduce((n, w) => n + w.paid, 0);
+    return { seat, cards: r.mine.length, cost, expected, paid, returned: res.returned, wagered: res.wagered, final: r.stacks.at(-1), leaks: r.others + r.ahead, ok: expected === paid && paid === res.returned && cost === res.wagered && r.stacks.at(-1) === 50000 - cost + paid && r.others === 0 && r.ahead === 0 };
+  };
+  const A = check(ra, sa);
+  const B = check(rb, sb);
+  const sameBalls = JSON.stringify(ra.balls) === JSON.stringify(rb.balls);
+  results.bingoMulti = { tableId, startedWithoutLeader: started, calls: ra.balls.length, sameBalls, A, B, refusedB: errsB };
+  if (!started || !A.ok || !B.ok || !sameBalls || !errsB.includes('BAD_REQUEST')) failed = true;
+  for (const p of [page, pageB]) await p.evaluate(() => window.bg.send({ t: 'leave' }));
+  await ctxB.close();
+
+  // the view in a busy hall: a snapshot with players around you, mid-game
+  await page.goto(`${base}/casino/?dev=table&game=bingo&name=parlor6_e2e_view`);
+  await sitDown(page, '1000');
+  await page.waitForFunction(() => document.getElementById('boot')?.classList.contains('done'), null, { timeout: 90000 });
+  await page.waitForTimeout(800);
+  await page.evaluate(() => {
+    const t = window.casino.table;
+    const snap = structuredClone(t.snapshot);
+    snap.meta.mode = 'multi';
+    snap.you.seat = 13;
+    snap.you.status = 'seated';
+    const me = snap.members[0];
+    const names = ['Marisol', 'Theo', 'Ade', 'Priya', 'Kenji', 'Rosa', 'Dmitri', 'Hollis', 'June', 'Walt', 'Ines'];
+    snap.members = [{ ...me, seat: 13, status: 'seated' }, ...names.map((n, i) => ({ ...me, accountId: 9000 + i, name: n, seat: i * 3, status: 'seated', stack: 100000 + i * 7300, connected: i !== 4 }))];
+    const called = [7, 22, 41, 60, 68, 3, 17, 33, 52, 71, 12, 28, 44, 57, 63, 9, 19, 38];
+    const card = (id, nums, won) => ({ id, nums, stake: 500, won });
+    const mine = [
+      card(1, [7, 22, 41, 60, 68, 3, 17, 33, 52, 71, 12, 28, 0, 57, 63, 9, 19, 38, 46, 74, 1, 16, 31, 55, 70], { line: { call: 5, paid: 250000 } }),
+      card(2, [2, 18, 34, 49, 61, 4, 20, 36, 50, 62, 5, 21, 0, 51, 64, 6, 23, 39, 53, 66, 8, 24, 40, 54, 67], {}),
+      card(3, [10, 25, 42, 56, 69, 11, 26, 43, 58, 72, 13, 27, 0, 59, 73, 14, 29, 45, 47, 75, 15, 30, 35, 48, 65], {}),
+    ];
+    const players = { 13: { cards: 3, staked: 1500, won: 250000, best: 2 } };
+    names.forEach((_, i) => (players[i * 3] = { cards: 1 + (i % 4), staked: 500 * (1 + (i % 4)), won: i === 2 ? 40000 : 0, best: i % 3 === 0 ? 1 : 3 }));
+    snap.view = { phase: 'calling', round: 12, deadline: Date.now() + 2000, window: 25000, callMs: 2200, called, mine, players, results: {}, history: [], canRebuy: [] };
+    t.view.onTable(snap);
+  });
+  await page.waitForTimeout(1200);
+  await shot(page, 'bg-4-hall-multi');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(800);
+  await shot(page, 'bg-5-phone');
+  await page.close();
+}
