@@ -313,6 +313,13 @@ class App {
     // Big wins are announced to people out on the floor, never to the winner at their table.
     this.lifeOff = this.life.connect(link, { onFloor: () => this.hud !== null && this.table === null && this.world.seated === null });
     link.on('emote', (id, e) => void this.world.showEmote(id === link.you?.id ? 'me' : id, e));
+    // v6 emotes6: an emote bought or earned while you're on the floor is yours at once: in the
+    // profile (the wheel reads it there next time) and unlocked on a wheel that's up now
+    link.on('owned', (emotes) => {
+      const p = session.profile;
+      if (p) session.set({ ...p, owned: [...new Set([...(p.owned ?? []), ...emotes])] });
+      this.emotes?.grant(emotes);
+    });
     // v6 fx6: the shop's effects and the lobby's statues, for everyone on the floor (world/fx/)
     this.world.useFx({ self: () => link.you?.id ?? null, marquee: this.life.marquee, tally: this.life.tally });
     link.on('fx', (ev) => this.world.playFx(ev));
@@ -410,7 +417,8 @@ class App {
     });
     this.hud.setOnline(this.link?.onlineCount ?? null);
     // Emotes (G) and the leaderboards, in the HUD's right-hand bar ahead of the tips bulb.
-    this.emotes = mountEmotes({ root: this.ui, send: (e) => void this.link?.emote(e) });
+    // v6 emotes6: the wheel shows what you own; a locked one opens the boutique at it
+    this.emotes = mountEmotes({ root: this.ui, send: (e) => void this.link?.emote(e), owned: () => session.profile?.owned, shop: (e) => this.openShop(e) });
     const bar = this.hud.root.querySelector('.hud-right')!;
     const first = bar.querySelector('.hud-btn');
     bar.insertBefore(socialButton('emotes', 'Emotes (G)', () => this.emotes?.toggle()), first);
