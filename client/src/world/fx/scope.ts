@@ -103,6 +103,11 @@ export function statueSpots(plan: FloorPlan, n = STATUES): StatueSpot[] {
   const L = lobby.inner;
   const cx = (L.x0 + L.x1) / 2;
   const out: StatueSpot[] = [];
+  // v6 rooms6: the lobby's own statue places (rooms.ts, plan.statues) first, while they're clear
+  for (const s of plan.statues ?? []) {
+    if (out.length >= n) break;
+    if (s.room === 'lobby' && clearFor(plan, L, s.x, s.z) && out.every((o) => Math.hypot(o.x - s.x, o.z - s.z) >= 2.4)) out.push({ x: s.x, z: s.z, yaw: s.yaw });
+  }
   const pool: [number, number][] = CANDIDATES.map(([x, z]) => [lobby.cx + x, lobby.cz + z]);
   // after the chosen few, a grid down the lobby's sides as a fallback (a plan that changed a lot);
   // never its middle, which is the way from the doors to everything

@@ -286,11 +286,12 @@ export const ROOMS: RoomSpec[] = [
     ],
     keep: [{ x0: 1.9, z0: 2.5, x1: 6.5, z1: 5.85 }],
     // where the lobby's statues stand (the shop's, fx6): each plinth with a clear walk round it,
-    // clear of the doors' approaches, the directory, the palms and the lift bank; best first
+    // clear of the doors' approaches, the directory, the palms and the lift bank; best first, each
+    // facing the lobby's middle three metres toward the doors
     statues: [
-      [3.4, -1.4, -0.62],
-      [-4.0, 3.6, 2.33],
-      [5.7, -3.0, -1.14],
+      [3.4, -1.4, -0.85],
+      [-4.0, 3.6, 0.93],
+      [5.7, -3.0, -1.09],
     ],
     plants: [[-6.4, 5.4]],
   },
@@ -342,13 +343,13 @@ export const ROOMS: RoomSpec[] = [
     furniture: [{ kind: 'banquette', x: 8.4, z: 6.3, yaw: 0 }],
     fixtures: [{ kind: 'pit-podium' }],
     hanging: [
-      { id: 'table-games', x: 0, y: 2.96, z: -0.15, ry: 0, w: 4.6, h: 0.6, kind: 'lit', text: 'TABLE GAMES', color: '#ffe0a0' },
+      { id: 'table-games', x: 0, y: 3.5, z: -0.15, ry: 0, w: 4.6, h: 0.6, kind: 'lit', text: 'TABLE GAMES', color: '#ffe0a0' },
       // over the north aisle, either side of the salon's door (clear of the signs over the doors):
       // the north wing's rooms lie one room beyond the doors along it
       {
         id: 'north-wing-w',
         x: -6.3,
-        y: 2.9,
+        y: 3.1,
         z: -9.3,
         ry: 0,
         w: 4.2,
@@ -363,7 +364,7 @@ export const ROOMS: RoomSpec[] = [
       {
         id: 'north-wing-e',
         x: 6.3,
-        y: 2.9,
+        y: 3.1,
         z: -9.3,
         ry: 0,
         w: 4.2,

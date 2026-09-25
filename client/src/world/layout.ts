@@ -832,12 +832,8 @@ export function planFloor(footprint: (game: GameId) => Footprint, slots: readonl
   for (const spec of ordered) {
     const r = room(spec.id);
     for (const a of [...spec.aisles, ...(spec.keep ?? [])]) aisles.push({ x0: r.cx + a.x0, z0: r.cz + a.z0, x1: r.cx + a.x1, z1: r.cz + a.z1 });
-    // a statue's plinth and the walk round it are kept clear like an aisle
-    for (const [x, z, yaw] of spec.statues ?? []) {
-      statues.push({ x: r.cx + x, z: r.cz + z, yaw, room: r.id });
-      const h = STATUE_PLINTH / 2 + STATUE_CLEAR;
-      aisles.push({ x0: r.cx + x - h, z0: r.cz + z - h, x1: r.cx + x + h, z1: r.cz + z + h });
-    }
+    // a statue's plinth and the walk round it are kept clear of anything placed (checkLayout)
+    for (const [x, z, yaw] of spec.statues ?? []) statues.push({ x: r.cx + x, z: r.cz + z, yaw, room: r.id });
   }
   for (const d of doors) {
     if (d.b === 'outside') continue;
@@ -1544,6 +1540,14 @@ function clashes(plan: FloorPlan, s: Solid, others: Solid[]): string[] {
     if (strip && s.y0 < 1.8 && !s.holds?.length && shapesOverlap(shape, { poly: strip })) out.push(`${s.id} blocks the players of ${p.id}`);
   }
   if (s.floor) for (const [k, aisle] of plan.aisles.entries()) if (shapesOverlap(shape, { poly: rectPoly(aisle) })) out.push(`${s.id} stands in aisle ${k}`);
+  // a statue's place: nothing standing on its plinth or the walk round it, and nothing overhead
+  // (a palm's fronds) within reach of the figure
+  for (const [k, st] of plan.statues.entries()) {
+    const h = STATUE_PLINTH / 2 + STATUE_CLEAR;
+    const onFloor = s.y0 < 1.2 && shapesOverlap(shape, { poly: rectPoly({ x0: st.x - h, z0: st.z - h, x1: st.x + h, z1: st.z + h }) });
+    const over = s.y0 >= 1.2 && s.y0 < 3.2 && shapesOverlap(shape, { x: st.x, z: st.z, r: 0.45 });
+    if (onFloor || over) out.push(`${s.id} stands on statue place ${k + 1}`);
+  }
   for (const o of others) {
     if (o === s || o.group === s.group) continue;
     if (s.y0 >= o.y1 || o.y0 >= s.y1) continue;

@@ -11,8 +11,8 @@ import type { Batch } from './batch.ts';
 import type { Mats } from './materials.ts';
 import { hdr } from './materials.ts';
 import { GLOW, type GlowMerge } from './lighting.ts';
-import { DRAPES, ISLAND_CAP, ISLAND_TOP, LANTERN, MOONGATE, PATTERN_BOARD, TABLE_LANTERN, WALL, WALL_COUNTER, ceilingAt, type FloorPlan, type WallMount } from './layout.ts';
-import { BOARD_PATTERNS, drawPatternBoards } from './textures-themes.ts';
+import { DRAPES, FOUNTAIN, ISLAND_CAP, ISLAND_TOP, LANTERN, MOONGATE, PATTERN_BOARD, TABLE_LANTERN, WALL, WALL_COUNTER, ceilingAt, type FloorPlan, type WallMount } from './layout.ts';
+import { BOARD_PATTERNS, drawFalls, drawPatternBoards, drawRipples } from './textures-themes.ts';
 import { canvasTexture } from './carpet.ts';
 import type { Decor } from './decor.ts';
 
@@ -372,6 +372,9 @@ export function buildThemes(plan: FloorPlan, b: Batch, m: Mats, glow: GlowMerge,
     b.box(m.get('lacquer-gold'), fringe.x, top - 0.03, fringe.z, pw + 0.01, 0.025, 0.012, undefined, d.ry);
   }
 
+  // --- fountains: a travertine basin, two bowls on a baluster, water sheeting off each lip ----------
+  if (plan.fountains.length) fountains(plan, b, m, glow, out);
+
   // --- noren over the parlour's doorways: navy cloth panels with a white blossom crest ------------
   m.define1('noren', () => {
     const t = canvasTexture(drawNoren(256, 128), 4);
@@ -451,4 +454,82 @@ function drawNoren(w: number, h: number): HTMLCanvasElement {
   ctx.arc(cx, cy, R * 0.14, 0, Math.PI * 2);
   ctx.fill();
   return c;
+}
+
+// --- the fountain ------------------------------------------------------------------------------------
+
+/**
+ * The water's two textures, shared by every fountain and both qualities: the pools' ripples drift
+ * and the sheets falling off the bowls' lips run down. Moving a texture's offset each frame is all
+ * the animation costs (tickWater, from the world's update).
+ */
+let ripples: THREE.CanvasTexture | null = null;
+let falls: THREE.CanvasTexture | null = null;
+
+/** Scroll the fountains' water (no-op until a fountain is built). */
+export function tickWater(dt: number): void {
+  if (ripples) {
+    ripples.offset.x = (ripples.offset.x + dt * 0.021) % 1;
+    ripples.offset.y = (ripples.offset.y + dt * 0.013) % 1;
+  }
+  if (falls) falls.offset.y = (falls.offset.y + dt * 0.55) % 1;
+}
+
+/** A shape turned round the fountain's axis: [radius, height] from the inside out or bottom up. */
+function lathe(pts: [number, number][], seg = 48): THREE.LatheGeometry {
+  return new THREE.LatheGeometry(pts.map(([x, y]) => new THREE.Vector2(x, y)), seg);
+}
+
+function fountains(plan: FloorPlan, b: Batch, m: Mats, glow: GlowMerge, out: Decor): void {
+  m.define1('water-pool', () => {
+    ripples ??= canvasTexture(drawRipples(256), 4);
+    return new THREE.MeshBasicMaterial({ map: ripples, color: new THREE.Color(1, 1, 1).multiplyScalar(1.05), transparent: true, opacity: 0.86, depthWrite: false });
+  });
+  m.define1('water-fall', () => {
+    falls ??= canvasTexture(drawFalls(128, 256, 107), 4);
+    return new THREE.MeshBasicMaterial({ map: falls, color: new THREE.Color(1, 1, 1).multiplyScalar(1.3), transparent: true, depthWrite: false, side: THREE.DoubleSide });
+  });
+  m.define1('pool-tile', () => new THREE.MeshLambertMaterial({ color: '#0f3a40' }));
+  const stone = m.get('marble-light');
+  const brass = m.get('brass');
+  const pool = m.get('water-pool');
+  const fall = m.get('water-fall');
+  const { r: R, rim, mid, top, crown } = FOUNTAIN;
+  const floor = 0.12;
+  // each surface of water sits a little under its bowl's lip, each sheet just outside the lip it pours over
+  const midWater = mid.y - 0.05;
+  const topWater = top.y - 0.04;
+  for (const f of plan.fountains) {
+    b.room = f.room;
+    glow.room = f.room;
+    const at = (y = 0) => ({ x: f.x, y, z: f.z });
+    // the basin: a stepped travertine wall with a rolled lip, its inside down to a tiled floor
+    b.add(lathe([[R + 0.04, 0], [R + 0.04, 0.06], [R, 0.08], [R, rim - 0.06], [R + 0.03, rim - 0.03], [R, rim], [R - 0.12, rim], [R - 0.14, rim - 0.04], [R - 0.14, floor]]), stone, at(), 1.2);
+    b.add(new THREE.CircleGeometry(R - 0.14, 48).rotateX(-Math.PI / 2), m.get('pool-tile'), at(floor));
+    b.add(new THREE.TorusGeometry(R + 0.012, 0.012, 6, 64).rotateX(Math.PI / 2), brass, at(rim - 0.16));
+    // coins on the bottom, for luck
+    for (let i = 0; i < 26; i++) {
+      const a = i * 2.39996;
+      const rr = 0.45 + ((i * 37) % 11) * 0.07;
+      b.add(new THREE.CylinderGeometry(0.014, 0.014, 0.004, 10), brass, { x: f.x + Math.cos(a) * rr, y: floor + 0.006, z: f.z + Math.sin(a) * rr });
+    }
+    // light under the water, round the basin's inside wall
+    glow.add(new THREE.TorusGeometry(R - 0.17, 0.018, 6, 64).rotateX(Math.PI / 2), new THREE.Color('#9fe8ff').multiplyScalar(1.8), at(floor + 0.12));
+    // the pool's surface
+    b.add(new THREE.CircleGeometry(R - 0.145, 48).rotateX(-Math.PI / 2), pool, at(rim - 0.08));
+    // the baluster up to the middle bowl, the middle bowl, the stem to the top bowl, the top bowl
+    b.add(lathe([[0.24, floor], [0.3, floor + 0.08], [0.2, 0.3], [0.13, 0.55], [0.2, 0.72], [0.14, 0.86], [0.18, mid.y - 0.26]], 24), stone, at(), 1.2);
+    b.add(lathe([[0.18, mid.y - 0.3], [0.4, mid.y - 0.24], [0.66, mid.y - 0.13], [mid.r, mid.y - 0.03], [mid.r + 0.02, mid.y], [mid.r - 0.06, mid.y], [mid.r - 0.08, mid.y - 0.06], [0.3, mid.y - 0.14], [0.001, mid.y - 0.15]]), stone, at(), 1.2);
+    b.add(lathe([[0.11, mid.y - 0.15], [0.14, mid.y + 0.02], [0.09, mid.y + 0.2], [0.13, mid.y + 0.34], [0.1, top.y - 0.14]], 20), stone, at(), 1.2);
+    b.add(lathe([[0.1, top.y - 0.16], [0.24, top.y - 0.11], [top.r, top.y - 0.02], [top.r + 0.015, top.y], [top.r - 0.05, top.y], [top.r - 0.06, top.y - 0.05], [0.001, top.y - 0.08]], 32), stone, at(), 1.2);
+    b.add(new THREE.TorusGeometry(mid.r + 0.01, 0.012, 6, 48).rotateX(Math.PI / 2), brass, at(mid.y - 0.035));
+    // the finial: a brass pine cone on a short stem in the top bowl
+    b.add(lathe([[0.04, topWater - 0.02], [0.05, top.y + 0.08], [0.035, top.y + 0.14], [0.09, top.y + 0.24], [0.11, top.y + 0.33], [0.07, crown - 0.06], [0.001, crown]], 16), brass, at());
+    // the water in each bowl, and the sheets pouring over their lips into the one below
+    b.add(new THREE.CircleGeometry(mid.r - 0.075, 40).rotateX(-Math.PI / 2), pool, at(midWater));
+    b.add(new THREE.CircleGeometry(top.r - 0.055, 28).rotateX(-Math.PI / 2), pool, at(topWater));
+    b.add(new THREE.CylinderGeometry(mid.r + 0.035, mid.r + 0.2, mid.y - 0.01 - (rim - 0.08), 48, 1, true), fall, at((mid.y - 0.01 + rim - 0.08) / 2));
+    b.add(new THREE.CylinderGeometry(top.r + 0.03, top.r + 0.12, top.y - 0.01 - midWater, 32, 1, true), fall, at((top.y - 0.01 + midWater) / 2));
+    out.pools.push({ x: f.x, z: f.z, r: R + 1.4, room: f.room });
+  }
 }

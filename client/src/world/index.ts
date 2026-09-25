@@ -19,6 +19,7 @@ import { MapOverlay, buildDirectories } from './wayfinding.ts';
 import { buildRoom } from './room.ts';
 import { buildStations, type WorldStation } from './stations.ts';
 import { buildDecor } from './decor.ts';
+import { tickWater } from './decor-themes.ts';
 import { buildSigns, floorSigns, loadSignFonts, signGain } from './signs.ts';
 import { GlowMerge, Lighting, buildPools } from './lighting.ts';
 import { Props } from './props.ts';
@@ -455,6 +456,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
         bloom.setLook(want);
       }
       props.update(dt);
+      tickWater(dt);
       characters.updateLabels(engine.camera);
       bloom.update(dt);
       pr.update(dt);
