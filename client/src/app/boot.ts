@@ -32,6 +32,9 @@ import { RideSound, rideKey } from '../world/rides.ts';
 import { mountFeats, type FeatsUi } from '../ui/feats/index.ts'; // v6 feats6
 import { ENGINES } from '../../../shared/src/games/index.ts';
 import { mountDaily, dailyApi, type DailyHandle } from '../ui/daily/index.ts'; // v6 celebs6
+// v6 bank6: the bank's calls and its transfer notices
+import * as bankApi from '../ui/bank/api.ts';
+import { bankNotices } from '../ui/bank/notices.ts';
 import { CLOSE, type Profile } from '../../../shared/src/protocol.ts';
 // v6 dine6: drinking and eating what the bar brings
 import { Diner } from '../world/consumables/diner.ts';
@@ -111,6 +114,8 @@ class App {
   private comingBack = false;
   /** Walking when we went away (or at a table, which puts us back on the floor): walking again after. */
   private awayWalking = false;
+  /** v6 bank6: money from other players, told on the floor, while the floor is connected. */
+  private bankOff: (() => void) | null = null;
   /** v6 invite6: invites to lobby tables (ui/lobby/invites.ts), while the floor is connected. */
   private invites: InviteHub | null = null;
   /** v6 celebs6: the daily bonus's HUD button and sheet, while the HUD is up. */
@@ -399,6 +404,8 @@ class App {
     });
     // v6 celebs6: a celebrity's tip and a gift box land in the balance; their notices show while you walk the floor
     this.world.life.celebs.useApp({ money: (m) => session.balance(m.balance, m.inPlay, m.rev), sfx: this.sfx, onFloor: () => this.hud !== null && this.table === null && this.world.seated === null && overlayCount() === 0, snapper: this.engine });
+    // v6 bank6: money from other players, told on the floor (ui/bank/notices.ts)
+    this.bankOff = bankNotices({ link, inbox: () => bankApi.bank().then((s) => s.inbox), me: api.me, setProfile: (p) => session.set(p), say: (t) => toast(t, 'info', 6000), sfx: this.sfx });
   }
 
   /**
@@ -408,6 +415,8 @@ class App {
   private disconnectFloor(keepBar = false): void {
     this.idle.stop();
     this.world.life.celebs.useApp(null); // v6 celebs6
+    this.bankOff?.(); // v6 bank6
+    this.bankOff = null;
     this.world.life.useApp(null);
     this.world.life.useBar(null);
     this.world.life.useLink(null);

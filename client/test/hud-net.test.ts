@@ -45,6 +45,18 @@ describe('the HUD session net', () => {
     expect(sessionNet(profile({ balance: 49_991 * D }), later, null, 250_009 * D)).toBe(0);
   });
 
+  it('v6 bank6: moving money into the bank is not a loss, and what the bank made is not a win', () => {
+    const start = netStart(profile({ bank: { savings: 0, deposits: 0, fundCost: 0, fundValue: 0, gain: 0, worth: 50_000 * D } }), 0);
+    // $20,000 to savings, $10,000 in a deposit, $5,000 in the fund (now worth $4,000)
+    const moved = profile({ balance: 15_000 * D, bank: { savings: 20_000 * D, deposits: 10_000 * D, fundCost: 5_000 * D, fundValue: 4_000 * D, gain: 0, worth: 49_000 * D } });
+    expect(sessionNet(moved, start, null, 0)).toBe(0);
+    // $300 of interest paid and $1,000 from a friend: the bank's gain, not play
+    const later = profile({ balance: 16_000 * D, bank: { savings: 20_300 * D, deposits: 10_000 * D, fundCost: 5_000 * D, fundValue: 4_000 * D, gain: 1_300 * D, worth: 50_300 * D } });
+    expect(sessionNet(later, start, null, 0)).toBe(0);
+    // then $500 won at a table
+    expect(sessionNet({ ...later, balance: 16_500 * D }, start, null, 0)).toBe(500 * D);
+  });
+
   it('a purchase answered by the server is counted as spending once, whatever its rev', () => {
     let spent = 0;
     const s = {

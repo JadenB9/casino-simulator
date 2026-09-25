@@ -413,6 +413,18 @@ export class CasinoFloor extends DurableObject<Env> {
     this.broadcast({ t: 'feat', id: accountId, name, feat });
   }
 
+  /** v6 bank6: another player sent this account money (bank.ts): its own sockets hear it. */
+  bankNote(accountId: number, msg: Extract<FloorServerMsg, { t: 'bank.in' }>): void {
+    const data = JSON.stringify(msg);
+    for (const ws of this.ctx.getWebSockets(`a:${accountId}`)) {
+      try {
+        ws.send(data);
+      } catch {
+        /* closing */
+      }
+    }
+  }
+
   /** v6 law6: a table says this player is winning too much there; the pit boss may be watching. */
   lawHot(r: HotReport): Promise<StrikeResult> {
     return this.law.hot(r, Date.now());

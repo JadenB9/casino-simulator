@@ -76,7 +76,8 @@ async function audit(names, where) {
             (SELECT COALESCE(SUM(amount), 0) FROM casino_ledger l WHERE l.account_id = a.id AND l.kind IN ('buyin', 'cashout', 'refund')) AS moved,
             (SELECT COALESCE(SUM(amount), 0) FROM casino_ledger l WHERE l.account_id = a.id AND l.kind IN ('grant', 'loan')) AS granted,
             (SELECT COALESCE(SUM(price), 0) FROM casino_items i WHERE i.account_id = a.id)
-              + (SELECT COALESCE(SUM(price), 0) FROM casino_orders o WHERE o.account_id = a.id) AS spent,
+              + (SELECT COALESCE(SUM(price), 0) FROM casino_orders o WHERE o.account_id = a.id)
+              - (SELECT COALESCE(SUM(cash), 0) FROM casino_bank b WHERE b.account_id = a.id) AS spent, -- v6 bank6: what went to (or came from) the bank counts like spending
             (SELECT COALESCE(SUM(net), 0) FROM casino_stats s WHERE s.account_id = a.id) AS net,
             (SELECT COALESCE(SUM(rounds), 0) FROM casino_stats s WHERE s.account_id = a.id) AS rounds,
             (SELECT COALESCE(SUM(amount), 0) FROM casino_escrow e WHERE e.account_id = a.id) AS escrow,

@@ -53,13 +53,13 @@ const EMPTY: StatLine = { rounds: 0, wagered: 0, net: 0, biggestWin: 0, counted:
 /** The asker's record: five reads in one batch, each by primary key. Null if the account is gone. */
 export async function statsOf(db: D1Database, accountId: number, now: number): Promise<StatsResponse | null> {
   const [acct, stats, tally, items, feats] = await db.batch([
-    db.prepare(`SELECT name, balance, in_play, created_at FROM casino_accounts WHERE id = ?1`).bind(accountId),
+    db.prepare(`SELECT name, balance, in_play, banked, created_at FROM casino_accounts WHERE id = ?1`).bind(accountId),
     db.prepare(`SELECT game, rounds, wagered, net, biggest_win FROM casino_stats WHERE account_id = ?1`).bind(accountId),
     db.prepare(`SELECT key, n FROM casino_tally WHERE account_id = ?1`).bind(accountId),
     db.prepare(`SELECT COALESCE(SUM(price), 0) AS v FROM casino_items WHERE account_id = ?1`).bind(accountId),
     db.prepare(`SELECT COUNT(*) AS v FROM casino_feats WHERE account_id = ?1`).bind(accountId),
   ]);
-  const a = (acct!.results as { name: string; balance: number; in_play: number; created_at: number }[])[0];
+  const a = (acct!.results as { name: string; balance: number; in_play: number; banked: number; created_at: number }[])[0];
   if (!a) return null;
   const t = new Map((tally!.results as { key: string; n: number }[]).map((r) => [r.key, r.n]));
   const n = (k: string) => t.get(k) ?? 0;
@@ -90,8 +90,8 @@ export async function statsOf(db: D1Database, accountId: number, now: number): P
   return {
     name: a.name,
     createdAt: a.created_at,
-    // net worth as the richest board ranks it (leaderboard.ts WORTH: + banked once the bank's column lands)
-    worth: { balance: a.balance, inPlay: a.in_play, total: a.balance + a.in_play },
+    // net worth as the richest board ranks it (leaderboard.ts WORTH), the bank's fund at cost
+    worth: { balance: a.balance, inPlay: a.in_play, total: a.balance + a.in_play + a.banked },
     total,
     games,
     days: lastDays(vegasDay(now), STATS_DAYS).map((day) => ({ day, net: n(dayKey(day)) })),

@@ -152,6 +152,21 @@ export interface Profile {
   owned?: string[];
   /** v6: the feats earned (feats.ts), oldest first. */
   feats?: { feat: string; at: number }[];
+  // v6 bank6: what's in the bank (shared/src/bank.ts), and net worth
+  bank?: ProfileBank;
+}
+
+// v6 bank6: the bank on the profile. `worth` = balance + inPlay + savings + deposits + fundValue.
+export interface ProfileBank {
+  savings: Cents;
+  /** Principal in open term deposits. */
+  deposits: Cents;
+  /** The Casino Index at what it cost, and at the price last written. */
+  fundCost: Cents;
+  fundValue: Cents;
+  /** Money the bank made or took in all: interest, the fund's gains and losses, transfers in less out. */
+  gain: Cents;
+  worth: Cents;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -400,6 +415,8 @@ export type FloorServerMsg =
   | { t: 'detours'; list: Detour[] }
   | { t: 'law'; ev: LawEvent }
   | { t: 'jail'; jail: JailState | null }
+  // v6 bank6: another player sent you money (shared/src/bank.ts); only to you
+  | { t: 'bank.in'; id: string; from: string; amount: Cents; note: string | null; at: number }
   | { t: 'err'; code: ErrorCode; msg: string }
   | ChatServerMsg;
 
