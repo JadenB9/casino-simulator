@@ -92,7 +92,8 @@ const CANDIDATES: [number, number][] = [
 ];
 
 /**
- * Up to `n` spots in the lobby where a statue stands clear of everything: not on a walkway or in a
+ * Up to `n` spots in the lobby where a statue stands: the plan's own statue places if it has them,
+ * else places found clear of everything: not on a walkway or in a
  * doorway, not in front of the directory, not under a palm's fronds, a plinth's width from
  * anything standing, and apart from each other. The lobby's own plan decides, so moving the
  * directory or a palm moves the statues with it.
@@ -100,6 +101,10 @@ const CANDIDATES: [number, number][] = [
 export function statueSpots(plan: FloorPlan, n = STATUES): StatueSpot[] {
   const lobby = plan.rooms.find((r) => r.id === 'lobby');
   if (!lobby) return [];
+  // The lobby's plan names its statue places (rooms.ts: kept clear the way an aisle is, round the
+  // fountain): those, best first. A plan without them gets places found below.
+  const planned = (plan as FloorPlan & { statues?: { x: number; z: number; yaw: number; room: string }[] }).statues?.filter((s) => s.room === 'lobby') ?? [];
+  if (planned.length > 0) return planned.slice(0, n).map(({ x, z, yaw }) => ({ x, z, yaw }));
   const L = lobby.inner;
   const cx = (L.x0 + L.x1) / 2;
   const out: StatueSpot[] = [];
