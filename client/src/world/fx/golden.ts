@@ -11,6 +11,7 @@ import { Bits, FLOOR_TOP, Sparks, aimBeam } from './particles.ts';
 import { COIN, type Stock } from './stock.ts';
 import type { Effect, FxWorld } from './types.ts';
 import { envelope } from './timing.ts';
+import { wave } from '../../app/comfort.ts';
 
 const RATE = { high: 46, low: 20 };
 const GLITTER = { high: 90, low: 40 };
@@ -57,7 +58,7 @@ export function golden(w: FxWorld, stock: Stock, ev: FxEvent, late: boolean): Ef
         shaftRoom = view.here;
         placeShafts(w, shafts, shaftRoom);
       }
-      shaftMat.uniforms.uK!.value = (q === 'high' ? 0.2 : 0.17) * k * (0.85 + 0.15 * Math.sin(t * 0.7));
+      shaftMat.uniforms.uK!.value = (q === 'high' ? 0.2 : 0.17) * k * (0.85 + 0.15 * wave(t * 0.7));
       shaftMat.uniforms.uTime!.value = t;
       if (left > 1.5) {
         owed += RATE[q] * dt * Math.min(1, t / 1.5 + 0.2);

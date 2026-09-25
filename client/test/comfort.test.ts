@@ -233,6 +233,8 @@ const FLASHING = [
   'world/fx/disco.ts',
   'world/fx/takeover.ts',
   'world/fx/sparklers.ts',
+  'world/fx/golden.ts',
+  'world/marquee.ts',
   'games/bingo/view.ts',
   'games/pachinko/view.ts',
   'world/celebs/flash.ts',
