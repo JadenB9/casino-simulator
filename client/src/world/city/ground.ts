@@ -289,7 +289,8 @@ export function buildGround(mats: Mats, col: Collider, quality: Quality): ZoneBu
     [cuts[1]!, cuts[2]!],
     [cuts[3]!, z1],
   ] as const) {
-    kit.box('sidewalk', WW.x0, WW.x1, -0.1, 0.006, a, b, 2.4);
+    // (the sidewalk's edge tucked inside the curb, so their faces on the street never share a plane)
+    kit.box('sidewalk', WW.x0, WW.x1 - 0.1, -0.1, 0.006, a, b, 2.4);
     kit.box('curb', WW.x1 - 0.22, WW.x1, -0.1, 0.01, a + 0.01, b - 0.01);
   }
   for (const side of [-1, 1] as const) {
@@ -297,7 +298,7 @@ export function buildGround(mats: Mats, col: Collider, quality: Quality): ZoneBu
     const zb = side * 45.5;
     kit.box('asphalt', G.drive.x0, WW.x1, -0.1, 0, Math.min(za, zb), Math.max(za, zb), 6);
   }
-  kit.box('sidewalk', WE.x0, WE.x1, -0.1, 0.006, z0, z1, 2.4);
+  kit.box('sidewalk', WE.x0 + 0.1, WE.x1, -0.1, 0.006, z0, z1, 2.4);
   kit.box('curb', WE.x0, WE.x0 + 0.22, -0.1, 0.01, z0 + 0.01, z1 - 0.01);
   kit.box('asphalt', R.x0, R.x1, -0.1, 0, z0, z1, 6);
   // the double yellow down the middle, dashed lane lines, the crosswalk's zebra and stop lines

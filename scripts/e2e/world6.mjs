@@ -2,10 +2,12 @@
 // Headless checks for the v6 building fixes (the dev floor, Vite only). Usage:
 //   node scripts/e2e/world6.mjs [port] [out dir] [checks...]
 //   checks: zfight doors palms directory boutique prompts (default: all)
-// zfight: every mesh in the scene as drawn (the building's batch, the glows, furniture, props,
-//   signs, the directory, the stations' models), in world space, through zfight.ts: two
-//   differently dressed faces in one plane that overlap where anyone can look. Fails on any in
-//   the building (the stations' own models are listed, not failed: they're the games').
+// zfight: in each zone (the casino, the ground floor, the roof) every mesh in the scene as drawn
+//   (the building's batch, the glows, furniture, props, signs, the directory, the stations'
+//   models), in world space, through zfight.ts: two differently dressed faces in one plane that
+//   overlap where anyone can look. Fails on any, the stations' and props' own models included; a
+//   far stand-in against its own live model is only counted (lod.ts never draws both), and two
+//   see-through overlays that don't write depth (a light pool, a blob shadow) can't fight.
 // doors: close-ups of both jambs of every doorway from both sides (doors-<id>-<room>-<jamb>.png).
 // palms: every palm and plant from the side, the trunk against its planter's middle
 //   (palm-<n>.png), and the measured trunk base against the planter's centre.
@@ -70,15 +72,25 @@ const frames = (page, n = 6) =>
 // --- z-fighting over the whole scene ------------------------------------------------------------
 if (checks.includes('zfight')) {
   const { page, errors } = await openFloor('quality=high&view=overview');
-  const r = await page.evaluate(async () => {
+  // each zone with the player standing in it (the ground floor and the roof are built and shown there)
+  for (const zone of ['casino', 'ground', 'roof']) {
+  const r = await page.evaluate(async ([zone, root]) => {
     const Z = await import('/casino/src/world/zfight.ts');
+    const ZN = await import(`/casino/@fs${root}/shared/src/zones.ts`);
+    const LF = await import(`/casino/@fs${root}/shared/src/lifts.ts`);
     const L = await import('/casino/src/world/layout.ts');
     const { THREE, world, engine } = window.casino;
     const plan = world.plan;
+    if (zone !== 'casino') {
+      const a = LF.LIFTS[zone].arrive;
+      world.teleport(a.x / 100, a.z / 100, 0);
+      for (let i = 0; i < 20; i++) await new Promise((r) => requestAnimationFrame(r));
+    }
     world.rooms.showAll(true);
     world.lod.pin?.(null, null);
     engine.scene.updateMatrixWorld(true);
     const surfaces = [];
+    const overlays = new Set();
     const station = new Map();
     for (const st of world.stations) st.model.traverse((o) => station.set(o, st.id));
     const m = new THREE.Matrix4();
@@ -101,6 +113,10 @@ if (checks.includes('zfight')) {
         out[k * 3 + 1] = v.y;
         out[k * 3 + 2] = v.z;
       }
+      // see-through and not writing depth (a light pool, a blob shadow): two of those on one plane
+      // can't fight each other (neither hides the other), only something solid under them
+      const overlay = material && [material].flat().every((x) => x.transparent && !x.depthWrite);
+      if (overlay) overlays.add(`${name} (${mat})`);
       surfaces.push({ name, mat, pos: out });
     };
     let skinned = 0;
@@ -153,14 +169,24 @@ if (checks.includes('zfight')) {
       o.traverse((c) => c.isMesh && meshSurfaces(c, `${o.name}${c === o ? '' : ':' + (c.name || 'part')}`));
     });
     for (const st of world.stations) st.model.traverse((o) => o.isMesh && !o.isSkinnedMesh && meshSurfaces(o, `station ${st.id}: ${o.name || o.parent?.name || 'mesh'}`));
-    const unseen = ([x, y, z], [, ny]) => {
+    const unseen = ([x, y, z], n) => {
+      const ny = n[1];
+      if (zone !== 'casino') {
+        // this zone's own patch of the world, its ground's underside left out
+        const Q = ZN.ZONES[zone];
+        if (x * 100 < Q.minX || x * 100 > Q.maxX || z * 100 < Q.minZ || z * 100 > Q.maxZ) return true;
+        // a face on the zone's edge facing out of it: nobody stands out there
+        const [nx, , nz] = n;
+        if ((nx > 0.99 && x * 100 > Q.maxX - 0.1) || (nx < -0.99 && x * 100 < Q.minX + 0.1) || (nz > 0.99 && z * 100 > Q.maxZ - 0.1) || (nz < -0.99 && z * 100 < Q.minZ + 0.1)) return true;
+        return ny < -0.99 && y < 0.001;
+      }
       const R = plan.room;
       if (x < R.x0 + 0.001 || x > R.x1 - 0.001 || z < R.z0 + 0.001 || z > R.z1 - 0.001) return true;
       if (ny < -0.99 && y < 0.001) return true;
       return ny > 0.99 && y > L.ceilingAt(plan, x, z) - 0.001;
     };
     const t = performance.now();
-    const fights = Z.findFights(surfaces, { unseen });
+    const fights = Z.findFights(surfaces, { unseen }).filter((f) => !(overlays.has(f.a) && overlays.has(f.b)));
     // what a fight is between: a thing (its name less the instance's material), a station's model, a stand-in
     const thing = (x) => x.replace(/ \([^)]*\)$/, '');
     // a stand-in's copy of one station against itself is that station's model again (the game's)
@@ -184,12 +210,12 @@ if (checks.includes('zfight')) {
       // a stand-in against its live model or itself: lod.ts shows one or the other, never both
       swaps: fights.filter((f) => ((kind(f.a) === 'station' || kind(f.b) === 'station') && (kind(f.a) === 'far' || kind(f.b) === 'far')) || ownCopy(f)).length,
     };
-  });
-  console.log(`zfight: ${r.surfaces} surfaces, ${r.tris} triangles (${r.skinned} skinned meshes left out), ${r.ms} ms`);
+  }, [zone, process.cwd()]);
+  console.log(`zfight ${zone}: ${r.surfaces} surfaces, ${r.tris} triangles (${r.skinned} skinned meshes left out), ${r.ms} ms`);
   for (const f of r.building) fail(`z-fight ${f}`);
   for (const f of r.own) fail(`z-fight inside a prop's own model ${f}`);
   for (const f of r.far) fail(`z-fight in the far stand-ins ${f}`);
-  if (r.stations.length) console.log(`  inside the stations' own models (the games'): ${r.stations.length}`);
+  for (const f of r.stations) fail(`z-fight inside a station's model ${f}`);
   if (r.swaps) console.log(`  a stand-in against its own live model (never drawn together): ${r.swaps}`);
   // the distinct kinds: a station's id and an instance's number left out, a stand-in against its own station left out (never drawn together)
   const kinds = new Map();
@@ -205,10 +231,9 @@ if (checks.includes('zfight')) {
     e.n++;
     kinds.set(k, e);
   }
-  console.log(`  station kinds (${kinds.size}):`);
+  if (kinds.size) console.log(`  station kinds (${kinds.size}):`);
   for (const [k, e] of [...kinds].sort((x, y) => y[1].n - x[1].n)) console.log(`    ${e.n}x ${k} (${e.mm} mm) e.g. ${e.eg}`);
-  if (process.env.ZFIGHT_STATIONS === '1') for (const f of r.stations) console.log(`  station ${f}`);
-  else for (const f of r.stations.slice(0, 40)) console.log(`  station ${f}`);
+  }
   if (errors.length) fail(`zfight page errors: ${errors.slice(0, 3).join(' | ')}`);
   await page.close();
 }

@@ -37,7 +37,8 @@ export function buildRoof(mats: Mats, col: Collider, quality: Quality): ZoneBuil
 
   // --- the deck, its stone edge, the tower under it ---------------------------------------------------
   kit.box('deck', D.x0, D.x1, -0.2, 0, D.z0, D.z1, 2.8);
-  kit.box('pavers', C.x0, P.x0, -0.2, 0.004, C.z0, C.z1, 3.2);
+  // (stopping just short of the deck's edge, so their ends never share a plane)
+  kit.box('pavers', C.x0, P.x0 - 0.005, -0.2, 0.004, C.z0, C.z1, 3.2);
   const edge = 0.5;
   kit.box('stone-warm', D.x0 - edge, D.x1 + edge, -0.7, 0.06, D.z0 - edge, D.z0, 1.6);
   kit.box('stone-warm', D.x0 - edge, D.x1 + edge, -0.7, 0.06, D.z1, D.z1 + edge, 1.6);
