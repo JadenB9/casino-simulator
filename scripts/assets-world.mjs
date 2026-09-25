@@ -39,8 +39,10 @@ const cli = 'node_modules/.bin/gltf-transform';
 const credits = [];
 const kb = (f) => Math.round(statSync(f).size / 1024);
 
-function optimize(src, dst, extra = []) {
-  execFileSync(cli, ['optimize', src, dst, '--compress', 'quantize', '--simplify', 'false', ...extra], { stdio: ['ignore', 'ignore', 'inherit'] });
+/** `simplify`: how far (a share of the model's size) simplifying may move its surface; off by default. */
+function optimize(src, dst, extra = [], simplify = 0) {
+  const simp = simplify ? ['--simplify', 'true', '--simplify-ratio', '0.25', '--simplify-error', String(simplify)] : ['--simplify', 'false'];
+  execFileSync(cli, ['optimize', src, dst, '--compress', 'quantize', ...simp, ...extra], { stdio: ['ignore', 'ignore', 'inherit'] });
 }
 
 // --- characters -----------------------------------------------------------------------------
@@ -169,8 +171,9 @@ const PROPS = [
   { file: 'bottle-red.glb', src: join(KF, 'wine-red.glb'), author: 'Kenney', url: 'https://kenney.nl/assets/food-kit' },
   { file: 'bottle-white.glb', src: join(KF, 'wine-white.glb'), author: 'Kenney', url: 'https://kenney.nl/assets/food-kit' },
   { file: 'glass-cocktail.glb', src: join(KF, 'cocktail.glb'), author: 'Kenney', url: 'https://kenney.nl/assets/food-kit' },
-  // High setting only: a hero chandelier (no transmission materials)
-  { file: 'chandelier-high.glb', src: join(PH, 'Chandelier_02/Chandelier_02_1k.gltf'), author: 'Poly Haven', url: 'https://polyhaven.com/a/Chandelier_02', size: 512 },
+  // High setting only: a hero chandelier (no transmission materials), simplified from 21k
+  // triangles to 6k (its arms' turned profiles lose facets nobody sees from under it)
+  { file: 'chandelier-high.glb', src: join(PH, 'Chandelier_02/Chandelier_02_1k.gltf'), author: 'Poly Haven', url: 'https://polyhaven.com/a/Chandelier_02', size: 512, simplify: 0.002 },
 ];
 for (const p of PROPS) {
   const doc = await io.read(p.src);
@@ -180,7 +183,7 @@ for (const p of PROPS) {
   }
   const src = join(tmp, basename(p.file));
   await io.write(src, doc);
-  optimize(src, join(MODELS, p.file), ['--texture-compress', 'webp', '--texture-size', String(p.size ?? 1024)]);
+  optimize(src, join(MODELS, p.file), ['--texture-compress', 'webp', '--texture-size', String(p.size ?? 1024)], p.simplify);
   credits.push({ file: p.file, from: p.src.slice(stage.length + 1), author: p.author, license: 'CC0 1.0', url: p.url });
   console.log(`  ${p.file.padEnd(28)} ${kb(join(MODELS, p.file))} KB`);
 }

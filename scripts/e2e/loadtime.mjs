@@ -4,7 +4,8 @@
 // its bytes on the wire, and anything fetched twice. Point it at a production build (`vite preview`
 // of dist/casino with the worker behind it) for real sizes; the dev server's are unbundled.
 //
-// Usage: node scripts/e2e/loadtime.mjs [port] [--net none|4g|3g] [--runs N] [--name perf_load]
+// Usage: node scripts/e2e/loadtime.mjs [port] [--net none|4g|3g] [--runs N] [--name perf_load] [--list]
+//   --list: every request too, biggest first (kB on the wire, whether before the login screen).
 //   4g: 9 Mbps down, 1.5 up, 150 ms round trips; 3g: 1.6 Mbps, 0.75 up, 300 ms.
 
 import { chromium } from 'playwright';
@@ -98,6 +99,10 @@ for (let run = 0; run < runs; run++) {
   };
   all.push(res);
   console.log(JSON.stringify(res));
+  if (argv.includes('--list')) {
+    const early = new Set(atLogin.map((r) => r.url));
+    for (const r of [...list].sort((a, b) => (b.bytes ?? 0) - (a.bytes ?? 0))) console.log(`  ${((r.bytes ?? 0) / 1024).toFixed(1).padStart(7)} kB ${early.has(r.url) ? 'pre ' : 'post'} ${r.url.replace(/^.*\/casino\//, '')}`);
+  }
   await ctx.close();
 }
 if (runs > 1) {
