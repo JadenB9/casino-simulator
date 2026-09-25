@@ -40,7 +40,6 @@ export interface FxView {
   /** The room the camera is in, and the rooms being drawn. */
   here: string;
   visible: ReadonlySet<string>;
-  eye: THREE.Vector3;
 }
 
 export interface Effect {

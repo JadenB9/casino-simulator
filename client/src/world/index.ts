@@ -442,7 +442,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
       const f = world.focus;
       lighting.setFocus(f && f.zone !== 'slots' && f.game !== 'videopoker' ? focusAt.copy(f.anchor.position) : null);
       // the shop's effects: before the lights settle, since they tint them and borrow the focus spot
-      fx.update(dt, { here: visibility.room, visible: everything ? allRooms : visibility.visible, eye: engine.camera.position }, interact.seated !== null);
+      fx.update(dt, { here: visibility.room, visible: everything ? allRooms : visibility.visible }, interact.seated !== null);
       lighting.update(dt);
       // Seated, the camera is a metre from lit felt, cards and brass: nothing on a table glows
       // there; at a machine its own lights do, a little.

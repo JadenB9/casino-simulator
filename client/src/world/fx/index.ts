@@ -196,7 +196,6 @@ export class FxPlayer {
       }
     }
     this.book.prune(now);
-    this.group.visible = true;
     this.statues.group.visible = view.here === 'lobby' || view.visible.has('lobby');
     if ((this.captionIn -= dt) <= 0) {
       this.captionIn = 0.25;
