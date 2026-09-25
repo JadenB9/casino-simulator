@@ -337,16 +337,17 @@ function bounds(rooms: RoomSpec[]): Rect {
 export const PLANTER = { r: 0.32, h: 0.46, seat: 0.42 };
 export const PALM_PLANTER = { r: 0.5, h: 0.62, seat: 0.55 };
 /**
- * Per metre of plant: the model's own pot or root ball at its foot (the planter is made wider than
- * that), the leaves' spread, and where the leaves start as a fraction of its height.
+ * Per metre of plant, measured from the middle of its foot (props.ts stands each on it): the
+ * model's own pot or root ball there (the planter is made wider than that), the leaves' spread,
+ * and where the leaves start as a fraction of its height.
  */
 export const LEAVES: Record<PlantKind | 'palm', { base: number; r: number; from: number }> = {
-  'plant-a': { base: 0.33, r: 0.71, from: 0.03 },
-  'plant-b': { base: 0.21, r: 0.77, from: 0.05 },
-  palm: { base: 0.22, r: 0.64, from: 0.39 },
+  'plant-a': { base: 0.26, r: 0.71, from: 0.03 },
+  'plant-b': { base: 0.15, r: 0.77, from: 0.05 },
+  palm: { base: 0.09, r: 0.64, from: 0.39 },
 };
-/** A palm's trunk leans off the pot's centre (the model is centred on its fronds): its reach, per metre. */
-const PALM_TRUNK = 0.23;
+/** How far a palm's trunk reaches from the middle of its foot, per metre (it wanders a little). */
+const PALM_TRUNK = 0.12;
 /** Walkers keep this far from a palm's centre (under the low fronds). */
 export const PALM_WALK = 1.0;
 /** How near a walker comes to a plant's centre: through the leaf tips, never the pot. */
@@ -856,13 +857,17 @@ function planWalls(rooms: PlannedRoom[], doors: PlannedDoor[], windows: Window[]
       }
     }
   }
-  // extend each run over the wall thickness where it ends at a corner (not where the next run on
-  // the same line carries on), so corners close
+  // extend each run over the wall thickness where it ends at a corner, so corners close: not where
+  // the next run on the same line carries on, and not where it meets a wall running on past it (a
+  // T): there the other wall already fills the joint, and an end pushed through to its far face
+  // would sit in that face and flicker against it
   const ends = out.map((w) => ({ w, a0: w.a0, a1: w.a1 }));
   for (const e of ends) {
     const touching = (v: number) => ends.some((o) => o !== e && o.w.axis === e.w.axis && o.w.c === e.w.c && (Math.abs(o.a0 - v) < 1e-6 || Math.abs(o.a1 - v) < 1e-6));
-    if (!touching(e.a0)) e.w.a0 -= WALL / 2;
-    if (!touching(e.a1)) e.w.a1 += WALL / 2;
+    const across = (v: number, lo: number, hi: number) => ends.some((o) => o.w.axis !== e.w.axis && Math.abs(o.w.c - v) < 1e-6 && o.a0 <= lo + 1e-6 && o.a1 >= hi - 1e-6);
+    const through = (v: number) => across(v, e.w.c - 0.01, e.w.c) && across(v, e.w.c, e.w.c + 0.01);
+    if (!touching(e.a0) && !through(e.a0)) e.w.a0 -= WALL / 2;
+    if (!touching(e.a1) && !through(e.a1)) e.w.a1 += WALL / 2;
   }
   // openings: doors (a lintel stays over them) and windows (a sill below, a head above)
   const cut = (list: WallPiece[], o: { axis: 'x' | 'z'; c: number; a0: number; a1: number }, keep: [number, number][]): WallPiece[] => {

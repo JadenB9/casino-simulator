@@ -29,9 +29,15 @@
 .bq-money-val { font-size: 22px; line-height: 1; color: var(--ink); }
 .bq-money-own { margin-left: auto; font-size: 14px; letter-spacing: 0.06em; color: var(--ink-3); }
 
-.bq-tabs { padding: 12px 24px 8px; }
+.bq-tabs { display: grid; gap: 8px; padding: 12px 24px 8px; }
 .bq-seg { display: flex; width: 100%; }
 .bq-seg .seg-btn { flex: 1; padding: 0 4px; font-size: 14px; letter-spacing: 0.06em; }
+/* the kinds under Wear: quieter than the sections, text with a rule under the one picked */
+.bq-sub { display: flex; width: 100%; flex-wrap: nowrap; border: 0; border-radius: 0; border-bottom: 1px solid var(--line); overflow: visible; }
+.bq-sub .seg-btn { flex: 1; height: 30px; padding: 0 2px; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; font-size: 13px; letter-spacing: 0.08em; color: var(--ink-3); }
+.bq-sub .seg-btn[aria-checked='true'] { background: none; color: var(--brass-hi); border-bottom-color: var(--brass-hi); }
+/* something new in there you don't have yet: a small brass dot after the label */
+.bq-tabs .seg-btn.has-new::after { content: ''; display: inline-block; width: 5px; height: 5px; margin-left: 5px; border-radius: 50%; background: var(--brass-hi); vertical-align: 3px; }
 
 .bq-list { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 2px 12px 8px; }
 .bq-item { display: grid; grid-template-columns: 1fr auto; column-gap: 14px; row-gap: 3px; width: 100%; padding: 11px 12px 12px 14px; border: 0; border-left: 2px solid transparent; border-bottom: 1px solid rgba(214, 178, 110, 0.09); background: none; color: var(--ink-2); text-align: left; cursor: pointer; transition: background 0.15s, border-color 0.15s; }
@@ -43,8 +49,24 @@
 .bq-item.short .bq-price { color: var(--ink-3); }
 .bq-about { font-size: 14px; line-height: 1.3; color: var(--ink-3); }
 .bq-chip { align-self: start; justify-self: end; min-width: 58px; padding: 2px 6px; border: 1px solid transparent; border-radius: 3px; font-size: 11px; line-height: 14px; letter-spacing: 0.14em; text-align: center; text-transform: uppercase; }
-.bq-chip.owned { color: var(--ink-2); border-color: var(--line-strong); }
-.bq-chip.wearing { color: #1d140a; background: var(--brass); border-color: var(--brass); }
+.bq-chip.owned, .bq-chip.earned { color: var(--ink-2); border-color: var(--line-strong); }
+.bq-chip.wearing, .bq-chip.riding, .bq-chip.playing { color: #1d140a; background: var(--brass); border-color: var(--brass); }
+.bq-chip.queued { color: var(--brass-hi); border-color: var(--brass); }
+.bq-chip.new { min-width: 0; color: var(--brass-hi); letter-spacing: 0.18em; }
+.bq-meta { display: flex; gap: 10px; margin-bottom: 2px; font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--brass); }
+.bq-meta span + span::before { content: ''; display: inline-block; width: 3px; height: 3px; margin: 0 10px 0 0; border-radius: 50%; background: var(--ink-3); vertical-align: 3px; }
+.bq-about { display: flex; flex-direction: column; }
+.bq-group { margin: 14px 2px 4px 14px; font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-3); }
+.bq-item.reward .bq-name { color: var(--ink-2); }
+.bq-item.reward .bq-price { font-family: var(--serif); font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--brass); }
+/* the statue section: who stands in the lobby now */
+.bq-statues { padding: 2px 0 6px; }
+.bq-statue { display: grid; grid-template-columns: 26px 1fr auto; align-items: baseline; gap: 10px; padding: 9px 12px 9px 14px; border-bottom: 1px solid rgba(214, 178, 110, 0.09); }
+.bq-statue-n { font-family: var(--serif); font-size: 15px; color: var(--brass); }
+.bq-statue-name { font-size: 17px; color: var(--ink); }
+.bq-statue-at { font-size: 14px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.bq-statue.mine .bq-statue-name { color: var(--brass-hi); }
+.bq-empty { margin: 6px 14px 0; font-size: 15px; line-height: 1.4; color: var(--ink-3); }
 
 .bq-foot { display: grid; gap: 8px; padding: 14px 24px 18px; border-top: 1px solid var(--line); background: rgba(10, 8, 7, 0.4); }
 .bq-sel { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
@@ -54,6 +76,9 @@
 .bq-status.ok { color: var(--win); }
 .bq-status.err { color: var(--lose); }
 .bq-primary { height: 42px; font-size: 17px; }
+.bq-primary.armed { box-shadow: 0 0 0 2px rgba(241, 213, 154, 0.35), 0 0 26px rgba(241, 213, 154, 0.35); }
+/* the Headline's preview: your name in lights */
+.bq-cap-name.led { font-family: var(--ui); font-weight: 700; letter-spacing: 0.22em; color: #ffb347; text-shadow: 0 0 6px rgba(255, 150, 40, 0.9), 0 0 22px rgba(255, 110, 20, 0.55); }
 .bq-confirm-price { margin: 2px 0 4px !important; font-size: 30px !important; color: var(--brass-hi) !important; font-variant-numeric: tabular-nums; }
 
 @media (max-width: 760px) {
@@ -68,6 +93,30 @@
   .bq-money, .bq-tabs, .bq-foot { padding-left: 16px; padding-right: 16px; }
   .bq-list { padding: 2px 4px 8px; }
   .bq-seg .seg-btn { font-size: 13px; }
+}
+
+/* ---------------------------------------------------------------- effects (HUD) */
+
+/* Docked on the right over the floor, no dimming: what you buy goes off in view. */
+.sheet-scrim:has(> .fx-sheet) { display: flex; background: none; justify-content: flex-end; align-items: flex-start; padding: 76px 16px 16px; }
+.sheet.fx-sheet { width: min(430px, 100%); max-height: calc(100vh - 92px); overflow: auto; background: rgba(14, 12, 10, 0.9); }
+.fx-list { display: grid; }
+.fx-row { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 12px; padding: 9px 8px 10px; margin: 0 -8px; border-bottom: 1px solid rgba(214, 178, 110, 0.09); border-left: 2px solid transparent; transition: background 0.15s; }
+.fx-row.on { border-left-color: var(--brass); }
+.fx-row.armed { background: rgba(226, 190, 118, 0.08); }
+.fx-text { display: grid; gap: 2px; min-width: 0; }
+.fx-name { display: flex; align-items: center; gap: 9px; font-size: 17px; color: var(--ink); }
+.fx-name .kc { min-width: 20px; height: 19px; font-size: 11px; color: var(--ink-3); }
+.fx-meta { font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--brass); }
+.fx-when { min-height: 0; font-size: 13.5px; color: var(--ink-3); }
+.fx-when:empty { display: none; }
+.fx-row.on .fx-when { color: var(--brass-hi); }
+.fx-price { min-width: 76px; font-size: 16px; text-align: right; color: var(--ink-2); }
+.fx-play { min-width: 82px; height: 32px; padding: 0 12px; font-size: 14px; }
+.fx-foot { margin-top: 10px; padding-top: 12px; border-top: 1px solid var(--line); justify-content: flex-end; }
+@media (max-width: 560px) {
+  .sheet-scrim:has(> .fx-sheet) { padding: 60px 8px 8px; }
+  .fx-price { min-width: 0; }
 }
 
 /* ---------------------------------------------------------------- bar */

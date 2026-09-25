@@ -1,16 +1,33 @@
-// The Controls block of the Settings sheet: whether the floor holds the mouse (so moving it always
-// looks around) or looks only while dragging, and how fast it turns the camera. Both apply at once:
-// world/mouse.ts tells the walking player. Touch screens have no mouse to hold, so they skip it.
+// The Controls block of the Settings sheet: the camera (behind your character or through its eyes,
+// F on the floor switches too), whether the floor holds the mouse (so moving it always looks
+// around) or looks only while dragging, and how fast it turns the camera. All apply at once:
+// world/mouse.ts tells the walking player. Touch screens have no mouse to hold, so they get the
+// camera only.
 
 import { el } from '../kit.ts';
 import { segmented } from './parts.ts';
-import { SENS_MAX, SENS_MIN, loadMouse, setMouseSettings } from '../../world/mouse.ts';
+import { SENS_MAX, SENS_MIN, loadMouse, setMouseSettings, type View } from '../../world/mouse.ts';
 
 type Row = (label: string, control: HTMLElement, note?: HTMLElement) => HTMLElement;
 
 export function controlSettings(row: Row): HTMLElement[] {
-  if (!matchMedia('(any-pointer: fine)').matches) return [];
   const m = loadMouse();
+  const fine = matchMedia('(any-pointer: fine)').matches;
+  const view = segmented<View>(
+    'Camera',
+    [
+      { id: 'third', label: 'Third person' },
+      { id: 'first', label: 'First person' },
+    ],
+    m.view,
+    (v) => setMouseSettings({ view: v }),
+  );
+  const camera = row(
+    'Camera',
+    view.root,
+    el('p', 'set-note', fine ? 'Third person follows behind you; first person sees the floor through your eyes. F switches on the floor.' : 'Third person follows behind you; first person sees the floor through your eyes.'),
+  );
+  if (!fine) return [el('h3', 'section-label', 'Controls'), camera];
   const look = segmented<'lock' | 'drag'>(
     'Mouse look',
     [
@@ -37,6 +54,7 @@ export function controlSettings(row: Row): HTMLElement[] {
   wrap.append(input, value);
   return [
     el('h3', 'section-label', 'Controls'),
+    camera,
     row('Mouse look', look.root, el('p', 'set-note', 'Locked: on the floor, moving the mouse looks around. Esc frees the cursor and a click on the floor takes it back. Drag: hold the button and drag to look.')),
     row('Sensitivity', wrap),
   ];
