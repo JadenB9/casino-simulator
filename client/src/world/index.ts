@@ -230,7 +230,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
   collide(plan, col);
   // v6 city6: the elevators in the lobby (built into the lobby's batch), and the zones they go to
   const ui0 = opts.ui ?? document.getElementById('ui') ?? document.body;
-  const city = new City({ root, scene, renderer, camera: engine.camera, mats, col, quality, ui: ui0, sfx: opts.sfx }, batch, glow);
+  const city = new City({ root, scene, renderer, camera: engine.camera, mats, col, quality, ui: ui0, sfx: opts.sfx, door: { x: (plan.door.x0 + plan.door.x1) / 2, z: plan.door.z, width: plan.door.x1 - plan.door.x0, height: plan.door.height } }, batch, glow);
   const lod = new StationLod(stations, quality);
   const decor = buildDecor(plan, stations, batch, mats, glow);
   buildPools(decor.pools, downlights, plan, batch, mats);
@@ -260,6 +260,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
     characters.load(look).catch((err) => console.warn('character failed to load', err)),
     staff.load().catch((err) => console.warn('staff failed to load', err)),
     mannequins.load().catch((err) => console.warn('mannequins failed to load', err)),
+    city.load(), // v6 city6: the street doors' leaves
   ]);
   // which seats have a chair or stool (other players sit on them; everywhere else they stand)
   measureSeats(stations, (s) => GAMES[s.game].seats(s.variant), [props.group, furniture.group]);
