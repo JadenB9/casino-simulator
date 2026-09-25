@@ -229,7 +229,9 @@ export const ROOMS: RoomSpec[] = [
     style: { floor: 'marble-floor', floorUv: 2.4, wall: 'wall', wainscot: 'wainscot', rail: 'brass', ceiling: 5.0, ceilingMat: 'ceiling', kind: 'tray', downlights: 0, cove: 'warm', ambient: { sky: '#ffe2b8', ground: '#3a2016', k: 1.45 } },
     stations: [],
     furniture: [
-      { kind: 'directory', x: -4.3, z: 2.2, yaw: 0.75 },
+      // the directory stands between the ways to the cashier and to the pit, facing the doors: in
+      // view as you come in, clear of the palms' fronds and of anyone's path
+      { kind: 'directory', x: -3.6, z: -0.3, yaw: 0.72 },
       { kind: 'bench', x: -6.2, z: -3.3, yaw: Math.PI / 2 },
       { kind: 'bench', x: 6.2, z: -3.3, yaw: -Math.PI / 2 },
       { kind: 'palm', x: -3.6, z: 4.8, yaw: 0 },
@@ -612,7 +614,8 @@ export const ROOMS: RoomSpec[] = [
       { kind: 'armchair', x: -2.4, z: 5.0, yaw: Math.PI },
     ],
     fixtures: [{ kind: 'counter', x0: 2.55, x1: 3.25, z0: -2.0, z1: 3.0 }],
-    hanging: [],
+    // over the counter, so the way to buy is plain from the door
+    hanging: [{ id: 'boutique-counter', x: 2.05, y: 2.62, z: 0.5, ry: -Math.PI / 2, w: 2.6, h: 0.42, kind: 'lit', text: 'PURCHASES & FITTINGS', color: '#ffe6b8' }],
     spots: [],
     aisles: [{ x0: -4.85, z0: -0.7, x1: 2.4, z1: 1.7 }],
     plants: [],

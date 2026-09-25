@@ -285,6 +285,11 @@ export function buildDecor(plan: FloorPlan, stations: WorldStation[], b: Batch, 
     b.box(brass, cx, 0.97, cz, k.x1 - k.x0 + 0.06, 0.05, len + 0.06);
     b.box(brass, k.x0 - 0.005, 0.1, cz, 0.01, 0.06, len);
     glow.box(GLOW.shelf, k.x0 - 0.02, 0.9, cz, 0.012, 0.012, len - 0.1);
+    // a brass service bell on the counter's front edge, where you'd ask
+    const bell = { x: k.x0 + 0.16, z: cz };
+    b.add(new THREE.CylinderGeometry(0.05, 0.055, 0.012, 20), m.get('marble-black'), { x: bell.x, y: 1.001, z: bell.z });
+    b.add(new THREE.SphereGeometry(0.042, 20, 8, 0, Math.PI * 2, 0, Math.PI / 2), brass, { x: bell.x, y: 1.007, z: bell.z });
+    b.add(new THREE.CylinderGeometry(0.007, 0.007, 0.022, 8), brass, { x: bell.x, y: 1.056, z: bell.z });
     const x1 = plan.boutique.wall;
     const x0 = x1 - 0.36;
     b.box(wood, (x0 + x1) / 2, 1.25, cz, 0.36, 2.5, len + 0.8, 1.2);
@@ -315,9 +320,12 @@ export function buildDecor(plan: FloorPlan, stations: WorldStation[], b: Batch, 
   }
 
   // --- planters, palms and plants --------------------------------------------------------------
+  const soil = m.get('soil');
   const planter = (x: number, z: number, r: number, h: number) => {
     b.add(new THREE.CylinderGeometry(r, r * 0.82, h, 24), lacquer, { x, y: h / 2, z });
     b.add(new THREE.TorusGeometry(r, 0.02, 6, 28), brass, new THREE.Matrix4().makeRotationX(Math.PI / 2).premultiply(new THREE.Matrix4().makeTranslation(x, h, z)));
+    // earth to the brim, the trunk (or the plant's own pot) standing in it
+    b.add(new THREE.CircleGeometry(r - 0.012, 24), soil, new THREE.Matrix4().makeRotationX(-Math.PI / 2).premultiply(new THREE.Matrix4().makeTranslation(x, h + 0.004, z)), 0.6);
   };
   for (const p of plan.palms) {
     into(p.room);

@@ -337,16 +337,17 @@ function bounds(rooms: RoomSpec[]): Rect {
 export const PLANTER = { r: 0.32, h: 0.46, seat: 0.42 };
 export const PALM_PLANTER = { r: 0.5, h: 0.62, seat: 0.55 };
 /**
- * Per metre of plant: the model's own pot or root ball at its foot (the planter is made wider than
- * that), the leaves' spread, and where the leaves start as a fraction of its height.
+ * Per metre of plant, measured from the middle of its foot (props.ts stands each on it): the
+ * model's own pot or root ball there (the planter is made wider than that), the leaves' spread,
+ * and where the leaves start as a fraction of its height.
  */
 export const LEAVES: Record<PlantKind | 'palm', { base: number; r: number; from: number }> = {
-  'plant-a': { base: 0.33, r: 0.71, from: 0.03 },
-  'plant-b': { base: 0.21, r: 0.77, from: 0.05 },
-  palm: { base: 0.22, r: 0.64, from: 0.39 },
+  'plant-a': { base: 0.26, r: 0.71, from: 0.03 },
+  'plant-b': { base: 0.15, r: 0.77, from: 0.05 },
+  palm: { base: 0.09, r: 0.64, from: 0.39 },
 };
-/** A palm's trunk leans off the pot's centre (the model is centred on its fronds): its reach, per metre. */
-const PALM_TRUNK = 0.23;
+/** How far a palm's trunk reaches from the middle of its foot, per metre (it wanders a little). */
+const PALM_TRUNK = 0.12;
 /** Walkers keep this far from a palm's centre (under the low fronds). */
 export const PALM_WALK = 1.0;
 /** How near a walker comes to a plant's centre: through the leaf tips, never the pot. */

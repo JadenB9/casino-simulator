@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Headless checks for the v6 building fixes (the dev floor, Vite only). Usage:
 //   node scripts/e2e/world6.mjs [port] [out dir] [checks...]
-//   checks: zfight doors palms directory prompts (default: all)
+//   checks: zfight doors palms directory boutique prompts (default: all)
 // zfight: every mesh in the scene as drawn (the building's batch, the glows, furniture, props,
 //   signs, the directory, the stations' models), in world space, through zfight.ts: two
 //   differently dressed faces in one plane that overlap where anyone can look. Fails on any in
@@ -10,6 +10,7 @@
 // palms: every palm and plant from the side, the trunk against its planter's middle
 //   (palm-<n>.png), and the measured trunk base against the planter's centre.
 // directory: the lobby's board from the way in (directory-*.png), E on it opens it big.
+// boutique: the shop from its door and the prompt at the counter's end (boutique-*.png).
 // prompts: walks up to every E spot the floor offers (the boutique's counter and mannequins, the
 //   bar, each teller window, the cashier, seats, computers, the directory) from its natural
 //   approach and checks the prompt says the right thing, and that a station next to a spot still
@@ -21,7 +22,7 @@ import { mkdirSync } from 'node:fs';
 
 const [port = '6200', out = '/tmp/world6', ...wanted] = process.argv.slice(2);
 mkdirSync(out, { recursive: true });
-const all = ['zfight', 'doors', 'palms', 'directory', 'prompts'];
+const all = ['zfight', 'doors', 'palms', 'directory', 'boutique', 'prompts'];
 const checks = wanted.length ? wanted : all;
 const gpu = process.env.GPU === '1';
 const args = gpu ? ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'];
@@ -227,6 +228,209 @@ if (checks.includes('doors')) {
     await page.screenshot({ path: `${out}/${p.file}` });
   }
   console.log(`doors: ${poses.length} close-ups in ${out}`);
+  await page.close();
+}
+
+// --- palms and plants in their planters ----------------------------------------------------------
+if (checks.includes('palms')) {
+  const { page } = await openFloor('quality=high&view=overview');
+  const r = await page.evaluate(() => {
+    const { THREE, world, engine } = window.casino;
+    const plan = world.plan;
+    world.rooms.showAll(true);
+    engine.scene.updateMatrixWorld(true);
+    const props = engine.scene.getObjectByName('props');
+    const m = new THREE.Matrix4();
+    const v = new THREE.Vector3();
+    const out = [];
+    // each instance's foot (its lowest few centimetres) against the planter it stands in
+    for (const [kind, list] of [
+      ['palm', plan.palms],
+      ['plant-a', plan.plants.filter((p) => p.kind === 'plant-a')],
+      ['plant-b', plan.plants.filter((p) => p.kind === 'plant-b')],
+    ]) {
+      const g = props.getObjectByName(`prop:${kind}`);
+      const meshes = g ? g.children.filter((c) => c.isInstancedMesh) : [];
+      for (let i = 0; i < (meshes[0]?.count ?? 0); i++) {
+        const pts = [];
+        for (const mesh of meshes) {
+          mesh.getMatrixAt(i, m);
+          const pos = mesh.geometry.attributes.position;
+          for (let k = 0; k < pos.count; k++) {
+            v.fromBufferAttribute(pos, k).applyMatrix4(m).applyMatrix4(mesh.matrixWorld);
+            pts.push([v.x, v.y, v.z]);
+          }
+        }
+        const y0 = Math.min(...pts.map((p) => p[1]));
+        const foot = pts.filter((p) => p[1] < y0 + 0.06);
+        const fx = (Math.min(...foot.map((p) => p[0])) + Math.max(...foot.map((p) => p[0]))) / 2;
+        const fz = (Math.min(...foot.map((p) => p[2])) + Math.max(...foot.map((p) => p[2]))) / 2;
+        // the planter under it
+        let best = null;
+        for (const p of list) {
+          const d = Math.hypot(p.x - fx, p.z - fz);
+          if (!best || d < best.d) best = { p, d };
+        }
+        out.push({ kind, i, off: best ? +best.d.toFixed(3) : null, at: best ? [best.p.x, best.p.z, best.p.size, best.p.room] : null });
+      }
+    }
+    return out;
+  });
+  for (const p of r) {
+    if (p.off === null) fail(`${p.kind} #${p.i} stands in no planter`);
+    else if (p.off > 0.03) fail(`${p.kind} #${p.i} (${p.at[3]}) stands ${p.off} m off its planter's middle`);
+  }
+  console.log(`palms: ${r.length} palms and plants, the furthest foot ${Math.max(...r.map((p) => p.off ?? 0)).toFixed(3)} m off its planter's middle`);
+  // each palm from beside it, low, the way 2.png saw it
+  const palms = r.filter((p) => p.kind === 'palm');
+  for (const [n, p] of palms.entries()) {
+    const [x, z] = p.at;
+    await camera(page, [x + 1.6, 1.05, z + 1.1], [x, 0.75, z], 50);
+    await frames(page, 8);
+    await page.screenshot({ path: `${out}/palm-${n + 1}-${p.at[3]}.png` });
+  }
+  await page.close();
+}
+
+// --- the directory board: in view from the way in, and E opens it big -----------------------------
+if (checks.includes('directory')) {
+  const { page } = await openFloor('quality=high');
+  const board = await page.evaluate(() => {
+    const f = window.casino.world.plan.furniture.find((q) => q.kind === 'directory');
+    return f ? { x: f.x, z: f.z, yaw: f.yaw } : null;
+  });
+  if (!board) fail('no directory board in the lobby');
+  else {
+    // from the spawn (the camera behind the player, as a player comes in) and from part way over
+    await page.evaluate(() => window.casino.world.teleport(0, 12.8, Math.PI));
+    await frames(page, 20);
+    await page.screenshot({ path: `${out}/directory-spawn.png` });
+    const view = await page.evaluate(({ x, z }) => {
+      // is the board's face in the camera's view, and nothing solid of the palms' in the way?
+      const { THREE, engine } = window.casino;
+      const cam = engine.camera;
+      const v = new THREE.Vector3(x, 1.46, z).project(cam);
+      const ray = new THREE.Raycaster(cam.position.clone(), new THREE.Vector3(x, 1.46, z).sub(cam.position).normalize());
+      const hits = ray.intersectObjects(engine.scene.getObjectByName('props')?.children ?? [], true).filter((h) => h.distance < cam.position.distanceTo(new THREE.Vector3(x, 1.46, z)) - 0.1);
+      return { onScreen: Math.abs(v.x) < 0.95 && Math.abs(v.y) < 0.95 && v.z < 1, blocked: hits.map((h) => h.object.parent?.name ?? h.object.name) };
+    }, board);
+    if (!view.onScreen) fail('the directory is out of view from the spawn');
+    if (view.blocked.length) fail(`the directory is hidden from the spawn behind ${[...new Set(view.blocked)].join(', ')}`);
+    // walk up to it: 1.4 m in front of it, facing it
+    const at = { x: board.x + Math.sin(board.yaw) * 1.4, z: board.z + Math.cos(board.yaw) * 1.4 };
+    await page.evaluate(({ x, z, yaw }) => window.casino.world.teleport(x, z, yaw + Math.PI), { ...at, yaw: board.yaw });
+    await frames(page, 12);
+    const prompt = await page.evaluate(() => document.querySelector('.world-prompt:not([hidden])')?.textContent ?? '');
+    if (!/Read the directory/.test(prompt)) fail(`at the directory the prompt says "${prompt}"`);
+    await page.screenshot({ path: `${out}/directory-near.png` });
+    await page.keyboard.press('KeyE');
+    await frames(page, 12);
+    const sheet = await page.evaluate(() => {
+      const s = document.querySelector('.map-sheet');
+      return s ? { title: s.querySelector('h2, .sheet-title')?.textContent ?? s.textContent.slice(0, 40), w: s.getBoundingClientRect().width } : null;
+    });
+    if (!sheet) fail('E at the directory opened nothing');
+    else if (!/Floor Directory/.test(sheet.title)) fail(`E at the directory opened "${sheet.title}"`);
+    await page.screenshot({ path: `${out}/directory-open.png` });
+    console.log(`directory: at ${board.x.toFixed(2)}, ${board.z.toFixed(2)}; in view from the spawn; E opens "${sheet?.title}" (${Math.round(sheet?.w ?? 0)} px wide)`);
+  }
+  await page.close();
+}
+
+// --- the boutique: the counter reads as the place to buy -------------------------------------------
+if (checks.includes('boutique')) {
+  const { page } = await openFloor('quality=high');
+  const k = await page.evaluate(async () => {
+    const { lifePoints } = await import('/casino/src/world/life-points.ts');
+    return lifePoints(window.casino.world.plan).boutique.counter;
+  });
+  // from the shop's door, the way in from the lobby
+  await camera(page, [7.6, 1.7, 9.5], [k.x, 1.5, (k.z0 + k.z1) / 2], 60);
+  await frames(page, 10);
+  await page.screenshot({ path: `${out}/boutique-door.png` });
+  // walked up to the counter's north end, looking at it: the prompt
+  await page.evaluate(() => {
+    window.__cam?.();
+    window.__cam = null;
+    window.casino.world.player.setEnabled(true);
+    window.casino.world.player.character.root.visible = true;
+  });
+  await page.evaluate(({ x, z }) => {
+    const { world } = window.casino;
+    world.teleport(x - 1.0, z, 0);
+    world.life.seating.player.camYaw = Math.atan2(1.0, -0.8) + Math.PI;
+  }, { x: k.x, z: k.z0 + 0.8 });
+  await frames(page, 20);
+  await page.screenshot({ path: `${out}/boutique-counter.png` });
+  await page.close();
+}
+
+// --- every E spot, from the way you'd walk up to it ----------------------------------------------
+if (checks.includes('prompts')) {
+  const { page } = await openFloor('quality=low');
+  const r = await page.evaluate(async () => {
+    const { lifePoints } = await import('/casino/src/world/life-points.ts');
+    const { world } = window.casino;
+    const plan = world.plan;
+    const pts = lifePoints(plan);
+    const frame = () => new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)));
+    const prompt = () => {
+      const e = document.querySelector('.world-prompt');
+      return e && !e.hidden ? e.textContent : '';
+    };
+    const player = world.life.seating.player;
+    // stand at (x, z) with the body facing `face` and the camera looking toward (lx, lz)
+    const at = async (x, z, face, look) => {
+      world.teleport(x, z, face);
+      if (look) player.camYaw = Math.atan2(look[0] - x, look[1] - z) + Math.PI;
+      await frame();
+      await frame();
+      return prompt();
+    };
+    const out = [];
+    const want = async (what, re, x, z, face, look) => {
+      const got = await at(x, z, face, look);
+      out.push({ what, ok: re.test(got), got });
+    };
+    const b = pts.boutique;
+    if (b) {
+      const k = b.counter;
+      // along the whole counter front: walking along it (the body faces along), looking at it
+      for (const t of [0.1, 0.5, 0.9]) {
+        const z = k.z0 + (k.z1 - k.z0) * t;
+        await want(`boutique counter at ${t}`, /Browse the boutique/, k.x - 0.9, z, 0, [k.x, z]);
+        await want(`boutique counter at ${t}, facing it`, /Browse the boutique/, k.x - 1.3, z, Math.PI / 2);
+      }
+      for (const [i, m] of b.mannequins.entries()) {
+        for (const a of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) {
+          const x = m.at.x + Math.sin(a) * (m.at.r + 0.7);
+          const z = m.at.z + Math.cos(a) * (m.at.r + 0.7);
+          // skip sides against a wall or another piece (nobody stands there)
+          if (!plan.rooms.find((r) => r.id === 'boutique') || x < 7.4 || x > 16.6 || z < 3.4 || z > 14.6) continue;
+          await want(`mannequin ${i + 1} from ${Math.round((a * 180) / Math.PI)}°`, /Browse · /, x, z, a + Math.PI);
+        }
+      }
+      for (const [i, c] of b.cases.entries()) await want(`case ${i + 1}`, /Browse the cases/, c.x, c.z, c.yaw);
+    }
+    // each teller window, straight on and off to either side
+    for (const [i, w] of pts.bank.windows.entries()) {
+      for (const dx of [-0.6, 0, 0.6]) await want(`teller ${i + 1} ${dx}`, /Bank/, w.front.x + dx, w.front.z + 0.9, Math.PI);
+    }
+    // the bar, along its front, looking at the counter
+    const f = pts.bar.front;
+    for (const t of [0.35, 0.6, 0.85]) {
+      const z = f.z0 + (f.z1 - f.z0) * t;
+      await want(`bar at ${t}`, /Order|Sit|Video Poker/, (f.x0 + f.x1) / 2, z, 0, [f.x1 + 1, z]);
+    }
+    // the video poker machines in the counter and the computers at their desks: the station first
+    for (const s of world.stations.filter((q) => q.game === 'videopoker' || q.zone === 'online')) {
+      const d = s.footprint.depth / 2 + 0.7;
+      await want(`${s.id} over its neighbours`, new RegExp(s.name), s.anchor.position.x + Math.sin(s.yaw) * d, s.anchor.position.z + Math.cos(s.yaw) * d, s.yaw + Math.PI);
+    }
+    return out;
+  });
+  for (const x of r) if (!x.ok) fail(`prompt at ${x.what}: "${x.got}"`);
+  console.log(`prompts: ${r.filter((x) => x.ok).length}/${r.length} spots offer the right thing`);
   await page.close();
 }
 
