@@ -23,9 +23,8 @@
 
 import type { GameEvent, GameId, RoundResult, Step } from '../../shared/src/engine.ts';
 import { CATALOG, isGameId } from '../../shared/src/games/catalog.ts';
-import { FEATS, FEAT_GAMES, TEN_X_MULTIPLE, featOf, isMaxTally, tallyValue } from '../../shared/src/feats.ts';
-import type { TableServerMsg } from '../../shared/src/protocol.ts';
-import type { EmoteId } from '../../shared/src/protocol.ts';
+import { FEATS, TEN_X_MULTIPLE, featOf, isMaxTally, tallyValue } from '../../shared/src/feats.ts';
+import type { EmoteId, TableServerMsg } from '../../shared/src/protocol.ts';
 import { LINEUP, isSlotId } from '../../shared/src/games/slots/lineup.ts';
 import { ROYAL_FLUSH, STRAIGHT_FLUSH as VP_STRAIGHT_FLUSH, FOUR_OF_A_KIND } from '../../shared/src/games/videopoker/hands.ts';
 import { category as threeCardCategory, score as threeCardScore, STRAIGHT_FLUSH as TC_STRAIGHT_FLUSH, TRIPS as TC_TRIPS } from '../../shared/src/games/threecard/rules.ts';
@@ -673,4 +672,3 @@ export function stepFacts(
   return out;
 }
 
-export { FEAT_GAMES };
