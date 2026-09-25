@@ -135,7 +135,7 @@ export function stepCoins(b: Bits, dt: number, linger = 7): void {
   for (let i = 0; i < b.n; i++) {
     b.age[i]! += dt;
     if (b.landed[i]) {
-      // age counts from landing once it's down (land() leaves it where it was: reset below)
+      // once it's down, its age counts from when it landed
       if (b.age[i]! > linger) {
         b.size[i]! -= dt * 1.5;
         if (b.size[i]! <= 0) {

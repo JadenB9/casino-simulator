@@ -14,7 +14,7 @@
 // an effect makes is let go when it ends; what they share (stock.ts) stays with the floor.
 
 import * as THREE from 'three';
-import type { FxEvent, Statue } from '../../../../shared/src/items.ts';
+import type { EffectReach, FxEvent, Statue } from '../../../../shared/src/items.ts';
 import type { Quality } from '../../render/engine3d.ts';
 import { serverNow } from '../../net/clock.ts';
 import type { Sfx } from '../../audio/sfx.ts';
@@ -23,10 +23,10 @@ import type { Characters, Person } from '../characters.ts';
 import type { Collider } from '../collision.ts';
 import type { Lighting } from '../lighting.ts';
 import type { Mats } from '../materials.ts';
-import type { FloorPlan } from '../layout.ts';
+import { roomAt, type FloorPlan } from '../layout.ts';
 import type { CharacterSource } from '../emotes.ts';
 import type { Marquee } from '../marquee.ts';
-import { FxBook, fxKey, phaseOf } from './timing.ts';
+import { FxBook, fxKey, phaseOf, reachOf } from './timing.ts';
 import { fxRoom, seenFrom } from './scope.ts';
 import { FxCaption, captionOf } from './caption.ts';
 import { Stock } from './stock.ts';
@@ -44,7 +44,6 @@ import type { Effect, FxView, FxWorld } from './types.ts';
 import './fx.css';
 
 export type { Hanger } from './disco.ts';
-export { FxBook, phaseOf, envelope, fxKey, playable } from './timing.ts';
 
 /** Seconds into an effect after which a page joining counts as late (no opening bang, no burst). */
 const LATE_S = 1.2;
@@ -73,7 +72,9 @@ interface Playing {
   ev: FxEvent;
   effect: Effect;
   group: THREE.Group;
+  /** The room it was bought in, and how far it reaches. */
   room: string | null;
+  reach: EffectReach;
 }
 
 export class FxPlayer {
@@ -178,7 +179,10 @@ export class FxPlayer {
     for (const [key, p] of this.playing) {
       // one the floor no longer lists (it ended while we were away) winds down now
       const ph = this.book.get(key) ? phaseOf(p.ev, now) : { t: (now - p.ev.at) / 1000, left: 0 };
-      p.group.visible = seenFrom(this.o.plan, p.ev, view.here, view.visible, p.room);
+      // one round its buyer is drawn wherever the buyer's room can be seen (they may have walked on)
+      const buyer = p.reach === 'you' ? this.world.where(p.ev.id) : null;
+      const room = buyer ? (roomAt(this.o.plan, buyer.x, buyer.z)?.id ?? p.room) : p.room;
+      p.group.visible = seenFrom(this.o.plan, p.ev, view.here, view.visible, room);
       let alive = false;
       try {
         alive = p.effect.update(dt, ph.t, ph.left, view);
@@ -277,6 +281,6 @@ export class FxPlayer {
       // nothing to draw (a point outside every room): it still counts as started
       effect = { update: (_dt, _t, left) => left > 0, dispose: () => {} };
     }
-    this.playing.set(fxKey(ev), { ev, effect, group, room: fxRoom(this.o.plan, ev)?.id ?? null });
+    this.playing.set(fxKey(ev), { ev, effect, group, room: fxRoom(this.o.plan, ev)?.id ?? null, reach: reachOf(ev.fx) });
   }
 }
