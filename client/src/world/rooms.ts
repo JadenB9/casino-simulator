@@ -12,6 +12,7 @@
 // of it and PI north of it; a seat's yaw is the way its sitter faces.
 
 import type { GameId } from '../../../shared/src/engine.ts';
+import type { ItemKind } from '../../../shared/src/items.ts';
 
 export type RoomId = 'lobby' | 'pit' | 'slots' | 'bar' | 'lounge' | 'poker' | 'salon' | 'online' | 'yard' | 'bank' | 'boutique';
 
@@ -114,8 +115,8 @@ export interface FurnitureItem {
   x: number;
   z: number;
   yaw: number;
-  /** A mannequin's look: the shop items it wears; `item` is the piece the boutique opens at. */
-  wears?: { body: 'm' | 'f'; outfit: string; clothes?: string; chain?: string; grill?: string; watch?: string; hat?: string; shades?: string; item: string };
+  /** A mannequin's look: the shop items it wears, by kind (a ride it stands on); `item` is the piece the boutique opens at. */
+  wears?: { body: 'm' | 'f'; outfit: string; item: string } & Partial<Record<ItemKind, string>>;
   /** A palm's height (fitted to the ceiling when left out). */
   size?: number;
 }
@@ -606,9 +607,11 @@ export const ROOMS: RoomSpec[] = [
     stations: [],
     furniture: [
       { kind: 'mannequin', x: -3.8, z: -3.1, yaw: -Math.PI / 2, wears: { body: 'm', outfit: 'suit', clothes: 'white-tuxedo', chain: 'cuban-link', grill: 'full-gold', item: 'white-tuxedo' } },
-      { kind: 'mannequin', x: -3.8, z: 4.1, yaw: -Math.PI / 2, wears: { body: 'f', outfit: 'dress', clothes: 'fur-coat', chain: 'iced-cuban', shades: 'gold-aviators', item: 'fur-coat' } },
+      { kind: 'mannequin', x: -3.8, z: 4.1, yaw: -Math.PI / 2, wears: { body: 'f', outfit: 'smart', clothes: 'leather-jacket', chain: 'tennis-chain', shades: 'round-shades', hat: 'cowboy-hat', item: 'leather-jacket' } },
       { kind: 'mannequin', x: 0.9, z: -5.05, yaw: 0, wears: { body: 'm', outfit: 'suit', chain: 'dice-pendant', grill: 'diamond-set', watch: 'iced-watch', shades: 'gold-aviators', item: 'dice-pendant' } },
-      { kind: 'mannequin', x: 0.9, z: 5.05, yaw: Math.PI, wears: { body: 'm', outfit: 'suit', clothes: 'velvet-jacket', chain: 'ace-pendant', watch: 'iced-watch', hat: 'black-fedora', item: 'velvet-jacket' } },
+      { kind: 'mannequin', x: 0.9, z: 5.05, yaw: Math.PI, wears: { body: 'm', outfit: 'suit', clothes: 'sequin-suit', chain: 'tennis-chain', watch: 'rose-watch', hat: 'top-hat', item: 'sequin-suit' } },
+      // in the corner by the counter, on a hoverboard, facing along the east wall
+      { kind: 'mannequin', x: 3.7, z: -4.7, yaw: 0, wears: { body: 'm', outfit: 'suit', ride: 'hoverboard', shades: 'diamond-shades', hat: 'gold-crown', item: 'hoverboard' } },
       { kind: 'case', x: -0.9, z: -2.4, yaw: 0 },
       { kind: 'case', x: -0.9, z: 3.4, yaw: 0 },
       { kind: 'armchair', x: -2.4, z: 5.0, yaw: Math.PI },
