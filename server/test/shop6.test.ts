@@ -381,6 +381,33 @@ describe('POST /shop/fx', () => {
     watcher.ws.close(1000, 'bye');
   });
 
+  it('gives the slot back when the charge is refused, and plays a hold only once', async () => {
+    const p = await player('s6fxcancel');
+    const c = await onFloor(p, 2400, 400);
+    const first = op();
+    const held = await floor().fxReserve(p.id, 'fx-disco', first);
+    expect('event' in held).toBe(true);
+    // a second hold in the Lounge queues behind the first...
+    const q = await player('s6fxcancel2');
+    const qc = await onFloor(q, 2500, 500);
+    const qOp = op();
+    const behind = await floor().fxReserve(q.id, 'fx-round', qOp);
+    expect((behind as any).event.at).toBe((held as any).event.until + FX_GAP_MS);
+    // ...the same op again is the same hold, not a second one
+    expect(await floor().fxReserve(p.id, 'fx-disco', first)).toEqual(held);
+    // refused (the batch found the balance short): the slot is free again for what comes next
+    await floor().fxCancel(p.id, first);
+    expect(await floor().fxOf(p.id, first)).toBeNull();
+    expect(await floor().fxConfirm(p.id, first)).toBeNull();
+    // confirming twice broadcasts once
+    const watcher = await onFloor(await player('s6fxcancel3'));
+    expect(await floor().fxConfirm(q.id, qOp)).toEqual((behind as any).event);
+    await floor().fxConfirm(q.id, qOp);
+    await sleep(80);
+    expect(watcher.msgs.filter((m) => m.t === 'fx' && m.id === q.id)).toHaveLength(1);
+    for (const s of [c, qc, watcher]) s.ws.close(1000, 'bye');
+  });
+
   it('a retry of a paid effect the floor never heard of plays it, without a second charge', async () => {
     const p = await player('s6fxreplay');
     const c = await onFloor(p, 1200, 900);
