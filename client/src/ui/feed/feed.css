@@ -1,7 +1,7 @@
 /* Big-win toasts: under the HUD, centred, in the row the dealer's line takes at a table. A brass
    edge on the left like the LED sign's trim, the name in the house serif, the amount in brass. */
 
-.bigwin-toasts { position: fixed; top: var(--below-hud); left: 50%; transform: translateX(-50%); z-index: 41; display: grid; justify-items: center; width: max-content; max-width: calc(100vw - 32px); }
+.bigwin-toasts { position: fixed; top: var(--below-hud); left: 50%; transform: translateX(-50%); z-index: 24; display: grid; justify-items: center; width: max-content; max-width: calc(100vw - 32px); }
 .bigwin-toast { position: relative; display: grid; gap: 2px; min-width: 240px; max-width: 100%; padding: 9px 18px 10px 20px; border-color: var(--line-strong); overflow: hidden; animation: bigwin-in 0.34s var(--ease); }
 .bigwin-toast::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: linear-gradient(var(--brass-hi), var(--brass)); }
 .bigwin-toast.out { opacity: 0; transform: translateY(-6px); transition: opacity 0.38s var(--ease), transform 0.38s var(--ease); }
