@@ -24,10 +24,19 @@ import { keno } from './keno/index.ts';
 import { hilo } from './hilo/index.ts';
 import { crash } from './crash/index.ts';
 import { banditwheel } from './banditwheel/index.ts';
+import { coinflip } from './coinflip/index.ts';
+import { wheel } from './wheel/index.ts';
+import { cases } from './cases/index.ts';
+import { diamonds } from './diamonds/index.ts';
+import { letitride } from './letitride/index.ts';
+import { paigow } from './paigow/index.ts';
+import { bingo } from './bingo/index.ts';
+import { pachinko } from './pachinko/index.ts';
 
 export const GAMES: Record<GameId, GameClientModule> = {
   blackjack, roulette, craps, baccarat, slots, videopoker, threecard, holdem, war, bigsix, sicbo,
-  plinko, tower, mines, dice, limbo, keno, hilo, crash, banditwheel, highcard,
+  plinko, tower, mines, dice, limbo, keno, hilo, crash, banditwheel,
+  coinflip, wheel, cases, diamonds, letitride, paigow, bingo, pachinko, highcard,
 };
 
 export { stubModule };

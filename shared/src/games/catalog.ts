@@ -72,6 +72,14 @@ export const CATALOG: Record<GameId, GameInfo> = {
   hilo: { id: 'hilo', name: 'Hi-Lo', prefix: 'hl', seats: { min: 1, max: 1 }, multiplayer: false, variants: [], online: true },
   crash: { id: 'crash', name: 'Crash', prefix: 'cs', seats: { min: 1, max: 12 }, multiplayer: true, variants: [], online: true, autoStart: true },
   banditwheel: { id: 'banditwheel', name: 'Bandit Wheel', prefix: 'bw', seats: { min: 1, max: 10 }, multiplayer: true, variants: [], autoStart: true },
+  coinflip: { id: 'coinflip', name: 'Coinflip', prefix: 'cf', seats: { min: 1, max: 1 }, multiplayer: false, variants: [], online: true },
+  wheel: { id: 'wheel', name: 'Wheel', prefix: 'wh', seats: { min: 1, max: 1 }, multiplayer: false, variants: [], online: true },
+  cases: { id: 'cases', name: 'Cases', prefix: 'ca', seats: { min: 1, max: 1 }, multiplayer: false, variants: [], online: true },
+  diamonds: { id: 'diamonds', name: 'Diamonds', prefix: 'dm', seats: { min: 1, max: 1 }, multiplayer: false, variants: [], online: true },
+  letitride: { id: 'letitride', name: 'Let It Ride', prefix: 'lr', seats: { min: 1, max: 7 }, multiplayer: true, variants: [] },
+  paigow: { id: 'paigow', name: 'Pai Gow Poker', prefix: 'pg', seats: { min: 1, max: 6 }, multiplayer: true, variants: [] },
+  bingo: { id: 'bingo', name: 'Bingo', prefix: 'bg', seats: { min: 1, max: 40 }, multiplayer: true, variants: [], autoStart: true },
+  pachinko: { id: 'pachinko', name: 'Pachinko', prefix: 'pa', seats: { min: 1, max: 1 }, multiplayer: false, variants: [] },
   highcard: { id: 'highcard', name: 'High Card', prefix: 'hc', seats: { min: 1, max: 6 }, multiplayer: true, variants: [], dev: true },
 };
 
