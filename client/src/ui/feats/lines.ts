@@ -3,7 +3,7 @@
 
 import { CATALOG } from '../../../../shared/src/games/catalog.ts';
 import type { GameId } from '../../../../shared/src/engine.ts';
-import { FEAT_GAMES, featOf, featsAt, tallyValue, titleOf, type Feat } from '../../../../shared/src/feats.ts';
+import { FEAT_GAMES, casinoDay, dailyFeats, featOf, featsAt, tallyValue, titleOf, type Feat } from '../../../../shared/src/feats.ts';
 import { emoteItem, wornItem } from '../../../../shared/src/items.ts';
 import { formatMoney } from '../../../../shared/src/money.ts';
 
@@ -14,7 +14,8 @@ export function dollars(cents: number): string {
 
 /** A tally kept in cents (amounts won) rather than a count. */
 export function isMoneyTally(key: string): boolean {
-  return key === 'won' || key === 'best' || key.startsWith('won:');
+  const k = key.replace(/^d:[^:]+:/, '');
+  return k === 'won' || k === 'best' || k.startsWith('won:');
 }
 
 export type RewardKind = 'cash' | 'item' | 'emote' | 'title';
@@ -40,8 +41,8 @@ export function progressOf(f: Feat, tally: Readonly<Record<string, number>>): { 
 }
 
 export interface FeatGroup {
-  /** 'house' for the ones earned anywhere, else the game. */
-  id: 'house' | GameId;
+  /** 'today' for the day's challenges, 'house' for the ones earned anywhere, else the game. */
+  id: 'today' | 'house' | GameId;
   name: string;
   /** Which part of the building: the rail's headings. */
   part: 'The house' | 'Tables' | 'Machines' | 'Online';
@@ -50,8 +51,8 @@ export interface FeatGroup {
 
 const MACHINES = new Set<GameId>(['slots', 'videopoker', 'pachinko']);
 
-/** Everything on the list, the house first, then each game in the catalog's order. */
-export function featGroups(): FeatGroup[] {
+/** Everything on the list: today's three, the house's, then each game in the catalog's order. */
+export function featGroups(now = Date.now()): FeatGroup[] {
   const games = FEAT_GAMES.map((g): FeatGroup => ({
     id: g,
     name: CATALOG[g].name,
@@ -60,7 +61,16 @@ export function featGroups(): FeatGroup[] {
   }));
   const order: FeatGroup['part'][] = ['Tables', 'Machines', 'Online'];
   games.sort((a, b) => order.indexOf(a.part) - order.indexOf(b.part));
-  return [{ id: 'house', name: 'Anywhere', part: 'The house', feats: featsAt(null) }, ...games];
+  return [
+    { id: 'today', name: 'Today', part: 'The house', feats: dailyFeats(casinoDay(now)) },
+    { id: 'house', name: 'Anywhere', part: 'The house', feats: featsAt(null) },
+    ...games,
+  ];
+}
+
+/** The unlock card's small label: what kind of feat it was. */
+export function unlockKind(f: Feat): string {
+  return f.daily ? 'Daily challenge' : f.kind === 'challenge' ? 'Challenge complete' : 'Achievement';
 }
 
 /** The unlock card's small line: the game, then what came with it. */
@@ -73,7 +83,7 @@ export function unlockSub(f: Feat): string {
 export function feedLines(name: string, feat: string): { name: string; what: string; sub: string } | null {
   const f = featOf(feat);
   if (!f) return null;
-  return { name, what: f.name, sub: f.game ? CATALOG[f.game].name : f.kind === 'challenge' ? 'Challenge' : 'Achievement' };
+  return { name, what: f.name, sub: f.daily ? 'Daily challenge' : f.game ? CATALOG[f.game].name : f.kind === 'challenge' ? 'Challenge' : 'Achievement' };
 }
 
 /** The words a title shows under a name, from a look's `title` (a feat id), or null. */

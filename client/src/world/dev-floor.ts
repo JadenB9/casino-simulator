@@ -49,6 +49,10 @@ function views(w: FloorWorld): Record<string, View | 'walk'> {
     yard: inRoom(w, 'yard', [1.6, 1.8, -5.2], [0.6, 1.6, 3.8]),
     cashier: inRoom(w, 'bank', [4.4, 1.7, 0.5], [0, 1.4, -5]),
     boutique: inRoom(w, 'boutique', [-4.4, 1.7, 0.5], [3, 1.2, 0.5]),
+    // the north wing, each from its door off the room below it
+    parlour: inRoom(w, 'parlour', [0, 1.7, 5.3], [0, 1.3, -3]),
+    cardroom: inRoom(w, 'cardroom', [7.3, 1.8, 5.3], [-1, 1.0, -2]),
+    bingo: inRoom(w, 'bingo', [0, 1.9, 5.3], [0, 1.4, -3]),
     // in front of the wheel, where its players stand
     bigsix: { pos: [wheel.x + 5.2, 1.9, wheel.z + 1.4], at: [wheel.x, 1.5, wheel.z] },
   };

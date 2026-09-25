@@ -73,15 +73,15 @@ describe('casino days and weeks', () => {
   });
 
   it('keys sort by date, so a range of them is a stretch of days', () => {
-    expect(dayKey('2026-09-25')).toBe('d:2026-09-25:net');
+    expect(dayKey('2026-09-25')).toBe('n:2026-09-25');
     expect(weekKey('2026-09-21')).toBe('w:2026-09-21:net');
     expect(dayKey('2026-09-09') < dayKey('2026-09-10')).toBe(true);
-    // the prune bound (the first twelve characters) sits between the days either side of it
-    const bound = dayKey('2026-09-10').slice(0, 12);
-    expect(dayKey('2026-09-09') < bound && bound <= dayKey('2026-09-10')).toBe(true);
+    // the week prune bound (the first twelve characters) sits between the weeks either side of it
+    const bound = weekKey('2026-09-14').slice(0, 12);
+    expect(weekKey('2026-09-07') < bound && bound <= weekKey('2026-09-14')).toBe(true);
     // no other tally key falls in the d: or w: ranges
     const inRange = (k: string, p: string) => k >= `${p}:` && k < `${p};`;
-    for (const k of ['daily-streak', 'daily-last', 'wins', 'won', 'worst', 'wins:dice', 'd', 'w']) expect(inRange(k, 'd') || inRange(k, 'w')).toBe(false);
+    for (const k of ['daily-streak', 'daily-last', 'd:2026-09-25:won', 'wins', 'won', 'worst', 'wins:dice', 'n', 'w']) expect(inRange(k, 'n') || inRange(k, 'w')).toBe(false);
   });
 
   it('the last n days end today, oldest first', () => {

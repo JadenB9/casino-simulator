@@ -2,20 +2,24 @@
 // few seconds, and the character acts it out (Character.gesture: a wave, a clap, a hop for a
 // cheer). The icon is the wheel's own (ui/social/icons.ts), so what you pick is what everyone
 // sees; SVG elements, no emoji (they differ on every OS) and no data: URLs (the CSP). A new
-// emote from the same player replaces the one showing.
+// emote from the same player replaces the one showing. A dance keeps its bubble up for as long as
+// it lasts.
 //
 // Your own character is out of sight while you sit at a table (the camera is in your seat), so
 // there your bubble shows at the foot of the view instead, where you are; everyone else still
 // sees your seated character do it. A clap is heard: your own from right here, someone else's
-// from where they stand, and only within earshot (audio/claps.ts).
+// from where they stand, and only within earshot (audio/claps.ts). A dance is heard the same way,
+// over a short beat of its own (audio/beat.ts).
 
 import * as THREE from 'three';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import type { EmoteId } from '../../../shared/src/protocol.ts';
 import { emoteGlyph } from '../ui/social/icons.ts';
 import { Claps, CLAP_RANGE } from '../audio/claps.ts';
+import { Beats, BEAT_RANGE, hasBeat } from '../audio/beat.ts';
 import type { Sfx } from '../audio/sfx.ts';
-import { CLAP_TIMES } from './characters.ts';
+import { CLAP_TIMES, gestureSeconds } from './characters.ts';
+import { gestureOf } from './gestures.ts';
 import type { Character } from './contract.ts';
 
 /** Seconds a bubble stays up, the last FADE_S of them fading (on the frame clock, like the gesture). */
@@ -28,16 +32,26 @@ export const BUBBLE_Y = 2.46;
  * as high as other players' would be off the top of the screen.
  */
 export const OWN_BUBBLE_Y = 2.0;
-/** A clap is heard from about chest height. */
+/** A clap (or a dance's beat) is heard from about chest height. */
 const CLAP_Y = 1.25;
 
-const LABELS: Partial<Record<EmoteId, string>> = {
+const LABELS: Record<EmoteId, string> = {
   wave: 'waves',
   cheer: 'cheers',
   clap: 'claps',
   thumbs: 'gives a thumbs up',
   shrug: 'shrugs',
   sixseven: 'does the six seven',
+  throwback: 'throws it back',
+  griddy: 'hits the griddy',
+  floss: 'does the floss',
+  dab: 'dabs',
+  robot: 'does the robot',
+  backflip: 'does a backflip',
+  moneyfan: 'fans out a stack of hundreds',
+  bow: 'takes a bow',
+  trophy: 'lifts the trophy',
+  moonwalk: 'moonwalks',
 };
 
 export interface EmotesDeps {
@@ -69,9 +83,11 @@ const _at = new THREE.Vector3();
 export class Emotes {
   private readonly showing = new Map<Character, Showing>();
   private readonly claps: Claps | null;
+  private readonly beats: Beats | null;
 
   constructor(private readonly deps: EmotesDeps = {}) {
     this.claps = deps.sfx ? new Claps(deps.sfx) : null;
+    this.beats = deps.sfx ? new Beats(deps.sfx) : null;
   }
 
   /** Put `e` over this character, `y` metres up, and play its gesture (when the character has one). */
@@ -94,7 +110,8 @@ export class Emotes {
       tag.position.set(0, y, 0);
       ch.root.add(tag);
     }
-    this.showing.set(ch, { tag, el: outer, bubble, left: EMOTE_S, hush: e === 'clap' ? this.clap(ch, opts.own === true) : null });
+    const hush = e === 'clap' ? this.clap(ch, opts.own === true) : hasBeat(e) ? this.beat(ch, e, opts.own === true) : null;
+    this.showing.set(ch, { tag, el: outer, bubble, left: Math.max(EMOTE_S, gestureSeconds(e)), hush });
     ch.gesture?.(e);
   }
 
@@ -119,6 +136,18 @@ export class Emotes {
     const ears = this.deps.ears?.();
     if (ears && ears.distanceTo(at) > CLAP_RANGE) return null;
     return this.claps.play(CLAP_TIMES, at);
+  }
+
+  /** A dance's beat: your own right here, others' from where they dance, within earshot. */
+  private beat(ch: Character, e: EmoteId, own: boolean): (() => void) | null {
+    if (!this.beats) return null;
+    const g = gestureOf(e);
+    if (own) return this.beats.play(e, null, g?.beat, g?.dur);
+    const at = ch.root.getWorldPosition(_at);
+    at.y += CLAP_Y;
+    const ears = this.deps.ears?.();
+    if (ears && ears.distanceTo(at) > BEAT_RANGE) return null;
+    return this.beats.play(e, at, g?.beat, g?.dur);
   }
 
   private clear(ch: Character): void {

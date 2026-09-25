@@ -16,6 +16,11 @@
 //   wins:<game>    rounds won at that game (games with one are the "games" count below)
 //   bj:naturals    blackjacks dealt to you and paid
 // `games` isn't stored: it's how many of the casino's games have a `wins:` row above zero.
+//
+// Daily challenges: three a day, the same three for everyone, new at midnight Las Vegas time
+// (dailyFeats). They're measured on the day's own copies of the tallies, `d:<YYYY-MM-DD>:won`,
+// `d:<day>:rounds`, `d:<day>:best`, `d:<day>:wins:<game>`, and their ids name the day
+// (`daily:<day>:<0-2>`), so each is earned once per day. Tables drop day rows a few days old.
 
 import { DOLLAR, type Cents } from './money.ts';
 import type { GameId } from './engine.ts';
@@ -51,13 +56,15 @@ export interface Feat {
   goal?: number;
   tally?: string;
   reward: Reward;
+  /** A daily challenge: the casino day (YYYY-MM-DD) it belongs to. */
+  daily?: string;
 }
 
 const $ = (n: number): Cents => n * DOLLAR;
 
 /** Keys kept as the largest value seen rather than a running sum. */
 export function isMaxTally(key: string): boolean {
-  return key === 'best' || isStatMaxTally(key); // v6 stats6: worst, worst:<game>, streak
+  return key === 'best' || key.endsWith(':best') || isStatMaxTally(key); // v6 stats6: worst, worst:<game>, streak
 }
 
 /** The games "every game" means: everything the floor offers (the dev fixture isn't one). */
@@ -98,21 +105,6 @@ const GAME_WON_NAMES: Record<GameId, string> = {
   pachinko: 'Silver Balls',
   highcard: 'High Card',
 };
-
-/** Games still without moments of their own: a big multiple stands in until they have some. */
-const TEN_X: Partial<Record<GameId, string>> = {
-  coinflip: 'Called It',
-  wheel: 'Top Segment',
-  cases: 'Good Case',
-  diamonds: 'Rough Diamond',
-  letitride: 'Rode It Home',
-  paigow: 'Dragon Hand',
-  bingo: 'Bingo',
-  pachinko: 'Jackpot Tulip',
-};
-
-/** A round that paid back this many times its stake earns the stand-in above. */
-export const TEN_X_MULTIPLE = 10;
 
 const A = (id: string, game: GameId | undefined, name: string, about: string, reward: Reward): Feat => ({ id, kind: 'achievement', ...(game ? { game } : {}), name, about, reward });
 const C = (id: string, game: GameId | undefined, name: string, about: string, tally: string, goal: number, reward: Reward): Feat => ({
@@ -209,23 +201,44 @@ export const FEATS: readonly Feat[] = [
   A('cs-10x', 'crash', 'Liftoff', 'Cash out at 10x or higher.', { cash: $(1_000) }),
   A('cs-100x', 'crash', 'Moonshot', 'Cash out at 100x or higher.', { cash: $(25_000), title: 'Rocketeer' }),
 
+  A('cf-five', 'coinflip', 'Called It', 'Call five flips right in a row and cash out.', { cash: $(1_000) }),
+  A('cf-ten', 'coinflip', 'Heads or Tails', 'Call ten flips right in a row and cash out.', { cash: $(10_000), title: 'Lucky Coin' }),
+  A('wh-big', 'wheel', 'Big Segment', 'Land a segment paying 10x or more.', { cash: $(1_000) }),
+  A('wh-top', 'wheel', 'Top of the Wheel', 'Land the top segment of the 50-segment High wheel.', { cash: $(10_000) }),
+  A('ca-epic', 'cases', 'Epic Pull', 'Open an epic item or better (20x or more).', { cash: $(1_000) }),
+  A('ca-legendary', 'cases', 'Legendary', 'Open a legendary item or better (100x or more).', { cash: $(5_000) }),
+  A('dm-four', 'diamonds', 'Four Alike', 'Set down four gems of a colour.', { cash: $(750) }),
+  A('dm-five', 'diamonds', 'Five Alike', 'Set down five gems of one colour.', { cash: $(10_000), title: 'Jeweller' }),
+
   // --- the bandit wheel ----------------------------------------------------------------------
   A('bw-10', 'banditwheel', 'Ten to One', 'Win on the 10.', { cash: $(1_000) }),
   A('bw-20', 'banditwheel', 'Bandit Twenty', 'Win on the 20.', { cash: $(2_500) }),
 
-  // --- the newest games: a big multiple until they have moments of their own -------------------
-  ...(Object.entries(TEN_X) as [GameId, string][]).map(([g, name]) =>
-    A(`${CATALOG[g].prefix}-10x`, g, name, `Win ${TEN_X_MULTIPLE} times your stake in one round of ${CATALOG[g].name}.`, { cash: $(1_000) }),
-  ),
+  // --- the bingo hall and the pachinko parlour --------------------------------------------------
+  A('bg-bingo', 'bingo', 'Bingo', 'Complete a pattern on one of your cards.', { cash: $(500) }),
+  A('bg-blackout', 'bingo', 'Blackout', 'Cover a whole card in time to be paid for it.', { cash: $(10_000), title: 'Caller' }),
+  A('pa-jackpot', 'pachinko', 'Fever', 'Hit a jackpot on the reels.', { cash: $(750) }),
+  A('pa-chain', 'pachinko', 'Eight in a Chain', 'Chain eight jackpots from one ball.', { cash: $(10_000) }),
+
+  // --- let it ride and pai gow -----------------------------------------------------------------
+  A('lr-ride', 'letitride', 'Let It Ride', 'Win with all three bets left riding.', { cash: $(1_000) }),
+  A('lr-straight-flush', 'letitride', 'Rode a Straight Flush', 'Make a straight flush or better at Let It Ride.', { cash: $(10_000) }),
+  A('pg-fortune', 'paigow', 'Fortune', 'Hit four of a kind or better on the Fortune bonus.', { cash: $(5_000) }),
+  A('pg-aces', 'paigow', 'Five Aces', 'Hit five aces (the joker one of them) on the Fortune bonus.', { cash: $(10_000), title: 'Dragon' }),
 
   // --- each game's amount won ------------------------------------------------------------------
   ...FEAT_GAMES.map((g) => C(`won-${g}`, g, GAME_WON_NAMES[g], `Win $50,000 at ${CATALOG[g].name}.`, `won:${g}`, GAME_WON_GOAL, { cash: $(2_500) })),
 ];
 
 const BY_ID = new Map(FEATS.map((f) => [f.id, f]));
+const DAILY_ID = /^daily:(\d{4}-\d{2}-\d{2}):(\d)$/;
 
 export function featOf(id: unknown): Feat | null {
-  return typeof id === 'string' ? (BY_ID.get(id) ?? null) : null;
+  if (typeof id !== 'string') return null;
+  const known = BY_ID.get(id);
+  if (known) return known;
+  const m = DAILY_ID.exec(id);
+  return m ? (dailyFeats(m[1]!)[Number(m[2])] ?? null) : null;
 }
 
 /** The feat whose title this is (a look's `title` is a feat id), or null. */
@@ -244,8 +257,118 @@ export function featsAt(game: GameId | null): Feat[] {
  * win; anything else is its row (0 when there isn't one).
  */
 export function tallyValue(tally: Readonly<Record<string, number>>, key: string): number {
-  if (key === 'games') return FEAT_GAMES.filter((g) => (tally[`wins:${g}`] ?? 0) > 0).length;
+  // `games`, or a day's `d:<day>:games`: the games with a win (that day)
+  const games = /^(d:\d{4}-\d{2}-\d{2}:)?games$/.exec(key);
+  if (games) return FEAT_GAMES.filter((g) => (tally[`${games[1] ?? ''}wins:${g}`] ?? 0) > 0).length;
   return tally[key] ?? 0;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Daily challenges
+
+/** How many a day. */
+export const DAILY_COUNT = 3;
+/** Day rows a table keeps sending and D1 keeps, counting today. */
+export const DAILY_KEEP_DAYS = 3;
+
+interface DailySpec {
+  /** The tally, after `d:<day>:` (`wins:*` picks a game). */
+  key: 'won' | 'rounds' | 'games' | 'best' | 'wins:*';
+  goal: number;
+  name: string;
+  about: string;
+  cash: Cents;
+}
+
+/**
+ * The pool, in kinds; a day takes one from each of three kinds. A daily's id is its day and slot,
+ * and what it asks is worked out again from the day, so entries are only ever added at the end.
+ */
+const DAILY_POOL: readonly (readonly DailySpec[])[] = [
+  [
+    { key: 'won', goal: $(2_500), name: 'Good Day', about: 'Win $2,500 today.', cash: $(500) },
+    { key: 'won', goal: $(10_000), name: 'Big Day', about: 'Win $10,000 today.', cash: $(1_500) },
+  ],
+  [
+    { key: 'rounds', goal: 50, name: 'Keep Playing', about: 'Play 50 rounds today.', cash: $(500) },
+    { key: 'rounds', goal: 150, name: 'All Day', about: 'Play 150 rounds today.', cash: $(1_000) },
+  ],
+  [
+    { key: 'games', goal: 3, name: 'Three Tables', about: 'Win at three different games today.', cash: $(750) },
+    { key: 'games', goal: 5, name: 'Around the Floor', about: 'Win at five different games today.', cash: $(1_500) },
+  ],
+  [
+    { key: 'best', goal: $(1_000), name: 'One Good Round', about: 'Win $1,000 in one round today.', cash: $(750) },
+    { key: 'best', goal: $(5_000), name: 'One Big Round', about: 'Win $5,000 in one round today.', cash: $(1_500) },
+  ],
+  [{ key: 'wins:*', goal: 5, name: 'Five at the Table', about: 'Win five rounds of one game today.', cash: $(750) }],
+];
+
+/** The games a "five wins" daily picks from: the ones with a table or a machine to walk up to. */
+const DAILY_GAMES: readonly GameId[] = ['blackjack', 'roulette', 'craps', 'baccarat', 'slots', 'videopoker', 'threecard', 'war', 'bigsix', 'sicbo', 'banditwheel', 'plinko', 'dice', 'mines'];
+
+/** A small hash of the day: the same picks for everyone, every time it's asked. */
+function daySeed(day: string): () => number {
+  let h = 2166136261;
+  for (let i = 0; i < day.length; i++) h = Math.imul(h ^ day.charCodeAt(i), 16777619);
+  return () => {
+    h = Math.imul(h ^ (h >>> 15), 2246822507);
+    h = Math.imul(h ^ (h >>> 13), 3266489909);
+    h ^= h >>> 16;
+    return (h >>> 0) / 4294967296;
+  };
+}
+
+const DAILY_CACHE = new Map<string, Feat[]>();
+
+/** A casino day's three challenges (the day as casinoDay writes it). */
+export function dailyFeats(day: string): Feat[] {
+  const known = DAILY_CACHE.get(day);
+  if (known) return known;
+  const rand = daySeed(day);
+  const kinds = DAILY_POOL.map((_, i) => i);
+  const picked: Feat[] = [];
+  for (let slot = 0; slot < DAILY_COUNT; slot++) {
+    const kind = kinds.splice(Math.floor(rand() * kinds.length), 1)[0]!;
+    const opts = DAILY_POOL[kind]!;
+    const spec = opts[Math.floor(rand() * opts.length)]!;
+    const game = spec.key === 'wins:*' ? DAILY_GAMES[Math.floor(rand() * DAILY_GAMES.length)]! : undefined;
+    picked.push({
+      id: `daily:${day}:${slot}`,
+      kind: 'challenge',
+      ...(game ? { game } : {}),
+      name: game ? `Five at ${CATALOG[game].name}` : spec.name,
+      about: game ? `Win five rounds of ${CATALOG[game].name} today.` : spec.about,
+      tally: `d:${day}:${game ? `wins:${game}` : spec.key}`,
+      goal: spec.goal,
+      reward: { cash: spec.cash },
+      daily: day,
+    });
+  }
+  if (DAILY_CACHE.size > 16) DAILY_CACHE.clear();
+  DAILY_CACHE.set(day, picked);
+  return picked;
+}
+
+const DAY_FORMAT = (() => {
+  try {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit' });
+  } catch {
+    return null;
+  }
+})();
+
+/** The casino's date (Las Vegas time), YYYY-MM-DD: when the dailies turn over (as floor/wins.ts counts its days). */
+export function casinoDay(now: number): string {
+  if (DAY_FORMAT) {
+    const parts = DAY_FORMAT.formatToParts(new Date(now));
+    const get = (t: string) => parts.find((p) => p.type === t)?.value;
+    const y = get('year');
+    const m = get('month');
+    const d = get('day');
+    if (y && m && d) return `${y}-${m}-${d}`;
+  }
+  return new Date(now).toISOString().slice(0, 10);
 }
 
 /** GET /feats: what you've earned and how far along each tally is. */

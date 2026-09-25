@@ -8,7 +8,7 @@
 
 import './feats.css';
 import type { GameId } from '../../../../shared/src/engine.ts';
-import { FEATS, featOf, tallyValue, type Feat, type FeatsResponse } from '../../../../shared/src/feats.ts';
+import { FEATS, FEAT_GAMES, featOf, tallyValue, type Feat, type FeatsResponse } from '../../../../shared/src/feats.ts';
 import type { Look } from '../../../../shared/src/look.ts';
 import { el, toast } from '../kit.ts';
 import type { Closable, SessionLike } from '../menu/deps.ts';
@@ -52,6 +52,7 @@ export function openFeats(deps: FeatsSheetDeps): FeatsSheet {
   });
 
   const groups = featGroups();
+  // at a table, its game's; otherwise today's challenges
   let current: FeatGroup = groups.find((g) => g.id === deps.game) ?? groups[0]!;
   const earned = new Map<string, number>((session.profile?.feats ?? []).map((f) => [f.feat, f.at]));
   let tally: Record<string, number> | null = null;
@@ -192,7 +193,7 @@ export function openFeats(deps: FeatsSheetDeps): FeatsSheet {
     r.append(medal(got, prog?.k ?? 0));
     const text = el('div', 'ft-text');
     const top = el('div', 'ft-top');
-    top.append(el('h4', 'ft-name', f.name), el('span', 'ft-kind', f.kind === 'challenge' ? 'Challenge' : 'Achievement'));
+    top.append(el('h4', 'ft-name', f.name), el('span', 'ft-kind', f.daily ? 'Daily' : f.kind === 'challenge' ? 'Challenge' : 'Achievement'));
     text.append(top, el('p', 'ft-about', f.about));
     if (f.kind === 'challenge' && !got) {
       const bar = el('div', 'ft-bar');
@@ -218,8 +219,9 @@ export function openFeats(deps: FeatsSheetDeps): FeatsSheet {
     const titles = el('div', 'ft-head-titles');
     titles.append(el('h3', 'ft-group', g.name), el('div', 'ft-count', `${have} of ${g.feats.length} earned`));
     head.append(titles);
+    if (g.id === 'today') head.append(el('div', 'ft-won no', 'New at midnight, Las Vegas time'));
     // a game: whether it counts toward Champion yet
-    if (g.id !== 'house' && tally) {
+    else if (g.id !== 'house' && tally) {
       const won = (tally[`wins:${g.id}`] ?? 0) > 0;
       head.append(el('div', `ft-won ${won ? 'yes' : 'no'}`, won ? 'Won here' : 'No win here yet'));
     }
@@ -233,13 +235,13 @@ export function openFeats(deps: FeatsSheetDeps): FeatsSheet {
   }
 
   function paintSummary(): void {
-    const total = FEATS.length;
-    sEarned.textContent = `${earned.size} of ${total}`;
+    // the list's feats; a day's challenges come and go
+    sEarned.textContent = `${FEATS.filter((f) => earned.has(f.id)).length} of ${FEATS.length}`;
     let paid = 0;
     for (const id of earned.keys()) paid += featOf(id)?.reward.cash ?? 0;
     sPaid.textContent = dollars(paid);
     sWon.textContent = tally ? dollars(tally.won ?? 0) : '…';
-    sGames.textContent = tally ? `${tallyValue(tally, 'games')} of ${featGroups().length - 1}` : '…';
+    sGames.textContent = tally ? `${tallyValue(tally, 'games')} of ${FEAT_GAMES.length}` : '…';
   }
 
   function paint(): void {

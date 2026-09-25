@@ -10,7 +10,8 @@
 //     wins                  rounds that made a profit, every game (wins:<game> is the feats')
 //     rounds:<game>         rounds with money on them at that game (rounds is the feats')
 //     streak                the longest run of winning rounds at one table (a maximum)
-//     d:<YYYY-MM-DD>:net    net on that casino day (Las Vegas), signed
+//     n:<YYYY-MM-DD>        net on that casino day (Las Vegas), signed (not d:, whose rows the
+//                           feats' flush clears after a few days)
 //     w:<YYYY-MM-DD>:net    net in the week starting that Monday, signed
 //     feats                 feats earned (added in the batch that pays each one)
 //   and reads the feats' `won`, `won:<game>`, `rounds` and celebs' `celeb:<id>` rows.
@@ -84,7 +85,7 @@ export function weekOf(day: string): string {
   return addDays(day, -((dow + 6) % 7));
 }
 
-export const dayKey = (day: string): string => `d:${day}:net`;
+export const dayKey = (day: string): string => `n:${day}`;
 export const weekKey = (monday: string): string => `w:${monday}:net`;
 
 /** The last `n` casino days up to and including `today`, oldest first. */

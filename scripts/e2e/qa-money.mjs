@@ -14,6 +14,8 @@ import { chromium } from 'playwright';
 import { mkdirSync } from 'node:fs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+// v6 celebs6: bar prices follow happy hour's schedule (half price inside a window)
+import { halfPrice, happyHourAt } from '../../shared/src/happyhour.ts';
 
 const run = promisify(execFile);
 const [port = '6100', out = '/tmp/qa-money', ...only] = process.argv.slice(2);
@@ -897,8 +899,12 @@ if (wanted('money')) {
     check(same.status === 200 && same.body.balance === 0 && same.body.at === buy.body.at, 'the same op again is the same purchase, not a second charge');
     const twice = await api('shop/buy', { method: 'POST', token: ts, body: { item: item.id, op: `${op}-2` } });
     check(twice.status === 409 && twice.body.error === 'NOT_ELIGIBLE', `buying it again: ${twice.status} "${twice.body?.msg}"`);
+    const domAsked = Date.now();
     const dom = await api('bar/order', { method: 'POST', token: ts, body: { item: 'dom', op: `${op}-bar` } });
-    check(dom.status === 409 && dom.body.msg === 'Not enough: the Bottle of Dom is $1,200 and your balance is $0.', `the bar refuses what the balance can't pay: "${dom.body?.msg}"`);
+    // v6 celebs6: the price the schedule gives at order time (either, if a window opened or closed meanwhile)
+    const domPrices = [domAsked, Date.now()].map((t) => (happyHourAt(t) ? halfPrice(120_000) : 120_000));
+    const domSays = domPrices.map((c) => `Not enough: the Bottle of Dom is ${money(c)} and your balance is $0.`);
+    check(dom.status === 409 && domSays.includes(dom.body.msg), `the bar refuses what the balance can't pay: "${dom.body?.msg}"`);
     const loan0 = await api('bank/loan', { method: 'POST', token: ts });
     check(loan0.status === 200 && loan0.body.loan.amount === 5_000_000, `at $0 the bank tops up the whole $50,000: ${loan0.body?.loan?.amount}`);
     // in the page: the bar's refusal is shown in words

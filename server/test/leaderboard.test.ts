@@ -450,7 +450,7 @@ describe('leaderboard upkeep', () => {
     const [p] = await players('lb_prune_', 1);
     const old = addDays(TODAY, -50);
     const recent = addDays(TODAY, -3);
-    const keep = ['won', 'wins', 'worst', 'daily-streak', 'daily-last', dayKey(recent), dayKey(TODAY), weekKey(weekOf(recent)), 'w', 'd'];
+    const keep = ['won', 'wins', 'worst', 'daily-streak', 'daily-last', `d:${old}:won`, dayKey(recent), dayKey(TODAY), weekKey(weekOf(recent)), 'w', 'n'];
     for (const k of [...keep, dayKey(old), weekKey(weekOf(old))]) await setTally(p!, k, 5);
     await ask(p!);
     const left = (await env.DB.prepare(`SELECT key FROM casino_tally WHERE account_id = ?1`).bind(p!.id).all<{ key: string }>()).results.map((r) => r.key);
@@ -486,7 +486,7 @@ describe('leaderboard reads', () => {
     expect(rate).toMatch(/SEARCH r USING COVERING INDEX idx_casino_tally_key_n \(key=\? AND n>\?\)/);
     expect(rate).toMatch(/SEARCH w USING PRIMARY KEY \(account_id=\? AND key=\?\)/);
     expect(await plan(SQL.celebs)).toMatch(/SEARCH casino_tally USING COVERING INDEX idx_casino_tally_key_n \(key>\? AND key<\?\)/);
-    expect(await plan(SQL.prune, 'd:2026-01-01', 'w:2026-01-01')).toMatch(/idx_casino_tally_key_n/);
+    expect(await plan(SQL.prune, 'n:2026-01-01', 'w:2026-01-01')).toMatch(/idx_casino_tally_key_n/);
 
     // A game's boards: its slice of each stats index, in order, both ways for net.
     const game: [string, string, RegExp][] = [

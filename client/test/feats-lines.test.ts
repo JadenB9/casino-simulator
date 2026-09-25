@@ -1,14 +1,17 @@
 import { describe, it, expect } from 'vitest';
 import { FEATS, featOf } from '../../shared/src/feats.ts';
-import { dollars, earnedOn, featGroups, feedLines, isMoneyTally, progressOf, rewardParts, titleText, unlockSub } from '../src/ui/feats/lines.ts';
+import { dollars, earnedOn, featGroups, feedLines, isMoneyTally, progressOf, rewardParts, titleText, unlockKind, unlockSub } from '../src/ui/feats/lines.ts';
 
 // How the achievements read: the sheet's groups and bars, the card when you earn one, the feed.
 describe('the sheet', () => {
-  it('lists every feat once, the house first, then the tables, the machines and the online lounge', () => {
-    const groups = featGroups();
-    const listed = groups.flatMap((g) => g.feats.map((f) => f.id));
+  it("lists today's challenges, then every feat once: the house, the tables, the machines and the online lounge", () => {
+    const now = Date.UTC(2026, 8, 25, 18);
+    const groups = featGroups(now);
+    expect(groups[0]!.id).toBe('today');
+    expect(groups[0]!.feats.map((f) => f.id)).toEqual(['daily:2026-09-25:0', 'daily:2026-09-25:1', 'daily:2026-09-25:2']);
+    const listed = groups.slice(1).flatMap((g) => g.feats.map((f) => f.id));
     expect(listed.sort()).toEqual(FEATS.map((f) => f.id).sort());
-    expect(groups[0]!.id).toBe('house');
+    expect(groups[1]!.id).toBe('house');
     const parts = groups.map((g) => g.part);
     // each part in one run, in the building's order
     expect([...new Set(parts)]).toEqual(['The house', 'Tables', 'Machines', 'Online']);
@@ -41,6 +44,8 @@ describe('the sheet', () => {
     expect(progressOf(featOf('vp-royal')!, {})).toBeNull();
     expect(isMoneyTally('won:roulette')).toBe(true);
     expect(isMoneyTally('wins:roulette')).toBe(false);
+    expect(isMoneyTally('d:2026-09-25:won')).toBe(true);
+    expect(isMoneyTally('d:2026-09-25:rounds')).toBe(false);
   });
 
   it('dates what was earned, with the year only when it is not this one', () => {
@@ -62,6 +67,9 @@ describe('the card and the feed', () => {
     expect(feedLines('Ace_High', 'won-1m')).toEqual({ name: 'Ace_High', what: 'Millionaire', sub: 'Challenge' });
     expect(feedLines('Ace_High', 'first-win')).toEqual({ name: 'Ace_High', what: "Beginner's Luck", sub: 'Achievement' });
     expect(feedLines('Ace_High', 'nope')).toBeNull();
+    expect(feedLines('Ace_High', 'daily:2026-09-25:0')?.sub).toBe('Daily challenge');
+    expect(unlockKind(featOf('daily:2026-09-25:1')!)).toBe('Daily challenge');
+    expect(unlockKind(featOf('won-1m')!)).toBe('Challenge complete');
   });
 
   it('a title is a feat id on the look; anything else shows nothing', () => {

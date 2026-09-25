@@ -30,7 +30,11 @@ import type { Quality } from '../render/engine3d.ts';
 import type { Character, CharacterFactory } from './contract.ts';
 import type { EmoteId } from '../../../shared/src/protocol.ts';
 import { Wearables, dressed } from './wearables.ts';
+import { DOWN, PIVOT, gestureOf, mirror, movesLegs, smooth, type BoneKey, type Foot, type Hand, type HandMix, type Pose, type PropId, type StaffGesture, type Turn, type Vec } from './gestures.ts';
+import { disposeProp, propMesh } from './emote-props.ts';
 import { Ride, kneeFor, rideSpec, stanceYaw } from './rides.ts';
+
+export { CLAP_RATE, CLAP_S, CLAP_TIMES, gestureSeconds, type StaffGesture } from './gestures.ts';
 
 export const MODEL_BASE = `${import.meta.env.BASE_URL}assets/models/`;
 
@@ -256,8 +260,18 @@ export class Person implements Character {
   /** Bones this frame's gesture turned, and the mixer's pose for them (put back next frame). */
   private readonly posed = new Map<THREE.Object3D, THREE.Quaternion>();
   private readonly spare = new Map<THREE.Object3D, THREE.Quaternion>();
-  private act: { e: EmoteId | StaffGesture; t: number } | null = null;
-  private modelY = 0;
+  /** The emote being acted out, how far in, and (walked off) how much of it is left as it fades. */
+  private act: { e: EmoteId | StaffGesture; t: number; fade: number } | null = null;
+  /** Room for where the mixer had the bones an emote moves (kept in `moved`, below). */
+  private readonly spareAt = new Map<THREE.Object3D, THREE.Vector3>();
+  /** The legs as the emotes pose them, and the chest's turn in the idle pose (for Hand.frame). */
+  private legsIK: Partial<Record<'R' | 'L', Leg>> = {};
+  private readonly chestRest = new THREE.Quaternion();
+  /** Something an emote holds (a fan of bills, a trophy), while it plays. */
+  private prop: { id: PropId; mesh: THREE.Mesh } | null = null;
+  /** The model's own place in the root, which a hop, glide, flip or spin moves it from. */
+  private readonly modelAt = new THREE.Vector3();
+  private readonly modelQ = new THREE.Quaternion();
   // --- posing layers (see the functions after the class) ---
   /** Where the head looks (world space), and the eased yaw/pitch it has got to. */
   private gaze: THREE.Vector3 | null = null;
@@ -278,7 +292,7 @@ export class Person implements Character {
   // --- v6 looks6: riding (rides.ts) ---
   /** The ride the look wears, hung on the root; stood on unless sitting. */
   private ride: Ride | null = null;
-  /** Bones the riding stance moved (feet, hips), and where the animation had them (put back next frame). */
+  /** Bones the riding stance or an emote moved (feet, hips), and where the animation had them (put back next frame). */
   private readonly moved = new Map<THREE.Object3D, THREE.Vector3>();
   /** Where the root was last frame, and how fast it goes and turns (for the ride's wheels and lean). */
   private rideLast: { x: number; z: number; yaw: number } | null = null;
@@ -369,7 +383,57 @@ export class Person implements Character {
 
   /** Act out an emote, or one of a dealer's motions (StaffGesture). */
   gesture(e: EmoteId | StaffGesture): void {
-    this.act = { e, t: 0 };
+    this.act = { e, t: 0, fade: 1 };
+    if (this.prop && gestureOf(e)?.prop !== this.prop.id) this.dropProp();
+  }
+
+  /** Take up an emote's prop (in hand from the next frame). */
+  private takeProp(id: PropId): void {
+    this.dropProp();
+    const mesh = propMesh(id);
+    mesh.scale.setScalar(0.001);
+    this.root.add(mesh);
+    this.prop = { id, mesh };
+  }
+
+  private dropProp(): void {
+    if (!this.prop) return;
+    disposeProp(this.prop.mesh);
+    this.prop = null;
+  }
+
+  /**
+   * Put the prop in hand, where the hands are now (after the flip and the hop): the bills fanned
+   * up from the right palm, the cup upright between both hands. It grows in as the emote starts
+   * and shrinks away as it ends.
+   */
+  private holdProp(): void {
+    const prop = this.prop!;
+    const r = this.arms.R;
+    const l = this.arms.L;
+    const act = this.act;
+    const g = act ? gestureOf(act.e) : null;
+    if (!r || !l || !act || !g || !this.model) {
+      prop.mesh.visible = false;
+      return;
+    }
+    const mesh = prop.mesh;
+    mesh.visible = true;
+    mesh.scale.setScalar(Math.max(0.001, smooth(Math.min(1, act.t / 0.3, (g.dur - act.t) / 0.25, act.fade))));
+    // (in the root's own frame, which the prop hangs in: on a ride the posing frame is the model's)
+    const at = (o: THREE.Object3D, out: THREE.Vector3) => this.root.worldToLocal(o.getWorldPosition(out));
+    if (prop.id === 'bills') {
+      const q = r.wrist.getWorldQuaternion(_qa).premultiply(this.root.getWorldQuaternion(_qb).invert());
+      const palm = _pn.copy(r.palm).applyQuaternion(q);
+      const along = _fn.copy(r.along).applyQuaternion(q);
+      at(r.wrist, mesh.position).addScaledVector(along, 0.06).addScaledVector(palm, 0.028);
+      _fx.crossVectors(along, palm);
+      mesh.quaternion.setFromRotationMatrix(_basis.makeBasis(_fx, along, palm));
+    } else {
+      at(r.wrist, mesh.position).add(at(l.wrist, _v)).multiplyScalar(0.5);
+      mesh.position.y += 0.02;
+      mesh.quaternion.copy(this.model.quaternion).multiply(_qa.copy(this.modelQ).invert());
+    }
   }
 
   /** Turn the head (and a little of the neck) toward a point in world space; null looks ahead. */
@@ -435,6 +499,12 @@ export class Person implements Character {
     this.posed.clear();
     for (const [bone, p] of this.moved) bone.position.copy(p);
     this.moved.clear();
+    // the posing works on the body standing where it stands; a flip is put on at the end (and a
+    // ride's stance, which ridePose() puts on again, below)
+    if (this.model) {
+      this.model.position.copy(this.modelAt);
+      this.model.quaternion.copy(this.modelQ);
+    }
     const riding = this.rideOn(dt);
     // idle -> walk -> run by weight, eased so starts and stops cross-fade (a rider stands still on it)
     const s = riding ? 0 : this.speed;
@@ -451,35 +521,150 @@ export class Person implements Character {
     this.root.updateWorldMatrix(true, false);
     this.root.getWorldQuaternion(_rootQ).invert();
     _rootInv.copy(this.root.matrixWorld).invert();
-    let y = 0;
     let drop = 0;
     if (this.seatTop !== null) drop = this.sitPose();
-    else if (riding) y += this.ridePose();
+    else if (riding) this.model!.position.y = this.modelAt.y + this.ridePose();
     else if (this.swaySeed !== null) this.swayPose(dt);
     this.lookPose(dt);
-    if (this.act) y += this.perform(dt);
-    if (this.model) this.model.position.y = this.modelY + y;
+    const whole = this.act ? this.perform(dt, riding) : null;
+    if (whole) this.carry(whole);
+    if (this.prop) this.holdProp();
     this.settle(drop);
   }
 
-  /** Pose the body for the emote being acted out; returns how high it hops. */
-  private perform(dt: number): number {
+  /**
+   * Pose the body for the emote being acted out; returns what it does to the whole body. On a ride
+   * it's the seated version: the upper body only, on top of the stance.
+   */
+  private perform(dt: number, riding = false): Whole | null {
     const act = this.act!;
     const g = gestureOf(act.e);
     act.t += dt;
     if (!g || act.t >= g.dur || !this.model) {
       this.act = null;
-      return 0;
+      this.dropProp();
+      return null;
+    }
+    const seated = this.seatTop !== null || riding;
+    const pose = g.pose(act.t, seated);
+    const legs = !seated && movesLegs(pose);
+    // walking off ends a dance: it fades from wherever it had got to (not in mid-air)
+    if (act.fade < 1 || (legs && this.speed > DANCE_WALK && !pose.flip)) {
+      act.fade -= dt / 0.3;
+      if (act.fade <= 0) {
+        this.act = null;
+        this.dropProp();
+        return null;
+      }
     }
     // ease into the pose and back out of it
-    const k = smooth(Math.min(1, act.t / 0.22)) * smooth(Math.min(1, (g.dur - act.t) / 0.3));
-    const pose = g.pose(act.t, this.seatTop !== null);
+    const k = smooth(Math.min(1, act.t / 0.22)) * smooth(Math.min(1, (g.dur - act.t) / 0.3)) * smooth(act.fade);
+    // the legs' lengths, from the pose the mixer gave them, before the hips move
+    const lens = legs ? this.legLengths() : null;
+    if (legs && pose.pelvis) {
+      const body = this.bones.body;
+      if (body) this.shift(body, _v.set(pose.pelvis[0] * k, pose.pelvis[1] * k, pose.pelvis[2] * k).add(local(body, _w)));
+    }
     for (const key of BONE_ORDER) {
       const turn = pose[key];
-      if (turn) this.turn(key, turn, k);
+      if (!turn || (seated && key === 'body') || (lens && LEG_BONES.has(key))) continue;
+      this.turn(key, turn, k);
     }
+    if (lens) this.plant(pose, k, lens);
     if (pose.handR || pose.handL) this.hands(pose, k);
-    return (pose.hop ?? 0) * k;
+    if (g.prop && this.prop?.id !== g.prop) this.takeProp(g.prop);
+    if (seated) return { y: 0, z: 0, flip: 0, spin: 0 };
+    return { y: (pose.hop ?? 0) * k, z: (pose.glide ?? 0) * k, flip: (pose.flip ?? 0) * k, spin: (pose.spin ?? 0) * k };
+  }
+
+  /** Lift, glide, flip and spin the whole model (about PIVOT, the middle of the body). */
+  private carry(w: Whole): void {
+    const m = this.model;
+    if (!m) return;
+    if (w.flip || w.spin) {
+      _turnQ.setFromEuler(_euler.set(w.flip, w.spin, 0, 'YXZ'));
+      _pv.fromArray(PIVOT);
+      m.position.sub(_pv).applyQuaternion(_turnQ).add(_pv);
+      m.quaternion.premultiply(_turnQ);
+    }
+    m.position.y += w.y;
+    m.position.z += w.z;
+  }
+
+  /** Move a bone's joint to `to` (the character's frame); the mixer's place for it comes back next frame. */
+  private shift(bone: THREE.Object3D, to: THREE.Vector3): void {
+    if (!bone.parent) return;
+    if (!this.moved.has(bone)) {
+      let p = this.spareAt.get(bone);
+      if (!p) this.spareAt.set(bone, (p = new THREE.Vector3()));
+      this.moved.set(bone, p.copy(bone.position));
+    }
+    bone.parent.updateWorldMatrix(true, false);
+    bone.position.copy(bone.parent.worldToLocal(this.root.localToWorld(_pt.copy(to))));
+    bone.updateMatrixWorld(true);
+  }
+
+  /** Each leg's thigh and shin (knee to the foot's joint) as the mixer has them now. */
+  private legLengths(): Record<'R' | 'L', [number, number]> | null {
+    const r = this.legsIK.R;
+    const l = this.legsIK.L;
+    if (!r || !l) return null;
+    const len = (g: Leg): [number, number] => {
+      const h = local(g.thigh, _sh);
+      const k = local(g.shin, _el);
+      return [h.distanceTo(k), k.distanceTo(local(g.foot, _wr))];
+    };
+    return { R: len(r), L: len(l) };
+  }
+
+  /**
+   * Put the feet where the pose wants them and bend the legs to reach: each thigh points at a
+   * knee found where both bones' lengths meet (out toward Foot.knee), turned about its length so
+   * the knee's own hinge lies square to the bend; the shin then points at the foot. A foot out of
+   * reach comes up to the leg instead. Each foot keeps its roll, turns to its toe angle and rocks
+   * onto its ball for a raised heel.
+   */
+  private plant(pose: Pose, k: number, lens: Record<'R' | 'L', [number, number]>): void {
+    for (const [side, m] of [['R', 1], ['L', -1]] as const) {
+      const leg = this.legsIK[side]!;
+      const f: Foot = (side === 'R' ? pose.footR : pose.footL) ?? { at: [-0.1, 0, 0.05], toe: 0.14 };
+      const [a, b] = lens[side];
+      // where the heel goes: from where the mixer stands it, `k` of the way to the pose's place
+      const now = local(leg.foot, _wr);
+      const heel = (f.heel ?? 0) * k;
+      const toe = (f.toe ?? 0) * m;
+      const fwd = _fn.set(-Math.sin(toe), 0, Math.cos(toe));
+      const T = _t.set(f.at[0] * m, leg.footY + f.at[1], f.at[2]);
+      if (heel > 0) T.addScaledVector(fwd, BALL * (1 - Math.cos(heel))).setY(T.y + BALL * Math.sin(heel));
+      T.lerpVectors(now, T, k);
+      // the knee
+      const H = local(leg.thigh, _sh);
+      const u = _u.subVectors(T, H);
+      const d = THREE.MathUtils.clamp(u.length(), Math.abs(a - b) + 1e-4, (a + b) * 0.999);
+      u.normalize();
+      T.copy(H).addScaledVector(u, d);
+      const cos = THREE.MathUtils.clamp((a * a + d * d - b * b) / (2 * a * d), -1, 1);
+      const out = mirrored(f.knee ?? KNEE, m, _hint);
+      out.addScaledVector(u, -out.dot(u));
+      if (out.lengthSq() < 1e-8) out.set(0, 0, 1);
+      out.normalize();
+      const K = _e1.copy(H).addScaledVector(u, a * cos).addScaledVector(out, a * Math.sqrt(1 - cos * cos));
+      // the thigh onto the knee, its hinge square to the bend
+      const dir0 = _y.set(0, 1, 0).applyQuaternion(spin(leg.thigh, _qa));
+      const dir1 = _d1.subVectors(K, H).normalize();
+      frame(dir0, _h0.copy(leg.hinge).applyQuaternion(_qa), _qb);
+      this.rotate(leg.thigh, frame(dir1, _h1.crossVectors(out, u), _qa).multiply(_qb.invert()));
+      // the shin onto the foot
+      this.point(leg.shin, _d0.subVectors(T, local(leg.shin, _el)).normalize());
+      // the foot: to the ankle, turned to face its way and rocked onto its ball
+      this.shift(leg.foot, T);
+      const f0 = _dir.set(0, 1, 0).applyQuaternion(spin(leg.foot, _qa)).setY(0);
+      if (f0.lengthSq() < 1e-6) continue;
+      _qb.setFromUnitVectors(f0.normalize(), fwd);
+      _qc.identity().slerp(_qb, k);
+      if (heel !== 0) _qc.premultiply(_qd.setFromAxisAngle(_ax.crossVectors(_y.set(0, 1, 0), fwd).normalize(), heel));
+      this.rotate(leg.foot, _qc);
+    }
   }
 
   /**
@@ -524,20 +709,47 @@ export class Person implements Character {
     const right = local(r.upper, _sh);
     const mid = local(l.upper, _mid).add(right).multiplyScalar(0.5);
     const len = right.distanceTo(local(r.lower, _el)) + _el.distanceTo(local(r.wrist, _wr));
-    if (pose.handR) this.reach(r, 1, pose.handR, mid, len, k);
-    if (pose.handL) this.reach(l, -1, pose.handL, mid, len, k);
+    // the chest's turn from the idle pose, for hands that go with it
+    const chest = this.bones.chest;
+    if (chest) spin(chest, _qChest).multiply(_qa.copy(this.chestRest).invert());
+    else _qChest.identity();
+    if (pose.handR) this.arm(r, 1, pose.handR, mid, len, k);
+    if (pose.handL) this.arm(l, -1, pose.handL, mid, len, k);
+  }
+
+  /** One arm to a hand, or to a mix of two (each solved in full, then blended), eased in by `k`. */
+  private arm(arm: Arm, m: number, h: Hand | HandMix, mid: THREE.Vector3, len: number, k: number): void {
+    arm.bones.forEach((b, i) => arm.from[i]!.copy(b.quaternion));
+    if ('w' in h) {
+      this.reach(arm, m, h.a, mid, len);
+      arm.bones.forEach((b, i) => {
+        arm.mixed[i]!.copy(b.quaternion);
+        b.quaternion.copy(arm.from[i]!);
+      });
+      arm.upper.updateMatrixWorld(true);
+      this.reach(arm, m, h.b, mid, len);
+      arm.bones.forEach((b, i) => b.quaternion.slerpQuaternions(arm.mixed[i]!, _qa.copy(b.quaternion), h.w));
+      arm.upper.updateMatrixWorld(true);
+    } else {
+      this.reach(arm, m, h, mid, len);
+    }
+    if (k < 1) {
+      arm.bones.forEach((bone, i) => bone.quaternion.slerpQuaternions(arm.from[i]!, _qa.copy(bone.quaternion), k));
+      arm.upper.updateMatrixWorld(true);
+    }
   }
 
   /**
    * Put one arm where an emote wants it (see Hand): the elbow and the wrist first, then the palm,
    * then the fingers. The upper arm turns about its length until the elbow's own hinge lies square
    * to the plane the arm now bends in, so the forearm swings into place as an elbow bends; the turn
-   * of the hand is shared between the forearm (as a forearm turns) and the wrist. All of it is
-   * solved in full and then blended with the pose it replaces by `k`, as the emote eases in and
-   * out. `m` is 1 for the right arm and -1 for the left, which mirrors the hand's numbers.
+   * of the hand is shared between the forearm (as a forearm turns) and the wrist. `m` is 1 for
+   * the right arm and -1 for the left, which mirrors the hand's numbers.
    */
-  private reach(arm: Arm, m: number, h: Hand, mid: THREE.Vector3, len: number, k: number): void {
-    arm.bones.forEach((b, i) => arm.from[i]!.copy(b.quaternion));
+  private reach(arm: Arm, m: number, h: Hand, mid: THREE.Vector3, len: number): void {
+    // a hand in the chest's frame: every direction turned as the chest has turned
+    const q = h.frame === 'chest' ? _qChest : null;
+    const dir = (v: Vec, out: THREE.Vector3) => (q ? mirrored(v, m, out).applyQuaternion(q) : mirrored(v, m, out));
     const S = local(arm.upper, _sh);
     const E = local(arm.lower, _el);
     const W = local(arm.wrist, _wr);
@@ -546,23 +758,29 @@ export class Person implements Character {
     // where the elbow and the wrist go
     const elbow = _e1;
     const wrist = _t;
-    if (h.at) {
-      wrist.set(h.at[0] * m, h.at[1], h.at[2]).multiplyScalar(len).add(mid);
-      wrist.x -= (h.out ?? 0) * m;
+    if (h.at || h.knee) {
+      if (h.knee) {
+        const shin = this.bones[m > 0 ? 'shinR' : 'shinL'];
+        if (shin) local(shin, wrist).add(mirrored(h.knee, m, _hint));
+        else wrist.copy(W);
+      } else {
+        dir(h.at!, wrist).multiplyScalar(len).add(mid);
+        wrist.x -= (h.out ?? 0) * m;
+      }
       const u = _u.subVectors(wrist, S);
       const d = THREE.MathUtils.clamp(u.length(), Math.abs(a - b) + 1e-4, (a + b) * 0.999);
       u.normalize();
       wrist.copy(S).addScaledVector(u, d);
       // the elbow sits where both bones' lengths meet, out toward the side it was given
       const cos = THREE.MathUtils.clamp((a * a + d * d - b * b) / (2 * a * d), -1, 1);
-      const out = mirrored(h.elbow ?? DOWN, m, _hint);
+      const out = dir(h.elbow ?? DOWN, _hint);
       out.addScaledVector(u, -out.dot(u));
       if (out.lengthSq() < 1e-8) out.set(-m, 0, 0).addScaledVector(u, u.x * m);
       out.normalize();
       elbow.copy(S).addScaledVector(u, a * cos).addScaledVector(out, a * Math.sqrt(1 - cos * cos));
     } else {
-      elbow.copy(S).addScaledVector(mirrored(h.upper ?? DOWN, m, _hint).normalize(), a);
-      wrist.copy(elbow).addScaledVector(mirrored(h.fore ?? DOWN, m, _hint).normalize(), b);
+      elbow.copy(S).addScaledVector(dir(h.upper ?? DOWN, _hint).normalize(), a);
+      wrist.copy(elbow).addScaledVector(dir(h.fore ?? DOWN, _hint).normalize(), b);
     }
     // 1. the upper arm onto the elbow (when the arm is straight, any turn about its length will do)
     const dir0 = _d0.subVectors(E, S).normalize();
@@ -580,8 +798,8 @@ export class Person implements Character {
     local(arm.wrist, W);
     this.rotate(arm.lower, _qa.setFromUnitVectors(_d0.subVectors(W, E).normalize(), fore));
     // 3. the hand: half its turn about the forearm's length is the forearm's, the rest the wrist's
-    const palm = mirrored(h.palm, m, _pt).normalize();
-    const along = h.fingers ? mirrored(h.fingers, m, _ft) : _ft.copy(fore);
+    const palm = dir(h.palm, _pt).normalize();
+    const along = h.fingers ? dir(h.fingers, _ft) : _ft.copy(fore);
     along.addScaledVector(palm, -along.dot(palm)).normalize();
     frame(palm, along, _qt);
     _qa.copy(_qt).multiply(this.handFrame(arm, _qb).invert());
@@ -603,10 +821,6 @@ export class Person implements Character {
       // the index finger's side of the hand
       const up = _dir.crossVectors(along, palm).multiplyScalar(m).addScaledVector(along, 0.12).normalize();
       for (const bone of arm.thumb) this.point(bone, up);
-    }
-    if (k < 1) {
-      arm.bones.forEach((bone, i) => bone.quaternion.slerpQuaternions(arm.from[i]!, _qa.copy(bone.quaternion), k));
-      arm.upper.updateMatrixWorld(true);
     }
   }
 
@@ -655,7 +869,34 @@ export class Person implements Character {
         along,
         bones: all,
         from: all.map(() => new THREE.Quaternion()),
+        mixed: all.map(() => new THREE.Quaternion()),
       };
+    }
+  }
+
+  /**
+   * The legs and the chest in the idle pose, for the emotes that move the feet and the hands that
+   * go with the chest: each knee's hinge (the character's x axis, in the thigh's own frame) and the
+   * foot's height off the floor. A leg without every bone leaves the feet to the mixer.
+   */
+  private measureStance(model: THREE.Object3D): void {
+    this.legsIK = {};
+    const find = (n: string) => model.getObjectByName(n) ?? model.getObjectByName(n.replace('.', '')) ?? null;
+    const rootQ = this.root.getWorldQuaternion(new THREE.Quaternion());
+    const toRoot = rootQ.clone().invert();
+    const chest = this.bones.chest;
+    if (chest) this.chestRest.copy(chest.getWorldQuaternion(new THREE.Quaternion()).premultiply(toRoot));
+    const x = new THREE.Vector3(1, 0, 0).applyQuaternion(rootQ);
+    for (const side of ['R', 'L'] as const) {
+      const thigh = find(`UpperLeg.${side}`);
+      const shin = find(`LowerLeg.${side}`);
+      const foot = find(`Foot.${side}`);
+      if (!thigh || !shin || !foot) continue;
+      const hinge = x.clone().applyQuaternion(thigh.getWorldQuaternion(new THREE.Quaternion()).invert());
+      hinge.y = 0;
+      if (hinge.lengthSq() < 1e-8) continue;
+      const at = this.root.worldToLocal(foot.getWorldPosition(new THREE.Vector3()));
+      this.legsIK[side] = { thigh, shin, foot, hinge: hinge.normalize(), footY: at.y };
     }
   }
 
@@ -751,7 +992,7 @@ export class Person implements Character {
     if (!this.model || !hipBone || !kneeBone || !foot) return null;
     this.model.updateWorldMatrix(true, true);
     // (in the model's own frame, so neither a hop nor the root lowered onto a seat counts)
-    const lift = this.model.position.y - this.modelY;
+    const lift = this.model.position.y - this.modelAt.y;
     const hip = this.root.worldToLocal(hipBone.getWorldPosition(new THREE.Vector3()));
     const knee = this.root.worldToLocal(kneeBone.getWorldPosition(new THREE.Vector3()));
     const ankle = this.root.worldToLocal(foot.getWorldPosition(new THREE.Vector3()));
@@ -778,6 +1019,7 @@ export class Person implements Character {
     if (this.model) this.mixer?.uncacheRoot(this.model);
     this.mesh?.geometry.dispose();
     this.wear.dispose();
+    this.dropProp();
     this.ride?.dispose();
     this.tag.element.remove();
     this.root.removeFromParent();
@@ -811,7 +1053,8 @@ export class Person implements Character {
     // skinned bounds don't follow the animation; the character is small, so never cull it alone
     m.frustumCulled = false;
     this.model = model;
-    this.modelY = model.position.y;
+    this.modelAt.copy(model.position);
+    this.modelQ.copy(model.quaternion);
     this.bones = {};
     this.posed.clear();
     for (const [key, name] of Object.entries(BONE_NAMES) as [BoneKey, string][]) {
@@ -831,6 +1074,8 @@ export class Person implements Character {
       return a;
     });
     this.weights = [1, 0, 0];
+    // (idle alone: every action starts at full weight until update() eases them)
+    this.actions.forEach((a, i) => a.setEffectiveWeight(this.weights[i]!));
     this.spare.clear();
     this.legs = null;
     this.applyPace();
@@ -838,6 +1083,7 @@ export class Person implements Character {
     this.mixer.update(0);
     this.root.updateMatrixWorld(true);
     this.measureArms(model);
+    this.measureStance(model);
     this.update(0);
     this.paint();
   }
@@ -936,7 +1182,7 @@ export class Person implements Character {
     const model = this.model!;
     const side = spec.stance === 'side';
     const lift = spec.deck + ride.bob;
-    model.position.y = this.modelY + lift;
+    model.position.y = this.modelAt.y + lift;
     model.rotation.set(side ? ride.lean : ride.pitch, stanceYaw(spec), side ? 0 : ride.lean, 'YXZ');
     model.updateMatrixWorld(true);
     model.getWorldQuaternion(_rootQ).invert();
@@ -1014,7 +1260,7 @@ export class Person implements Character {
       const g = ride.grip(m === 1 ? 1 : -1, _rg);
       if (!g) continue;
       g.applyMatrix4(_rootInv).sub(mid).divideScalar(len);
-      this.reach(arm, m, { at: [g.x * m, g.y, g.z], elbow: [-1, -0.6, -0.5], palm: [0, -1, 0.25], fingers: [0.15, -0.2, 1], fist: 0.75 }, mid, len, 1);
+      this.arm(arm, m, { at: [g.x * m, g.y, g.z], elbow: [-1, -0.6, -0.5], palm: [0, -1, 0.25], fingers: [0.15, -0.2, 1], fist: 0.75 }, mid, len, 1);
     }
     return lift;
   }
@@ -1034,23 +1280,8 @@ const _rq = new THREE.Quaternion();
 
 // --- gestures ---------------------------------------------------------------------------------
 
-type BoneKey =
-  | 'shoulderR'
-  | 'upperR'
-  | 'lowerR'
-  | 'shoulderL'
-  | 'upperL'
-  | 'lowerL'
-  | 'head'
-  | 'neck'
-  | 'hips'
-  | 'torso'
-  | 'chest'
-  | 'thighR'
-  | 'shinR'
-  | 'thighL'
-  | 'shinL';
 const BONE_NAMES: Record<BoneKey, string> = {
+  body: 'Body',
   shoulderR: 'Shoulder.R',
   upperR: 'UpperArm.R',
   lowerR: 'LowerArm.R',
@@ -1068,7 +1299,8 @@ const BONE_NAMES: Record<BoneKey, string> = {
   shinL: 'LowerLeg.L',
 };
 /** Parents before children, so each turn starts from its parent's new pose. */
-const BONE_ORDER: BoneKey[] = ['hips', 'thighR', 'shinR', 'thighL', 'shinL', 'torso', 'chest', 'shoulderR', 'upperR', 'lowerR', 'shoulderL', 'upperL', 'lowerL', 'neck', 'head'];
+const BONE_ORDER: BoneKey[] = ['body', 'hips', 'thighR', 'shinR', 'thighL', 'shinL', 'torso', 'chest', 'shoulderR', 'upperR', 'lowerR', 'shoulderL', 'upperL', 'lowerL', 'neck', 'head'];
+const LEG_BONES = new Set<BoneKey>(['thighR', 'shinR', 'thighL', 'shinL']);
 
 /** Where the eyes are above the feet, for aiming the head. */
 const EYE_Y = 1.64;
@@ -1083,36 +1315,10 @@ const SIT_BEND_MAX = 1.62;
 // upper arm comes to 10 forward and closer in, the forearm level (right arm; the left mirrors).
 const SIT_UPPER: Turn = [-0.43, 0, 0.2];
 const SIT_LOWER: Turn = [-0.72, 0.3, 0];
-
-/** Radians about the character's x (left), y (up) and z (forward) axes, applied z, then x, then y. */
-type Turn = [number, number, number];
-/** A point or a direction in the character's frame: x to its left, y up, z forward. */
-type Vec = [number, number, number];
-
-/**
- * An arm as an emote holds it, given for the right arm (the left mirrors x: -x is out to the
- * right, +x across the body). Either the wrist goes to `at` (from the middle of the shoulders, in
- * arm lengths: shoulder to wrist, straight) with the elbow bending out toward `elbow`, or the upper
- * arm and the forearm lie along `upper` and `fore`. Directions needn't be unit length.
- */
-interface Hand {
-  at?: Vec;
-  /** Metres further out than `at` (-x for the right hand): a hand's own thickness, which doesn't grow with the arm. */
-  out?: number;
-  elbow?: Vec;
-  upper?: Vec;
-  fore?: Vec;
-  /** Which way the palm faces, and the way the fingers point (on along the forearm if not given). */
-  palm: Vec;
-  fingers?: Vec;
-  /** The fingers curled into a fist, 0 to 1. */
-  fist?: number;
-  /** The thumb straight up along the index finger's side of the hand. */
-  thumb?: boolean;
-}
-
-type Pose = Partial<Record<BoneKey, Turn>> & { hop?: number; handR?: Hand; handL?: Hand };
-type Gesture = { dur: number; pose: (t: number, seated: boolean) => Pose };
+/** Heel to the tips of the toes, metres: a raised heel turns the (unbending) foot about them. */
+const BALL = 0.18;
+/** A walk faster than this ends a dance (it eases out from wherever it had got to). */
+const DANCE_WALK = 0.3;
 
 /** An arm's bones and how they're built (Person.measureArms). */
 interface Arm {
@@ -1128,146 +1334,36 @@ interface Arm {
   /** The palm's normal and the way the fingers point, in the wrist's own frame. */
   palm: THREE.Vector3;
   along: THREE.Vector3;
-  /** Every bone above, and room for their poses before an emote turned them (for the blend). */
+  /** Every bone above, and room for their poses before an emote turned them (for the blend), and for a second pose (a mix). */
   bones: THREE.Object3D[];
   from: THREE.Quaternion[];
+  mixed: THREE.Quaternion[];
+}
+
+/** A leg's bones for the emotes that move the feet (Person.plant). */
+interface Leg {
+  thigh: THREE.Object3D;
+  shin: THREE.Object3D;
+  foot: THREE.Object3D;
+  /** The knee's hinge (the character's x axis in the idle pose), in the thigh's own frame. */
+  hinge: THREE.Vector3;
+  /** The foot's height off the floor standing. */
+  footY: number;
+}
+
+/** What an emote does to the whole body this frame: its hop and glide, flip and spin. */
+interface Whole {
+  y: number;
+  z: number;
+  flip: number;
+  spin: number;
 }
 
 const FINGERS = ['Index', 'Middle', 'Ring', 'Pinky'];
 /** A fist: each finger joint's bend, knuckle first (radians). */
 const FIST = [1.5, 1.65, 0.95];
-const DOWN: Vec = [0, -1, 0];
-
-/** The same turn for the left side: x stays, y and z change sign. */
-const mirror = (t: Turn): Turn => [t[0], -t[1], -t[2]];
-
-/** Claps a second, and how long a clap lasts; the hands meet at every 1 / CLAP_RATE s. */
-export const CLAP_RATE = 3;
-export const CLAP_S = 2;
-/** When a clap's hands meet, in seconds from its start (while the arms are fully up): its sound's cues. */
-export const CLAP_TIMES: readonly number[] = [1, 2, 3, 4, 5].map((n) => n / CLAP_RATE);
-/** How far a wrist is from the middle when the palms touch, in metres (on either body). */
-const PALM = 0.054;
-
-/**
- * The emotes, each hand given for the right arm (see Hand). Everything is in the character's own
- * frame, so a seated player makes the same shapes; a cheer only hops from the floor.
- */
-const GESTURES: Partial<Record<EmoteId, Gesture>> = {
-  // the right hand up by the head, palm out, the forearm rocking side to side from the elbow
-  wave: {
-    dur: 2.4,
-    pose: (t) => ({
-      handR: { upper: [-1, -0.3, 0.15], fore: [-0.45 * Math.sin(t * 11), 1, 0.15], palm: [0, 0, 1] },
-      head: [0, 0, 0.08],
-    }),
-  },
-  // both fists thrown up in a V and shaken, with a couple of hops
-  cheer: {
-    dur: 1.7,
-    pose: (t, seated) => {
-      const hand: Hand = { upper: [-0.5, 1, 0.12], fore: [-0.38 + 0.14 * Math.sin(t * 16), 1, 0.15], palm: [0.25, 0, 1], fist: 1 };
-      return { handR: hand, handL: hand, hop: !seated && t < 0.9 ? 0.15 * Math.abs(Math.sin((Math.PI * t) / 0.45)) : 0 };
-    },
-  },
-  // palm to palm in front of the chest, elbows out, three claps a second: the hands snap shut
-  // and ease apart
-  clap: {
-    dur: CLAP_S,
-    pose: (t) => {
-      const open = Math.abs(Math.sin(Math.PI * CLAP_RATE * t)) ** 0.75;
-      const hand: Hand = { at: [-0.25 * open, -0.42, 0.62], out: PALM, elbow: [-1, -0.3, -0.15], palm: [1, 0, 0], fingers: [-0.1 * open, 0.6, 1] };
-      return { handR: hand, handL: hand, head: [0.04, 0, 0] };
-    },
-  },
-  // a fist held out in front of the chest, thumb up, pushed forward once, and a nod
-  thumbs: {
-    dur: 1.9,
-    pose: (t) => {
-      const push = beat(t, 0.1, 0.55);
-      return {
-        handR: { upper: [-0.22, -0.8, 0.5 + 0.2 * push], fore: [0.1, 0.3, 1], palm: [1, 0, 0], fingers: [0, 0, 1], fist: 1, thumb: true },
-        head: [0.07 + 0.05 * push, 0, 0],
-      };
-    },
-  },
-  // shoulders up, elbows in at the sides, forearms out with the palms up, head to one side
-  shrug: {
-    dur: 1.7,
-    pose: () => {
-      const shoulder: Turn = [0, 0, -0.24];
-      const hand: Hand = { upper: [-0.14, -1, -0.04], fore: [-0.8, 0.12, 0.6], palm: [0, 1, 0], fingers: [-0.8, 0, 0.6] };
-      return { shoulderR: shoulder, shoulderL: mirror(shoulder), handR: hand, handL: hand, head: [0, 0, 0.2] };
-    },
-  },
-  // "six, seven": both hands out in front, palms up, weighed one against the other while the
-  // head bobs to it
-  sixseven: {
-    dur: 2.1,
-    pose: (t, seated) => {
-      const w = Math.sin(t * Math.PI * 2 * 1.6);
-      const lift = seated ? 0.3 : 0.08;
-      const hand = (up: number): Hand => ({ upper: [-0.1, -1, seated ? 0.45 : 0.28], fore: [-0.07, lift + 0.42 * up, 1], palm: [0, 1, 0], fingers: [-0.1, 0, 1] });
-      return { handR: hand(w), handL: hand(-w), head: [0.03 + 0.06 * Math.abs(w), 0, 0.06 * w] };
-    },
-  },
-};
-
-/** A dealer's motions at the table, for the table views to call through the world. */
-export type StaffGesture = 'deal' | 'sweep' | 'pay';
-
-/** Up, then down again, between two moments of a gesture (0 outside them). */
-const beat = (t: number, t0: number, t1: number) => (t <= t0 || t >= t1 ? 0 : Math.sin((Math.PI * (t - t0)) / (t1 - t0)));
-
-// Reaching down over the felt: from the idle arm (upper 14 degrees back and 27 out, forearm 24
-// forward) the upper arm swings forward and in and the elbow opens, so the hand comes down to a
-// hand's height over a table 0.78 m high, 30-40 cm out.
-const STAFF_GESTURES: Record<StaffGesture, { dur: number; pose: (t: number) => Pose }> = {
-  // the deck held at the waist in the left hand; the right takes a card and flicks it out
-  deal: {
-    dur: 1.0,
-    pose: (t) => {
-      const flick = beat(t, 0.35, 0.7);
-      return {
-        torso: [0.06, 0, 0],
-        upperL: [-0.34, 0, -0.26],
-        lowerL: [-0.81, -0.5, 0],
-        upperR: [-0.88 - 0.2 * flick, 0.1, 0.26],
-        lowerR: [0.67 + 0.15 * flick, 0.15, 0],
-      };
-    },
-  },
-  // the right arm reaches across the layout and draws the chips in toward the rack
-  sweep: {
-    dur: 1.35,
-    pose: (t) => {
-      const u = smooth(Math.min(1, Math.max(0, (t - 0.2) / 0.85)));
-      return {
-        torso: [0.14, 0.15 - 0.3 * u, 0],
-        upperR: [-1.0 + 0.45 * u, 0.55 - 0.75 * u, 0.26],
-        lowerR: [0.55 - 0.45 * u, 0.2, 0],
-      };
-    },
-  },
-  // both hands forward, setting a payout down beside a bet
-  pay: {
-    dur: 1.1,
-    pose: (t) => {
-      const push = beat(t, 0.3, 0.8);
-      const upper: Turn = [-0.8 - 0.15 * push, 0.1, 0.26];
-      const lower: Turn = [0.5 + 0.15 * push, 0.2, 0];
-      return { torso: [0.1 + 0.04 * push, 0, 0], upperR: upper, lowerR: lower, upperL: mirror(upper), lowerL: mirror(lower) };
-    },
-  },
-};
-
-function gestureOf(e: EmoteId | StaffGesture): Gesture | undefined {
-  return (GESTURES as Partial<Record<string, Gesture>>)[e] ?? (STAFF_GESTURES as Partial<Record<string, Gesture>>)[e];
-}
-
-function smooth(x: number): number {
-  return x * x * (3 - 2 * x);
-}
+/** A knee bends ahead. */
+const KNEE: Vec = [0, 0, 1];
 
 // The posing works in the character's own frame: update() sets these from its root each frame.
 const _rootQ = new THREE.Quaternion();
@@ -1343,6 +1439,8 @@ const _fx = new THREE.Vector3();
 const _fy = new THREE.Vector3();
 const _fz = new THREE.Vector3();
 const _basis = new THREE.Matrix4();
+const _qChest = new THREE.Quaternion();
+const _pv = new THREE.Vector3();
 
 /** Every outfit id per body, for pickers and checks. */
 export const ALL_OUTFITS = OUTFITS;

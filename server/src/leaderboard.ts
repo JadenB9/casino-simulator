@@ -140,8 +140,8 @@ export const SQL = {
     SELECT account_id AS id, SUM(price) AS v FROM casino_items
      GROUP BY account_id`,
   names: `SELECT id, name FROM casino_accounts WHERE id IN (SELECT value FROM json_each(?1))`,
-  /** Day and week rows before ?1 / ?2 (day keys sort by date, and nothing else starts d: or w:). */
-  prune: `DELETE FROM casino_tally WHERE (key >= 'd:' AND key < ?1) OR (key >= 'w:' AND key < ?2)`,
+  /** Day and week net rows before ?1 / ?2 (they sort by date, and nothing else starts n: or w:). */
+  prune: `DELETE FROM casino_tally WHERE (key >= 'n:' AND key < ?1) OR (key >= 'w:' AND key < ?2)`,
   gameNetTop: gameStats('net', 'idx_casino_stats_game_net').top,
   gameNetPlace: gameStats('net', 'idx_casino_stats_game_net').place,
   gameNetBottom: gameStats('net', 'idx_casino_stats_game_net', true).top,
@@ -343,7 +343,7 @@ async function readBoards(db: D1Database, specs: Partial<Record<LeaderboardId, B
   const prune = !game && now - prunedAt >= PRUNE_MS;
   if (prune) {
     const cut = addDays(vegasDay(now), -KEEP_DAYS);
-    stmts.push(db.prepare(SQL.prune).bind(dayKey(cut).slice(0, 12), weekKey(weekOf(cut)).slice(0, 12)));
+    stmts.push(db.prepare(SQL.prune).bind(dayKey(cut), weekKey(weekOf(cut)).slice(0, 12)));
     prunedAt = now;
   }
   const results = await db.batch<ScanRow>(stmts);

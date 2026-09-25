@@ -214,7 +214,7 @@ async function handleApi(request: Request, env: Env, route: string, cors: Record
 
   // v6 celebs6: the daily bonus (daily.ts); on the dev stack only, a celebrity or a gift box on demand
   if (route === 'daily' || route === 'daily/claim') return dailyApi(request, env, route, claims.a, cors);
-  if (route.startsWith('dev/') && env.CASINO_DEV === '1') return celebsDevApi(request, route, cors, floor(env));
+  if (route.startsWith('dev/') && env.CASINO_DEV === '1') return celebsDevApi(request, env, route, cors, floor(env));
 
   // The boutique and the bar (shop.ts): paid from the balance, never from chips on tables.
   if (route === 'shop' || route.startsWith('shop/') || route.startsWith('bar/')) return shopApi(request, env, route, claims.a, cors);
