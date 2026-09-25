@@ -89,6 +89,44 @@ await frozenPunch('fist-windup', 0.1, [0.7, 1.5, 7.9], [0, 1.45, 7.75]);
 await frozenPunch('fist-eyes', 0.26, [0, 1.66, 7.62], [-0.12, 1.42, 8.3]);
 await p.evaluate(() => (window.casino.freeze = null));
 
+/** Down in the elevator to the ground floor, walking to a car in the casino's lift bank first. */
+async function toGround() {
+  const car = await p.evaluate(() => window.casino.world.city.casinoBank.cars[0]);
+  const cx = (car.x0 + car.x1) / 2;
+  const cz = (car.z0 + car.z1) / 2;
+  await walk(cx, cz, 0);
+  await p.evaluate(() => window.casino.world.city.go('ground'));
+  await p.waitForFunction(() => window.casino.world.zone === 'ground' && !window.casino.world.city.riding, null, { timeout: 30000 });
+  await p.waitForTimeout(800);
+}
+/** Walk (a couple of metres at a time, as fast as the floor allows) to (x, z), then face `yaw`. */
+async function walk(x, z, yaw) {
+  for (let i = 0; i < 120; i++) {
+    const done = await p.evaluate(([x, z, yaw]) => {
+      const w = window.casino.world;
+      const q = w.player.position;
+      const d = Math.hypot(x - q.x, z - q.z);
+      const k = Math.min(1, 1.8 / Math.max(d, 1e-6));
+      w.player.teleport(q.x + (x - q.x) * k, q.z + (z - q.z) * k, yaw);
+      return d <= 1.8;
+    }, [x, z, yaw]);
+    await p.waitForTimeout(240);
+    if (done) break;
+  }
+}
+
+if (!only || only.some((n) => n.startsWith('jail'))) {
+  await toGround();
+  // from the sidewalk to the visitors' door, on foot (W held): the lot and the door let you in
+  await walk(164.6, -25, Math.PI / 2);
+  await p.evaluate(() => window.casino.world.releaseMouse?.());
+  await p.keyboard.down('KeyW');
+  await p.waitForTimeout(2600);
+  await p.keyboard.up('KeyW');
+  const at = await p.evaluate(() => ({ x: window.casino.world.player.position.x, z: window.casino.world.player.position.z }));
+  console.log(`${at.x > 168 && at.x < 172 ? 'ok  ' : 'FAIL'} walked in off the street to the hall (${at.x.toFixed(1)}, ${at.z.toFixed(1)})`);
+}
+
 // the jail: from across the street, the door, the hall through the bars, inside
 await shot('jail-street', [158, 3.2, -25], [172, 2.2, -25], [170, -10, 0]);
 await shot('jail-corner', [160, 9, -50], [180, 1, -25]);
