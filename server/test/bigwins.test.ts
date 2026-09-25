@@ -116,6 +116,13 @@ describe('what the floor says about a win, and when', () => {
     expect(revealAt('slots', events, 10_000)).toBe(10_000 + 3_200 + 2 * 2_400);
   });
 
+  it("Straw, Sticks & Bricks names the Blowdown and the Whole Street, and waits for the wolf", () => {
+    const bd = (street: number) => ({ type: 'reels', spin: 0, blowdown: { start: [], spins: [{}, {}, {}, {}], houses: [], street, win: 1 } });
+    expect(describeWin('slots', 'pigs', [bd(0)], 0, 200, 9_000)).toBe('Straw, Sticks & Bricks, Blowdown 45x');
+    expect(describeWin('slots', 'pigs', [bd(200_000)], 0, 200, 220_000)).toBe('Straw, Sticks & Bricks, the Whole Street 1100x');
+    expect(revealAt('slots', [bd(0)], 10_000)).toBe(10_000 + 3_200 + 9_500 + 4 * 1_200);
+  });
+
   it('every game has words for its win', () => {
     expect(describeWin('videopoker', '', [{ type: 'result', seat: 0, name: 'Royal Flush' }], 0, 500, 400_000)).toBe('Royal Flush');
     expect(describeWin('bigsix', '', [{ type: 'settle', seats: { 0: { bets: [['star', 1_000, 41_000]] } } }], 0, 1_000, 41_000)).toBe('Star, 40 to 1');

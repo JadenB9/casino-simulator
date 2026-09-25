@@ -142,15 +142,24 @@ const SHOW_MS: Partial<Record<GameId, number>> = {
 const FREE_GAME_MS = 2_400;
 
 /** Server time the winner sees the result: when the ball lands, or once the cards and reels are shown. */
+/** Straw, Sticks & Bricks' Blowdown on the machine: the banner, the board, the wolf, then each of its spins and the street. */
+const BLOWDOWN_MS = 9_500;
+const BLOWDOWN_SPIN_MS = 1_200;
+const STREET_MS = 3_000;
+
 export function revealAt(game: GameId, events: readonly GameEvent[], now: number): number {
   let rest = 0;
   let free = 0;
+  let bonus = 0;
   for (const e of events) {
     if (typeof e.restAt === 'number' && Number.isFinite(e.restAt)) rest = Math.max(rest, e.restAt);
     if (e.type === 'reels' && typeof e.spin === 'number' && e.spin > 0) free++;
+    // v6 pigs6: the Blowdown plays out on the machine: its banner, each spin, the wolf down the street
+    const bd = e.type === 'reels' ? (e.blowdown as { spins?: unknown; street?: unknown } | undefined) : undefined;
+    if (bd && typeof bd === 'object') bonus += BLOWDOWN_MS + (Array.isArray(bd.spins) ? bd.spins.length : 0) * BLOWDOWN_SPIN_MS + (typeof bd.street === 'number' && bd.street > 0 ? STREET_MS : 0);
   }
   // a game not in the table (a new one) gets a middling pause
-  const at = rest > 0 ? Math.max(rest, now) + REST_BEAT_MS : now + (SHOW_MS[game] ?? 2_500) + free * FREE_GAME_MS;
+  const at = rest > 0 ? Math.max(rest, now) + REST_BEAT_MS : now + (SHOW_MS[game] ?? 2_500) + free * FREE_GAME_MS + bonus;
   return Math.min(at, now + REVEAL_MAX_MS);
 }
 
@@ -163,7 +172,10 @@ export function describeWin(game: GameId, variant: string, events: readonly Game
       case 'slots': {
         const machine = CATALOG.slots.variants.find((v) => v.id === variant)?.name ?? 'Slots';
         const free = events.some((e) => e.type === 'reels' && typeof e.spin === 'number' && e.spin > 0);
-        return `${machine}, ${free ? 'free games ' : ''}${times}`;
+        // v6 pigs6: Straw, Sticks & Bricks' Blowdown and its Whole Street
+        const bd = events.find((e) => e.type === 'reels' && typeof e.blowdown === 'object' && e.blowdown !== null)?.blowdown as { street?: unknown } | undefined;
+        const feature = free ? 'free games ' : bd ? (typeof bd.street === 'number' && bd.street > 0 ? 'the Whole Street ' : 'Blowdown ') : '';
+        return `${machine}, ${feature}${times}`;
       }
       case 'videopoker': {
         const r = mine('result')[0];
