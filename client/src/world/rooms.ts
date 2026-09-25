@@ -330,19 +330,34 @@ export const ROOMS: RoomSpec[] = [
     fixtures: [{ kind: 'pit-podium' }],
     hanging: [
       { id: 'table-games', x: 0, y: 2.96, z: -0.15, ry: 0, w: 4.6, h: 0.6, kind: 'lit', text: 'TABLE GAMES', color: '#ffe0a0' },
-      // over the north aisle: the north wing's rooms lie one room beyond the doors along it
+      // over the north aisle, either side of the salon's door (clear of the signs over the doors):
+      // the north wing's rooms lie one room beyond the doors along it
       {
-        id: 'north-wing',
-        x: 0,
+        id: 'north-wing-w',
+        x: -6.3,
         y: 2.9,
         z: -9.3,
         ry: 0,
-        w: 6.4,
+        w: 4.2,
         h: 0.4,
         kind: 'way',
         front: [
           { text: 'PACHINKO', arrow: 'left', before: true },
-          { text: 'JADE ROOM', arrow: 'up' },
+          { text: 'JADE ROOM', arrow: 'right' },
+        ],
+        back: [{ text: 'LOBBY', arrow: 'up' }],
+      },
+      {
+        id: 'north-wing-e',
+        x: 6.3,
+        y: 2.9,
+        z: -9.3,
+        ry: 0,
+        w: 4.2,
+        h: 0.4,
+        kind: 'way',
+        front: [
+          { text: 'JADE ROOM', arrow: 'left', before: true },
           { text: 'BINGO', arrow: 'right' },
         ],
         back: [{ text: 'LOBBY', arrow: 'up' }],
