@@ -15,7 +15,7 @@ import {
 import { el, modal } from '../kit.ts';
 import type { AccountApi, Closable, SessionLike, SfxLike } from '../menu/deps.ts';
 import { openSheet } from '../menu/sheet.ts';
-import { formatDateTime, gameName, problemText, segmented, statTile } from '../menu/parts.ts';
+import { gameName, problemText, segmented, statTile } from '../menu/parts.ts';
 import * as realBank from './api.ts';
 import type { BankApi } from './api.ts';
 import { PriceChart } from './chart.ts';
@@ -746,7 +746,7 @@ export function openBank(deps: BankDeps): Closable {
         const text = el('span', 'bank-line-text', d.text);
         if (l.note) text.append(el('span', 'bank-note', l.note));
         row.append(
-          el('span', 'bank-line-date', formatDateTime(l.at)),
+          el('span', 'bank-line-date', shortFmt.format(l.at)),
           text,
           el('span', 'bank-line-acct', d.account),
           el('span', `money bank-line-amt ${amount > 0 ? 'win' : ''}`.trim(), amount === 0 ? '' : formatMoney(amount, { sign: true })),
