@@ -64,6 +64,14 @@ function sql(command) {
   });
 }
 
+// qa6: on a fresh local database a brand-new name is greeted by the guided look editor, not the
+// menu these checks walk; make NAME an account from over a quarter of an hour ago first, as it is
+// on any database the script has run on before.
+{
+  await fetch(`http://localhost:${port}/casino/api/login`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: NAME, password: PASS }) });
+  execFileSync('node_modules/.bin/wrangler', ['d1', 'execute', 'DB', '--local', '-c', 'server/wrangler.toml', '--command', `UPDATE casino_accounts SET created_at = created_at - 3600000 WHERE name = '${NAME}'`], { cwd: new URL('../..', import.meta.url), env: { ...process.env, CI: '1' }, stdio: 'ignore' });
+}
+
 // ---- first visit: name, password, the rule, Show; in; out; "Continue as" asks for the password
 {
   const p = await open(`${dev}?screen=flow&dock=0`);

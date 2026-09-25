@@ -42,8 +42,17 @@ async function enterFloor() {
     await page.fill('.pass-input', 'casino-dev'); // DEV_PASSWORD in client/src/net/api.ts
     await page.click('.enter-btn');
   }
-  await page.waitForSelector('.menu-item', { timeout: 20_000 });
-  await page.click('.menu-item >> nth=0');
+  // qa6: a new name (a fresh local database) picks a look first, then goes straight in
+  await page.waitForSelector('.menu-item, .editor-panel', { timeout: 20_000 });
+  if (await page.$('.menu-item')) await page.click('.menu-item >> nth=0');
+  else {
+    await page.waitForTimeout(2500);
+    for (let k = 0; k < 10 && !(await page.$('.hud')); k++) {
+      const next = await page.$('.editor-panel .ed-buttons .btn.primary');
+      if (next) await next.click();
+      await page.waitForTimeout(700);
+    }
+  }
   await page.waitForSelector('.hud', { timeout: 20_000 });
 }
 
