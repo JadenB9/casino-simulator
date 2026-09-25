@@ -158,6 +158,11 @@ export class Directory {
     return null;
   }
 
+  /** v6 invite6: the PIN a table holds now, or null (a public table, or none at all). */
+  pinOf(tableId: string): string | null {
+    return this.sql.exec<{ pin: string }>(`SELECT pin FROM lobby_pins WHERE table_id = ?1`, tableId).toArray()[0]?.pin ?? null;
+  }
+
   releasePin(tableId: string, now: number): void {
     this.sql.exec(`UPDATE lobby_pins SET table_id = NULL, game = NULL, released_at = ?1 WHERE table_id = ?2`, now, tableId);
   }
