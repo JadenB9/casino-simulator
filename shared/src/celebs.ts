@@ -20,7 +20,7 @@ import type { Look } from './look.ts';
 // ---------------------------------------------------------------------------------------------
 // Routes
 
-/** Where a celebrity stops and what they do there. */
+/** Where a celebrity stops and what they do there (a wave at the doors on the way out is 'bye'). */
 export type StopKind = 'greet' | 'sign' | 'table' | 'pose' | 'bye';
 
 export interface RouteStop {
@@ -50,32 +50,32 @@ export const ROUTES: Record<RouteId, Route> = {
   // the pit's War table, the bar's counter, the lounge by the fire
   bar: {
     pts: [[0, 14.2], [0, 8.2], [0, 0.5], [0.16, -8.9], [10, -6], [25.4, -6.2], [21, -3], [23.7, 5], [24, 8.6], [21.1, -2.9], [21, -3], [10, -6], [0, 0.5], [0, 8.2], [0, 14.2]],
-    stops: [{ at: 1, kind: 'greet', secs: 24, face: 0 }, { at: 3, kind: 'table', secs: 45, face: 2 }, { at: 5, kind: 'sign', secs: 50, face: -1 }, { at: 8, kind: 'pose', secs: 40, face: 0 }, { at: 14, kind: 'bye', secs: 9, face: 0 }],
+    stops: [{ at: 1, kind: 'greet', secs: 24, face: 0 }, { at: 3, kind: 'table', secs: 45, face: 2 }, { at: 5, kind: 'sign', secs: 50, face: -1 }, { at: 8, kind: 'pose', secs: 40, face: 0 }, { at: 14, kind: 'bye', secs: 9, face: 2 }],
   },
   // down the slots hall's aisle and out to the Bandit Wheel in the yard
   yard: {
     pts: [[0, 14.2], [0, 8.2], [0, 0.5], [-10, -6], [-22, -6.2], [-23.4, 9.8], [-22, -6.2], [-10, -6], [0, 0.5], [0, 8.2], [0, 14.2]],
-    stops: [{ at: 1, kind: 'greet', secs: 24, face: 0 }, { at: 4, kind: 'sign', secs: 50, face: 1 }, { at: 5, kind: 'table', secs: 45, face: 0 }, { at: 10, kind: 'bye', secs: 9, face: 0 }],
+    stops: [{ at: 1, kind: 'greet', secs: 24, face: 0 }, { at: 4, kind: 'sign', secs: 50, face: 1 }, { at: 5, kind: 'table', secs: 45, face: 0 }, { at: 10, kind: 'bye', secs: 9, face: 2 }],
   },
-  // round the pit's east end to the High Limit Salon, then the Poker Room
+  // round the pit's east end to baccarat in the High Limit Salon, then the Poker Room
   salon: {
     pts: [[0, 14.2], [0, 8.2], [0, 0.5], [10, -6], [11.9, -7.8], [11.9, -17.6], [1.3, -18.4], [1.1, -18.7], [0, -23.2], [1.1, -18.6], [1.4, -18.4], [11.9, -17.6], [11.5, -18.7], [11.5, -19.4], [12.6, -20.1], [16.9, -21], [20, -25], [16.9, -21], [11.7, -19.6], [11.5, -19.3], [11.6, -17.9], [11.9, -17.6], [11.9, -7.8], [10, -6], [0, 0.5], [0, 8.2], [0, 14.2]],
-    stops: [{ at: 1, kind: 'pose', secs: 30, face: 0 }, { at: 8, kind: 'sign', secs: 50, face: 0 }, { at: 16, kind: 'table', secs: 45, face: 0 }, { at: 26, kind: 'bye', secs: 9, face: 0 }],
+    stops: [{ at: 1, kind: 'pose', secs: 30, face: 0 }, { at: 8, kind: 'table', secs: 45, face: 2 }, { at: 16, kind: 'sign', secs: 50, face: 0 }, { at: 26, kind: 'bye', secs: 9, face: 2 }],
   },
   // the boutique's counter first, Three Card Poker, then the bar
   boutique: {
     pts: [[0, 14.2], [0, 8.2], [12.6, 9.5], [0, 8.2], [0, 0.5], [4.2, -8.9], [10, -6], [25.4, -6.2], [10, -6], [0, 0.5], [0, 8.2], [0, 14.2]],
-    stops: [{ at: 1, kind: 'greet', secs: 24, face: 0 }, { at: 2, kind: 'pose', secs: 40, face: -1 }, { at: 5, kind: 'table', secs: 45, face: 2 }, { at: 7, kind: 'sign', secs: 50, face: -1 }, { at: 11, kind: 'bye', secs: 9, face: 0 }],
+    stops: [{ at: 1, kind: 'greet', secs: 24, face: 0 }, { at: 2, kind: 'pose', secs: 40, face: -1 }, { at: 5, kind: 'table', secs: 45, face: 2 }, { at: 7, kind: 'sign', secs: 50, face: -1 }, { at: 11, kind: 'bye', secs: 9, face: 2 }],
   },
-  // round the pit's west end to the Online Lounge, then blackjack
+  // round the pit's west end to the Online Lounge's computers, then blackjack
   online: {
     pts: [[0, 14.2], [0, 8.2], [0, 0.5], [-10, -6], [-11.9, -7.8], [-11.9, -17.6], [-11.5, -18.7], [-11.5, -19.4], [-19, -24], [-20, -25], [-16.8, -22.3], [-11.6, -19.5], [-11.5, -19.3], [-11.6, -17.9], [-11.9, -17.6], [-11.9, -7.8], [-10.3, -7.8], [-8.34, -8.9], [0, 0.5], [0, 8.2], [0, 14.2]],
-    stops: [{ at: 1, kind: 'greet', secs: 24, face: 0 }, { at: 9, kind: 'table', secs: 45, face: 1 }, { at: 17, kind: 'sign', secs: 50, face: 2 }, { at: 20, kind: 'bye', secs: 9, face: 0 }],
+    stops: [{ at: 1, kind: 'greet', secs: 24, face: 0 }, { at: 9, kind: 'table', secs: 45, face: 1 }, { at: 17, kind: 'table', secs: 45, face: 2 }, { at: 20, kind: 'bye', secs: 9, face: 2 }],
   },
   // along the pit's south row, blackjack at both ends, then the slots hall
   pit: {
     pts: [[0, 14.2], [0, 8.2], [0, 0.5], [8.34, -8.9], [0.16, -8.9], [-7.4, -8.8], [-8.34, -8.9], [-10, -6], [-22, -6.2], [-10, -6], [0, 0.5], [0, 8.2], [0, 14.2]],
-    stops: [{ at: 1, kind: 'pose', secs: 30, face: 0 }, { at: 3, kind: 'table', secs: 45, face: 2 }, { at: 6, kind: 'table', secs: 40, face: 2 }, { at: 8, kind: 'greet', secs: 40, face: 1 }, { at: 12, kind: 'bye', secs: 9, face: 0 }],
+    stops: [{ at: 1, kind: 'pose', secs: 30, face: 0 }, { at: 3, kind: 'table', secs: 45, face: 2 }, { at: 6, kind: 'table', secs: 40, face: 2 }, { at: 8, kind: 'greet', secs: 40, face: 1 }, { at: 12, kind: 'bye', secs: 9, face: 2 }],
   },
 };
 
