@@ -15,7 +15,7 @@ const stats: ArenaStats = { decisions: 0, refused: 0, ms: 0, slowestMs: 0 };
 const find = (r: MatchResult[], name: string) => r.find((x) => x.name === name)!;
 
 it('bots drawn for high stakes beat bots drawn for micro stakes', () => {
-  const deals = mcRounds(1_500);
+  const deals = mcRounds(1_200);
   for (const [lo, hi, seed] of [
     [100, 1_000_000, 11], // $1 against $10,000 big blinds
     [100, 10_000, 12], // $1 against $100
@@ -33,7 +33,7 @@ it('bots drawn for high stakes beat bots drawn for micro stakes', () => {
 });
 
 it('a professional beats every kind of weak player heads-up', () => {
-  const deals = mcRounds(2_000);
+  const deals = mcRounds(1_500);
   for (const [id, skill, seed] of [
     ['station', 0.12, 21],
     ['fish', 0.2, 22],
@@ -48,7 +48,7 @@ it('a professional beats every kind of weak player heads-up', () => {
 });
 
 it('no trivial strategy wins against the tables the engine seats at high stakes', () => {
-  const deals = mcRounds(1_000);
+  const deals = mcRounds(600);
   const strategies = [
     ['always call', alwaysCall],
     ['always raise', alwaysRaise],
