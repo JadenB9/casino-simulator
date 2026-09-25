@@ -30,6 +30,7 @@ import { CupChips, Pile } from './chips.ts';
 import { WheelSound } from './sound.ts';
 import { Panel, History, Players, TerminalTag, type PlayerRow } from './hud.ts';
 import { drawScreen, type ScreenState } from './art.ts';
+import { blink, wave } from '../../app/comfort.ts';
 
 const SEATS = seatPositions();
 /** Clicks are handed to the audio clock this far ahead. */
@@ -486,7 +487,8 @@ function mountBanditWheel(ctx: TableViewCtx): TableView {
   function lamps(): void {
     if (!bulbs) return;
     const now = performance.now();
-    const on = now > flashUntil || Math.floor(now / 140) % 2 === 0;
+    // calm (app/comfort.ts): lit and steady instead of flashing
+    const on = blink(now > flashUntil || Math.floor(now / 140) % 2 === 0);
     bulbs.material.color.copy(bulbLit).multiplyScalar(on ? 1 : 0.18);
   }
 
@@ -830,7 +832,7 @@ function mountBanditWheel(ctx: TableViewCtx): TableView {
       clicks();
       updateTime();
       lamps();
-      const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 240);
+      const pulse = 0.5 + 0.5 * wave(performance.now() / 240);
       if (glow.visible) glow.material.opacity = 0.18 + 0.2 * pulse;
       if (winGroup.children.length) winMat.opacity = 0.25 + 0.3 * pulse;
     },

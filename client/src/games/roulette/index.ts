@@ -33,6 +33,7 @@ import { BallSound } from './sound.ts';
 import { History, Meters, Plaque, Tip, Clock, Players, type PlayerRow } from './hud.ts';
 import { rouletteAdvice, rouletteMoment } from './advice.ts';
 import { celebrate } from '../../table/celebrate.ts';
+import { wave } from '../../app/comfort.ts';
 
 const FELT_Y = TOP_Y + 0.0007;
 const CHIP_Y = TOP_Y + 0.0009;
@@ -795,7 +796,7 @@ function mountRoulette(ctx: TableViewCtx): TableView {
       placeBall();
       ballSounds();
       updateClock();
-      if (winGroup.children.length) winMat.opacity = 0.22 + 0.12 * (0.5 + 0.5 * Math.sin(performance.now() / 260));
+      if (winGroup.children.length) winMat.opacity = 0.22 + 0.12 * (0.5 + 0.5 * wave(performance.now() / 260));
     },
 
     dispose() {

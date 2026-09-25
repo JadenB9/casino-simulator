@@ -314,7 +314,7 @@ class App {
     this.lifeOff = this.life.connect(link, { onFloor: () => this.hud !== null && this.table === null && this.world.seated === null });
     link.on('emote', (id, e) => void this.world.showEmote(id === link.you?.id ? 'me' : id, e));
     // v6 fx6: the shop's effects and the lobby's statues, for everyone on the floor (world/fx/)
-    this.world.useFx({ self: () => link.you?.id ?? null, marquee: this.life.marquee });
+    this.world.useFx({ self: () => link.you?.id ?? null, marquee: this.life.marquee, tally: this.life.tally });
     link.on('fx', (ev) => this.world.playFx(ev));
     link.on('fxs', (list) => this.world.syncFx(list));
     link.on('statues', (list) => void this.world.setStatues(list));

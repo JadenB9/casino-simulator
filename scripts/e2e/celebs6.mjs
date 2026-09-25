@@ -7,6 +7,7 @@
 //           seeing the selfie, already met, and the stops after (photos, a table played for show)
 //   gift    a gift box left in the lobby: seen by both, opened by one, gone for the other
 //   phone   a visit on a phone's screen: the notice and the card clear of the HUD
+//   happy   a happy hour started by hand: the notice, the card, the bartender, the menu at half price
 //   lineup  each celebrity in turn at the lobby stop, close up (not run by default)
 //
 // Usage: node scripts/e2e/celebs6.mjs [port] [outDir] [checks...]   (default: daily celeb gift)
@@ -23,7 +24,7 @@ import { execFileSync } from 'node:child_process';
 const args = process.argv.slice(2).filter((a) => !a.startsWith('--'));
 const flag = (n) => process.argv.includes(`--${n}`);
 const [port = '6290', out = '/tmp/celebs6-shots', ...wanted] = args;
-const checks = wanted.length ? wanted : ['daily', 'celeb', 'gift', 'phone'];
+const checks = wanted.length ? wanted : ['daily', 'celeb', 'gift', 'happy', 'phone'];
 mkdirSync(out, { recursive: true });
 const SHARED = `/casino/@fs${resolve('shared/src/celebs.ts')}`;
 const A = 'celebs6_e2e_a';
@@ -341,6 +342,44 @@ if (checks.includes('gift')) {
   for (const [who, r] of [['a', a], ['b', b]]) for (const e of r.errors) fail(`${who} error: ${e}`);
   await a.ctx.close();
   await b.ctx.close();
+}
+
+// --- happy hour: the notice, the card, the bartender's call, the menu at half price ---------------
+
+if (checks.includes('happy')) {
+  const a = await enterAs(A);
+  await a.p.keyboard.press('Escape');
+  // by the bar's counter, facing the bartender
+  await travel(a.p, 23.6, -8.5, Math.PI / 2);
+  const started = await api(a.p, 'dev/happy', 'POST', { ms: 150_000 });
+  if (started.status !== 200) fail(`the dev happy hour (${started.status})`);
+  await a.p.waitForSelector('.happy-card', { timeout: 10000 }).catch(() => fail('the happy hour card'));
+  await a.p.waitForTimeout(900);
+  const said = await a.p.evaluate(() => [...document.querySelectorAll('.staff-say-text')].map((e) => e.textContent));
+  console.log('happy: staff say', JSON.stringify(said));
+  if (!said.some((x) => /half price|happy hour/i.test(x ?? ''))) fail('the bartender calls it');
+  await shot(a.p, 'happy-floor');
+  const card = await a.p.evaluate(() => document.querySelector('.happy-card')?.textContent ?? '');
+  console.log('happy: card', card);
+  await a.p.evaluate(() => window.casino.app.openBarMenu());
+  await a.p.waitForSelector('.bar-sheet', { timeout: 8000 });
+  await a.p.waitForTimeout(400);
+  await shot(a.p, 'happy-menu');
+  const tags = await a.p.evaluate(() => [...document.querySelectorAll('.bar-price')].slice(0, 2).map((e) => e.textContent));
+  console.log('happy: prices', JSON.stringify(tags));
+  if (!tags[0]?.includes('$9') || !tags[0]?.includes('$4.50')) fail(`the beer struck through at $9, $4.50 now (${tags[0]})`);
+  const banner = await a.p.evaluate(() => document.querySelector('.happy-banner:not([hidden])')?.textContent ?? '');
+  if (!banner.includes('half price')) fail(`the menu's happy hour line (${banner})`);
+  const before = await balance(a.p);
+  await a.p.click('.bar-order[aria-label^="Order Beer"]');
+  await a.p.waitForFunction(() => document.querySelector('.bar-note.ok')?.textContent?.includes('$4.50'), null, { timeout: 8000 }).catch(() => fail('the note says $4.50'));
+  const paid = before - (await balance(a.p));
+  console.log('happy: paid', paid / 100);
+  if (paid !== 450) fail(`a beer in happy hour is $4.50 (${paid / 100})`);
+  await shot(a.p, 'happy-ordered');
+  await a.p.keyboard.press('Escape');
+  for (const e of a.errors) fail(`happy error: ${e}`);
+  await a.ctx.close();
 }
 
 // --- every celebrity, as they greet the lobby ---------------------------------------------------------

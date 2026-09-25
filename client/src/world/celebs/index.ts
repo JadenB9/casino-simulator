@@ -34,7 +34,8 @@ import { CELEB_MOTIONS, type CelebMotion } from './motions.ts';
 import { followersOf, placeFollower, seeded, type Follower } from './crowd.ts';
 import { Flashes, screenFlash } from './flash.ts';
 import { GiftModel } from './gift.ts';
-import { Notices, Sighting, photoCard } from './news.ts';
+import { HappyCard, Notices, Sighting, photoCard } from './news.ts';
+import { clockText, happyHour, setHappyHour } from './happy.ts';
 import { chime, shutter } from './sound.ts';
 import { selfieCamera, takeSelfie, type Snapper } from './selfie.ts';
 import { calm } from '../../app/comfort.ts';
@@ -67,7 +68,16 @@ export interface CelebsDeps {
   player: Player;
   /** A room's id and name at a point, null outside. */
   roomAt: (x: number, z: number) => { id: string; name: string } | null;
+  /** The bartender and the waiters, to call out happy hour (life/). */
+  staff?: () => { bartender: { ch: { root: THREE.Object3D } } | null; waiters: readonly { ch: { root: THREE.Object3D }; x: number; z: number }[] };
 }
+
+/** What the staff say about happy hour. */
+const HAPPY_LINES = {
+  start: ['Happy hour! Everything at the bar is half price.', "It's happy hour, folks. Half price on the whole menu.", 'Half price at the bar for the next fifteen minutes.'],
+  last: ['Last call on happy hour. A few minutes left at half price.', 'Happy hour ends in a few minutes. Get your orders in.'],
+  waiter: ["It's happy hour: half price. Can I get you something?", 'Half price at the bar right now. Something to drink?', 'Happy hour. Everything on the menu is half off.'],
+} as const;
 
 /** Drawn out to here (m). */
 const RANGE = 32;
@@ -148,6 +158,11 @@ export class Celebs {
   private giftModel: GiftModel | null = null;
   private notices: Notices | null = null;
   private sighting: Sighting | null = null;
+  private happyCard: HappyCard | null = null;
+  /** Which happy hour (by its start) we've warned of, announced, and called last orders for; which waiters have said it. */
+  private readonly happyTold = { soon: 0, start: 0, last: 0 };
+  private readonly waiterSaid = new Set<number>();
+  private happyIn = 0;
   /** Visits we've already announced, teased, or met the star of (this page's memory). */
   private readonly told = new Set<number>();
   private readonly teased = new Set<number>();
@@ -220,6 +235,7 @@ export class Celebs {
     this.flashes.update(dt);
     this.updateGift(dt, now);
     this.selfie();
+    this.happy(dt, now);
     const v = this.visit;
     if (!v || now >= visitEnd(v)) {
       if (this.cast.length) this.clearCast();
@@ -257,6 +273,7 @@ export class Celebs {
     this.flashes.dispose();
     this.notices?.dispose();
     this.sighting?.dispose();
+    this.happyCard?.dispose();
     this.group.removeFromParent();
   }
 
@@ -267,6 +284,10 @@ export class Celebs {
       case 'celebs':
         this.setVisit(m.visit);
         this.setGift(m.gift);
+        if (m.happy) setHappyHour(m.happy);
+        break;
+      case 'happy':
+        setHappyHour(m.happy);
         break;
       case 'celeb':
         this.setVisit(m.visit);
@@ -617,6 +638,49 @@ export class Celebs {
     const me = this.deps.player.position;
     const room = this.deps.roomAt(star.x, star.z);
     (this.sighting ??= new Sighting(this.ui())).set({ name: celeb.name, known: celeb.known, room: room?.name ?? 'On the way out', metres: Math.hypot(star.x - me.x, star.z - me.z), met: this.met.has(v.id) });
+  }
+
+  // --- happy hour ------------------------------------------------------------------------------
+
+  /** A word before it starts, the notice and the bartender's call when it does, last orders, the card. */
+  private happy(dt: number, now: number): void {
+    this.happyIn -= dt;
+    if (this.happyIn > 0) return;
+    this.happyIn = 0.25;
+    const h = happyHour();
+    const on = h !== null && now >= h.start && now < h.end;
+    const floor = this.onFloor();
+    if (h && !on && h.start > now && h.start - now <= 5 * 60_000 && h.start - now > 60_000 && this.happyTold.soon !== h.start && floor) {
+      this.happyTold.soon = h.start;
+      const m = Math.ceil((h.start - now) / 60_000);
+      this.news().show({ tag: 'Happy hour', title: `Happy hour at the bar in ${m} minutes`, sub: 'Everything on the menu at half price for a quarter of an hour.' });
+    }
+    if (h && on && this.happyTold.start !== h.start) {
+      this.happyTold.start = h.start;
+      this.waiterSaid.clear();
+      if (floor && h.end - now > 60_000) this.news().show({ tag: 'Happy hour', title: 'Everything at the bar is half price', sub: `For the next ${Math.ceil((h.end - now) / 60_000)} minutes. Order at the counter or from any waiter.` });
+      this.staffSays('start', h.start);
+    }
+    if (h && on && h.end - now <= 3 * 60_000 && this.happyTold.last !== h.start) {
+      this.happyTold.last = h.start;
+      this.staffSays('last', h.start);
+    }
+    // a waiter passing close by mentions it, once each
+    const staff = on ? this.deps.staff?.() : null;
+    const me = this.deps.player.position;
+    staff?.waiters.forEach((w, i) => {
+      if (this.waiterSaid.has(i) || Math.hypot(w.x - me.x, w.z - me.z) > 4.5) return;
+      this.waiterSaid.add(i);
+      this.deps.speech.say(w.ch.root, HAPPY_LINES.waiter[(Math.floor(h!.start / 60_000) + i) % HAPPY_LINES.waiter.length]!, 'Waiter');
+    });
+    if (on && floor) (this.happyCard ??= new HappyCard(this.ui())).set(clockText(h!.end - now));
+    else this.happyCard?.set(null);
+  }
+
+  private staffSays(kind: 'start' | 'last', start: number): void {
+    const b = this.deps.staff?.().bartender;
+    const lines = HAPPY_LINES[kind];
+    if (b) this.deps.speech.say(b.ch.root, lines[Math.floor(start / 60_000) % lines.length]!, 'Bartender');
   }
 
   // --- the gift box ----------------------------------------------------------------------------
