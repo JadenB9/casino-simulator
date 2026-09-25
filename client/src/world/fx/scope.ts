@@ -92,7 +92,8 @@ const CANDIDATES: [number, number][] = [
 ];
 
 /**
- * Up to `n` spots in the lobby where a statue stands clear of everything: not on a walkway or in a
+ * Up to `n` spots in the lobby where a statue stands: the plan's own statue places if it has them,
+ * else places found clear of everything: not on a walkway or in a
  * doorway, not in front of the directory, not under a palm's fronds, a plinth's width from
  * anything standing, and apart from each other. The lobby's own plan decides, so moving the
  * directory or a palm moves the statues with it.
@@ -103,8 +104,9 @@ export function statueSpots(plan: FloorPlan, n = STATUES): StatueSpot[] {
   const L = lobby.inner;
   const cx = (L.x0 + L.x1) / 2;
   const out: StatueSpot[] = [];
-  // v6 rooms6: the lobby's own statue places (rooms.ts, plan.statues) first, while they're clear
-  for (const s of plan.statues ?? []) {
+  // the lobby's own statue places (rooms.ts, plan.statues) first, while they're clear
+  const planned = (plan as FloorPlan & { statues?: { x: number; z: number; yaw: number; room: string }[] }).statues ?? [];
+  for (const s of planned) {
     if (out.length >= n) break;
     if (s.room === 'lobby' && clearFor(plan, L, s.x, s.z) && out.every((o) => Math.hypot(o.x - s.x, o.z - s.z) >= 2.4)) out.push({ x: s.x, z: s.z, yaw: s.yaw });
   }
@@ -122,6 +124,27 @@ export function statueSpots(plan: FloorPlan, n = STATUES): StatueSpot[] {
   return out;
 }
 
+/**
+ * Whether a footprint of half-width `half` at (x, z) stands in the way in to a doorway: the cone of
+ * floor in front of each door (on both sides), reaching `DOOR_CONE` metres out and widening as it
+ * goes, the way people fan out walking through.
+ */
+export function inDoorCone(plan: FloorPlan, x: number, z: number, half: number): boolean {
+  for (const d of plan.doors) {
+    const along = d.axis === 'x' ? x : z;
+    const across = (d.axis === 'x' ? z : x) - d.c;
+    const out = Math.abs(across);
+    if (out > DOOR_CONE + half) continue;
+    const mid = (d.a0 + d.a1) / 2;
+    const reach = (d.a1 - d.a0) / 2 + 0.4 + 0.25 * out;
+    if (Math.abs(along - mid) < reach + half) return true;
+  }
+  return false;
+}
+
+/** How far out from a doorway its way in is kept clear (m). */
+export const DOOR_CONE = 2.8;
+
 function clearFor(plan: FloorPlan, room: Rect, x: number, z: number): boolean {
   const half = PLINTH.base / 2;
   // inside the room with a walker's width to the walls
@@ -131,6 +154,7 @@ function clearFor(plan: FloorPlan, room: Rect, x: number, z: number): boolean {
   const hits = (a: Rect, b: Rect) => a.x0 < b.x1 && b.x0 < a.x1 && a.z0 < b.z1 && b.z0 < a.z1;
   for (const a of plan.aisles) if (hits(foot, grow(a, 0.35))) return false;
   for (const d of plan.doorways) if (hits(foot, grow(d, 1.2))) return false;
+  if (inDoorCone(plan, x, z, half)) return false;
   for (const s of plan.stations) if (Math.hypot(s.x - x, s.z - z) < Math.max(s.fp.width, s.fp.depth) / 2 + half + 1.2) return false;
   for (const s of plan.solids) {
     const tall = s.y0 < TALL;

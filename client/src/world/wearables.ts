@@ -17,14 +17,17 @@
 // (dressed()) and swap its body material for one of their own (gold lamé, satin lapels, velvet,
 // fur, diamonds), which picks the cloth out by each vertex's Look slot and rest position.
 //
-// A bar order is held in the right hand: a glass, bottle, cup or plate skinned to the wrist, and
-// an additive clip on the character's own mixer brings the forearm up to carry it, walking or not.
+// A bar order is held in the right hand, and drunk or eaten there: consumables/ builds it on the
+// wrist and plays the carrying, sipping and eating poses on the character's own mixer. What it
+// needs from here is heldFit(): where the glass sits in the hand, the carrying pose, the mouth.
 
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import type { Look } from '../../../shared/src/look.ts';
-import { barItem, itemOfKind, type BarModel } from '../../../shared/src/items.ts';
+import { barItem, itemOfKind } from '../../../shared/src/items.ts';
 import { serverNow } from '../net/clock.ts';
+import { HeldOrder } from './consumables/index.ts';
+import type { HandView } from './consumables/pose.ts';
 import { calmScale } from '../app/comfort.ts';
 
 type V3 = THREE.Vector3;
@@ -206,7 +209,7 @@ vec3 wGlint(vec3 p, float cells, float t) {
 let jewelMat: THREE.MeshStandardMaterial | null = null;
 
 /** Metal, enamel, lenses, felt: one material, colour and finish per vertex. */
-function jewel(): THREE.MeshStandardMaterial {
+export function jewel(): THREE.MeshStandardMaterial {
   if (jewelMat) return jewelMat;
   const m = new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 1, roughness: 1, envMapIntensity: 1.35 });
   m.name = 'jewel';
@@ -256,7 +259,7 @@ function gem(): THREE.MeshStandardMaterial {
 let glassMat: THREE.MeshStandardMaterial | null = null;
 
 /** Clear drinking glass: mostly reflection, drawn after everything solid. */
-function glass(): THREE.MeshStandardMaterial {
+export function glass(): THREE.MeshStandardMaterial {
   if (glassMat) return glassMat;
   const m = new THREE.MeshStandardMaterial({ color: new THREE.Color(0.9, 0.94, 0.95), metalness: 0, roughness: 0.03, transparent: true, opacity: 0.26, envMapIntensity: 3, depthWrite: false });
   m.name = 'glass';
@@ -1905,151 +1908,45 @@ function buildImperialCrown(fit: Fit, out: Out, headBone: number): void {
 
 // --- held orders ---------------------------------------------------------------------------------
 
-const WATER = fin(0.8, 0.85, 0.85, 0, 0.05);
+const views = new WeakMap<Fit, HandView | null>();
 
 /**
- * A bar order in the hand. Built upright in its own frame (origin where the fingers close round
- * it, +y up), then turned into the hand: at rest the arm hangs, so "up" is the direction the
- * thumb points, which the carrying pose turns up.
+ * What the held-order code (consumables/) needs of a fitted model: the carrying pose, where the
+ * glass sits in the right wrist's own frame, and the mouth in the head's. Null if the model has
+ * no carrying pose.
  */
-/** Where a held order sits (its own frame: origin where the fingers close, +y up) and the bone it rides. */
-function handFrame(fit: Fit): { m: THREE.Matrix4; bone: number } | null {
-  const wristI = boneIndex(fit, 'Wrist.R');
-  if (wristI < 0 || !fit.carry) return null;
-  return { m: fit.carry.grip, bone: wristI };
+export function heldFit(tpl: TemplateLike, female: boolean): HandView | null {
+  const fit = fitFor(tpl, female);
+  if (!fit) return null;
+  return heldView(fit, tpl);
 }
 
-function buildHeld(fit: Fit, model: BarModel, out: Out): void {
-  const h = handFrame(fit);
-  if (!h) return;
-  // The item's frame in the hand: x ahead along the fingers, y up, z out to the side. Stemmed
-  // glasses are held by the stem, a tumbler up in the fingers, a cup's saucer resting inward.
-  const shift = GRIP_SHIFT[model] ?? [0, 0, 0];
-  const m = h.m.clone().multiply(translate(shift[0], shift[1], shift[2]));
-  const add = (g: THREE.BufferGeometry, paint: Paint | null, bucket: 'metal' | 'glass' = 'metal', local?: THREE.Matrix4) =>
-    out[bucket].add(g, local ? m.clone().multiply(local) : m, paint, h.bone);
-  const lathe = (pts: [number, number][], segs = 24) => new THREE.LatheGeometry(pts.map(([r, y]) => new THREE.Vector2(r, y)), segs);
-  switch (model) {
-    case 'bottle': {
-      // an amber beer bottle held round its body, a cream label
-      const glassy = fin(0.2, 0.07, 0.01, 0, 0.1);
-      add(lathe([[0.0001, -0.07], [0.029, -0.07], [0.03, -0.066], [0.03, 0.03], [0.026, 0.045], [0.0125, 0.075], [0.0115, 0.108], [0.0135, 0.112], [0.012, 0.118], [0.0001, 0.118]]), glassy);
-      add(lathe([[0.0304, -0.03], [0.0304, 0.018]]), fin(0.72, 0.62, 0.42, 0, 0.6));
-      add(lathe([[0.0122, 0.108], [0.0132, 0.113], [0.0122, 0.118], [0.0001, 0.119]]), GOLD_SOFT);
-      break;
-    }
-    case 'magnum': {
-      // a dark green champagne bottle, gold foil on the neck, a cream shield label
-      const green = fin(0.01, 0.045, 0.02, 0, 0.08);
-      add(lathe([[0.0001, -0.1], [0.038, -0.1], [0.04, -0.094], [0.04, 0.03], [0.034, 0.07], [0.016, 0.11], [0.0145, 0.16], [0.0001, 0.162]], 28), green);
-      add(lathe([[0.0162, 0.1], [0.0168, 0.116], [0.0152, 0.163], [0.0001, 0.166]], 28), GOLD_SOFT);
-      add(lathe([[0.0404, -0.05], [0.0404, 0.02]], 28), fin(0.75, 0.68, 0.52, 0, 0.55));
-      break;
-    }
-    case 'flute': {
-      add(lathe([[0.0001, -0.075], [0.028, -0.075], [0.029, -0.072], [0.004, -0.068], [0.003, -0.01], [0.012, 0.004], [0.022, 0.05], [0.023, 0.13], [0.0215, 0.13], [0.0205, 0.05], [0.011, 0.007]]), null, 'glass');
-      add(lathe([[0.0001, 0.006], [0.011, 0.009], [0.0198, 0.05], [0.0205, 0.1], [0.0001, 0.1]]), fin(0.75, 0.55, 0.18, 0, 0.05));
-      break;
-    }
-    case 'martini': {
-      add(lathe([[0.0001, -0.075], [0.03, -0.075], [0.031, -0.072], [0.004, -0.068], [0.003, 0.0], [0.05, 0.06], [0.052, 0.062], [0.049, 0.062], [0.004, 0.004]]), null, 'glass');
-      add(lathe([[0.0001, 0.006], [0.042, 0.05], [0.0001, 0.05]]), WATER);
-      add(new THREE.SphereGeometry(0.0065, 12, 8).scale(1, 1.25, 1), fin(0.12, 0.2, 0.02, 0, 0.35), 'metal', translate(0.008, 0.035, 0));
-      add(new THREE.CylinderGeometry(0.0008, 0.0008, 0.06, 5), fin(0.6, 0.45, 0.25, 0, 0.6), 'metal', translate(0.004, 0.045, 0).multiply(new THREE.Matrix4().makeRotationZ(0.35)));
-      break;
-    }
-    case 'wine': {
-      add(lathe([[0.0001, -0.075], [0.03, -0.075], [0.031, -0.072], [0.0045, -0.068], [0.0035, -0.005], [0.03, 0.02], [0.037, 0.06], [0.031, 0.1], [0.0295, 0.1], [0.0355, 0.06], [0.0285, 0.022]]), null, 'glass');
-      add(lathe([[0.0001, 0.0], [0.028, 0.02], [0.0335, 0.045], [0.0001, 0.045]]), fin(0.12, 0.004, 0.012, 0, 0.05));
-      break;
-    }
-    case 'rocks': {
-      add(lathe([[0.0001, -0.035], [0.037, -0.035], [0.038, 0.045], [0.035, 0.045], [0.034, -0.025], [0.0001, -0.025]]), null, 'glass');
-      add(lathe([[0.0001, -0.024], [0.0335, -0.024], [0.0335, 0.008], [0.0001, 0.008]]), fin(0.45, 0.16, 0.02, 0, 0.05));
-      add(new RoundedBoxGeometry(0.026, 0.026, 0.026, 2, 0.004), fin(0.7, 0.75, 0.78, 0, 0.1), 'glass', translate(0.004, 0.012, -0.004).multiply(new THREE.Matrix4().makeRotationY(0.5)));
-      break;
-    }
-    case 'cup': {
-      // an espresso cup on its saucer
-      const china = fin(0.85, 0.83, 0.78, 0, 0.18);
-      add(lathe([[0.0001, -0.03], [0.058, -0.028], [0.06, -0.022], [0.0001, -0.026]], 32), china);
-      add(lathe([[0.0001, -0.024], [0.022, -0.024], [0.028, 0.0], [0.03, 0.022], [0.028, 0.022], [0.026, 0.004], [0.0001, 0.004]], 28), china);
-      add(lathe([[0.0001, 0.016], [0.027, 0.016]], 28), fin(0.05, 0.022, 0.01, 0, 0.3));
-      add(new THREE.TorusGeometry(0.009, 0.0028, 6, 14, Math.PI * 1.3), china, 'metal', translate(0.031, 0.006, 0).multiply(new THREE.Matrix4().makeRotationZ(-Math.PI * 0.65)));
-      break;
-    }
-    case 'plate': {
-      // a white plate, held level by its rim, with the order on it
-      const china = fin(0.85, 0.84, 0.8, 0, 0.2);
-      add(lathe([[0.0001, -0.004], [0.075, -0.004], [0.1, 0.004], [0.104, 0.008], [0.1, 0.008], [0.075, 0.0], [0.0001, 0.0]], 36), china, 'metal', translate(0, 0, PLATE_Z));
-      break;
-    }
+function heldView(fit: Fit, tpl: TemplateLike): HandView | null {
+  if (views.has(fit)) return views.get(fit)!;
+  let view: HandView | null = null;
+  let body: THREE.SkinnedMesh | null = null;
+  tpl.root.traverse((o) => {
+    if ((o as THREE.SkinnedMesh).isSkinnedMesh && !body) body = o as THREE.SkinnedMesh;
+  });
+  const wrist = boneIndex(fit, 'Wrist.R');
+  const head = boneIndex(fit, 'Head');
+  if (fit.carry && body && wrist >= 0 && head >= 0) {
+    const b = body as THREE.SkinnedMesh;
+    // a bone as it stood when the model was measured, the frame the pieces are placed from
+    const restInv = (i: number) => b.skeleton.boneInverses[i]!.clone().multiply(b.bindMatrix).multiply(fit.toBind[i]!);
+    const faceZ = Math.max(fit.eyes[0].z, fit.eyes[1].z) + 0.006;
+    view = {
+      id: fit.id,
+      carry: fit.carry.turns,
+      grip: restInv(wrist).multiply(fit.carry.grip),
+      mouth: V(fit.cx, fit.mouthY, faceZ).applyMatrix4(restInv(head)),
+    };
   }
+  views.set(fit, view);
+  return view;
 }
 
-const GRIP_SHIFT: Partial<Record<BarModel, [number, number, number]>> = {
-  martini: [0.006, 0.05, 0],
-  wine: [0.006, 0.05, 0],
-  flute: [0.004, 0.045, 0],
-  rocks: [0.012, 0.03, -0.004],
-  cup: [0, 0.01, -0.05],
-};
-
-/** Where a plate's centre sits from the hand holding its rim: toward the body, in front of it. */
-const PLATE_Z = -0.085;
-
-/** What goes on the plate, by order. */
-function buildPlateFood(fit: Fit, item: string, out: Out): void {
-  const h = handFrame(fit);
-  if (!h) return;
-  const hand = h.m.clone().multiply(translate(0, 0.002, PLATE_Z));
-  const put = (g: THREE.BufferGeometry, f: Finish, x: number, y: number, z: number, rot = 0) =>
-    out.metal.add(g, hand.clone().multiply(translate(x, y, z)).multiply(new THREE.Matrix4().makeRotationY(rot)), f, h.bone);
-  const bun = fin(0.55, 0.26, 0.07, 0, 0.55);
-  switch (item) {
-    case 'sliders':
-      for (const [x, z] of [
-        [-0.03, 0.012],
-        [0.028, 0.02],
-        [0.0, -0.028],
-      ] as const) {
-        put(new THREE.SphereGeometry(0.022, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.75, 1), bun, x, 0.022, z);
-        put(new THREE.CylinderGeometry(0.021, 0.021, 0.008, 14), fin(0.12, 0.04, 0.02, 0, 0.7), x, 0.014, z);
-        put(new THREE.CylinderGeometry(0.023, 0.023, 0.003, 14), fin(0.8, 0.5, 0.05, 0, 0.5), x, 0.0185, z);
-        put(new THREE.CylinderGeometry(0.02, 0.021, 0.008, 14), bun, x, 0.006, z);
-      }
-      break;
-    case 'truffle-fries':
-      for (let i = 0; i < 22; i++) {
-        const a = i * 2.4;
-        const r = 0.01 + (i % 5) * 0.009;
-        put(new THREE.BoxGeometry(0.007, 0.007, 0.055), fin(0.78, 0.5, 0.12, 0, 0.6), Math.cos(a) * r, 0.006 + (i % 3) * 0.006, Math.sin(a) * r, a);
-      }
-      break;
-    case 'shrimp-cocktail':
-      put(new THREE.CylinderGeometry(0.035, 0.03, 0.02, 20), fin(0.8, 0.84, 0.86, 0, 0.1), 0, 0.01, 0);
-      for (let i = 0; i < 5; i++) {
-        const a = (i / 5) * Math.PI * 2;
-        put(new THREE.TorusGeometry(0.014, 0.0065, 6, 12, Math.PI * 1.2), fin(0.9, 0.35, 0.18, 0, 0.35), Math.cos(a) * 0.03, 0.024, Math.sin(a) * 0.03, -a);
-      }
-      break;
-    case 'lobster':
-      put(new THREE.CapsuleGeometry(0.02, 0.08, 4, 12).rotateX(Math.PI / 2).scale(1, 0.7, 1), fin(0.6, 0.05, 0.02, 0, 0.35), 0, 0.016, 0);
-      for (const s of [-1, 1]) put(new THREE.SphereGeometry(0.014, 10, 8).scale(1, 0.7, 1.6), fin(0.6, 0.05, 0.02, 0, 0.35), s * 0.028, 0.014, -0.052, s * 0.4);
-      put(new THREE.CylinderGeometry(0.014, 0.012, 0.016, 12), fin(0.85, 0.62, 0.12, 0, 0.2), 0.05, 0.008, 0.03);
-      break;
-    case 'caviar':
-      put(new THREE.CylinderGeometry(0.03, 0.03, 0.014, 24), STEEL, 0, 0.007, 0);
-      put(new THREE.CylinderGeometry(0.027, 0.027, 0.002, 24), fin(0.01, 0.01, 0.012, 0, 0.12), 0, 0.0142, 0);
-      for (const [x, z] of [
-        [0.05, 0.01],
-        [0.04, -0.035],
-        [-0.045, 0.03],
-      ] as const)
-        put(new THREE.CylinderGeometry(0.014, 0.014, 0.005, 14), fin(0.7, 0.5, 0.2, 0, 0.6), x, 0.003, z);
-      break;
-  }
-}
+const HELD_KIT = { solid: () => jewel(), glass: () => glass(), reflect, beforeDraw };
 
 // --- assembling a character's set -----------------------------------------------------------------
 
@@ -2131,24 +2028,6 @@ function buildFarChain(fit: Fit, id: string, out: Out): void {
   if (!chain) return;
   const path = chainPath(fit, chain.drop * (fit.female ? 0.9 : 1), chain.width);
   out.metal.add(new THREE.TubeGeometry(path.curve, 64, chain.width * 0.5, 5, true), new THREE.Matrix4(), GOLD_SOFT, Math.max(0, boneIndex(fit, 'Chest')));
-}
-
-// --- the carrying pose ---------------------------------------------------------------------------
-
-const holdClips = new WeakMap<Fit, THREE.AnimationClip>();
-/** The carrying pose as an additive clip (it rides on top of idling and walking). */
-function holdClip(fit: Fit): THREE.AnimationClip | null {
-  const known = holdClips.get(fit);
-  if (known) return known;
-  if (!fit.carry || fit.carry.turns.size === 0) return null;
-  const clip = new THREE.AnimationClip(
-    'carry',
-    1,
-    [...fit.carry.turns].map(([name, q]) => new THREE.QuaternionKeyframeTrack(`${name}.quaternion`, [0, 1], [q.x, q.y, q.z, q.w, q.x, q.y, q.z, q.w])),
-    THREE.AdditiveAnimationBlendMode,
-  );
-  holdClips.set(fit, clip);
-  return clip;
 }
 
 // --- special clothes -----------------------------------------------------------------------------
@@ -2512,15 +2391,13 @@ export class Wearables {
   private model: THREE.Object3D | null = null;
   private fit: Fit | null = null;
   private set: Attached | null = null;
-  private hand: Attached | null = null;
+  /** A bar order in the hand (consumables/held.ts). */
+  private hand: HeldOrder | null = null;
   private plain: THREE.Material | null = null;
   /** Special clothes' material, and the hat the hair is tucked under (either makes the body's own material). */
   private suit: THREE.Material | null = null;
   private tucked: { fit: Fit; hat: string; tuck: Tuck } | null = null;
   private own: THREE.Material | null = null;
-  private carry: THREE.AnimationAction | null = null;
-  private carryMixer: THREE.AnimationMixer | null = null;
-  private carrying = false;
   private timer = 0;
 
   /**
@@ -2533,12 +2410,9 @@ export class Wearables {
     if (model !== this.model) {
       // a new model: everything hung on the old one went with it
       this.drop(this.set);
-      this.drop(this.hand);
+      this.hand?.dispose();
       this.set = null;
       this.hand = null;
-      this.carry = null;
-      this.carryMixer = null;
-      this.carrying = false;
       this.model = model;
     }
     this.fit = fit;
@@ -2575,18 +2449,17 @@ export class Wearables {
       this.set = key ? this.attachSet(fit, body, big, small, key) : null;
     }
 
-    // a bar order in the hand, until its time runs out
+    // a bar order in the hand, until its time runs out, drunk or eaten there
     const now = serverNow();
     const held = look.held && barItem(look.held.item) && look.held.until > now ? look.held : null;
-    const item = held ? barItem(held.item)! : null;
-    const handKey = item ? `${fit.id}|held|${item.model === 'plate' ? item.id : item.model}` : '';
+    const view = held ? heldView(fit, tpl) : null;
+    const handKey = held && view ? `${fit.id}|${held.order}|${held.item}` : '';
     if (handKey !== (this.hand?.key ?? '')) {
-      this.drop(this.hand);
-      this.hand = item ? this.attachHeld(fit, body, item.model, item.id, handKey) : null;
+      this.hand?.dispose();
+      this.hand = held && view ? new HeldOrder(handKey, tpl, view, model, body, mixer, held, HELD_KIT) : null;
     }
     clearTimeout(this.timer);
     if (held) this.timer = window.setTimeout(() => this.putDown(), Math.min(2 ** 31 - 1, held.until - now + 50));
-    this.pose(mixer, model, !!held);
   }
 
   /** The body material to use now: the special clothes' own, or the plain one given (hair tucked under a hat). */
@@ -2600,7 +2473,7 @@ export class Wearables {
   dispose(): void {
     clearTimeout(this.timer);
     this.drop(this.set);
-    this.drop(this.hand);
+    this.hand?.dispose();
     this.set = null;
     this.hand = null;
     this.model = null;
@@ -2608,23 +2481,8 @@ export class Wearables {
 
   /** The order's time ran out: it leaves the hand (the look still says it; nobody draws it). */
   private putDown(): void {
-    this.drop(this.hand);
+    this.hand?.dispose();
     this.hand = null;
-    if (this.carryMixer && this.model) this.pose(this.carryMixer, this.model, false);
-  }
-
-  private pose(mixer: THREE.AnimationMixer | null, model: THREE.Object3D, on: boolean): void {
-    if (!mixer || !this.fit || on === this.carrying) return;
-    if (!this.carry || this.carryMixer !== mixer) {
-      if (!on) return;
-      const clip = holdClip(this.fit);
-      if (!clip) return;
-      this.carry = mixer.clipAction(clip, model);
-      this.carryMixer = mixer;
-    }
-    this.carrying = on;
-    if (on) this.carry.reset().fadeIn(0.35).play();
-    else this.carry.fadeOut(0.35);
   }
 
   private attachSet(fit: Fit, body: THREE.SkinnedMesh, big: string[], small: string[], key: string): Attached {
@@ -2650,22 +2508,6 @@ export class Wearables {
     lod.addLevel(farGroup, FAR_M, 0.08);
     this.model!.add(lod);
     return { key, builds: [nearKey, farKey], holder: lod };
-  }
-
-  private attachHeld(fit: Fit, body: THREE.SkinnedMesh, model: BarModel, item: string, key: string): Attached {
-    const b = acquire(
-      key,
-      (out) => {
-        buildHeld(fit, model, out);
-        if (model === 'plate') buildPlateFood(fit, item, out);
-      },
-      fit,
-    );
-    const holder = new THREE.Group();
-    holder.name = 'held';
-    this.skinned(b, body, holder);
-    this.model!.add(holder);
-    return { key, builds: [key], holder };
   }
 
   /** Skinned meshes for a built set, on this character's own skeleton. */

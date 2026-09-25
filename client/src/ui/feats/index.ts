@@ -85,7 +85,8 @@ export function mountFeats(deps: FeatsDeps): FeatsUi {
   button.addEventListener('click', toggle);
 
   const onKey = (e: KeyboardEvent) => {
-    if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || e.repeat || isTyping(e)) return;
+    // (Shift+J joins the newest invite: ui/lobby/invites.ts)
+    if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || e.repeat || isTyping(e)) return;
     if (e.code !== 'KeyJ') return;
     e.preventDefault();
     toggle();

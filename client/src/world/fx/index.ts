@@ -280,7 +280,7 @@ export class FxPlayer {
           effect = golden(w, s, ev, late);
           break;
         case 'fx-takeover':
-          effect = takeover(w, s, ev, late, () => this.marquee);
+          effect = takeover(w, s, ev, late, () => this.marquee, this.o.hangers);
           break;
       }
     } catch (err) {

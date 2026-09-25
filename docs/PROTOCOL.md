@@ -106,7 +106,8 @@ every request).
 | POST | `/tables` | `{ game, variant?, visibility, limits?: { min, max } }` | `{ tableId, pin? }` | 400, 429 |
 | POST | `/tables/join` | `{ pin }` | `{ tableId, game, lobby?: LobbySummary }` | 404 `BAD_PIN`, 429 |
 | POST | `/ticket` | `{ target }` | `{ ticket, exp }` | 400 (not a socket path), 401, 429 |
-| GET | `/leaderboard` | | `LeaderboardResponse` | 401 |
+| GET | `/leaderboard` | `?game=<id>` (optional) | `LeaderboardResponse` | 400 (not a game on the floor), 401 |
+| GET | `/stats` | | `StatsResponse` | 401 |
 | GET | `/feats` | | `FeatsResponse` | 401 |
 | GET | `/shop` | | `ShopResponse` | 401 |
 | POST | `/shop/buy` | `{ item, op }` | `BuyResponse` | 400 (op), 404 `NOT_FOUND`, 409 `INSUFFICIENT_FUNDS {balance, inPlay}`, 409 `NOT_ELIGIBLE` (already yours), 429 |
@@ -185,22 +186,45 @@ type OrderResponse = { order: BarOrder; balance: number; inPlay: number; rev: nu
 ```
 
 ```ts
-type LeaderboardId = "richest" | "biggestWin" | "rounds";       // LEADERBOARDS, in tab order
-type LeaderboardRow = { rank: number; name: string; value: number; you?: true };
+type LeaderboardId =                                            // LEADERBOARDS, in the sheet's order
+  | "richest" | "netUp" | "netDown" | "won" | "lost" | "wagered" | "biggestWin" | "biggestLoss"
+  | "rounds" | "winRate" | "streak" | "feats" | "celebs" | "collection"
+  | "today" | "todayDown" | "week" | "weekDown";
+// GAME_LEADERBOARDS, one game's: netUp netDown won lost biggestWin biggestLoss rounds winRate
+type LeaderboardRow = { rank: number; name: string; value: number; of?: number; you?: true };
 type Leaderboard = {
   top: LeaderboardRow[];                                       // at most LEADERBOARD_TOP (10), best first
-  you: { rank: number | null; name: string; value: number } | null;  // only when you're not in top
+  you: { rank: number | null; name: string; value: number; of?: number } | null;  // only when you're not in top
 };
-type LeaderboardResponse = { boards: Record<LeaderboardId, Leaderboard>; age: number };
+type LeaderboardResponse = { boards: Partial<Record<LeaderboardId, Leaderboard>>; game?: GameId; age: number };
+type StatLine = { rounds; wagered; net; biggestWin;             // lifetime, from the cash-outs
+                  counted; wins; won; lost; biggestLoss };      // from the round tallies (v6 on)
+type StatsResponse = { name; createdAt; worth: { balance; inPlay; total }; total: StatLine;
+                       games: Partial<Record<GameId, StatLine>>;
+                       days: { day: string; net: number }[];    // STATS_DAYS (14) Las Vegas days, oldest first
+                       streak; feats; celebs; collection };
 ```
 
-Leaderboards. `richest` is balance plus chips taken to tables (`inPlay`, what the buy-ins took;
-a stack's wins count once it cashes out), in cents. `biggestWin` is the largest single-round
-profit in any one game, in cents. `rounds` is rounds played over every game, a count. Places
-are shared on a tie (1, 2, 2, 4), and ties are listed oldest account first. `you.rank` is null
-when there's nothing to rank yet (no money, no win, no rounds). Names only: no account ids.
-Each Worker isolate reads the boards from D1 at most once a minute and `age` says how old they
-are (ms); a player outside a top ten has their own place read once per such read.
+Leaderboards (`server/src/leaderboard.ts`; what each counts is `shared/src/stats.ts`). Money in
+cents, counts as counts, `winRate` in basis points (5234 = 52.34%) with `of` the rounds it's out
+of. `richest` is balance plus chips taken to tables (`inPlay`, what the buy-ins took; a stack's
+wins count once it cashes out). `netUp` / `netDown` are lifetime net over every game (the losers'
+board holds only players who are down, most down first, values negative), `wagered` everything
+bet, `rounds` rounds played, all from the cash-outs. `biggestWin` is the largest single-round
+profit in any one game. From the round tallies, which begin with v6 and reach D1 with the feats'
+flush (every couple of minutes at a table, and at cash-out): `won` / `lost` (the profit of winning
+rounds, what losing rounds cost), `biggestLoss` (most lost on one round), `winRate` (rounds that
+made a profit, out of `WIN_RATE_MIN` = 100 or more; a push is not a win), `streak` (winning rounds
+in a row at one table; a push keeps it), `today` / `week` and their `Down` twins (net since
+midnight / Monday midnight, Las Vegas time). `feats` counts achievements earned, `celebs` the
+different celebrities met, `collection` what the kept items cost. `?game=<id>` answers that game's
+eight boards instead (win rate over `WIN_RATE_MIN_GAME` = 50 rounds). Places are shared on a tie
+(1, 2, 2, 4), ties listed oldest account first (newest first on the losers' boards). `you.rank`
+is null when there's nothing to rank yet. Names only: no account ids. Each Worker isolate reads a
+set of boards from D1 at most once a minute (each game's are a set of their own) and `age` says
+how old they are (ms); a player outside a top ten has their own places read once per such read.
+
+`GET /stats` is the asker's own record for the stats sheet, and nobody else's is ever sent.
 
 **The daily bonus** (`server/src/daily.ts`, `shared/src/celebs.ts`). `GET /daily` says where your
 streak stands; `POST /daily/claim` takes today's. Days are Las Vegas days. The first claim pays
