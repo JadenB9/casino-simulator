@@ -582,7 +582,11 @@ function preflop(sit: BotSituation, st: Style, rng: Rng): BotDecision {
       return { kind: 'check' };
     }
     if (limpers === 0) {
-      if (inRange(pct, w, rng)) {
+      // Steal wider from players seen folding most hands, tighter against ones who play them all.
+      let vpip = 0;
+      for (const o of sit.opponents) vpip += o.read.vpip / sit.opponents.length;
+      const openW = clamp(w * lean(PRIOR.vpip / Math.max(0.05, vpip), 0.7, 1.7, st.skill), 0.02, 0.95);
+      if (inRange(pct, openW, rng)) {
         // Passive players raise only the top of their range and limp the rest (a calling
         // station limps nearly everything).
         const limp = st.p.limp;

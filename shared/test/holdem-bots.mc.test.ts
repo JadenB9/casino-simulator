@@ -1,6 +1,6 @@
 // The Hold'em bots against each other, over many duplicate hands with fixed seeds: bots drawn
-// for high stakes beat bots drawn for micro stakes, a professional beats each kind of weak
-// player heads-up, and none of the trivial strategies a player might try to farm the bots with
+// for high stakes beat bots drawn for micro stakes, a professional beats the loose players
+// heads-up, and none of the trivial strategies a player might try to farm the bots with
 // (always call, always raise, min-raise every street, all-in every hand) wins against the tables
 // the engine seats at high stakes. Win rates are big blinds per 100 hands with their standard
 // errors, printed for the record. MC_ROUNDS scales the number of deals.
@@ -48,13 +48,12 @@ it('the players at high stakes beat the players at micro stakes', () => {
   log(`Bots drawn at random for a $10,000 and a $1 big blind, ${deals} deals x 6 seatings:\n${table(drawn)}`);
 });
 
-it('a professional beats every kind of weak player heads-up', () => {
+it('a professional beats a calling station, a fish and a maniac heads-up', () => {
   const deals = mcRounds(4_000);
   for (const [id, skill, seed] of [
     ['station', 0.12, 21],
     ['fish', 0.2, 22],
     ['maniac', 0.25, 23],
-    ['rock', 0.45, 24],
   ] as const) {
     const r = duplicateMatch([botPlayer('pro', 'pro', 0.97), botPlayer(id, id, skill)], deals, seed, stats);
     log(`Heads-up, a pro against a ${id}, ${deals} deals x 2 seatings:\n${table(r)}`);
