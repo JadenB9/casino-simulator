@@ -40,6 +40,7 @@ import { spendTicket } from '../tickets.ts';
 import type { CasinoFloor } from '../floor/index.ts';
 import { ChatRoom } from '../floor/chat.ts';
 import { bigWinsIn, type BigWinReport } from '../floor/wins.ts'; // features: big wins
+import { FeatBook, stepFacts } from '../feats.ts'; // v6 feats: achievements and challenges
 
 /** How long a dropped player keeps their seat before being cashed out. */
 export const GRACE_MS = 120_000;
@@ -200,6 +201,8 @@ export class CasinoTable extends DurableObject<Env> {
   private overdue = 0;
   /** Each member's `idle:` deadline as last written (a cache: a restart just writes it again). */
   private idleDue = new Map<number, number>();
+  /** v6 feats: tallies and feats earned here, on their way to D1 (server/src/feats.ts). */
+  private feats: FeatBook;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -223,6 +226,7 @@ export class CasinoTable extends DurableObject<Env> {
     // Wrong PINs per account and per address, stored so an eviction doesn't reset the count.
     this.sql.exec(`CREATE TABLE IF NOT EXISTS pin_misses (who TEXT PRIMARY KEY, n INTEGER NOT NULL, until INTEGER NOT NULL) WITHOUT ROWID`);
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
+    this.feats = new FeatBook(this.sql, () => `flush:${this.meta?.incarnation ?? ''}`, (fn) => ctx.storage.transactionSync(fn));
     this.load();
   }
 
@@ -668,6 +672,8 @@ export class CasinoTable extends DurableObject<Env> {
       this.runTicks(now);
       this.sweepLeavers(now);
       await this.pump();
+      const feats = this.feats.due();
+      if (feats !== null && feats <= now) await this.runFeats();
       this.sql.exec(`DELETE FROM aids WHERE at < ?1`, now - 15 * 60_000);
     } catch (err) {
       console.error('table alarm failed', this.meta?.name, err);
@@ -1073,6 +1079,8 @@ export class CasinoTable extends DurableObject<Env> {
     this.sendSeat(mem);
     this.broadcastMembers();
     if (applied && job.kind === 'buyin') {
+      // v6 feats: a new sitting reads the player's progress again (they may have played elsewhere)
+      this.feats.forget(mem.account_id);
       this.commit(engine.seatJoined(this.state, mem.seat!, this.engineCtx(now)), now);
       this.runTicks(now);
     } else if (job.kind === 'topup') {
@@ -1085,6 +1093,9 @@ export class CasinoTable extends DurableObject<Env> {
 
   private finishCashOut(job: OutboxRow, now: number): void {
     const mem = this.members.get(job.account_id);
+    // v6 feats: the chips are home, and so is the progress made with them
+    this.feats.flushSoon(job.account_id, now);
+    this.ctx.waitUntil(this.runFeats());
     this.ctx.storage.transactionSync(() => {
       this.sql.exec(`UPDATE outbox SET state = 'done' WHERE op_id = ?1`, job.op_id);
       if (!mem) return;
@@ -1172,6 +1183,13 @@ export class CasinoTable extends DurableObject<Env> {
       }
       stacks.set(mv.seat, next);
     }
+    // v6 feats: what the finished rounds did toward achievements and challenges (worked out first,
+    // stored with the round)
+    const facts = step.rounds?.length ? stepFacts(m.game, m.variant, step, (seat) => {
+      const mem = bySeat.get(seat);
+      return mem ? { accountId: mem.account_id, name: mem.name } : undefined;
+    }) : [];
+    let featWork = false;
     this.ctx.storage.transactionSync(() => {
       for (const [seat, stack] of stacks) {
         const mem = bySeat.get(seat)!;
@@ -1205,12 +1223,14 @@ export class CasinoTable extends DurableObject<Env> {
       this.sql.exec(`INSERT OR REPLACE INTO state (id, json) VALUES (1, ?1)`, JSON.stringify(this.state));
       m.seq += 1;
       this.putMeta('seq', m.seq);
+      if (facts.length) featWork = this.feats.record(facts, now);
     });
     this.overdue = 0;
     this.broadcastEvents(step.events, now);
     for (const seat of stacks.keys()) this.sendSeat(bySeat.get(seat)!);
     if (readyCleared) this.broadcastMembers();
     if (step.rounds?.length) this.announceBigWins(step, bySeat, now); // features: big wins
+    if (featWork) this.ctx.waitUntil(this.runFeats());
     // Nothing on the layout anywhere: the round a seat was given up in is over.
     if (m.held?.length && !this.roundInPlay()) {
       m.held = [];
@@ -1286,6 +1306,8 @@ export class CasinoTable extends DurableObject<Env> {
     if (d !== null) times.push(d);
     const o = this.sql.exec<{ at: number | null }>(`SELECT min(next_at) AS at FROM outbox WHERE state = 'pending'`).one().at;
     if (o !== null) times.push(o);
+    const f = this.feats.due();
+    if (f !== null) times.push(f);
     if (this.engine && this.state !== null) {
       const e = this.engine.deadline(this.state);
       if (e !== null) times.push(this.overdue > 0 ? Math.max(e, Date.now() + Math.min(OVERDUE_MAX_MS, 50 * 2 ** this.overdue)) : e);
@@ -1481,6 +1503,18 @@ export class CasinoTable extends DurableObject<Env> {
     }
   }
 
+  // v6 feats: pay what was earned here, send progress to D1 (server/src/feats.ts decides what)
+  private async runFeats(): Promise<void> {
+    await this.feats.run(this.env.DB, {
+      send: (accountId, msg) => {
+        for (const ws of this.ctx.getWebSockets(`a:${accountId}`)) this.send(ws, msg);
+      },
+      featEarned: (accountId, name, feat) => this.floor().featEarned(accountId, name, feat),
+      grant: (accountId, emotes) => this.floor().grant(accountId, emotes),
+    });
+    this.scheduleAlarm();
+  }
+
   private async syncDirectory(): Promise<void> {
     const m = this.meta;
     if (!m || m.mode !== 'multi') return;
@@ -1496,8 +1530,8 @@ export class CasinoTable extends DurableObject<Env> {
   private async closeTable(): Promise<void> {
     const m = this.meta!;
     const pending = this.sql.exec<{ n: number }>(`SELECT count(*) AS n FROM outbox WHERE state = 'pending'`).one().n;
-    if (pending > 0) {
-      // Money is still on its way to D1; close once it has landed.
+    if (pending > 0 || !this.feats.idle()) {
+      // Money (or progress) is still on its way to D1; close once it has landed.
       this.setDeadline('close', Date.now() + 30_000);
       return;
     }
@@ -1508,6 +1542,11 @@ export class CasinoTable extends DurableObject<Env> {
       if (m.pin) await this.floor().releasePin(m.name);
     } catch (err) {
       console.error('floor close failed', err);
+    }
+    try {
+      await this.feats.cleanup(this.env.DB);
+    } catch (err) {
+      console.error('feats cleanup failed', err);
     }
   }
 
