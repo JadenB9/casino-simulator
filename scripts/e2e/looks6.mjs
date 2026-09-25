@@ -359,6 +359,33 @@ if (checks.includes('floor')) {
   const extra = Object.fromEntries(RIDE_IDS.map((id) => [id, calls[id] - calls.foot]));
   console.log(`draw calls on foot ${calls.foot}; a ride adds ${JSON.stringify(extra)}`);
   for (const [id, n] of Object.entries(extra)) if (n > 2) fail(`${id} adds ${n} draw calls`);
+  // the boutique's forms in the new pieces, one standing on a hoverboard
+  await a.p.evaluate(() => window.casino.world.player.teleport(12.5, 8, Math.PI));
+  await a.p.waitForTimeout(800);
+  for (const [name, from, at] of [
+    ['boutique-hoverboard-form', [14.2, 1.5, 6.2], [15.7, 0.9, 4.3]],
+    ['boutique-forms-west', [11.4, 1.6, 9.2], [8.2, 1.1, 10.6]],
+    ['boutique-sequin-form', [12.9, 1.55, 11.7], [12.9, 1.1, 14.05]],
+  ]) {
+    await a.p.evaluate(
+      ([f, t]) => {
+        const { engine, world } = window.casino;
+        world.player.setEnabled(false);
+        window.__watch?.();
+        window.__watch = engine.onFrame(() => {
+          engine.camera.position.set(f[0], f[1], f[2]);
+          engine.camera.lookAt(t[0], t[1], t[2]);
+        });
+      },
+      [from, at],
+    );
+    await a.p.waitForTimeout(900);
+    await shot(a.p, name);
+  }
+  await a.p.evaluate(() => {
+    window.__watch?.();
+    window.casino.world.player.setEnabled(true);
+  });
   // leave A on foot for the next run's first look
   await saveLook(a.p, { ride: null });
   for (const [who, r] of [
