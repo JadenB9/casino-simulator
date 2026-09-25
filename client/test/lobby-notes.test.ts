@@ -7,7 +7,7 @@ import { soloNote } from '../src/ui/lobby/notes.ts';
 // games deal; a wheel, the dice and Crash run otherwise, and the line must say so.
 describe('the single-player line in the station panel', () => {
   const multi = (Object.keys(CATALOG) as GameId[]).filter((g) => CATALOG[g].multiplayer && !CATALOG[g].dev);
-  const dealt = new Set<GameId>(['blackjack', 'baccarat', 'threecard', 'war']);
+  const dealt = new Set<GameId>(['blackjack', 'baccarat', 'threecard', 'war', 'letitride', 'paigow']);
 
   it('talks about dealing only at the games that deal cards', () => {
     for (const g of multi) expect(/\bdeal\b/i.test(soloNote(g)), g).toBe(dealt.has(g));
