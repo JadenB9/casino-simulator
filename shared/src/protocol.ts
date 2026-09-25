@@ -12,6 +12,7 @@ import type { GameId, TableMode, TableConfig } from './engine.ts';
 import type { Look } from './look.ts';
 import type { FxEvent, Statue } from './items.ts';
 import type { ZoneId } from './zones.ts';
+import type { CarCall } from './valet.ts'; // v6 cars6
 import { isSeatId } from './seats.ts';
 import type { TableLimits } from './limits.ts';
 
@@ -329,6 +330,10 @@ export type FloorServerMsg =
   | { t: 'owned'; emotes: EmoteId[] }
   // v6: the server moved you (the elevator, jail, release): go there at once (cm, yaw byte)
   | { t: 'tp'; x: number; z: number; r: number }
+  // v6 cars6: a car called to the valet's curb (or sent back: until has passed); the ones at the curb after hello
+  | ({ t: 'car' } & CarCall)
+  | { t: 'cars'; list: CarCall[] }
+  // v6 cars6: end
   | { t: 'err'; code: ErrorCode; msg: string }
   | ChatServerMsg;
 

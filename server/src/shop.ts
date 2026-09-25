@@ -14,7 +14,7 @@
 
 import { formatMoney, type Cents } from '../../shared/src/money.ts';
 import {
-  EFFECTS, EMOTE_ITEMS, HOLD_MS, SHOP_ITEMS, STATUE, barItem, effectItem, emoteItem, isFreeEmote, isOp, shopEmote, shopItem, wornItem,
+  EFFECTS, EMOTE_ITEMS, HOLD_MS, SHOP_ITEMS, STATUE, barItem, carItem, effectItem, emoteItem, isFreeEmote, isOp, shopEmote, shopItem, wornItem,
   type BarItem, type BuyResponse, type EffectItem, type EffectResponse, type FxEvent, type OrderResponse, type ShopResponse,
 } from '../../shared/src/items.ts';
 import type { EmoteId } from '../../shared/src/protocol.ts';
@@ -24,6 +24,7 @@ import { bumpRate, orderKey, ownedOf } from './db.ts';
 import { moneyOf } from './transfer.ts';
 import { FX_KEEP_MS, eventFromOrder, fxKey, statueOf, statuesQuery, type StatueRow } from './floor/fx.ts';
 import type { CasinoFloor } from './floor/index.ts';
+import { valetApi } from './cars.ts'; // v6 cars6
 
 /** Purchases per account per minute, for the shop, the effects and the bar each. */
 const LIMIT = 20;
@@ -33,7 +34,7 @@ interface Sold {
   id: string;
   name: string;
   price: Cents;
-  kind: 'item' | 'emote' | 'statue';
+  kind: 'item' | 'emote' | 'statue' | 'car';
 }
 
 function sold(id: unknown): Sold | null {
@@ -42,6 +43,9 @@ function sold(id: unknown): Sold | null {
   const emote = shopEmote(id);
   if (emote) return { id: emote.id, name: emote.name, price: emote.price, kind: 'emote' };
   if (id === STATUE.id) return { id: STATUE.id, name: STATUE.name, price: STATUE.price, kind: 'statue' };
+  // v6 cars6: the valet's cars, bought once and kept like the rest (a casino_items row)
+  const car = carItem(id);
+  if (car) return { id: car.id, name: car.name, price: car.price, kind: 'car' };
   return null;
 }
 
@@ -82,6 +86,9 @@ export async function shopApi(request: Request, env: Env, route: string, account
     }
     return json({ item: item.id, price: r.price, at: r.at, balance: r.balance, inPlay: r.inPlay, rev: r.rev } satisfies BuyResponse, 200, cors);
   }
+
+  // v6 cars6: the valet brings a car you own round to the curb (cars.ts)
+  if (route === 'shop/valet' && request.method === 'POST') return valetApi(request, env, accountId, cors);
 
   if (route === 'shop/fx' && request.method === 'POST') {
     const body = (await readJson(request)) as { item?: unknown; op?: unknown } | null;
