@@ -29,6 +29,12 @@ import { showAway, showIdleWarning, type AwayHandle, type WarningHandle } from '
 import { IdleWatch } from './idle.ts';
 import { ENGINES } from '../../../shared/src/games/index.ts';
 import { CLOSE, type Profile } from '../../../shared/src/protocol.ts';
+// v6 cars6: the valet lot, the curb and the garage (world/cars/), the valet's panel (ui/cars/)
+import { Cars } from '../world/cars/index.ts';
+import { openValet } from '../ui/cars/valet.ts';
+import * as carsApi from '../ui/cars/api.ts';
+import { serverNow } from '../net/clock.ts';
+import { carItem } from '../../../shared/src/items.ts';
 
 export async function boot(): Promise<void> {
   const ui = document.getElementById('ui')!;
@@ -85,6 +91,8 @@ class App {
   private bar: Bar | null = null;
   /** Big wins on the floor: the marquee, the toast, the day's meter and the room's sound. */
   private readonly life: FloorLife;
+  /** v6 cars6: the cars on the ground floor. */
+  readonly cars: Cars;
   private lifeOff: (() => void) | null = null;
   private menu: MenuHandle | null = null;
   private table: OpenTable | null = null;
@@ -142,6 +150,18 @@ class App {
       true,
     );
     this.life = mountFloorLife({ engine, world, sfx, ui });
+    // v6 cars6: the valet lot, the curb and your garage; E at the podium opens the valet
+    this.cars = new Cars({
+      engine,
+      world,
+      now: serverNow,
+      me: () => this.link?.you?.id ?? null,
+      onValet: () => this.openValet(),
+      onKeys: (c) => toast(`Your ${carItem(c.car)?.name ?? 'car'} is at the curb. The valet hands you the keys.`),
+    });
+    void this.cars.load();
+    engine.onFrame((dt) => this.cars.update(dt));
+    session.on((p) => this.cars.setOwned(p.owned, p.name));
     this.idle = new IdleWatch({
       showWarning: (at) => {
         this.idleWarning?.close();
@@ -295,6 +315,13 @@ class App {
     // Big wins are announced to people out on the floor, never to the winner at their table.
     this.lifeOff = this.life.connect(link, { onFloor: () => this.hud !== null && this.table === null && this.world.seated === null });
     link.on('emote', (id, e) => void this.world.showEmote(id === link.you?.id ? 'me' : id, e));
+    link.subscribe((m) => this.cars.hear(m)); // v6 cars6: cars called round to the valet's curb
+    // v6 cars6: the cars you own, for your garage (the profile lists them once it carries owned)
+    void shopApi.shop().then((r) => {
+      const p = session.profile;
+      const cars = r.owned.map((o) => o.item).filter((id) => carItem(id) && !p?.owned?.includes(id));
+      if (p && cars.length) session.set({ ...p, owned: [...(p.owned ?? []), ...cars] });
+    }, () => {});
     link.on('hello', (you, first) => {
       // A tab that takes over from another one carries on where that one stood. Coming back from
       // away, the floor forgot us; the first position we send puts us back where we stand.
@@ -428,6 +455,25 @@ class App {
       // v6 shop6: what's playing on the floor and where you stand, for the effects
       floor: this.link,
       where: () => this.whereOnFloor(),
+      onClose: () => this.world.player.setEnabled(true),
+    });
+  }
+
+  /** v6 cars6: the valet's panel (E at the podium out front): buy cars, have one brought round. */
+  openValet(car?: string): void {
+    if (!this.hud) return;
+    if (this.table || this.world.seated) return;
+    this.world.player.setEnabled(false);
+    openValet({
+      root: this.ui,
+      api: { shop: shopApi.shop, buy: shopApi.buy, valet: carsApi.valet, newOp: shopApi.newOp },
+      session,
+      engine: this.engine,
+      mats: this.cars.mats,
+      sfx: this.sfx,
+      car,
+      atCurb: () => this.cars.valet.mine(),
+      onCall: (c) => c && this.cars.valet.hear(c),
       onClose: () => this.world.player.setEnabled(true),
     });
   }
