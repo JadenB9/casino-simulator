@@ -1,11 +1,13 @@
-// The boutique's shopkeeper, in a black blazer behind the counter. "Press E · Browse" at the
-// counter (or at a mannequin, which opens the boutique at what it wears): a welcome with both hands
-// and a word by name, then the boutique opens. Leaving, a goodbye ("Wear it well." if something new
+// The boutique's shopkeeper, in a black blazer behind the counter. "Press E · Browse the boutique"
+// anywhere along the counter's front (or "Browse · Fur Coat" at a mannequin, which opens the
+// boutique at what it wears, or at a display case): a welcome with both hands and a word by name,
+// then the boutique opens. Leaving, a goodbye ("Wear it well." if something new
 // is on). Between customers they keep the shop: polishing a glass case, straightening a mannequin's
 // jacket, then back behind the counter, and back at once when someone comes to it.
 
 import type { Spot } from '../interact.ts';
-import type { Stand } from '../life-points.ts';
+import type { Piece, Stand } from '../life-points.ts';
+import { wornItem } from '../../../../shared/src/items.ts';
 import type { Member } from './crew.ts';
 import type { LifeCtx } from './ctx.ts';
 import { shopBye, shopHello } from './lines.ts';
@@ -16,11 +18,15 @@ import * as THREE from 'three';
 export interface Boutique {
   keeper: Stand;
   customer: Stand;
-  cases: (Stand & { top: number })[];
-  mannequins: (Stand & { item?: string })[];
+  /** The counter's front, its customers' face (x) facing west, from z0 to z1. */
+  counter?: { x: number; z0: number; z1: number };
+  cases: (Stand & { top: number; at?: Piece })[];
+  mannequins: (Stand & { item?: string; at?: Piece })[];
 }
 
+/** How far from the counter's front "Browse" is offered, and from a mannequin's or a case's edge. */
 const REACH = 1.4;
+const PIECE_REACH = 1.1;
 const PACE = 0.9;
 const WALK_CYCLE = 1.75;
 /** Seconds between the welcome and the boutique opening. */
@@ -43,16 +49,36 @@ export class Shopkeeper {
     this.m = ctx.crew.add('shopkeeper', shop.keeper.x, shop.keeper.z, shop.keeper.yaw);
   }
 
+  /**
+   * "Browse" along the whole of the counter's front, the nearest point of it (not one spot in its
+   * middle), and at each mannequin and case from any side: the piece itself, not a stand point
+   * in front of it that was behind you by the time you reached it.
+   */
   spots = (p: { x: number; z: number }): Spot[] => {
     const out: Spot[] = [];
-    const c = this.shop.customer;
-    const d = Math.max(0, Math.hypot(c.x - p.x, c.z - p.z) - 0.35);
-    if (d <= REACH) out.push({ key: 'boutique', x: c.x, z: c.z, d, label: 'Browse', use: () => this.welcome() });
+    const k = this.shop.counter;
+    if (k) {
+      const z = Math.max(k.z0, Math.min(k.z1, p.z));
+      // on the shop's side of it, never behind it
+      if (p.x < k.x + 0.05) {
+        const d = Math.max(0, Math.hypot(k.x - p.x, z - p.z) - 0.45);
+        if (d <= REACH) out.push({ key: 'boutique', x: k.x, z, d, label: 'Browse the boutique', use: () => this.welcome() });
+      }
+    } else {
+      const c = this.shop.customer;
+      const d = Math.max(0, Math.hypot(c.x - p.x, c.z - p.z) - 0.35);
+      if (d <= REACH) out.push({ key: 'boutique', x: c.x, z: c.z, d, label: 'Browse the boutique', use: () => this.welcome() });
+    }
+    const piece = (key: string, at: Piece, label: string, item?: string) => {
+      const d = Math.max(0, Math.hypot(at.x - p.x, at.z - p.z) - at.r - 0.25);
+      if (d <= PIECE_REACH) out.push({ key, x: at.x, z: at.z, d, label, use: () => this.welcome(item) });
+    };
     for (const [i, mq] of this.shop.mannequins.entries()) {
       if (!mq.item) continue;
-      const dm = Math.max(0, Math.hypot(mq.x - p.x, mq.z - p.z) - 0.6);
-      if (dm <= 1.2) out.push({ key: `mannequin:${i}`, x: mq.x, z: mq.z, d: dm, label: 'Browse', use: () => this.welcome(mq.item) });
+      const name = wornItem(mq.item)?.name;
+      piece(`mannequin:${i}`, mq.at ?? { x: mq.x, z: mq.z, r: 0.3 }, name ? `Browse · ${name}` : 'Browse', mq.item);
     }
+    for (const [i, c] of this.shop.cases.entries()) if (c.at) piece(`case:${i}`, c.at, 'Browse the cases');
     return out;
   };
 

@@ -81,6 +81,11 @@ The "Press E" prompt sits bottom-centre, clear of the bottom-left corner (the si
 Prompts read `Press E · Blackjack · $5–$500,000`: the limits a table there can be opened at
 (`limitsSpan` in shared/src/limits.ts), or a machine's bets from its engine's config.
 
+A thing counts as in front of you within about 75 degrees of the way your body faces or of the
+way the camera looks (walk along a counter and look at it with the mouse: the body still faces
+the way you walked). Big things offer their nearest point, not one spot in their middle: the
+boutique's counter, each teller window's stretch of the cage, the bar's front, a directory board.
+
 ### Wearables
 `wearables.ts` puts the boutique's pieces on any character the factory makes, from the look:
 chains fitted to each outfit's neck and chest, grills, watches, aviators and hats skinned to
@@ -125,6 +130,23 @@ walks the floor (reach.ts) from `SPAWN` to every station, door and room;
 loop. `node scripts/e2e/world4.mjs <port> <dir>` checks the real models against the plan (every
 prop and piece of furniture inside its solids, every seat's top where the plan says), the rooms'
 screenshots, the map and the draw calls; world3.mjs and world2.mjs still run their checks on it.
+
+### No z-fighting
+No two differently dressed faces of the building lie in one plane where anyone can see them (they
+would flicker in stripes as the camera moves). Doorways have a lining through the wall, their
+casings come in over it and everything on a casing (a bead, a keystone, a band) stands clear of the
+faces round it; a wall's trims run along its room's own face and die into a casing at its outer
+edge; a wall run closes over a corner only where no other wall carries on past it; anything set on
+a surface (a lamp's diffuser, a mirror, a sign) stands a few millimetres off it. The far stand-ins
+draw screens and glows as decals (polygonOffset). `zfight.ts` finds any two faces of different
+materials within 2 mm of one plane that overlap, less what's pressed against something facing the
+other way; `client/test/world-zfight.test.ts` runs it over everything the building's batch holds,
+and `node scripts/e2e/world6.mjs <port> <dir> zfight` over the scene as drawn (furniture, props,
+signs, the stand-ins; the stations' own models are listed, not failed). world6.mjs also shoots both
+jambs of every doorway from both sides (`doors`), measures every palm and plant's foot against its
+planter's middle (`palms`: props.ts stands them on their foot, not the middle of their spread),
+the directory from the spawn and opened (`directory`), the boutique (`boutique`) and walks up to
+every E spot (`prompts`).
 
 ### Seats at every table
 Every table game shows its seats: a chair or stool at each `seats()` position (furniture-spec.ts
@@ -179,7 +201,10 @@ bankers, the shopkeeper), all in metres with yaw as `Object3D.rotation.y`:
   lounge, the pit, the salon, the poker room, the slots hall (`ROUTES` in rooms.ts).
 
 ### Wayfinding
-The lobby's directory board draws the plan with every room and a "You are here". The Map (the
+The lobby's directory board draws the plan with every room and a "You are here"; it stands
+between the ways to the cashier and to the pit, facing the doors, in view from the spawn and
+clear of the palms. "E · Read the directory" in front of it opens the Map as the Floor Directory:
+wide, with a legend of every room and what's in it beside the plan. The Map (the
 HUD's map button, or N on the floor; never at a table, where N is blackjack's "no insurance")
 draws the rooms, walls, doors, windows, tables and machines and you with the way you face; a click
 on a room lights it and lists what's there. Over every doorway, on both sides, is the name of the
@@ -264,7 +289,10 @@ bar over the bartender's Order, a computer over its own desk chair).
   at the window on wide screens); a top-up is nodded through and counted out ("Here's your
   $40,000.01. Good luck out there."), a refusal gets a shake of the head. The cage's own prompt
   steps aside while there are tellers.
-- **Shopkeeper** (shopkeeper.ts): "E · Browse" at the boutique counter (or a mannequin, at what it
+- **Shopkeeper** (shopkeeper.ts): "E · Browse the boutique" anywhere along the counter's front
+  (its nearest point; a lit PURCHASES & FITTINGS sign hangs over it and a service bell sits on
+  it), "E · Browse · Fur Coat" at a mannequin from any side (at what it wears), "E · Browse the
+  cases" at a display case (or a mannequin, at what it
   wears): a welcome with both hands, a word by name, then `openShop()`; a goodbye after. Between
   customers: polishing a case, straightening a mannequin.
 - **Cost**: the crew (crew.ts) are characters like the dealers (uniforms from characters.ts, one

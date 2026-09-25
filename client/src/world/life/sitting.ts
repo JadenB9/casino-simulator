@@ -203,7 +203,9 @@ export class Seating {
       this.camEase -= dt;
       const k = 1 - Math.exp(-dt * 4.5);
       this.player.camYaw = lerpAngle(this.player.camYaw, this.camYaw, k);
-      this.player.camPitch += (SEAT_PITCH - this.player.camPitch) * k;
+      // in first person the eyes are the sitter's own: keep a level look rather than one from above
+      const pitch = this.player.view === 'first' ? 0 : SEAT_PITCH;
+      this.player.camPitch += (pitch - this.player.camPitch) * k;
     }
     this.bringBack();
   }

@@ -156,7 +156,8 @@ export function buildDecor(plan: FloorPlan, stations: WorldStation[], b: Batch, 
       const len = z1 - z0;
       const zc = (z0 + z1) / 2;
       b.box(wood, bx, 0.53, zc, bar.depth, 1.02, len, 1.2);
-      b.box(lacquer, bar.front + 0.05, 0.06, zc, 0.12, 0.12, len);
+      // the kick plate stops short of the counter's ends, so its ends never share their plane
+      b.box(lacquer, bar.front + 0.05, 0.06, zc, 0.12, 0.12, len - 0.01);
       b.box(marble, bx - 0.05, BAR_TOP - 0.025, zc, bar.depth + 0.18, 0.05, len + 0.06, 1.4);
       b.add(new THREE.CylinderGeometry(0.045, 0.045, len, 10), leather, { x: bar.front - 0.1, y: BAR_TOP + 0.02, z: zc, rx: Math.PI / 2 });
       b.add(new THREE.CylinderGeometry(0.022, 0.022, len, 10), brass, { x: bar.front - 0.24, y: 0.2, z: zc, rx: Math.PI / 2 });
@@ -168,7 +169,8 @@ export function buildDecor(plan: FloorPlan, stations: WorldStation[], b: Batch, 
     for (const z of [bar.z0, bar.z1]) {
       const x0 = bar.front + bar.depth;
       const x1 = bar.back;
-      b.box(wood, (x0 + x1) / 2, 0.53, z, x1 - x0, 1.02, 0.12, 1.2);
+      // up to the marble's underside (a centimetre into it, their ends would share a plane)
+      b.box(wood, (x0 + x1) / 2, 0.515, z, x1 - x0, 1.03, 0.12, 1.2);
       b.box(marble, (x0 + x1) / 2, BAR_TOP - 0.025, z, x1 - x0, 0.05, 0.2, 1.4);
     }
     // back bar: cabinet, mirror, three lit glass shelves of bottles, and a crown for the sign
@@ -283,10 +285,15 @@ export function buildDecor(plan: FloorPlan, stations: WorldStation[], b: Batch, 
     b.box(brass, cx, 0.97, cz, k.x1 - k.x0 + 0.06, 0.05, len + 0.06);
     b.box(brass, k.x0 - 0.005, 0.1, cz, 0.01, 0.06, len);
     glow.box(GLOW.shelf, k.x0 - 0.02, 0.9, cz, 0.012, 0.012, len - 0.1);
+    // a brass service bell on the counter's front edge, where you'd ask
+    const bell = { x: k.x0 + 0.16, z: cz };
+    b.add(new THREE.CylinderGeometry(0.05, 0.055, 0.012, 20), m.get('marble-black'), { x: bell.x, y: 1.001, z: bell.z });
+    b.add(new THREE.SphereGeometry(0.042, 20, 8, 0, Math.PI * 2, 0, Math.PI / 2), brass, { x: bell.x, y: 1.007, z: bell.z });
+    b.add(new THREE.CylinderGeometry(0.007, 0.007, 0.022, 8), brass, { x: bell.x, y: 1.056, z: bell.z });
     const x1 = plan.boutique.wall;
     const x0 = x1 - 0.36;
     b.box(wood, (x0 + x1) / 2, 1.25, cz, 0.36, 2.5, len + 0.8, 1.2);
-    b.add(new THREE.PlaneGeometry(len + 0.6, 1.9), m.get('mirror'), { x: x0 - 0.001, y: 1.45, z: cz, ry: -Math.PI / 2 });
+    b.add(new THREE.PlaneGeometry(len + 0.6, 1.9), m.get('mirror'), { x: x0 - 0.004, y: 1.45, z: cz, ry: -Math.PI / 2 });
     for (const y of [1.0, 1.5, 2.0]) {
       b.box(m.get('glass'), x0 - 0.12, y, cz, 0.26, 0.012, len + 0.5);
       glow.box(GLOW.shelf, x0 - 0.02, y + 0.03, cz, 0.01, 0.01, len + 0.5);
@@ -313,9 +320,12 @@ export function buildDecor(plan: FloorPlan, stations: WorldStation[], b: Batch, 
   }
 
   // --- planters, palms and plants --------------------------------------------------------------
+  const soil = m.get('soil');
   const planter = (x: number, z: number, r: number, h: number) => {
     b.add(new THREE.CylinderGeometry(r, r * 0.82, h, 24), lacquer, { x, y: h / 2, z });
     b.add(new THREE.TorusGeometry(r, 0.02, 6, 28), brass, new THREE.Matrix4().makeRotationX(Math.PI / 2).premultiply(new THREE.Matrix4().makeTranslation(x, h, z)));
+    // earth to the brim, the trunk (or the plant's own pot) standing in it
+    b.add(new THREE.CircleGeometry(r - 0.012, 24), soil, new THREE.Matrix4().makeRotationX(-Math.PI / 2).premultiply(new THREE.Matrix4().makeTranslation(x, h + 0.004, z)), 0.6);
   };
   for (const p of plan.palms) {
     into(p.room);
@@ -364,7 +374,7 @@ export function buildDecor(plan: FloorPlan, stations: WorldStation[], b: Batch, 
     for (const e of [-0.7, 0.7]) b.add(new THREE.CylinderGeometry(0.005, 0.005, top - 2.28, 5), chrome, { x: l.x + e * c, y: (top + 2.28) / 2, z: l.z - e * s });
     b.box(m.get('lacquer'), l.x, 2.2, l.z, 1.8, 0.16, 0.5, undefined, l.yaw);
     b.box(brass, l.x, 2.12, l.z, 1.82, 0.02, 0.52, undefined, l.yaw);
-    glow.box(GLOW.soft, l.x, 2.115, l.z, 1.7, 0.012, 0.42, l.yaw);
+    glow.box(GLOW.soft, l.x, 2.106, l.z, 1.7, 0.012, 0.42, l.yaw);
     out.pools.push({ x: l.x, z: l.z, r: 2.1, room: l.room });
   }
 
@@ -376,7 +386,7 @@ export function buildDecor(plan: FloorPlan, stations: WorldStation[], b: Batch, 
     into(isl.room);
     const top = ceilingAt(plan, isl.x, isl.z);
     b.box(lacquer, isl.x, 1.0, isl.z, isl.w - 0.1, 0.52, 0.05);
-    glow.box(hdr('#35d8ff', 2.4), isl.x, 1.265, isl.z, isl.w - 0.1, 0.012, 0.03);
+    glow.box(hdr('#35d8ff', 2.4), isl.x, 1.265, isl.z, isl.w - 0.11, 0.012, 0.03);
     // the north row holds the first two games (two desks each), the south row the next two
     isl.games.forEach((g, i) => {
       const color = hdr(accents[Object.keys(CATALOG).indexOf(g) % accents.length]!, 2.6);
