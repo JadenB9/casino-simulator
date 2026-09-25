@@ -189,6 +189,5 @@ html.touch-ui .world-prompt { display: none !important; }
   .touch-caption { bottom: 206px; }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .touch-act, .touch-caption, .touch-note { animation: none; }
-}
+/* Reduce flashing & motion (app/comfort.ts) */
+body.calm .touch-act, body.calm .touch-caption, body.calm .touch-note { animation: none; }

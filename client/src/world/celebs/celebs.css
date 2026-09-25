@@ -44,10 +44,9 @@
 .celeb-flash.calm { animation-name: celeb-flash-soft; }
 .celeb-sighting.calm .celeb-sighting-tag::before { animation: none; }
 @keyframes celeb-flash-soft { 0% { opacity: 0.22; } 100% { opacity: 0; } }
-@media (prefers-reduced-motion: reduce) {
-  .celeb-flash { animation-name: celeb-flash-soft; }
-  .celeb-sighting-tag::before { animation: none; }
-}
+/* Reduce flashing & motion (app/comfort.ts) */
+body.calm .celeb-flash { animation-name: celeb-flash-soft; }
+body.calm .celeb-sighting-tag::before { animation: none; }
 
 @media (max-width: 720px) {
   .celeb-notice { min-width: 0; padding: 7px 14px 8px 16px; }

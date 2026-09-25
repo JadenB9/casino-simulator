@@ -79,10 +79,9 @@
 .emo-wheel.cooling .emo-hint { color: var(--lose); }
 
 @keyframes emo-in { from { opacity: 0; transform: scale(0.94); } }
-@media (prefers-reduced-motion: reduce) {
-  .emo-wheel { animation: none; }
-  .emo-btn { transition: none; }
-}
+/* Reduce flashing & motion (app/comfort.ts) */
+body.calm .emo-wheel { animation: none; }
+body.calm .emo-btn { transition: none; }
 
 /* Touch screens: measured against the visible height (a phone browser's 100vh reaches behind its
    toolbars). */
