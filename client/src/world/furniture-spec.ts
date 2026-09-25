@@ -82,10 +82,14 @@ export const FURNITURE: Record<FurnitureKind, FurnitureSpec> = {
   podium: { w: 0.92, d: 0.56, h: 1.52 },
   lamp: { w: 0.84, d: 0.84, h: 1.45, round: true },
   palm: { w: 1.0, d: 1.0, h: 0.62, round: true },
+  // the parlour's drinks machine: a lit front of cans behind glass
+  vending: { w: 1.0, d: 0.86, h: 1.9 },
+  // the Jade Room's lacquer sideboard, porcelain on it
+  cabinet: { w: 1.8, d: 0.5, h: 1.4 },
 };
 
 /** The chairs and stools at the tables, drawn at every seat the game's module lists. */
-export type ChairKind = 'chair' | 'plush' | 'stool' | 'velvet-stool';
+export type ChairKind = 'chair' | 'plush' | 'stool' | 'velvet-stool' | 'folding' | 'parlour-stool';
 
 export const CHAIRS: Record<ChairKind, { w: number; d: number; h: number; round?: boolean }> = {
   // a casino table chair: upholstered seat and back on a wood frame, brass foot ring
@@ -96,6 +100,10 @@ export const CHAIRS: Record<ChairKind, { w: number; d: number; h: number; round?
   // a backless stool on a chrome post
   stool: { w: 0.31, d: 0.31, h: 0.7, round: true },
   'velvet-stool': { w: 0.33, d: 0.33, h: 0.74, round: true },
+  // the bingo hall's stacking chair: narrow, its places are 0.44 m apart along the long tables
+  folding: { w: 0.4, d: 0.46, h: 0.86 },
+  // a pachinko stool: a round cushion with a low back, on a post fixed to the floor
+  'parlour-stool': { w: 0.38, d: 0.38, h: 0.86, round: true },
 };
 
 /**
@@ -115,4 +123,9 @@ export const SEATING: Partial<Record<GameId, { kind: ChairKind; top: number; hig
   sicbo: { kind: 'stool', top: 0.6 },
   bigsix: { kind: 'stool', top: 0.68 },
   slots: { kind: 'stool', top: 0.6 },
+  letitride: { kind: 'chair', top: 0.56 },
+  paigow: { kind: 'chair', top: 0.56 },
+  // the long tables stand 0.74 m; the machine's trays about 0.95
+  bingo: { kind: 'folding', top: 0.48 },
+  pachinko: { kind: 'parlour-stool', top: 0.6 },
 };
