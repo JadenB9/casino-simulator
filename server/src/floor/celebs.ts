@@ -179,11 +179,11 @@ export class Celebs {
    * The dev stack's trigger (never in production: see celebsDevApi): a visit starting in a
    * moment, or a box on the floor now, at a spot if given.
    */
-  force(kind: 'celeb' | 'gift' | 'happy', now: number, arg?: string | number): Visit | (GiftBox & { amount: Cents }) | HappyHour {
+  force(kind: 'celeb' | 'gift' | 'happy', now: number, arg?: string | number, from?: number): Visit | (GiftBox & { amount: Cents }) | HappyHour {
     if (kind === 'happy') {
-      // (the Worker prices orders from its own copy of this: happy.ts startDevHappy)
+      // the window the Worker prices orders by (happy.ts startDevHappy): `from` to `arg`
       const end = typeof arg === 'number' ? arg : now;
-      this.devHappy = { start: now, end };
+      this.devHappy = { start: from ?? now, end };
       this.due = 0;
       this.tick(now);
       return this.devHappy;
@@ -348,13 +348,13 @@ function send(ws: WebSocket, msg: CelebServerMsg): void {
  * celebrity walks in, a box is left, or happy hour starts, right now. Only on the dev stack (CASINO_DEV in server/wrangler.toml, which production
  * never sets), for the headless checks.
  */
-export async function celebsDevApi(request: Request, env: Env, route: string, cors: Record<string, string>, floor: { celebDev(kind: 'celeb' | 'gift' | 'happy', arg?: string | number): Promise<unknown> | unknown }): Promise<Response> {
+export async function celebsDevApi(request: Request, env: Env, route: string, cors: Record<string, string>, floor: { celebDev(kind: 'celeb' | 'gift' | 'happy', arg?: string | number, from?: number): Promise<unknown> | unknown }): Promise<Response> {
   if (request.method !== 'POST') return fail(404, 'NOT_FOUND', 'Not here.', cors);
   const body = (await readJson(request)) as { celeb?: unknown; spot?: unknown; ms?: unknown } | null;
   // a happy hour from now: the Worker's price (a row every isolate reads) and the floor's news
   if (route === 'dev/happy') {
     const h = await startDevHappy(env.DB, Date.now(), typeof body?.ms === 'number' && body.ms > 0 ? Math.min(body.ms, HAPPY_MS) : HAPPY_MS);
-    return json({ happy: await floor.celebDev('happy', h.end) }, 200, cors);
+    return json({ happy: await floor.celebDev('happy', h.end, h.start) }, 200, cors);
   }
   if (route === 'dev/celeb') return json({ visit: await floor.celebDev('celeb', typeof body?.celeb === 'string' ? body.celeb : undefined) }, 200, cors);
   if (route === 'dev/gift') return json({ gift: await floor.celebDev('gift', typeof body?.spot === 'number' ? body.spot : undefined) }, 200, cors);
