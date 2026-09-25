@@ -41,6 +41,14 @@ function sql(command) {
   return execFileSync('npx', ['wrangler', 'd1', 'execute', 'DB', '--local', '--json', '--command', command, '-c', 'server/wrangler.toml'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
 }
 
+// Cash the house gives while you play (a feat's reward, a daily challenge, a celebrity's tip) lands
+// in the balance beside the table's chips: 'grant' rows in the ledger, counted into each cash-out.
+function granted() {
+  const out = JSON.parse(sql(`SELECT COALESCE(SUM(l.amount), 0) AS n FROM casino_ledger l JOIN casino_accounts a ON a.id = l.account_id WHERE a.name = '${NAME}' AND l.kind = 'grant'`));
+  return out[0]?.results?.[0]?.n ?? 0;
+}
+let granted0 = 0;
+
 /** How each table is played: Max's spot (and the later rounds' chip), the round's decisions, its end. */
 const GAMES = {
   blackjack: { max: (seat) => ({ felt: `spot:${seat}` }), keys: { turn: 's', insurance: 'n' }, end: ['done'] },
@@ -227,6 +235,7 @@ async function playStation(page, id) {
   const tag = `${id}-${QUALITY}`;
   const profile0 = await page.evaluate(() => window.casino.app && window.casino.session?.profile);
   const balance0 = profile0?.balance ?? 0;
+  granted0 = granted();
   // (chips still parked at other tables from an earlier run stay in play)
   const inPlay0 = profile0?.inPlay ?? 0;
   // a bet that went down in a round that never dealt comes back when you leave
@@ -517,8 +526,9 @@ async function playStation(page, id) {
     if (prof?.inPlay === inPlay0) break;
     await page.waitForTimeout(1000);
   }
-  const want = balance0 - buyIn + stackEnd + undealt;
-  check(prof?.balance === want && prof?.inPlay === inPlay0, `${id}: cashed out, balance ${prof?.balance / 100} = ${balance0 / 100} - ${buyIn / 100} + the stack ${stackEnd / 100}${undealt ? ` + ${undealt / 100} undealt` : ''} (in play ${prof?.inPlay / 100}, was ${inPlay0 / 100})`);
+  const grants = granted() - granted0;
+  const want = balance0 - buyIn + stackEnd + undealt + grants;
+  check(prof?.balance === want && prof?.inPlay === inPlay0, `${id}: cashed out, balance ${prof?.balance / 100} = ${balance0 / 100} - ${buyIn / 100} + the stack ${stackEnd / 100}${undealt ? ` + ${undealt / 100} undealt` : ''}${grants ? ` + ${grants / 100} granted` : ''} (in play ${prof?.inPlay / 100}, was ${inPlay0 / 100})`);
   // the app asks for the profile a moment after leaving (the cash-out lands after the socket closes)
   let hud = null;
   for (let i = 0; i < 20 && hud !== prof?.balance; i++) {
@@ -542,8 +552,9 @@ async function leaveAndReconcile(page, id, balance0, inPlay0, buyIn, extra = 0) 
     if (prof?.inPlay === inPlay0) break;
     await page.waitForTimeout(1000);
   }
-  const want = balance0 - buyIn + stackEnd + extra;
-  check(prof?.balance === want && prof?.inPlay === inPlay0, `${id}: cashed out, balance ${prof?.balance / 100} = ${balance0 / 100} - ${buyIn / 100} + the stack ${stackEnd / 100} (in play ${prof?.inPlay / 100}, was ${inPlay0 / 100})`);
+  const grants = granted() - granted0;
+  const want = balance0 - buyIn + stackEnd + extra + grants;
+  check(prof?.balance === want && prof?.inPlay === inPlay0, `${id}: cashed out, balance ${prof?.balance / 100} = ${balance0 / 100} - ${buyIn / 100} + the stack ${stackEnd / 100}${grants ? ` + ${grants / 100} granted` : ''} (in play ${prof?.inPlay / 100}, was ${inPlay0 / 100})`);
 }
 
 /** Sit down alone: the limits (when the game has them), then the biggest quick buy-in. */
@@ -573,6 +584,7 @@ async function sitAlone(page, id, tier) {
 /** Hold'em against the bots: hands played by the Tips (then C), and All-in (A, A) once. */
 async function playHoldem(page, id) {
   const prof0 = await page.evaluate(() => window.casino.session.profile);
+  granted0 = granted();
   const buyIn = await sitAlone(page, id, 2);
   const dealer = await page.evaluate((id) => !!window.casino.world.staff?.at?.(id), id);
   check(dealer, `${id}: a dealer stands at the table`);
@@ -634,6 +646,7 @@ async function playHoldem(page, id) {
 /** A machine: Max (A) for the most coins, spins or hands with Space, then cash out. */
 async function playMachine(page, id, game) {
   const prof0 = await page.evaluate(() => window.casino.session.profile);
+  granted0 = granted();
   const buyIn = await sitAlone(page, id, null);
   await page.waitForTimeout(1200);
   await shot(page, `${id}-${QUALITY}-2-seated`);
