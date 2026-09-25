@@ -2,7 +2,7 @@
 // verifies tokens, answers the account HTTP API, and forwards WebSocket upgrades to the right
 // Durable Object with headers only it can set.
 
-import { CLOSE, PROTOCOL_VERSION, type CreateTableResponse, type JoinByPinResponse, type LoanResponse, type LoginResponse, type MeResponse, type TicketResponse } from '../../shared/src/protocol.ts';
+import { CLOSE, PROTOCOL_VERSION, type CreateTableResponse, type JoinByPinResponse, type LoanResponse, type LoginResponse, type MeResponse, type StatsResponse, type TicketResponse } from '../../shared/src/protocol.ts';
 import { isValidName } from '../../shared/src/names.ts';
 import { PASSWORD_MAX, PASSWORD_MIN, isValidPassword } from '../../shared/src/password.ts';
 import { parseLook, lookFromJson } from '../../shared/src/look.ts';
@@ -20,6 +20,7 @@ import type { FeatsResponse } from '../../shared/src/feats.ts';
 import { takeLoan } from './transfer.ts';
 import { shopApi } from './shop.ts';
 import { leaderboard } from './leaderboard.ts';
+import { statsOf } from './stats.ts'; // v6 stats6
 // v6 celebs6: the daily bonus, and the dev stack's celebrity trigger
 import { dailyApi } from './daily.ts';
 import { celebsDevApi } from './floor/celebs.ts';
@@ -120,8 +121,16 @@ async function handleApi(request: Request, env: Env, route: string, cors: Record
   }
 
   // Names and numbers only; the boards are kept for a minute (see leaderboard.ts).
+  // v6 stats6: ?game=<id> for one game's boards; GET /stats for your own record
   if (route === 'leaderboard' && request.method === 'GET') {
-    return json(await leaderboard(env.DB, { id: claims.a, name: claims.n }, now), 200, cors);
+    const game = new URL(request.url).searchParams.get('game');
+    if (game !== null && (!isGameId(game) || CATALOG[game].dev)) return fail(400, 'BAD_REQUEST', 'No such game.', cors);
+    return json(await leaderboard(env.DB, { id: claims.a, name: claims.n }, now, game), 200, cors);
+  }
+  if (route === 'stats' && request.method === 'GET') {
+    const stats = await statsOf(env.DB, claims.a, now);
+    if (!stats) return fail(401, 'UNAUTHORIZED', 'That account is gone.', cors);
+    return json(stats satisfies StatsResponse, 200, cors);
   }
 
   if (route === 'me/look' && request.method === 'PUT') {

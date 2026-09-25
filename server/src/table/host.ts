@@ -41,6 +41,7 @@ import type { CasinoFloor } from '../floor/index.ts';
 import { ChatRoom } from '../floor/chat.ts';
 import { bigWinsIn, type BigWinReport } from '../floor/wins.ts'; // features: big wins
 import { FeatBook, stepFacts } from '../feats.ts'; // v6 feats: achievements and challenges
+import { RunBook } from '../stats.ts'; // v6 stats6: win runs, day and week nets
 
 /** How long a dropped player keeps their seat before being cashed out. */
 export const GRACE_MS = 120_000;
@@ -203,6 +204,8 @@ export class CasinoTable extends DurableObject<Env> {
   private idleDue = new Map<number, number>();
   /** v6 feats: tallies and feats earned here, on their way to D1 (server/src/feats.ts). */
   private feats: FeatBook;
+  /** v6 stats6: each player's run of winning rounds here (server/src/stats.ts). */
+  private runs: RunBook;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -227,6 +230,7 @@ export class CasinoTable extends DurableObject<Env> {
     this.sql.exec(`CREATE TABLE IF NOT EXISTS pin_misses (who TEXT PRIMARY KEY, n INTEGER NOT NULL, until INTEGER NOT NULL) WITHOUT ROWID`);
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
     this.feats = new FeatBook(this.sql, () => `flush:${this.meta?.incarnation ?? ''}`, (fn) => ctx.storage.transactionSync(fn));
+    this.runs = new RunBook(this.sql); // v6 stats6
     this.load();
   }
 
@@ -1223,6 +1227,7 @@ export class CasinoTable extends DurableObject<Env> {
       this.sql.exec(`INSERT OR REPLACE INTO state (id, json) VALUES (1, ?1)`, JSON.stringify(this.state));
       m.seq += 1;
       this.putMeta('seq', m.seq);
+      if (facts.length) this.runs.apply(facts, now); // v6 stats6: streaks, day and week nets, sent with the tallies
       if (facts.length) featWork = this.feats.record(facts, now);
     });
     this.overdue = 0;

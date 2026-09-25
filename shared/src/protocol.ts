@@ -213,9 +213,18 @@ export interface HttpError {
   inPlay?: Cents;
 }
 
-/** The leaderboards (GET /leaderboard), in the order the sheet shows them. */
-export const LEADERBOARDS = ['richest', 'biggestWin', 'rounds'] as const;
+// v6 stats6: the leaderboards (GET /leaderboard), in the order the sheet shows them, grouped
+// money, play, then today and this week. What each one counts is in shared/src/stats.ts.
+export const LEADERBOARDS = [
+  'richest', 'netUp', 'netDown', 'won', 'lost', 'wagered', 'biggestWin', 'biggestLoss',
+  'rounds', 'winRate', 'streak', 'feats', 'celebs', 'collection',
+  'today', 'todayDown', 'week', 'weekDown',
+] as const;
 export type LeaderboardId = (typeof LEADERBOARDS)[number];
+
+/** The boards one game has (GET /leaderboard?game=<id>), in the order the sheet shows them. */
+export const GAME_LEADERBOARDS = ['netUp', 'netDown', 'won', 'lost', 'biggestWin', 'biggestLoss', 'rounds', 'winRate'] as const satisfies readonly LeaderboardId[];
+export type GameLeaderboardId = (typeof GAME_LEADERBOARDS)[number];
 
 /** How many places each board lists. */
 export const LEADERBOARD_TOP = 10;
@@ -224,8 +233,13 @@ export interface LeaderboardRow {
   /** 1 is first; players on the same value share a place (1, 2, 2, 4). */
   rank: number;
   name: string;
-  /** Cents on richest (balance plus chips on tables) and biggestWin; a count on rounds. */
+  /**
+   * Cents on the money boards (negative on netDown, todayDown and weekDown), a count on rounds,
+   * streak, feats and celebs, basis points (5234 = 52.34%) on winRate.
+   */
   value: number;
+  /** winRate: the rounds the rate is out of. */
+  of?: number;
   /** The player who asked. */
   you?: true;
 }
@@ -234,16 +248,56 @@ export interface Leaderboard {
   top: LeaderboardRow[];
   /**
    * The asker's own place when it isn't in `top` (null when it is). `rank` is null while there
-   * is nothing to rank: no money, no win yet, no rounds yet.
+   * is nothing to rank: no money, no win yet, too few rounds for a win rate...
    */
-  you: { rank: number | null; name: string; value: number } | null;
+  you: { rank: number | null; name: string; value: number; of?: number } | null;
 }
 
 export interface LeaderboardResponse {
-  boards: Record<LeaderboardId, Leaderboard>;
+  /** Every board in LEADERBOARDS, or with `game`, every board in GAME_LEADERBOARDS. */
+  boards: Partial<Record<LeaderboardId, Leaderboard>>;
+  /** The game these boards are for; absent for the casino-wide boards. */
+  game?: GameId;
   /** How old the boards are, in ms: the server reads them at most about once a minute. */
   age: number;
 }
+
+/** One line of a player's record (GET /stats): all games, or one. */
+export interface StatLine {
+  /** Lifetime, from the cash-outs (casino_stats): every round ever played. */
+  rounds: number;
+  wagered: Cents;
+  net: Cents;
+  biggestWin: Cents;
+  /**
+   * From the round tallies, which began with v6 (casino_tally): rounds with money on them,
+   * those that made a profit, what the winning rounds won and the losing rounds lost, and the
+   * worst single round.
+   */
+  counted: number;
+  wins: number;
+  won: Cents;
+  lost: Cents;
+  biggestLoss: Cents;
+}
+
+/** GET /stats: the asker's own record for the stats sheet. Nobody else's is ever sent. */
+export interface StatsResponse {
+  name: string;
+  createdAt: number;
+  worth: { balance: Cents; inPlay: Cents; total: Cents };
+  total: StatLine;
+  games: Partial<Record<GameId, StatLine>>;
+  /** Net per casino day (Las Vegas), oldest first, STATS_DAYS of them ending today; 0 on a quiet day. */
+  days: { day: string; net: Cents }[];
+  /** Longest run of winning rounds at one table. */
+  streak: number;
+  feats: number;
+  celebs: number;
+  /** What the things you keep cost: worn pieces, rides, cars, the statue. */
+  collection: Cents;
+}
+// v6 stats6: end
 
 // ---------------------------------------------------------------------------------------------
 // Floor socket
