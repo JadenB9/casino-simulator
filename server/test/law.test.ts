@@ -232,6 +232,16 @@ describe('the pit boss', { timeout: 20_000 }, () => {
 });
 
 describe('strikes', { timeout: 20_000 }, () => {
+  it("on the dev stack, the pit boss's catch on demand (the e2e's catch at a table)", async () => {
+    const a = await player('lw_dev');
+    const hidden = outOfSight();
+    const ca = await onFloor(a, hidden.x, hidden.z);
+    const res = await api('dev/law/catch', a.token, { method: 'POST' });
+    expect(res.status).toBe(200);
+    expect((await res.json<any>()).result).toBe('warned');
+    await leave(ca);
+  });
+
   it('run out: a catch after the window is a fresh warning, not jail', async () => {
     const a = await player('lw_exp');
     const hidden = outOfSight();

@@ -445,6 +445,11 @@ export class CasinoFloor extends DurableObject<Env> {
     return this.law.progress(accountId, net, Date.now());
   }
 
+  /** v6 law6: the dev stack's catch (index.ts, CASINO_DEV only): the pit boss, whether or not he can see you. */
+  lawDevCatch(accountId: number, name: string): Promise<StrikeResult> {
+    return this.law.strike(accountId, name, 'boss', 'win', Date.now());
+  }
+
   /** v6 celebs6: the dev stack's celebrity and gift box on demand (celebs.ts celebsDevApi). */
   celebDev(kind: 'celeb' | 'gift' | 'happy', arg?: string | number, from?: number): Visit | GiftBox | HappyHour {
     return this.celebs.force(kind, Date.now(), arg, from);

@@ -229,6 +229,8 @@ async function handleApi(request: Request, env: Env, route: string, cors: Record
   // v6 celebs6: the daily bonus (daily.ts); on the dev stack only, a celebrity or a gift box on demand
   if (route === 'daily' || route === 'daily/claim') return dailyApi(request, env, route, claims.a, cors);
   if (route === 'dev/bank/clock') return bankApi(request, env, route, { id: claims.a, name: claims.n }, cors); // v6 bank6
+  // v6 law6: on the dev stack only, the pit boss catches you wherever you are (the e2e's way to a catch at a table)
+  if (route === 'dev/law/catch' && request.method === 'POST' && env.CASINO_DEV === '1') return json({ result: await floor(env).lawDevCatch(claims.a, claims.n) }, 200, cors);
   if (route.startsWith('dev/') && env.CASINO_DEV === '1') return celebsDevApi(request, env, route, cors, floor(env));
 
   // v6 bank6: savings, deposits, the Casino Index, transfers and the statement (bank.ts)

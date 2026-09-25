@@ -51,10 +51,62 @@ const TABLE_AT: Record<string, { x: number; z: number }> = {
 /** The booking counter, and where you stand at it to use the bank. */
 const COUNTER = { x0: 173.1, x1: 177.1, z0: -28.4, z1: -27.8 };
 export const BANK_SPOT = { x: 175.1, z: -27.25 };
+
+/** The roof's underside over (x, z) (the follow camera keeps under it), or null out of doors. */
+export function jailCeiling(x: number, z: number): number | null {
+  return x > B.x0 && x < B.x1 && z > YARD_Z && z < B.z1 ? CEIL - 0.12 : null;
+}
 /** The bail board on the yard wall, facing the day room. */
 const BOARD = { x: 189.2, y: 2.25, w: 3.2, h: 1.8 };
 
 // --- baked light ---------------------------------------------------------------------------------
+
+/** The strip lights in the ceiling: the hall's and the day room's. */
+const LIGHTS: [number, number][] = [
+  [169.6, -25],
+  [176, -24],
+  [183.4, -24],
+  [190.8, -24],
+  [176, -18.5],
+  [183.4, -18.5],
+  [190.8, -18.5],
+];
+
+/**
+ * What the strip lights add at a point, by the way its face turns: a pool on the floor under each,
+ * a glow on the ceiling round it, a wash down the walls' upper half. Under a roof only.
+ */
+function lampLight(x: number, y: number, z: number, ny: number): number {
+  if (z < YARD_Z) return 0;
+  let k = 0;
+  for (const [lx, lz] of LIGHTS) {
+    const d2 = (x - lx) ** 2 + (z - lz) ** 2;
+    if (ny > 0.5 && y < 0.2) k += 0.34 * Math.exp(-d2 / 5);
+    else if (ny < -0.5) k += 0.42 * Math.exp(-d2 / 1.6);
+    else if (Math.abs(ny) <= 0.5 && y > 1.2) k += 0.12 * Math.exp(-d2 / 9) * Math.min(1, (y - 1.2) / 2);
+  }
+  return k;
+}
+
+/** Wear on a floor: patches a few per cent lighter or darker, the same for everyone. */
+function wear(x: number, z: number): number {
+  const h = (a: number, b: number) => {
+    const n = Math.sin(a * 127.1 + b * 311.7) * 43758.5453;
+    return n - Math.floor(n);
+  };
+  // value noise on a 1.2 m lattice, smoothly blended
+  const gx = x / 1.2;
+  const gz = z / 1.2;
+  const ix = Math.floor(gx);
+  const iz = Math.floor(gz);
+  const fx = gx - ix;
+  const fz = gz - iz;
+  const sx = fx * fx * (3 - 2 * fx);
+  const sz = fz * fz * (3 - 2 * fz);
+  const top = h(ix, iz) + (h(ix + 1, iz) - h(ix, iz)) * sx;
+  const bot = h(ix, iz + 1) + (h(ix + 1, iz + 1) - h(ix, iz + 1)) * sx;
+  return (top + (bot - top) * sz - 0.5) * 0.14;
+}
 
 /** How much light a face gets, by the way it faces: from above, and a little more from +x and +z. */
 function faceLight(nx: number, ny: number, nz: number): number {
@@ -98,7 +150,10 @@ class Solid {
       if (lit) {
         // darker toward the floor, as if the room's light fell off (and corners gathered dirt)
         const y = pos.getY(i);
-        k = faceLight(nor.getX(i), nor.getY(i), nor.getZ(i)) * (0.8 + 0.2 * Math.min(1, y / 2.6));
+        const ny = nor.getY(i);
+        k = faceLight(nor.getX(i), ny, nor.getZ(i)) * (0.8 + 0.2 * Math.min(1, y / 2.6));
+        k += lampLight(pos.getX(i), y, pos.getZ(i), ny);
+        if (ny > 0.5 && y < 0.2) k *= 1 + wear(pos.getX(i), pos.getZ(i));
       }
       col[i * 3] = base.r * k;
       col[i * 3 + 1] = base.g * k;
@@ -112,6 +167,13 @@ class Solid {
   /** An axis-aligned box between two corners. */
   box(x0: number, x1: number, y0: number, y1: number, z0: number, z1: number, hex: string, lit = true): void {
     this.add(new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0).translate((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2), hex, lit);
+  }
+
+  /** A flat floor (or, `down`, a ceiling) cut into half-metre squares, so its baked light has somewhere to fall. */
+  plane(x0: number, x1: number, z0: number, z1: number, y: number, hex: string, down = false): void {
+    const g = new THREE.PlaneGeometry(x1 - x0, z1 - z0, Math.ceil((x1 - x0) / 0.5), Math.ceil((z1 - z0) / 0.5));
+    g.rotateX(down ? Math.PI / 2 : -Math.PI / 2).translate((x0 + x1) / 2, y, (z0 + z1) / 2);
+    this.add(g, hex);
   }
 
   build(map: THREE.Texture): THREE.Mesh {
@@ -260,6 +322,10 @@ const SIGNS: SignSpec[] = [
   { text: 'NO CONTACT', sub: 'BEYOND THE BARS', bg: '#c9a227', fg: '#16181b', x: 168.9, y: 3.25, z: -20.17, w: 2.6, h: 0.7, face: '-z' },
   { text: 'BOOKING', sub: 'COMMISSARY  ·  BANK', bg: '#2a3a33', fg: '#e7e3d6', x: 175.1, y: 3.15, z: YARD_Z + 0.17, w: 3.0, h: 0.7, face: '+z' },
   { text: 'YARD', bg: '#2a3a33', fg: '#e7e3d6', x: (YARD_DOOR.x0 + YARD_DOOR.x1) / 2, y: 3.2, z: YARD_Z + 0.17, w: 1.6, h: 0.55, face: '+z' },
+  { text: 'INMATE RULES', sub: 'NO CREDIT  ·  HANDS TO YOURSELF  ·  LIGHTS OUT 22:00', bg: '#e4e0d4', fg: '#20231f', x: B.x1 - T - 0.02, y: 1.75, z: -18.6, w: 2.2, h: 0.62, face: '-x' },
+  { text: 'VISITING HOURS', sub: 'DAILY  ·  9 AM TO 9 PM', bg: '#e4e0d4', fg: '#20231f', x: 169.5, y: 1.8, z: -29.83, w: 1.8, h: 0.5, face: '+z' },
+  { text: 'COMMISSARY', sub: 'SOAP $2  ·  RAMEN $1  ·  STAMPS $1', bg: '#e4e0d4', fg: '#20231f', x: 179.1, y: 1.85, z: YARD_Z + 0.17, w: 2.0, h: 0.56, face: '+z' },
+  { text: 'KEEP LEFT', bg: '#c9a227', fg: '#16181b', x: 192.2, y: 2.2, z: CELLS_Z - 0.09, w: 1.1, h: 0.34, face: '-z' },
   { text: 'C BLOCK', sub: 'CELLS 1 - 5', bg: '#2a3a33', fg: '#e7e3d6', x: 183.4, y: 3.25, z: CELLS_Z - 0.12, w: 3.0, h: 0.7, face: '-z' },
 ];
 
@@ -449,9 +515,9 @@ export function buildJail(opts: { quality: Quality; collider: Collider }): Jail 
   s.box(B.x0, 196, 0, FLOOR, B.z1, -5, C.street);
   s.box(B.x1, 196, 0, FLOOR, B.z0, B.z1, C.street);
   // the floors: the hall, the prison, the yard (and under the offices, for the walls to stand on)
-  s.box(B.x0 + T, BARS_X - 0.15, 0, FLOOR, B.z0 + T, B.z1 - T, C.hall);
-  s.box(BARS_X - 0.15, B.x1 - T, 0, FLOOR, YARD_Z - 0.15, B.z1 - T, C.floor);
-  s.box(BARS_X - 0.15, B.x1 - T, 0, FLOOR, B.z0 + T, YARD_Z - 0.15, C.yard);
+  s.plane(B.x0 + T, BARS_X - 0.15, B.z0 + T, B.z1 - T, FLOOR, C.hall);
+  s.plane(BARS_X - 0.15, B.x1 - T, YARD_Z - 0.15, B.z1 - T, FLOOR, C.floor);
+  s.plane(BARS_X - 0.15, B.x1 - T, B.z0 + T, YARD_Z - 0.15, FLOOR, C.yard);
 
   // --- the shell
   // the front, with the visitors' door
@@ -463,7 +529,9 @@ export function buildJail(opts: { quality: Quality; collider: Collider }): Jail 
   wall(B.x0 + T, B.x1 - T, B.z1 - T, B.z1, TOP, C.facade);
   wall(B.x0 + T, B.x1 - T, B.z0, B.z0 + T, TOP + 0.6, C.facade);
   // the roof over everything but the yard
-  s.box(B.x0 + T, B.x1 - T, CEIL, CEIL + 0.3, YARD_Z + 0.15, B.z1 - T, C.ceiling);
+  // (the slab two centimetres over the ceiling's own face, so the two never share a plane)
+  s.box(B.x0 + T, B.x1 - T, CEIL + 0.02, CEIL + 0.3, YARD_Z + 0.15, B.z1 - T, C.ceiling);
+  s.plane(B.x0 + T, B.x1 - T, YARD_Z + 0.15, B.z1 - T, CEIL, C.ceiling, true);
   // the yard wall: with the day room behind it, a doorway through it
   wall(B.x0 + T, YARD_DOOR.x0, YARD_Z - 0.15, YARD_Z + 0.15, TOP, C.inner);
   wall(YARD_DOOR.x1, B.x1 - T, YARD_Z - 0.15, YARD_Z + 0.15, TOP, C.inner);
@@ -504,7 +572,7 @@ export function buildJail(opts: { quality: Quality; collider: Collider }): Jail 
   bench(s, col, B.x0 + 0.9, -29.4, 2.4, 'x');
   bench(s, col, B.x0 + 0.9, -20.6, 2.4, 'x');
   s.box(BARS_X - 0.75, BARS_X - 0.65, FLOOR, FLOOR + 0.012, -29.85, -20.15, C.line);
-  ceilingLights(s, [[169.6, -25]]);
+  ceilingLights(s, LIGHTS.slice(0, 1));
 
   // --- booking: the counter (the bank's window), a clock over it
   s.box(COUNTER.x0, COUNTER.x1, FLOOR, 1.02, COUNTER.z0, COUNTER.z1, '#5e6166');
@@ -528,14 +596,7 @@ export function buildJail(opts: { quality: Quality; collider: Collider }): Jail 
     stool(s, x, z);
   // the painted walkway in front of the cells
   s.box(BARS_X + 0.15, B.x1 - T, FLOOR, FLOOR + 0.012, CELLS_Z - 2.05, CELLS_Z - 1.95, C.line);
-  ceilingLights(s, [
-    [176, -24],
-    [183.4, -24],
-    [190.8, -24],
-    [176, -18.5],
-    [183.4, -18.5],
-    [190.8, -18.5],
-  ]);
+  ceilingLights(s, LIGHTS.slice(1));
 
   // --- the cells
   bars(s, col, 'x', CELLS_Z, BARS_X + 0.15, B.x1 - T, 2.6, (x) => CELL_X.slice(0, 5).some((c0) => x > c0 + 0.35 && x < c0 + 1.35));
