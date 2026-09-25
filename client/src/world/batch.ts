@@ -66,6 +66,15 @@ export class Batch {
     rooms.set(this.room, list);
   }
 
+  /** Every piece so far in world space, by room and material (for the z-fighting check, zfight.ts). */
+  surfaces(): { name: string; mat: string; pos: ArrayLike<number> }[] {
+    const out: { name: string; mat: string; pos: ArrayLike<number> }[] = [];
+    for (const [mat, rooms] of this.byMat) {
+      for (const [room, pieces] of rooms) for (const g of pieces) out.push({ name: room, mat: mat.name || mat.type, pos: g.getAttribute('position').array });
+    }
+    return out;
+  }
+
   /** Merge everything into one BatchedMesh per material, one instance per room, under `parent`. */
   build(parent: THREE.Object3D, name: string): RoomMeshes {
     const meshes: THREE.BatchedMesh[] = [];

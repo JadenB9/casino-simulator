@@ -7,7 +7,8 @@ fixes each game's rules, paytables and exact return, with the proof or the enume
 number, and the Monte Carlo results that check the engines against them.
 
 Every figure here is printed by [`docs/math/plinko-dice-limbo-keno.mjs`](../math/plinko-dice-limbo-keno.mjs)
-(§1-4) and [`docs/math/tower-mines-hilo-crash.mjs`](../math/tower-mines-hilo-crash.mjs) (§5-8),
+(§1-4), [`docs/math/tower-mines-hilo-crash.mjs`](../math/tower-mines-hilo-crash.mjs) (§5-8) and
+[`docs/math/coinflip-wheel-cases-diamonds.mjs`](../math/coinflip-wheel-cases-diamonds.mjs) (§9-12),
 which work each game out exactly in integer arithmetic without touching the game code
 (`node docs/math/plinko-dice-limbo-keno.mjs`). The unit tests check the same numbers a second time
 through the engines themselves.
@@ -22,6 +23,10 @@ through the engines themselves.
 | [6](#6-mines) | Mines: 5 × 5, 1 to 24 mines, cash out after any gem | 98.28% to 99% by mines and gems (all 300 cells); exactly 99% on 108 |
 | [7](#7-hi-lo) | Hi-Lo: higher or lower than the card, as many times as you dare | 99% of what rides on every guess before the cent floor; one guess, then cash out: 98.4615% to 99% by guess, exactly 99% after a skip to A, 3, 5, 9, J or K |
 | [8](#8-crash) | Crash: shared rounds, a multiplier climbing until it crashes | exactly 99% on every cash-out, manual or automatic |
+| [9](#9-coinflip) | Coinflip: call heads or tails, 1.98×, and ride the streak up to twenty calls | exactly 99% at every stop, and for any plan of when to stop |
+| [10](#10-wheel) | Wheel: 10 to 50 segments at Low, Medium or High risk | exactly 99% on all fifteen wheels |
+| [11](#11-cases) | Cases: four cases of weighted items from 0.05× to 1,000× | exactly 99% on every case |
+| [12](#12-diamonds) | Diamonds: five gems of seven colours, paid like a poker hand | exactly 99% |
 
 ## 0. Conventions
 
@@ -1041,3 +1046,315 @@ for §1-4); anything less shows on the page alone.
 [ballislife-hilo]: https://ballislife.com/betting/reviews/stake-us/hilo/
 [zizobet-crash]: https://blog.zizobet.com/post/maths-behind-crash-games-multiplier-curves
 [crashgamesplay-algorithm]: https://crashgamesplay.com/guides/crash-game-algorithm/
+
+---
+
+## 9. Coinflip
+
+### 9.1 Rules
+
+1. Choose heads or tails and a bet, and press Bet. The stake comes off the stack and the server
+   flips a fair coin (`randInt(rng, 2)`) in the same step.
+2. A wrong call ends the round and the bet is lost. A right call pays 1.98× and leaves the round
+   open: call again (either side, or Random call) to double what rides, or cash out.
+3. After k right calls in a row the multiplier is 0.99 × 2^k (1.98×, 3.96×, 7.92×, ...). The
+   twentieth right call, at 1,038,090.24×, cashes out on its own.
+4. Each flip is drawn when it is called, never ahead of time, so there is no hidden state at all.
+5. Standing up (or cashing out of the table) with a streak riding cashes the streak out first. A
+   round is only ever open after a right call, so there is always something to pay.
+
+This is the shape of Stake's Flip: a 1.98× first call and a streak you can keep riding. Here the
+house takes its 1% once, on the whole streak, like Mines and Tower (0.99 / P(k right)), rather than
+on every call.
+
+### 9.2 Multipliers and exact return
+
+In hundredths the multiplier is 99 · 2^k, a whole number, so no payout is ever rounded. k right
+calls come up with probability 2^−k, so a cash-out after k returns 99 · 2^k · 2^−k / 100 = 99%
+exactly, for every k.
+
+| Right calls | Multiplier | Chance | Return | SD |
+|---:|---:|---:|---:|---:|
+| 1 | 1.98× | 1 in 2 | 99.0000% | 0.990 |
+| 2 | 3.96× | 1 in 4 | 99.0000% | 1.715 |
+| 3 | 7.92× | 1 in 8 | 99.0000% | 2.619 |
+| 4 | 15.84× | 1 in 16 | 99.0000% | 3.834 |
+| 5 | 31.68× | 1 in 32 | 99.0000% | 5.512 |
+| 6 | 63.36× | 1 in 64 | 99.0000% | 7.858 |
+| 8 | 253.44× | 1 in 256 | 99.0000% | 15.809 |
+| 10 | 1,013.76× | 1 in 1,024 | 99.0000% | 31.665 |
+| 15 | 32,440.32× | 1 in 32,768 | 99.0000% | 179.206 |
+| 20 | 1,038,090.24× | 1 in 1,048,576 | 99.0000% | 1,013.760 |
+
+Any plan for when to stop returns 99% too, however it depends on what came before: from k right
+calls, calling again is worth ½ · 99 · 2^(k+1) = 99 · 2^k hundredths, exactly what cashing out pays,
+so no stopping rule can gain or lose against another. The unit tests check every k, and play the
+engine through all 256 sequences of eight flips under three different stopping plans (a fixed
+streak, stop after two tails have shown, a streak that depends on the first side), summing what
+came back exactly: 99% of what went in, each time.
+
+### 9.3 Monte Carlo
+
+Ten million rounds from the engine's `flip`, each settled against four stops (so the four tallies
+share their flips); then 300,000 rounds through the whole engine, cashing out after two.
+
+| Bet | N | Published | Measured | SE | z |
+|---|---:|---:|---:|---:|---:|
+| Cash out after 1 (1.98×) | 10,000,000 | 99.0000% | 98.9252% | 0.0313% | -2.39 |
+| Cash out after 3 (7.92×) | 10,000,000 | 99.0000% | 98.8877% | 0.0828% | -1.36 |
+| Cash out after 6 (63.36×) | 10,000,000 | 99.0000% | 98.7751% | 0.2482% | -0.91 |
+| Cash out after 10 (1,013.76×) | 10,000,000 | 99.0000% | 99.7236% | 1.0050% | +0.72 |
+| engine, cash out after 2 | 300,000 | 99.0000% | 99.1412% | 0.3132% | +0.45 |
+
+The four stops share their flips, so their z-scores move together. The first (z −2.39) is inside 3
+SE on the fixed seed; two reruns on the production generator (`MC_RNG=crypto`) measured 98.9541%
+and 98.9939% for it (z −1.47 and −0.20).
+
+### 9.4 Implementation notes
+
+- `shared/src/games/coinflip/rules.ts`: `streakMult` (hundredths), `streakPayout`, `flip`,
+  `returnAt`, `MAX_STREAK` = 20.
+- `engine.ts`: actions `bet { amount, side }` (takes the stake and flips), `flip { side }`,
+  `cashout`; events `bet`, `flip { call, side, win, streak, mult }`, `over { outcome, streak, mult,
+  payout }`. `liveBets` is the stake while a streak rides; `seatLeaving` cashes it out.
+
+---
+
+## 10. Wheel
+
+### 10.1 Rules
+
+1. Choose a risk (Low, Medium or High), how many segments (10, 20, 30, 40 or 50) and a bet, and
+   press Spin.
+2. The server picks one segment uniformly (`randInt(rng, segments)`) and pays the bet times the
+   multiplier printed on it; blank segments pay nothing. The wheel on the page turns onto that
+   segment, landing somewhere across it.
+3. One spin is one round, settled in the step that takes the bet.
+
+### 10.2 The fifteen wheels
+
+Every segment is equally likely, so a wheel's return is the average of its multipliers. Each of
+the fifteen averages exactly 0.99:
+
+| Wheel | 10 | 20 | 30 | 40 | 50 |
+|---|---|---|---|---|---|
+| Low | 1.50× ×1, 1.20× ×7, 0 ×2 | 1.50× ×2, 1.20× ×14, 0 ×4 | 1.50× ×3, 1.20× ×21, 0 ×6 | 1.50× ×4, 1.20× ×28, 0 ×8 | 1.50× ×5, 1.20× ×35, 0 ×10 |
+| Medium | 3× ×1, 2× ×1, 1.90× ×1, 1.50× ×2, 0 ×5 | 3× ×1, 2× ×6, 1.80× ×1, 1.50× ×2, 0 ×10 | 4× ×1, 3× ×1, 2× ×6, 1.70× ×1, 1.50× ×6, 0 ×15 | 3× ×4, 2× ×7, 1.60× ×1, 1.50× ×8, 0 ×20 | 5× ×1, 3× ×3, 2× ×8, 1.50× ×13, 0 ×25 |
+| High | 9.90× ×1, 0 ×9 | 19.80× ×1, 0 ×19 | 29.70× ×1, 0 ×29 | 39.60× ×1, 0 ×39 | 49.50× ×1, 0 ×49 |
+
+Low (two blanks in ten, seven 1.20×, one 1.50×) and High (one segment at 0.99 × segments) have the
+counts of Stake's Wheel ([stakelink-wheel], [stake-analyzer-wheel]; 49.50× on High 50 is Stake's top
+Wheel pay), and so does Medium 20 (3×, six 2×, 1.8×, two 1.5×, ten blanks). The other Medium wheels
+keep the same pay levels, half the wheel blank, with counts chosen so each averages exactly 0.99.
+On Medium, blanks and paying segments alternate all the way round.
+
+| Wheel | SD by segments (10, 20, 30, 40, 50) | Pays something | Pays more than the bet |
+|---|---|---:|---:|
+| Low | 0.503 on all five | 80% | 80% |
+| Medium | 1.063, 1.028, 1.095, 1.065, 1.134 | 50% | 50% |
+| High | 2.970, 4.315, 5.331, 6.183, 6.930 | 1 in segments | 1 in segments |
+
+The unit tests check every wheel's counts and exact return, that Medium alternates, and spin the
+engine onto each of the 450 segments in turn, checking the payout and the stack each time.
+
+### 10.3 Monte Carlo
+
+Two million spins of each wheel from the engine's `drawSegment`; then 300,000 spins through the
+whole engine on Medium 30.
+
+| Wheel | N | Published | Measured | SE | z |
+|---|---:|---:|---:|---:|---:|
+| Low 10 | 2,000,000 | 99.0000% | 98.9913% | 0.0356% | -0.24 |
+| Low 20 | 2,000,000 | 99.0000% | 98.9937% | 0.0356% | -0.18 |
+| Low 30 | 2,000,000 | 99.0000% | 99.0193% | 0.0356% | +0.54 |
+| Low 40 | 2,000,000 | 99.0000% | 98.9857% | 0.0356% | -0.40 |
+| Low 50 | 2,000,000 | 99.0000% | 98.9809% | 0.0356% | -0.54 |
+| Medium 10 | 2,000,000 | 99.0000% | 99.0287% | 0.0752% | +0.38 |
+| Medium 20 | 2,000,000 | 99.0000% | 99.0093% | 0.0727% | +0.13 |
+| Medium 30 | 2,000,000 | 99.0000% | 98.9604% | 0.0775% | -0.51 |
+| Medium 40 | 2,000,000 | 99.0000% | 98.8851% | 0.0753% | -1.53 |
+| Medium 50 | 2,000,000 | 99.0000% | 99.0821% | 0.0802% | +1.02 |
+| High 10 | 2,000,000 | 99.0000% | 99.0480% | 0.2101% | +0.23 |
+| High 20 | 2,000,000 | 99.0000% | 99.0693% | 0.3052% | +0.23 |
+| High 30 | 2,000,000 | 99.0000% | 98.4778% | 0.3760% | -1.39 |
+| High 40 | 2,000,000 | 99.0000% | 99.2237% | 0.4377% | +0.51 |
+| High 50 | 2,000,000 | 99.0000% | 98.7525% | 0.4894% | -0.51 |
+| engine Medium 30 | 300,000 | 99.0000% | 99.0144% | 0.2002% | +0.07 |
+
+### 10.4 Implementation notes
+
+- `shared/src/games/wheel/rules.ts`: `WHEELS[risk][segments]` (hundredths, clockwise from the
+  top), `drawSegment`, `payoutFor`, `wheelReturn`, `wheelTable`.
+- `engine.ts`: action `spin { bet, risk, segments }`; event `spin { segment, mult, payout, stack,
+  restAt }`. `restAt` (three seconds on) is when the page's wheel comes to rest, so the casino's
+  big-win feed never tells a result before the page shows it.
+
+---
+
+## 11. Cases
+
+### 11.1 Rules
+
+1. Choose a case (Starter, Classic, High Roller or Vault) and its price (the bet), and press Open.
+2. The server draws the item: a number below 1,000,000 (`randInt`), and the items laid end to end
+   by weight, cheapest first. The bet times the item's multiplier comes back.
+3. The page runs a reel of item cards past its marker and stops on the item the server drew. The
+   rest of the reel is drawn by the page, at the case's own odds, for show; only the card under the
+   marker is the result. Quick open runs a short reel (1.3 seconds against 5.6).
+4. One case is one round, settled in the step that takes the bet.
+
+An item's rarity (its colour) follows from what it pays: under 1× Common, 1× Uncommon, 2× Rare,
+5× Epic, 20× Legendary, 100× Mythic, 500× and up Exotic.
+
+### 11.2 The four cases
+
+Every case's weights add to 1,000,000 and Σ weight × multiplier is exactly 99 × 1,000,000
+hundredths, so every case returns exactly 99%. The weights of each case's two cheapest items were
+solved for that; the rest fall away smoothly to the top item.
+
+| Item | Starter | Classic | High Roller | Vault |
+|---|---|---|---|---|
+| Clay Chip | 0.20× · 215,925 | 0.10× · 300,215 | 0.10× · 376,340 | 0.05× · 390,800 |
+| Pair of Dice | 0.50× · 216,824 | 0.30× · 233,795 | 0.25× · 249,004 | 0.20× · 262,850 |
+| Ace of Spades | 0.80× · 226,900 | 0.60× · 176,400 | 0.50× · 171,180 | 0.50× · 158,564 |
+| Lucky Horseshoe | 1.20× · 136,140 | 1.00× · 117,600 | | |
+| Cherries | 1.50× · 90,760 | 1.50× · 78,400 | | |
+| Silver Dollar | 2.00× · 56,725 | 2.50× · 49,000 | 1.00× · 91,296 | 1.00× · 90,608 |
+| Pocket Watch | 3.00× · 34,035 | 5.00× · 27,440 | 2.00× · 57,060 | 2.00× · 56,630 |
+| Gold Ring | 5.00× · 17,018 | 10.00× · 11,760 | 4.00× · 34,236 | 5.00× · 28,315 |
+| Gold Bar | 10.00× · 5,673 | 25.00× · 3,920 | 10.00× · 13,694 | 15.00× · 9,061 |
+| Lucky Seven | | 50.00× · 1,470 | 25.00× · 4,565 | 50.00× · 2,265 |
+| Blue Diamond | | | 50.00× · 1,712 | 150.00× · 680 |
+| Gold Crown | | | 100.00× · 685 | 500.00× · 170 |
+| Champion Trophy | | | 250.00× · 228 | |
+| Briefcase of Cash | | | | 1,000.00× · 57 |
+
+| Case | Top item | Pays more than the case | SD | Return |
+|---|---|---:|---:|---:|
+| Starter | 10× Gold Bar, 1 in 176 | 34.04% | 1.074 | 99.0000% |
+| Classic | 50× Lucky Seven, 1 in 680 | 17.20% | 2.774 | 99.0000% |
+| High Roller | 250× Champion Trophy, 1 in 4,386 | 11.22% | 5.436 | 99.0000% |
+| Vault | 1,000× Briefcase of Cash, 1 in 17,544 | 9.72% | 11.072 | 99.0000% |
+
+The unit tests check each case's total weight and exact return, draw each item at both edges of
+its range of numbers, and open each case through the engine onto every item.
+
+### 11.3 Monte Carlo
+
+Five million cases of each kind from the engine's `drawItem`, each item's count also checked
+against its weight (every item within 4.5 binomial SE); then 300,000 quick Starter cases through
+the whole engine.
+
+| Case | N | Published | Measured | SE | z |
+|---|---:|---:|---:|---:|---:|
+| Starter | 5,000,000 | 99.0000% | 98.9840% | 0.0480% | -0.33 |
+| Classic | 5,000,000 | 99.0000% | 99.2500% | 0.1245% | +2.01 |
+| High Roller | 5,000,000 | 99.0000% | 99.2038% | 0.2457% | +0.83 |
+| Vault | 5,000,000 | 99.0000% | 99.4955% | 0.5009% | +0.99 |
+| engine Starter, quick | 300,000 | 99.0000% | 99.1725% | 0.1969% | +0.88 |
+
+### 11.4 Implementation notes
+
+- `shared/src/games/cases/rules.ts`: `CASE_INFO` (names, kinds, multipliers, weights), `itemAt`,
+  `drawItem`, `rarityOf`, `caseReturn`.
+- `engine.ts`: action `open { bet, case, quick }`; event `open { case, item, mult, payout, stack,
+  quick, restAt }`, with `restAt` when the reel stops (for the big-win feed).
+
+---
+
+## 12. Diamonds
+
+### 12.1 Rules
+
+1. Choose a bet and press Bet. The server draws five gems, each one of seven colours with equal
+   chance, independently (`randInt(rng, 7)` five times). The page sets them down one by one.
+2. The hand pays by how the colours group, like a poker hand: five of a kind, four of a kind, a
+   full house (three and two), three of a kind, two pair, a pair, or nothing.
+3. One hand is one round, settled in the step that takes the bet.
+
+### 12.2 Paytable and exact return
+
+All 7^5 = 16,807 hands are equally likely; the math script and the unit tests enumerate every one.
+
+| Hand | Pays | Hands | Chance |
+|---|---:|---:|---:|
+| Five of a kind | 66.99× | 7 | 0.0416% (1 in 2,401) |
+| Four of a kind | 5.00× | 210 | 1.2495% |
+| Full house | 4.00× | 420 | 2.4990% |
+| Three of a kind | 3.00× | 2,100 | 12.4948% |
+| Two pair | 2.00× | 3,150 | 18.7422% |
+| Pair | 0.10× | 8,400 | 49.9792% |
+| No match | 0 | 2,520 | 14.9938% |
+
+The return is Σ hands × pay / (100 × 16,807) = 1,663,893 / 1,680,700 = 99.0000% exactly (SD 1.866).
+A hand pays more than its bet 35.03% of the time and something 85.01% of the time.
+
+This is Stake's Diamonds table, seven colours and all ([stake-analyzer-diamonds], [deadspin-diamonds]),
+with one change: Stake pays five of a kind 50×, for a return of 98.2924% (Stake prints 98.29%). Here
+five of a kind pays 66.99×, which makes it exactly 99%. It has to be five of a kind that moves: every
+other pattern comes in multiples of 7 × 30 = 210 hands, so any change to them moves the total by a
+multiple of 210 hundredths, and 99% needs 1,663,893 − 1,617,000 = 46,893 = 7 × 6,699 more than the
+other rows give. No rounder figure for five of a kind lands on 99% exactly.
+
+### 12.3 Monte Carlo
+
+Ten million hands from the engine's `drawGems`, each pattern's count checked against its
+enumerated rate; then 300,000 hands through the whole engine.
+
+| Bet | N | Published | Measured | SE | z |
+|---|---:|---:|---:|---:|---:|
+| Every hand | 10,000,000 | 99.0000% | 99.1265% | 0.0591% | +2.14 |
+| engine | 300,000 | 99.0000% | 98.5184% | 0.3350% | -1.44 |
+
+| Pattern | Measured | Published | z |
+|---|---:|---:|---:|
+| Five of a kind | 0.0420% | 0.0416% | +0.51 |
+| Four of a kind | 1.2625% | 1.2495% | +3.70 |
+| Full house | 2.4998% | 2.4990% | +0.16 |
+| Three of a kind | 12.5044% | 12.4948% | +0.91 |
+| Two pair | 18.7483% | 18.7422% | +0.50 |
+| Pair | 49.9306% | 49.9792% | -3.07 |
+| No match | 15.0124% | 14.9938% | +1.66 |
+
+The pattern rates are seven correlated checks on one fixed seed, each held to 4 SE; two runs on the
+production generator (`MC_RNG=crypto`) put four of a kind at −0.32 and −1.11 and the return at
+−0.33 and +0.05 SE.
+
+### 12.4 Implementation notes
+
+- `shared/src/games/diamonds/rules.ts`: `PAYS` (hundredths), `WAYS`, `drawGems`, `groups`,
+  `patternOf`, `matched` (the gems that make the pattern, which the page lights), `exactReturn`.
+- `engine.ts`: action `bet { bet }`; event `draw { gems, pattern, mult, payout, stack }`.
+
+---
+
+## Tips and celebrations (§9-12)
+
+With Tips on, each page says what the numbers above say: nothing to choose changes the return.
+
+- **Coinflip:** heads and tails are an even 50%, and every stop returns exactly 99%; mid-streak,
+  cashing out and calling again are worth exactly the same.
+- **Wheel:** all fifteen wheels return exactly 99%; risk and segments only change how often it pays.
+- **Cases:** every case returns exactly 99%; a bigger case trades steady small items for rare big ones.
+- **Diamonds:** every gem is drawn on its own, so a hand returns 99% whatever came before it.
+
+A win is celebrated only when it pays at least ten times the bet (the site's shared threshold):
+four right calls in a row at Coinflip, High risk on 20 segments or more at Wheel, a 10× item or better from a case, five
+of a kind at Diamonds. Anything less shows on the page alone.
+
+## Sources for §9-12
+
+- [stakelink-wheel]: Stake Wheel: segments, risk levels, and the 49.50× top pay on High 50 (one
+  segment, 49 blanks); Low 50 as ten grey, five green, thirty-five white:
+  https://stakelink.in/stake-wheel-india/
+- [stake-analyzer-wheel]: Stake Analyzer, Wheel payout tables (Medium 20: 3×, 2×, 1.8×, 1.5× and
+  blanks): https://stakeanalyzer.live/payouts/wheel
+- [stake-analyzer-diamonds]: Stake Analyzer, Diamonds paytable (seven colours, 16,807 outcomes,
+  50× / 5× / 4× / 3× / 2× / 0.1× / 0): https://stakeanalyzer.live/payouts/diamonds
+- [deadspin-diamonds]: Deadspin, Stake Diamonds rules and payouts (98.29% RTP, five of a kind
+  about once in 2,500 rounds): https://deadspin.com/sweepstakes-casinos/reviews/stake-us/games/diamonds/
+
+[stakelink-wheel]: https://stakelink.in/stake-wheel-india/
+[stake-analyzer-wheel]: https://stakeanalyzer.live/payouts/wheel
+[stake-analyzer-diamonds]: https://stakeanalyzer.live/payouts/diamonds
+[deadspin-diamonds]: https://deadspin.com/sweepstakes-casinos/reviews/stake-us/games/diamonds/

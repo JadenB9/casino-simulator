@@ -286,6 +286,8 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
   let everything = false;
   // the map opens on the floor, not at a table (blackjack's N is "no insurance")
   const map = new MapOverlay({ plan, ui, you: () => ({ x: player.position.x, z: player.position.z, heading: player.heading }), canOpen: () => !interact.seated && player.isEnabled });
+  // v6 world6: E at a directory board opens it big (the Map, as the Floor Directory)
+  interact.spots(map.spots);
   // On the floor with the mouse free (after Esc, or before the first click on the dev floor): how
   // to get looking around back. Only where there's a mouse to hold (the player knows).
   const hint = el('div', 'world-hint');

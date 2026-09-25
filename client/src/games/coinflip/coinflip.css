@@ -1,0 +1,57 @@
+/* Coinflip on the online site: recent rounds along the top, the coin tossed in the middle over its
+   shadow, this round's flips in a row under it, and the streak ladder along the bottom. Design
+   pixels of the 1280 x 800 page (the board is 950 x 702). */
+
+.cf-board { position: absolute; inset: 0; }
+.cf-strip { position: absolute; top: 22px; left: 24px; right: 24px; }
+
+.cf-stage { position: absolute; left: 24px; right: 24px; top: 78px; height: 390px; display: grid; justify-items: center; perspective: 900px; }
+.cf-toss { position: absolute; top: 58px; width: 230px; height: 230px; will-change: transform; }
+.cf-coin { position: relative; width: 100%; height: 100%; transform-style: preserve-3d; }
+.cf-side { position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; border-radius: 50%; }
+.cf-back { transform: rotateX(180deg); }
+.cf-face-svg { display: block; width: 100%; height: 100%; filter: drop-shadow(0 10px 20px rgba(0, 0, 0, 0.35)); }
+.cf-coin.land .cf-side { animation: cf-land 0.34s ease-out; }
+@keyframes cf-land { 40% { filter: brightness(1.25); } }
+.cf-coin.lost .cf-side { animation: cf-lost 0.5s ease-out forwards; }
+@keyframes cf-lost { to { filter: saturate(0.35) brightness(0.62); } }
+
+.cf-shadow {
+  position: absolute; top: 300px; width: 190px; height: 26px; border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0));
+}
+.cf-caption { position: absolute; bottom: 12px; font-size: 18px; color: var(--os-ink-3); white-space: nowrap; }
+.cf-caption b { color: var(--os-ink); font-weight: 600; }
+.cf-stage .os-pop { top: 42%; }
+
+/* This round's flips, oldest on the left */
+.cf-flips { position: absolute; left: 24px; right: 24px; top: 478px; height: 52px; display: flex; justify-content: center; gap: 10px; }
+.cf-flip { position: relative; width: 44px; height: 44px; border-radius: 50%; padding: 3px; background: var(--os-panel); }
+.cf-flip .cf-mini { filter: none; }
+.cf-flip.win { box-shadow: 0 0 0 2px var(--os-win); }
+.cf-flip.lose { box-shadow: 0 0 0 2px var(--os-lose); }
+.cf-flip.lose .cf-mini { filter: saturate(0.3) brightness(0.7); }
+.cf-flip.fresh { animation: cf-flip-in 0.28s var(--ease, ease-out); }
+@keyframes cf-flip-in { from { opacity: 0; scale: 0.6; } }
+
+/* The streak ladder: a window onto twenty steps, sliding as the streak climbs */
+.cf-ladder {
+  position: absolute; left: 24px; right: 24px; bottom: 24px; height: 96px;
+  padding: 14px 17px; border-radius: 8px; background: var(--os-panel);
+}
+.cf-track-window { overflow: hidden; height: 74px; }
+.cf-track { display: flex; gap: 8px; transition: transform 0.35s var(--ease, ease-out); }
+.cf-step {
+  flex: none; width: 101px; height: 68px; display: grid; align-content: center; justify-items: center; gap: 2px;
+  border-radius: 6px; background: var(--os-card); color: var(--os-ink-2); box-shadow: 0 4px 0 var(--os-bg);
+}
+.cf-step-m { font-family: var(--os-num); font-size: 21px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--os-ink); }
+.cf-step-n { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--os-ink-3); }
+.cf-step.done { background: var(--os-win); box-shadow: 0 4px 0 #11843a; }
+.cf-step.done .cf-step-m, .cf-step.done .cf-step-n { color: var(--os-go-ink); }
+.cf-step.next { background: var(--os-line); box-shadow: inset 0 0 0 2px var(--os-cash), 0 4px 0 var(--os-bg); }
+
+/* The panel's extra buttons */
+.os-action.cf-cash[hidden] { display: none; }
+.os-action.cf-random { height: 44px; font-size: 15px; font-weight: 700; }
+.cf-call button { height: 44px; font-size: 15px; }

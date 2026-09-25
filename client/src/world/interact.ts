@@ -1,6 +1,7 @@
 // Walking up to things. The nearest station within 1.6 m in front of the player gets a prompt
 // ("Press E · Blackjack · $5–$5,000"); E sits down there: the camera flies to the game's play pose
-// and onEnter fires. Leaving (Esc, or exitTable() from the app) flies back behind the player.
+// and onEnter fires. Leaving (Esc, or exitTable() from the app) flies back behind the player (or,
+// in first person, to their eyes).
 // The cashier works the same way but only fires onCashier; the app opens the bank over the floor.
 // Other things to walk up to (a seat, a waiter, a teller window) come from spot providers (the
 // floor's life, world/life/): the nearest of everything gets the prompt, and E uses it.
@@ -14,6 +15,8 @@ import { playPoseWorld } from './stations.ts';
 import type { CashierPoint } from './contract.ts';
 
 const REACH = 1.6;
+/** In front: the cosine of the widest angle off the facing or the camera's look (about 75 degrees). */
+const FACING = 0.26;
 /**
  * A station within this much (m) of the nearest spot wins the prompt: at a video poker machine set
  * into the bar the bartender's Order would otherwise always win (the counter is right there), and
@@ -61,6 +64,7 @@ export class Interact {
   seated: WorldStation | null = null;
   private fly: { from: THREE.Vector3; fromT: THREE.Vector3; to: THREE.Vector3; toT: THREE.Vector3; t: number; dur: number; lift: number; done: () => void } | null = null;
   private readonly look = new THREE.Vector3();
+  private readonly ahead = new THREE.Vector3();
 
   constructor(
     private readonly stations: WorldStation[],
@@ -153,11 +157,16 @@ export class Interact {
     this.flyTo(pose.position, pose.target, AIM, () => {});
   }
 
-  /** Leave the table: fly back behind the player and hand the controls back. */
+  /**
+   * Leave the table: fly back behind the player, or in first person to their eyes, and hand the
+   * controls back. Flying to the eyes the camera would meet the character face on, so it stays
+   * out of sight until the camera is in its head.
+   */
   exit(): Promise<void> {
     if (!this.seated) return Promise.resolve();
     this.seated = null;
-    this.player.character.root.visible = true;
+    const eyes = this.player.view === 'first';
+    this.player.character.root.visible = !eyes;
     const back = this.player.followPose();
     return new Promise((resolve) =>
       this.flyTo(
@@ -165,6 +174,7 @@ export class Interact {
         back.target,
         FLY_OUT,
         () => {
+          this.player.character.root.visible = true;
           this.player.setEnabled(true);
           resolve();
         },
@@ -188,19 +198,28 @@ export class Interact {
     this.fly = { from, fromT, to: to.clone(), toT: toT.clone(), t: 0, dur, lift, done };
   }
 
-  /** The closest thing within reach and roughly in front of the player. */
+  /**
+   * The closest thing within reach and roughly in front of the player: in front of the way they
+   * face, or of the way the camera looks (you walk along a counter and look at it with the mouse;
+   * the body still faces the way you were walking).
+   */
   private pick(): Target | null {
     const p = this.player.position;
     const fx = Math.sin(this.player.heading);
     const fz = Math.cos(this.player.heading);
+    this.camera.getWorldDirection(this.ahead);
+    const cl = Math.hypot(this.ahead.x, this.ahead.z) || 1;
+    const cx = this.ahead.x / cl;
+    const cz = this.ahead.z / cl;
     let best: Target | null = null;
     const consider = (qx: number, qz: number, d: number, t: Target, any = false) => {
       if (d > REACH) return;
       const dx = qx - p.x;
       const dz = qz - p.z;
       const len = Math.hypot(dx, dz);
-      // in front: within about 75 degrees of where the player faces (or practically touching)
-      if (!any && len > 0.35 && (dx * fx + dz * fz) / len < 0.26) return;
+      // in front: within about 75 degrees of where the player faces or the camera looks (or
+      // practically touching)
+      if (!any && len > 0.5 && (dx * fx + dz * fz) / len < FACING && (dx * cx + dz * cz) / len < FACING) return;
       if (!best || rank(t) < rank(best)) best = t;
     };
     const rank = (t: Target) => (t.kind === 'spot' ? t.d + STATION_FIRST : t.d);
