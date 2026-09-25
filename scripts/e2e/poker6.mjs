@@ -131,7 +131,7 @@ async function buyIn(page, dollars) {
   await page.waitForSelector('.modal input[type=number]', { timeout: 30_000 });
   const note = (await page.textContent('.modal p')).trim();
   await page.fill('.modal input[type=number]', String(dollars));
-  await page.click('.modal .btn.primary');
+  await page.$eval('.modal .btn.primary', (b) => b.click());
   await page.waitForFunction(() => window.casino.app.table?.seated === true, null, { timeout: 30_000 });
   return note;
 }
@@ -204,7 +204,7 @@ if (wanted('micro')) try {
   await a.page.waitForTimeout(300);
   check((await a.page.textContent('.lim-buyin')) === 'Buy-in $20–$250', 'the micro table takes $20 to $250');
   await shot(a.page, 'poker6-1-picker-micro');
-  await a.clickText(page, '.lim-opt', 'Custom');
+  await clickText(a.page, '.lim-opt', 'Custom');
   await a.page.waitForTimeout(300);
   await shot(a.page, 'poker6-2-picker-custom');
   await pickStake(a.page, '$0.50/$1');
@@ -237,7 +237,7 @@ if (wanted('nosebleed')) try {
   await b.login();
   await walkUp(b.page);
   await b.page.waitForSelector('.lim-opt', { timeout: 20_000 });
-  await b.clickText(page, '.lim-opt', 'Custom');
+  await clickText(b.page, '.lim-opt', 'Custom');
   await b.page.fill('.lim-input >> nth=0', '25000');
   await b.page.fill('.lim-input >> nth=1', '50000');
   await b.page.waitForTimeout(300);
@@ -266,6 +266,16 @@ if (wanted('nosebleed')) try {
 
 async function multi(label, names, pick, buy, file) {
   const [c, d] = [await player(names[0]), await player(names[1])];
+  try {
+    return await multiPlay(label, c, d, pick, buy, file);
+  } catch (err) {
+    await shot(c.page, `${file}-fail-a`).catch(() => {});
+    await shot(d.page, `${file}-fail-b`).catch(() => {});
+    throw err;
+  }
+}
+
+async function multiPlay(label, c, d, pick, buy, file) {
   await walkUp(c.page);
   await c.page.waitForSelector('.lobby-choice', { timeout: 20_000 });
   await c.page.keyboard.press('m');
@@ -292,7 +302,10 @@ async function multi(label, names, pick, buy, file) {
   await autoplay(c.page);
   await autoplay(d.page);
   await clickText(c.page, '.party-row .btn', 'Start');
-  const hands = await playHands(c.page, 3);
+  const hands = await playHands(c.page, 3).catch(async (e) => {
+    await shot(c.page, `${file}-stuck`);
+    throw e;
+  });
   check(hands >= 3, `${label}: hands played between two people: ${hands}`);
   await c.page.waitForTimeout(800);
   await shot(c.page, `${file}-a`);

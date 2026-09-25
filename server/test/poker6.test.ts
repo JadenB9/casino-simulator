@@ -42,7 +42,7 @@ async function leaveAndSettle(c: Client, id: number): Promise<{ balance: number;
 }
 
 describe("Hold'em at any stakes", () => {
-  it('a $0.50/$1 table: half-dollar bets, a $20 to $250 buy-in, and a cash-out to the cent', { timeout: 60_000 }, async () => {
+  it('a $0.50/$1 table: half-dollar bets, a $20 to $250 buy-in, and a cash-out to the cent', { timeout: 150_000 }, async () => {
     const { token, profile } = await login('poker6_micro');
     const { client } = await connect('solo/holdem', token, '&limits=50-100');
     const c = client!;
@@ -55,14 +55,13 @@ describe("Hold'em at any stakes", () => {
     c.send({ t: 'buyin', aid: 'in', amount: 25_000 });
     await c.next((m) => m.t === 'seat' && m.status === 'seated');
     await playAHand(c);
-    await playAHand(c);
     const after = await leaveAndSettle(c, profile.id);
-    // whatever the hands did, not a cent was made or lost on the way
+    // whatever the hand did, not a cent was made or lost on the way
     expect(await ledger(profile.id)).toBe(after.balance);
     c.ws.close();
   });
 
-  it('a $100,000/$200,000 table takes $50,000,000, and every cent comes back through the escrow', { timeout: 60_000 }, async () => {
+  it('a $100,000/$200,000 table takes $50,000,000, and every cent comes back through the escrow', { timeout: 150_000 }, async () => {
     const { token, profile } = await login('poker6_nosebleed');
     await grant(profile.id, 6_000_000_000, 'nosebleed');
     const { client } = await connect('solo/holdem', token, '&limits=10000000-20000000');

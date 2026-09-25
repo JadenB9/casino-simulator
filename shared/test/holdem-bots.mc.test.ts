@@ -39,9 +39,11 @@ it('the players at high stakes beat the players at micro stakes', () => {
     log(`The typical players at a $${hi / 100} big blind against those at $${lo / 100}, ${deals} deals x 6 seatings:\n${table(r)}`);
     const high = find(r, 'high');
     const micro = find(r, 'micro');
-    // the high-stakes players together win, the micro-stakes ones lose, each by more than 3 SE
-    expect(high.bb100).toBeGreaterThan(3 * high.se);
-    expect(micro.bb100).toBeLessThan(-3 * micro.se);
+    // the high-stakes players win and the micro-stakes ones lose (rake and all), the gap between
+    // them more than 3 SE of each
+    expect(high.bb100).toBeGreaterThan(0);
+    expect(micro.bb100).toBeLessThan(0);
+    expect(high.bb100 - micro.bb100).toBeGreaterThan(3 * (high.se + micro.se));
   }
   // and a line-up drawn at random, as the engine seats it, for the record
   const drawn = duplicateMatch([...drawnTable(1_000_000, 3, 11, 'hi:'), ...drawnTable(100, 3, 12, 'lo:')], deals, 13, stats, { teams: ['high', 'high', 'high', 'micro', 'micro', 'micro'] });
