@@ -86,7 +86,12 @@ export class TableSession {
         if (s === 'closed' && !this.ended) this.onClosed(code);
       },
     });
-    this.offFrame = onFrame((dt) => this.view?.update(dt));
+    // the board is fitted after the view has moved things for the frame
+    stage.fit.watch(ui);
+    this.offFrame = onFrame((dt) => {
+      this.view?.update(dt);
+      stage.fit.update(dt);
+    });
   }
 
   readonly link: TableLink = {
