@@ -25,6 +25,9 @@ import { spotOf as bandit } from '../../../shared/src/games/banditwheel/rules.ts
 import { SPOT_NAMES as BACCARAT_SPOTS, type Spot as BaccaratSpot } from '../../../shared/src/games/baccarat/rules.ts';
 import { handName as threeCardHand, score as threeCardScore } from '../../../shared/src/games/threecard/rules.ts';
 import type { Card } from '../../../shared/src/cards.ts';
+// v6 online6: the new online games' item and hand names
+import { CASE_INFO, isCase } from '../../../shared/src/games/cases/rules.ts';
+import { PATTERN_NAMES, type Pattern as DiamondsPattern } from '../../../shared/src/games/diamonds/rules.ts';
 
 /** Returned at least this many times the stake... */
 export const BIG_MULTIPLE = 25;
@@ -123,6 +126,10 @@ const SHOW_MS: Partial<Record<GameId, number>> = {
   mines: 1_000,
   hilo: 1_000,
   crash: 500,
+  // v6 parlor6: a bingo prize lights as its ball is called; a pachinko batch big enough for the
+  // feed is a chain of fevers, about ten seconds a jackpot after the balls have flown
+  bingo: 2_000,
+  pachinko: 45_000,
 };
 /** Each free game plays out after the paid spin. */
 const FREE_GAME_MS = 2_400;
@@ -245,6 +252,37 @@ export function describeWin(game: GameId, variant: string, events: readonly Game
       case 'crash': {
         const e = mine('cashout')[0];
         return e ? `Cashed out at ${mult(e.at)}` : times;
+      }
+      // v6 online6: Coinflip, Wheel, Cases and Diamonds
+      case 'coinflip': {
+        const e = events.find((x) => x.type === 'over');
+        return e ? `${e.streak} right ${e.streak === 1 ? 'call' : 'calls'}, ${mult(e.mult)}` : times;
+      }
+      case 'wheel': {
+        const e = mine('spin')[0];
+        return e ? `${e.segments} segments ${RISK_WORD[e.risk as string] ?? ''}, ${mult(e.mult)}`.replace(/ ,/, ',') : times;
+      }
+      case 'cases': {
+        const e = mine('open')[0];
+        const box = e && isCase(e.case) ? CASE_INFO[e.case] : null;
+        const item = box && typeof e!.item === 'number' ? box.items[e!.item] : undefined;
+        return item ? `${item.name}, ${box!.name} case, ${mult(e!.mult)}` : times;
+      }
+      case 'diamonds': {
+        const e = mine('draw')[0];
+        const name = e ? PATTERN_NAMES[e.pattern as DiamondsPattern] : undefined;
+        return name ? `${name}, ${mult(e!.mult)}` : times;
+      }
+      // v6 parlor6: the biggest bingo prize the last ball paid, and a pachinko chain
+      case 'bingo': {
+        const best = mine('win').sort((a, b) => Number(b.mult) - Number(a.mult))[0];
+        const name = best ? { line: 'Line', corners: 'Four corners', blackout: 'Blackout' }[best.pattern as string] : undefined;
+        return name ? `${name} on ball ${best!.call}, ${mult(best!.mult)}` : `Bingo, ${times}`;
+      }
+      case 'pachinko': {
+        const e = mine('launch')[0];
+        const n = typeof e?.jackpots === 'number' ? e.jackpots : 0;
+        return n > 0 ? `${n}-jackpot ${n > 1 ? 'chain' : 'fever'}, ${e!.balls} balls` : times;
       }
       case 'holdem': {
         // Only a hand shown down is named; an uncontested pot stays a pot.

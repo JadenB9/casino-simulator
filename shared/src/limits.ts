@@ -97,6 +97,9 @@ export const LIMITS: Partial<Record<GameId, LimitSpec>> = {
     max: { ratio: 2, ratioMax: 3, ceiling: 10_000 * D, step: D },
   },
   banditwheel: ONLINE(),
+  // v6 parlor6: a bingo card, a pachinko batch of 25 balls
+  bingo: ONLINE(),
+  pachinko: ONLINE(),
   plinko: ONLINE(),
   tower: ONLINE(),
   mines: ONLINE(),
@@ -105,6 +108,11 @@ export const LIMITS: Partial<Record<GameId, LimitSpec>> = {
   keno: ONLINE(),
   hilo: ONLINE(),
   crash: ONLINE(),
+  // v6 online6:
+  coinflip: ONLINE(),
+  wheel: ONLINE(),
+  cases: ONLINE(),
+  diamonds: ONLINE(),
   // the test fixture, so the host's limits can be tested on the simplest engine
   highcard: ONLINE(),
 };

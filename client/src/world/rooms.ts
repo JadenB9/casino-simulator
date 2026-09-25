@@ -12,6 +12,7 @@
 // of it and PI north of it; a seat's yaw is the way its sitter faces.
 
 import type { GameId } from '../../../shared/src/engine.ts';
+import type { ItemKind } from '../../../shared/src/items.ts';
 
 export type RoomId = 'lobby' | 'pit' | 'slots' | 'bar' | 'lounge' | 'poker' | 'salon' | 'online' | 'yard' | 'bank' | 'boutique';
 
@@ -114,8 +115,8 @@ export interface FurnitureItem {
   x: number;
   z: number;
   yaw: number;
-  /** A mannequin's look: the shop items it wears; `item` is the piece the boutique opens at. */
-  wears?: { body: 'm' | 'f'; outfit: string; clothes?: string; chain?: string; grill?: string; watch?: string; hat?: string; shades?: string; item: string };
+  /** A mannequin's look: the shop items it wears, by kind (a ride it stands on); `item` is the piece the boutique opens at. */
+  wears?: { body: 'm' | 'f'; outfit: string; item: string } & Partial<Record<ItemKind, string>>;
   /** A palm's height (fitted to the ceiling when left out). */
   size?: number;
 }
@@ -229,7 +230,9 @@ export const ROOMS: RoomSpec[] = [
     style: { floor: 'marble-floor', floorUv: 2.4, wall: 'wall', wainscot: 'wainscot', rail: 'brass', ceiling: 5.0, ceilingMat: 'ceiling', kind: 'tray', downlights: 0, cove: 'warm', ambient: { sky: '#ffe2b8', ground: '#3a2016', k: 1.45 } },
     stations: [],
     furniture: [
-      { kind: 'directory', x: -4.3, z: 2.2, yaw: 0.75 },
+      // the directory stands between the ways to the cashier and to the pit, facing the doors: in
+      // view as you come in, clear of the palms' fronds and of anyone's path
+      { kind: 'directory', x: -3.6, z: -0.3, yaw: 0.72 },
       { kind: 'bench', x: -6.2, z: -3.3, yaw: Math.PI / 2 },
       { kind: 'bench', x: 6.2, z: -3.3, yaw: -Math.PI / 2 },
       { kind: 'palm', x: -3.6, z: 4.8, yaw: 0 },
@@ -604,15 +607,18 @@ export const ROOMS: RoomSpec[] = [
     stations: [],
     furniture: [
       { kind: 'mannequin', x: -3.8, z: -3.1, yaw: -Math.PI / 2, wears: { body: 'm', outfit: 'suit', clothes: 'white-tuxedo', chain: 'cuban-link', grill: 'full-gold', item: 'white-tuxedo' } },
-      { kind: 'mannequin', x: -3.8, z: 4.1, yaw: -Math.PI / 2, wears: { body: 'f', outfit: 'dress', clothes: 'fur-coat', chain: 'iced-cuban', shades: 'gold-aviators', item: 'fur-coat' } },
+      { kind: 'mannequin', x: -3.8, z: 4.1, yaw: -Math.PI / 2, wears: { body: 'f', outfit: 'smart', clothes: 'leather-jacket', chain: 'tennis-chain', shades: 'round-shades', hat: 'cowboy-hat', item: 'leather-jacket' } },
       { kind: 'mannequin', x: 0.9, z: -5.05, yaw: 0, wears: { body: 'm', outfit: 'suit', chain: 'dice-pendant', grill: 'diamond-set', watch: 'iced-watch', shades: 'gold-aviators', item: 'dice-pendant' } },
-      { kind: 'mannequin', x: 0.9, z: 5.05, yaw: Math.PI, wears: { body: 'm', outfit: 'suit', clothes: 'velvet-jacket', chain: 'ace-pendant', watch: 'iced-watch', hat: 'black-fedora', item: 'velvet-jacket' } },
+      { kind: 'mannequin', x: 0.9, z: 5.05, yaw: Math.PI, wears: { body: 'm', outfit: 'suit', clothes: 'sequin-suit', chain: 'tennis-chain', watch: 'rose-watch', hat: 'top-hat', item: 'sequin-suit' } },
+      // in the corner by the counter, on a hoverboard, facing along the east wall
+      { kind: 'mannequin', x: 3.7, z: -4.7, yaw: 0, wears: { body: 'm', outfit: 'suit', ride: 'hoverboard', shades: 'diamond-shades', hat: 'gold-crown', item: 'hoverboard' } },
       { kind: 'case', x: -0.9, z: -2.4, yaw: 0 },
       { kind: 'case', x: -0.9, z: 3.4, yaw: 0 },
       { kind: 'armchair', x: -2.4, z: 5.0, yaw: Math.PI },
     ],
     fixtures: [{ kind: 'counter', x0: 2.55, x1: 3.25, z0: -2.0, z1: 3.0 }],
-    hanging: [],
+    // over the counter, so the way to buy is plain from the door
+    hanging: [{ id: 'boutique-counter', x: 2.05, y: 2.62, z: 0.5, ry: -Math.PI / 2, w: 2.6, h: 0.42, kind: 'lit', text: 'PURCHASES & FITTINGS', color: '#ffe6b8' }],
     spots: [],
     aisles: [{ x0: -4.85, z0: -0.7, x1: 2.4, z1: 1.7 }],
     plants: [],

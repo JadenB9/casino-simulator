@@ -16,6 +16,7 @@ import { problemText } from '../menu/parts.ts';
 import { heldOrders } from '../../world/consumables/held.ts';
 import { drinkFx, onDrinkFx, setDrinkFx } from '../../world/consumables/prefs.ts';
 import type { Bar } from './bar.ts';
+import { barPriceNow, happyBanner, priceTag } from '../../world/celebs/happy.ts'; // v6 celebs6: happy hour
 
 export interface BarMenuDeps {
   root: HTMLElement;
@@ -116,7 +117,7 @@ export function openBarMenu(deps: BarMenuDeps): Closable {
     r.dataset.id = it.id;
     const text = el('div', 'bar-text');
     const line = el('div', 'dine-line');
-    line.append(el('span', 'bar-name', it.name), el('span', 'dine-dots'), el('span', 'bar-price money', formatMoney(it.price)));
+    line.append(el('span', 'bar-name', it.name), el('span', 'dine-dots'), priceTag(it.price)); // v6 celebs6: struck through and halved in happy hour
     const under = el('div', 'dine-under');
     under.append(el('span', 'bar-about', it.about));
     const does = DOES[it.id];
@@ -152,7 +153,7 @@ export function openBarMenu(deps: BarMenuDeps): Closable {
   done.addEventListener('click', () => sheet.close());
   const foot = el('div', 'sheet-foot bar-foot dine-foot');
   foot.append(note, el('span', 'dine-keys', 'Q takes a sip or a bite. Stand facing someone with a drink to toast.'), done);
-  sheet.body.append(top, cols, foot);
+  sheet.body.append(top, happyBanner(), cols, foot); // v6 celebs6: happy hour's line
 
   let shown: string | null = null;
   const paint = () => {
@@ -160,7 +161,7 @@ export function openBarMenu(deps: BarMenuDeps): Closable {
     balVal.textContent = formatMoney(p?.balance ?? 0);
     for (const [id, b] of buttons) {
       const it = barItem(id)!;
-      b.disabled = busy !== null || (p?.balance ?? 0) < it.price;
+      b.disabled = busy !== null || (p?.balance ?? 0) < barPriceNow(it.price); // v6 celebs6
       b.textContent = busy === id ? 'Ordering' : 'Order';
     }
     const lines: string[] = [];
@@ -194,9 +195,9 @@ export function openBarMenu(deps: BarMenuDeps): Closable {
     note.className = 'bar-note';
     paint();
     try {
-      await bar.order(it.id);
+      const paid = await bar.order(it.id);
       deps.sfx?.play('chips-handle', { volume: 0.45 });
-      note.textContent = `${it.name}, ${formatMoney(it.price)}. It's on its way.`;
+      note.textContent = `${it.name}, ${formatMoney(paid.price)}. It's on its way.`; // v6 celebs6: what was paid
       note.className = 'bar-note ok';
     } catch (err) {
       note.textContent = problemText(err);
