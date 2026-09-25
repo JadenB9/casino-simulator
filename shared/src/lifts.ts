@@ -33,19 +33,36 @@ export const CAR_DEPTH_CM = 190;
 export const LIFT_REACH_CM = 360;
 
 function bank(zone: ZoneId, x: number, z: number, r: number, cars: number): LiftBank {
-  const a = (r / 256) * Math.PI * 2;
-  const out = 170;
-  // (+ 0 turns a rounded -0 into 0: it goes over the wire and into tests as 0)
-  return { zone, x, z, r, cars, arrive: { x: Math.round(x + Math.sin(a) * out) + 0, z: Math.round(z + Math.cos(a) * out) + 0, r } };
+  const b: LiftBank = { zone, x, z, r, cars, arrive: { x, z, r } };
+  // a ride ends standing in the middle car (the left of two), facing its doors
+  const c = carCentre(b, Math.floor((cars - 1) / 2));
+  b.arrive = { x: c.x, z: c.z, r };
+  return b;
+}
+
+/** Out of a bank's doors (n) and along its front, to the right looking out (a): unit vectors. */
+export function bankAxes(b: LiftBank): { nx: number; nz: number; ax: number; az: number } {
+  const yaw = (b.r / 256) * Math.PI * 2;
+  const nx = Math.sin(yaw);
+  const nz = Math.cos(yaw);
+  return { nx, nz, ax: -nz, az: nx };
+}
+
+/** The middle of car `i`'s floor (cm), counted from the left looking in (+ 0 keeps -0 off the wire). */
+export function carCentre(b: LiftBank, i: number): { x: number; z: number } {
+  const { nx, nz, ax, az } = bankAxes(b);
+  const along = (i - (b.cars - 1) / 2) * CAR_PITCH_CM;
+  const back = -CAR_DEPTH_CM / 2;
+  return { x: Math.round(b.x + ax * along + nx * back) + 0, z: Math.round(b.z + az * along + nz * back) + 0 };
 }
 
 /**
- * The three banks. The casino's stands against the lobby's west wall, its doors facing east into
- * the lobby; the valet lobby's in its back (west) wall, facing the glass doors to the drive; the
+ * The three banks. The casino's stands against the lobby's west wall between the bank's portal and
+ * the corner, its door facing east into the lobby; the valet lobby's in its back (west) wall, facing the glass doors to the drive; the
  * terrace's in the stair-and-lift pavilion at its east end, facing west over the city.
  */
 export const LIFTS: Record<ZoneId, LiftBank> = {
-  casino: bank('casino', -500, 1240, 64, 2),
+  casino: bank('casino', -495, 1235, 64, 1),
   ground: bank('ground', 10_500, 0, 64, 3),
   roof: bank('roof', -11_300, 0, 192, 2),
 };

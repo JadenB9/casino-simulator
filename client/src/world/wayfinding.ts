@@ -219,6 +219,16 @@ export interface MapDeps {
   you: () => { x: number; z: number; heading: number };
   /** Whether the map may open now (not in the middle of something that holds the keys). */
   canOpen?: () => boolean;
+  /** v6 city6: out of the casino (the ground floor, the roof), that zone's map instead. */
+  elsewhere?: () => ElsewhereMap | null;
+}
+
+/** v6 city6: a map of somewhere else (city/map.ts): its body, you on it, and what to call where you are. */
+export interface ElsewhereMap {
+  title: string;
+  body: HTMLElement;
+  you: SVGGElement;
+  here(x: number, z: number): string;
 }
 
 export class MapOverlay {
@@ -230,6 +240,7 @@ export class MapOverlay {
   private picked: string | null = null;
   private here = '';
   private hudCheck = 0;
+  private alt: ElsewhereMap | null = null;
 
   constructor(private readonly deps: MapDeps) {
     const b = el('button', 'hud-btn map-btn');
@@ -258,6 +269,25 @@ export class MapOverlay {
    */
   show(directory = false): void {
     if (this.sheet) return;
+    // v6 city6: out of the casino, where you are
+    const alt = directory ? null : (this.deps.elsewhere?.() ?? null);
+    if (alt) {
+      const sheet = openSheet(this.deps.ui, { title: alt.title, subtitle: '', cls: 'map-sheet', onClose: () => this.closed() });
+      this.sheet = sheet;
+      this.alt = alt;
+      this.button.setAttribute('aria-pressed', 'true');
+      sheet.body.append(alt.body);
+      this.youEl = alt.you;
+      sheet.panel.addEventListener('keydown', (e) => {
+        if (e.code === 'KeyN' && !e.ctrlKey && !e.metaKey && !e.altKey && !isTyping(e)) {
+          e.preventDefault();
+          this.close();
+        }
+      });
+      this.here = '';
+      this.update(0);
+      return;
+    }
     const sheet = openSheet(this.deps.ui, { title: directory ? 'Floor Directory' : 'Casino Map', subtitle: '', cls: directory ? 'map-sheet map-directory' : 'map-sheet', onClose: () => this.closed() });
     this.sheet = sheet;
     this.button.setAttribute('aria-pressed', 'true');
@@ -318,6 +348,16 @@ export class MapOverlay {
     const you = this.deps.you();
     // Object3D yaw turns +z toward +x; on the map +z is down, so the arrow turns the other way
     this.youEl.setAttribute('transform', `translate(${you.x.toFixed(2)} ${you.z.toFixed(2)}) rotate(${((-you.heading * 180) / Math.PI).toFixed(1)})`);
+    // v6 city6: somewhere else says where you are itself
+    if (this.alt) {
+      const here = this.alt.here(you.x, you.z);
+      if (here !== this.here) {
+        this.here = here;
+        this.sheet.sub.textContent = here;
+        this.sheet.sub.hidden = !here;
+      }
+      return;
+    }
     const here = roomAt(this.deps.plan, you.x, you.z)?.id ?? '';
     if (here !== this.here) {
       this.here = here;
@@ -336,6 +376,7 @@ export class MapOverlay {
 
   private closed(): void {
     this.sheet = null;
+    this.alt = null;
     this.youEl = null;
     this.roomsEl.clear();
     this.caption = null;

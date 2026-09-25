@@ -37,6 +37,9 @@ import type { EmoteId } from '../../../shared/src/protocol.ts';
 import type { GameId } from '../../../shared/src/engine.ts';
 import type { Sfx } from '../audio/sfx.ts';
 import { el } from '../ui/kit.ts';
+import { City, type CityLink } from './city/index.ts'; // v6 city6
+import { zoneMap } from './city/map.ts'; // v6 city6
+import type { ZoneId } from '../../../shared/src/zones.ts';
 import './world.css';
 
 export type { WorldStation } from './stations.ts';
@@ -146,7 +149,18 @@ export interface FloorWorld extends World {
   readonly map: MapOverlay;
   /** The procedural furniture: every table's chairs and stools, the lounges' chairs, and the rest. */
   readonly furniture: Furniture;
+  /**
+   * v6 city6: the elevators, the ground floor and the roof (city/). `zone` is where you are;
+   * only it is drawn.
+   */
+  readonly city: City;
+  readonly zone: ZoneId;
+  /** v6 city6: the floor socket, for the elevator and the server's moves (`tp`); null to forget. */
+  useFloor(link: CityLink | null): void;
 }
+
+/** v6 city6: no rooms of the casino are seen from another zone. */
+const NO_ROOMS = new Set<string>();
 
 /**
  * Glossy floor materials that mirror the casino on High: reflection strength, and a polish
@@ -191,6 +205,9 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
   if (vpMode !== plan.vpMode) setVpMode(plan, vpMode);
   // walls and everything solid block the walker and the camera, as the plan was checked
   collide(plan, col);
+  // v6 city6: the elevators in the lobby (built into the lobby's batch), and the zones they go to
+  const ui0 = opts.ui ?? document.getElementById('ui') ?? document.body;
+  const city = new City({ root, scene, renderer, camera: engine.camera, mats, col, quality, ui: ui0, sfx: opts.sfx }, batch, glow);
   const lod = new StationLod(stations, quality);
   const decor = buildDecor(plan, stations, batch, mats, glow);
   buildPools(decor.pools, downlights, plan, batch, mats);
@@ -229,7 +246,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
   character.setName('');
   root.add(character.root);
   const canvas = renderer.domElement;
-  const player = new Player(character, engine.camera, col, (x, z) => ceilingAt(plan, x, z, 0.3), canvas, () => opts.canCapture?.() ?? true);
+  const player = new Player(character, engine.camera, col, (x, z) => city.ceilingAt(x, z) ?? ceilingAt(plan, x, z, 0.3), canvas, () => opts.canCapture?.() ?? true);
   player.spawn(SPAWN.x, SPAWN.z, SPAWN.yaw);
 
   const cashierAnchor = new THREE.Object3D();
@@ -237,7 +254,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
   cashierAnchor.position.set(plan.cashier.x, 0, plan.cashier.counter.z1);
   root.add(cashierAnchor);
   const cashier: CashierPoint = { id: 'cashier', anchor: cashierAnchor, position: new THREE.Vector3(plan.cashier.x, 0, plan.cashier.z) };
-  const ui = opts.ui ?? document.getElementById('ui') ?? document.body;
+  const ui = ui0;
   const interact = new Interact(stations, cashier, player, engine.camera, ui, opts.onEscape);
   // Rooms nobody can see from where the camera is aren't drawn: their walls and ceilings, their
   // furniture and props, their stations and staff.
@@ -256,7 +273,14 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
   const sees = (room: string, box: THREE.Box3) => visibility.sees(room, box);
   let everything = false;
   // the map opens on the floor, not at a table (blackjack's N is "no insurance")
-  const map = new MapOverlay({ plan, ui, you: () => ({ x: player.position.x, z: player.position.z, heading: player.heading }), canOpen: () => !interact.seated && player.isEnabled });
+  const map = new MapOverlay({
+    plan,
+    ui,
+    you: () => ({ x: player.position.x, z: player.position.z, heading: player.heading }),
+    canOpen: () => !interact.seated && player.isEnabled,
+    // v6 city6: on the ground floor or the roof, its own map
+    elsewhere: () => (city.zone === 'casino' ? null : zoneMap(city.zone)),
+  });
   // v6 world6: E at a directory board opens it big (the Map, as the Floor Directory)
   interact.spots(map.spots);
   // On the floor with the mouse free (after Esc, or before the first click on the dev floor): how
@@ -269,6 +293,17 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
   const touch = new TouchControls({ player, ui, seated: () => interact.seated, focus: () => interact.focus, spot: () => interact.spot, sensitivity: () => player.mouseSettings.sensitivity });
   const life = new FloorLife({ root, camera: engine.camera, characters, plan, points: lifePoints(plan), player, interact, collider: col, staff: staff.posts });
   await life.load();
+  // v6 city6: the casino's own pieces (hidden while you're in another zone), sitting down out there
+  city.attach({
+    player,
+    interact,
+    lighting,
+    casino: [...staticMeshes.meshes, ...glowMeshes.meshes, ...(signs ? [signs.mesh] : []), ...directories.meshes, furniture.group, props.group, stationRoot, staff.group, mannequins.group, life.crew.group],
+    addSeats: (seats) => life.seating.add(seats),
+    standUp: () => life.seating.stand({ send: false, walk: true }),
+    seated: () => interact.seated !== null,
+  });
+  let home = true;
 
   const bloom = new Bloom(engine);
   const pr = new PixelRatio(renderer);
@@ -386,6 +421,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
       mannequins.refresh();
       if (signs) (signs.mesh.material as THREE.MeshBasicMaterial).color.setScalar(signGain(q));
       lighting.setQuality(q);
+      city.setQuality(q);
       characters.setQuality(q);
       void props.setQuality(q).then(() => reflect());
       applyQuality(q);
@@ -400,17 +436,24 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
       const idle = player.awaitingClick && !interact.seated;
       if (hint.hidden === idle) hint.hidden = !idle;
       touch.update();
-      if (!everything && visibility.update(engine.camera)) applyRooms();
-      lighting.setRoom(visibility.room);
-      lod.update(engine.camera, interact.seated, everything ? null : visibility.visible, everything ? null : sees);
+      // v6 city6: which zone you're in; away from the casino none of its rooms are drawn
+      city.update(dt);
+      const back = city.zone === 'casino';
+      if (back && !home) applyRooms();
+      home = back;
+      const rooms = everything ? null : home ? visibility.visible : NO_ROOMS;
+      if (home && !everything && visibility.update(engine.camera)) applyRooms();
+      if (home) lighting.setRoom(visibility.room);
+      lod.update(engine.camera, interact.seated, rooms, everything ? null : sees);
       character.update(dt);
-      staff.update(dt, engine.camera, interact.seated, everything ? null : visibility.visible, everything ? null : sees);
+      staff.update(dt, engine.camera, interact.seated, rooms, everything ? null : sees);
       map.update(dt);
-      life.update(dt, visibility.visible, sees);
+      life.update(dt, home ? visibility.visible : NO_ROOMS, sees);
       emotes.update(dt);
       const f = world.focus;
-      lighting.setFocus(f && f.zone !== 'slots' && f.game !== 'videopoker' ? focusAt.copy(f.anchor.position) : null);
+      if (home) lighting.setFocus(f && f.zone !== 'slots' && f.game !== 'videopoker' ? focusAt.copy(f.anchor.position) : null);
       lighting.update(dt);
+      city.light(dt);
       // Seated, the camera is a metre from lit felt, cards and brass: nothing on a table glows
       // there; at a machine its own lights do, a little.
       const seat = interact.seated;
@@ -446,7 +489,8 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
     useRemotes(source) {
       remotes = source;
     },
-    canSee: (x, z) => everything || visibility.seesPerson(x, z),
+    // v6 city6: nobody in another zone is drawn
+    canSee: (x, z) => city.sees(x, z, (a, b) => everything || visibility.seesPerson(a, b)),
     staff,
     life,
     dealerGesture: (id, g) => staff.gesture(id, g),
@@ -471,7 +515,13 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
     },
     map,
     furniture,
+    city,
+    get zone() {
+      return city.zone;
+    },
+    useFloor: (link) => city.useLink(link),
     dispose() {
+      city.dispose();
       map.dispose();
       directories.dispose();
       mannequins.dispose();
