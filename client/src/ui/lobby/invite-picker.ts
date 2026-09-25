@@ -47,6 +47,7 @@ export class InvitePicker {
   private readonly list = el('div', 'inv-list');
   private readonly query = el('input', 'inv-search-input');
   private readonly note = el('p', 'inv-note');
+  private readonly facts = el('div', 'inv-facts');
   private readonly sendBtn = el('button', 'btn primary');
   private readonly allBtn = el('button', 'btn');
   private readonly picked = new Set<number>();
@@ -57,9 +58,11 @@ export class InvitePicker {
   private pendingTimer = 0;
   private tickTimer = 0;
   private closed = false;
+  private current: InviteTable;
 
   constructor(private readonly opts: PickerOpts) {
     const t = opts.table;
+    this.current = t;
     this.root.setAttribute('role', 'dialog');
     this.root.setAttribute('aria-label', `Invite players to ${tableName(t.game, t.variant)}`);
 
@@ -73,13 +76,7 @@ export class InvitePicker {
     close.addEventListener('click', () => this.close());
     head.append(title, close);
 
-    const facts = el('div', 'inv-facts');
-    if (t.pin) {
-      const priv = el('span', 'inv-fact');
-      priv.append(lock(), el('span', '', 'Private: an invite lets them in without the PIN'));
-      facts.append(priv);
-    }
-    facts.append(el('span', 'inv-fact', t.seatsLeft === 1 ? '1 seat left' : `${t.seatsLeft} seats left`));
+    this.paintFacts();
 
     const field = el('label', 'inv-search');
     this.query.type = 'search';
@@ -106,7 +103,7 @@ export class InvitePicker {
     const keys = el('div', 'inv-keys');
     keys.append(el('span', 'lb-key', 'Space'), el('span', '', 'Pick'), el('span', 'lb-key', 'Enter'), el('span', '', 'Invite'), el('span', 'lb-key', 'Esc'), el('span', '', 'Close'));
 
-    this.root.append(head, facts, field, this.list, this.note, foot, keys);
+    this.root.append(head, this.facts, field, this.list, this.note, foot, keys);
     opts.root.append(this.root);
     addEventListener('keydown', this.onKey, true);
     this.render();
@@ -116,12 +113,31 @@ export class InvitePicker {
   }
 
   get table(): InviteTable {
-    return this.opts.table;
+    return this.current;
+  }
+
+  /** The party changed: new members aren't offered, the seats left and the PIN follow. */
+  setTable(t: InviteTable): void {
+    this.current = t;
+    this.paintFacts();
+    this.render();
+  }
+
+  private paintFacts(): void {
+    const t = this.current;
+    const parts: HTMLElement[] = [];
+    if (t.pin) {
+      const priv = el('span', 'inv-fact');
+      priv.append(lock(), el('span', '', 'Private: an invite lets them in without the PIN'));
+      parts.push(priv);
+    }
+    parts.push(el('span', 'inv-fact', t.seatsLeft === 0 ? 'Table full' : t.seatsLeft === 1 ? '1 seat left' : `${t.seatsLeft} seats left`));
+    this.facts.replaceChildren(...parts);
   }
 
   /** The floor's answer to this table's invite. */
   onAnswer(msg: Extract<InviteServerMsg, { t: 'invite.sent' | 'invite.no' }>): void {
-    if (this.closed || msg.table !== this.opts.table.tableId) return;
+    if (this.closed || msg.table !== this.current.tableId) return;
     this.settle();
     if (msg.t === 'invite.no') {
       this.say(msg.msg, true);
@@ -189,7 +205,7 @@ export class InvitePicker {
     const now = this.opts.now();
     for (const [id, s] of this.states) if (s.kind === 'invited' && s.until <= now) this.states.delete(id);
     const me = this.opts.me();
-    const exclude = new Set([...this.opts.table.members, ...(me ? [me.id] : [])]);
+    const exclude = new Set([...this.current.members, ...(me ? [me.id] : [])]);
     const ranked = rankCandidates(this.opts.players(), me, this.opts.recent.items, exclude, this.query.value);
     const online = new Set(ranked.map((r) => r.id));
     for (const id of [...this.picked]) if (!online.has(id) && !this.query.value) this.picked.delete(id);

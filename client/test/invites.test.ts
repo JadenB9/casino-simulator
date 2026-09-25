@@ -37,7 +37,7 @@ describe('what an invite card says', () => {
     expect(seatsLeft({ players: 5, max: 7 })).toBe('2 seats left');
     expect(seatsLeft({ players: 6, max: 7 })).toBe('1 seat left');
     expect(seatsLeft({ players: 7, max: 7 })).toBe('Full');
-    expect(inviteDetail(inv())).toBe('High limit · 2 seats left');
+    expect(inviteDetail(inv())).toBe('High limit $500–$50,000 · 2 seats left');
     expect(inviteSentence(inv())).toBe('Sam invited you to Blackjack (High limit, 2 seats left).');
   });
 

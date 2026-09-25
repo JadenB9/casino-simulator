@@ -114,13 +114,21 @@ export class InviteHub {
       },
       recent: this.recent,
       stationName: (id) => this.app.stations.find((s) => s.id === id)?.name ?? null,
-      send: (to) => this.app.floor.send({ t: 'invite', table: table.tableId, ...(table.pin ? { pin: table.pin } : {}), to }),
+      send: (to) => {
+        const t = this.picker?.table ?? table;
+        return this.app.floor.send({ t: 'invite', table: t.tableId, ...(t.pin ? { pin: t.pin } : {}), to });
+      },
       everyoneAgain: () => this.everyone.get(table.tableId) ?? 0,
       now: () => serverNow(),
       onClose: () => {
         this.picker = null;
       },
     });
+  }
+
+  /** The party at the picker's table changed (someone joined, the PIN changed). */
+  tableChanged(table: InviteTable): void {
+    if (this.picker?.table.tableId === table.tableId) this.picker.setTable(table);
   }
 
   /** Close the picker (leaving the table it was for). */

@@ -35,6 +35,8 @@ export interface PartyPanelOpts {
 export interface PartyInvites {
   openPicker(table: InviteTable): void;
   closePicker(tableId?: string): void;
+  /** Who is at the table changed: an open picker stops offering them. */
+  tableChanged(table: InviteTable): void;
   noteMet(people: { id: number; name: string }[]): void;
 }
 
@@ -137,6 +139,7 @@ export class PartyPanel {
     this.party = next;
     // the people you play with come first in the invite list next time
     this.opts.invites?.noteMet(next.members.map((m) => ({ id: m.accountId, name: m.name })));
+    if (next.tableId) this.opts.invites?.tableChanged(this.inviteTable(next));
     this.root.hidden = false;
     this.settle();
   }
@@ -218,16 +221,7 @@ export class PartyPanel {
       inv.type = 'button';
       inv.append(invite(), el('span', '', full ? 'Table full' : 'Invite players'));
       inv.disabled = full;
-      inv.addEventListener('click', () =>
-        invites.openPicker({
-          tableId: p.tableId,
-          ...(p.pin ? { pin: p.pin } : {}),
-          game: this.opts.game,
-          variant: p.variant,
-          members: p.members.map((m) => m.accountId),
-          seatsLeft: Math.max(0, p.maxSeats - p.members.length),
-        }),
-      );
+      inv.addEventListener('click', () => invites.openPicker(this.inviteTable(p)));
       controls.append(inv);
     }
 
@@ -258,6 +252,18 @@ export class PartyPanel {
     controls.append(row);
     parts.push(controls);
     this.body.replaceChildren(...parts);
+  }
+
+  /** v6 invite6: the table as the invite picker needs it. */
+  private inviteTable(p: Party): InviteTable {
+    return {
+      tableId: p.tableId,
+      ...(p.pin ? { pin: p.pin } : {}),
+      game: this.opts.game,
+      variant: p.variant,
+      members: p.members.map((m) => m.accountId),
+      seatsLeft: Math.max(0, p.maxSeats - p.members.length),
+    };
   }
 
   private memberRow(m: Member, isLeader: boolean, isMe: boolean): HTMLLIElement {

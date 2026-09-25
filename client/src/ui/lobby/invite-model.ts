@@ -31,9 +31,11 @@ export function seatsLeft(lobby: Pick<LobbySummary, 'players' | 'max'>): string 
   return n === 0 ? 'Full' : n === 1 ? '1 seat left' : `${n} seats left`;
 }
 
-/** The card's second line: "High limit · 2 seats left · Private · In play". */
+/** The card's second line: "High limit $500–$50,000 · 2 seats left · Private · In play". */
 export function inviteDetail(inv: Pick<Invite, 'game' | 'lobby' | 'private'>): string {
-  const parts = [limitsWord(inv.game, inv.lobby), seatsLeft(inv.lobby)];
+  const word = limitsWord(inv.game, inv.lobby);
+  const range = inv.lobby.limits ? limitsLabel(inv.game, inv.lobby.limits) : null;
+  const parts = [word && range && word !== range ? `${word} ${range}` : word, seatsLeft(inv.lobby)];
   if (inv.private) parts.push('Private');
   if (inv.lobby.started) parts.push('In play');
   return parts.filter(Boolean).join(' · ');

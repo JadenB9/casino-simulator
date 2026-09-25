@@ -115,7 +115,7 @@ export class Invites {
     const skipped: { id: number; name: string; why: InviteSkip }[] = [];
     const reached: number[] = [];
     for (const id of targets) {
-      const why = this.skipReason(me, id, now);
+      const why = this.skipReason(me, id, now, all);
       if (why) {
         if (!all) skipped.push({ id, name: this.nameOf(id), why });
         continue;
@@ -144,13 +144,14 @@ export class Invites {
   }
 
   /** Why an invite wouldn't reach this player now, or null if it will. */
-  private skipReason(from: number, to: number, now: number): InviteSkip | null {
+  private skipReason(from: number, to: number, now: number, all: boolean): InviteSkip | null {
     const open = this.deps.socketsOf(to).filter((s) => s.readyState === WebSocket.OPEN);
     if (open.length === 0) return 'offline';
     if (this.sql.exec<{ n: number }>(`SELECT count(*) AS n FROM invite_dnd WHERE account_id = ?1`, to).one().n > 0) return 'dnd';
     const active = Math.max(...open.map((s) => this.deps.presence.activeAt(s) ?? 0));
     if (now - active >= AWAY_MS) return 'away';
-    if (this.used(`pair:${from}:${to}`, now) >= 1) return 'recent';
+    // "everyone" has its own, longer wait; asking one person again and again is what this stops
+    if (!all && this.used(`pair:${from}:${to}`, now) >= 1) return 'recent';
     if (this.used(`to:${to}`, now) >= TARGET_PER_MIN) return 'busy';
     return null;
   }
