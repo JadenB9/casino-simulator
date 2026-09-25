@@ -144,12 +144,17 @@ ask again in a moment.
 **Achievements and challenges** (`shared/src/feats.ts`). The tables decide them from the rounds
 they settle (`server/src/feats.ts`); each is earned once per account and paid once, in one D1
 batch: the `casino_feats` row and, for a cash reward, a `'grant'` ledger row with op id
-`feat:<account>:<feat>` and the balance change. The player hears `{ t: 'feat', feat, at,
-balance? }` on the table's socket (the balance after a cash reward) and everyone on the floor
+`feat:<account>:<feat>` and the balance change. The cash is never more than the play that earns
+it costs on average (the EV rule at the top of `shared/src/feats.ts`): an achievement's scales
+with the stake of the round that earned it, up to its listed amount; count challenges and
+dailies are comps, half the house's edge on play so far less comps already paid; amount
+challenges pay as listed. The player hears `{ t: 'feat', feat, at, paid, balance? }` on the
+table's socket (`paid` the cash, the balance after it) and everyone on the floor
 `{ t: 'feat', id, name, feat }`. Reward pieces, emotes and titles need no row of their own: they
 come with the feat (`profile.owned`, and `look.title` may name a feat whose reward has a
-title). `GET /feats` is `{ feats: [{ feat, at }], tally }`: the tallies challenges are measured on
-(`won`, `best`, `rounds`, `won:<game>`, `wins:<game>`, `bj:naturals`), as D1 has them. Tables
+title). `GET /feats` is `{ feats: [{ feat, at, paid? }], tally }`: the tallies challenges are
+measured on (`won`, `best`, `rounds`, `won:<game>`, `wins:<game>`, `bj:naturals`, `theo`, `comp`,
+and the day's `d:<day>:*` copies), as D1 has them. Tables
 send their tallies now and then (two minutes after the first unsent one, when the player stands
 up, and before paying a feat), so the numbers can trail a table still in play.
 

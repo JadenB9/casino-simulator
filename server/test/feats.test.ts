@@ -11,7 +11,7 @@ import { evictDurableObject, runInDurableObject } from 'cloudflare:test';
 import type { CasinoTable } from '../src/table/host.ts';
 import type { GameEvent, Step } from '../../shared/src/engine.ts';
 import { DOLLAR, STARTING_BALANCE } from '../../shared/src/money.ts';
-import { FEAT_GAMES, casinoDay, dailyFeats, featOf } from '../../shared/src/feats.ts';
+import { FEAT_GAMES, cashFor, casinoDay, dailyFeats, featOf, fullStake, momentRate } from '../../shared/src/feats.ts';
 import { dayKey, weekKey, weekOf } from '../../shared/src/stats.ts'; // v6 stats6
 import { DEFAULT_LOOK } from '../../shared/src/look.ts';
 import { featOpId, flushStatements, unlockFeat } from '../src/feats.ts';
@@ -103,16 +103,19 @@ describe('a feat earned at a table', () => {
     const c = await sit(me.token, 'dice');
     const stub = soloStub('dice', me.id);
 
-    // a 4% roll that won: first-win and dc-long
+    // a $100 roll at 4% that won: first-win (a title) and dc-long (cash, scaled by the $100)
     const rolled = Date.now();
-    expect(await play(stub, 100, 2_475, [longRoll(true)])).toBe(true);
+    expect(await play(stub, 10_000, 247_500, [longRoll(true)])).toBe(true);
     const first = await c.next((m) => m.t === 'feat' && m.feat === 'first-win', 5_000);
     const long = await c.next((m) => m.t === 'feat' && m.feat === 'dc-long', 5_000);
     expect(first.at).toBeGreaterThan(0);
-    // each comes with the money after it
-    const paid = featOf('first-win')!.reward.cash! + featOf('dc-long')!.reward.cash!;
-    // the second paid carries both
-    expect(Math.max(first.balance.balance, long.balance.balance)).toBe(STARTING_BALANCE - 20_000 * DOLLAR + paid);
+    expect(first.paid).toBe(0);
+    expect(first.balance).toBeUndefined();
+    // 10 cents for every dollar staked: $10 of its $1,000
+    const paid = cashFor(featOf('dc-long')!, { stake: 10_000 });
+    expect(paid).toBe(1_000);
+    expect(long.paid).toBe(paid);
+    expect(long.balance.balance).toBe(STARTING_BALANCE - 20_000 * DOLLAR + paid);
     expect(long.balance.inPlay).toBe(20_000 * DOLLAR);
 
     // the feed
@@ -124,16 +127,17 @@ describe('a feat earned at a table', () => {
     // D1: a row per feat, a grant per cash reward, keyed by the feat
     expect(await count(`SELECT count(*) AS n FROM casino_feats WHERE account_id = ?1`, me.id)).toBe(2);
     const grants = await env.DB.prepare(`SELECT op_id, amount, kind FROM casino_ledger WHERE account_id = ?1 AND op_id LIKE 'feat:%' ORDER BY op_id`).bind(me.id).all<any>();
-    expect(grants.results).toEqual([
-      { op_id: featOpId(me.id, 'dc-long'), amount: featOf('dc-long')!.reward.cash, kind: 'grant' },
-      { op_id: featOpId(me.id, 'first-win'), amount: featOf('first-win')!.reward.cash, kind: 'grant' },
-    ]);
+    expect(grants.results).toEqual([{ op_id: featOpId(me.id, 'dc-long'), amount: paid, kind: 'grant' }]);
+    // GET /feats says what each paid
+    const listed = (await (await api('feats', me.token)).json<any>()).feats;
+    expect(listed.find((f: any) => f.feat === 'dc-long').paid).toBe(paid);
+    expect(listed.find((f: any) => f.feat === 'first-win').paid).toBeUndefined();
 
     // the same moment again pays nothing more
-    expect(await play(stub, 100, 2_475, [longRoll(true)])).toBe(true);
+    expect(await play(stub, 10_000, 247_500, [longRoll(true)])).toBe(true);
     await new Promise((r) => setTimeout(r, 300));
     expect(c.msgs.filter((m: any) => m.t === 'feat')).toHaveLength(0);
-    expect(await count(`SELECT count(*) AS n FROM casino_ledger WHERE account_id = ?1 AND op_id LIKE 'feat:%'`, me.id)).toBe(2);
+    expect(await count(`SELECT count(*) AS n FROM casino_ledger WHERE account_id = ?1 AND op_id LIKE 'feat:%'`, me.id)).toBe(1);
 
     await cashOut(c);
     await expectBalanced(me.id);
@@ -158,9 +162,9 @@ describe('a feat earned at a table', () => {
     const d = `d:${casinoDay(Date.now())}:`;
     const day = casinoDay(Date.now());
     expect(got.tally).toEqual({
-      rounds: 1, won: 990_000, 'won:limbo': 990_000, 'wins:limbo': 1, best: 990_000,
+      rounds: 1, won: 990_000, 'won:limbo': 990_000, 'wins:limbo': 1, best: 990_000, theo: 100,
       // the day's own copies, for the daily challenges
-      [`${d}rounds`]: 1, [`${d}won`]: 990_000, [`${d}wins:limbo`]: 1, [`${d}best`]: 990_000,
+      [`${d}rounds`]: 1, [`${d}won`]: 990_000, [`${d}wins:limbo`]: 1, [`${d}best`]: 990_000, [`${d}theo`]: 100,
       // v6 stats6: the leaderboards' keys, and the three feats counted
       wins: 1, 'rounds:limbo': 1, streak: 1, [dayKey(day)]: 990_000, [weekKey(weekOf(day))]: 990_000, feats: 3,
     });
@@ -225,6 +229,89 @@ describe('a feat earned at a table', () => {
   }, 30_000);
 });
 
+describe("an achievement's cash scales with the stake that earned it", () => {
+  const cleared = (bet: number): GameEvent => ({ type: 'over', round: 1, outcome: 'cleared', gems: 1, mult: 2_475, payout: bet * 24.75, bet, field: [], hit: null });
+
+  for (const [dollars, cents] of [[1, 6], [100, 625], [1_000, 6_250]] as const) {
+    it(`Clean Sweep on a $${dollars} board pays ${cents} cents of its $10,000`, async () => {
+      const me = await account(`ft_sweep_${dollars}`);
+      await unlockFeat(env.DB, me.id, 'first-win', 1);
+      const start = await money(me.id);
+      const c = await sit(me.token, 'mines');
+      const stake = dollars * DOLLAR;
+      await play(soloStub('mines', me.id), stake, stake * 24.75, [cleared(stake)]);
+      const got = await c.next((m) => m.t === 'feat' && m.feat === 'mn-clear', 5_000);
+      expect(cashFor(featOf('mn-clear')!, { stake })).toBe(cents);
+      expect(got.paid).toBe(cents);
+      expect(got.balance.balance).toBe(start.balance - 20_000 * DOLLAR + cents);
+      // the title comes whatever the stake
+      expect((await (await api('feats', me.token)).json<any>()).feats.find((f: any) => f.feat === 'mn-clear').paid).toBe(cents);
+      await cashOut(c);
+      await expectBalanced(me.id);
+      c.ws.close(1000, 'bye');
+    }, 30_000);
+  }
+
+  it('stops at the listed cash: Top Bin on a $1,000 drop pays its $25,000, no more', async () => {
+    const f = featOf('pk-top')!;
+    expect(fullStake(f)!).toBeLessThanOrEqual(1_000 * DOLLAR);
+    const me = await account('ft_top_bin');
+    await unlockFeat(env.DB, me.id, 'first-win', 1);
+    const c = await sit(me.token, 'plinko');
+    const drop: GameEvent = { type: 'drop', seat: 0, bet: 100_000, rows: 16, risk: 'high', bin: 16, mult: 100_000, payout: 1_000_000, path: [], stack: 0 };
+    await play(soloStub('plinko', me.id), 100_000, 1_000_000, [drop]);
+    const got = await c.next((m) => m.t === 'feat' && m.feat === 'pk-top', 5_000);
+    expect(got.paid).toBe(f.reward.cash);
+    await cashOut(c);
+    await expectBalanced(me.id);
+    c.ws.close(1000, 'bye');
+  }, 30_000);
+
+  it("a pendant's moment counts only on a $25 round: a royal on $5 earns nothing, on $25 the pendant", async () => {
+    const royal: GameEvent = { type: 'result', seat: 0, rank: 9, name: 'Royal Flush', coins: 5, denom: 100, credits: 4_000, payout: 0 };
+    const me = await account('ft_royal');
+    await unlockFeat(env.DB, me.id, 'first-win', 1);
+    const c = await sit(me.token, 'videopoker');
+    await play(soloStub('videopoker', me.id), 500, 400_000, [royal]);
+    await new Promise((r) => setTimeout(r, 500));
+    expect(c.msgs.filter((m: any) => m.t === 'feat')).toEqual([]);
+    await play(soloStub('videopoker', me.id), 2_500, 2_000_000, [royal]);
+    const got = await c.next((m) => m.t === 'feat' && m.feat === 'vp-royal', 5_000);
+    expect(got.paid).toBe(cashFor(featOf('vp-royal')!, { stake: 2_500 }));
+    expect((await (await api('me', me.token)).json<any>()).profile.owned).toContain('royal-pendant');
+    await cashOut(c);
+    await expectBalanced(me.id);
+    c.ws.close(1000, 'bye');
+  }, 30_000);
+});
+
+describe('count challenges are comps, out of one pool', () => {
+  it('100 rounds pays half of what play has cost; the next comp gets only what is left', async () => {
+    const me = await account('ft_comps');
+    await unlockFeat(env.DB, me.id, 'first-win', 1);
+    // 99 rounds and $1,500 of theo already; four games won at
+    const seed: [string, number][] = [['rounds', 99], ['theo', 150_000], ...FEAT_GAMES.slice(0, 4).map((g): [string, number] => [`wins:${g}`, 1])];
+    for (const [key, n] of seed) await env.DB.prepare(`INSERT INTO casino_tally (account_id, key, n) VALUES (?1, ?2, ?3)`).bind(me.id, key, n).run();
+    const start = await money(me.id);
+    const c = await sit(me.token, 'dice');
+    // a losing $1 round: the 100th (and a cent of theo)
+    await play(soloStub('dice', me.id), 100, 0);
+    const hundred = await c.next((m) => m.t === 'feat' && m.feat === 'rounds-100', 5_000);
+    expect(hundred.paid).toBe(75_000);
+    // a winning round at a fifth game: Tour of the Floor, but the pool has $0.01 left (half of $1,500.02 less $750)
+    const fifth = FEAT_GAMES.find((g) => g === 'dice')!;
+    expect(FEAT_GAMES.slice(0, 4)).not.toContain(fifth);
+    await play(soloStub('dice', me.id), 100, 200);
+    const tour = await c.next((m) => m.t === 'feat' && m.feat === 'games-5', 5_000);
+    expect(tour.paid).toBe(1);
+    expect(tour.balance.balance).toBe(start.balance - 20_000 * DOLLAR + 75_000 + 1);
+    expect((await tally(me.id)).comp).toBe(75_001);
+    await cashOut(c);
+    await expectBalanced(me.id);
+    c.ws.close(1000, 'bye');
+  }, 30_000);
+});
+
 describe('daily challenges', () => {
   it("today's are paid like any feat, once, and the floor isn't told", async () => {
     const me = await account('ft_daily');
@@ -236,12 +323,21 @@ describe('daily challenges', () => {
     const daily = dailyFeats(casinoDay(Date.now()))[0]!;
     const games = /:games$/.exec(daily.tally!);
     const rows: [string, number][] = games ? FEAT_GAMES.slice(0, daily.goal!).map((g) => [daily.tally!.replace(/games$/, `wins:${g}`), 1]) : [[daily.tally!, daily.goal!]];
+    // and what play has cost so far: $600 in all, $400 of it today (a comp pays half, today's half at most)
+    const day = casinoDay(Date.now());
+    rows.push(['theo', 60_000], [`d:${day}:theo`, 40_000]);
     for (const [key, n] of rows) await env.DB.prepare(`INSERT INTO casino_tally (account_id, key, n) VALUES (?1, ?2, ?3)`).bind(me.id, key, n).run();
     const start = await money(me.id);
     const c = await sit(me.token, 'dice');
     await play(soloStub('dice', me.id), 100, 0);
     const got = await c.next((m) => m.t === 'feat' && m.feat === daily.id, 5_000);
-    expect(got.balance.balance).toBe(start.balance - 20_000 * DOLLAR + daily.reward.cash!);
+    // $200 (half of today's $400.01 of theo, to the cent below), or the daily's own cash if less
+    const want = cashFor(daily, { tally: { theo: 60_001, [`d:${day}:theo`]: 40_001 } });
+    expect(want).toBe(Math.min(daily.reward.cash!, 20_000));
+    expect(got.paid).toBe(want);
+    expect(got.balance.balance).toBe(start.balance - 20_000 * DOLLAR + want);
+    // the comp pool remembers it
+    expect((await tally(me.id)).comp).toBe(want);
     await play(soloStub('dice', me.id), 100, 0);
     await new Promise((r) => setTimeout(r, 1_500));
     expect(c.msgs.filter((m: any) => m.t === 'feat')).toEqual([]);
@@ -300,8 +396,8 @@ describe('tallies', () => {
     const d = `d:${casinoDay(Date.now())}:`;
     const day = casinoDay(Date.now());
     expect(t).toEqual({
-      rounds: 4, won: 900 + 4_500 + 2_000, 'won:dice': 7_400, 'wins:dice': 3, best: 4_500,
-      [`${d}rounds`]: 4, [`${d}won`]: 7_400, [`${d}wins:dice`]: 3, [`${d}best`]: 4_500,
+      rounds: 4, won: 900 + 4_500 + 2_000, 'won:dice': 7_400, 'wins:dice': 3, best: 4_500, theo: 35,
+      [`${d}rounds`]: 4, [`${d}won`]: 7_400, [`${d}wins:dice`]: 3, [`${d}best`]: 4_500, [`${d}theo`]: 35,
       // v6 stats6: the leaderboards' keys ride along; the run of wins survived the eviction too
       feats: 1, wins: 3, 'rounds:dice': 4, lost: 1_000, 'lost:dice': 1_000, worst: 1_000, 'worst:dice': 1_000, streak: 2,
       [dayKey(day)]: 6_400, [weekKey(weekOf(day))]: 6_400,

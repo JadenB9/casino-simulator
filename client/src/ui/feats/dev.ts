@@ -49,7 +49,8 @@ const TALLY: Record<string, number> = {
 };
 
 const fixture: FeatsApi = {
-  feats: () => new Promise<FeatsResponse>((r) => setTimeout(() => r({ feats: EARNED.map(([feat, d]) => ({ feat, at: now - d * DAY })), tally: TALLY }), 250)),
+  // (Four of a Kind was hit on a $25 hand: $31.25 of its $2,500)
+  feats: () => new Promise<FeatsResponse>((r) => setTimeout(() => r({ feats: EARNED.map(([feat, d]) => ({ feat, at: now - d * DAY, ...(feat === 'vp-quads' ? { paid: 3_125 } : {}) })), tally: TALLY }), 250)),
   saveLook: async (look: Look) => look,
 };
 

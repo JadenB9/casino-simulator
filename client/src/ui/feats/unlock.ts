@@ -17,7 +17,7 @@ const QUEUE_MAX = 4;
 
 export class UnlockCards {
   private box: HTMLElement | null = null;
-  private queue: string[] = [];
+  private queue: { feat: string; paid?: number }[] = [];
   private busy = false;
   private timer = 0;
 
@@ -28,9 +28,10 @@ export class UnlockCards {
     private readonly onOpen?: (feat: string) => void,
   ) {}
 
-  show(feat: string): void {
+  /** `paid`: the cash it paid (from the table), when known. */
+  show(feat: string, paid?: number): void {
     if (!featOf(feat)) return;
-    this.queue.push(feat);
+    this.queue.push({ feat, paid });
     while (this.queue.length > QUEUE_MAX) this.queue.shift();
     if (!this.busy) this.next();
   }
@@ -44,7 +45,8 @@ export class UnlockCards {
   }
 
   private next(): void {
-    const id = this.queue.shift();
+    const next = this.queue.shift();
+    const id = next?.feat;
     const f = id ? featOf(id) : null;
     if (!id || !f) {
       this.busy = false;
@@ -64,14 +66,14 @@ export class UnlockCards {
     text.append(
       el('div', 'ft-card-kind', unlockKind(f)),
       el('div', 'ft-card-name', f.name),
-      el('div', 'ft-card-sub', unlockSub(f)),
+      el('div', 'ft-card-sub', unlockSub(f, next?.paid)),
     );
     card.append(medal(true), text);
     card.addEventListener('click', () => this.onOpen?.(id));
     this.box.replaceChildren(card);
     if (this.sfx && !this.sfx.muted) {
       this.sfx.play('ui-switch', { volume: 0.55 });
-      if (f.reward.cash) this.sfx.play('chips-stack', { volume: 0.5, delay: 0.22 });
+      if ((next?.paid ?? f.reward.cash ?? 0) > 0) this.sfx.play('chips-stack', { volume: 0.5, delay: 0.22 });
     }
     this.timer = window.setTimeout(() => {
       card.classList.add('out');

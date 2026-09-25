@@ -47,6 +47,8 @@ export interface TableFeat {
   feat: string;
   at: number;
   balance?: { balance: number; inPlay: number; rev: number };
+  /** The cash it paid (it scales with the round's stake): short of the listed amount, the card says so. */
+  paid?: number;
 }
 
 export interface FeatsUi {
@@ -110,15 +112,15 @@ export function mountFeats(deps: FeatsDeps): FeatsUi {
 
   /** Feats already announced (or being announced) this page, so the floor's copy doesn't repeat one. */
   const told = new Set<string>();
-  const land = (feat: string, at: number, balance?: TableFeat['balance']) => {
+  const land = (feat: string, at: number, balance?: TableFeat['balance'], paid?: number) => {
     // The profile learns of the feat with the money it paid (the HUD's session net leaves that
     // cash out, so the two go together); without the money, the next profile read brings both.
     const p = session.profile;
-    const paid = !(featOf(feat)?.reward.cash) || balance !== undefined;
-    if (paid && p && !(p.feats ?? []).some((f) => f.feat === feat)) session.set({ ...p, feats: [...(p.feats ?? []), { feat, at }] });
+    const known = !(featOf(feat)?.reward.cash) || (balance !== undefined && paid !== undefined);
+    if (known && p && !(p.feats ?? []).some((f) => f.feat === feat)) session.set({ ...p, feats: [...(p.feats ?? []), { feat, at, ...(paid !== undefined ? { paid } : {}) }] });
     if (balance) deps.session.balance?.(balance.balance, balance.inPlay, balance.rev);
-    cards.show(feat);
-    sheet?.earned(feat, at);
+    cards.show(feat, paid);
+    sheet?.earned(feat, at, paid);
   };
 
   return {
@@ -137,7 +139,7 @@ export function mountFeats(deps: FeatsDeps): FeatsUi {
       const go = () => {
         if (done) return;
         done = true;
-        land(m.feat, m.at, m.balance);
+        land(m.feat, m.at, m.balance, m.paid);
       };
       if (!whenShown) return go();
       whenShown(go);

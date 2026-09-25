@@ -26,8 +26,8 @@ describe('the HUD session net', () => {
 
   it("leaves an achievement's cash out, and counts only what was earned since", () => {
     const start = netStart(profile({ feats: [{ feat: 'first-win', at: 1 }] }), 0);
-    // won $100 at play; Long Odds paid $1,000 beside it
-    const now = profile({ balance: 51_100 * D, feats: [{ feat: 'first-win', at: 1 }, { feat: 'dc-long', at: 2 }] });
+    // won $100 at play; Long Odds paid $12.50 beside it (its cash scales with the stake)
+    const now = profile({ balance: 50_112.5 * D, feats: [{ feat: 'first-win', at: 1 }, { feat: 'dc-long', at: 2, paid: 12.5 * D }] });
     expect(sessionNet(now, start, null, 0)).toBe(100 * D);
   });
 

@@ -10,7 +10,8 @@ import type { GameEngine, GameEvent, GameId, RoundResult, Step } from '../../sha
 import { isRefusal } from '../../shared/src/engine.ts';
 import { engineFor } from '../../shared/src/games/index.ts';
 import { CATALOG } from '../../shared/src/games/catalog.ts';
-import { DAILY_COUNT, FEATS, FEAT_GAMES, casinoDay, dailyFeats, featOf, tallyValue } from '../../shared/src/feats.ts';
+import { DAILY_COUNT, FEATS, FEAT_GAMES, GAME_EDGE, MOMENT_SHARE, cashFor, casinoDay, dailyFeats, featOf, fullStake, momentRate, tallyValue } from '../../shared/src/feats.ts';
+import { CASE_INFO } from '../../shared/src/games/cases/rules.ts';
 import { TableSim } from '../../shared/test/helpers/table-sim.ts';
 import { seededRng } from '../../shared/test/helpers/seeded.ts';
 import { BUY_IN, ENGINE_READY, LOBBY_GAMES, botDoneBetting, botMove, type Rand } from '../../scripts/load/bots.ts';
@@ -83,10 +84,119 @@ describe('the list', () => {
   });
 });
 
+describe('what feats cost the house (shared/src/feats.ts)', () => {
+  const cashMoments = FEATS.filter((f) => f.odds !== undefined);
+
+  it("every achievement with cash scales it; at each game their expected pay is at most half a round's cost", () => {
+    const byGame = new Map<string, number>();
+    for (const f of FEATS.filter((x) => x.kind === 'achievement' && x.reward.cash)) {
+      expect(f.odds, f.id).toBeGreaterThan(0);
+      expect(f.odds!, f.id).toBeLessThanOrEqual(1);
+      const rate = momentRate(f)!;
+      expect(rate, f.id).toBeGreaterThan(0);
+      byGame.set(f.game!, (byGame.get(f.game!) ?? 0) + f.odds! * rate);
+    }
+    for (const [g, pay] of byGame) expect(pay, g).toBeLessThanOrEqual(MOMENT_SHARE * GAME_EDGE[g as GameId] * (1 + 1e-9));
+    // the full cash is reached exactly at fullStake, and a dollar less falls short
+    for (const f of cashMoments) {
+      const full = fullStake(f)!;
+      expect(cashFor(f, { stake: full }), f.id).toBe(f.reward.cash);
+      expect(cashFor(f, { stake: full - 100 }), f.id).toBeLessThan(f.reward.cash!);
+      expect(cashFor(f, { stake: full * 10 }), f.id).toBe(f.reward.cash);
+      expect(cashFor(f, { stake: 0 }), f.id).toBe(0);
+    }
+  });
+
+  it("the owner's examples: Clean Sweep and Long Odds on $1 pay cents", () => {
+    expect(cashFor(featOf('mn-clear')!, { stake: 100 })).toBe(6);
+    expect(fullStake(featOf('mn-clear')!)).toBe(160_000 * 100);
+    expect(cashFor(featOf('dc-long')!, { stake: 100 })).toBe(10);
+    expect(cashFor(featOf('rl-straight')!, { stake: 100 })).toBe(0);
+  });
+
+  it("Hold'em pays no cash (no house edge); nor does the first win; count challenges and dailies are comps", () => {
+    for (const f of FEATS.filter((x) => x.game === 'holdem')) expect(f.reward.cash ?? 0, f.id).toBe(0);
+    expect(featOf('first-win')!.reward.cash).toBeUndefined();
+    for (const id of ['rounds-100', 'rounds-1000', 'rounds-10000', 'games-5']) expect(featOf(id)!.comp, id).toBe(true);
+    for (const f of dailyFeats('2026-09-25')) expect(f.comp).toBe(true);
+    // every cash challenge left paying as listed is an amount won
+    for (const f of FEATS.filter((x) => x.kind === 'challenge' && x.reward.cash && !x.comp)) expect(f.tally, f.id).toMatch(/^(won|best|won:)/);
+  });
+
+  it('a comp pays half of what play has cost, less what comps have paid, and a daily at most half of the day', () => {
+    const r100 = featOf('rounds-100')!;
+    expect(cashFor(r100, { tally: { theo: 150_000 } })).toBe(75_000);
+    expect(cashFor(r100, { tally: { theo: 150_000, comp: 74_000 } })).toBe(1_000);
+    expect(cashFor(r100, { tally: { theo: 150_000, comp: 80_000 } })).toBe(0);
+    expect(cashFor(r100, { tally: { theo: 10_000_000 } })).toBe(r100.reward.cash);
+    const d = dailyFeats('2026-09-25')[0]!;
+    expect(cashFor(d, { tally: { theo: 10_000_000, 'd:2026-09-25:theo': 300 } })).toBe(150);
+  });
+
+  it('the chances are true upper bounds, from the games themselves', () => {
+    const odds = (id: string) => featOf(id)!.odds!;
+    // Mines: clearing a board is most likely with 1 mine or 24: 1 in 25
+    let clear = 0;
+    for (let m = 1; m <= 24; m++) {
+      let ways = 1;
+      for (let k = 0; k < m; k++) ways = (ways * (25 - k)) / (k + 1);
+      clear = Math.max(clear, 1 / ways);
+    }
+    expect(clear).toBeLessThanOrEqual(odds('mn-clear') + 1e-12);
+    // ten gems cashed out: at best (1 mine) C(24,10)/C(25,10) = 15/25
+    expect(15 / 25).toBeLessThanOrEqual(odds('mn-gems'));
+    // Keno: six or more of your picks among the ten drawn, best over 6-10 picks; every pick hit with 5+
+    const C = (n: number, k: number) => { let r = 1; for (let i = 0; i < k; i++) r = (r * (n - i)) / (i + 1); return r; };
+    const hits = (k: number, h: number) => (C(k, h) * C(40 - k, 10 - h)) / C(40, 10);
+    let catch6 = 0;
+    let sweep = 0;
+    for (let k = 1; k <= 10; k++) {
+      let p = 0;
+      for (let h = 6; h <= k; h++) p += hits(k, h);
+      catch6 = Math.max(catch6, p);
+      if (k >= 5) sweep = Math.max(sweep, hits(k, k));
+    }
+    expect(catch6).toBeLessThanOrEqual(odds('kn-catch'));
+    expect(sweep).toBeLessThanOrEqual(odds('kn-sweep'));
+    // Plinko: an end bin, best on 8 rows; the 16-row top
+    expect(2 / 2 ** 8).toBeLessThanOrEqual(odds('pk-edge'));
+    expect(2 / 2 ** 16).toBeLessThanOrEqual(odds('pk-top'));
+    // Limbo and Crash: P(result >= x) = 0.99/x
+    expect(0.99 / 10).toBeLessThanOrEqual(odds('lb-10x'));
+    expect(0.99 / 100).toBeLessThanOrEqual(odds('lb-100x'));
+    expect(0.99 / 10).toBeLessThanOrEqual(odds('cs-10x'));
+    expect(0.99 / 100).toBeLessThanOrEqual(odds('cs-100x'));
+    // Dice: a 5% chance at most; Coinflip: 5 and 10 right calls
+    expect(0.05).toBeLessThanOrEqual(odds('dc-long'));
+    expect(1 / 32).toBeLessThanOrEqual(odds('cf-five'));
+    expect(1 / 1_024).toBeLessThanOrEqual(odds('cf-ten'));
+    // Tower: nine rows on Easy (3 in 4 each)
+    expect((3 / 4) ** 9).toBeLessThanOrEqual(odds('tw-top'));
+    // Wheel: 10x or more is only the High wheels' one segment, 1 in 20 at best; the top of the 50
+    expect(Math.max(...([10, 20, 30, 40, 50] as const).map((n) => WHEELS.high[n].filter((m) => m >= 1_000).length / n))).toBeLessThanOrEqual(odds('wh-big'));
+    expect(1 / 50).toBeLessThanOrEqual(odds('wh-top'));
+    // Cases: 20x and 100x items, the best case for each
+    const share = (min: number) => Math.max(...Object.values(CASE_INFO).map((c) => c.items.filter((i) => i.mult >= min).reduce((a, i) => a + i.weight, 0) / c.items.reduce((a, i) => a + i.weight, 0)));
+    expect(share(2_000)).toBeLessThanOrEqual(odds('ca-epic'));
+    expect(share(10_000)).toBeLessThanOrEqual(odds('ca-legendary'));
+    // Diamonds: 210 and 7 of the 16,807 hands
+    expect(210 / 16_807).toBeLessThanOrEqual(odds('dm-four'));
+    expect(7 / 16_807).toBeLessThanOrEqual(odds('dm-five'));
+    // Big Six, Bandit Wheel, Sic Bo, Three Card trips and straight flushes
+    expect(2 / 54).toBeLessThanOrEqual(odds('b6-star'));
+    expect(2 / 25).toBeLessThanOrEqual(odds('bw-10'));
+    expect(6 / 216).toBeLessThanOrEqual(odds('sb-triple'));
+    expect(52 / 22_100).toBeLessThanOrEqual(odds('tc-trips'));
+    expect(48 / 22_100).toBeLessThanOrEqual(odds('tc-straight-flush'));
+  });
+});
+
 describe('tallies', () => {
   it('a winning round counts its profit, a losing one only that it was played', () => {
+    // theo: what the round cost on average, its stake times the game's lowest edge (2.7% at roulette)
     expect(roundFacts('roulette', 'american', { events: [], state: null }, round(1_000, 3_600)).tally).toEqual({
       rounds: 1,
+      theo: 27,
       won: 2_600,
       'won:roulette': 2_600,
       'wins:roulette': 1,
@@ -97,14 +207,17 @@ describe('tallies', () => {
     });
     expect(roundFacts('roulette', 'american', { events: [], state: null }, round(1_000, 0)).tally).toEqual({
       rounds: 1,
+      theo: 27,
       'rounds:roulette': 1,
       lost: 1_000,
       'lost:roulette': 1_000,
       worst: 1_000,
       'worst:roulette': 1_000,
     });
-    // a push is no win (and no loss)
-    expect(roundFacts('blackjack', '', { events: [], state: null }, round(1_000, 1_000)).tally).toEqual({ rounds: 1, 'rounds:blackjack': 1 });
+    // a push is no win (and no loss); 0.3% of $10 at blackjack is 3 cents
+    expect(roundFacts('blackjack', '', { events: [], state: null }, round(1_000, 1_000)).tally).toEqual({ rounds: 1, theo: 3, 'rounds:blackjack': 1 });
+    // Hold'em has no house edge: no theo
+    expect(roundFacts('holdem', '', { events: [], state: null }, round(1_000, 1_000)).tally).toEqual({ rounds: 1, 'rounds:holdem': 1 });
   });
 
   it('first-win comes with any profit, at any game', () => {
@@ -113,7 +226,7 @@ describe('tallies', () => {
   });
 
   it('nothing staked, the test game, or numbers that are not money count for nothing', () => {
-    const none = { tally: {}, moments: [] } satisfies RoundFacts;
+    const none = { tally: {}, moments: [], stake: 0 } satisfies RoundFacts;
     expect(roundFacts('slots', 'sevens', { events: [], state: null }, round(0, 5_000))).toEqual(none);
     expect(roundFacts('highcard', '', { events: [], state: null }, round(1_000, 2_000))).toEqual(none);
     expect(roundFacts('dice', '', { events: [], state: null }, round(-5, 100))).toEqual(none);
@@ -174,7 +287,7 @@ describe('daily challenges', () => {
     expect(f.tally).toMatchObject({ 'd:2026-09-25:rounds': 1, 'd:2026-09-25:won': 150, 'd:2026-09-25:wins:dice': 1, 'd:2026-09-25:best': 150 });
     const lost = roundFacts('dice', '', { events: [], state: null }, round(100, 0), '2026-09-25');
     // (and v6 stats6's keys for the loss)
-    expect(lost.tally).toEqual({ rounds: 1, 'd:2026-09-25:rounds': 1, 'rounds:dice': 1, lost: 100, 'lost:dice': 100, worst: 100, 'worst:dice': 100 });
+    expect(lost.tally).toEqual({ rounds: 1, 'd:2026-09-25:rounds': 1, theo: 1, 'd:2026-09-25:theo': 1, 'rounds:dice': 1, lost: 100, 'lost:dice': 100, worst: 100, 'worst:dice': 100 });
   });
 
   it("only the day's own are met, from the day's tallies", () => {
@@ -343,7 +456,9 @@ describe('the card tables', () => {
 
   it("video poker: the result's hand rank", () => {
     const res = (rank: number) => ({ type: 'result', seat: 0, rank, name: '', coins: 5, denom: 100, credits: 0, payout: 0 });
-    expect(moments('videopoker', [res(9)])).toEqual(['vp-royal']);
+    expect(moments('videopoker', [res(9)], round(2_500, 10_000_000))).toEqual(['vp-royal']);
+    // a royal on a $5 bet is a great hand, but the pendant wants $25 behind it
+    expect(moments('videopoker', [res(9)], round(500, 400_000))).toEqual([]);
     expect(moments('videopoker', [res(8)])).toEqual(['vp-straight-flush']);
     expect(moments('videopoker', [res(7)])).toEqual(['vp-quads']);
     expect(moments('videopoker', [res(6)])).toEqual([]);
@@ -355,20 +470,22 @@ describe('the slot machines', () => {
     ({ type: 'reels', stops: [0, 0, 0], spin: 0, freeLeft: 0, lines: [], hits: [], combo: null, wilds: 0, scatters: 0, scatterWin: 0, win: 0, trigger: false, multiplier: 1, ...over }) as SlotsEvent;
 
   it("each machine's top award: the head of the pay glass, or five of its best symbol on a line", () => {
-    expect(moments('slots', [reels({ combo: 'three7' })], round(300, 300_000), 'sevens')).toContain('sl-jackpot');
+    expect(moments('slots', [reels({ combo: 'three7' })], round(3_000, 3_000_000), 'sevens')).toContain('sl-jackpot');
     expect(moments('slots', [reels({ combo: 'three3B' })], round(300, 30_000), 'sevens')).not.toContain('sl-jackpot');
-    expect(moments('slots', [reels({ combo: 'threeWX' })], round(300, 300_000), 'wild')).toContain('sl-jackpot');
+    expect(moments('slots', [reels({ combo: 'threeWX' })], round(3_000, 3_000_000), 'wild')).toContain('sl-jackpot');
     // three sevens is the top on Classic Sevens, not on 5x Wild
     expect(moments('slots', [reels({ combo: 'three7' })], round(300, 30_000), 'wild')).not.toContain('sl-jackpot');
-    expect(moments('slots', [reels({ combo: 'threeDI' })], round(300, 300_000), 'diamonds')).toContain('sl-jackpot');
+    expect(moments('slots', [reels({ combo: 'threeDI' })], round(3_000, 3_000_000), 'diamonds')).toContain('sl-jackpot');
     const line = (symbol: string, count: number) => ({ line: 3, symbol, count, win: 1_000 });
-    expect(moments('slots', [reels({ lines: [line('DIAMOND', 5)] })], round(100, 100_000), 'neon')).toContain('sl-jackpot');
+    expect(moments('slots', [reels({ lines: [line('DIAMOND', 5)] })], round(2_500, 2_500_000), 'neon')).toContain('sl-jackpot');
     expect(moments('slots', [reels({ lines: [line('DIAMOND', 4)] })], round(100, 20_000), 'neon')).not.toContain('sl-jackpot');
-    expect(moments('slots', [reels({ lines: [line('SEVEN', 5)] })], round(100, 100_000), 'cherries')).toContain('sl-jackpot');
-    expect(moments('slots', [reels({ lines: [line('CART', 5)] })], round(100, 100_000), 'goldrush')).toContain('sl-jackpot');
+    expect(moments('slots', [reels({ lines: [line('SEVEN', 5)] })], round(2_500, 2_500_000), 'cherries')).toContain('sl-jackpot');
+    expect(moments('slots', [reels({ lines: [line('CART', 5)] })], round(2_500, 2_500_000), 'goldrush')).toContain('sl-jackpot');
     expect(moments('slots', [reels({ lines: [line('PICK', 5)] })], round(100, 50_000), 'goldrush')).not.toContain('sl-jackpot');
+    // a pendant's moment needs a $25 round: on $3 the jackpot pays its line, not the pendant
+    expect(moments('slots', [reels({ combo: 'three7' })], round(300, 300_000), 'sevens')).not.toContain('sl-jackpot');
     // in a free game too
-    expect(moments('slots', [reels({}), reels({ spin: 3, lines: [line('DIAMOND', 5)] })], round(100, 100_000), 'neon')).toContain('sl-jackpot');
+    expect(moments('slots', [reels({}), reels({ spin: 3, lines: [line('DIAMOND', 5)] })], round(2_500, 2_500_000), 'neon')).toContain('sl-jackpot');
   });
 
   it('a bonus: free games started, or the Cherry Wheel', () => {
