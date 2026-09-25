@@ -1,0 +1,91 @@
+/* Cases on the online site: the last drops along the top, the reel under its gold marker, the
+   item it stopped on, and everything the case holds along the bottom. Design pixels of the
+   1280 x 800 page (the board is 950 x 702). Each rarity sets --ca-r, its colour. */
+
+.r-common { --ca-r: #9aa7b5; }
+.r-uncommon { --ca-r: #4fb3ff; }
+.r-rare { --ca-r: #3b6cff; }
+.r-epic { --ca-r: #9b5cff; }
+.r-legendary { --ca-r: #e040fb; }
+.r-mythic { --ca-r: #ff4d4f; }
+.r-exotic { --ca-r: #ffc53d; }
+
+.ca-board { position: absolute; inset: 0; }
+
+/* An item card: its picture over a glow of its rarity, a bar of that colour along the foot */
+.ca-card, .ca-item, .ca-drop {
+  position: relative; display: grid; justify-items: center; align-content: start; overflow: hidden;
+  background: linear-gradient(180deg, #1d313e, #152631); border-radius: 6px;
+  box-shadow: inset 0 -4px 0 var(--ca-r), inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+.ca-glow {
+  position: absolute; left: 50%; top: 42%; width: 120%; aspect-ratio: 1; translate: -50% -50%;
+  background: radial-gradient(closest-side, var(--ca-r), transparent); opacity: 0.28; pointer-events: none;
+}
+.ca-icon { position: relative; display: block; filter: drop-shadow(0 6px 8px rgba(0, 0, 0, 0.45)); }
+.ca-card-mult { position: relative; font-family: var(--os-num); font-weight: 600; font-variant-numeric: tabular-nums; color: var(--os-ink); }
+.ca-card-name { position: relative; font-size: 12px; font-weight: 600; color: var(--os-ink-2); white-space: nowrap; }
+
+/* The last drops, newest on the left */
+.ca-drops { position: absolute; top: 18px; left: 24px; right: 24px; height: 58px; display: flex; align-items: center; gap: 14px; }
+.ca-drops-list { display: flex; gap: 6px; }
+.ca-drop { width: 64px; height: 58px; padding-top: 4px; }
+.ca-drop .ca-icon { width: 32px; height: 32px; }
+.ca-drop .ca-card-mult { font-size: 14px; }
+.ca-drop.fresh { animation: ca-drop-in 0.3s var(--ease, ease-out); }
+@keyframes ca-drop-in { from { opacity: 0; translate: -18px 0; } }
+
+/* The reel */
+.ca-reel {
+  position: absolute; top: 90px; left: 24px; width: 902px; height: 210px; overflow: hidden;
+  border-radius: 8px; background: #0b1720; box-shadow: inset 0 0 0 1px var(--os-line);
+}
+.ca-track { position: absolute; left: 0; top: 20px; display: flex; gap: 8px; will-change: transform; }
+.ca-card { flex: none; width: 132px; height: 170px; padding-top: 18px; gap: 8px; }
+.ca-card .ca-icon { width: 90px; height: 90px; }
+.ca-card .ca-card-mult { font-size: 22px; }
+.ca-reel.running .ca-card { filter: brightness(0.92); }
+.ca-card.won { box-shadow: inset 0 -4px 0 var(--ca-r), inset 0 0 0 2px var(--ca-r), 0 0 28px var(--ca-r); z-index: 1; }
+.ca-card.won .ca-glow { opacity: 0.6; }
+.ca-card.won .ca-icon { animation: ca-won 0.5s var(--ease, ease-out); }
+@keyframes ca-won { 40% { scale: 1.16; } }
+.ca-marker {
+  position: absolute; left: 50%; top: 0; bottom: 0; width: 3px; margin-left: -1.5px; z-index: 3;
+  background: #ffc53d; box-shadow: 0 0 12px rgba(255, 197, 61, 0.8);
+}
+.ca-marker::before, .ca-marker::after {
+  content: ''; position: absolute; left: 50%; width: 18px; height: 11px; margin-left: -9px; background: #ffc53d;
+}
+.ca-marker::before { top: 0; clip-path: polygon(0 0, 100% 0, 50% 100%); }
+.ca-marker::after { bottom: 0; clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+.ca-fade { position: absolute; top: 0; bottom: 0; width: 120px; z-index: 2; pointer-events: none; }
+.ca-fade.left { left: 0; background: linear-gradient(90deg, #0b1720, rgba(11, 23, 32, 0)); }
+.ca-fade.right { right: 0; background: linear-gradient(270deg, #0b1720, rgba(11, 23, 32, 0)); }
+
+/* What the reel stopped on */
+.ca-result { position: absolute; top: 318px; left: 24px; right: 24px; height: 40px; display: flex; justify-content: center; align-items: center; gap: 14px; }
+.ca-result-idle { font-size: 16px; color: var(--os-ink-3); }
+.ca-result-rarity {
+  padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+  color: #0b1720; background: var(--ca-r);
+}
+.ca-result-name { font-size: 22px; font-weight: 700; }
+.ca-result-mult { font-family: var(--os-num); font-size: 26px; font-variant-numeric: tabular-nums; color: var(--os-ink-2); }
+.ca-result-mult.win { color: var(--os-win); }
+.ca-result > * { animation: ca-result-in 0.3s var(--ease, ease-out); }
+@keyframes ca-result-in { from { opacity: 0; translate: 0 6px; } }
+
+/* Everything in the case, the best first */
+.ca-contents { position: absolute; left: 24px; right: 24px; bottom: 20px; display: grid; gap: 10px; }
+.ca-contents-head { display: flex; justify-content: space-between; align-items: baseline; }
+.ca-contents-about { font-size: 13px; color: var(--os-ink-3); }
+.ca-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+.ca-item { height: 128px; padding-top: 6px; gap: 1px; }
+.ca-item .ca-icon { width: 54px; height: 54px; }
+.ca-item .ca-card-mult { font-size: 19px; }
+.ca-item-odds { position: relative; font-family: var(--os-num); font-size: 13px; color: var(--os-ink-3); font-variant-numeric: tabular-nums; }
+
+/* The case choice: two by two, each with its top prize */
+.os-seg.ca-cases { grid-auto-flow: row; grid-template-columns: 1fr 1fr; }
+.os-seg.ca-cases button { height: 52px; display: grid; align-content: center; gap: 2px; }
+.ca-case-top { font-size: 11px; font-weight: 700; color: var(--ca-r); }

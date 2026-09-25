@@ -168,6 +168,45 @@ for (const game of games) {
     out.notes.push(`spins ${spins.length}: ${spins.map((s) => `${s.risk[0]}${s.segments} ${s.mult / 100}x`).join(', ')}; chips shown ${await checkChips()}`);
   }
 
+  if (game === 'cases') {
+    await setBet(25);
+    await page.click('.os-side .ca-cases button:has-text("High Roller")');
+    await settle(300);
+    await shot('1-high-roller');
+    await page.click('.os-action.go');
+    await settle(1800);
+    await shot('2-reel-running');
+    await settle(4600);
+    await shot('3-opened');
+    const open = events('open').at(-1);
+    check(!!open && open.case === 'highroller' && open.bet === 2500 && !open.quick, 'a High Roller case went out at $25');
+    const won = await page.$eval('.ca-card.won', (e) => Number(e.dataset.item)).catch(() => null);
+    check(won === open.item, `the reel stopped on the server's item (${won} = ${open.item})`);
+    // The marker sits over the winning card.
+    const centred = await page.evaluate(() => {
+      const m = document.querySelector('.ca-marker').getBoundingClientRect();
+      const c = document.querySelector('.ca-card.won').getBoundingClientRect();
+      const x = m.left + m.width / 2;
+      return x > c.left && x < c.right;
+    });
+    check(centred, 'the marker is over the winning card');
+    out.notes.push(`opened: item ${open.item} ${open.mult / 100}x paid ${money(open.payout)}; result line "${await text('.ca-result')}"`);
+    // Quick opens across the other cases.
+    await page.click('.os-side .os-seg button:has-text("Quick open")');
+    for (const name of ['Starter', 'Classic', 'Vault']) {
+      await page.click(`.os-side .ca-cases button:has-text("${name}")`);
+      for (let i = 0; i < 3; i++) {
+        await page.keyboard.press('Space');
+        await settle(1700);
+      }
+    }
+    await shot('4-quick-vault');
+    const opens = events('open');
+    check(opens.slice(1).every((o) => o.quick && o.restAt - 0 > 0), 'quick opens went out quick');
+    check(opens.every((o) => o.payout === (o.bet / 100) * o.mult), 'every case paid its item exactly');
+    out.notes.push(`opens ${opens.length}: ${opens.map((o) => `${o.case} ${o.mult / 100}x`).join(', ')}; chips shown ${await checkChips()}`);
+  }
+
   out.notes.push(`frames: ${frames.length}`);
   report.push(out);
   // Stand up, so the chips go home and the next run starts with a buy-in.
