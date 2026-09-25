@@ -368,7 +368,14 @@ if (checks.includes('happy')) {
   await a.p.waitForSelector('.bar-sheet', { timeout: 8000 });
   await a.p.waitForTimeout(400);
   await shot(a.p, 'happy-menu');
-  const tags = await a.p.evaluate(() => [...document.querySelectorAll('.bar-price')].slice(0, 2).map((e) => e.textContent));
+  // qa6: the menu is in sections now (dine6), the cocktail first: read the beer's own row
+  const tags = await a.p.evaluate(() => {
+    const row = (e) => {
+      for (let n = e; n; n = n.parentElement) if (n.textContent.includes('Imported lager')) return n;
+      return null;
+    };
+    return [...document.querySelectorAll('.bar-price')].filter((e) => row(e)).slice(0, 1).map((e) => e.textContent);
+  });
   console.log('happy: prices', JSON.stringify(tags));
   if (!tags[0]?.includes('$9') || !tags[0]?.includes('$4.50')) fail(`the beer struck through at $9, $4.50 now (${tags[0]})`);
   const banner = await a.p.evaluate(() => document.querySelector('.happy-banner:not([hidden])')?.textContent ?? '');
