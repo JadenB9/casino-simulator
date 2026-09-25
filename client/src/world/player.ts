@@ -360,7 +360,8 @@ export class Player {
     this.position.z = p.z;
     if (this.mouse.view === 'first' && !this.showing) {
       // through your eyes the body faces where you look, walking or not, unless a seat holds it
-      if (!this.sitting) this.heading = turn(this.heading, this.camYaw + Math.PI, 1 - Math.exp(-dt * 20));
+      // (a ride keeps its own heading: it carves where you steer, whatever you look at)
+      if (!this.sitting && !ride) this.heading = turn(this.heading, this.camYaw + Math.PI, 1 - Math.exp(-dt * 20));
     } else if (len > 0) {
       const want = Math.atan2(mx, mz);
       this.heading = turn(this.heading, want, 1 - Math.exp(-dt * 12));
