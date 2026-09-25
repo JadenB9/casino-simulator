@@ -33,6 +33,8 @@ import { Shopkeeper, type Boutique } from './shopkeeper.ts';
 import { Speech } from './speech.ts';
 import { Trays } from './tray.ts';
 import { Waiters } from './waiters.ts';
+// v6 celebs6: celebrity visits and the gift box (world/celebs/)
+import { Celebs, type CelebLink } from '../celebs/index.ts';
 import './life.css';
 
 export type { LifeApp } from './ctx.ts';
@@ -69,6 +71,8 @@ export class FloorLife {
   readonly bartender: Bartender;
   readonly bankers: Bankers;
   shopkeeper: Shopkeeper | null = null;
+  /** v6 celebs6: celebrities who drop in, and the gift box (world/celebs/); the app gives it its side with celebs.useApp. */
+  readonly celebs: Celebs;
   readonly grid: NavGrid;
   private readonly speech: Speech;
   private readonly trays = new Trays();
@@ -87,6 +91,8 @@ export class FloorLife {
     this.crew = new Crew(deps.characters, deps.collider, roles);
     deps.root.add(this.crew.group);
     this.speech = new Speech(deps.camera);
+    // v6 celebs6
+    this.celebs = new Celebs({ root: deps.root, camera: deps.camera, characters: deps.characters, grid: this.grid, speech: this.speech, player: deps.player, roomAt: (x, z) => roomAt(deps.plan, x, z) });
     this.ctx = {
       crew: this.crew,
       speech: this.speech,
@@ -111,6 +117,8 @@ export class FloorLife {
     this.offs.push(
       deps.interact.spots((p) => this.seating.spots(p)),
       deps.interact.spots((p) => (this.seating.seated ? [] : [...this.waiters.spots(p), ...this.bartender.spots(p), ...this.bankers.spots(p), ...(this.shopkeeper?.spots(p) ?? [])])),
+      // v6 celebs6: "Talk to <name>", "Open the gift box"
+      deps.interact.spots((p) => (this.seating.seated ? [] : this.celebs.spots(p))),
     );
   }
 
@@ -130,10 +138,11 @@ export class FloorLife {
     this.app = app;
   }
 
-  /** The floor socket, for seats (null: sitting stays on this screen). */
-  useLink(link: SeatLink | null): void {
+  /** The floor socket, for seats and the celebrities (null: sitting stays on this screen). */
+  useLink(link: (SeatLink & CelebLink) | null): void {
     this.link = link;
     this.seating.useLink(link);
+    this.celebs.useLink(link); // v6 celebs6
   }
 
   /** The bar's orders: every one paid for is made and brought by the staff from now on. */
@@ -178,6 +187,7 @@ export class FloorLife {
     this.shopkeeper?.update(dt);
     this.crew.update(dt, this.deps.camera, rooms, sees, this.roomOf);
     this.waiters.place();
+    this.celebs.update(dt, rooms, sees); // v6 celebs6
     this.speech.update(dt);
   }
 
@@ -190,6 +200,7 @@ export class FloorLife {
     for (const off of this.offs) off();
     this.useBar(null);
     this.seating.dispose();
+    this.celebs.dispose(); // v6 celebs6
     this.waiters.dispose();
     this.speech.dispose();
     this.crew.dispose();
