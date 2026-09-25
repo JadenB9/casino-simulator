@@ -245,7 +245,7 @@ export function buildRoom(plan: FloorPlan, b: Batch, m: Mats, glow: GlowMerge): 
         const x1 = Math.min(e.x1, r.inner.x1);
         const z0 = Math.max(e.z0, r.inner.z0);
         const z1 = Math.min(e.z1, r.inner.z1);
-        if (x1 > x0 && z1 > z0) b.box(brass, (x0 + x1) / 2, 0.006, (z0 + z1) / 2, x1 - x0, 0.006, z1 - z0);
+        if (x1 > x0 && z1 > z0) b.box(m.get('brass-inlay'), (x0 + x1) / 2, 0.006, (z0 + z1) / 2, x1 - x0, 0.006, z1 - z0);
       }
     }
     if (r.id === 'lobby') compass(r.cx, r.cz);
@@ -259,6 +259,7 @@ export function buildRoom(plan: FloorPlan, b: Batch, m: Mats, glow: GlowMerge): 
   /** A brass compass rose set into the lobby's marble. */
   function compass(x: number, z: number): void {
     const black = m.get('marble-black');
+    const brass = m.get('brass-inlay');
     const ring = (r0: number, r1: number, mat: THREE.Material, y: number) => b.add(new THREE.RingGeometry(r0, r1, 64), mat, new THREE.Matrix4().makeRotationX(-Math.PI / 2).premultiply(new THREE.Matrix4().makeTranslation(x, y, z)));
     ring(1.3, 1.36, brass, 0.007);
     ring(1.05, 1.3, black, 0.006);
