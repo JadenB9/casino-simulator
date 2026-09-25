@@ -47,7 +47,7 @@ export class Statues {
   readonly spots: StatueSpot[];
   private shown: Shown[] = [];
   private run = 0;
-  private golds: Partial<Record<Quality, THREE.MeshStandardMaterial | THREE.MeshLambertMaterial>> = {};
+  private golds: Partial<Record<Quality, THREE.MeshStandardMaterial | THREE.MeshPhongMaterial>> = {};
 
   constructor(private readonly deps: StatueDeps) {
     this.group.name = 'statues';
@@ -122,7 +122,8 @@ export class Statues {
         }
         m = s;
       } else {
-        m = new THREE.MeshLambertMaterial({ color: '#d9a746', emissive: '#3d2a08' });
+        // Low has no reflections to make metal of: a warm body colour and a hard highlight do it
+        m = new THREE.MeshPhongMaterial({ color: '#b98a34', specular: '#ffe29a', shininess: 48, emissive: '#2a1a04' });
       }
       m.name = 'statue-gold';
       this.golds[q] = m;

@@ -56,6 +56,9 @@ export const STATUE_POST = 0.72;
 /** Clear floor wanted round a plinth's base, and the height the figure reaches. */
 const CLEAR = 0.55;
 const TALL = 3.2;
+/** Above this, a solid is overhead (a palm's fronds): only the figure's own reach must miss it. */
+const OVERHEAD = 1.2;
+const FIGURE_R = 0.5;
 
 /**
  * The lobby's places for a statue (from its middle), best first: flanking the way in from the doors (the first one
@@ -86,8 +89,9 @@ export function statueSpots(plan: FloorPlan, n = STATUES): StatueSpot[] {
   const cx = (L.x0 + L.x1) / 2;
   const out: StatueSpot[] = [];
   const pool: [number, number][] = CANDIDATES.map(([x, z]) => [lobby.cx + x, lobby.cz + z]);
-  // after the chosen few, a grid over the lobby as a fallback (a plan that changed a lot)
-  for (let z = L.z0 + 1; z <= L.z1 - 1; z += 0.5) for (let x = L.x0 + 1; x <= L.x1 - 1; x += 0.5) pool.push([x, z]);
+  // after the chosen few, a grid down the lobby's sides as a fallback (a plan that changed a lot);
+  // never its middle, which is the way from the doors to everything
+  for (let z = L.z0 + 1; z <= L.z1 - 1; z += 0.5) for (let x = L.x0 + 1; x <= L.x1 - 1; x += 0.5) if (Math.abs(x - cx) >= 3.2) pool.push([x, z]);
   for (const [x, z] of pool) {
     if (out.length >= n) break;
     if (!clearFor(plan, L, x, z)) continue;
@@ -118,7 +122,8 @@ function clearFor(plan: FloorPlan, room: Rect, x: number, z: number): boolean {
       const fz = s.z + Math.cos(s.yaw) * 1.4;
       if (Math.hypot(fx - x, fz - z) < 1.6 + half) return false;
     }
-    if (Math.hypot(s.x - x, s.z - z) < r + half + CLEAR) return false;
+    const need = s.y0 >= OVERHEAD ? r + FIGURE_R : r + half + CLEAR;
+    if (Math.hypot(s.x - x, s.z - z) < need) return false;
   }
   return true;
 }

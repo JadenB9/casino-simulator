@@ -125,7 +125,7 @@ async function statues(quality) {
   // solid: walking into the middle of one leaves you outside its post
   const pushed = await page.evaluate((st) => {
     const c = window.casino;
-    const p = { x: st.x, z: st.z };
+    const p = { x: st.x + 0.05, z: st.z };
     c.world.collider.resolve(p, 0.3);
     return Math.hypot(p.x - st.x, p.z - st.z);
   }, s[0]);
@@ -134,12 +134,17 @@ async function statues(quality) {
   await place(page, [0, 1.75, 14.3], [0, 1.6, 7]);
   await wait(page, 0.6);
   await shot(page, `statues-${quality}-doors`);
-  await place(page, [s[0].x - 1.6, 1.6, s[0].z + 2.3], [s[0].x, 1.9, s[0].z]);
+  // in front of the newest, then its plaque, then all three from the pit's doorway
+  const front = (st, d, y) => [st.x + Math.sin(st.yaw) * d, y, st.z + Math.cos(st.yaw) * d];
+  await place(page, front(s[0], 3.2, 1.7), [s[0].x, 2.0, s[0].z]);
   await wait(page, 0.6);
   await shot(page, `statues-${quality}-close`);
-  await place(page, [s[1].x + 1.3, 1.5, s[1].z + 1.6], [s[1].x, 1.2, s[1].z]);
+  await place(page, front(s[1], 1.0, 0.8), [s[1].x, 0.5, s[1].z]);
   await wait(page, 0.6);
   await shot(page, `statues-${quality}-plaque`);
+  await place(page, [0, 2.2, 4.2], [0, 1.4, 12]);
+  await wait(page, 0.6);
+  await shot(page, `statues-${quality}-back`);
   // a new list replaces them: one statue, then none
   await page.evaluate(() => window.casino.fx.statues(1));
   await wait(page, 0.5);
