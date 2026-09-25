@@ -32,6 +32,7 @@ import { FULL_HOUSE, QUADS, cardInt, categoryOf, evaluate } from '../../shared/s
 import type { Card } from '../../shared/src/cards.ts';
 import type { Cents } from '../../shared/src/money.ts';
 import { moneyOf } from './transfer.ts';
+import { revealAt } from './floor/wins.ts';
 
 /** Unsent tallies wait at most this long after the first of them before going to D1. */
 export const FLUSH_MS = 120_000;
@@ -411,8 +412,11 @@ export async function featsOf(db: D1Database, accountId: number): Promise<{ tall
 export interface FeatOut {
   /** A message to this account's sockets at the table. */
   send(accountId: number, msg: TableServerMsg): void;
-  /** The floor's feed line (best effort). */
-  featEarned(accountId: number, name: string, feat: string): Promise<void>;
+  /**
+   * The floor's feed line (best effort), not before `showAt` (server time): the moment the
+   * player sees the round that earned it, so nobody hears of it before they do.
+   */
+  featEarned(accountId: number, name: string, feat: string, showAt: number): Promise<void>;
   /** The floor adds an earned emote to the player's wheel (best effort). */
   grant(accountId: number, emotes: EmoteId[]): Promise<void>;
 }
@@ -446,9 +450,10 @@ export class FeatBook {
     sql.exec(`CREATE TABLE IF NOT EXISTS feat_flush (account_id INTEGER PRIMARY KEY, seq INTEGER NOT NULL, body TEXT NOT NULL)`);
     // Feats earned here and not yet paid, each stamped once with when it was earned.
     // `tries` counts the batches sent for it: only a retry can find its own earlier try landed.
+    // `show_at` is when the player sees the round that earned it: the floor hears no sooner.
     sql.exec(`CREATE TABLE IF NOT EXISTS feat_todo (
       account_id INTEGER NOT NULL, feat TEXT NOT NULL, at INTEGER NOT NULL, tries INTEGER NOT NULL DEFAULT 0,
-      PRIMARY KEY (account_id, feat)) WITHOUT ROWID`);
+      show_at INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (account_id, feat)) WITHOUT ROWID`);
     sql.exec(`CREATE TABLE IF NOT EXISTS feat_meta (k TEXT PRIMARY KEY, v INTEGER NOT NULL) WITHOUT ROWID`);
     // after a restart, every account with unsent progress gets its challenges looked at again
     for (const r of sql.exec<{ account_id: number }>(`SELECT DISTINCT account_id FROM feat_pending`).toArray()) this.dirty.add(r.account_id);
@@ -459,9 +464,9 @@ export class FeatBook {
    * the rounds' facts worked out beforehand (roundFacts never throws, but it runs outside so a
    * bug in it could never roll a round back). True when there's something to pay.
    */
-  record(facts: { accountId: number; name: string; facts: RoundFacts }[], now: number): boolean {
+  record(facts: StepFacts[], now: number): boolean {
     let todo = false;
-    for (const { accountId, name, facts: f } of facts) {
+    for (const { accountId, name, facts: f, showAt } of facts) {
       const keys = Object.entries(f.tally);
       if (keys.length === 0 && f.moments.length === 0) continue;
       this.sql.exec(
@@ -476,7 +481,7 @@ export class FeatBook {
       const have = this.base.get(accountId)?.have;
       for (const feat of f.moments) {
         if (have?.has(feat) || !featOf(feat)) continue;
-        this.sql.exec(`INSERT OR IGNORE INTO feat_todo (account_id, feat, at) VALUES (?1, ?2, ?3)`, accountId, feat, now);
+        this.sql.exec(`INSERT OR IGNORE INTO feat_todo (account_id, feat, at, show_at) VALUES (?1, ?2, ?3, ?4)`, accountId, feat, now, showAt);
         todo = true;
       }
       if (keys.length === 0) continue;
@@ -488,7 +493,7 @@ export class FeatBook {
         continue;
       }
       for (const feat of this.meets(accountId)) {
-        this.sql.exec(`INSERT OR IGNORE INTO feat_todo (account_id, feat, at) VALUES (?1, ?2, ?3)`, accountId, feat, now);
+        this.sql.exec(`INSERT OR IGNORE INTO feat_todo (account_id, feat, at, show_at) VALUES (?1, ?2, ?3, ?4)`, accountId, feat, now, showAt);
         todo = true;
       }
     }
@@ -550,7 +555,9 @@ export class FeatBook {
       this.dirty.delete(a);
     }
     // 2. Feats to pay, oldest first; each account's tallies land first.
-    const todo = this.sql.exec<{ account_id: number; feat: string; at: number; tries: number }>(`SELECT account_id, feat, at, tries FROM feat_todo ORDER BY at, feat`).toArray();
+    const todo = this.sql
+      .exec<{ account_id: number; feat: string; at: number; tries: number; show_at: number }>(`SELECT account_id, feat, at, tries, show_at FROM feat_todo ORDER BY at, feat`)
+      .toArray();
     const flushed = new Set<number>();
     for (const t of todo) {
       const base = await this.loadBase(db, t.account_id);
@@ -566,7 +573,7 @@ export class FeatBook {
       const r = await unlockFeat(db, t.account_id, t.feat, t.at, t.tries > 0);
       base.have.add(t.feat);
       this.sql.exec(`DELETE FROM feat_todo WHERE account_id = ?1 AND feat = ?2`, t.account_id, t.feat);
-      if (r.kind === 'applied') await this.announce(out, t.account_id, t.feat, t.at, r.money);
+      if (r.kind === 'applied') await this.announce(out, t.account_id, t.feat, t.at, t.show_at, r.money);
     }
     // 3. Tallies whose time has come (a flush in flight is always due).
     const due = this.sql
@@ -583,12 +590,12 @@ export class FeatBook {
     );
   }
 
-  private async announce(out: FeatOut, accountId: number, feat: string, at: number, money?: { balance: Cents; inPlay: Cents; rev: number }): Promise<void> {
+  private async announce(out: FeatOut, accountId: number, feat: string, at: number, showAt: number, money?: { balance: Cents; inPlay: Cents; rev: number }): Promise<void> {
     const name = this.sql.exec<{ name: string }>(`SELECT name FROM feat_acct WHERE account_id = ?1`, accountId).toArray()[0]?.name ?? '';
     out.send(accountId, { t: 'feat', feat, at, ...(money ? { balance: money } : {}) });
     const emote = featOf(feat)?.reward.emote;
     await Promise.all([
-      name ? out.featEarned(accountId, name, feat).catch((err) => console.error('floor featEarned failed', err)) : null,
+      name ? out.featEarned(accountId, name, feat, showAt).catch((err) => console.error('floor featEarned failed', err)) : null,
       emote ? out.grant(accountId, [emote]).catch((err) => console.error('floor grant failed', err)) : null,
     ]);
   }
@@ -655,20 +662,29 @@ export class FeatBook {
   }
 }
 
+/** A finished round's facts, whose they are, and when its player sees it (floor/wins.ts revealAt). */
+export interface StepFacts {
+  accountId: number;
+  name: string;
+  facts: RoundFacts;
+  showAt: number;
+}
+
 /** The facts of every finished round in a step that belongs to someone at the table. */
 export function stepFacts(
   game: GameId,
   variant: string,
   step: Step<unknown>,
   who: (seat: number) => { accountId: number; name: string } | undefined,
-): { accountId: number; name: string; facts: RoundFacts }[] {
-  const out: { accountId: number; name: string; facts: RoundFacts }[] = [];
+  now: number,
+): StepFacts[] {
+  const out: StepFacts[] = [];
+  const showAt = revealAt(game, step.events, now);
   for (const r of step.rounds ?? []) {
     const w = who(r.seat);
     if (!w) continue;
     const facts = roundFacts(game, variant, step, r);
-    if (Object.keys(facts.tally).length || facts.moments.length) out.push({ ...w, facts });
+    if (Object.keys(facts.tally).length || facts.moments.length) out.push({ ...w, facts, showAt });
   }
   return out;
 }
-

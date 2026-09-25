@@ -1188,7 +1188,7 @@ export class CasinoTable extends DurableObject<Env> {
     const facts = step.rounds?.length ? stepFacts(m.game, m.variant, step, (seat) => {
       const mem = bySeat.get(seat);
       return mem ? { accountId: mem.account_id, name: mem.name } : undefined;
-    }) : [];
+    }, now) : [];
     let featWork = false;
     this.ctx.storage.transactionSync(() => {
       for (const [seat, stack] of stacks) {
@@ -1509,7 +1509,19 @@ export class CasinoTable extends DurableObject<Env> {
       send: (accountId, msg) => {
         for (const ws of this.ctx.getWebSockets(`a:${accountId}`)) this.send(ws, msg);
       },
-      featEarned: (accountId, name, feat) => this.floor().featEarned(accountId, name, feat),
+      // the floor hears once the player has seen the round (a spin still turning keeps it quiet)
+      featEarned: async (accountId, name, feat, showAt) => {
+        const wait = Math.min(showAt - Date.now(), 90_000);
+        const tell = async () => {
+          if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+          try {
+            await this.floor().featEarned(accountId, name, feat);
+          } catch (err) {
+            console.error('floor featEarned failed', err);
+          }
+        };
+        this.ctx.waitUntil(tell());
+      },
       grant: (accountId, emotes) => this.floor().grant(accountId, emotes),
     });
     this.scheduleAlarm();

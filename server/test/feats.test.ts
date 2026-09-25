@@ -103,6 +103,7 @@ describe('a feat earned at a table', () => {
     const stub = soloStub('dice', me.id);
 
     // a 4% roll that won: first-win and dc-long
+    const rolled = Date.now();
     expect(await play(stub, 100, 2_475, [longRoll(true)])).toBe(true);
     const first = await c.next((m) => m.t === 'feat' && m.feat === 'first-win', 5_000);
     const long = await c.next((m) => m.t === 'feat' && m.feat === 'dc-long', 5_000);
@@ -116,6 +117,8 @@ describe('a feat earned at a table', () => {
     // the feed
     const feed = await w.next((m) => m.t === 'feat' && m.name === 'ft_first_win' && m.feat === 'dc-long', 5_000);
     expect(feed.id).toBe(me.id);
+    // not before the player has seen the roll (a dice result shows for about a second)
+    expect(Date.now() - rolled).toBeGreaterThanOrEqual(900);
 
     // D1: a row per feat, a grant per cash reward, keyed by the feat
     expect(await count(`SELECT count(*) AS n FROM casino_feats WHERE account_id = ?1`, me.id)).toBe(2);

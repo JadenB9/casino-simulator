@@ -110,8 +110,11 @@ export function mountFeats(deps: FeatsDeps): FeatsUi {
   /** Feats already announced (or being announced) this page, so the floor's copy doesn't repeat one. */
   const told = new Set<string>();
   const land = (feat: string, at: number, balance?: TableFeat['balance']) => {
+    // The profile learns of the feat with the money it paid (the HUD's session net leaves that
+    // cash out, so the two go together); without the money, the next profile read brings both.
     const p = session.profile;
-    if (p && !(p.feats ?? []).some((f) => f.feat === feat)) session.set({ ...p, feats: [...(p.feats ?? []), { feat, at }] });
+    const paid = !(featOf(feat)?.reward.cash) || balance !== undefined;
+    if (paid && p && !(p.feats ?? []).some((f) => f.feat === feat)) session.set({ ...p, feats: [...(p.feats ?? []), { feat, at }] });
     if (balance) deps.session.balance?.(balance.balance, balance.inPlay, balance.rev);
     cards.show(feat);
     sheet?.earned(feat, at);
