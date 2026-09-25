@@ -756,6 +756,7 @@ function seatView(s: HoldemState, st: SeatState, viewer: number | null): HoldemS
     seat: st.seat,
     name: st.name,
     bot: st.bot,
+    ...(st.bot && st.persona && PERSONAS[st.persona] ? { style: PERSONAS[st.persona]!.label } : {}),
     stack: st.stack,
     sittingOut: st.sittingOut,
     waiting: st.waiting,

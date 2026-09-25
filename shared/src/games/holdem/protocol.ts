@@ -62,6 +62,8 @@ export interface HoldemSeatView {
   seat: number;
   name: string;
   bot: boolean;
+  /** Bots: what kind of player it is, in a few words ("Plays too many hands"). */
+  style?: string;
   /** Chips behind (not counting what is in front of the seat or in the pot). */
   stack: Cents;
   sittingOut: boolean;

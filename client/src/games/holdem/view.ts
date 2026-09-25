@@ -22,7 +22,7 @@ import { el } from '../../ui/kit.ts';
 import { serverNow } from '../../net/clock.ts';
 import { session } from '../../app/session.ts';
 import { ActionBar } from './actionbar.ts';
-import { advise, bannerOf, estimateEquity, onBoard, positionOf } from './advice.ts';
+import { advise, bannerOf, distOf, estimateEquity, onBoard, positionOf } from './advice.ts';
 import { holdemFelt, dealerButton, slotPoint, slotEdge, slotYaw, boardPoint, BOARD_SCALE, DEALER_POINT, TOP_Y } from './table.ts';
 import { hideNearChairs } from './model.ts';
 import './holdem.css';
@@ -303,6 +303,8 @@ export function mountHoldem(ctx: TableViewCtx): TableView {
     }
     o.name.textContent = sv.name;
     o.tag.hidden = !sv.bot;
+    // a bot's style, for whoever hovers its plate
+    o.plate.title = sv.bot && sv.style ? `${sv.name}: ${sv.style.charAt(0).toLowerCase()}${sv.style.slice(1)}` : '';
     o.avatar.querySelector('.he-initial')!.textContent = sv.name.slice(0, 1).toUpperCase();
     setStack(o, sv.stack, sv.allIn);
     const st = statusText(sv, view);
@@ -477,6 +479,7 @@ export function mountHoldem(ctx: TableViewCtx): TableView {
           canRaise: !!(legal.bet ?? legal.raise),
           opening: !!legal.bet,
           position: view.button === null ? 'middle' : positionOf(you.seat, dealt, view.button, view.sbSeat, view.bbSeat),
+          ...(view.button === null ? {} : { dist: distOf(you.seat, dealt, view.button, view.sbSeat, view.bbSeat), players: dealt.length }),
           raises,
         },
         equityMemo.value,

@@ -7,10 +7,10 @@ import { tendency, type Reads } from '../shared/src/games/holdem/reads.ts';
 const deals = Number(process.argv[2] ?? 300);
 const seed = Number(process.argv[3] ?? 1);
 const stats: ArenaStats = { decisions: 0, refused: 0, ms: 0, slowestMs: 0 };
-const run = (label: string, players: Parameters<typeof duplicateMatch>[0]) => {
+const run = (label: string, players: Parameters<typeof duplicateMatch>[0], teams?: string[]) => {
   const t0 = performance.now();
   const reads: Reads = {};
-  const r = duplicateMatch(players, deals, seed, stats, { reads });
+  const r = duplicateMatch(players, deals, seed, stats, { reads, teams });
   console.log(`${label} (${((performance.now() - t0) / 1000).toFixed(1)} s)\n${table(r)}`);
   for (const [name, read] of Object.entries(reads)) {
     const t = tendency(read);
@@ -38,6 +38,6 @@ if (which === 'cheese') {
 if (which === 'stakes') {
   // a table of bots drawn at each stakes, against a table drawn at another
   for (const [lo, hi] of [[100, 1_000_000], [100, 10_000], [10_000, 1_000_000]]) {
-    run(`Bots drawn at a $${hi / 100} big blind against bots drawn at $${lo / 100}`, [...drawnTable(hi, 3, seed, 'hi'), ...drawnTable(lo, 3, seed + 1, 'lo')]);
+    run(`Bots drawn at a $${hi / 100} big blind against bots drawn at $${lo / 100}`, [...drawnTable(hi, 3, seed, 'hi'), ...drawnTable(lo, 3, seed + 1, 'lo')], [`$${hi / 100} bots`, `$${hi / 100} bots`, `$${hi / 100} bots`, `$${lo / 100} bots`, `$${lo / 100} bots`, `$${lo / 100} bots`]);
   }
 }

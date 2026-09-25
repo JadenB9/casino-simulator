@@ -192,30 +192,42 @@ export interface MatchResult {
  * A duplicate match: `deals` deals at a table of these players, each deal played once per
  * rotation of the seats (all n of them), reads kept by name across the match.
  */
-export function duplicateMatch(players: readonly ArenaPlayer[], deals: number, seed: number, stats: ArenaStats, opts: { bb?: number; stackBB?: number; reads?: Reads } = {}): MatchResult[] {
+export function duplicateMatch(
+  players: readonly ArenaPlayer[],
+  deals: number,
+  seed: number,
+  stats: ArenaStats,
+  opts: { bb?: number; stackBB?: number; reads?: Reads; teams?: readonly string[] } = {},
+): MatchResult[] {
   const n = players.length;
   const deckRng = seededRng(seed);
   const botRng = seededRng(seed ^ 0x5bd1e995);
   const reads: Reads = opts.reads ?? {};
-  const sums = players.map(() => ({ sum: 0, sq: 0 }));
+  // one row per player, then one per team (the average of its players)
+  const teams = opts.teams ? [...new Set(opts.teams)] : [];
+  const sums = [...players, ...teams].map(() => ({ sum: 0, sq: 0 }));
   for (let d = 0; d < deals; d++) {
     const deck = shuffle(deckRng, Array.from({ length: 52 }, (_, i) => i));
     const button = d % n;
-    const perDeal = new Array(n).fill(0);
+    const perDeal: number[] = new Array(n).fill(0);
     for (let rot = 0; rot < n; rot++) {
       const order = Array.from({ length: n }, (_, seat) => players[(seat + rot) % n]!);
       const net = playHand(order, button, [...deck], reads, botRng, stats, opts);
-      net.forEach((x, seat) => (perDeal[(seat + rot) % n] += x / n));
+      net.forEach((x, seat) => (perDeal[(seat + rot) % n]! += x / n));
+    }
+    for (const t of teams) {
+      const members = players.map((_, i) => i).filter((i) => opts.teams![i] === t);
+      perDeal.push(members.reduce((a, i) => a + perDeal[i]!, 0) / members.length);
     }
     perDeal.forEach((x, i) => {
       sums[i]!.sum += x;
       sums[i]!.sq += x * x;
     });
   }
-  return players.map((p, i) => {
+  return [...players.map((p) => p.name), ...teams].map((name, i) => {
     const mean = sums[i]!.sum / deals;
     const sd = Math.sqrt(Math.max(0, sums[i]!.sq / deals - mean * mean) * (deals / Math.max(1, deals - 1)));
-    return { name: p.name, bb100: mean * 100, se: (sd / Math.sqrt(deals)) * 100, hands: deals * n };
+    return { name, bb100: mean * 100, se: (sd / Math.sqrt(deals)) * 100, hands: deals * n };
   });
 }
 

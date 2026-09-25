@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import type { Card } from '../../shared/src/cards.ts';
 import { cardInt, evaluate } from '../../shared/src/games/holdem/eval.ts';
 import { seededRng } from '../../shared/test/helpers/seeded.ts';
-import { advise, bannerOf, drawsOf, estimateEquity, madeName, onBoard, positionOf, potOdds, readHand, startName, type Spot } from '../src/games/holdem/advice.ts';
+import { advise, bannerOf, distOf, drawsOf, estimateEquity, madeName, onBoard, positionOf, potOdds, readHand, startName, type Spot } from '../src/games/holdem/advice.ts';
 
 const cards = (s: string) => (s ? s.split(' ') : []) as Card[];
 const ints = (s: string) => cards(s).map(cardInt);
@@ -129,20 +129,24 @@ describe('holdem tips: the play', () => {
     expect(advise({ ...free, canRaise: false }, 0.9).pick).toBe('check');
   });
 
-  it('plays the starting hand groups before the flop', () => {
+  it('plays the opening charts by seat before the flop', () => {
     const pre = (hole: string, o: Partial<Spot> = {}) => advise(spot({ hole: cards(hole), board: [], call: 10_00, total: 15_00, opponents: 5, position: 'early', ...o }), 0.3);
     expect(pre('As Ah')).toEqual({ text: 'Pocket aces, a premium hand. You have about 30% against 5 players: raise.', pick: 'raise' });
     expect(pre('7c 2d').pick).toBe('fold');
     expect(pre('7c 2d', { position: 'bb', call: 0 }).pick).toBe('check');
     expect(pre('Kc Td', { position: 'late' }).pick).toBe('raise');
     expect(pre('Kc Td', { position: 'early' }).pick).toBe('fold');
-    // Facing a raise: group 1 re-raises, groups 2-3 call a normal price, the rest fold.
+    // Facing a raise: the top of the raiser's range re-raises, the next slice calls a normal price, the rest fold.
     expect(pre('Qs Qh', { raises: 1, call: 30_00, total: 45_00 }).pick).toBe('raise');
     expect(pre('Js Ts', { raises: 1, call: 30_00, total: 45_00 }).pick).toBe('call');
     expect(pre('Js Ts', { raises: 1, call: 800_00, total: 815_00, behind: 900_00 }).pick).toBe('fold');
     expect(pre('8s 6s', { raises: 1, call: 30_00, total: 45_00 }).pick).toBe('fold');
     expect(pre('8s 6s', { raises: 1, call: 20_00, total: 55_00, position: 'bb' }).pick).toBe('call');
     expect(pre('8s 6s', { raises: 1, call: 40_00, total: 55_00, position: 'bb' }).pick).toBe('fold');
+    // the charts by seat: the button opens suited kings, under the gun nine handed doesn't
+    expect(pre('Ks 6s', { dist: 0, position: 'late' }).pick).toBe('raise');
+    expect(pre('Ks 6s', { dist: 6, players: 9 }).pick).toBe('fold');
+    expect(pre('2s 2h', { dist: 3 }).pick).toBe('raise');
     // A re-raise that can't be made becomes a call.
     expect(pre('Ks Kh', { raises: 2, call: 900_00, total: 1_000_00, behind: 900_00, canRaise: false }).pick).toBe('call');
   });
@@ -158,5 +162,11 @@ describe('holdem tips: the play', () => {
     // Wrapping past the last seat.
     expect(positionOf(0, [0, 2, 4, 6], 4, 6, 0)).toBe('bb');
     expect(positionOf(2, [0, 2, 4, 6], 4, 6, 0)).toBe('late');
+    // and counts seats to the button for the charts
+    expect(distOf(0, dealt, 0, 1, 2)).toBe(0);
+    expect(distOf(5, dealt, 0, 1, 2)).toBe(1);
+    expect(distOf(3, dealt, 0, 1, 2)).toBe(3);
+    expect(distOf(1, dealt, 0, 1, 2)).toBe(-1);
+    expect(distOf(4, [4, 6], 4, 4, 6)).toBe(0);
   });
 });

@@ -6,13 +6,15 @@
 // From the flop on the play is the pot odds: call when your chance beats the share of the final
 // pot the call would be. Before the flop the price is a poor guide (most of the players still to
 // act will fold, so the chance against all of them undersells a good hand), so the play comes from
-// the starting-hand groups and positions the bots use instead.
+// the opening charts by seat the bots use instead (ranges.ts): open the chart for your seat,
+// re-raise the top of a raiser's range, call with the next slice when the price is right.
 
 import type { Card } from '../../../../shared/src/cards.ts';
 import type { Cents } from '../../../../shared/src/money.ts';
 import type { Rng } from '../../../../shared/src/rng.ts';
 import { evaluate, cardInt, HIGH_CARD, PAIR, TWO_PAIR, TRIPS, STRAIGHT, FLUSH, FULL_HOUSE, QUADS, STRAIGHT_FLUSH } from '../../../../shared/src/games/holdem/eval.ts';
-import { equity, sklanskyGroup, type Position } from '../../../../shared/src/games/holdem/bots.ts';
+import { equity, openWidth, sklanskyGroup, type Position } from '../../../../shared/src/games/holdem/bots.ts';
+import { strength as handRank } from '../../../../shared/src/games/holdem/ranges.ts';
 
 const ONE = ['two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'jack', 'queen', 'king', 'ace'];
 const MANY = ['twos', 'threes', 'fours', 'fives', 'sixes', 'sevens', 'eights', 'nines', 'tens', 'jacks', 'queens', 'kings', 'aces'];
@@ -210,6 +212,17 @@ export function positionOf(seat: number, dealt: readonly number[], button: numbe
   return f < 1 / 3 ? 'early' : f < 2 / 3 ? 'middle' : 'late';
 }
 
+/** A seat's place for the charts, the way the engine places its bots: 0 the button, 1 the cutoff...; -1 and -2 the blinds. */
+export function distOf(seat: number, dealt: readonly number[], button: number, sb: number | null, bb: number | null): number {
+  const seats = [...dealt].sort((x, y) => x - y);
+  if (seats.length === 2) return seat === button ? 0 : -2;
+  if (seat === sb) return -1;
+  if (seat === bb) return -2;
+  let d = 0;
+  for (let x = seat; x !== button && d < seats.length; x = after(seats, x)) d++;
+  return d;
+}
+
 export type Pick = 'fold' | 'check' | 'call' | 'raise';
 
 /** One decision, from what the seat can see. */
@@ -228,6 +241,10 @@ export interface Spot {
   canRaise: boolean;
   opening: boolean;
   position: Position;
+  /** Your place before the flop: 0 the button, 1 the cutoff, ...; -1 small blind, -2 big blind (from `position` when missing). */
+  dist?: number;
+  /** Players dealt in (six when missing). */
+  players?: number;
   /** Bets and raises before the flop so far. */
   raises: number;
 }
@@ -238,21 +255,31 @@ export interface Advice {
   pick: Pick;
 }
 
-// Hands to open with when nobody has raised, by the highest group for each position (the bots'
-// thresholds on the same scale).
-const OPEN_GROUP: Record<Position, number> = { early: 4, middle: 5, late: 6, sb: 5, bb: 4 };
+// A seat's place for the charts when only its position is known.
+const DIST: Record<Position, number> = { early: 3, middle: 2, late: 0, sb: -1, bb: -2 };
 
-function preflopPick(group: number, s: Spot): Pick {
+/**
+ * The charts' play: open the chart for your seat; against a raise (a middle-position opener's
+ * range, about a fifth of hands), re-raise its top eighth and call the next slice at a normal
+ * price, wider in the big blind by the price; against a re-raise, only the very top goes on.
+ */
+function preflopPick(pct: number, s: Spot): Pick {
   const canCheck = s.call === 0;
-  if (s.raises === 0) return group <= OPEN_GROUP[s.position] ? 'raise' : canCheck ? 'check' : 'fold';
-  if (group === 1) return 'raise';
-  // Calling a raise that is most of your stack takes a group 1 hand.
+  const dist = s.dist ?? DIST[s.position];
+  if (s.raises === 0) return pct < openWidth(dist, s.players ?? 6) ? 'raise' : canCheck ? 'check' : 'fold';
+  const opener = openWidth(2, 6);
+  if (s.raises === 1 && pct < opener * 0.14) return 'raise';
+  if (s.raises >= 2 && pct < 0.02) return 'raise';
+  // Calling a raise that is most of your stack takes one of those hands.
   const cheap = s.call <= s.behind * 0.3;
   if (s.raises === 1 && cheap) {
-    if (group <= 3) return 'call';
-    // In the blinds a small raise is a good price: defend a little wider.
-    if ((s.position === 'sb' || s.position === 'bb') && potOdds(s.call, s.total) < 0.3 && group <= 6) return 'call';
+    if (dist === -2) {
+      // The big blind closes the action at a price: defend by it.
+      const odds = Math.max(0.08, potOdds(s.call, s.total));
+      if (pct < opener * Math.min(1.8, Math.max(0.45, 1.4 * (0.27 / odds)))) return 'call';
+    } else if (pct < opener * (dist === -1 ? 0.3 : 0.5)) return 'call';
   }
+  if (s.raises >= 2 && cheap && pct < 0.06) return 'call';
   return canCheck ? 'check' : 'fold';
 }
 
@@ -265,8 +292,10 @@ export function advise(s: Spot, eq: number): Advice {
   const verb = (p: Pick) => (p === 'raise' && s.opening ? 'bet' : p);
 
   if (s.board.length === 0) {
-    const group = sklanskyGroup(cardInt(s.hole[0]!), cardInt(s.hole[1]!));
-    const pick = legal(preflopPick(group, s));
+    const a = cardInt(s.hole[0]!);
+    const b = cardInt(s.hole[1]!);
+    const group = sklanskyGroup(a, b);
+    const pick = legal(preflopPick(handRank(a, b), s));
     return { text: `${read}, ${strength(group)}. You have about ${have}%${vs}: ${verb(pick)}.`, pick };
   }
 
