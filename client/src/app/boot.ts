@@ -23,10 +23,13 @@ import { mountEmotes, openLeaderboard, socialApi, socialButton, type EmoteWheel 
 import { createChat, type Chat } from '../ui/chat/index.ts';
 import { mountFloorLife, type FloorLife } from '../ui/feed/index.ts';
 import { Bar, openBarMenu, openShop, shopApi, shopButton } from '../ui/shop/index.ts';
+import { openEffects } from '../ui/shop/index.ts'; // v6 shop6: effects from anywhere on the floor
 import { button, modal, toast } from '../ui/kit.ts';
 import { showAway, showIdleWarning, type AwayHandle, type WarningHandle } from '../ui/away/away.ts';
 import { IdleWatch } from './idle.ts';
+import { rideKey } from '../world/rides.ts';
 import { ENGINES } from '../../../shared/src/games/index.ts';
+import { mountDaily, dailyApi, type DailyHandle } from '../ui/daily/index.ts'; // v6 celebs6
 import { CLOSE, type Profile } from '../../../shared/src/protocol.ts';
 
 export async function boot(): Promise<void> {
@@ -102,6 +105,8 @@ class App {
   private comingBack = false;
   /** Walking when we went away (or at a table, which puts us back on the floor): walking again after. */
   private awayWalking = false;
+  /** v6 celebs6: the daily bonus's HUD button and sheet, while the HUD is up. */
+  private daily: DailyHandle | null = null;
   /** Where each station's n-th seated player is drawn; stations never move. */
   private readonly seatCache = new Map<string, SeatPose | null>();
 
@@ -141,6 +146,18 @@ class App {
       true,
     );
     this.life = mountFloorLife({ engine, world, sfx, ui });
+    // v6 looks6: B steps off your ride and back on (a look save, so everyone sees it)
+    rideKey({
+      profile: () => session.profile,
+      save: async (look) => {
+        const stored = await api.saveLook(look);
+        const now = session.profile;
+        if (now) session.set({ ...now, look: stored });
+        return stored;
+      },
+      allowed: (e) => !isTyping(e) && overlayCount() === 0 && this.hud !== null && this.table === null && this.world.seated === null,
+      say: (text) => toast(text),
+    });
     this.idle = new IdleWatch({
       showWarning: (at) => {
         this.idleWarning?.close();
@@ -294,6 +311,11 @@ class App {
     // Big wins are announced to people out on the floor, never to the winner at their table.
     this.lifeOff = this.life.connect(link, { onFloor: () => this.hud !== null && this.table === null && this.world.seated === null });
     link.on('emote', (id, e) => void this.world.showEmote(id === link.you?.id ? 'me' : id, e));
+    // v6 fx6: the shop's effects and the lobby's statues, for everyone on the floor (world/fx/)
+    this.world.useFx({ self: () => link.you?.id ?? null, marquee: this.life.marquee, tally: this.life.tally });
+    link.on('fx', (ev) => this.world.playFx(ev));
+    link.on('fxs', (list) => this.world.syncFx(list));
+    link.on('statues', (list) => void this.world.setStatues(list));
     link.on('hello', (you, first) => {
       // A tab that takes over from another one carries on where that one stood. Coming back from
       // away, the floor forgot us; the first position we send puts us back where we stand.
@@ -324,6 +346,8 @@ class App {
       holdItem: (id) => this.world.holdItem(id),
       atTable: () => this.table !== null || this.world.seated !== null,
     });
+    // v6 celebs6: a celebrity's tip and a gift box land in the balance; their notices show while you walk the floor
+    this.world.life.celebs.useApp({ money: (m) => session.balance(m.balance, m.inPlay, m.rev), sfx: this.sfx, onFloor: () => this.hud !== null && this.table === null && this.world.seated === null && overlayCount() === 0, snapper: this.engine });
   }
 
   /**
@@ -332,6 +356,7 @@ class App {
    */
   private disconnectFloor(keepBar = false): void {
     this.idle.stop();
+    this.world.life.celebs.useApp(null); // v6 celebs6
     this.world.life.useApp(null);
     this.world.life.useBar(null);
     this.world.life.useLink(null);
@@ -389,7 +414,10 @@ class App {
     bar.insertBefore(socialButton('emotes', 'Emotes (G)', () => this.emotes?.toggle()), first);
     bar.insertBefore(socialButton('leaderboard', 'Leaderboards', () => openLeaderboard({ root: this.ui, api: socialApi })), first);
     bar.insertBefore(shopButton('boutique', 'Boutique', () => this.openShop()), first);
+    bar.insertBefore(shopButton('effects', 'Effects', () => this.openEffects()), first); // v6 shop6
     bar.insertBefore(shopButton('bar', 'Bar', () => this.openBarMenu()), first);
+    // v6 celebs6: the daily bonus (its button, and its sheet on arrival while today's is waiting)
+    this.daily = mountDaily({ root: this.ui, bar, before: first, api: dailyApi, money: (m) => session.balance(m.balance, m.inPlay, m.rev), sfx: this.sfx });
     this.chat?.setVisible(true);
   }
 
@@ -398,6 +426,8 @@ class App {
     if (this.table) await this.leaveTable();
     this.emotes?.dispose();
     this.emotes = null;
+    this.daily?.dispose(); // v6 celebs6
+    this.daily = null;
     this.chat?.setVisible(false);
     this.hud?.close();
     this.hud = null;
@@ -417,14 +447,41 @@ class App {
     this.world.player.setEnabled(false);
     openShop({
       root: this.ui,
-      api: { shop: shopApi.shop, buy: shopApi.buy, saveLook: api.saveLook },
+      api: { shop: shopApi.shop, buy: shopApi.buy, fx: shopApi.fx, saveLook: api.saveLook },
       session,
       engine: this.engine,
       characters: this.world.characterFactory,
       sfx: this.sfx,
       item,
+      // v6 shop6: what's playing on the floor and where you stand, for the effects
+      floor: this.link,
+      where: () => this.whereOnFloor(),
       onClose: () => this.world.player.setEnabled(true),
     });
+  }
+
+  // v6 shop6: effects bought from the HUD, anywhere on the floor (ui/shop/effects.ts)
+  openEffects(): void {
+    if (!this.hud) return;
+    const walking = this.table === null && this.world.seated === null;
+    if (walking) this.world.player.setEnabled(false);
+    openEffects({
+      root: this.ui,
+      api: { fx: shopApi.fx },
+      session,
+      floor: this.link,
+      where: () => this.whereOnFloor(),
+      sfx: this.sfx,
+      openBoutique: walking ? () => this.openShop('fx-confetti') : undefined,
+      onClose: () => walking && this.world.player.setEnabled(true),
+    });
+  }
+
+  /** v6 shop6: where you stand (metres) while the floor socket is up; effects play there. */
+  private whereOnFloor(): { x: number; z: number } | null {
+    if (!this.link?.you) return null;
+    const p = this.world.player.position;
+    return { x: p.x, z: p.z };
   }
 
   /** The bar's menu, from the HUD for now (a waiter's, later). */

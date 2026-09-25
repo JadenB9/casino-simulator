@@ -89,6 +89,16 @@ export const SHOP_ITEMS: readonly ShopItem[] = [
 
 const BY_ID = new Map(SHOP_ITEMS.map((i) => [i.id, i]));
 
+/**
+ * A piece's name as a sentence says it: "the Rope Chain", "the Griddy" (never "the The Griddy"),
+ * "your statue"; `start` for the first word of a sentence. Effects read better bare ("Own the
+ * Night starts in 0:40"), so they don't go through here.
+ */
+export function theName(name: string, start = false): string {
+  const said = name.startsWith('Your ') ? `your ${name.slice(5).toLowerCase()}` : `the ${name.replace(/^The /, '')}`;
+  return start ? said[0]!.toUpperCase() + said.slice(1) : said;
+}
+
 /** An item the boutique sells (never a reward), or null. */
 export function shopItem(id: unknown): ShopItem | null {
   const item = typeof id === 'string' ? BY_ID.get(id) : undefined;
@@ -222,6 +232,14 @@ export const EFFECTS: readonly EffectItem[] = [
 
 const FX_BY_ID = new Map(EFFECTS.map((i) => [i.id, i]));
 
+/**
+ * The floor plays one effect at a time per player ('you'), per room ('room') and for the casino
+ * ('casino'); a busy one queues the next behind it, this long after it ends. Nothing is sold that
+ * would start further out than FX_MAX_WAIT_MS.
+ */
+export const FX_GAP_MS = 1_000;
+export const FX_MAX_WAIT_MS = 5 * 60_000;
+
 export function effectItem(id: unknown): EffectItem | null {
   return typeof id === 'string' ? (FX_BY_ID.get(id) ?? null) : null;
 }
@@ -230,7 +248,14 @@ export function effectItem(id: unknown): EffectItem | null {
  * A lasting mark on the building: a gold statue of your character on a plinth in the lobby. Bought
  * once and kept (a casino_items row); the lobby shows the STATUES most recent buyers.
  */
-export const STATUE: { id: 'statue'; name: string; price: Cents; about: string } = {
+export interface StatueItem {
+  id: 'statue';
+  name: string;
+  price: Cents;
+  about: string;
+}
+
+export const STATUE: StatueItem = {
   id: 'statue',
   name: 'Your Statue',
   price: 10_000_000 * DOLLAR,
@@ -290,12 +315,23 @@ export function isOp(x: unknown): x is string {
 // HTTP (GET /shop, POST /shop/buy, POST /bar/order)
 
 export interface ShopResponse {
+  /** The worn items and rides the boutique sells (never a reward). */
   items: readonly ShopItem[];
-  /** Ids you own, with what you paid and when. */
-  owned: { item: string; price: Cents; at: number }[];
+  /**
+   * Ids you own (worn items, rides, emotes, the statue), with what you paid and when. A reward
+   * you earned is here too, with price 0 and the feat that gave it.
+   */
+  owned: { item: string; price: Cents; at: number; feat?: string }[];
   balance: Cents;
+  /** v6: the emotes it sells (not the free six, not rewards), the effects, and the statue. */
+  emotes: readonly EmoteItem[];
+  effects: readonly EffectItem[];
+  statue: StatueItem;
+  /** v6: the statues in the lobby now, newest first. */
+  statues: Statue[];
 }
 
+/** POST /shop/buy: a worn item or ride, an emote, or the statue (by id). */
 export interface BuyRequest {
   item: string;
   op: string;

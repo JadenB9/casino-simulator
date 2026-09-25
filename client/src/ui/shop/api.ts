@@ -3,7 +3,7 @@
 // word (menu/parts.ts problemText).
 
 import type { HttpError } from '../../../../shared/src/protocol.ts';
-import type { BuyResponse, OrderResponse, ShopResponse } from '../../../../shared/src/items.ts';
+import type { BuyResponse, EffectResponse, OrderResponse, ShopResponse } from '../../../../shared/src/items.ts';
 import { API_ORIGIN, ApiError, savedToken } from '../../net/api.ts';
 
 async function call<T>(path: string, body?: unknown): Promise<T> {
@@ -21,6 +21,9 @@ export const shop = (): Promise<ShopResponse> => call<ShopResponse>('shop');
 
 /** Buy one item from your balance. Retrying with the same op is the same purchase. */
 export const buy = (item: string, op: string): Promise<BuyResponse> => call<BuyResponse>('shop/buy', { item, op });
+
+/** Play an effect where you stand: paid each time. Retrying with the same op is the same effect, charged once. */
+export const fx = (item: string, op: string): Promise<EffectResponse> => call<EffectResponse>('shop/fx', { item, op });
 
 /** Order from the bar; it's paid now and brought to you. Retrying with the same op is the same order. */
 export const order = (item: string, op: string): Promise<OrderResponse> => call<OrderResponse>('bar/order', { item, op });

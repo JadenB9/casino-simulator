@@ -2,11 +2,16 @@
 // game's one renderer the way the character editor's dressing room is. The room is built far
 // below the floor, out of every other view; the camera is borrowed while the boutique is open and
 // put back when it closes. The camera moves in to whatever is on show: the chest for a chain, the
-// mouth for a grill, the left wrist for a watch, the whole figure for clothes.
+// mouth for a grill, the left wrist for a watch, the whole figure for clothes and rides.
+//
+// v6: it also previews what isn't worn. An emote is acted out (the character's gesture, when it
+// has one); an effect changes the room's light (a follow spot, a disco, gold light) and drops
+// what it drops (confetti, bills, sparks, coins) round the plinth; the statue is you, cast in gold.
 
 import * as THREE from 'three';
 import type { Look } from '../../../../shared/src/look.ts';
 import type { ItemKind } from '../../../../shared/src/items.ts';
+import type { EmoteId } from '../../../../shared/src/protocol.ts';
 import type { Character, CharacterFactory } from '../../world/contract.ts';
 import type { EngineLike } from '../menu/deps.ts';
 
@@ -57,7 +62,7 @@ function canvasTexture(w: number, h: number, paint: (g: CanvasRenderingContext2D
  * A jeweller's room: a black lacquered plinth with a brass edge, a deep oxblood backdrop with
  * out-of-focus lights, and spotlights with a short reach (60 m down, they never touch the floor).
  */
-function room(at: THREE.Vector3): { group: THREE.Group; pivot: THREE.Group; dispose(): void } {
+function room(at: THREE.Vector3): { group: THREE.Group; pivot: THREE.Group; vitrine: THREE.Group; mood(m: Mood, t: number): void; dispose(): void } {
   const group = new THREE.Group();
   group.name = 'showroom';
   group.position.copy(at);
@@ -130,9 +135,81 @@ function room(at: THREE.Vector3): { group: THREE.Group; pivot: THREE.Group; disp
   pivot.position.y = PODIUM_TOP;
   group.add(pivot);
 
+  // v6: the effects' lights, off until a preview wants them
+  const spot = new THREE.SpotLight('#fff6e8', 0, 9, 0.2, 0.35, 1.2);
+  spot.position.set(0, 5.2, 0.4);
+  spot.target.position.set(0, 0.6, 0);
+  const gold = new THREE.PointLight('#ffb640', 0, 8, 1.2);
+  gold.position.set(0.9, 2.2, 1.6);
+  const disco = ['#ff3d6e', '#3ddcff', '#b36bff', '#ffd23d'].map((c) => {
+    const l = new THREE.PointLight(c, 0, 6, 1.5);
+    group.add(l);
+    return l;
+  });
+  // a mirror ball over the plinth, for the disco
+  const ball = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(0.2, 2),
+    new THREE.MeshStandardMaterial({ color: '#d8dde4', metalness: 1, roughness: 0.08, flatShading: true, emissive: '#1c2028' }),
+  );
+  ball.position.set(0, 2.3, -0.2);
+  ball.visible = false;
+  // the follow spot's beam through the haze, and its pool on the plinth
+  const beamMat = new THREE.MeshBasicMaterial({ color: '#fff1d6', transparent: true, opacity: 0.075, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.7, 5.2, 48, 1, true), beamMat);
+  beam.position.set(0, PODIUM_TOP + 2.6, 0);
+  const pool = new THREE.Mesh(
+    new THREE.CircleGeometry(0.62, 64).rotateX(-Math.PI / 2),
+    new THREE.MeshBasicMaterial({ color: '#fff0d0', transparent: true, opacity: 0.2, blending: THREE.AdditiveBlending, depthWrite: false }),
+  );
+  pool.position.y = PODIUM_TOP + 0.003;
+  beam.visible = pool.visible = false;
+  group.add(spot, spot.target, gold, ball, beam, pool);
+
+  // the private collection's vitrine: a glass cylinder on the plinth, brass rings top and foot, a
+  // cap, and a streak of reflected light down the glass so it reads as glass from every side
+  const vitrine = new THREE.Group();
+  const brass = new THREE.MeshStandardMaterial({ color: '#c9a24b', metalness: 1, roughness: 0.28 });
+  const glassMat = new THREE.MeshStandardMaterial({ color: '#9fb6be', transparent: true, opacity: 0.05, roughness: 0.04, metalness: 0.2, depthWrite: false, side: THREE.DoubleSide });
+  const H = 2.3;
+  const R = 0.6;
+  const glass = new THREE.Mesh(new THREE.CylinderGeometry(R, R, H, 72, 1, true), glassMat);
+  glass.position.y = PODIUM_TOP + H / 2;
+  const streakMat = new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.1, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  const streak = new THREE.Mesh(new THREE.CylinderGeometry(R + 0.002, R + 0.002, H * 0.94, 12, 1, true, -0.55, 0.16), streakMat);
+  streak.position.y = PODIUM_TOP + H / 2;
+  const foot = new THREE.Mesh(new THREE.TorusGeometry(R, 0.018, 10, 96), brass);
+  foot.rotation.x = Math.PI / 2;
+  foot.position.y = PODIUM_TOP + 0.018;
+  const top = foot.clone();
+  top.position.y = PODIUM_TOP + H;
+  const cap = new THREE.Mesh(new THREE.CircleGeometry(R, 72).rotateX(Math.PI / 2), glassMat);
+  cap.position.y = PODIUM_TOP + H;
+  vitrine.add(glass, streak, foot, top, cap);
+  vitrine.visible = false;
+  group.add(vitrine);
+  const base = { key: key.intensity, rim: rim.intensity, fill: fill.intensity };
+
   return {
     group,
     pivot,
+    vitrine,
+    mood(m: Mood, t: number) {
+      const dim = m === 'spot' ? 0.12 : m === 'disco' ? 0.18 : m === 'gold' ? 0.55 : m === 'vault' ? 0.45 : 1;
+      key.intensity = base.key * dim;
+      rim.intensity = base.rim * (m === 'gold' ? 0.9 : dim);
+      fill.intensity = base.fill * dim;
+      spot.intensity = m === 'spot' ? 140 : m === 'vault' ? 70 : 0;
+      gold.intensity = m === 'gold' ? 60 : 0;
+      ball.visible = m === 'disco';
+      beam.visible = m === 'spot';
+      pool.visible = m === 'spot' || m === 'vault';
+      ball.rotation.y = t * 0.8;
+      disco.forEach((l, i) => {
+        const a = t * 1.3 + (i * Math.PI) / 2;
+        l.intensity = m === 'disco' ? 22 : 0;
+        l.position.set(Math.cos(a) * 1.6, 1.2 + Math.sin(t * 2 + i) * 0.6, Math.sin(a) * 1.6);
+      });
+    },
     dispose() {
       group.removeFromParent();
       group.remove(pivot);
@@ -146,6 +223,131 @@ function room(at: THREE.Vector3): { group: THREE.Group; pivot: THREE.Group; disp
       });
     },
   };
+}
+
+/** The room's light for an effect's preview. */
+export type Mood = 'none' | 'spot' | 'disco' | 'gold' | 'vault';
+
+/** What falls or flies round the plinth in an effect's preview. */
+export type Shower = 'confetti' | 'bills' | 'sparks' | 'coins';
+
+const SHOWER_COUNT: Record<Shower, number> = { confetti: 260, bills: 70, sparks: 220, coins: 90 };
+const SHOWER_COLORS: Record<Shower, string[]> = {
+  confetti: ['#f2c14e', '#e8a531', '#c8242f', '#f4e3b0', '#b01d2a'],
+  bills: ['#b9c9a4', '#a8bb91', '#c6d3b3'],
+  sparks: ['#fff3c4', '#ffd98a', '#ffffff'],
+  coins: ['#e0b84a', '#f2cf6b', '#c99a2e'],
+};
+
+/** Particles for a preview: one instanced mesh, moved on the CPU (a few hundred at most). */
+class Particles {
+  readonly mesh: THREE.InstancedMesh;
+  private readonly pos: Float32Array;
+  private readonly vel: Float32Array;
+  private readonly spin: Float32Array;
+  private readonly m = new THREE.Matrix4();
+  private readonly q = new THREE.Quaternion();
+  private readonly e = new THREE.Euler();
+  private readonly v = new THREE.Vector3();
+  private readonly one = new THREE.Vector3(1, 1, 1);
+
+  constructor(readonly kind: Shower) {
+    const n = SHOWER_COUNT[kind];
+    const geo =
+      kind === 'coins' ? new THREE.CylinderGeometry(0.03, 0.03, 0.005, 18)
+      : kind === 'bills' ? new THREE.PlaneGeometry(0.16, 0.068)
+      : kind === 'sparks' ? new THREE.PlaneGeometry(0.018, 0.018)
+      : new THREE.PlaneGeometry(0.035, 0.022);
+    const mat =
+      kind === 'sparks' ? new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })
+      : kind === 'coins' ? new THREE.MeshStandardMaterial({ color: '#ffffff', metalness: 0.85, roughness: 0.3 })
+      : new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.6, side: THREE.DoubleSide });
+    this.mesh = new THREE.InstancedMesh(geo, mat, n);
+    this.mesh.frustumCulled = false;
+    this.pos = new Float32Array(n * 3);
+    this.vel = new Float32Array(n * 3);
+    this.spin = new Float32Array(n * 3);
+    const colors = SHOWER_COLORS[kind];
+    const c = new THREE.Color();
+    for (let i = 0; i < n; i++) {
+      this.mesh.setColorAt(i, c.set(colors[i % colors.length]!));
+      this.reset(i, true);
+    }
+  }
+
+  private reset(i: number, first: boolean): void {
+    const p = this.pos;
+    const v = this.vel;
+    const j = i * 3;
+    if (this.kind === 'sparks') {
+      // six fountains in a ring round the plinth
+      const a = ((i % 6) / 6) * Math.PI * 2 + 0.3;
+      p[j] = Math.cos(a) * 0.95;
+      p[j + 1] = 0.05;
+      p[j + 2] = Math.sin(a) * 0.95;
+      v[j] = (Math.random() - 0.5) * 0.5;
+      v[j + 1] = 2.4 + Math.random() * 1.4;
+      v[j + 2] = (Math.random() - 0.5) * 0.5;
+      if (first) p[j + 1] = -Math.random() * 3; // staggered: they start below and wait their turn
+    } else {
+      const r = 0.25 + Math.sqrt(Math.random()) * 0.9;
+      const a = Math.random() * Math.PI * 2;
+      p[j] = Math.cos(a) * r;
+      p[j + 1] = first ? Math.random() * 3.2 : 3.2 + Math.random() * 0.6;
+      p[j + 2] = Math.sin(a) * r;
+      v[j] = (Math.random() - 0.5) * 0.2;
+      v[j + 1] = this.kind === 'coins' ? -1.6 - Math.random() : this.kind === 'bills' ? -0.35 - Math.random() * 0.2 : -0.5 - Math.random() * 0.3;
+      v[j + 2] = (Math.random() - 0.5) * 0.2;
+    }
+    this.spin[j] = Math.random() * 6;
+    this.spin[j + 1] = Math.random() * 6;
+    this.spin[j + 2] = Math.random() * 6;
+  }
+
+  update(dt: number, t: number): void {
+    const n = SHOWER_COUNT[this.kind];
+    const p = this.pos;
+    const v = this.vel;
+    for (let i = 0; i < n; i++) {
+      const j = i * 3;
+      if (this.kind === 'sparks') {
+        if (p[j + 1]! < 0) {
+          p[j + 1]! += dt * 3;
+          if (p[j + 1]! >= 0) this.reset(i, false);
+          this.m.makeScale(0, 0, 0);
+          this.mesh.setMatrixAt(i, this.m);
+          continue;
+        }
+        v[j + 1]! -= 5.5 * dt;
+      } else if (this.kind !== 'coins') {
+        // paper flutters: a sideways sway as it falls
+        p[j]! += Math.sin(t * 2.2 + i) * dt * 0.25;
+      }
+      p[j]! += v[j]! * dt;
+      p[j + 1]! += v[j + 1]! * dt;
+      p[j + 2]! += v[j + 2]! * dt;
+      if (p[j + 1]! < 0.02) this.reset(i, false);
+      const s = this.spin;
+      this.e.set(s[j]! + t * (1.5 + (i % 5)), s[j + 1]! + t * 2, s[j + 2]!);
+      this.q.setFromEuler(this.e);
+      this.v.set(p[j]!, p[j + 1]!, p[j + 2]!);
+      this.m.compose(this.v, this.q, this.one);
+      this.mesh.setMatrixAt(i, this.m);
+    }
+    this.mesh.instanceMatrix.needsUpdate = true;
+  }
+
+  dispose(): void {
+    this.mesh.removeFromParent();
+    this.mesh.geometry.dispose();
+    (this.mesh.material as THREE.Material).dispose();
+    this.mesh.dispose();
+  }
+}
+
+/** The statue's gold: brushed, warm, catching the key and the rim. */
+function statueGold(): THREE.MeshStandardMaterial {
+  return new THREE.MeshStandardMaterial({ color: '#a8843a', metalness: 0.85, roughness: 0.46, emissive: '#2a1c06', emissiveIntensity: 0.2 });
 }
 
 export interface ShowroomOpts {
@@ -175,6 +377,12 @@ export class Showroom {
   private readonly camAt = new THREE.Vector3();
   private readonly camLook = new THREE.Vector3();
   private placed = false;
+  private mood: Mood = 'none';
+  private cased = false;
+  private shower: Particles | null = null;
+  private gold: THREE.MeshStandardMaterial | null = null;
+  /** The materials the character wore before it was cast in gold. */
+  private readonly worn = new Map<THREE.Mesh, THREE.Material | THREE.Material[]>();
 
   constructor(private readonly opts: ShowroomOpts) {
     this.cam = opts.engine.camera;
@@ -207,6 +415,43 @@ export class Showroom {
     this.held = 2.5;
   }
 
+  /** v6: an effect's preview: the room's light and what falls round the plinth (null: nothing). */
+  preview(mood: Mood, shower: Shower | null): void {
+    this.mood = mood;
+    if (this.shower?.kind !== shower) {
+      this.shower?.dispose();
+      this.shower = shower ? new Particles(shower) : null;
+      if (this.shower) this.built.group.add(this.shower.mesh);
+    }
+  }
+
+  /**
+   * v6: a piece of the private collection stands in a glass case, lit from above. A close-up (a
+   * chain, a crown) puts the camera inside the glass, so there it keeps only the light.
+   */
+  vitrine(on: boolean): void {
+    this.cased = on;
+  }
+
+  /** v6: cast the figure in gold (the statue's preview), or give it its own clothes back. */
+  gilded(on: boolean): void {
+    if (on) {
+      this.gold ??= statueGold();
+      return;
+    }
+    for (const [mesh, mat] of this.worn) mesh.material = mat;
+    this.worn.clear();
+    this.gold?.dispose();
+    this.gold = null;
+  }
+
+  /** v6: act out an emote, if the character can; false if it can't. */
+  gesture(e: EmoteId): boolean {
+    if (!this.character.gesture) return false;
+    this.character.gesture(e);
+    return true;
+  }
+
   /** Hold the figure still at this turn (null lets it turn again). */
   still(yaw: number | null): void {
     this.fixed = yaw;
@@ -227,6 +472,20 @@ export class Showroom {
     this.yaw += (want - this.yaw) * (this.fixed !== null ? 1 : Math.min(1, dt * 3));
     this.built.pivot.rotation.y = this.yaw;
     this.character.update(dt);
+    // the model can fill in after a look change, so the gold goes on every frame it's wanted
+    if (this.gold) {
+      const gold = this.gold;
+      this.character.root.traverse((o) => {
+        const m = o as THREE.Mesh;
+        // (the contact shadow under the feet is a see-through card: it stays a shadow)
+        if (!m.isMesh || m.material === gold || (m.material as THREE.Material).transparent) return;
+        this.worn.set(m, m.material);
+        m.material = gold;
+      });
+    }
+    this.built.vitrine.visible = this.cased && this.framing === 'full';
+    this.built.mood(this.mood === 'none' && this.cased ? 'vault' : this.mood, this.clock);
+    this.shower?.update(dt, this.clock);
     this.place(dt);
   }
 
@@ -262,6 +521,8 @@ export class Showroom {
 
   dispose(): void {
     this.offFrame();
+    this.gilded(false);
+    this.shower?.dispose();
     this.character.dispose();
     this.built.dispose();
     this.cam.position.copy(this.camBefore.position);

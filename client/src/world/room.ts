@@ -37,6 +37,124 @@ const COVES = {
   neon: new THREE.Color('#ff47b8').multiplyScalar(2.1),
 };
 
+/** How thick a doorway's lining is, and how far a casing's inner edge comes over it. */
+const LINING = 0.02;
+const EDGE = 0.015;
+/**
+ * How far a wall's trims run on past the room's corners. None: each ends against the other wall's
+ * face, where its end is hidden; run on into the wall, the ends of two trims would meet inside it
+ * in one plane.
+ */
+const TRIM_INTO = 0;
+
+/**
+ * A block of a doorway's casing on one room's face: along the wall (a0..a1), up (y0..y1), and
+ * standing proud of the face from `from` (0: the face itself) to `proud`.
+ */
+export interface CasingPart {
+  mat: THREE.Material;
+  a0: number;
+  a1: number;
+  y0: number;
+  y1: number;
+  proud: number;
+  from?: number;
+  uv?: number;
+}
+
+function liningMat(kind: PlannedDoor['kind']): string {
+  return kind === 'grand' || kind === 'arch' ? 'marble-black' : kind === 'industrial' ? 'steel' : 'beam';
+}
+
+/**
+ * The casing round a doorway on one room's face. Its inner edge comes over the lining by
+ * EDGE, and each thing on it (a bead, a keystone) stands clear of the faces round it: nothing
+ * shares a plane with anything else, so nothing flickers however the doorway is seen.
+ */
+export function casingParts(d: PlannedDoor, r: PlannedRoom, m: Mats): CasingPart[] {
+  const brass = m.get('brass');
+  const out: CasingPart[] = [];
+  const h = d.height;
+  const ceiling = r.style.ceiling;
+  // the opening's edges as the casing sees them
+  const in0 = d.a0 + EDGE;
+  const in1 = d.a1 - EDGE;
+  const mid = (d.a0 + d.a1) / 2;
+  const w = in1 - in0;
+  const part = (mat: THREE.Material, a: number, along: number, y0: number, y1: number, proud: number, extra: Partial<CasingPart> = {}) => out.push({ mat, a0: a - along / 2, a1: a + along / 2, y0, y1, proud, ...extra });
+  if (d.kind === 'grand') {
+    // marble pilasters and a deep entablature with a brass band
+    const black = m.get('marble-black');
+    for (const a of [in0 - 0.28, in1 + 0.28]) {
+      part(black, a, 0.56, 0, h, 0.1, { uv: 1.4 });
+      // brass bands round the pilaster's foot and head, a little proud all round
+      part(brass, a, 0.6, 0, 0.2, 0.13);
+      part(brass, a, 0.6, h - 0.16, h - 0.04, 0.13);
+    }
+    const eh = Math.min(0.5, ceiling - h - 0.02);
+    if (eh > 0.1) {
+      part(black, mid, w + 1.16, h, h + eh, 0.12, { uv: 1.4 });
+      part(brass, mid, w + 1.2, h + eh / 2 - 0.03, h + eh / 2 + 0.03, 0.13);
+    }
+    return out;
+  }
+  if (d.kind === 'industrial' && r.style.wall === 'corrugated') {
+    // the yard's side: a steel frame with hazard stripes on the jambs
+    const steel = m.get('steel');
+    for (const a of [in0 - 0.12, in1 + 0.12]) {
+      part(steel, a, 0.24, 0, h, 0.12);
+      // the stripes wrap the jamb, a little wider and prouder than it
+      for (let y = 0.3; y < h - 0.2; y += 0.5) part(brass, a, 0.25, y - 0.09, y + 0.09, 0.13);
+    }
+    part(steel, mid, w + 0.48, h, h + 0.24, 0.13);
+    return out;
+  }
+  if (d.kind === 'entrance') {
+    // brass round the street door (door.glb stands in it)
+    part(brass, mid, d.a1 - d.a0 + 0.3, h, h + 0.1, 0.08);
+    for (const a of [d.a0 - 0.07, d.a1 + 0.07]) part(brass, a, 0.14, 0, h, 0.08);
+    return out;
+  }
+  // portals, arches and shop doors: a dark wood architrave with a brass bead; an arch gets
+  // marble pilasters and a keystone
+  const jamb = d.kind === 'arch' ? 0.3 : 0.16;
+  const mat = d.kind === 'arch' ? m.get('marble-black') : d.kind === 'shopfront' ? brass : m.get('beam');
+  for (const a of [in0 - jamb / 2, in1 + jamb / 2]) part(mat, a, jamb, 0, h, 0.07, { uv: 1.2 });
+  const head = Math.min(d.kind === 'arch' ? 0.36 : 0.2, ceiling - h - 0.02);
+  if (head > 0.04) part(mat, mid, w + 2 * jamb, h, h + head, 0.08, { uv: 1.2 });
+  if (d.kind !== 'shopfront') {
+    // the bead on the casing's face, set back from its inner edge
+    const bead = 0.024;
+    const top = head > 0.04 ? h + 0.004 + bead : h;
+    for (const a of [in0 - 0.004 - bead / 2, in1 + 0.004 + bead / 2]) part(brass, a, bead, 0, top, 0.09, { from: 0.07 });
+    if (head > 0.04) part(brass, mid, w + 2 * (0.004 + bead), h + 0.004, top, 0.09, { from: 0.08 });
+  }
+  if (d.kind === 'arch' && head > 0.2) part(brass, mid, 0.3, h + head * 0.05, h + head * 0.95, 0.11);
+  return out;
+}
+
+/**
+ * Where a band of trim (y0..y1) runs along a wall between run0 and run1: everywhere but where a
+ * casing part on the same face crosses its height.
+ */
+export function trimRuns(run0: number, run1: number, y0: number, y1: number, casings: readonly { a0: number; a1: number; y0: number; y1: number }[]): [number, number][] {
+  let runs: [number, number][] = [[run0, run1]];
+  for (const c of casings) {
+    if (c.y1 <= y0 + 1e-6 || c.y0 >= y1 - 1e-6) continue;
+    const next: [number, number][] = [];
+    for (const [a0, a1] of runs) {
+      if (c.a1 <= a0 || c.a0 >= a1) {
+        next.push([a0, a1]);
+        continue;
+      }
+      if (c.a0 > a0 + 1e-4) next.push([a0, c.a0]);
+      if (c.a1 < a1 - 1e-4) next.push([c.a1, a1]);
+    }
+    runs = next;
+  }
+  return runs;
+}
+
 export function buildRoom(plan: FloorPlan, b: Batch, m: Mats, glow: GlowMerge): { chandeliers: Chandelier[]; downlights: Downlight[] } {
   const chandeliers: Chandelier[] = [];
   const downlights: Downlight[] = [];
@@ -68,13 +186,12 @@ export function buildRoom(plan: FloorPlan, b: Batch, m: Mats, glow: GlowMerge): 
       glow.room = r.id;
       casing(d, r);
     }
-    // the threshold through the wall, in the first room's part
+    // the threshold through the wall and the opening's lining, in the first room's part
     if (d.b !== 'outside') {
       b.room = d.a;
-      const t = d.rect;
-      const th = d.axis === 'x' ? { x0: d.a0, x1: d.a1, z0: d.c - WALL / 2 - 0.02, z1: d.c + WALL / 2 + 0.02 } : { x0: d.c - WALL / 2 - 0.02, x1: d.c + WALL / 2 + 0.02, z0: d.a0, z1: d.a1 };
+      lining(d);
+      const th = d.axis === 'x' ? { x0: d.a0, x1: d.a1, z0: d.c - WALL / 2, z1: d.c + WALL / 2 } : { x0: d.c - WALL / 2, x1: d.c + WALL / 2, z0: d.a0, z1: d.a1 };
       flat(th, m.get(d.kind === 'industrial' ? 'steel' : 'marble-black'), 1.2, FLOOR_Y + 0.002);
-      void t;
     }
   }
   for (const w of plan.windows) {
@@ -143,6 +260,9 @@ export function buildRoom(plan: FloorPlan, b: Batch, m: Mats, glow: GlowMerge): 
   /**
    * One room's half of a wall: from the centre line to its face (the whole thickness when the
    * other side is the street), up to its own ceiling, with its trims on a full-height stretch.
+   * The trims run along the room's own face only (they stop inside the walls at its corners, never
+   * coming out through the far side) and die into a doorway's casing at its outer edge: run under
+   * it, a trim's face would lie in the casing's and the two would flicker.
    */
   function wall(w: WallPiece, side: 'neg' | 'pos', r: PlannedRoom, outer: boolean): void {
     const s = r.style;
@@ -150,98 +270,89 @@ export function buildRoom(plan: FloorPlan, b: Batch, m: Mats, glow: GlowMerge): 
     const top = Math.min(w.y1, s.ceiling);
     const y0 = w.y0;
     if (top <= y0 + 0.001) return;
-    const len = w.a1 - w.a0;
-    const mid = (w.a0 + w.a1) / 2;
     const thick = outer ? WALL : WALL / 2;
     // centre across the wall of this half, and a point proud of the face by d
     const across = w.c + n * (WALL / 2 - thick / 2);
     const face = (d: number) => w.c + n * (WALL / 2 + d / 2);
-    const piece = (mat: THREE.Material, y0: number, y1: number, depth: number, off: number | null, uv?: number) => {
+    const block = (mat: THREE.Material, a0: number, a1: number, y0: number, y1: number, depth: number, off: number | null, uv?: number) => {
       const cz = off === null ? across : face(depth);
-      if (w.axis === 'x') b.box(mat, mid, (y0 + y1) / 2, cz, len, y1 - y0, off === null ? thick : depth, uv);
-      else b.box(mat, cz, (y0 + y1) / 2, mid, off === null ? thick : depth, y1 - y0, len, uv);
+      const mid = (a0 + a1) / 2;
+      if (w.axis === 'x') b.box(mat, mid, (y0 + y1) / 2, cz, a1 - a0, y1 - y0, off === null ? thick : depth, uv);
+      else b.box(mat, cz, (y0 + y1) / 2, mid, off === null ? thick : depth, y1 - y0, a1 - a0, uv);
     };
-    piece(m.get(s.wall), y0, top, thick, null, s.wall === 'corrugated' ? 2.4 : 1.6);
+    block(m.get(s.wall), w.a0, w.a1, y0, top, thick, null, s.wall === 'corrugated' ? 2.4 : 1.6);
+    // the room's face along this wall, a little into the walls at its ends
+    const span: [number, number] = w.axis === 'x' ? [r.inner.x0, r.inner.x1] : [r.inner.z0, r.inner.z1];
+    const run0 = Math.max(w.a0, span[0] - TRIM_INTO);
+    const run1 = Math.min(w.a1, span[1] + TRIM_INTO);
+    if (run1 <= run0) return;
+    const casings = casingsOn(w.axis, w.c, r);
+    const piece = (mat: THREE.Material, y0: number, y1: number, depth: number, uv?: number) => {
+      for (const [a0, a1] of trimRuns(run0, run1, y0, y1, casings)) block(mat, a0, a1, y0, y1, depth, 0, uv);
+    };
     const full = y0 === 0 && top >= s.ceiling - 0.001;
     const sill = y0 === 0 && !full;
     const rail = m.get(s.rail);
     if (full) {
-      if (s.wainscot) piece(m.get(s.wainscot), 0, 1.12, 0.04, 0, 2.2);
+      // the wainscot stops where the rail starts: sharing its top, their ends would share a plane
+      if (s.wainscot) piece(m.get(s.wainscot), 0, 1.1, 0.04, 2.2);
       if (s.wall === 'corrugated') {
         // the yard: a steel kick plate and a timber rail instead of a wainscot
-        piece(m.get('steel'), 0, 0.3, 0.03, 0);
-        piece(m.get('planks'), 1.0, 1.16, 0.06, 0, 1.2);
+        piece(m.get('steel'), 0, 0.3, 0.03);
+        piece(m.get('planks'), 1.0, 1.16, 0.06, 1.2);
       } else {
-        piece(rail, 1.1, 1.16, 0.07, 0);
-        piece(m.get('lacquer'), 0, 0.14, 0.06, 0);
+        piece(rail, 1.1, 1.16, 0.07);
+        piece(m.get('lacquer'), 0, 0.14, 0.06);
       }
     }
     if (sill) {
-      piece(m.get('lacquer'), 0, 0.14, 0.06, 0);
-      piece(m.get('marble-black'), top - 0.04, top, 0.1, 0, 1.4);
+      piece(m.get('lacquer'), 0, 0.14, 0.06);
+      piece(m.get('marble-black'), top - 0.04, top, 0.1, 1.4);
     }
     if (top >= s.ceiling - 0.001 && s.kind !== 'truss') {
-      piece(m.get('beam'), s.ceiling - 0.16, s.ceiling, 0.1, 0, 1.5);
-      piece(rail, s.ceiling - 0.19, s.ceiling - 0.16, 0.12, 0);
+      piece(m.get('beam'), s.ceiling - 0.16, s.ceiling, 0.1);
+      piece(rail, s.ceiling - 0.19, s.ceiling - 0.16, 0.12);
     }
+  }
+
+  /** Every casing part on a room's face of the wall on this line. */
+  function casingsOn(axis: 'x' | 'z', c: number, r: PlannedRoom): CasingPart[] {
+    const out: CasingPart[] = [];
+    for (const d of plan.doors) if (d.axis === axis && d.c === c && (d.a === r.id || d.b === r.id)) out.push(...casingParts(d, r, m));
+    return out;
   }
 
   /** The casing round a doorway on one room's face, dressed for the kind of door. */
   function casing(d: PlannedDoor, r: PlannedRoom): void {
     // which way is into this room from the wall: -1 for the north/west room
     const n = d.axis === 'x' ? (r.bounds.z1 === d.c ? -1 : 1) : r.bounds.x1 === d.c ? -1 : 1;
-    const faceAt = (proud: number) => d.c + n * (WALL / 2 + proud / 2);
-    const part = (mat: THREE.Material, a: number, y: number, along: number, h: number, proud: number, uv?: number) => {
-      if (d.axis === 'x') b.box(mat, a, y, faceAt(proud), along, h, proud, uv);
-      else b.box(mat, faceAt(proud), y, a, proud, h, along, uv);
-    };
-    const w = d.a1 - d.a0;
-    const mid = (d.a0 + d.a1) / 2;
+    for (const p of casingParts(d, r, m)) {
+      const from = p.from ?? 0;
+      const depth = p.proud - from;
+      const at = d.c + n * (WALL / 2 + from + depth / 2);
+      const a = (p.a0 + p.a1) / 2;
+      const y = (p.y0 + p.y1) / 2;
+      if (d.axis === 'x') b.box(p.mat, a, y, at, p.a1 - p.a0, p.y1 - p.y0, depth, p.uv);
+      else b.box(p.mat, at, y, a, depth, p.y1 - p.y0, p.a1 - p.a0, p.uv);
+    }
+  }
+
+  /**
+   * The lining of a doorway: its sides and head clad through the wall's thickness, so the opening
+   * shows wood (or marble, or steel) instead of the cut ends of each room's wallpaper.
+   */
+  function lining(d: PlannedDoor): void {
+    if (d.b === 'outside') return;
+    const mat = m.get(liningMat(d.kind));
     const h = d.height;
-    const ceiling = r.style.ceiling;
-    if (d.kind === 'grand') {
-      // marble pilasters and a deep entablature with a brass band
-      const black = m.get('marble-black');
-      for (const a of [d.a0 - 0.28, d.a1 + 0.28]) {
-        part(black, a, h / 2, 0.56, h, 0.1, 1.4);
-        part(brass, a, 0.1, 0.62, 0.2, 0.14);
-        part(brass, a, h - 0.1, 0.62, 0.12, 0.14);
-      }
-      const eh = Math.min(0.5, ceiling - h - 0.02);
-      if (eh > 0.1) {
-        part(black, mid, h + eh / 2, w + 1.16, eh, 0.12, 1.4);
-        part(brass, mid, h + eh / 2, w + 1.2, 0.06, 0.16);
-      }
-      return;
-    }
-    if (d.kind === 'industrial' && r.style.wall === 'corrugated') {
-      // the yard's side: a steel frame with hazard stripes on the jambs
-      const steel = m.get('steel');
-      for (const a of [d.a0 - 0.12, d.a1 + 0.12]) part(steel, a, h / 2, 0.24, h, 0.12);
-      part(steel, mid, h + 0.12, w + 0.48, 0.24, 0.14);
-      const stripe = m.get('brass');
-      for (const a of [d.a0 - 0.12, d.a1 + 0.12]) for (let y = 0.3; y < h - 0.2; y += 0.5) part(stripe, a, y, 0.25, 0.18, 0.13);
-      return;
-    }
-    if (d.kind === 'entrance') {
-      // brass round the street door (door.glb stands in it)
-      part(brass, mid, h + 0.05, w + 0.3, 0.1, 0.08);
-      for (const a of [d.a0 - 0.1, d.a1 + 0.1]) part(brass, a, h / 2, 0.14, h, 0.08);
-      return;
-    }
-    // portals, arches and shop doors: a dark wood architrave with a brass bead; an arch gets
-    // marble pilasters and a keystone
-    const wood = m.get('beam');
-    const jamb = d.kind === 'arch' ? 0.3 : 0.16;
-    const mat = d.kind === 'arch' ? m.get('marble-black') : d.kind === 'shopfront' ? brass : wood;
-    for (const a of [d.a0 - jamb / 2, d.a1 + jamb / 2]) part(mat, a, h / 2, jamb, h, 0.07, 1.2);
-    const head = Math.min(d.kind === 'arch' ? 0.36 : 0.2, ceiling - h - 0.02);
-    if (head > 0.04) part(mat, mid, h + head / 2, w + 2 * jamb, head, 0.08, 1.2);
-    if (d.kind !== 'shopfront') {
-      for (const a of [d.a0 - 0.012, d.a1 + 0.012]) part(brass, a, h / 2, 0.024, h, 0.09);
-      part(brass, mid, h + 0.012, w + 0.05, 0.024, 0.09);
-    }
-    if (d.kind === 'arch' && head > 0.2) part(brass, mid, h + head / 2, 0.3, head * 0.9, 0.11);
+    const box = (a0: number, a1: number, y0: number, y1: number) => {
+      const a = (a0 + a1) / 2;
+      if (d.axis === 'x') b.box(mat, a, (y0 + y1) / 2, d.c, a1 - a0, y1 - y0, WALL, 1.2);
+      else b.box(mat, d.c, (y0 + y1) / 2, a, WALL, y1 - y0, a1 - a0, 1.2);
+    };
+    box(d.a0, d.a0 + LINING, 0, h - LINING);
+    box(d.a1 - LINING, d.a1, 0, h - LINING);
+    box(d.a0, d.a1, h - LINING, h);
   }
 
   /** A shop window: clear glass between brass mullions, over the sill the wall pieces left. */
@@ -278,7 +389,8 @@ export function buildRoom(plan: FloorPlan, b: Batch, m: Mats, glow: GlowMerge): 
 
   /** Recessed downlights on a grid over a rect, skipping `hole`, trimmed in brass. */
   function lights(r: PlannedRoom, rect: Rect, y: number, pitch: number, hole: Rect | null): void {
-    const disc = new THREE.CircleGeometry(0.06, 16);
+    // the lamp and its trim share their edge exactly (the same 20 segments)
+    const disc = new THREE.CircleGeometry(0.06, 20);
     const ring = new THREE.RingGeometry(0.06, 0.1, 20);
     const nx = Math.max(1, Math.round((rect.x1 - rect.x0) / pitch));
     const nz = Math.max(1, Math.round((rect.z1 - rect.z0) / pitch));
@@ -333,8 +445,9 @@ export function buildRoom(plan: FloorPlan, b: Batch, m: Mats, glow: GlowMerge): 
       // the lip that hides the strip: wood, a brass edge
       const lx = sd.cx - sd.n[0] * 0.09;
       const lz = sd.cz - sd.n[1] * 0.09;
-      b.box(wood, lx, low - 0.04, lz, along ? sd.len + 0.36 : 0.18, 0.1, along ? 0.18 : sd.len + 0.36, 1.5);
-      b.box(brass, sd.cx - sd.n[0] * 0.185, low - 0.04, sd.cz - sd.n[1] * 0.185, along ? sd.len + 0.36 : 0.02, 0.04, along ? 0.02 : sd.len + 0.36);
+      // (its top at the band's ceiling, under the fascia; the brass a little longer than the wood)
+      b.box(wood, lx, low - 0.05, lz, along ? sd.len + 0.36 : 0.18, 0.1, along ? 0.18 : sd.len + 0.36, 1.5);
+      b.box(brass, sd.cx - sd.n[0] * 0.185, low - 0.04, sd.cz - sd.n[1] * 0.185, along ? sd.len + 0.37 : 0.02, 0.04, along ? 0.02 : sd.len + 0.37);
       if (cove) glow.box(cove, sd.cx - sd.n[0] * 0.08, low + 0.035, sd.cz - sd.n[1] * 0.08, along ? sd.len : 0.04, 0.03, along ? 0.04 : sd.len);
     }
     if (s.downlights > 0) {
@@ -346,7 +459,7 @@ export function buildRoom(plan: FloorPlan, b: Batch, m: Mats, glow: GlowMerge): 
           const x = e.x + (e.w > e.d ? t * e.w : 0);
           const z = e.z + (e.d > e.w ? t * e.d : 0);
           const at = new THREE.Matrix4().makeRotationX(Math.PI / 2).premultiply(new THREE.Matrix4().makeTranslation(x, low - 0.004, z));
-          glow.add(new THREE.CircleGeometry(0.06, 16), GLOW.bulb, at);
+          glow.add(new THREE.CircleGeometry(0.06, 20), GLOW.bulb, at);
           b.add(new THREE.RingGeometry(0.06, 0.1, 20), brass, at);
           downlights.push({ x, z, room: r.id });
         }
@@ -402,7 +515,7 @@ export function buildRoom(plan: FloorPlan, b: Batch, m: Mats, glow: GlowMerge): 
       b.box(wood, lx, H - 0.05, lz, along ? sd.len + lipD * 2 : lipD, 0.16, along ? lipD : sd.len + lipD * 2, 1.5);
       const ex = sd.cx + sd.n[0] * (lipD + 0.01);
       const ez = sd.cz + sd.n[1] * (lipD + 0.01);
-      b.box(brassM, ex, H - 0.05, ez, along ? sd.len + lipD * 2 : 0.025, 0.05, along ? 0.025 : sd.len + lipD * 2);
+      b.box(brassM, ex, H - 0.05, ez, along ? sd.len + lipD * 2 + 0.01 : 0.025, 0.05, along ? 0.025 : sd.len + lipD * 2 + 0.01);
       const gx = sd.cx + sd.n[0] * 0.12;
       const gz = sd.cz + sd.n[1] * 0.12;
       glow.box(GLOW.warm, gx, H + 0.045, gz, along ? sd.len : 0.05, 0.03, along ? 0.05 : sd.len);

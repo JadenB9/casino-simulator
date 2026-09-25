@@ -116,7 +116,11 @@ export class StationLod {
   constructor(stations: WorldStation[], quality: Quality) {
     this.high = quality === 'high';
     this.solid = this.high ? pbrMaterial() : new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
-    this.glow = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide });
+    // The glowing parts are screens and lamps set a hair off the cabinet (a tenth of a millimetre
+    // to a couple): up close the depth buffer tells them apart, but a stand-in is seen from 8 m
+    // and more, where it can't. They're decals on the body, so they're drawn pulled toward the
+    // eye and always win.
+    this.glow = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, ...DECAL });
     const baked = stations.map((s) => {
       const b = this.bake(s.model);
       b.copy.name = `far:${s.id}`;
@@ -245,7 +249,11 @@ export class StationLod {
   dispose(): void {
     for (const { copy } of this.entries) {
       copy.traverse((o) => {
-        if (o instanceof THREE.Mesh && !(o instanceof THREE.InstancedMesh)) o.geometry.dispose();
+        if (!(o instanceof THREE.Mesh) || o instanceof THREE.InstancedMesh) return;
+        o.geometry.dispose();
+        // the copy's own decal materials (the live model's are the game's)
+        const m = o.material as THREE.Material;
+        if (m.polygonOffset && m.polygonOffsetUnits === DECAL.polygonOffsetUnits) m.dispose();
       });
       copy.removeFromParent();
     }
@@ -359,13 +367,29 @@ export class StationLod {
     });
 
     for (const [mat, pieces] of byMaterial) {
-      const mesh = new THREE.Mesh(merge(pieces, 'uv'), mat);
+      // an unlit textured part (a computer's screen) is a decal on its cabinet, as the glows are
+      const mesh = new THREE.Mesh(merge(pieces, 'uv'), (mat as THREE.MeshBasicMaterial).isMeshBasicMaterial ? decal(mat) : mat);
       // A see-through part drawn after the solid ones, as it would be in the live model.
       mesh.renderOrder = mat.transparent ? 1 : 0;
       out.add(mesh);
     }
     return { copy: out, solid: solid.length ? merge(solid, 'color', this.high) : null, glow: glow.length ? merge(glow, 'color') : null };
   }
+}
+
+/** Drawn a little nearer the eye than the faces it lies on. */
+const DECAL = { polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4 };
+
+const decals = new WeakMap<THREE.Material, THREE.Material>();
+/** The stand-ins' copy of a material, drawn as a decal (the live model keeps its own). */
+function decal(m: THREE.Material): THREE.Material {
+  let d = decals.get(m);
+  if (!d) {
+    d = m.clone();
+    Object.assign(d, DECAL);
+    decals.set(m, d);
+  }
+  return d;
 }
 
 /** One batch holding all these geometries (their instances are added by the caller), or null for none. */

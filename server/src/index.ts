@@ -13,10 +13,14 @@ import { closeWith, corsHeaders, fail, json, originAllowed, readJson } from './h
 import { bearer, logIn, signToken, verifyToken } from './auth.ts';
 import { signTicket, ticketTarget, verifyTicket } from './tickets.ts';
 import { KeyedBuckets } from './ratelimit.ts';
-import { bumpRate, escrowsOf, getAccount, loadProfile, setLook } from './db.ts';
+import { bumpRate, escrowsOf, getAccount, loadProfile, ownedOf, setLook } from './db.ts';
+import { isFreeEmote, emoteItem } from '../../shared/src/items.ts';
 import { takeLoan } from './transfer.ts';
 import { shopApi } from './shop.ts';
 import { leaderboard } from './leaderboard.ts';
+// v6 celebs6: the daily bonus, and the dev stack's celebrity trigger
+import { dailyApi } from './daily.ts';
+import { celebsDevApi } from './floor/celebs.ts';
 import { ipKey } from './floor/directory.ts';
 import type { CasinoFloor } from './floor/index.ts';
 import type { CasinoTable } from './table/host.ts';
@@ -192,6 +196,10 @@ async function handleApi(request: Request, env: Env, route: string, cors: Record
     return json((await signTicket(env.CASINO_TOKEN_SECRET, claims.a, target, now)) satisfies TicketResponse, 200, cors);
   }
 
+  // v6 celebs6: the daily bonus (daily.ts); on the dev stack only, a celebrity or a gift box on demand
+  if (route === 'daily' || route === 'daily/claim') return dailyApi(request, env, route, claims.a, cors);
+  if (route.startsWith('dev/') && env.CASINO_DEV === '1') return celebsDevApi(request, env, route, cors, floor(env));
+
   // The boutique and the bar (shop.ts): paid from the balance, never from chips on tables.
   if (route === 'shop' || route.startsWith('shop/') || route.startsWith('bar/')) return shopApi(request, env, route, claims.a, cors);
 
@@ -285,7 +293,12 @@ async function handleSocket(request: Request, env: Env, url: URL, route: string,
   headers.set('x-casino-ticket', ticket.j);
   headers.set('x-casino-ticket-exp', String(ticket.exp));
 
-  if (route === 'floor') return floorStub(env).fetch(forward(request, headers));
+  if (route === 'floor') {
+    // v6: the emotes this account may send besides the free six (the floor drops the rest)
+    const owned = await ownedOf(env.DB, ticket.a);
+    headers.set('x-casino-emotes', [...owned.items].filter((id) => emoteItem(id) && !isFreeEmote(id)).join(','));
+    return floorStub(env).fetch(forward(request, headers));
+  }
 
   const lobby = route.match(/^table\/([a-z0-9-]+)$/);
   if (lobby) {

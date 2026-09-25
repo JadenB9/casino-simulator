@@ -33,6 +33,13 @@ export interface Stand {
   yaw: number;
 }
 
+/** A piece of furniture as a point to walk up to: its middle and how far it reaches round it. */
+export interface Piece {
+  x: number;
+  z: number;
+  r: number;
+}
+
 export interface Strip {
   x0: number;
   z0: number;
@@ -55,13 +62,21 @@ export interface LifePoints {
     /** The counter's height. */
     top: number;
   };
-  bank: { windows: { banker: Stand; customer: Stand }[] };
+  /** Each teller window: the banker behind it, the customer before it, and the window itself on the counter's front. */
+  bank: { windows: { banker: Stand; customer: Stand; front: { x: number; z: number } }[] };
   /**
-   * The boutique: the shopkeeper behind the counter and the customer before it; where a customer
-   * stands to look at each display case (with the case's height) and each mannequin (with the
-   * piece the shop opens at).
+   * The boutique: the shopkeeper behind the counter and the customer before it, and the counter's
+   * front (its customers' face, x, facing west, from z0 to z1); where a customer stands to look
+   * at each display case (with the case's height) and each mannequin (with the piece the shop
+   * opens at), and where the piece itself stands (`at`, and how far it reaches round, `r`).
    */
-  boutique: { keeper: Stand; customer: Stand; cases: (Stand & { top: number })[]; mannequins: (Stand & { item?: string })[] } | null;
+  boutique: {
+    keeper: Stand;
+    customer: Stand;
+    counter: { x: number; z0: number; z1: number };
+    cases: (Stand & { top: number; at: Piece })[];
+    mannequins: (Stand & { item?: string; at: Piece })[];
+  } | null;
   /** Closed waiter loops: walk them in order and back to the first point; `pause` seconds at a stop. */
   routes?: { x: number; z: number; pause?: number }[][];
 }
@@ -144,6 +159,7 @@ export function lifePoints(plan: FloorPlan): LifePoints {
   const windows = c.windows.map((x) => ({
     banker: { x: round(x), z: round(c.counter.z1 - 0.64 - 0.3), yaw: 0 },
     customer: { x: round(x), z: round(c.counter.z1 + 0.6), yaw: turnAngle(Math.PI) },
+    front: { x: round(x), z: round(c.counter.z1 + 0.06) },
   }));
 
   // the boutique
@@ -168,13 +184,14 @@ export function lifePoints(plan: FloorPlan): LifePoints {
         const toward = Math.sign(mid - f.z) || 1;
         const facing = Math.cos(f.yaw) >= 0 ? toward : -toward;
         const [x, z] = at(f, 0, facing * (FURNITURE.case.d / 2 + 0.45));
-        return { x: round(x), z: round(z), yaw: turnAngle(f.yaw + (facing > 0 ? Math.PI : 0)), top: FURNITURE.case.h };
+        return { x: round(x), z: round(z), yaw: turnAngle(f.yaw + (facing > 0 ? Math.PI : 0)), top: FURNITURE.case.h, at: { x: round(f.x), z: round(f.z), r: round(Math.hypot(FURNITURE.case.w, FURNITURE.case.d) / 2) } };
       });
-    const mannequins = plan.furniture.filter((f) => f.kind === 'mannequin' && f.room === 'boutique').map((f) => ({ ...view(f, 0.95), item: f.wears?.item }));
+    const mannequins = plan.furniture.filter((f) => f.kind === 'mannequin' && f.room === 'boutique').map((f) => ({ ...view(f, 0.95), item: f.wears?.item, at: { x: round(f.x), z: round(f.z), r: round(FURNITURE.mannequin.w / 2) } }));
     const b = plan.boutique;
     boutique = {
       keeper: { x: round(b.keeper.x), z: round(b.keeper.z), yaw: turnAngle(b.keeper.yaw) },
       customer: { x: round(b.customer.x), z: round(b.customer.z), yaw: turnAngle(b.customer.yaw) },
+      counter: { x: round(b.counter.x0), z0: round(b.counter.z0), z1: round(b.counter.z1) },
       cases,
       mannequins,
     };

@@ -7,12 +7,15 @@
 import * as THREE from 'three';
 import './map.css';
 import { el } from '../ui/kit.ts';
+import type { Spot } from './interact.ts';
 import { isTyping, overlayCount } from '../ui/keyboard.ts';
 import { openSheet, type Sheet } from '../ui/menu/sheet.ts';
 import { CATALOG } from '../../../shared/src/games/catalog.ts';
 import { roomAt, type FloorPlan, type PlannedRoom } from './layout.ts';
 import { FURNITURE } from './furniture-spec.ts';
 import { stationName } from './stations.ts';
+
+const DIRECTORY_W = FURNITURE.directory.w;
 
 /** Each room's colour on the plans: its own, from its signs and floor. */
 const TINT: Record<string, string> = {
@@ -248,14 +251,22 @@ export class MapOverlay {
     else this.show();
   }
 
-  show(): void {
+  /**
+   * Open the map. Read at a directory board it opens as the Floor Directory: wider, the plan
+   * beside a legend of every room and what's in it, as the board has (a click on either lights
+   * the room up).
+   */
+  show(directory = false): void {
     if (this.sheet) return;
-    const sheet = openSheet(this.deps.ui, { title: 'Casino Map', subtitle: '', cls: 'map-sheet', onClose: () => this.closed() });
+    const sheet = openSheet(this.deps.ui, { title: directory ? 'Floor Directory' : 'Casino Map', subtitle: '', cls: directory ? 'map-sheet map-directory' : 'map-sheet', onClose: () => this.closed() });
     this.sheet = sheet;
     this.button.setAttribute('aria-pressed', 'true');
-    sheet.body.append(this.draw());
     this.caption = el('div', 'map-caption');
-    sheet.body.append(this.caption);
+    if (directory) {
+      const plan = el('div', 'map-plan');
+      plan.append(this.draw(), this.caption);
+      sheet.body.append(plan, this.legend());
+    } else sheet.body.append(this.draw(), this.caption);
     // N closes it again from inside the panel (the sheet keeps other keys to itself)
     sheet.panel.addEventListener('keydown', (e) => {
       if (e.code === 'KeyN' && !e.ctrlKey && !e.metaKey && !e.altKey && !isTyping(e)) {
@@ -271,6 +282,29 @@ export class MapOverlay {
   close(): void {
     this.sheet?.close();
   }
+
+  /**
+   * "Read the directory" in front of a directory board (Interact's spot provider): E opens the
+   * board's plan big, as the Map, where you are shown live and a click on a room says what's
+   * there.
+   */
+  spots = (p: { x: number; z: number }): Spot[] => {
+    const out: Spot[] = [];
+    for (const f of this.deps.plan.furniture) {
+      if (f.kind !== 'directory') continue;
+      const nx = Math.sin(f.yaw);
+      const nz = Math.cos(f.yaw);
+      const ahead = (p.x - f.x) * nx + (p.z - f.z) * nz;
+      if (ahead < 0.1) continue;
+      // the nearest point of the board's face
+      const along = Math.max(-DIRECTORY_W / 2, Math.min(DIRECTORY_W / 2, (p.x - f.x) * nz - (p.z - f.z) * nx));
+      const x = f.x + along * nz;
+      const z = f.z - along * nx;
+      const d = Math.max(0, Math.hypot(p.x - x, p.z - z) - 0.5);
+      if (d <= 1.4) out.push({ key: `directory:${f.n}`, x, z, d, label: 'Read the directory', use: () => this.show(true) });
+    }
+    return out;
+  };
 
   /** Every frame: you on the map while it's open; the HUD's button once there is a HUD. */
   update(dt: number): void {
@@ -343,6 +377,26 @@ export class MapOverlay {
     this.youEl = you;
     svg.append(rooms, stations, walls, glass, labels, entry, you);
     return svg;
+  }
+
+  /** Every room, A to Z, with its colour and what's there: the board's legend, readable. */
+  private legend(): HTMLElement {
+    const list = el('ol', 'map-legend');
+    for (const r of [...this.deps.plan.rooms].sort((a, b) => a.name.localeCompare(b.name))) {
+      const { games, about } = roomContents(this.deps.plan, r.id);
+      const item = el('li', 'map-legend-room');
+      const pick = el('button', 'map-legend-pick');
+      pick.type = 'button';
+      const swatch = el('span', 'map-swatch');
+      swatch.style.background = TINT[r.id] ?? '#444';
+      pick.append(swatch, el('span', 'map-legend-name', r.name));
+      pick.addEventListener('click', () => this.pick(r.id));
+      item.append(pick);
+      if (about) item.append(el('p', 'map-legend-what', about));
+      if (games.length) item.append(el('p', 'map-legend-games', games.join(' · ')));
+      list.append(item);
+    }
+    return list;
   }
 
   private label(r: PlannedRoom): SVGTextElement[] {
