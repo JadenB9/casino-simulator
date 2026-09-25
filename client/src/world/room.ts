@@ -63,7 +63,7 @@ export interface CasingPart {
 }
 
 function liningMat(kind: PlannedDoor['kind']): string {
-  return kind === 'grand' || kind === 'arch' ? 'marble-black' : kind === 'industrial' ? 'steel' : 'beam';
+  return kind === 'grand' || kind === 'arch' ? 'marble-black' : kind === 'industrial' ? 'steel' : kind === 'lacquer' ? 'lacquer-red' : 'beam';
 }
 
 /**
@@ -107,6 +107,24 @@ export function casingParts(d: PlannedDoor, r: PlannedRoom, m: Mats): CasingPart
       for (let y = 0.3; y < h - 0.2; y += 0.5) part(brass, a, 0.25, y - 0.09, y + 0.09, 0.13);
     }
     part(steel, mid, w + 0.48, h, h + 0.24, 0.13);
+    return out;
+  }
+  if (d.kind === 'lacquer') {
+    // the north wing's east-Asian doors: red lacquer posts and head, a black beam across the top
+    // running out past the posts, a gold bead inside
+    const red = m.get('lacquer-red');
+    const post = 0.2;
+    for (const a of [in0 - post / 2, in1 + post / 2]) part(red, a, post, 0, h, 0.08, { uv: 1.2 });
+    // (the beam's top kept well under the crown and a cove's strip)
+    const head = Math.min(0.22, ceiling - h - 0.33);
+    if (head > 0.06) {
+      part(red, mid, w + 2 * post, h, h + head, 0.08, { uv: 1.2 });
+      part(m.get('lacquer'), mid, w + 2 * post + 0.28, h + head, h + head + 0.08, 0.12);
+    }
+    const bead = 0.024;
+    const top = head > 0.06 ? h + 0.004 + bead : h;
+    for (const a of [in0 - 0.004 - bead / 2, in1 + 0.004 + bead / 2]) part(brass, a, bead, 0, top, 0.09, { from: 0.08 });
+    if (head > 0.06) part(brass, mid, w + 2 * (0.004 + bead), h + 0.004, top, 0.09, { from: 0.08 });
     return out;
   }
   if (d.kind === 'entrance') {
@@ -414,6 +432,7 @@ export function buildRoom(plan: FloorPlan, b: Batch, m: Mats, glow: GlowMerge): 
     const cove = s.cove ? COVES[s.cove] : null;
     if (s.kind === 'coffer') return coffers(r);
     if (s.kind === 'truss') return trusses(r);
+    if (s.kind === 'troffer') return troffers(r);
     if (s.kind === 'panels') {
       under(I, mat, s.ceiling);
       if (s.downlights > 0) lights(r, { x0: I.x0 + 0.4, x1: I.x1 - 0.4, z0: I.z0 + 0.4, z1: I.z1 - 0.4 }, s.ceiling, s.downlights, null);
@@ -547,6 +566,34 @@ export function buildRoom(plan: FloorPlan, b: Batch, m: Mats, glow: GlowMerge): 
     const midZ = (plan.staff.z0 + plan.staff.z1) / 2;
     const j = Math.max(0, Math.min(nz - 1, Math.floor((midZ - P.z0) / cd)));
     for (let i = nx % 2 ? 0 : 1; i < nx; i += 2) chandeliers.push({ x: P.x0 + (i + 0.5) * cw, y: PH - 0.02, z: P.z0 + (j + 0.5) * cd, size: 1.5, room: r.id });
+  }
+
+  /**
+   * The bingo hall: a drop ceiling of pale tiles on a grey grid, with fluorescent troffers set into
+   * it on a regular pitch, each lens inside a steel frame.
+   */
+  function troffers(r: PlannedRoom): void {
+    const s = r.style;
+    const I = r.inner;
+    under(I, m.get(s.ceilingMat), s.ceiling, 0.6);
+    const frame = m.get('chrome');
+    const lens = new THREE.Color('#f4f6ff').multiplyScalar(1.9);
+    const y = s.ceiling;
+    const nx = Math.max(1, Math.round((I.x1 - I.x0) / 2.4));
+    const nz = Math.max(1, Math.round((I.z1 - I.z0) / 2.4));
+    for (let i = 0; i < nx; i++) {
+      for (let j = 0; j < nz; j++) {
+        const x = I.x0 + ((i + 0.5) * (I.x1 - I.x0)) / nx;
+        const z = I.z0 + ((j + 0.5) * (I.z1 - I.z0)) / nz;
+        // the lens a centimetre under the tiles, the frame's four bars round it (not over it)
+        glow.box(lens, x, y - 0.006, z, 0.56, 0.012, 1.16);
+        for (const e of [-1, 1]) {
+          b.box(frame, x + e * 0.3, y - 0.008, z, 0.04, 0.016, 1.24);
+          b.box(frame, x, y - 0.008, z + e * 0.6, 0.56, 0.016, 0.04);
+        }
+        downlights.push({ x, z, room: r.id });
+      }
+    }
   }
 
   /** The yard: a dark roof on steel trusses, a work lamp hanging from every other one. */

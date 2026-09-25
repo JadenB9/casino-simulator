@@ -70,8 +70,8 @@ export const ROUTES: Record<RouteId, Route> = {
   },
   // round the pit's west end to the Online Lounge's computers, then blackjack
   online: {
-    pts: [[0, 14.2], [0, 8.2], [0, 0.5], [-10, -6], [-11.9, -7.8], [-11.9, -17.6], [-11.5, -18.7], [-11.5, -19.4], [-19, -24], [-20, -25], [-16.8, -22.3], [-11.6, -19.5], [-11.5, -19.3], [-11.6, -17.9], [-11.9, -17.6], [-11.9, -7.8], [-10.3, -7.8], [-8.34, -8.9], [0, 0.5], [0, 8.2], [0, 14.2]],
-    stops: [{ at: 1, kind: 'greet', secs: 24, face: 0 }, { at: 9, kind: 'table', secs: 45, face: 1 }, { at: 17, kind: 'table', secs: 45, face: 2 }, { at: 20, kind: 'bye', secs: 9, face: 2 }],
+    pts: [[0, 14.2], [0, 8.2], [0, 0.5], [-10, -6], [-11.9, -7.8], [-11.9, -17.6], [-11.55, -19.65], [-16.45, -22.45], [-19.6, -22.3], [-20, -22.6], [-16.45, -22.5], [-11.6, -19.5], [-11.5, -19.3], [-11.6, -17.9], [-11.9, -17.6], [-11.9, -7.8], [-10.3, -7.8], [-8.34, -8.9], [0, 0.5], [0, 8.2], [0, 14.2]],
+    stops: [{ at: 1, kind: 'greet', secs: 24, face: 0 }, { at: 9, kind: 'table', secs: 45, face: 2 }, { at: 17, kind: 'table', secs: 45, face: 2 }, { at: 20, kind: 'bye', secs: 9, face: 2 }],
   },
   // along the pit's south row, blackjack at both ends, then the slots hall
   pit: {

@@ -1,0 +1,80 @@
+/* Let It Ride: labels pinned to hands, the Ride/Pull bar, the meters, the betting clock and
+   the rules card. Everything sits over the table; the bottom-left corner stays free. */
+
+.lr-hand { display: flex; align-items: baseline; gap: 8px; padding: 3px 10px; border-radius: 4px; font-family: var(--serif); font-size: 14px; font-weight: 600; letter-spacing: 0.04em; white-space: nowrap; color: var(--ink); background: rgba(9, 17, 29, 0.8); border: 1px solid rgba(239, 217, 162, 0.28); pointer-events: none; }
+.lr-hand.mine { font-size: 16px; border-color: var(--line-strong); }
+.lr-hand .muted { color: var(--ink-3); font-size: 0.86em; font-weight: 400; }
+.lr-hand .net { font-family: var(--ui); font-size: 1.05em; letter-spacing: 0.02em; color: var(--ink-2); }
+.lr-hand .net.up { color: var(--win); }
+.lr-hand .net.down { color: var(--lose); }
+/* several of your hands side by side: the hand over its result, narrow enough not to meet */
+.lr-hand.stack { flex-direction: column; align-items: center; gap: 0; max-width: 92px; padding: 2px 7px 3px; font-size: 13px; line-height: 1.15; white-space: normal; text-align: center; }
+.lr-hand.stack.mine { font-size: 13px; }
+
+.lr-name { padding: 1px 8px; border-radius: 3px; font-size: 13px; letter-spacing: 0.05em; color: var(--ink-2); background: rgba(12, 10, 8, 0.66); white-space: nowrap; pointer-events: none; }
+.lr-name.mine { color: var(--brass-hi); }
+.lr-name.away { opacity: 0.5; }
+
+.lr-tip { padding: 3px 9px; border-radius: 3px; font-size: 13px; letter-spacing: 0.06em; white-space: nowrap; color: var(--ink); background: var(--glass-2); border: 1px solid var(--line); pointer-events: none; }
+
+.tray.lr-away { display: none; }
+
+.lr-decide { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; padding: 10px 14px; }
+.lr-decide[hidden] { display: none; }
+.lr-decide .btn { height: 46px; min-width: 150px; font-size: 19px; }
+.lr-hint { margin-left: 4px; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); }
+
+.lr-meters { position: fixed; top: var(--below-hud); left: 16px; display: grid; grid-template-columns: auto auto; align-items: baseline; gap: 2px 16px; padding: 8px 14px; font-size: 18px; }
+.lr-meters .up { color: var(--win); }
+.lr-meters .down { color: var(--lose); }
+
+.lr-rules-btn { position: fixed; top: calc(var(--below-hud) + 98px); left: 16px; height: 30px; font-size: 14px; }
+.lr-rules { position: fixed; top: calc(var(--below-hud) + 138px); left: 16px; width: 360px; max-height: calc(100vh - var(--below-hud) - 240px); overflow: auto; padding: 12px 16px 14px; font-size: 15px; line-height: 1.38; color: var(--ink-2); }
+.lr-rules[hidden] { display: none; }
+.lr-rules h3 { margin: 2px 0 6px; font-family: var(--serif); font-size: 18px; font-weight: 600; letter-spacing: 0.06em; color: var(--brass-hi); }
+.lr-rules p { margin: 6px 0; }
+.lr-paytable { margin: 8px 0; padding: 6px 10px; border: 1px solid var(--line); border-radius: 4px; }
+.lr-paytable .label { margin-bottom: 3px; letter-spacing: 0.08em; }
+.lr-paytable .row { display: flex; justify-content: space-between; gap: 12px; color: var(--ink); }
+.lr-keys { font-size: 13px; color: var(--ink-3); }
+
+.lr-clock { position: fixed; top: var(--below-hud); left: 50%; width: 48px; height: 48px; transform: translateX(-50%); display: grid; place-items: center; }
+.lr-clock[hidden] { display: none; }
+.lr-ring { position: absolute; inset: 0; width: 100%; height: 100%; }
+.lr-ring circle { fill: rgba(12, 10, 8, 0.7); stroke-width: 3; }
+.lr-ring .track { stroke: rgba(255, 255, 255, 0.14); }
+.lr-ring .left { fill: none; stroke: var(--brass-hi); stroke-linecap: round; transform: rotate(-90deg); transform-origin: 50% 50%; }
+.lr-clock.low .left { stroke: var(--lose); }
+.lr-clock-text { position: relative; font-size: 19px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* The dealer's hand, in front of the dealer's cards: "Dealer · Jack high". */
+.lr-hand.lr-dealer { gap: 9px; padding: 4px 12px 5px; background: rgba(9, 17, 29, 0.88); border-color: var(--line-strong); }
+.lr-dealer-word { font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-2); }
+.lr-dealer-hand { font-size: 20px; color: var(--ink); }
+
+/* Touch screens: the rules card's keyboard list means nothing without a keyboard, and its height
+   is measured against the visible screen. */
+@media (pointer: coarse) {
+  .lr-keys { display: none; }
+  .lr-rules { max-height: calc(100dvh - var(--below-hud) - 240px); }
+}
+/* Phones and tablets upright: the decision bar above the back chip, like the tray. */
+@media (max-aspect-ratio: 1/1) {
+  .lr-decide { bottom: 54px; }
+}
+@media (max-width: 560px) {
+  .lr-decide { flex-wrap: wrap; justify-content: center; width: calc(100vw - 20px); max-width: 440px; padding: 8px 10px 10px; }
+  .lr-decide .btn { flex: 1 1 40%; min-width: 0; }
+  .lr-hint { flex: 1 0 100%; text-align: center; margin: 0; }
+  .lr-meters { left: 10px; gap: 2px 12px; padding: 6px 12px; font-size: 16px; }
+  .lr-rules-btn { left: 10px; }
+  .lr-rules { left: 10px; right: 10px; width: auto; max-height: calc(100dvh - var(--below-hud) - 314px); }
+}
+/* On its side: slimmer bars, and the rules card opens on the right where there's height for it. */
+@media (max-height: 480px) {
+  .lr-decide { bottom: max(8px, env(safe-area-inset-bottom, 0px)); padding: 6px 10px; }
+  .lr-decide .btn { min-width: 130px; }
+  .lr-meters { left: 10px; gap: 0 12px; padding: 5px 12px; font-size: 16px; }
+  .lr-rules-btn { top: calc(var(--below-hud) + 82px); left: 10px; }
+  .lr-rules { top: var(--below-hud); left: auto; right: 10px; width: min(380px, 50vw); max-height: calc(100vh - var(--below-hud) - 76px); max-height: calc(100dvh - var(--below-hud) - 76px); }
+}

@@ -1,6 +1,7 @@
 // Floor life: what makes the floor feel busy beyond the people walking it. The LED sign over the
 // pit with the recent big wins and the day's meter over the slots (both in world/), a toast when
-// someone wins big, attract mode on the idle slot machines, and the room's own sound.
+// someone wins big or earns an achievement, attract mode on the idle slot machines, and the
+// room's own sound.
 //
 //   const life = mountFloorLife({ engine, world, sfx });      // once the world is built
 //   const stop = life.connect(link, { onFloor });             // once there is a floor socket
@@ -160,6 +161,11 @@ export function mountFloorLife(deps: FloorLifeDeps): FloorLife {
     } else if (m.t === 'bigwin') {
       const { t: _t, today, ...w } = m;
       schedule(w, today);
+    } else if (m.t === 'feat') {
+      // v6: someone else's achievement, for whoever is out walking (yours is ui/feats' card)
+      const you = link?.you?.name.toLowerCase();
+      if (you && m.name.toLowerCase() === you) return;
+      if (onFloor() && bigWinToasts()) toasts.show({ feat: m.feat, name: m.name });
     }
   };
 

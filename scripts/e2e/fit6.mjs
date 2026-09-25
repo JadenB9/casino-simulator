@@ -10,9 +10,10 @@
 //   desktop one, SHOTS=0 the rounds played for the wheel and dice shots;
 //   FIT=off opens the game with fitting switched off (?fit=off), to see what it was before;
 //   GPU=1 draws on the machine's GPU (much faster than SwiftShader).
-// Games built but not yet placed on the floor (Coinflip, Wheel, Cases, Diamonds) are checked on the
-// dev table page (?dev=table&game=...), with the same measures. Stubs still being built elsewhere
-// are skipped: letitride, paigow, bingo, pachinko (HARNESS=a,b adds any game to the dev-page run).
+// Games built but not yet placed on the floor (Coinflip, Wheel, Cases, Diamonds, Let It Ride, Pai
+// Gow Poker) are checked on the dev table page (?dev=table&game=...), with the same measures. Stubs
+// still being built elsewhere are skipped: bingo, pachinko (HARNESS=a,b sets the dev-page games).
+// Heavy: run it through the machine's gate (~/Projects/casino-worktrees6/heavy.sh node ...).
 
 import { chromium, devices } from 'playwright';
 import { mkdirSync } from 'node:fs';
@@ -32,8 +33,8 @@ const STATIONS = {
   banditwheel: 'bw-1', plinko: 'pk-1', tower: 'tw-1', mines: 'mn-1', dice: 'dc-1', limbo: 'lb-1', keno: 'kn-1', hilo: 'hl-1', crash: 'cs-1',
   'vip-blackjack': 'vip-bj-1', 'vip-baccarat': 'vip-bc-1', 'vip-roulette': 'vip-rl-1',
 };
-const STUBS = ['letitride', 'paigow', 'bingo', 'pachinko'];
-const HARNESS = (process.env.HARNESS ?? 'coinflip,wheel,cases,diamonds').split(',').filter(Boolean);
+const STUBS = ['bingo', 'pachinko'];
+const HARNESS = (process.env.HARNESS ?? 'coinflip,wheel,cases,diamonds,letitride,paigow').split(',').filter(Boolean);
 const VIEWPORTS = (process.env.VIEWPORTS ?? '1920x1080,1440x900,1366x768,1280x720,1280x600,1024x640,2560x1080,900x1000')
   .split(',')
   .map((s) => s.split('x').map(Number));

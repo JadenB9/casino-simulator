@@ -11,7 +11,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { env, exports } from 'cloudflare:workers';
 import { runDurableObjectAlarm, runInDurableObject } from 'cloudflare:test';
-import { ORIGIN, TEST_PASSWORD, connect, type Client } from './helpers.ts';
+import { ORIGIN, TEST_PASSWORD, connect, featsHad, type Client } from './helpers.ts';
 import type { CasinoFloor } from '../src/floor/index.ts';
 import type { CasinoTable } from '../src/table/host.ts';
 import { ALL_IN_MS, BETTING_MS, CRASHED_MS } from '../../shared/src/games/crash/engine.ts';
@@ -37,6 +37,8 @@ async function player(tag: string): Promise<Player> {
   );
   expect(res.status).toBe(200);
   const body = await res.json<any>();
+  // the money here is checked to the cent: no feat pays beside the play
+  await featsHad(body.profile.id);
   return { id: body.profile.id, name: body.profile.name, token: body.token };
 }
 
