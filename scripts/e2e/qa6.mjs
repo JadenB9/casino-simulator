@@ -164,7 +164,7 @@ if (checks.includes('game')) {
   await p.fill('.modal input[type=number]', '1000');
   await p.click('.modal .btn.primary');
   await p.waitForFunction(() => window.casino.app.table?.seated === true, null, { timeout: 20_000 });
-  await p.waitForTimeout(2500);
+  await p.waitForTimeout(6000); // past the fly-in
   await p.screenshot({ path: `${out}/game-bj-1280x600.png` });
   const offscreen = await p.evaluate(() =>
     [...document.querySelectorAll('.table-ui button, .bet-controls button, .chip-rail button')]
