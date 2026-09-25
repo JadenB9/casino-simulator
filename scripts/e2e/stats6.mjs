@@ -165,6 +165,9 @@ log(`A: ${aDice.wins} wins of 12, net ${aDice.net}, streak ${sa.streak}; B: net 
 
 // --- the leaderboards --------------------------------------------------------------------------
 
+// qa6: leaving the table gives mouse look back, and on the GPU's headless Chrome the pointer lock
+// really takes, so the HUD isn't clickable until it's let go (Esc, for a person)
+await A.p.evaluate(() => document.exitPointerLock());
 await A.p.click('button[aria-label="Leaderboards"]');
 await A.p.waitForSelector('.lb-sheet .lb-table', { timeout: 15_000 });
 await A.p.waitForTimeout(800);
