@@ -236,6 +236,8 @@ const FLASHING = [
   'games/bingo/view.ts',
   'games/pachinko/view.ts',
   'world/celebs/flash.ts',
+  // v6 law6: taking a punch shakes the view
+  'world/law/index.ts',
 ];
 
 describe('every module known to flash reads the switch', () => {
