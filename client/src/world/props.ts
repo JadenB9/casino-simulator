@@ -17,11 +17,13 @@ import { modelBytes } from '../render/model-bytes.ts';
  * Each prop's file and what its size measures. `foot`: stood on the middle of its foot (a palm's
  * trunk, a plant's own pot) rather than the middle of its whole spread: a palm's fronds reach
  * further one way than the other, and centred on them its trunk came out at the planter's edge.
+ * `upright`: tipped about its foot so its trunk stands straight up out of the pot (the palm's
+ * leans a few degrees).
  */
-const FILES: Record<Exclude<PropKind, 'chandelier'>, { file: string; fit: 'height' | 'length'; foot?: boolean }> = {
+const FILES: Record<Exclude<PropKind, 'chandelier'>, { file: string; fit: 'height' | 'length'; foot?: boolean; upright?: boolean }> = {
   stool: { file: 'stool.glb', fit: 'height' },
   couch: { file: 'couch.glb', fit: 'length' },
-  palm: { file: 'palm.glb', fit: 'height', foot: true },
+  palm: { file: 'palm.glb', fit: 'height', foot: true, upright: true },
   'plant-a': { file: 'plant-a.glb', fit: 'height', foot: true },
   'plant-b': { file: 'plant-b.glb', fit: 'height', foot: true },
   'lamp-floor': { file: 'lamp-floor.glb', fit: 'height' },
@@ -85,13 +87,14 @@ export class Props {
         const spec = FILES[kind];
         try {
           const { parts, size, min, foot } = await this.load(spec.file);
+          const tip = spec.upright ? upright(parts, foot, min.y, size.y) : new THREE.Matrix4();
           const len = spec.fit === 'height' ? size.y : Math.max(size.x, size.z);
           // stand the model on its base, centred on the spot (by its foot, or its bounds)
           const cx = spec.foot ? foot.x : min.x + size.x / 2;
           const cz = spec.foot ? foot.y : min.z + size.z / 2;
           const mats = list.map((p) => {
             const s = p.size / len;
-            return new THREE.Matrix4().compose(new THREE.Vector3(p.x, p.y, p.z), new THREE.Quaternion().setFromAxisAngle(_up, p.ry), new THREE.Vector3(s, s, s)).multiply(new THREE.Matrix4().makeTranslation(-cx, -min.y, -cz));
+            return new THREE.Matrix4().compose(new THREE.Vector3(p.x, p.y, p.z), new THREE.Quaternion().setFromAxisAngle(_up, p.ry), new THREE.Vector3(s, s, s)).multiply(tip).multiply(new THREE.Matrix4().makeTranslation(-cx, -min.y, -cz));
           });
           this.group.add(this.instance(kind, parts, mats, list.map((p) => p.room)));
         } catch (err) {
@@ -324,6 +327,46 @@ export function footOf(parts: readonly { geometry: THREE.BufferGeometry; matrix:
     }
   }
   return x0 <= x1 ? new THREE.Vector2((x0 + x1) / 2, (z0 + z1) / 2) : new THREE.Vector2();
+}
+
+/**
+ * The turn about a model's foot (its foot at the origin) that stands its trunk up straight: the
+ * trunk followed up from the foot in slices to 60% of the height, and the line from the foot to
+ * the last slice's middle turned to vertical.
+ */
+export function upright(parts: readonly { geometry: THREE.BufferGeometry; matrix: THREE.Matrix4 }[], foot: THREE.Vector2, y0: number, h: number): THREE.Matrix4 {
+  const pts: THREE.Vector3[] = [];
+  for (const p of parts) {
+    const pos = p.geometry.getAttribute('position');
+    for (let i = 0; i < pos.count; i++) pts.push(new THREE.Vector3().fromBufferAttribute(pos, i).applyMatrix4(p.matrix));
+  }
+  // the foot's reach, then each slice's middle near the last one's
+  let r = 0;
+  for (const v of pts) if (v.y <= y0 + h * 0.03) r = Math.max(r, Math.hypot(v.x - foot.x, v.z - foot.y));
+  let cx = foot.x;
+  let cz = foot.y;
+  let top = 0;
+  for (let t = 0.05; t <= 0.6 + 1e-9; t += 0.05) {
+    const ys = y0 + t * h;
+    let x0 = Infinity;
+    let x1 = -Infinity;
+    let z0 = Infinity;
+    let z1 = -Infinity;
+    for (const v of pts) {
+      if (Math.abs(v.y - ys) > h * 0.025 || Math.hypot(v.x - cx, v.z - cz) > r * 1.6) continue;
+      x0 = Math.min(x0, v.x);
+      x1 = Math.max(x1, v.x);
+      z0 = Math.min(z0, v.z);
+      z1 = Math.max(z1, v.z);
+    }
+    if (x0 > x1) continue;
+    cx = (x0 + x1) / 2;
+    cz = (z0 + z1) / 2;
+    top = t * h;
+  }
+  if (top <= 0) return new THREE.Matrix4();
+  const lean = new THREE.Vector3(cx - foot.x, top, cz - foot.y).normalize();
+  return new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion().setFromUnitVectors(lean, _up));
 }
 
 /** A copy of a part scaled by k about its middle across its two short axes (its long one kept). */
