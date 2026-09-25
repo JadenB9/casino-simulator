@@ -120,9 +120,13 @@ if (checks.includes('dev')) {
     // the casino's elevator from the lobby
     const bank = await p.evaluate(() => {
       const L = window.casino.world.city.casinoBank;
-      return { door: L.doorway(0), car: L.centre(0) };
+      const a = L.doorway(0);
+      const b = L.doorway(L.spec.cars - 1);
+      const c = L.centre(0);
+      return { mid: { x: (a.x + b.x) / 2, z: (a.z + b.z) / 2 }, n: { x: a.x - c.x, z: a.z - c.z } };
     });
-    await camera(p, [[bank.door.x + 4.5, 1.8, bank.door.z + 2.2], [bank.door.x, 1.4, bank.door.z]]);
+    const k = 4.6 / Math.hypot(bank.n.x, bank.n.z);
+    await camera(p, [[bank.mid.x + bank.n.x * k - 1.2, 1.8, bank.mid.z + bank.n.z * k], [bank.mid.x, 1.5, bank.mid.z]]);
     await frames(p, 12);
     await shot(p, `${quality}-casino-bank`);
     await camera(p, null);
@@ -368,15 +372,21 @@ if (checks.includes('game')) {
   // B stands in the lobby looking at the elevator
   const bank = await A.evaluate(() => {
     const L = window.casino.world.city.casinoBank;
-    return { door: L.doorway(0), car: L.centre(0), yaw: L.yaw };
+    const door = L.doorway(0);
+    const car = L.centre(0);
+    const n = Math.hypot(door.x - car.x, door.z - car.z);
+    return { door, car, yaw: L.yaw, nx: (door.x - car.x) / n, nz: (door.z - car.z) / n };
   });
-  await B.evaluate(([x, z]) => window.casino.world.teleport(x, z, -Math.PI / 2), [bank.door.x + 4, bank.door.z - 1.2]);
+  // (a point `k` metres out in front of the doors)
+  const out = (k) => [bank.door.x + bank.nx * k, bank.door.z + bank.nz * k];
+  const [bx, bz] = out(4.2);
+  await B.evaluate(([x, z, y]) => window.casino.world.teleport(x, z, y), [bx - 1.2, bz, bank.yaw + Math.PI]);
   // A walks up to the doors: they open by themselves; E there calls the car
-  await travelTo(A, bank.door.x + 2.2, bank.door.z, bank.yaw + Math.PI);
+  await travelTo(A, ...out(2.2), bank.yaw + Math.PI);
   await A.waitForTimeout(600);
   const atDoor = await where(A);
   ok(/Call the elevator/.test(atDoor.prompt) || (await A.evaluate(() => window.casino.world.city.casinoBank.isOpen(0))), `at the doors: "${atDoor.prompt.trim()}"`);
-  await travelTo(A, bank.door.x + 0.9, bank.door.z, bank.yaw + Math.PI);
+  await travelTo(A, ...out(0.9), bank.yaw + Math.PI);
   await A.waitForTimeout(1400);
   ok(await A.evaluate(() => window.casino.world.city.casinoBank.isOpen(0)), 'the doors open for someone walking up to them');
   await shot(A, 'game-doors-open');
@@ -501,6 +511,8 @@ if (checks.includes('game')) {
   await shot(B, 'game-b-sees-a-back');
 
   // a ride asked for from across the room: refused, in words
+  await travelTo(B, 0, 7, Math.PI);
+  await B.waitForTimeout(500);
   await B.evaluate(() => window.casino.app.link.send({ t: 'lift', to: 'roof' }));
   await B.waitForSelector('.toast', { timeout: 3000 }).catch(() => null);
   const refused = await B.evaluate(() => [...document.querySelectorAll('.toast')].map((t) => t.textContent).join(' '));
