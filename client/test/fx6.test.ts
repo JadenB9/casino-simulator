@@ -5,7 +5,9 @@ import { SPAWN, planFloor, roomAt, type FloorPlan } from '../src/world/layout.ts
 import { reachFrom, reached, walkGrid } from '../src/world/reach.ts';
 import { GAMES } from '../src/games/index.ts';
 import { FxBook, envelope, fxKey, phaseOf, playable, reachOf } from '../src/world/fx/timing.ts';
-import { PLINTH, STATUE_POST, fxRoom, inside, seenFrom, statueSpots } from '../src/world/fx/scope.ts';
+import { DOOR_CONE, PLINTH, STATUE_POST, fxRoom, inDoorCone, inside, seenFrom, statueSpots } from '../src/world/fx/scope.ts';
+import { SHELL_R, shellAt, topperCard } from '../src/world/fx/takeover.ts';
+import { ceilingAt } from '../src/world/layout.ts';
 import { captionOf, clock } from '../src/world/fx/caption.ts';
 import { ROUND_ITEM, withGlass } from '../src/world/fx/round.ts';
 import { ballSpot, shellGeometry } from '../src/world/fx/disco.ts';
@@ -283,6 +285,69 @@ describe('the disco', () => {
       }
       g.dispose();
     }
+  });
+});
+
+describe('the doorways', () => {
+  it('keep the way in to every door clear, on both sides', () => {
+    for (const d of P.doors) {
+      const mid = (d.a0 + d.a1) / 2;
+      for (const side of [-1, 1]) {
+        for (const out of [0.5, 1.5, DOOR_CONE - 0.3]) {
+          const [x, z] = d.axis === 'x' ? [mid, d.c + side * out] : [d.c + side * out, mid];
+          expect(inDoorCone(P, x, z, 0), `${d.id} ${side} ${out}`).toBe(true);
+        }
+      }
+    }
+    // the middle of a room isn't anyone's doorway
+    const pit = room('pit');
+    expect(inDoorCone(P, pit.cx, pit.cz, 0)).toBe(false);
+  });
+
+  it('never have a statue in them', () => {
+    for (const s of statueSpots(P)) expect(inDoorCone(P, s.x, s.z, PLINTH.base / 2), `${s.x},${s.z}`).toBe(false);
+  });
+});
+
+describe('own the night', () => {
+  const hangers = [{ x: room('lobby').cx, z: room('lobby').cz, r: 0.9 }];
+
+  it("bursts its shells clear of every ceiling, wall and chandelier", () => {
+    let tried = 0;
+    for (const r of P.rooms) {
+      const L = r.inner;
+      for (let x = L.x0; x <= L.x1; x += 0.7) {
+        for (let z = L.z0; z <= L.z1; z += 0.7) {
+          const s = shellAt(P, r, hangers, x, z);
+          if (!s) continue;
+          tried++;
+          expect(s.r).toBeLessThanOrEqual(SHELL_R);
+          // the stars' reach, all round, under the lowest ceiling near
+          for (const [dx, dz] of [[0, 0], [s.r, 0], [-s.r, 0], [0, s.r], [0, -s.r]]) expect(s.y + s.r).toBeLessThan(ceilingAt(P, x + dx, z + dz));
+          expect(x - s.r).toBeGreaterThan(L.x0);
+          expect(x + s.r).toBeLessThan(L.x1);
+          expect(z - s.r).toBeGreaterThan(L.z0);
+          expect(z + s.r).toBeLessThan(L.z1);
+          for (const h of hangers) expect(Math.hypot(h.x - x, h.z - z)).toBeGreaterThan(h.r + s.r);
+          expect(s.y).toBeGreaterThanOrEqual(2.2);
+        }
+      }
+    }
+    expect(tried).toBeGreaterThan(200);
+  });
+
+  it("fits a name card inside every kind of slot topper's face", () => {
+    const l = { top: 1.9, width: 0.7 };
+    const arch = topperCard({ ...l, topper: 'arch' });
+    // the arch's face is 0.57 wide and its crown 0.255 over the top
+    expect(arch.w).toBeLessThan(0.57);
+    expect(arch.y + arch.h / 2).toBeLessThan(l.top + 0.255);
+    const sign = topperCard({ ...l, topper: 'sign' });
+    expect(sign.w).toBeLessThan(l.width - 0.05);
+    expect(sign.y + sign.h / 2).toBeLessThan(l.top + 0.22);
+    const disc = topperCard({ ...l, topper: 'disc' });
+    // the corners stay inside the disc's 0.205 face
+    expect(Math.hypot(disc.w / 2, disc.h / 2)).toBeLessThan(0.205);
   });
 });
 
