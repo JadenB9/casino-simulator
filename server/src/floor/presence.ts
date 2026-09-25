@@ -18,7 +18,8 @@
 // walking off (a position more than SEAT_KEEP_CM from the seat) and leaving the floor free it.
 
 import type { FloorClientMsg, FloorServerMsg, PlayerInfo } from '../../../shared/src/protocol.ts';
-import { FLOOR_BOUNDS, PROTOCOL_VERSION } from '../../../shared/src/protocol.ts';
+import { PROTOCOL_VERSION } from '../../../shared/src/protocol.ts';
+import { ZONES, clampTo, zoneOf, type Rect } from '../../../shared/src/zones.ts';
 import type { Look } from '../../../shared/src/look.ts';
 import { SEAT_KEEP_CM, SEAT_REACH_CM, SeatBook } from '../../../shared/src/seats.ts';
 
@@ -57,6 +58,11 @@ export interface FloorAtt {
   active?: number;
   /** v6: the emotes this account owns beyond the free ones (bought or earned); others are dropped. */
   emotes?: string[];
+  /**
+   * v6: kept inside this rect (the jail) whatever zone it is in; set and cleared by the law
+   * (confine()). Not carried over to a new connection: the law re-applies it on connect.
+   */
+  confine?: Rect | null;
 }
 
 type Broadcast = (msg: FloorServerMsg, except?: WebSocket) => void;
@@ -134,8 +140,7 @@ export class Presence {
     if (!w) return;
     const a = w.att;
     const now = Date.now();
-    let x = clamp(msg.x, FLOOR_BOUNDS.minX, FLOOR_BOUNDS.maxX);
-    let z = clamp(msg.z, FLOOR_BOUNDS.minZ, FLOOR_BOUNDS.maxZ);
+    let { x, z } = clampTo(bounds(a), msg.x, msg.z);
     // Walking off a seat gets you up from it, even if the stand itself went missing.
     if (a.seat && Math.hypot(x - a.seat.x, z - a.seat.z) > SEAT_KEEP_CM) this.unseat(ws, a);
     const placing = a.fresh === true;
@@ -218,8 +223,7 @@ export class Presence {
     const w = this.live.get(ws);
     if (!w) return;
     const a = w.att;
-    const x = clamp(msg.x, FLOOR_BOUNDS.minX, FLOOR_BOUNDS.maxX);
-    const z = clamp(msg.z, FLOOR_BOUNDS.minZ, FLOOR_BOUNDS.maxZ);
+    const { x, z } = clampTo(bounds(a), msg.x, msg.z);
     if (Math.hypot(x - a.x, z - a.z) > SEAT_REACH_CM) {
       this.send(ws, { t: 'seat.no', seat: msg.seat, msg: 'Walk up to it first.' });
       return;
@@ -234,6 +238,49 @@ export class Presence {
     this.save(ws, a);
     this.broadcast({ t: 'player', id: a.accountId, seat: msg.seat });
     this.onMessage(ws, { t: 'st', x, z, r: msg.r });
+  }
+
+  /**
+   * v6: move a player to (x, z) now, in whatever zone that is (the elevator, jail, release): no
+   * speed check, off any floor seat, and the player hears `tp` so the client goes there at once.
+   * False if the account isn't on the floor.
+   */
+  teleport(accountId: number, x: number, z: number, r: number): boolean {
+    const now = Date.now();
+    let found = false;
+    for (const [ws, w] of this.live) {
+      if (w.att.accountId !== accountId || ws.readyState !== WebSocket.OPEN) continue;
+      found = true;
+      const a = w.att;
+      if (a.seat) this.unseat(ws, a);
+      const to = clampTo(a.confine ?? ZONES[zoneOf(x, z) ?? 'casino'], x, z);
+      a.x = to.x;
+      a.z = to.z;
+      a.r = r;
+      a.t = now;
+      a.fresh = false;
+      a.active = now;
+      w.bank = MAX_BANK;
+      w.moving = false;
+      this.save(ws, a);
+      this.dirty.add(ws);
+      this.send(ws, { t: 'tp', x: a.x, z: a.z, r });
+    }
+    if (found) this.flush(now);
+    return found;
+  }
+
+  /** v6: keep a player inside `rect` (the jail), or let them go (null). */
+  confine(accountId: number, rect: Rect | null): boolean {
+    return this.update(accountId, (a) => {
+      a.confine = rect;
+    });
+  }
+
+  /** v6: where a player is now (cm), or null if they aren't on the floor. */
+  positionOf(accountId: number): { x: number; z: number; r: number } | null {
+    const a = this.walkerOf(accountId)?.att;
+    return a ? { x: a.x, z: a.z, r: a.r } : null;
   }
 
   /** Get up from a floor seat (nothing happens if you aren't sitting). */
@@ -368,4 +415,9 @@ function info(a: FloorAtt): PlayerInfo {
 
 function clamp(v: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, v));
+}
+
+/** Where a player may walk: the jail if confined there, else the zone they're in (the casino if between). */
+function bounds(a: FloorAtt): Rect {
+  return a.confine ?? ZONES[zoneOf(a.x, a.z) ?? 'casino'];
 }

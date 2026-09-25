@@ -114,7 +114,8 @@ export function formatCompact(amount: Cents): string {
   if (abs < 1000) return formatMoney(amount);
   const sign = d < 0 ? '−' : '';
   if (abs < 1_000_000) return `${sign}$${trim(abs / 1000)}K`;
-  return `${sign}$${trim(abs / 1_000_000)}M`;
+  if (abs < 1_000_000_000) return `${sign}$${trim(abs / 1_000_000)}M`;
+  return `${sign}$${trim(abs / 1_000_000_000)}B`;
 }
 
 function trim(n: number): string {

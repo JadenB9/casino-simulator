@@ -226,6 +226,14 @@ await shot(a.p, 'effects');
 await a.p.click('.bq-item[data-id="fx-disco"]');
 await a.p.waitForTimeout(1500);
 await shot(a.p, 'effects-disco');
+// the private collection, in its case
+await a.p.click('.bq-seg .seg-btn[data-id="vault"]');
+await a.p.waitForTimeout(1200);
+await shot(a.p, 'vault');
+await a.p.click('.bq-item[data-id="emperor-robe"]');
+await a.p.waitForTimeout(1500);
+await shot(a.p, 'vault-robe');
+check((await a.p.$$('.bq-item.vault')).length === 5, 'the Vault shows the five pieces of the collection');
 await a.p.keyboard.press('Escape');
 await a.p.waitForTimeout(400);
 check(!(await a.p.$('.boutique')), 'Esc closes the boutique');
