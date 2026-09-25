@@ -11,6 +11,7 @@ import type { Card } from '../../../../shared/src/cards.ts';
 import { formatMoney, type Cents } from '../../../../shared/src/money.ts';
 import type { HoldemView, HoldemEvent, HoldemSeatView } from '../../../../shared/src/games/holdem/protocol.ts';
 import { ACT_MS } from '../../../../shared/src/games/holdem/engine.ts';
+import { HOLDEM_BUY_IN } from '../../../../shared/src/limits.ts';
 import { cardText, cardInt, intCard, evaluate, bestFive, TRIPS, FULL_HOUSE, STRAIGHT_FLUSH } from '../../../../shared/src/games/holdem/eval.ts';
 import { cryptoRng } from '../../../../shared/src/rng.ts';
 import { CardMesh, dealCard, flipCard, CARD_W } from '../../table/cards.ts';
@@ -520,7 +521,7 @@ export function mountHoldem(ctx: TableViewCtx): TableView {
     seatTitle.textContent = busted ? 'Out of chips' : 'Take a seat';
     seatNote.textContent = busted
       ? `Rebuy for ${money(buyIn.min)} to ${money(buyIn.max)}, or leave the table.`
-      : `Bring ${money(buyIn.min)} to ${money(buyIn.max)} to the table (20 to 100 big blinds).`;
+      : `Bring ${money(buyIn.min)} to ${money(buyIn.max)} to the table (${HOLDEM_BUY_IN.min} to ${HOLDEM_BUY_IN.max} big blinds).`;
     rebuy.textContent = busted ? 'Rebuy' : 'Buy in';
   }
 

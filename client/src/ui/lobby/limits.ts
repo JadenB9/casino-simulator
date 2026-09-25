@@ -42,10 +42,15 @@ function remember(game: GameId, l: TableLimits): void {
   }
 }
 
-/** Dollars typed into a field, as cents; NaN when it isn't a whole number of dollars. */
+/** Dollars typed into a field, as cents ("25", "1,000", "0.50"); NaN when it isn't an amount. */
 function dollarsIn(input: HTMLInputElement): Cents {
   const text = input.value.replace(/[\s,$]/g, '');
-  return /^\d{1,9}$/.test(text) ? Number(text) * 100 : NaN;
+  return /^\d{0,9}(\.\d{1,2})?$/.test(text) && text !== '' && text !== '.' ? Math.round(Number(text) * 100) : NaN;
+}
+
+/** Cents as the fields show them: "25", "0.50". */
+function dollarsOut(c: Cents): string {
+  return c % 100 === 0 ? String(c / 100) : (c / 100).toFixed(2);
 }
 
 export class LimitsPicker {
@@ -89,7 +94,7 @@ export class LimitsPicker {
     // Hold'em's options are the blinds themselves, one short line each ("$1K/$2K")
     this.grid.classList.toggle('blinds', blinds);
     tiers.forEach((t, i) => this.grid.append(this.option(i, t.name || limitsLabel(game, t, true), t.name ? limitsLabel(game, t, true) : '')));
-    this.grid.append(this.option(tiers.length, 'Custom', blinds ? '' : 'Your own'));
+    this.grid.append(this.option(tiers.length, 'Custom', blinds ? 'Any blinds' : 'Your own'));
 
     // Custom: two amounts in whole dollars, and the rule they have to meet.
     for (const [input, label] of [
@@ -97,7 +102,7 @@ export class LimitsPicker {
       [this.maxInput, blinds ? 'Big blind' : 'Maximum'],
     ] as const) {
       input.type = 'text';
-      input.inputMode = 'numeric';
+      input.inputMode = blinds ? 'decimal' : 'numeric';
       input.autocomplete = 'off';
       input.spellcheck = false;
       input.setAttribute('aria-label', `${label} in dollars`);
@@ -106,8 +111,8 @@ export class LimitsPicker {
       field.append(el('span', 'lim-field-name', label), el('span', 'lim-sign', '$'), input);
       this.custom.append(field);
     }
-    this.minInput.value = String(this.customLimits.min / 100);
-    this.maxInput.value = String(this.customLimits.max / 100);
+    this.minInput.value = dollarsOut(this.customLimits.min);
+    this.maxInput.value = dollarsOut(this.customLimits.max);
     this.rule.setAttribute('aria-live', 'polite');
     this.custom.append(this.rule);
 
@@ -199,12 +204,12 @@ export class LimitsPicker {
     this.custom.hidden = !custom;
     const v = this.value;
     if (custom) {
-      const problem = Number.isNaN(this.customLimits.min) || Number.isNaN(this.customLimits.max) ? 'Whole dollars only.' : limitsProblem(this.game, this.customLimits);
+      const problem = Number.isNaN(this.customLimits.min) || Number.isNaN(this.customLimits.max) ? 'Amounts in dollars, like 25 or 0.50.' : limitsProblem(this.game, this.customLimits);
       this.rule.textContent = problem ?? this.ruleText();
       this.rule.classList.toggle('bad', !!problem);
       const opt = this.buttons[this.spec.tiers.length]!;
       const optRange = opt.querySelector('.lim-opt-range');
-      if (optRange) optRange.textContent = v ? limitsLabel(this.game, v, true) : 'Your own';
+      if (optRange) optRange.textContent = v ? limitsLabel(this.game, v, true) : this.spec.kind === 'blinds' ? 'Any blinds' : 'Your own';
       else opt.querySelector('.lim-opt-name')!.textContent = v ? limitsLabel(this.game, v, true) : 'Custom';
     }
     if (!v) {
@@ -230,7 +235,10 @@ export class LimitsPicker {
     const { low, high } = this.spec.min;
     const min = this.customLimits.min;
     const r = maxRange(this.spec, Number.isFinite(min) && min >= low && min <= high ? min : low);
-    if (this.spec.kind === 'blinds') return `Small blind ${formatMoney(low)} to ${formatMoney(high)}; big blind two to three times it, up to ${formatMoney(this.spec.max.ceiling)}.`;
+    if (this.spec.kind === 'blinds') {
+      const small = this.spec.min.fine !== undefined && low < 100 ? `${formatMoney(low)}, or whole dollars up to ${formatMoney(high)}` : `${formatMoney(low)} to ${formatMoney(high)}`;
+      return `Any stakes: small blind ${small}; big blind two to three times it, in whole dollars.`;
+    }
     return `Minimum ${formatMoney(low)} to ${formatMoney(high)}. Maximum ${formatMoney(r.low)} to ${formatMoney(r.high)}.`;
   }
 }

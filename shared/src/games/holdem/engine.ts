@@ -18,6 +18,7 @@ import { type Cents, DOLLAR, formatMoney } from '../../money.ts';
 import type { EngineCtx, GameEngine, Step, Refusal, TableConfig, TableMode, ChipMove, RoundResult, GameEvent } from '../../engine.ts';
 import { refuse } from '../../engine.ts';
 import { isObj, isAmount } from '../../protocol.ts';
+import { holdemBuyIn, holdemStep } from '../../limits.ts';
 import { type Rng, shuffle, randInt, randUnit } from '../../rng.ts';
 import * as R from './rules.ts';
 import { evaluate, handName, bestFive, intCard, cardText } from './eval.ts';
@@ -37,7 +38,7 @@ export type { HoldemAction, HoldemView, HoldemEvent } from './protocol.ts';
 
 export const SMALL_BLIND: Cents = 5 * DOLLAR;
 export const BIG_BLIND: Cents = 10 * DOLLAR;
-/** Bets and raises are whole dollars (an all-in is whatever is left). */
+/** Bets and raises are whole dollars (an all-in is whatever is left); at $0.50/$1, half dollars (limits.ts holdemStep). */
 export const STEP: Cents = DOLLAR;
 
 /** The regular clock for one decision. */
@@ -129,8 +130,8 @@ function config(_variant: string, mode: TableMode): TableConfig {
     variant: '',
     mode,
     maxSeats: mode === 'solo' ? 6 : 9,
-    // 20 to 100 big blinds (4.1).
-    buyIn: { min: 20 * BIG_BLIND, max: 100 * BIG_BLIND },
+    // 20 to 250 big blinds (4.1): a short stack to a deep one.
+    buyIn: holdemBuyIn(BIG_BLIND),
     // No limit: a bet is capped by the stack, not by the table. `min` is the big blind.
     limits: { default: { min: BIG_BLIND, max: 1_000_000 * DOLLAR, step: STEP } },
     options: { sb: SMALL_BLIND, bb: BIG_BLIND },
@@ -141,6 +142,12 @@ function blinds(cfg: TableConfig): { sb: Cents; bb: Cents } {
   const sb = Number(cfg.options.sb);
   const bb = Number(cfg.options.bb);
   return { sb: sb > 0 ? sb : SMALL_BLIND, bb: bb > 0 ? bb : BIG_BLIND };
+}
+
+/** The step bets and raises go in at this table. */
+function stepOf(cfg: TableConfig): Cents {
+  const { sb, bb } = blinds(cfg);
+  return holdemStep(sb, bb);
 }
 
 function parseAction(raw: unknown): HoldemAction | null {
@@ -614,10 +621,10 @@ export function botSituation(s: HoldemState, seat: number): BotSituation {
     board: [...h.board],
     street: h.street,
     bb: h.bb,
-    step: STEP,
+    step: stepOf(s.cfg),
     pot: R.potTotal(h),
     bet: h.bet,
-    legal: R.legal(h, p, STEP),
+    legal: R.legal(h, p, stepOf(s.cfg)),
     position: positionOf(h, seat),
     opponents: h.players.filter((o) => o.seat !== seat && !o.folded).map((o) => ({ strong: s.pre.raisers.includes(o.seat) })),
     preRaises: s.pre.raises,
@@ -638,7 +645,7 @@ function botAct(s: HoldemState, ctx: EngineCtx, out: Out, seat: number): void {
   const d = decide(botSituation(s, seat), persona, ctx.rng);
   const prevBet = h.bet;
   botStats.decisions++;
-  let r = R.applyMove(h, p, d.kind, d.to, STEP);
+  let r = R.applyMove(h, p, d.kind, d.to, stepOf(s.cfg));
   if (!r.ok) {
     botStats.refused++;
     const m = R.timeoutMove(h, p);
@@ -693,7 +700,7 @@ function act(state: HoldemState, seat: number, action: HoldemAction, ctx: Engine
   const p = R.player(h, seat)!;
   const prevBet = h.bet;
   const to = action.type === 'bet' ? action.amount : action.type === 'raise' ? action.to : undefined;
-  const r = R.applyMove(h, p, action.type, to, STEP);
+  const r = R.applyMove(h, p, action.type, to, stepOf(s.cfg));
   if (!r.ok) return refuse(r.code, r.msg);
   useBank(s, seat, ctx.now);
   st.away = false;
@@ -742,8 +749,8 @@ function seatView(s: HoldemState, st: SeatState, viewer: number | null): HoldemS
   };
 }
 
-function legalView(h: R.Hand, p: R.Player): HoldemLegalView {
-  const l = R.legal(h, p, STEP);
+function legalView(h: R.Hand, p: R.Player, step: Cents): HoldemLegalView {
+  const l = R.legal(h, p, step);
   return {
     fold: !l.canCheck,
     check: l.canCheck,
@@ -753,7 +760,7 @@ function legalView(h: R.Hand, p: R.Player): HoldemLegalView {
     raise: l.canRaise ? { min: l.minTo, max: l.maxTo } : null,
     behind: l.behind,
     street: p.street,
-    step: STEP,
+    step,
   };
 }
 
@@ -788,7 +795,7 @@ function view(s: HoldemState, viewer: number | null): HoldemView {
         ? {
             seat: me.seat,
             cards: mine ? mine.hole.map(intCard) : [],
-            legal: h && mine && s.phase === 'playing' && h.toAct === me.seat ? legalView(h, mine) : null,
+            legal: h && mine && s.phase === 'playing' && h.toAct === me.seat ? legalView(h, mine, stepOf(s.cfg)) : null,
             sittingOut: me.sittingOut,
             waiting: me.waiting,
             bank: me.bank,

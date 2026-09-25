@@ -169,13 +169,13 @@ describe('a lobby at chosen limits', () => {
     ca.ws.close();
   });
 
-  it("Hold'em: the stakes are the blinds, the buy-in 20 to 100 big blinds", async () => {
+  it("Hold'em: the stakes are the blinds, the buy-in 20 to 250 big blinds", async () => {
     const a = await player('he');
     const res = await createTable(a, { game: 'holdem', visibility: 'private', limits: { min: 2_500, max: 5_000 } });
     const { tableId, pin } = await res.json<any>();
     const [c, snap] = await enter(a, `table/${tableId}`, `&pin=${pin}`);
     expect(snap.meta.config.options).toMatchObject({ sb: 2_500, bb: 5_000 });
-    expect(snap.meta.config.buyIn).toEqual({ min: 100_000, max: 500_000 });
+    expect(snap.meta.config.buyIn).toEqual({ min: 100_000, max: 1_250_000 });
     c.ws.close();
   });
 });

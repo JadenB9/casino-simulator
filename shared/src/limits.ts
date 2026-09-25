@@ -6,9 +6,9 @@
 // shape of the Standard one: every per-bet limit (roulette's inside and outside, the craps odds
 // and props, a side bet) and the buy-in scale from the chosen minimum and maximum in the same
 // proportion the Standard table has, rounded to that bet's step. Every Standard table takes a
-// buy-in of up to a hundred times its maximum bet, so every table does (Hold'em keeps poker's
-// 20 to 100 big blinds). Only how much may be bet changes, never what a bet pays, so the
-// published odds hold at every table.
+// buy-in of up to a hundred times its maximum bet, so every table does (Hold'em takes 20 to 250
+// big blinds, a short stack to a deep one). Only how much may be bet changes, never what a bet
+// pays, so the published odds hold at every table.
 
 import type { GameId, TableConfig } from './engine.ts';
 import { type BetLimits, type Cents, DOLLAR, formatCompact, formatMoney } from './money.ts';
@@ -33,8 +33,11 @@ export interface LimitSpec {
   tiers: readonly LimitTier[];
   /** The tier that is the engine's own config(). */
   standard: number;
-  /** A custom choice: the minimum from `low` to `high` in `step`s ... */
-  min: { low: Cents; high: Cents; step: Cents };
+  /**
+   * A custom choice: the minimum from `low` to `high` in `step`s (below a dollar, in `fine`
+   * steps instead: Hold'em's fifty-cent small blind) ...
+   */
+  min: { low: Cents; high: Cents; step: Cents; fine?: Cents };
   /** ... and the maximum at least `ratio` (at most `ratioMax`) times it, never above `ceiling`. */
   max: { ratio: number; ratioMax?: number; ceiling: Cents; step: Cents };
 }
@@ -88,13 +91,29 @@ export const LIMITS: Partial<Record<GameId, LimitSpec>> = {
   bigsix: bets('spot', ladder([1, 100], [1, 500], [5, 1_000], [25, 5_000], [100, 25_000], [1_000, 100_000]), WHEEL_CEILING),
   // Small, Big, Odd and Even; the other bets scale from them
   sicbo: bets('even', ladder([1, 500], [5, 5_000], [25, 10_000], [100, 50_000], [1_000, 100_000], [5_000, 500_000]), TABLE_CEILING),
+  // From a fifty-cent small blind to the nosebleeds; Custom takes any blinds in between.
   holdem: {
     kind: 'blinds',
     key: 'default',
-    tiers: tiers(['', 1, 2], ['', 2, 5], ['', 5, 10], ['', 10, 20], ['', 25, 50], ['', 50, 100], ['', 100, 200], ['', 500, 1_000], ['', 1_000, 2_000]),
-    standard: 2,
-    min: { low: D, high: 5_000 * D, step: D },
-    max: { ratio: 2, ratioMax: 3, ceiling: 10_000 * D, step: D },
+    tiers: tiers(
+      ['', 0.5, 1],
+      ['', 1, 2],
+      ['', 2, 5],
+      ['', 5, 10],
+      ['', 10, 20],
+      ['', 25, 50],
+      ['', 50, 100],
+      ['', 100, 200],
+      ['', 250, 500],
+      ['', 500, 1_000],
+      ['', 1_000, 2_000],
+      ['', 5_000, 10_000],
+      ['', 25_000, 50_000],
+      ['', 100_000, 200_000],
+    ),
+    standard: 3,
+    min: { low: D / 2, high: 100_000 * D, step: D, fine: D / 2 },
+    max: { ratio: 2, ratioMax: 3, ceiling: 300_000 * D, step: D },
   },
   banditwheel: ONLINE(),
   // v6 parlor6: a bingo card, a pachinko batch of 25 balls
@@ -156,6 +175,19 @@ export function parseLimitsParam(s: string | null): TableLimits | null {
   return m ? parseLimits({ min: Number(m[1]), max: Number(m[2]) }) : null;
 }
 
+/** Whether a custom minimum is on the spec's steps (whole dollars, or `fine` steps below a dollar). */
+function onMinStep(spec: LimitSpec, x: Cents): boolean {
+  const { step, fine } = spec.min;
+  return x % step === 0 || (fine !== undefined && x < D && x % fine === 0);
+}
+
+/** A minimum rounded down onto the spec's steps. */
+function floorMin(spec: LimitSpec, x: Cents): Cents {
+  const { step, fine } = spec.min;
+  const s = fine !== undefined && x < D ? fine : step;
+  return Math.floor(x / s) * s;
+}
+
 /** The range a custom maximum may take for this minimum. */
 export function maxRange(spec: LimitSpec, min: Cents): { low: Cents; high: Cents } {
   const step = spec.max.step;
@@ -174,8 +206,9 @@ export function limitsProblem(game: GameId, l: TableLimits): string | null {
   const blinds = spec.kind === 'blinds';
   const minWord = blinds ? 'The small blind' : 'The minimum';
   const maxWord = blinds ? 'The big blind' : 'The maximum';
-  const { low, high, step } = spec.min;
-  if (!Number.isSafeInteger(l.min) || l.min < low || l.min > high || l.min % step !== 0) {
+  const { low, high } = spec.min;
+  if (!Number.isSafeInteger(l.min) || l.min < low || l.min > high || !onMinStep(spec, l.min)) {
+    if (spec.min.fine !== undefined && low < D) return `${minWord} is ${formatMoney(low)}, or whole dollars up to ${formatMoney(high)}.`;
     return `${minWord} is ${formatMoney(low)} to ${formatMoney(high)}, in whole dollars.`;
   }
   const r = maxRange(spec, l.min);
@@ -197,8 +230,8 @@ export function limitsProblem(game: GameId, l: TableLimits): string | null {
 export function clampLimits(game: GameId, l: TableLimits): TableLimits | null {
   const spec = limitSpec(game);
   if (!spec) return null;
-  const { low, high, step } = spec.min;
-  const min = Math.min(high, Math.max(low, Math.floor(l.min / step) * step));
+  const { low, high } = spec.min;
+  const min = Math.min(high, Math.max(low, floorMin(spec, l.min)));
   const r = maxRange(spec, min);
   const max = Math.min(r.high, Math.max(r.low, Math.floor(l.max / spec.max.step) * spec.max.step));
   return { min, max };
@@ -206,6 +239,22 @@ export function clampLimits(game: GameId, l: TableLimits): TableLimits | null {
 
 // ---------------------------------------------------------------------------------------------
 // From chosen limits to a table's config
+
+/** Hold'em's buy-in, in big blinds: a short stack to a deep one. */
+export const HOLDEM_BUY_IN = { min: 20, max: 250 } as const;
+
+/** Hold'em's buy-in at this big blind, in whole dollars (the host takes chips in dollars). */
+export function holdemBuyIn(bb: Cents): { min: Cents; max: Cents } {
+  return { min: Math.ceil((HOLDEM_BUY_IN.min * bb) / D) * D, max: Math.floor((HOLDEM_BUY_IN.max * bb) / D) * D };
+}
+
+/**
+ * The step Hold'em bets and raises go in at these blinds: whole dollars, or fifty cents where a
+ * blind is on the half dollar (the $0.50/$1 table), so every bet is made of real chips.
+ */
+export function holdemStep(sb: Cents, bb: Cents): Cents {
+  return sb % D === 0 && bb % D === 0 ? D : D / 2;
+}
 
 function scale(base: BetLimits, kmin: number, kmax: number): BetLimits {
   const step = base.step;
@@ -234,9 +283,9 @@ export function applyLimits(cfg: TableConfig, l: TableLimits): TableConfig {
     const bb = l.max;
     return {
       ...cfg,
-      // 20 to 100 big blinds, as at the Standard table
-      buyIn: { min: 20 * bb, max: 100 * bb },
-      limits: { ...cfg.limits, default: { ...cfg.limits.default, min: bb } },
+      // 20 to 250 big blinds in whole dollars, as at the Standard table
+      buyIn: holdemBuyIn(bb),
+      limits: { ...cfg.limits, default: { ...cfg.limits.default, min: bb, step: holdemStep(sb, bb) } },
       options: { ...cfg.options, sb, bb },
     };
   }
@@ -275,7 +324,7 @@ export function limitsSpan(game: GameId): string | null {
   if (!spec) return null;
   const lo = spec.tiers[0]!;
   const hi = spec.tiers[spec.tiers.length - 1]!;
-  return spec.kind === 'blinds' ? `${limitsLabel(game, lo)} to ${limitsLabel(game, hi)}` : `${formatMoney(lo.min)}–${formatMoney(hi.max)}`;
+  return spec.kind === 'blinds' ? `${limitsLabel(game, lo, true)} to ${limitsLabel(game, hi, true)}` : `${formatMoney(lo.min)}–${formatMoney(hi.max)}`;
 }
 
 const range = (b: BetLimits | undefined): string => (b ? `${formatMoney(b.min)}–${formatMoney(b.max)}` : '');
@@ -310,7 +359,7 @@ export function limitsDetail(cfg: TableConfig): string[] {
       out.push(`Numbers ${range(l.single)}`, `Triples ${range(l.triple)}`, `${formatMoney(l.default.max)} a roll`);
       break;
     case 'holdem':
-      out.push('No limit', '20 to 100 big blinds to sit');
+      out.push('No limit', `${HOLDEM_BUY_IN.min} to ${HOLDEM_BUY_IN.max} big blinds to sit`);
       break;
   }
   out.push(`Buy-in ${range({ ...cfg.buyIn, step: D })}`);

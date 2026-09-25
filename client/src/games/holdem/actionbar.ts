@@ -68,10 +68,10 @@ export class ActionBar {
     });
     this.amountBox.type = 'number';
     this.amountBox.step = '1';
-    this.amountBox.addEventListener('change', () => this.setAmount(Math.round(Number(this.amountBox.value)) * 100));
+    this.amountBox.addEventListener('change', () => this.setAmount(Math.round(Number(this.amountBox.value) * 100)));
     this.amountBox.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
-        this.setAmount(Math.round(Number(this.amountBox.value)) * 100);
+        this.setAmount(Math.round(Number(this.amountBox.value) * 100));
         this.doRaise();
       }
     });
@@ -117,8 +117,10 @@ export class ActionBar {
       this.slider.max = String(range.max);
       this.slider.step = String(legal.step);
       this.slider.disabled = range.min >= range.max;
-      this.amountBox.min = String(Math.floor(range.min / 100));
-      this.amountBox.max = String(Math.floor(range.max / 100));
+      // dollars, or half dollars at the $0.50/$1 table
+      this.amountBox.step = String(legal.step / 100);
+      this.amountBox.min = String(range.min / 100);
+      this.amountBox.max = String(range.max / 100);
       for (const p of this.presets) p.disabled = range.min >= range.max;
       if (fresh) this.setAmount(range.min);
     } else if (!legal.call && !legal.check) this.allin.disabled = true;
