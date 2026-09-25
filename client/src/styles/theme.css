@@ -51,12 +51,12 @@ button { font: inherit; color: inherit; }
 #ui .pass { pointer-events: none; }
 :where(#ui .pass) > * { pointer-events: auto; }
 
-.boot { position: fixed; inset: 0; display: grid; place-content: center; gap: 14px; background: radial-gradient(120% 90% at 50% 40%, #2a1c12 0%, #0b0908 70%); z-index: 50; transition: opacity 0.5s var(--ease); }
+.boot { position: fixed; inset: 0; display: grid; place-content: center; justify-items: center; gap: 14px; background: radial-gradient(120% 90% at 50% 40%, #2a1c12 0%, #0b0908 70%); z-index: 50; transition: opacity 0.5s var(--ease); }
 .boot.done { opacity: 0; pointer-events: none; }
-.boot-mark { font-family: var(--serif); font-size: 30px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--brass-hi); text-align: center; }
-.boot-bar { width: 260px; height: 2px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+.boot-mark { font-family: var(--serif); font-size: 30px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--brass-hi); text-align: center; margin-right: -0.18em; /* the last letter's spacing: the bar lines up with the letters themselves */ }
+.boot-bar { justify-self: stretch; height: 2px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
 .boot-fill { height: 100%; width: 0; background: var(--brass); transition: width 0.3s var(--ease); }
-.boot-note { font-size: 13px; color: var(--ink-3); text-align: center; letter-spacing: 0.12em; text-transform: uppercase; }
+.boot-note { font-size: 13px; color: var(--ink-3); text-align: center; letter-spacing: 0.12em; text-transform: uppercase; margin-right: -0.12em; }
 
 /* panels and controls */
 .panel { background: var(--glass); border: 1px solid var(--line); border-radius: var(--radius); backdrop-filter: blur(10px) saturate(1.2); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45); }
