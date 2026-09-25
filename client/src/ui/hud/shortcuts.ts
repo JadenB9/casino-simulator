@@ -48,6 +48,7 @@ export const SHORTCUTS: readonly { title: string; rows: readonly Row[] }[] = [
       ['R', 'Rebet'],
       ['⇧ R', 'Rebet ×2'],
       ['Space', 'Deal, spin, roll or draw'],
+      ['K / ⇧ K', 'Tip the dealer the table minimum, or twice it (between hands)'], // v6.1 casino61
     ],
   },
   { title: 'Blackjack', rows: [['H', 'Hit'], ['S', 'Stand'], ['D', 'Double'], ['P', 'Split'], ['U', 'Surrender'], ['Y / N', 'Insurance or no insurance']] },

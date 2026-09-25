@@ -499,6 +499,7 @@ class App {
       sfx: this.sfx,
       onProfile: () => openProfile({ root: this.ui, api, session }),
       onMenu: () => void this.backToMenu(),
+      onBreak: () => void this.takeBreak(), // v6.1 casino61: the play reminder
     });
     this.hud.setOnline(this.link?.onlineCount ?? null);
     // Emotes (G) and the leaderboards, in the HUD's right-hand bar ahead of the tips bulb.
@@ -522,6 +523,12 @@ class App {
     this.feats.useHud(this.hud.root);
     installCheck(); // v6 bot6: the Quick check, when a table or the API says one is waiting
     this.chat?.setVisible(true);
+  }
+
+  /** v6.1 casino61: the play reminder's Take a break: up from any table (chips cash out as ever). */
+  private async takeBreak(): Promise<void> {
+    if (this.table) await this.leaveTable();
+    else if (closeTableFlows() || this.world.seated) await this.world.exitTable();
   }
 
   private async backToMenu(): Promise<void> {

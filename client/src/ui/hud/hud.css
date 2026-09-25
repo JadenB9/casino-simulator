@@ -112,3 +112,18 @@ button.hud-who:focus-visible { outline: 2px solid var(--focus); outline-offset: 
   .set-row { grid-template-columns: 1fr; gap: 6px; }
   .set-label { padding-top: 0; }
 }
+
+/* The play reminder (reminder.ts): a card under the HUD's left bar, never over the whole screen
+   and never past its edges; the board fit (table/fit.ts) keeps the table clear of it. It fades in
+   once (calm: it just appears). */
+.reminder { position: fixed; top: var(--below-hud); left: 16px; z-index: 20; display: grid; gap: 10px; width: 300px; max-width: calc(100vw - 32px); max-height: calc(100vh - var(--below-hud) - 16px); overflow: auto; padding: 14px 16px 16px; animation: reminder-in 0.4s var(--ease); }
+.reminder-title { font-family: var(--serif); font-size: 17px; letter-spacing: 0.06em; color: var(--brass-hi); }
+.reminder-figs { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.reminder-fig { display: grid; gap: 2px; }
+.reminder-value { font-size: 24px; }
+.reminder-value.win { color: var(--win); }
+.reminder-value.lose { color: var(--lose); }
+.reminder-note { margin: 0; font-size: 15px; line-height: 1.35; color: var(--ink-2); }
+.reminder-acts { display: flex; flex-wrap: wrap; gap: 8px; }
+@keyframes reminder-in { from { opacity: 0; } }
+body.calm .reminder { animation: none; }

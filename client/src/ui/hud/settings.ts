@@ -13,6 +13,7 @@ import { segmented } from '../menu/parts.ts';
 import { bigWinSettings } from '../feed/settings.ts'; // features: big-win toasts
 import { controlSettings } from '../menu/controls.ts'; // world: the camera and mouse look
 import { inviteSettings } from '../lobby/invite-settings.ts'; // v6 invite6: do not disturb
+import { reminderSettings } from '../menu/reminder.ts'; // v6.1 casino61: the play reminder and loss limit
 
 export interface SettingsDeps {
   root: HTMLElement;
@@ -101,6 +102,7 @@ export function openSettings(deps: SettingsDeps): Closable {
     row('Tips', tipsCtl.root, el('p', 'set-note', 'Shows the best play where a game has one (basic strategy, the video poker holds, Q-6-4) and which bets are better elsewhere.')),
     ...bigWinSettings(row), // features: big-win toasts
     ...inviteSettings(row), // v6 invite6: do not disturb
+    ...reminderSettings(row), // v6.1 casino61: the play reminder and loss limit
     el('h3', 'section-label', 'Graphics'),
     row('Quality', quality.root, qBox),
     row('Flashing & motion', calmCtl.root, el('p', 'set-note', 'Reduced: steady lights instead of flashing and chasing, fewer particles, no camera shake.')),

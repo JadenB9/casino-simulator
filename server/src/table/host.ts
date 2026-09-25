@@ -46,6 +46,7 @@ import { RunBook } from '../stats.ts'; // v6 stats6: win runs, day and week nets
 import { TableFair } from '../table-fair.ts'; // v6 bot6: fair play
 import { autoChecks } from '../fair.ts'; // v6 bot6
 import { CHECK_MSG } from '../../../shared/src/protocol.ts'; // v6 bot6
+import { canTip, tipRefusal } from '../../../shared/src/tip.ts'; // v6.1 casino61: tipping the dealer
 
 /** How long a dropped player keeps their seat before being cashed out. */
 export const GRACE_MS = 120_000;
@@ -569,7 +570,7 @@ export class CasinoTable extends DurableObject<Env> {
       this.strike(ws, b);
       return;
     }
-    const bucket = msg.t === 'act' ? b.act : msg.t === 'buyin' || msg.t === 'topup' || msg.t === 'cashout' ? b.money : b.misc;
+    const bucket = msg.t === 'act' ? b.act : msg.t === 'buyin' || msg.t === 'topup' || msg.t === 'cashout' || msg.t === 'tip' ? b.money : b.misc;
     if (!bucket.take()) {
       if (this.strike(ws, b)) this.send(ws, { t: 'err', code: 'RATE_LIMITED', msg: 'Too fast.' });
       return;
@@ -593,6 +594,9 @@ export class CasinoTable extends DurableObject<Env> {
         case 'cashout':
           this.handleCashOut(ws, mem, msg.aid, now);
           await this.pump();
+          break;
+        case 'tip':
+          this.handleTip(ws, mem, msg.aid, msg.amount, now);
           break;
         case 'ready':
           mem.ready = msg.on ? 1 : 0;
@@ -934,6 +938,42 @@ export class CasinoTable extends DurableObject<Env> {
     if (this.topUpPending(mem.account_id)) return this.err(ws, 'BUSY', 'Your last chips are still on the way.', aid);
     this.rememberAid(mem.account_id, aid, now);
     this.startCashOut(mem, now, false);
+  }
+
+  /**
+   * v6.1 casino61: a tip for the dealer (shared/src/tip.ts). The chips leave the stack the way a
+   * lost bet's do, so the cash-out is simply that much less; they are no round, so the seat's
+   * stats, feats, the law and fair play never see them. Only a 'tipped' tally counts them.
+   */
+  private handleTip(ws: WebSocket, mem: MemberRow, aid: string, amount: Cents, now: number): void {
+    if (this.seenAid(mem.account_id, aid)) return;
+    const m = this.meta!;
+    if (!canTip(m.game)) return this.err(ws, 'BAD_REQUEST', 'There is no dealer here to tip.', aid);
+    if (mem.status !== 'seated' || mem.seat === null) return this.err(ws, 'NOT_SEATED', 'Buy in first.', aid);
+    if (mem.leaving) return this.err(ws, 'WRONG_PHASE', "You're leaving this table.", aid);
+    const why = tipRefusal(amount, mem.stack, mem.live, m.game === 'holdem' && this.roundInPlay());
+    if (why) return this.err(ws, why.code, why.msg, aid);
+    let featWork = false;
+    this.ctx.storage.transactionSync(() => {
+      this.rememberAid(mem.account_id, aid, now);
+      mem.stack -= amount;
+      this.sql.exec(`UPDATE members SET stack = ?1 WHERE account_id = ?2`, mem.stack, mem.account_id);
+      featWork = this.feats.record([{ accountId: mem.account_id, name: mem.name, facts: { tally: { tipped: amount }, moments: [], stake: 0 }, showAt: now }], now);
+    });
+    this.sendSeat(mem);
+    const msg = JSON.stringify({ t: 'tipped', accountId: mem.account_id, name: mem.name, amount } satisfies TableServerMsg);
+    for (const other of this.ctx.getWebSockets()) {
+      const att = other.deserializeAttachment() as Att | null;
+      if (!att || !this.members.has(att.accountId)) continue;
+      try {
+        other.send(msg);
+      } catch {
+        /* closing */
+      }
+    }
+    if (featWork) this.ctx.waitUntil(this.runFeats());
+    // a tip of the last chips busts the seat like a lost bet: the sweep cashes it out at $0
+    this.sweepLeavers(now);
   }
 
   /** Stand the seat up: resolve its live bets, then cash out whatever is left, then leave. */

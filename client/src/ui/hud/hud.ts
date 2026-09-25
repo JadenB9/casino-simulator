@@ -16,6 +16,7 @@ import { openSettings } from './settings.ts';
 import { openShortcuts } from './shortcuts.ts';
 import { netStart, sessionNet } from './net.ts';
 import { calm } from '../../app/comfort.ts';
+import { mountReminder } from './reminder.ts'; // v6.1 casino61: the play reminder
 
 export interface HudDeps {
   root: HTMLElement;
@@ -27,6 +28,8 @@ export interface HudDeps {
   onProfile?(): void;
   /** When given, a menu button appears (back to the main menu). */
   onMenu?(): void;
+  /** v6.1 casino61: the play reminder's Take a break: stand up from any table, close any table flow. */
+  onBreak?(): void;
 }
 
 export interface Hud extends Closable {
@@ -138,10 +141,17 @@ export function mountHud(deps: HudDeps): Hud {
   let seat: { stack: Cents; escrow: Cents } | null = null;
   let netTimer = 0;
 
-  const paintSession = () => {
+  const currentNet = () => {
     const p = deps.session.profile;
-    if (!p) return;
-    const net = sessionNet(p, start, seat, deps.session.spent ?? 0);
+    return p ? sessionNet(p, start, seat, deps.session.spent ?? 0) : null;
+  };
+  // v6.1 casino61: the play reminder and the loss limit, on the same figures
+  const reminder = mountReminder({ root: deps.root, startedAt, net: currentNet, onBreak: deps.onBreak });
+
+  const paintSession = () => {
+    const net = currentNet();
+    if (net === null) return;
+    reminder.check();
     sessionTile.value.replaceChildren(
       el('span', net > 0 ? 'win' : net < 0 ? 'lose' : '', formatMoney(net, { sign: true })),
       el('span', 'hud-time', ` · ${formatDuration(Date.now() - startedAt)}`),
@@ -224,6 +234,7 @@ export function mountHud(deps: HudDeps): Hud {
       removeEventListener('keydown', onKey);
       clearInterval(clock);
       clearTimeout(netTimer);
+      reminder.close();
       shortcuts?.close();
       root.remove();
     },

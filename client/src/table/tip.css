@@ -1,0 +1,5 @@
+/* Tip the dealer (tip.ts): over the right end of the chip tray (tip.ts places it there), or in the
+   bottom-right corner at a table without a tray, clear of the site's back chip on the left. */
+.tip-dealer { position: fixed; right: 16px; bottom: 18px; display: flex; align-items: center; gap: 6px; padding: 5px 6px 5px 12px; }
+.tip-dealer-label { font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-3); margin-right: 2px; }
+.tip-dealer .btn { height: 28px; padding: 0 9px; font-size: 15px; }

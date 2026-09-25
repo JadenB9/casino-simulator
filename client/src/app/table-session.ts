@@ -17,6 +17,8 @@ import type { GameEvent } from '../../../shared/src/engine.ts';
 import type { ChatServerMsg, TableServerMsg } from '../../../shared/src/protocol.ts';
 import { CHECK_MSG } from '../../../shared/src/protocol.ts'; // v6 bot6
 import { limitsLabel, limitsOf, limitsParam, sameLimits, type TableLimits } from '../../../shared/src/limits.ts';
+import { canTip, tipAmounts } from '../../../shared/src/tip.ts'; // v6.1 casino61
+import { TipControl, thanks } from '../table/tip.ts'; // v6.1 casino61
 
 export interface TableTarget {
   kind: 'solo' | 'lobby';
@@ -51,6 +53,8 @@ export class TableSession {
   private pending = 0;
   private readonly kit: UiKit;
   private offFrame: () => void;
+  /** v6.1 casino61: tipping the dealer, at a table with one. */
+  private tipCtl: TipControl | null = null;
 
   constructor(
     readonly target: TableTarget,
@@ -91,9 +95,15 @@ export class TableSession {
     });
     // the board is fitted after the view has moved things for the frame
     stage.fit.watch(ui);
+    let tipWait = 0;
     this.offFrame = onFrame((dt) => {
       this.view?.update(dt);
       stage.fit.update(dt);
+      // v6.1 casino61: the Tip panel follows the tray, a few times a second
+      if ((tipWait -= dt) <= 0 && this.tipCtl) {
+        tipWait = 0.2;
+        this.tipCtl.place();
+      }
     });
   }
 
@@ -127,6 +137,7 @@ export class TableSession {
     // seat message says "watching, $0", which would otherwise offer a buy-in at the table just left).
     this.ended = true;
     this.kit.dispose();
+    this.tipCtl?.dispose();
     // A socket the table closed for good (away too long, say) is never coming back: the table
     // has already stood the seat up, so there's nothing to say.
     if (this.socket.state === 'closed') {
@@ -153,6 +164,7 @@ export class TableSession {
   close(): void {
     this.ended = true;
     this.kit.dispose();
+    this.tipCtl?.dispose();
     this.socket.close();
     this.offFrame();
     // what the view has on the table, before its dispose takes it off: the stage gives it all back
@@ -200,6 +212,7 @@ export class TableSession {
         showLimits(this.stage.anchor, m.meta.config);
         const view = this.mountIfNeeded();
         view.onTable(m);
+        this.paintTip();
         this.hooks.onTable?.(m);
         if (m.you.status === 'watching' && (m.meta.mode === 'solo' || m.meta.started)) void this.promptBuyIn();
         break;
@@ -219,6 +232,7 @@ export class TableSession {
         // Keep the snapshot's idea of you current (status and stack change after it was taken).
         if (this.snapshot) this.snapshot.you = { ...this.snapshot.you, status: m.status, stack: m.stack, seat: m.seat ?? this.snapshot.you.seat };
         this.view?.onSeat(m);
+        this.paintTip();
         this.hooks.onSeat?.(m);
         if (m.status === 'watching' && this.snapshot?.meta.mode === 'solo' && m.stack === 0) void this.promptBuyIn();
         break;
@@ -246,7 +260,25 @@ export class TableSession {
       case 'feat':
         this.hooks.onFeat?.(m);
         break;
+      case 'tipped': {
+        // the dealer takes the chips in and says thanks once the table has caught up
+        const mine = m.accountId === session.profile?.id;
+        this.afterShown(() => {
+          this.kit.say(thanks(m.name, mine));
+          this.stage.gesture('sweep');
+          if (mine) this.sfx.play('chip-lay', { volume: 0.8 });
+        });
+        break;
+      }
     }
+  }
+
+  /** v6.1 casino61: the Tip panel follows your seat: shown while seated, each tip your stack covers. */
+  private paintTip(): void {
+    const snap = this.snapshot;
+    if (!snap || this.ended || !canTip(snap.meta.game)) return;
+    this.tipCtl ??= new TipControl(this.ui, (amount) => this.send({ t: 'tip', aid: this.nextAid(), amount }));
+    this.tipCtl.set(tipAmounts(snap.meta.config), snap.you.status === 'seated' ? snap.you.stack : null);
   }
 
   private prompting = false;

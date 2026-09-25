@@ -553,6 +553,8 @@ export type TableClientMsg =
   | { t: 'buyin'; aid: string; amount: Cents }
   | { t: 'topup'; aid: string; amount: Cents }
   | { t: 'cashout'; aid: string }
+  /** v6.1: chips from your stack for the dealer (shared/src/tip.ts). */
+  | { t: 'tip'; aid: string; amount: Cents }
   | { t: 'act'; aid: string; a: unknown }
   | { t: 'ready'; on: boolean }
   | { t: 'visibility'; visibility: 'public' | 'private' }
@@ -584,6 +586,8 @@ export type TableServerMsg =
    * round's stake, feats.ts cashFor) and `balance` is the money after it.
    */
   | { t: 'feat'; feat: string; at: number; balance?: { balance: Cents; inPlay: Cents; rev: number }; paid?: Cents }
+  /** v6.1: someone at the table tipped the dealer (everyone at it hears, for the dealer's thanks). */
+  | { t: 'tipped'; accountId: number; name: string; amount: Cents }
   | { t: 'closed'; reason: string }
   | { t: 'err'; ref?: string; code: ErrorCode; msg: string }
   | CheckTableMsg // v6 bot6
@@ -627,6 +631,9 @@ export function parseTableMsg(raw: unknown): TableClientMsg | null {
     case 'cashout':
       if (!isAid(raw.aid)) return null;
       return { t: 'cashout', aid: raw.aid };
+    case 'tip':
+      if (!isAid(raw.aid) || !isInt(raw.amount) || raw.amount <= 0) return null;
+      return { t: 'tip', aid: raw.aid, amount: raw.amount };
     case 'act':
       if (!isAid(raw.aid) || raw.a === undefined) return null;
       return { t: 'act', aid: raw.aid, a: raw.a };
