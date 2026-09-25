@@ -4,7 +4,7 @@
 
 import { NEON, SEVENS, WILD, type MachineId, type NeonSymbol } from '../../../../shared/src/games/slots/machines.ts';
 import { drawNeonSymbol, drawStepperSymbol, neonColor, STRIP_CREAM } from './symbols.ts';
-import { segText } from './segments.ts';
+import { meterText } from './segments.ts';
 
 type G = CanvasRenderingContext2D;
 
@@ -436,7 +436,6 @@ export interface MeterValues {
   win: number | null;
 }
 
-const METER_DIGITS = { credit: 9, bet: 6, win: 9 };
 
 export function paintMeters(canvas: HTMLCanvasElement, machine: MachineId, v: MeterValues | null, scale = 1): void {
   const W = 1024, H = 136;
@@ -468,8 +467,7 @@ export function paintMeters(canvas: HTMLCanvasElement, machine: MachineId, v: Me
     g.lineWidth = 2;
     g.stroke();
     const value = v ? v[key] : null;
-    const { text, ghost } = segText(value ?? 0, METER_DIGITS[key]);
-    g.font = `700 58px DSEG7, monospace`;
+    const { text, ghost } = meterText(g, value ?? 0, w - 24);
     g.textAlign = 'right';
     g.textBaseline = 'alphabetic';
     g.fillStyle = digitColor;
