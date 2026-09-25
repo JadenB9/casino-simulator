@@ -370,11 +370,12 @@ if (checks.includes('happy')) {
   await shot(a.p, 'happy-menu');
   // qa6: the menu is in sections now (dine6), the cocktail first: read the beer's own row
   const tags = await a.p.evaluate(() => {
-    const row = (e) => {
-      for (let n = e; n; n = n.parentElement) if (n.textContent.includes('Imported lager')) return n;
-      return null;
-    };
-    return [...document.querySelectorAll('.bar-price')].filter((e) => row(e)).slice(0, 1).map((e) => e.textContent);
+    const about = [...document.querySelectorAll('.bar-sheet *')].find((e) => e.childElementCount === 0 && e.textContent.includes('Imported lager'));
+    for (let n = about; n; n = n.parentElement) {
+      const price = n.querySelector('.bar-price');
+      if (price) return [price.textContent];
+    }
+    return [];
   });
   console.log('happy: prices', JSON.stringify(tags));
   if (!tags[0]?.includes('$9') || !tags[0]?.includes('$4.50')) fail(`the beer struck through at $9, $4.50 now (${tags[0]})`);
