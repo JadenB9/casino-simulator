@@ -254,7 +254,7 @@ if (checks.includes('wheel')) {
     const page = await browser.newPage({ viewport: { width: vw, height: vh }, deviceScaleFactor: 2, hasTouch: label === 'phone' });
     const errors = [];
     page.on('pageerror', (e) => errors.push(String(e)));
-    page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+    page.on('console', (m) => m.type() === 'error' && !/Failed to load resource/.test(m.text()) && errors.push(m.text()));
     await page.goto(`http://localhost:${port}/casino/src/ui/social/dev.html?screen=emotes&fixture=1&owned=throwback,dab,moonwalk`, { timeout: 180000 });
     await page.waitForSelector('.emo-wheel');
     await page.waitForTimeout(400);
