@@ -204,7 +204,8 @@ export function tableModel(quality: Quality): THREE.Group {
   const bodyDepth = 0.12;
   const body = new THREE.Mesh(new THREE.ExtrudeGeometry(dShape(RAIL_R + 0.03, DEALER_Z - 0.035), { depth: bodyDepth, bevelEnabled: false, curveSegments: 72 }), m.wood);
   body.rotation.x = -Math.PI / 2;
-  body.position.y = TOP_Y - bodyDepth;
+  // (its top 3 mm under the felt: at the felt's own 0.3 mm the wood fought through the whole felt)
+  body.position.y = TOP_Y - bodyDepth - 0.003;
   g.add(body);
 
   // padded rail on the players' arc, capped where it meets the dealer's edge
