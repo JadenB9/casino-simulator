@@ -30,6 +30,7 @@ export const SHORTCUTS: readonly { title: string; rows: readonly Row[] }[] = [
       ['1-6', 'Pick a free emote while the emotes are open'],
       ['Q-P', 'Pick a boutique or reward emote (a locked one shows its price)'],
       ['Esc', 'Free the mouse, close a panel, stand up, leave'],
+      ['J', 'Achievements and challenges'],
       ['M', 'Mute or unmute'],
       ['?', 'This list'],
     ],
