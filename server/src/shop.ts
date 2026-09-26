@@ -95,7 +95,10 @@ async function soldWhere(env: Env, accountId: number, item: Sold): Promise<strin
     return x >= r.x0 && x <= r.x1 && z >= r.z0 && z <= r.z1 ? null : 'Guns are sold at Ace Arms, across the street from the valet.';
   }
   const L = ROOMS.lobby!;
-  return x >= L.x0 && x <= L.x1 && z >= L.z0 && z <= L.z1 ? null : 'Apartments are sold at the Residences desk in the casino’s lobby.';
+  const H = STORES.homes.room;
+  const inLobby = x >= L.x0 && x <= L.x1 && z >= L.z0 && z <= L.z1;
+  const inStore = x >= H.x0 && x <= H.x1 && z >= H.z0 && z <= H.z1;
+  return inLobby || inStore ? null : 'Apartments are sold at the Residences desk in the casino’s lobby and at Maison Home.';
 }
 
 /** Why the boutique won't sell something it knows (a reward, a free emote), or null. */

@@ -255,7 +255,7 @@ export class V7 {
       });
       return;
     }
-    this.openHome(null, 'Maison Home');
+    this.openHome(null, 'Maison Home', false, true);
   }
 
   /** The home catalogue: the apartment's steps, then every slot's pieces (or one slot's). */
@@ -264,7 +264,7 @@ export class V7 {
     this.openHome(null, 'Residences', true);
   }
 
-  private openHome(only: HomeSlot | null, title = 'Your home', residences = false): void {
+  private openHome(only: HomeSlot | null, title = 'Your home', residences = false, store = false): void {
     const owned = () => session.profile?.owned ?? [];
     const tier = () => homeTier(owned());
     openStore({
@@ -275,7 +275,7 @@ export class V7 {
       bought: () => (this.homeAt = 0),
       sections: () => {
         const out: { title: string; rows: StoreRow[] }[] = [];
-        if (!only && residences)
+        if (!only && (residences || store))
           out.push({
             title: 'The apartment',
             rows: APARTMENTS.map((a) => ({ id: a.id, name: a.name, price: a.price, about: a.about, owned: owns(a.id), locked: a.tier > tier() + 1 ? `Needs ${APARTMENTS[a.tier - 2]!.name} first.` : null })),
