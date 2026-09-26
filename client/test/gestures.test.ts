@@ -6,7 +6,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { EMOTES, SHOP_EMOTES, REWARD_EMOTES, type EmoteId } from '../../shared/src/protocol.ts';
-import { GESTURES, gestureSeconds, movesLegs, type Pose } from '../src/world/gestures.ts';
+import { GESTURES, dances, gestureSeconds, movesLegs, type Pose } from '../src/world/gestures.ts';
 import { beatTimes, hasBeat } from '../src/audio/beat.ts';
 
 /** Every number in a pose (turns, hands, feet, whole-body moves). */
@@ -111,5 +111,14 @@ describe('dance beats', () => {
     // the claps on two and four
     expect(b.c.slice(0, 2)).toEqual([beat, 3 * beat]);
     expect(beatTimes('wave', 0.5, 2).k).toEqual([]);
+  });
+
+  it('tells the dances (step off a ride for them) from emotes the arms do (done on the deck)', () => {
+    const off = (['wave', 'cheer', 'clap', 'thumbs', 'shrug', 'sixseven', 'throwback', 'griddy', 'floss', 'dab', 'robot', 'backflip', 'moneyfan', 'bow', 'trophy', 'moonwalk'] as const).filter((e) => dances(e));
+    expect(off).toEqual(['throwback', 'griddy', 'floss', 'robot', 'backflip', 'bow', 'moonwalk']);
+    // a dab holds a stance but doesn't move the legs; a knock off the feet and a jump do
+    expect(dances('knock')).toBe(true);
+    expect(dances('jump')).toBe(true);
+    expect(dances('punch')).toBe(false);
   });
 });

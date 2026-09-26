@@ -273,43 +273,81 @@ if (checks.includes('seated')) {
 }
 
 if (checks.includes('riding')) {
-  // On a ride (looks6's stances): a skateboard side-on and a scooter at its bar. Each emote is the
-  // upper-body version on top of the stance, the feet stay on the deck and the body on the ride.
+  // On a ride (looks6's stances, v7.2's emotes on them): a skateboard and a hoverboard side-on, a
+  // scooter at its bar. An emote of the arms and head is done standing on the deck, a board turned
+  // with its rider to face ahead; a dance steps off beside the ride (the ride waits to the right,
+  // the feet on the floor) and back on after; a jump is an ollie, the ride going up too.
   const { page, errors } = await openFloor();
-  const z0 = await page.evaluate(async (looks) => {
+  const RIDES = ['skateboard', 'e-scooter', 'hoverboard'];
+  const z0 = await page.evaluate(async ([looks, rides]) => {
     const c = window.casino;
     const f = c.world.characterFactory;
     const z0 = c.world.plan.entrance.z0 - 5;
-    const rides = ['skateboard', 'e-scooter'];
     c.cast = [];
     for (const [i, ride] of rides.entries()) {
-      const look = { ...looks[i], ride };
+      const look = { ...looks[i % 2], ride };
       await f.load(look);
       const p = f.create(look, '');
-      p.root.position.set(-0.9 + i * 1.8, 0, z0);
+      p.root.position.set(-1.8 + i * 1.8, 0, z0);
       c.engine.scene.add(p.root);
       p.update(0);
       c.cast.push(p);
     }
+    // nothing playing, and the ride settled back under everyone
+    c.rest = () => {
+      for (const p of c.cast) {
+        p.act = null;
+        for (let i = 0; i < 30; i++) p.update(1 / 30);
+      }
+    };
     return z0;
-  }, LOOKS);
-  for (const [e, t] of [['throwback', 0.6], ['backflip', 0.8], ['trophy', 1.5], ['dab', 0.9], ['moneyfan', 1.8], ['moonwalk', 1.2]]) {
+  }, [LOOKS, RIDES]);
+  const OFF = new Set(['throwback', 'backflip', 'moonwalk', 'griddy', 'bow']);
+  for (const [e, t] of [['throwback', 0.6], ['backflip', 0.8], ['griddy', 0.75], ['moonwalk', 1.2], ['trophy', 1.5], ['dab', 0.9], ['moneyfan', 1.8], ['wave', 0.8], ['bow', 1.2], ['jump', 0.39]]) {
     if (only && !only.includes(e)) continue;
     const m = await page.evaluate(([e, t]) => {
       const c = window.casino;
+      c.rest();
       const before = c.cast.map((p) => p.model.position.toArray());
       c.freeze(e, t);
-      return c.cast.map((p, i) => ({ riding: p.riding, pos: p.model.position.toArray().map((v) => +v.toFixed(3)), before: before[i].map((v) => +v.toFixed(3)), prop: !!p.prop }));
+      return c.cast.map((p, i) => {
+        const r = p.ride;
+        r.outer.updateMatrixWorld(true);
+        const lift = r.outer.children[0].position.y;
+        return { riding: p.riding, spec: r.spec, aside: +r.outer.position.x.toFixed(3), turned: +r.outer.rotation.y.toFixed(3), lift: +lift.toFixed(3), pos: p.model.position.toArray().map((v) => +v.toFixed(3)), before: before[i].map((v) => +v.toFixed(3)), prop: !!p.prop, body: c.measure(p) };
+      });
     }, [e, t]);
-    await place(page, [0, 1.35, z0 + 4.2], [0, 1.0, z0]);
+    await place(page, [0, 1.45, z0 + 5.2], [0, 1.0, z0]);
     await frames(page);
     await page.screenshot({ path: `${out}/riding-${e}.png` });
     for (const [i, x] of m.entries()) {
-      if (!x.riding) fail(`riding ${e} ${i}: not on the ride`);
-      if (Math.abs(x.pos[0] - x.before[0]) > 0.001 || Math.abs(x.pos[2] - x.before[2]) > 0.001) fail(`riding ${e} ${i}: the body left the ride (${x.pos} from ${x.before})`);
-      if ((e === 'trophy' || e === 'moneyfan') && !x.prop) fail(`riding ${e} ${i}: nothing in hand`);
+      const name = `riding ${e} ${RIDES[i]}`;
+      if (!x.riding) fail(`${name}: not on the ride`);
+      if (!OFF.has(e) && (Math.abs(x.pos[0] - x.before[0]) > 0.001 || Math.abs(x.pos[2] - x.before[2]) > 0.001)) fail(`${name}: the body went somewhere (${x.pos} from ${x.before})`);
+      if ((e === 'trophy' || e === 'moneyfan') && !x.prop) fail(`${name}: nothing in hand`);
+      const feet = Math.min(x.body.footR[1], x.body.footL[1]);
+      if (OFF.has(e)) {
+        if (x.aside > -0.6) fail(`${name}: the ride isn't aside (${x.aside})`);
+        if (e !== 'backflip' && feet > 0.16) fail(`${name}: the feet aren't on the floor (${feet})`);
+      } else {
+        if (x.aside !== 0) fail(`${name}: the ride moved aside (${x.aside})`);
+        const side = x.spec.stance === 'side';
+        if (e !== 'jump' && side && Math.abs(x.turned - Math.PI / 2) > 0.01) fail(`${name}: the board didn't turn to face ahead (${x.turned})`);
+        if (e !== 'jump' && x.body.fwd[2] < 0.95) fail(`${name}: not facing ahead (${x.body.fwd})`);
+        if (e === 'jump' && x.lift < 0.2) fail(`${name}: the ride stayed down in the ollie (${x.lift})`);
+        if (e !== 'jump' && feet < x.spec.deck - 0.06) fail(`${name}: the feet came off the deck (${feet} < ${x.spec.deck})`);
+      }
     }
+    console.log(`riding ${e}: ${m.map((x) => `aside ${x.aside} turned ${x.turned} lift ${x.lift} feet ${Math.min(x.body.footR[1], x.body.footL[1])} fwd ${x.body.fwd}`).join(' | ')}`);
   }
+  // back on after: the ride under the feet again, a board side-on
+  const back = await page.evaluate(() => {
+    const c = window.casino;
+    c.freeze('griddy', 0.5);
+    for (const p of c.cast) for (let i = 0; i < 200; i++) p.update(1 / 30);
+    return c.cast.map((p) => ({ aside: p.ride.outer.position.x, turned: p.ride.outer.rotation.y, step: p.rideStep, face: p.rideFace, fwd: c.measure(p).fwd }));
+  });
+  for (const [i, x] of back.entries()) if (x.aside !== 0 || x.turned !== 0 || x.step !== 0 || x.face !== 0) fail(`riding back on ${RIDES[i]}: ${JSON.stringify(x)}`);
   if (errors.length) fail(`riding: ${errors.join(' | ')}`);
   await page.close();
 }

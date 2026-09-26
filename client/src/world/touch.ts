@@ -18,7 +18,7 @@ import type { Player } from './player.ts';
 import type { WorldStation } from './stations.ts';
 import type { GameId } from '../../../shared/src/engine.ts';
 import { CATALOG } from '../../../shared/src/games/catalog.ts';
-import { rideChoice } from './rides.ts';
+import { rideChoice, rideLabel } from './rides.ts';
 import './touch.css';
 
 /** How far the knob travels from the centre, px. */
@@ -269,7 +269,8 @@ export class TouchControls {
     this.rideShown = r;
     this.ride.hidden = !r;
     this.ride.classList.toggle('riding', r === 'off');
-    const label = r === 'off' ? 'Step off your ride' : 'Get on your ride';
+    if (!r) return;
+    const label = rideLabel(r);
     this.ride.title = label;
     this.ride.setAttribute('aria-label', label);
   }

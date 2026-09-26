@@ -150,3 +150,30 @@ body.calm .emote-bubble { animation: emote-fade-in 0.2s both; }
 body.calm .emote-bubble.leaving { animation: emote-out-still 0.4s ease-in forwards; }
 @keyframes emote-fade-in { from { opacity: 0; } }
 @keyframes emote-out-still { to { opacity: 0; } }
+
+/* v7.2: B steps off your ride and back on (rides.ts): the key and what it does, low on the left,
+   quieter than the prompt; a button, so a click does it too. A touch screen has its own. */
+#ui .ride-hint {
+  position: fixed;
+  left: max(16px, env(safe-area-inset-left));
+  bottom: max(36px, calc(env(safe-area-inset-bottom) + 16px));
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 14px 6px 8px;
+  background: var(--glass);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font: inherit;
+  font-size: 15px;
+  letter-spacing: 0.04em;
+  color: var(--ink-2);
+  white-space: nowrap;
+  cursor: pointer;
+  animation: world-hint-in 0.3s var(--ease) both;
+  transition: color 0.15s, border-color 0.15s;
+}
+#ui .ride-hint:hover { color: var(--ink); border-color: var(--line-strong); }
+#ui .ride-hint:disabled { opacity: 0.6; cursor: default; }
+#ui .ride-hint[hidden], html.touch-ui #ui .ride-hint { display: none; }
+#ui .ride-hint .world-key { min-width: 0; padding: 0 7px; height: 22px; font-size: 13px; }

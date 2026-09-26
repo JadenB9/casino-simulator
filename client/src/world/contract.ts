@@ -28,7 +28,16 @@ export interface Character {
   gesture?(e: EmoteId): void;
   /** Sit on a seat this high above the feet (metres), or stand again with null, if the character can. */
   sit?(seatTop: number | null): void;
+  /**
+   * v7.2: where a part of the body is as posed now, in the character's own frame (x to its left, y
+   * up, z ahead; metres from its feet), written into `out`; null before the model is in. The shop's
+   * camera frames what's on show by it, whatever the body's height or pose.
+   */
+  part?(p: BodyPart, out: THREE.Vector3): THREE.Vector3 | null;
 }
+
+/** A part of the body a piece is shown on: a watch's wrist, the face (shades, a grill), a chain's chest, a hat's crown, the hand that holds. */
+export type BodyPart = 'wrist' | 'face' | 'chest' | 'crown' | 'hand';
 
 export interface CharacterFactory {
   create(look: Look, name: string): Character;

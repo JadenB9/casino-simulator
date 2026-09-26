@@ -5,7 +5,7 @@
 // cent is still accounted for:
 //   SUM(ledger) - SUM(items.price) - SUM(orders.price) = balance + in_play (with no chips out).
 
-import { describe, it, expect } from 'vitest';
+import { afterAll, beforeAll, describe, it, expect, vi } from 'vitest';
 import { env, exports } from 'cloudflare:workers';
 import { evictDurableObject, runInDurableObject } from 'cloudflare:test';
 import type { CasinoTable } from '../src/table/host.ts';
@@ -16,6 +16,16 @@ import { dayKey, weekKey, weekOf } from '../../shared/src/stats.ts'; // v6 stats
 import { DEFAULT_LOOK } from '../../shared/src/look.ts';
 import { featOpId, flushStatements, unlockFeat } from '../src/feats.ts';
 import { ORIGIN, TEST_PASSWORD, api, connect, type Client } from './helpers.ts';
+
+// The day's three daily challenges (feats.ts dailyFeats) change at midnight Las Vegas time, and on
+// some days a round here would earn one of them too, a feat and a payout these tests don't count.
+// So the clock runs from a day whose dailies none of these rounds meets.
+const A_QUIET_DAY = Date.parse('2026-09-25T19:00:00Z');
+beforeAll(() => {
+  vi.useFakeTimers({ toFake: ['Date'], shouldAdvanceTime: true });
+  vi.setSystemTime(A_QUIET_DAY);
+});
+afterAll(() => vi.useRealTimers());
 
 let ipSeq = 0;
 let aidSeq = 0;

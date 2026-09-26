@@ -27,10 +27,10 @@ import { skipWhileHidden } from '../render/matrices.ts';
 import { modelBytes } from '../render/model-bytes.ts';
 import { DEFAULT_LOOK, OUTFITS, SKIN_TONES, type Body, type Look } from '../../../shared/src/look.ts';
 import type { Quality } from '../render/engine3d.ts';
-import type { Character, CharacterFactory } from './contract.ts';
+import type { BodyPart, Character, CharacterFactory } from './contract.ts';
 import type { EmoteId } from '../../../shared/src/protocol.ts';
 import { Wearables, dressed } from './wearables.ts';
-import { DOWN, PIVOT, gestureOf, mirror, movesLegs, smooth, type BoneKey, type Foot, type Hand, type HandMix, type Pose, type PropId, type StaffGesture, type LawGesture, type Turn, type Vec } from './gestures.ts';
+import { DOWN, PIVOT, gestureOf, mirror, movesLegs, smooth, dances, type BoneKey, type Foot, type Hand, type HandMix, type Pose, type PropId, type StaffGesture, type LawGesture, type Turn, type Vec } from './gestures.ts';
 import { disposeProp, propMesh } from './emote-props.ts';
 import { Ride, kneeFor, rideSpec, stanceYaw, type RideSpec } from './rides.ts';
 
@@ -260,8 +260,11 @@ export class Person implements Character {
   /** Bones this frame's gesture turned, and the mixer's pose for them (put back next frame). */
   private readonly posed = new Map<THREE.Object3D, THREE.Quaternion>();
   private readonly spare = new Map<THREE.Object3D, THREE.Quaternion>();
-  /** The emote being acted out, how far in, and (walked off) how much of it is left as it fades. */
-  private act: { e: EmoteId | StaffGesture | LawGesture; t: number; fade: number } | null = null;
+  /**
+   * The emote being acted out, how far in, and (walked off) how much of it is left as it fades;
+   * on a ride, how it's done there (RideAct), chosen as it starts.
+   */
+  private act: { e: EmoteId | StaffGesture | LawGesture; t: number; fade: number; ride: RideAct } | null = null;
   /** Room for where the mixer had the bones an emote moves (kept in `moved`, below). */
   private readonly spareAt = new Map<THREE.Object3D, THREE.Vector3>();
   /** The legs as the emotes pose them, and the chest's turn in the idle pose (for Hand.frame). */
@@ -303,6 +306,13 @@ export class Person implements Character {
   private rideLast: { x: number; z: number; yaw: number } | null = null;
   private rideSpeed = 0;
   private rideYaw = 0;
+  /**
+   * v7.2, emotes on a ride: how far the rider has stepped off beside it for a dance (0 on the deck,
+   * 1 on the floor), and how far rider and board have turned together to face ahead (a board's
+   * side-on stance, for an emote done on it). Each eases over STEP_S.
+   */
+  private rideStep = 0;
+  private rideFace = 0;
 
   constructor(
     private readonly factory: Characters,
@@ -387,9 +397,30 @@ export class Person implements Character {
     return this.look;
   }
 
+  /**
+   * v7.2: where a part of the body is now, in the root's frame (see Character.part): the left wrist
+   * (the watch is worn there), a little ahead of the face, the front of the chest below the neck,
+   * the crown of the head, the right hand. Each from its bone, so a tall body or a short one, a
+   * broad one, a pose, all frame the same.
+   */
+  part(p: BodyPart, out: THREE.Vector3): THREE.Vector3 | null {
+    const model = this.model;
+    if (!model) return null;
+    const bone = (n: string) => model.getObjectByName(n.replace('.', '')) ?? model.getObjectByName(n);
+    const [name, dx, dy, dz] = PARTS[p];
+    const b = bone(name);
+    if (!b) return null;
+    this.root.updateWorldMatrix(true, true);
+    b.getWorldPosition(out);
+    this.root.worldToLocal(out);
+    // the offsets grow with the body (the look's height scales the model)
+    const s = model.scale.y;
+    return out.add(_pt.set(dx * s, dy * s, dz * s));
+  }
+
   /** Act out an emote, or one of a dealer's motions (StaffGesture). */
   gesture(e: EmoteId | StaffGesture | LawGesture): void {
-    this.act = { e, t: 0, fade: 1 };
+    this.act = { e, t: 0, fade: 1, ride: this.rideAct(e) };
     if (this.prop && gestureOf(e)?.prop !== this.prop.id) this.dropProp();
   }
 
@@ -588,7 +619,9 @@ export class Person implements Character {
 
   /**
    * Pose the body for the emote being acted out; returns what it does to the whole body. On a ride
-   * it's the seated version: the upper body only, on top of the stance.
+   * it's done as rideAct() chose: stepped off beside it (the legs and the whole body the emote's as
+   * the step is made), standing on the deck (the arms and head; a hop takes the ride up too), or
+   * the seated version, the upper body only on top of the stance.
    */
   private perform(dt: number, riding = false): Whole | null {
     const act = this.act!;
@@ -599,9 +632,13 @@ export class Person implements Character {
       this.dropProp();
       return null;
     }
-    const seated = this.seatTop !== null || riding;
-    const pose = g.pose(act.t, seated);
-    const legs = !seated && movesLegs(pose);
+    const mode = riding ? (act.ride ?? 'upper') : null;
+    const seated = this.seatTop !== null || mode === 'upper';
+    // (on the deck, the upper-body version: the feet are on the ride)
+    const pose = g.pose(act.t, seated || mode === 'on');
+    // how much the legs are the emote's: stepping off a ride, they come to it as the step is made
+    const ground = mode === 'on' ? 0 : mode === 'off' ? smooth(this.rideStep) : 1;
+    const legs = !seated && ground > 0 && movesLegs(pose);
     // walking off ends a dance: it fades from wherever it had got to (not in mid-air)
     if (act.fade < 1 || (legs && this.speed > DANCE_WALK && !pose.flip)) {
       act.fade -= dt / 0.3;
@@ -615,20 +652,27 @@ export class Person implements Character {
     const k = smooth(Math.min(1, act.t / 0.22)) * smooth(Math.min(1, (g.dur - act.t) / 0.3)) * smooth(act.fade);
     // the legs' lengths, from the pose the mixer gave them, before the hips move
     const lens = legs ? this.legLengths() : null;
+    const kl = k * ground;
     if (legs && pose.pelvis) {
       const body = this.bones.body;
-      if (body) this.shift(body, _v.set(pose.pelvis[0] * k, pose.pelvis[1] * k, pose.pelvis[2] * k).add(local(body, _w)));
+      if (body) this.shift(body, _v.set(pose.pelvis[0] * kl, pose.pelvis[1] * kl, pose.pelvis[2] * kl).add(local(body, _w)));
     }
     for (const key of BONE_ORDER) {
       const turn = pose[key];
-      if (!turn || (seated && key === 'body') || (lens && LEG_BONES.has(key))) continue;
-      this.turn(key, turn, k);
+      if (!turn || ((seated || mode === 'on') && (key === 'body' || key === 'hips')) || (lens && LEG_BONES.has(key))) continue;
+      this.turn(key, turn, key === 'body' || key === 'hips' ? kl : k);
     }
-    if (lens) this.plant(pose, k, lens);
+    if (lens) this.plant(pose, kl, lens);
     if (pose.handR || pose.handL) this.hands(pose, k);
     if (g.prop && this.prop?.id !== g.prop) this.takeProp(g.prop);
     if (seated) return { y: 0, z: 0, flip: 0, spin: 0 };
-    return { y: (pose.hop ?? 0) * k, z: (pose.glide ?? 0) * k, flip: (pose.flip ?? 0) * k, spin: (pose.spin ?? 0) * k };
+    if (mode === 'on') {
+      // an ollie: the ride goes up with you (never down through the floor)
+      const y = (pose.hop ?? 0) * k;
+      this.ride?.raise(Math.max(0, y));
+      return { y, z: 0, flip: 0, spin: 0 };
+    }
+    return { y: (pose.hop ?? 0) * kl, z: (pose.glide ?? 0) * kl, flip: (pose.flip ?? 0) * kl, spin: (pose.spin ?? 0) * kl };
   }
 
   /**
@@ -1239,10 +1283,30 @@ export class Person implements Character {
   private mountRide(id: string | undefined): void {
     const spec = rideSpec(id);
     if ((this.ride?.id ?? null) === (spec ? id : null)) return;
+    const had = !!this.ride;
     this.ride?.dispose();
     this.ride = spec ? new Ride(id!, spec) : null;
     if (this.ride) this.root.add(this.ride.outer);
     this.rideLast = null;
+    // getting on (B) in view: the ride comes down beside you and you hop onto it
+    this.rideStep = this.ride && !had && this.model && this.root.visible ? 1 : 0;
+    this.rideFace = 0;
+  }
+
+  /**
+   * How an emote starting now is done on the ride you're on (null: not on one). A jump is an
+   * ollie, the ride going up with you; an emote of the arms and head is done standing on the deck
+   * (on a board, turned with it to face ahead while it's slow); a dance, a backflip or a knock
+   * steps off beside the ride for it and back on after, unless you're going too fast to (then the
+   * upper body does it on the deck, as it does on a throne).
+   */
+  private rideAct(e: EmoteId | StaffGesture | LawGesture): RideAct {
+    const ride = this.riding ? this.ride : null;
+    if (!ride) return null;
+    if (e === 'jump') return 'on';
+    if (ride.spec.stance === 'seat') return 'upper';
+    if (!dances(e)) return 'on';
+    return this.rideSpeed < STEP_OFF_SPEED ? 'off' : 'upper';
   }
 
   /**
@@ -1272,6 +1336,14 @@ export class Person implements Character {
       this.rideSpeed += (v - this.rideSpeed) * k;
       this.rideYaw += (w - this.rideYaw) * k;
       ride.update(dt, this.rideSpeed, this.rideYaw);
+      ride.raise(0);
+      // off the deck for a dance and back on after it; a board turned to face ahead for an emote
+      const a = this.act;
+      const step = a?.ride === 'off' ? 1 : 0;
+      const face = a?.ride === 'on' && a.e !== 'jump' && ride.spec.stance === 'side' && this.rideSpeed < STEP_OFF_SPEED ? 1 : 0;
+      const e = dt / STEP_S;
+      this.rideStep += THREE.MathUtils.clamp(step - this.rideStep, -e, e);
+      this.rideFace += THREE.MathUtils.clamp(face - this.rideFace, -e, e);
     } else if (this.tag.position.y !== NAME_Y) {
       // (the model's own turn is put back every frame in update())
       this.tag.position.y = NAME_Y;
@@ -1292,9 +1364,17 @@ export class Person implements Character {
     const spec = ride.spec;
     const model = this.model!;
     const side = spec.stance === 'side';
-    const lift = spec.deck + ride.bob;
+    // stepped off for a dance (the ride beside you), or turned with a board to face ahead
+    const step = smooth(this.rideStep);
+    const face = smooth(this.rideFace);
+    const on = 1 - step;
+    ride.outer.position.x = -STEP_ASIDE * step;
+    ride.outer.rotation.y = side ? (face * Math.PI) / 2 : 0;
+    // stepping off or back on is a little hop between the deck and the floor
+    const lift = (spec.deck + ride.bob) * on + STEP_HOP * Math.sin(Math.PI * step);
+    const yaw = stanceYaw(spec) * (1 - Math.max(face, step));
     model.position.y = this.modelAt.y + lift;
-    model.quaternion.copy(this.modelQ).multiply(_rq.setFromEuler(_reu.set(side ? ride.lean : ride.pitch, stanceYaw(spec), side ? 0 : ride.lean, 'YXZ')));
+    model.quaternion.copy(this.modelQ).multiply(_rq.setFromEuler(_reu.set((side ? ride.lean : ride.pitch) * on, yaw, (side ? 0 : ride.lean) * on, 'YXZ')));
     model.updateMatrixWorld(true);
     model.getWorldQuaternion(_rootQ).invert();
     _rootInv.copy(model.matrixWorld).invert();
@@ -1319,27 +1399,28 @@ export class Person implements Character {
     const find = (n: string) => model.getObjectByName(n.replace('.', '')) ?? model.getObjectByName(n);
     const body = find('Body');
     // the hips down: the knees take it
-    if (body?.parent) {
+    if (body?.parent && on > 0) {
       this.moved.set(body, body.position.clone());
-      const at = local(body, _rv).add(_rw.set(0, -spec.crouch, 0)).applyMatrix4(model.matrixWorld);
+      const at = local(body, _rv).add(_rw.set(0, -spec.crouch * on, 0)).applyMatrix4(model.matrixWorld);
       body.position.copy(body.parent.worldToLocal(at));
       body.updateMatrixWorld(true);
     }
-    this.rideLegs(spec, 0, 0);
-    this.turn('torso', [side ? 0.12 : 0.06, side ? 0.12 : 0, 0]);
+    this.rideLegs(spec, 0, 0, undefined, on);
+    this.turn('torso', [side ? 0.12 : 0.06, side ? 0.12 : 0, 0], on);
     if (side) {
-      // looking along the board, arms out a little for balance
-      this.turn('chest', [0, 0.14, 0]);
-      this.turn('neck', [0, 0.42, 0]);
-      this.turn('head', [0.08, 0.62, 0]);
-      this.turn('upperR', [-0.2, 0, -0.32]);
-      this.turn('upperL', [-0.12, 0, 0.36]);
-      this.turn('lowerR', [-0.35, 0, 0]);
-      this.turn('lowerL', [-0.3, 0, 0]);
+      // looking along the board, arms out a little for balance (facing ahead for an emote: square on)
+      const k = on * (1 - face);
+      this.turn('chest', [0, 0.14, 0], k);
+      this.turn('neck', [0, 0.42, 0], k);
+      this.turn('head', [0.08, 0.62, 0], k);
+      this.turn('upperR', [-0.2, 0, -0.32], on);
+      this.turn('upperL', [-0.12, 0, 0.36], on);
+      this.turn('lowerR', [-0.35, 0, 0], on);
+      this.turn('lowerL', [-0.3, 0, 0], on);
       return lift;
     }
-    // both hands on the bar
-    this.rideHands(ride, { palm: [0, -1, 0.25], fingers: [0.15, -0.2, 1], fist: 0.75, elbow: [-1, -0.6, -0.5] });
+    // both hands on the bar (let go of as you step off)
+    this.rideHands(ride, { palm: [0, -1, 0.25], fingers: [0.15, -0.2, 1], fist: 0.75, elbow: [-1, -0.6, -0.5] }, on);
     return lift;
   }
 
@@ -1351,7 +1432,8 @@ export class Person implements Character {
    * up (a seated rider's knees point ahead and up); `shinTo` is the shin's length to the foot when
    * the pose before this one has already moved the knee.
    */
-  private rideLegs(spec: RideSpec, up: number, rise: number, shinTo?: number): void {
+  private rideLegs(spec: RideSpec, up: number, rise: number, shinTo?: number, w = 1): void {
+    if (w <= 0) return;
     const model = this.model!;
     const find = (n: string) => model.getObjectByName(n.replace('.', '')) ?? model.getObjectByName(n);
     for (const [i, s] of [
@@ -1370,7 +1452,8 @@ export class Person implements Character {
       // where the shin ends, in its own frame: it stays that way as the leg turns
       const end = shin.worldToLocal(foot.getWorldPosition(_re));
       const [fx, fz] = spec.feet[s === 1 ? 0 : 1];
-      const want = _rv.set(fx, A0.y + up, fz);
+      // (`w` of the way from where the animation has the foot: stepping off, it comes back to it)
+      const want = _rv.set(fx, A0.y + up, fz).lerp(A0, 1 - w);
       const reached = kneeFor(H, want, a, b, _rw.set(0.25 * s, rise, 1), _rn);
       const knee = _rn;
       this.rotate(thigh, _rq.setFromUnitVectors(_rd.subVectors(K0, H).normalize(), _rd2.subVectors(knee, H).normalize()));
@@ -1380,13 +1463,14 @@ export class Person implements Character {
       this.moved.set(foot, foot.position.clone());
       foot.position.copy(foot.parent.worldToLocal(reached.clone().applyMatrix4(model.matrixWorld)));
       foot.updateMatrixWorld(true);
-      this.rotate(foot, _rq.setFromAxisAngle(_rw.set(0, 1, 0), spec.toes[s === 1 ? 0 : 1] * s));
+      this.rotate(foot, _rq.setFromAxisAngle(_rw.set(0, 1, 0), spec.toes[s === 1 ? 0 : 1] * s * w));
     }
   }
 
   /** Both hands to the ride's grips (a bar, a throne's arms), shaped by `hand` (given for the right; the left mirrors). */
-  private rideHands(ride: Ride, hand: Omit<Hand, 'at'>): void {
+  private rideHands(ride: Ride, hand: Omit<Hand, 'at'>, k = 1): void {
     const r = this.arms.R;
+    if (k <= 0) return;
     const l = this.arms.L;
     if (!r || !l) return;
     const right = local(r.upper, _sh);
@@ -1399,7 +1483,7 @@ export class Person implements Character {
       const g = ride.grip(m === 1 ? 1 : -1, _rg);
       if (!g) continue;
       g.applyMatrix4(_rootInv).sub(mid).divideScalar(len);
-      this.arm(arm, m, { ...hand, at: [g.x * m, g.y, g.z] }, mid, len, 1);
+      this.arm(arm, m, { ...hand, at: [g.x * m, g.y, g.z] }, mid, len, k);
     }
   }
 }
@@ -1458,6 +1542,28 @@ const SIT_LOWER: Turn = [-0.72, 0.3, 0];
 const BALL = 0.18;
 /** A walk faster than this ends a dance (it eases out from wherever it had got to). */
 const DANCE_WALK = 0.3;
+
+/** v7.2: each body part's bone, and where the part is from its joint (metres, the character's frame). */
+const PARTS: Record<BodyPart, [bone: string, dx: number, dy: number, dz: number]> = {
+  wrist: ['Wrist.L', 0, 0, 0],
+  face: ['Head', 0, 0.07, 0.11],
+  chest: ['Neck', 0, -0.05, 0.05],
+  crown: ['Head', 0, 0.15, 0.03],
+  hand: ['Wrist.R', 0, 0.04, 0.04],
+};
+
+/**
+ * v7.2: how an emote is done on a ride (Person.rideAct): stepped off beside it ('off'), standing
+ * on the deck ('on'), or the seated upper-body version ('upper'); null when it began off a ride.
+ */
+type RideAct = 'off' | 'on' | 'upper' | null;
+/** Slower than this (m/s) a ride stops for an emote: you step off it for a dance, a board turns to face ahead. */
+const STEP_OFF_SPEED = 0.8;
+/** Seconds to step off a ride or back on (or turn a board to face ahead). */
+const STEP_S = 0.28;
+/** Where the ride waits while you dance (metres to your right), and how high the step off it goes. */
+const STEP_ASIDE = 0.62;
+const STEP_HOP = 0.1;
 
 /** An arm's bones and how they're built (Person.measureArms). */
 interface Arm {

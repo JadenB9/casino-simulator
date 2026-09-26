@@ -666,6 +666,34 @@ export function gestureSeconds(e: EmoteId): number {
   return GESTURES[e].dur;
 }
 
+const dancing = new Map<string, boolean>();
+
+/**
+ * Whether a gesture moves the legs through it (steps, sways the hips, flips, glides or spins),
+ * standing; not one that only holds the feet in a stance while the arms do it (a dab). Sampled
+ * every 50 ms: the feet, the hips or the body's turn going more than 5 cm (or 0.05 rad) either way.
+ */
+export function dances(e: EmoteId | StaffGesture | LawGesture): boolean {
+  let v = dancing.get(e);
+  if (v !== undefined) return v;
+  const g = gestureOf(e);
+  const lo: number[] = [];
+  const hi: number[] = [];
+  v = false;
+  for (let t = 0; g && t <= g.dur && !v; t += 0.05) {
+    const p = g.pose(t, false);
+    if (p.flip || p.glide || p.spin) v = true;
+    const at = [p.pelvis ?? [0, 0, 0], p.footR?.at ?? [0, 0, 0], p.footL?.at ?? [0, 0, 0], p.body ?? [0, 0, 0]].flat();
+    at.forEach((x, i) => {
+      lo[i] = Math.min(lo[i] ?? x, x);
+      hi[i] = Math.max(hi[i] ?? x, x);
+    });
+  }
+  v ||= hi.some((x, i) => x - lo[i]! > 0.05);
+  dancing.set(e, v);
+  return v;
+}
+
 /** Whether a pose moves anything below the waist (a walk stops it). */
 export function movesLegs(p: Pose): boolean {
   return !!(p.pelvis || p.footR || p.footL || p.body || p.flip || p.glide);

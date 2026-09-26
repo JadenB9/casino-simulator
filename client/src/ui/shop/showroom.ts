@@ -12,21 +12,25 @@ import * as THREE from 'three';
 import type { Look } from '../../../../shared/src/look.ts';
 import type { ItemKind } from '../../../../shared/src/items.ts';
 import type { EmoteId } from '../../../../shared/src/protocol.ts';
-import type { Character, CharacterFactory } from '../../world/contract.ts';
+import type { BodyPart, Character, CharacterFactory } from '../../world/contract.ts';
 import type { EngineLike } from '../menu/deps.ts';
 import { calmScale, fewer } from '../../app/comfort.ts';
 
 export type Framing = 'full' | 'chest' | 'face' | 'head' | 'wrist' | 'hand';
 
-/** Where the camera looks (character frame, facing the camera at yaw 0), how much height it frames, and which way the figure turns to show it. */
-const FRAMES: Record<Framing, { at: [number, number, number]; height: number; yaw: number; sway: number }> = {
+/**
+ * Where the camera looks (character frame, facing the camera at yaw 0), how much height it frames,
+ * and which way the figure turns to show it. v7.2: a close-up looks at the body part itself as the
+ * character has it (Character.part), `at` only standing in until the model is in; and a little
+ * wider on the small pieces, so the wrist or the face is never at the edge of the shot.
+ */
+const FRAMES: Record<Framing, { at: [number, number, number]; part?: BodyPart; height: number; yaw: number; sway: number }> = {
   full: { at: [0, 0.97, 0], height: 2.15, yaw: -0.35, sway: 0 },
-  chest: { at: [0, 1.43, 0.13], height: 0.62, yaw: -0.25, sway: 0.5 },
-  // (v7.2: wider on the small pieces, so a pose, a body or a height never leaves them out of shot)
-  face: { at: [0, 1.62, 0.2], height: 0.38, yaw: -0.3, sway: 0.45 },
-  head: { at: [0, 1.7, 0.12], height: 0.62, yaw: -0.4, sway: 0.45 },
-  wrist: { at: [0.26, 1.02, 0.06], height: 0.5, yaw: -1.25, sway: 0.35 },
-  hand: { at: [-0.2, 1.2, 0.3], height: 0.55, yaw: 0.45, sway: 0.35 },
+  chest: { at: [0, 1.43, 0.13], part: 'chest', height: 0.62, yaw: -0.25, sway: 0.5 },
+  face: { at: [0, 1.62, 0.2], part: 'face', height: 0.4, yaw: -0.3, sway: 0.4 },
+  head: { at: [0, 1.7, 0.12], part: 'crown', height: 0.62, yaw: -0.4, sway: 0.45 },
+  wrist: { at: [0.26, 1.02, 0.06], part: 'wrist', height: 0.34, yaw: -1.25, sway: 0.25 },
+  hand: { at: [-0.2, 1.2, 0.3], part: 'hand', height: 0.55, yaw: 0.45, sway: 0.35 },
 };
 
 /** The framing that shows off a kind of item. */
@@ -351,6 +355,8 @@ class Particles {
   }
 }
 
+const _part = new THREE.Vector3();
+
 /** The statue's gold: brushed, warm, catching the key and the rim. */
 function statueGold(): THREE.MeshStandardMaterial {
   return new THREE.MeshStandardMaterial({ color: '#a8843a', metalness: 0.85, roughness: 0.46, emissive: '#2a1c06', emissiveIntensity: 0.2 });
@@ -382,6 +388,9 @@ export class Showroom {
   private fixed: number | null = null;
   private readonly camAt = new THREE.Vector3();
   private readonly camLook = new THREE.Vector3();
+  /** The framed body part, eased (the figure breathes; the camera shouldn't). */
+  private readonly partAt = new THREE.Vector3();
+  private partFor: Framing | null = null;
   private placed = false;
   private mood: Mood = 'none';
   private cased = false;
@@ -507,7 +516,7 @@ export class Showroom {
     const cx = ((a.x0 + a.x1) / 2 / vw) * 2 - 1;
     const cy = -(((a.y0 + a.y1) / 2 / vh) * 2 - 1);
     // the point turns with the figure (with its resting turn, not the sway, so the camera stays calm)
-    const focus = this.built.group.position.clone().add(new THREE.Vector3(...f.at).applyAxisAngle(new THREE.Vector3(0, 1, 0), this.fixed ?? this.base)).add(new THREE.Vector3(0, PODIUM_TOP, 0));
+    const focus = this.built.group.position.clone().add(this.framed(dt).applyAxisAngle(new THREE.Vector3(0, 1, 0), this.fixed ?? this.base)).add(new THREE.Vector3(0, PODIUM_TOP, 0));
     const halfH = d * half;
     const halfW = halfH * (vw / vh);
     // a little above the point, looking slightly down, like a customer at the counter
@@ -523,6 +532,20 @@ export class Showroom {
     }
     this.cam.position.copy(this.camAt);
     this.cam.lookAt(this.camLook);
+  }
+
+  /** The point a framing looks at, in the figure's own frame: the body part as it is now (eased), or the stand-in. */
+  private framed(dt: number): THREE.Vector3 {
+    const f = FRAMES[this.framing];
+    const at = f.part ? this.character.part?.(f.part, _part) : null;
+    if (!at) {
+      this.partFor = null;
+      return new THREE.Vector3(...f.at);
+    }
+    if (this.partFor !== this.framing) this.partAt.copy(at);
+    else this.partAt.lerp(at, 1 - Math.exp(-dt * 4));
+    this.partFor = this.framing;
+    return this.partAt.clone();
   }
 
   dispose(): void {

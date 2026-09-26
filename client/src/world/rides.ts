@@ -742,11 +742,12 @@ function release(id: string): void {
 
 /**
  * A ride under a character: hung on the character's root (it goes where they go, facing where they
- * face). `outer` stays level on the floor (a hoverboard's glow is on it); `inner` leans, pitches and
- * bobs, and holds the skinned model with a bone per axle.
+ * face). `outer` stays level on the floor (a hoverboard's glow is on it); `carrier` goes up in an
+ * ollie; `inner` leans, pitches and bobs, and holds the skinned model with a bone per axle.
  */
 export class Ride {
   readonly outer = new THREE.Group();
+  private readonly carrier = new THREE.Group();
   private readonly inner = new THREE.Group();
   private readonly axles: THREE.Bone[] = [];
   private readonly mesh: THREE.SkinnedMesh;
@@ -763,7 +764,8 @@ export class Ride {
     readonly spec: RideSpec,
   ) {
     this.outer.name = `ride:${id}`;
-    this.outer.add(this.inner);
+    this.outer.add(this.carrier);
+    this.carrier.add(this.inner);
     const root = new THREE.Bone();
     for (const ax of spec.axles) {
       const b = new THREE.Bone();
@@ -820,6 +822,11 @@ export class Ride {
       this.glow.scale.set(s, 1, s);
       this.glow.position.x = -Math.sin(this.lean) * 0.12;
     }
+  }
+
+  /** Lift the ride off the floor by `y` metres (a jump on it takes it up too); 0 puts it back. */
+  raise(y: number): void {
+    this.carrier.position.y = y;
   }
 
   /** Where the right hand (side 1) or the left (-1) grips, in world space; null without a bar. */
@@ -883,6 +890,12 @@ export interface RideKeyDeps {
   allowed(e: KeyboardEvent): boolean;
   /** Say something short (no ride yet, or the save failed). */
   say(text: string): void;
+  /**
+   * v7.2: where the hint goes ("B · Step off" at the foot of the screen, which also does it on a
+   * click), and whether you're out on the floor to use it; none: no hint.
+   */
+  ui?: HTMLElement;
+  free?(): boolean;
 }
 
 /** The app's profile, as rideKey was given it (for the touch controls' ride button). */
@@ -899,34 +912,93 @@ export function rideChoice(): 'on' | 'off' | null {
   return toggledRide(p.look, p.owned, lastRide()) ? 'on' : null;
 }
 
-/** B steps off your ride and back on again. Returns a function that stops listening. */
+/** What the hint and the touch button say for a choice. */
+export function rideLabel(r: 'on' | 'off'): string {
+  return r === 'off' ? 'Step off your ride' : 'Get on your ride';
+}
+
+/** How often the hint looks again at whether you're riding and free to (ms). */
+const HINT_MS = 200;
+
+/**
+ * B steps off your ride and back on again; so does a click on the hint at the foot of the screen
+ * (with a mouse: a touch screen has its own button). Returns a function that stops listening.
+ */
 export function rideKey(deps: RideKeyDeps): () => void {
   keyDeps = deps;
   let busy = false;
-  const onKey = (e: KeyboardEvent) => {
-    if (e.code !== 'KeyB' || e.repeat || e.ctrlKey || e.metaKey || e.altKey || busy || !deps.allowed(e)) return;
+  const toggle = (): boolean => {
+    if (busy) return false;
     const p = deps.profile();
-    if (!p) return;
+    if (!p) return false;
     const riding = itemOfKind(p.look.ride, 'ride') as ShopItem | null;
     const next = toggledRide(p.look, p.owned, lastRide());
     if (!next) {
       deps.say('No ride yet: the boutique sells them.');
-      return;
+      return false;
     }
-    e.preventDefault();
     if (riding) rememberRide(riding.id);
     busy = true;
+    paint();
     deps
       .save(next)
       .then((stored) => {
         if (next.ride && !stored.ride) deps.say("That ride isn't yours any more.");
       })
       .catch(() => deps.say("Couldn't change that just now."))
-      .finally(() => (busy = false));
+      .finally(() => {
+        busy = false;
+        paint();
+      });
+    return true;
+  };
+  const onKey = (e: KeyboardEvent) => {
+    if (e.code !== 'KeyB' || e.repeat || e.ctrlKey || e.metaKey || e.altKey || busy || !deps.allowed(e)) return;
+    if (toggle()) e.preventDefault();
   };
   addEventListener('keydown', onKey);
+  // the hint: the key and what it does, a button a mouse can press as well
+  const hint = deps.ui ? document.createElement('button') : null;
+  const words = document.createElement('span');
+  let shown = '';
+  function paint(): void {
+    if (!hint) return;
+    const r = deps.free?.() ? rideChoice() : null;
+    const key = r ? `${r}${busy ? ' busy' : ''}` : '';
+    if (key === shown) return;
+    shown = key;
+    hint.hidden = !r;
+    if (!r) return;
+    const label = rideLabel(r);
+    words.textContent = r === 'off' ? 'Step off' : 'Get on your ride';
+    hint.title = `${label} (B)`;
+    hint.setAttribute('aria-label', `${label} (B)`);
+    hint.classList.toggle('riding', r === 'off');
+    hint.disabled = busy;
+  }
+  let timer = 0;
+  if (hint) {
+    hint.type = 'button';
+    hint.className = 'ride-hint';
+    hint.hidden = true;
+    const cap = document.createElement('span');
+    cap.className = 'world-key';
+    cap.textContent = 'B';
+    hint.append(cap, words);
+    // a click here mustn't also reach the floor (a click there throws a punch)
+    hint.addEventListener('pointerdown', (e) => e.stopPropagation());
+    hint.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (deps.free?.()) toggle();
+      hint.blur();
+    });
+    deps.ui!.append(hint);
+    timer = window.setInterval(paint, HINT_MS);
+  }
   return () => {
     removeEventListener('keydown', onKey);
+    clearInterval(timer);
+    hint?.remove();
     if (keyDeps === deps) keyDeps = null;
   };
 }

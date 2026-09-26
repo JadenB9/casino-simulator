@@ -215,16 +215,30 @@ class App {
     });
     session.on((p) => this.cars.setOwned(p.owned, p.name));
     // v6 looks6: B steps off your ride and back on (a look save, so everyone sees it)
+    const rideFree = () => overlayCount() === 0 && this.hud !== null && this.table === null && this.world.seated === null && !this.v7?.busy && !this.away;
     rideKey({
       profile: () => session.profile,
+      // v7.2: on (or off) at once, on your own screen; the server's answer follows, and a failed
+      // save puts the look back as it was
       save: async (look) => {
-        const stored = await api.saveLook(look);
-        const now = session.profile;
-        if (now) session.set({ ...now, look: stored });
-        return stored;
+        const was = session.profile?.look;
+        const at = session.profile;
+        if (at) session.set({ ...at, look });
+        try {
+          const stored = await api.saveLook(look);
+          const now = session.profile;
+          if (now) session.set({ ...now, look: stored });
+          return stored;
+        } catch (err) {
+          const now = session.profile;
+          if (now && was && now.look === look) session.set({ ...now, look: was });
+          throw err;
+        }
       },
-      allowed: (e) => !isTyping(e) && overlayCount() === 0 && this.hud !== null && this.table === null && this.world.seated === null && !this.v7?.busy,
+      allowed: (e) => !isTyping(e) && rideFree(),
       say: (text) => toast(text),
+      ui,
+      free: rideFree,
     });
     const rideSound = new RideSound(sfx);
     engine.onFrame((dt) => rideSound.update(dt, world.player.character, this.hud !== null && this.table === null && this.world.seated === null && !this.away));
