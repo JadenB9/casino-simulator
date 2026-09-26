@@ -49,7 +49,7 @@ export class Street {
     }
     const no = this.cantDrive(a, car);
     if (no) {
-      this.d.send(ws, { t: 'err', code: 'NOT_ELIGIBLE', msg: no });
+      this.d.send(ws, { t: 'err', code: 'NOT_ELIGIBLE', msg: no, about: 'drive' });
       return;
     }
     if (a.gun) p.setGun(a.accountId, null);

@@ -4,6 +4,8 @@
 // back half is a shooting range behind a waist-high wall; the home store is a showroom.
 // Metres, world coordinates (x east, z south).
 
+import { LIFTS } from './lifts.ts';
+
 export type StoreId = 'guns' | 'homes';
 
 export interface Store {
@@ -55,12 +57,12 @@ export function storeAt(x: number, z: number): Store | null {
 /**
  * v7.4: the Residences desk, where apartments are sold: the hotel lobby's front desk on the
  * ground floor (the valet lobby under the tower, city/ground.ts), with a clerk behind it facing
- * the lobby. `hall`: the lobby itself, where the server lets an apartment be bought (and at
- * Maison Home).
+ * the lobby. `hall`: the lobby inside its walls (city/plan.ts GROUND.hall is this), where the
+ * server lets an apartment be bought (and at Maison Home).
  */
 export const RESIDENCES = {
   desk: { x0: 113.8, x1: 120.2, z0: -10.4, z1: -9.5 },
   counter: { x: 117, z: -8.75 },
   clerk: { x: 117, z: -11.25, yaw: 0 },
-  hall: { x0: 103, x1: 127.8, z0: -12.6, z1: 12.6 },
+  hall: { x0: LIFTS.ground.x / 100, x1: 127.6, z0: -12.6, z1: 12.6 },
 } as const;

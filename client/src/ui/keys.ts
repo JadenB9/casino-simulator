@@ -126,24 +126,37 @@ export function held(keys: ReadonlySet<string>, action: KeyAction): boolean {
   return false;
 }
 
+/** Whether `code` is free for `action`: nothing it could clash with has it. */
+function freeFor(action: KeyAction, code: string): boolean {
+  const where = SPEC.get(action)!.where;
+  return KEY_SPECS.every((s) => s.action === action || !same(map[s.action], code) || !clash(where, s.where));
+}
+
 /**
- * Bind `code` to `action`. Whatever else it was bound to where it could clash gets `action`'s old
- * key instead. Returns the action that swapped, if one did, or false for a key that can't be used.
+ * Bind `code` to `action`. The control that had it (where the two could clash) swaps onto
+ * `action`'s old key; anything that swap doubles up moves on to its own default or the first free
+ * letter, and so on down the chain, each control settled once, until nothing shares. Returns the
+ * controls that moved, or false for a key that can't be used.
  */
-export function bindKey(action: KeyAction, code: string): KeyAction | null | false {
+export function bindKey(action: KeyAction, code: string): KeyAction[] | false {
   if (reservedKey(code)) return false;
   const old = map[action];
-  const where = SPEC.get(action)!.where;
-  let swapped: KeyAction | null = null;
-  for (const s of KEY_SPECS) {
-    if (s.action !== action && same(map[s.action], code) && clash(where, s.where)) {
-      map[s.action] = old;
-      swapped = s.action;
-    }
-  }
   map[action] = code;
+  const moved: KeyAction[] = [];
+  const settled = new Set<KeyAction>([action]);
+  const letters = Array.from({ length: 26 }, (_, i) => `Key${String.fromCharCode(65 + i)}`);
+  const clashesWithSettled = (a: KeyAction, k: string) => [...settled].some((s) => s !== a && same(map[s], k) && clash(SPEC.get(s)!.where, SPEC.get(a)!.where));
+  for (;;) {
+    const bump = KEY_SPECS.find((s) => !settled.has(s.action) && !freeFor(s.action, map[s.action]));
+    if (!bump) break;
+    // the first gets the old key (a swap); the rest a key none of the settled ones clash with
+    const next = moved.length === 0 ? old : [bump.default, ...letters].find((k) => !clashesWithSettled(bump.action, k) && freeFor(bump.action, k)) ?? old;
+    map[bump.action] = next;
+    settled.add(bump.action);
+    moved.push(bump.action);
+  }
   save();
-  return swapped;
+  return moved;
 }
 
 export function resetKeys(): void {

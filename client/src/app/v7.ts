@@ -143,11 +143,11 @@ export class V7 {
   /** v7.4: crouched (C). */
   private crouched = false;
 
-  private setCrouch(on: boolean): void {
+  private setCrouch(on: boolean, tell = true): void {
     this.crouched = on;
     paceBoost.crouch = on;
     (this.d.world.player.character as { crouch?(on: boolean): void }).crouch?.(on);
-    this.d.link()?.send({ t: 'crouch', on });
+    if (tell) this.d.link()?.send({ t: 'crouch', on });
   }
 
   private jumpAt = 0;
@@ -178,13 +178,15 @@ export class V7 {
   /** The floor socket: the shots, what you own now, a refusal to say. */
   useLink(link: FloorLink | null): void {
     this.linkOff?.();
+    // a new socket: the floor has you standing, so stand
+    if (this.crouched) this.setCrouch(false, false);
     this.linkOff = link?.subscribe((m) => {
       this.arms.hear(m);
       // v7.1: someone else jumped
       if (m.t === 'jump' && m.id !== this.d.link()?.you?.id) (this.d.character(m.id)?.gesture as ((e: string) => void) | undefined)?.('jump');
       if (m.t === 'err' && m.code === 'NOT_ELIGIBLE') {
         // (a car the floor refused: its reason is the one to see, not "wouldn't start")
-        this.driving.refused();
+        if (m.about === 'drive') this.driving.refused();
         toast(m.msg, 'err');
       }
     }) ?? null;

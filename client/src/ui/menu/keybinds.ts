@@ -40,9 +40,9 @@ export function keySettings(): { nodes: HTMLElement[]; dispose(): void } {
         return;
       }
       const spec = KEY_SPECS.find((s) => s.action === action)!;
-      const swapped = bindKey(action, e.code);
-      const other = swapped ? KEY_SPECS.find((s) => s.action === swapped)! : null;
-      note.textContent = other ? `${spec.name}: ${keyLabel(action)}. ${other.name} moved to ${keyLabel(other.action)}.` : `${spec.name}: ${keyLabel(action)}.`;
+      const moved = bindKey(action, e.code) || [];
+      const others = moved.map((a) => `${KEY_SPECS.find((s) => s.action === a)!.name} moved to ${keyLabel(a)}.`);
+      note.textContent = [`${spec.name}: ${keyLabel(action)}.`, ...others].join(' ');
       stop();
     };
     const stop = () => {

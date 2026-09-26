@@ -7,7 +7,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { env, exports } from 'cloudflare:workers';
 import { DEFAULT_LOOK } from '../../shared/src/look.ts';
 import { DOLLAR, STARTING_BALANCE } from '../../shared/src/money.ts';
-import { ORDER_LIFE_MS, SHOP_ITEMS, barItem, shopItem } from '../../shared/src/items.ts';
+import { HOLD_MS, ORDER_LIFE_MS, SHOP_ITEMS, barItem, shopItem } from '../../shared/src/items.ts';
 import { ORIGIN, TEST_PASSWORD, api, connect } from './helpers.ts';
 import { awayFromHappyHour } from './quiet-bar.ts';
 
@@ -352,14 +352,17 @@ describe('POST /bar/order', () => {
 });
 
 describe('holding an order', () => {
-  it('shows a paid order in your hand, with the end time the order sets', async () => {
+  it('shows a paid order in your hand, its end time held inside the order (five minutes on, at the least)', async () => {
     const a = await account('hold_yes');
     const { order: o } = await (await order(a.token, 'champagne')).json<any>();
     const res = await putLook(a.token, { ...DEFAULT_LOOK, held: { item: 'champagne', order: o.id, until: 1 } });
     expect(res.status).toBe(200);
     const look = (await res.json<any>()).look;
-    expect(look.held).toEqual({ item: 'champagne', order: o.id, until: o.until });
+    expect(look.held).toEqual({ item: 'champagne', order: o.id, until: o.at + HOLD_MS });
     expect((await me(a.token)).look.held).toEqual(look.held);
+    // (and never past the order's own end, whatever the client says)
+    const late = await putLook(a.token, { ...DEFAULT_LOOK, held: { item: 'champagne', order: o.id, until: 9e12 } });
+    expect((await late.json<any>()).look.held.until).toBe(o.until);
   });
 
   it('drops a held order that is not yours, not paid, not that item, or run out', async () => {
@@ -393,7 +396,7 @@ describe('holding an order', () => {
     const { order: o } = await (await order(a.token, 'dom')).json<any>();
     expect((await putLook(a.token, { ...DEFAULT_LOOK, held: { item: 'dom', order: o.id, until: 0 + 1 } })).status).toBe(200);
     const seen = await theirs!.next<any>((m) => m.t === 'player' && m.id === a.id && m.look?.held);
-    expect(seen.look.held).toEqual({ item: 'dom', order: o.id, until: o.until });
+    expect(seen.look.held).toEqual({ item: 'dom', order: o.id, until: o.at + HOLD_MS });
     expect((await putLook(a.token, DEFAULT_LOOK)).status).toBe(200);
     const down = await theirs!.next<any>((m) => m.t === 'player' && m.id === a.id && m.look && !m.look.held);
     expect(down.look).toEqual(DEFAULT_LOOK);

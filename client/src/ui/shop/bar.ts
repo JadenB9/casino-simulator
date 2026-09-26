@@ -12,7 +12,7 @@
 // and is handed over as soon as what you're holding leaves your hand, oldest first.
 
 import type { Cents } from '../../../../shared/src/money.ts';
-import type { BarOrder, OrderResponse } from '../../../../shared/src/items.ts';
+import { HOLD_MS, type BarOrder, type OrderResponse } from '../../../../shared/src/items.ts';
 import type { Held, Look } from '../../../../shared/src/look.ts';
 import type { SessionLike } from '../menu/deps.ts';
 import { serverNow } from '../../net/clock.ts';
@@ -116,16 +116,27 @@ export class Bar {
     this.queue.splice(i, 1);
     this.arrived.delete(o.id);
     this.handing = o.id;
-    await this.setHeld({ item: o.item, order: o.id, until: o.until });
+    // five minutes in hand from now (its time in line doesn't count), never past the order's life
+    await this.setHeld({ item: o.item, order: o.id, until: Math.min(o.until, serverNow() + HOLD_MS) });
     this.handing = null;
   }
 
   /** Put down what you're holding; the next one waiting its turn comes to hand. */
   async drop(): Promise<void> {
     if (this.deps.session.profile?.look.held) await this.setHeld(null);
-    const next = this.queue.find((o) => this.arrived.has(o.id));
-    // (at a table it waits by your seat until you stand up: hold() sees to that)
-    if (next) await this.hold(next.id);
+    // the oldest one waiting that's still good (one whose time ran out in line is let go)
+    for (;;) {
+      const next = this.queue.find((o) => this.arrived.has(o.id));
+      if (!next) return;
+      if (next.until > serverNow()) {
+        // (at a table it waits by your seat until you stand up: hold() sees to that)
+        await this.hold(next.id);
+        return;
+      }
+      this.queue.splice(this.queue.indexOf(next), 1);
+      this.arrived.delete(next.id);
+      this.changed();
+    }
   }
 
   /** Orders brought over and waiting for your hand to be free. */

@@ -11,6 +11,7 @@
 
 import { LIFTS } from '../../../../shared/src/lifts.ts';
 import { LOTS } from '../../../../shared/src/zones.ts';
+import { RESIDENCES } from '../../../../shared/src/stores.ts';
 
 export interface Area {
   x0: number;
@@ -28,7 +29,7 @@ export const GROUND = {
   /** The valet's side: its west wall and its lots' ends (v7: past the street, the loop road's own walls). */
   walk: { x0: 100.6, x1: 199.5, z0: -58, z1: 58 },
   /** The valet lobby's hall (inside faces of its walls) and the building round it. */
-  hall: { x0: m(LIFTS.ground.x), x1: 127.6, z0: -12.6, z1: 12.6 },
+  hall: RESIDENCES.hall,
   hallHeight: 6.2,
   building: { x0: 102.6, x1: 127.8, z0: -13, z1: 13 },
   /** The glass front's doorway (z) and its sliding doors. */

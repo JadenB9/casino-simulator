@@ -206,10 +206,13 @@ export function furnish(mats: Mats, col: Collider, tier: number, owned: Readonly
   // new one is bought it's the old one the flat came with: tired laminate, a stained worktop, a
   // yellowed fridge and a two-ring stove
   const K = { x0: -141.4, x1: -131.6, z0: 58.08, z1: 58.8 };
+  // (the units are the best kitchen owned, whatever stands in the slot: an espresso machine picked
+  // there sits on the new worktop, it doesn't bring the old one back)
   const kitchenStyle = pieceIn('kitchen', owned, t, picks.kitchen ?? null)?.style ?? null;
-  const newKitchen = kitchenStyle === 'modern' || kitchenStyle === 'chef';
-  kit.box(!newKitchen ? 'home-laminate' : t >= 2 || kitchenStyle === 'chef' ? 'home-walnut' : 'home-white', K.x0, K.x1, 0.01, 0.86, K.z0, K.z1);
-  kit.box(!newKitchen ? 'home-worktop-old' : kitchenStyle === 'modern' ? 'home-quartz' : 'marble-light', K.x0 - 0.02, K.x1 + 0.02, 0.86, 0.9, K.z0, K.z1 + 0.03, 1.2);
+  const chef = kitchenStyle === 'chef';
+  const newKitchen = chef || owned.has('kitchen-modern') || owned.has('kitchen-chef');
+  kit.box(!newKitchen ? 'home-laminate' : t >= 2 || chef ? 'home-walnut' : 'home-white', K.x0, K.x1, 0.01, 0.86, K.z0, K.z1);
+  kit.box(!newKitchen ? 'home-worktop-old' : chef ? 'marble-light' : 'home-quartz', K.x0 - 0.02, K.x1 + 0.02, 0.86, 0.9, K.z0, K.z1 + 0.03, 1.2);
   kit.box('home-steel', -136.9, -136, 0.9, 0.905, K.z0 + 0.12, K.z1 - 0.12);
   own.box((K.x0 + K.x1) / 2, (K.z0 + K.z1) / 2, K.x1 - K.x0, K.z1 - K.z0 + 0.06, 0, 0.9);
   // the fridge at the run's west end, and the hob
@@ -224,7 +227,7 @@ export function furnish(mats: Mats, col: Collider, tier: number, owned: Readonly
     kit.box('home-porcelain-old', -140.7, -140.0, 0.9, 0.92, K.z0 + 0.08, K.z1 - 0.06);
     for (const x of [-140.52, -140.18]) kit.cylinder('home-screen', x, (K.z0 + K.z1) / 2, 0.1, 0.92, 0.93, 14);
     for (const x of [-140.6, -140.1]) kit.cylinder('home-screen', x, K.z1 + 0.035, 0.022, 0.72, 0.76, 8);
-  } else if (kitchenStyle === 'modern') {
+  } else if (!chef) {
     kit.box('home-screen', -140.8, -140.0, 0.9, 0.906, K.z0 + 0.1, K.z1 - 0.08);
   }
 

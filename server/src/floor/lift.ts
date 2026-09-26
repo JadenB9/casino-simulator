@@ -25,7 +25,8 @@ export function ride(presence: Presence, att: FloorAtt, to: ZoneId, aptExists = 
   // on) doesn't hold you up: the valet takes it back to your garage and up you go
   const no = liftRefusal({ x: at.x, z: at.z, at: att.at, confine: att.confine, home: aptExists ? 1 : 0, car: null }, to);
   if (no) return SAY[no];
-  if (att.car) presence.setCar(att.accountId, null, null);
   const a = LIFTS[to].arrive;
-  return presence.teleport(att.accountId, a.x, a.z, a.r) ? null : SAY.far;
+  if (!presence.teleport(att.accountId, a.x, a.z, a.r)) return SAY.far;
+  if (att.car) presence.setCar(att.accountId, null, null);
+  return null;
 }

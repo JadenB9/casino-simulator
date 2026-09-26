@@ -34,7 +34,7 @@ describe('rebindable keys', () => {
   it('swaps a key with the control that had it, where the two could clash', async () => {
     const { keys, s } = await fresh();
     // E (interact) onto V (the gun): the gun gets E
-    expect(keys.bindKey('interact', 'KeyV')).toBe('gun');
+    expect(keys.bindKey('interact', 'KeyV')).toEqual(['gun']);
     expect(keys.keyFor('interact')).toBe('KeyV');
     expect(keys.keyFor('gun')).toBe('KeyE');
     expect(JSON.parse(s.data.get('casino.keys')!)).toEqual({ interact: 'KeyV', gun: 'KeyE' });
@@ -47,9 +47,23 @@ describe('rebindable keys', () => {
 
   it("lets a foot control and a car control share a key (C crouches, and turns the car's camera)", async () => {
     const { keys } = await fresh();
-    expect(keys.bindKey('horn', 'KeyC')).toBe('carView');
+    expect(keys.bindKey('horn', 'KeyC')).toEqual(['carView']);
     expect(keys.keyFor('crouch')).toBe('KeyC');
     expect(keys.keyFor('carView')).toBe('KeyH');
+  });
+
+  it('moves every control a swap would double up, in a chain (crouch onto E: interact to C, the car camera off C)', async () => {
+    const { keys } = await fresh();
+    const moved = keys.bindKey('crouch', 'KeyE') as string[];
+    expect(keys.keyFor('crouch')).toBe('KeyE');
+    expect(moved).toContain('interact');
+    expect(keys.keyFor('interact')).toBe('KeyC');
+    expect(moved).toContain('carView');
+    expect(keys.keyFor('carView')).not.toBe('KeyC');
+    for (const a of keys.KEY_SPECS) for (const b of keys.KEY_SPECS) {
+      if (a.action === b.action || keys.keyFor(a.action) !== keys.keyFor(b.action)) continue;
+      expect([a.where, b.where].sort()).toEqual(['car', 'foot']);
+    }
   });
 
   it("refuses the game's own keys, and ignores them in a saved list", async () => {

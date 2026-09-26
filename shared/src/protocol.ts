@@ -478,7 +478,8 @@ export type FloorServerMsg =
   | { t: 'jail'; jail: JailState | null }
   // v6 bank6: another player sent you money (shared/src/bank.ts); only to you
   | { t: 'bank.in'; id: string; from: string; amount: Cents; note: string | null; at: number }
-  | { t: 'err'; code: ErrorCode; msg: string }
+  // (v7.4: `about: 'drive'` on a refused get-in, so the client drops only that)
+  | { t: 'err'; code: ErrorCode; msg: string; about?: 'drive' }
   | ChatServerMsg;
 
 /**
