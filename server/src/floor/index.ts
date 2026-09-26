@@ -293,6 +293,11 @@ export class CasinoFloor extends DurableObject<Env> {
         const info = apt !== null ? this.tower.info(apt) : null;
         if (info) this.send(ws, { t: 'apt', apt: info });
       }
+    } else if (msg.t === 'jump') {
+      // v7.1: a hop, for everyone to see (the emote's limit keeps it from being a flood)
+      const id = this.presence.accountOf(ws);
+      this.presence.touch(ws, Date.now());
+      if (id !== null && b.emote.take()) this.broadcast({ t: 'jump', id });
     } else if (msg.t === 'apts') {
       this.presence.touch(ws, Date.now());
       this.send(ws, { t: 'apts', list: this.tower.list() });
@@ -425,7 +430,14 @@ export class CasinoFloor extends DurableObject<Env> {
 
   /** v6 cars6: bring a player's car round to the valet's curb (the Worker checked they own it), or send it back (null). */
   valetCall(accountId: number, name: string, car: string | null): CallResult {
+    // v7.1: one car at a time: not while you're driving one
+    if (car !== null && this.presence.attOfAccount(accountId)?.car) return { error: 'AWAY' };
     return this.valet.call({ id: accountId, name }, car, this.presence.positionOf(accountId), Date.now());
+  }
+
+  /** v7.1: where a player stands now (cm), for the shop's "only sold here" (null: not on the floor). */
+  positionOf(accountId: number): { x: number; z: number } | null {
+    return this.presence.positionOf(accountId);
   }
 
   online(): number {

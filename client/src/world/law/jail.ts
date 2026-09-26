@@ -553,10 +553,11 @@ export function buildJail(opts: { quality: Quality; collider: Collider }): Jail 
     s.box(B.x0 - 0.34, B.x0 - 0.02, 3.93, 3.95, z - 0.18, z + 0.18, C.flood, false);
   }
   // the door's steel frame, and a door standing open inward
-  s.box(B.x0 - 0.04, B.x0 + T + 0.02, 0, DOOR.h, DOOR.z0 - 0.06, DOOR.z0, C.steel);
-  s.box(B.x0 - 0.04, B.x0 + T + 0.02, 0, DOOR.h, DOOR.z1, DOOR.z1 + 0.06, C.steel);
+  // (the jambs stand 2 cm proud of the wall's cut ends, never in their plane)
+  s.box(B.x0 - 0.04, B.x0 + T + 0.02, 0, DOOR.h, DOOR.z0 - 0.06, DOOR.z0 + 0.02, C.steel);
+  s.box(B.x0 - 0.04, B.x0 + T + 0.02, 0, DOOR.h, DOOR.z1 - 0.02, DOOR.z1 + 0.06, C.steel);
   s.box(B.x0 - 0.04, B.x0 + T + 0.02, DOOR.h - 0.06, DOOR.h, DOOR.z0, DOOR.z1, C.steel);
-  s.box(B.x0 + T + 0.02, B.x0 + T + 0.07, FLOOR, DOOR.h - 0.08, DOOR.z1 - 0.02 - 1.0, DOOR.z1 - 0.02, C.steel);
+  s.box(B.x0 + T + 0.025, B.x0 + T + 0.075, FLOOR, DOOR.h - 0.08, DOOR.z1 - 0.03 - 1.0, DOOR.z1 - 0.03, C.steel);
   // razor wire along the top of the yard's walls
   razorWire(s, [
     [BARS_X, TOP + 0.6, B.z0 + 0.15, B.x1 - 0.15, B.z0 + 0.15],

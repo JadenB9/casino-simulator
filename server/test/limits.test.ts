@@ -122,7 +122,7 @@ describe('a lobby at chosen limits', () => {
     }
     const cases: [unknown, { min: number; max: number }][] = [
       [{ min: 1, max: 1 }, { min: 100, max: 1_000 }],
-      [{ min: 1e15, max: 1e15 }, { min: 10_000_000, max: 100_000_000 }],
+      [{ min: 1e15, max: 1e15 }, { min: 1_000_000_000_000, max: 10_000_000_000_000 }],
       [{ min: 2_550, max: 100_000 }, { min: 2_500, max: 100_000 }],
       [{ min: 10_000, max: 20_000 }, { min: 10_000, max: 100_000 }],
     ];

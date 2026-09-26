@@ -567,7 +567,7 @@ const STAFF_GESTURES: Record<StaffGesture, { dur: number; pose: (t: number) => P
 
 // v6 law6: a punch thrown, a punch taken, and a guard brushing one off (world/law/).
 // v7: knocked off your feet (a car, a shot) and back up again.
-export type LawGesture = 'punch' | 'hit' | 'brush' | 'knock';
+export type LawGesture = 'punch' | 'hit' | 'brush' | 'knock' | 'jump';
 
 const LAW_GESTURES: Record<LawGesture, Gesture> = {
   // the left fist up by the chin, the right drawn back and thrown straight out at head height as
@@ -624,6 +624,23 @@ const LAW_GESTURES: Record<LawGesture, Gesture> = {
         handR: arm,
         handL: arm,
         pelvis: [0, -0.05 * rise * (1 - rise) * 4, 0],
+      };
+    },
+  },
+  // v7.1: a jump: crouch, up off both feet with the knees tucked and the arms swung up, and land
+  jump: {
+    dur: 0.78,
+    pose: (t) => {
+      const air = t < 0.12 ? 0 : t > 0.66 ? 0 : Math.sin((Math.PI * (t - 0.12)) / 0.54);
+      const crouch = Math.max(0, 1 - Math.abs(t - 0.08) / 0.08) + Math.max(0, 1 - Math.abs(t - 0.7) / 0.08);
+      const arm: Hand = { upper: [-0.4, 0.2 + 0.7 * air, 0.3], fore: [-0.2, 0.6 + 0.3 * air, 0.3], palm: [0, 0, 1], fist: 0.3 };
+      return {
+        hop: 0.62 * air - 0.08 * crouch,
+        // (never quite 0: a jump while walking plays through rather than fading)
+        flip: 0.04 * air + 0.0001,
+        pelvis: [0, -0.1 * crouch, 0],
+        handR: arm,
+        handL: arm,
       };
     },
   },

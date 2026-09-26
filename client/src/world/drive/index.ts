@@ -237,11 +237,10 @@ export class Driving {
     const link = this.d.link();
     // left parked where it stands, for everyone (the floor confirms with the player's `parked`)
     const me = link?.you?.id;
-    if (me !== undefined && m.confirmed) {
-      this.park(me, m.car, m.s.x, m.s.z, m.s.yaw, m.rig);
-      this.keepMine = performance.now() + 4000;
-    }
-    else m.rig.dispose();
+    // v7.1: nothing is left in the road: the valet takes it back to your garage
+    m.rig.dispose();
+    void me;
+    if (m.confirmed) toast(`The valet takes the ${carItem(m.car)?.name ?? 'car'} back to your garage.`);
     if (m.confirmed) link?.send({ t: 'drive', car: null });
     if (!quiet && !m.confirmed) toast("The car wouldn't start. Try again in a moment.");
   }

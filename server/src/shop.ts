@@ -27,6 +27,8 @@ import { FX_KEEP_MS, eventFromOrder, fxKey, statueOf, statuesQuery, type StatueR
 import type { CasinoFloor } from './floor/index.ts';
 import { valetApi } from './cars.ts'; // v6 cars6
 import { gunItem } from '../../shared/src/arms.ts'; // v7
+import { STORES } from '../../shared/src/stores.ts'; // v7.1
+import { ROOMS } from '../../shared/src/law/plan.ts'; // v7.1
 import { APARTMENTS, apartmentItem, homeItem, homeTier } from '../../shared/src/estate.ts'; // v7
 
 /** Purchases per account per minute, for the shop, the effects and the bar each. */
@@ -77,6 +79,25 @@ async function needs(db: D1Database, accountId: number, item: Sold): Promise<str
   return null;
 }
 
+/** v7.1: where a thing must be bought, and why not here (null: here is fine). */
+async function soldWhere(env: Env, accountId: number, item: Sold): Promise<string | null> {
+  if (item.kind !== 'gun' && item.kind !== 'apartment') return null;
+  let at: { x: number; z: number } | null = null;
+  try {
+    at = await floorOf(env).positionOf(accountId);
+  } catch {
+    /* the floor didn't answer: treated as away */
+  }
+  const x = (at?.x ?? 1e9) / 100;
+  const z = (at?.z ?? 1e9) / 100;
+  if (item.kind === 'gun') {
+    const r = STORES.guns.room;
+    return x >= r.x0 && x <= r.x1 && z >= r.z0 && z <= r.z1 ? null : 'Guns are sold at Ace Arms, across the street from the valet.';
+  }
+  const L = ROOMS.lobby!;
+  return x >= L.x0 && x <= L.x1 && z >= L.z0 && z <= L.z1 ? null : 'Apartments are sold at the Residences desk in the casino’s lobby.';
+}
+
 /** Why the boutique won't sell something it knows (a reward, a free emote), or null. */
 function notSold(id: unknown): string | null {
   if (isFreeEmote(id)) return `Everyone has ${theName(emoteItem(id)!.name)} already.`;
@@ -103,6 +124,9 @@ export async function shopApi(request: Request, env: Env, route: string, account
     if (!(await bumpRate(db, 'casino-shop', `a${accountId}`, LIMIT, 60_000, now))) return fail(429, 'RATE_LIMITED', 'Give it a minute.', cors);
     const first = await needs(db, accountId, item); // v7
     if (first) return fail(409, 'NOT_ELIGIBLE', first, cors);
+    // v7.1: guns are sold in Ace Arms, apartments at the Residences desk in the casino's lobby
+    const away = await soldWhere(env, accountId, item);
+    if (away) return fail(409, 'NOT_ELIGIBLE', away, cors);
     const r = await buyItem(db, accountId, item, body.op, now);
     if (r.kind === 'owned') return fail(409, 'NOT_ELIGIBLE', `You already own ${theName(item.name)}.`, cors);
     if (r.kind === 'short') return notEnough(item, r, cors);

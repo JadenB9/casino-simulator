@@ -71,12 +71,19 @@ function bets(key: string, tierList: LimitTier[], ceiling: number): LimitSpec {
 }
 
 /** Table games go up to $500,000 a bet as a tier and $1,000,000 as custom limits. */
-const TABLE_CEILING = 1_000_000;
+// v7.1: custom limits reach $100 billion a bet at the tables: the most whose biggest payout (sic bo's
+// 180 to 1, with the rest of the layout) still counts to the cent (money is integer cents, exact to
+// about $90 trillion). The online games' multipliers run far higher, so they keep their own ceiling.
+const TABLE_CEILING = 100_000_000_000;
 /** The Big Six wheel, the Bandit Wheel and the online games stop at $100,000. */
 const WHEEL_CEILING = 100_000;
+/** v7.1: the wheels and Let It Ride pay at most 45 to 1: they go as high as the tables. */
+const BIG_WHEEL_CEILING = 100_000_000_000;
 
 /** The online games and the Bandit Wheel: $1 to $1,000 a bet at Standard. */
-const ONLINE = (): LimitSpec => bets('default', ladder([1, 100], [1, 1_000], [5, 5_000], [25, 10_000], [100, 50_000], [1_000, 100_000]), WHEEL_CEILING);
+// v7.1: the computers' games to $500,000 a bet: crash and limbo pay up to 100,000,000 times, and a
+// payout must still count to the cent
+const ONLINE = (): LimitSpec => bets('default', ladder([1, 100], [1, 1_000], [5, 5_000], [25, 10_000], [100, 50_000], [1_000, 100_000]), 500_000);
 
 export const LIMITS: Partial<Record<GameId, LimitSpec>> = {
   blackjack: bets('default', ladder([5, 500], [25, 5_000], [100, 10_000], [500, 50_000], [1_000, 100_000], [5_000, 500_000]), TABLE_CEILING),
@@ -89,11 +96,11 @@ export const LIMITS: Partial<Record<GameId, LimitSpec>> = {
   war: bets('bet', ladder([5, 500], [10, 1_000], [25, 5_000], [100, 10_000], [1_000, 100_000], [5_000, 500_000]), TABLE_CEILING),
   // v6 tables6: each of Let It Ride's three circles (a royal pays 1,000 to 1 on all three, so its
   // top tiers stop lower than the other card tables')
-  letitride: bets('bet', ladder([5, 500], [10, 1_000], [25, 2_500], [100, 5_000], [500, 25_000], [1_000, 50_000]), WHEEL_CEILING),
+  letitride: bets('bet', ladder([5, 500], [10, 1_000], [25, 2_500], [100, 5_000], [500, 25_000], [1_000, 50_000]), BIG_WHEEL_CEILING),
   // v6 tables6: the Pai Gow Poker bet; the Fortune bonus scales from it
   paigow: bets('bet', ladder([5, 500], [10, 1_000], [25, 5_000], [100, 10_000], [1_000, 100_000], [5_000, 500_000]), TABLE_CEILING),
   // each spot; the most on the layout a spin is five times it
-  bigsix: bets('spot', ladder([1, 100], [1, 500], [5, 1_000], [25, 5_000], [100, 25_000], [1_000, 100_000]), WHEEL_CEILING),
+  bigsix: bets('spot', ladder([1, 100], [1, 500], [5, 1_000], [25, 5_000], [100, 25_000], [1_000, 100_000]), BIG_WHEEL_CEILING),
   // Small, Big, Odd and Even; the other bets scale from them
   sicbo: bets('even', ladder([1, 500], [5, 5_000], [25, 10_000], [100, 50_000], [1_000, 100_000], [5_000, 500_000]), TABLE_CEILING),
   // From a fifty-cent small blind to the nosebleeds; Custom takes any blinds in between.

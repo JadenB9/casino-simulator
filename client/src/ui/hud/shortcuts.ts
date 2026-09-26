@@ -16,6 +16,8 @@ export const SHORTCUTS: readonly { title: string; rows: readonly Row[] }[] = [
       ['W A S D', 'Walk'],
       ['↑ ← ↓ →', 'Walk, on the arrow keys'],
       ['⇧', 'Run, held while walking'],
+      ['Space', 'Jump'],
+      ['R', 'Draw your gun (again for the next one); click fires'],
       ['E', 'Whatever the prompt offers; again to stand up'],
       ['F', 'First or third person'],
       ['B', 'Step off your ride, and back on'],

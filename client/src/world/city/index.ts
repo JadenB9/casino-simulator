@@ -256,6 +256,8 @@ export class City {
     const z = this.zones.get(this.zone);
     const me = !this.ride && f.player.isEnabled && this.onFoot() ? this.people[0]! : null;
     z?.update(dt, this.people, calm(), me, this.roadCars);
+    // v7.1: cars on the road are solid: a walker is pushed out of the traffic and others' cars
+    if (me) for (const c of [...(z?.traffic?.cars() ?? []), ...this.roadCars]) pushOut(c, p);
     this.step(dt);
   }
 
@@ -636,3 +638,26 @@ export class City {
 }
 
 export { ZONES };
+
+/** v7.1: push a walker (radius 0.32) at `p` out of a car's footprint, by the shortest way. */
+function pushOut(c: RoadCar, p: { x: number; z: number }): void {
+  const fx = Math.sin(c.yaw);
+  const fz = Math.cos(c.yaw);
+  const dx = p.x - c.x;
+  const dz = p.z - c.z;
+  const along = dx * fx + dz * fz;
+  const side = dx * fz - dz * fx;
+  const r = 0.32;
+  const ea = c.hl + r - Math.abs(along);
+  const es = c.hw + r - Math.abs(side);
+  if (ea <= 0 || es <= 0) return;
+  if (ea < es) {
+    const k = Math.sign(along || 1) * ea;
+    p.x += fx * k;
+    p.z += fz * k;
+  } else {
+    const k = Math.sign(side || 1) * es;
+    p.x += fz * k;
+    p.z -= fx * k;
+  }
+}

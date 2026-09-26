@@ -302,10 +302,10 @@ export class Presence {
       if (a.seat) this.unseat(ws, a);
       // v7: nobody is moved in a car: out of it, the car left where it was
       if (a.car) {
-        const parked = zoneOf(a.x, a.z) === 'ground' ? { car: a.car, x: a.x, z: a.z, r: a.r } : null;
+        // (v7.1: back to the garage, not left in the road)
         a.car = null;
-        a.parked = parked;
-        this.broadcast({ t: 'player', id: a.accountId, car: null, parked });
+        a.parked = null;
+        this.broadcast({ t: 'player', id: a.accountId, car: null, parked: null });
       }
       const to = clampTo(a.confine ?? ZONES[zoneOf(x, z) ?? 'casino'], x, z);
       a.x = to.x;
@@ -364,6 +364,11 @@ export class Presence {
       a.emotes = [...new Set([...had, ...emotes])];
     });
     return [...fresh];
+  }
+
+  /** v7.1: an account's attachment, if it's on the floor. */
+  attOfAccount(accountId: number): FloorAtt | null {
+    return this.walkerOf(accountId)?.att ?? null;
   }
 
   /** v7: a live player's attachment by socket (the street's checks read and change it through `change`). */

@@ -407,6 +407,8 @@ export type FloorClientMsg =
   | { t: 'lift'; to: ZoneId; apt?: number }
   // v7.1: the tower's list (who lives on which floor), and the owner putting a piece in a slot
   | { t: 'apts' }
+  // v7.1: a jump (everyone sees you hop)
+  | { t: 'jump' }
   | { t: 'home.pick'; slot: string; item: string | null }
   | InviteClientMsg // v6 invite6
   // v6 law6: throw a punch, facing `r` (yaw byte); the server finds who it lands on
@@ -465,6 +467,7 @@ export type FloorServerMsg =
   // v7.1: the apartment you're in (on arrival, and whenever its owner changes it), and the tower's list
   | { t: 'apt'; apt: AptInfo }
   | { t: 'apts'; list: { id: number; name: string; floor: number }[] }
+  | { t: 'jump'; id: number }
   | { t: 'detour'; d: Detour }
   | { t: 'detours'; list: Detour[] }
   | { t: 'law'; ev: LawEvent }
@@ -503,6 +506,8 @@ export function parseFloorMsg(raw: unknown, isGame: (g: unknown) => g is GameId)
       return raw.apt !== undefined ? { t: 'lift', to: raw.to, apt: raw.apt as number } : { t: 'lift', to: raw.to };
     case 'apts':
       return { t: 'apts' };
+    case 'jump':
+      return { t: 'jump' };
     case 'home.pick':
       if (typeof raw.slot !== 'string' || !/^[a-z]{2,16}$/.test(raw.slot) || (raw.item !== null && !isShortId(raw.item))) return null;
       return { t: 'home.pick', slot: raw.slot, item: raw.item as string | null };

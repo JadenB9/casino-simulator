@@ -27,7 +27,7 @@ export interface StreetDeps {
   confined: (accountId: number) => boolean;
   /** Where the staff are, with their detours (law.ts). */
   staffPose: (id: StaffId, now: number) => { x: number; z: number };
-  /** The valet's car at the curb for this account, which getting in takes off the curb. */
+  /** The valet's car at the curb for this account: getting into it takes it off the curb, getting into another sends it back (one car at a time). */
   takeFromCurb: (accountId: number, car: string) => void;
 }
 
@@ -43,8 +43,8 @@ export class Street {
     if (!a) return;
     if (car === null) {
       if (!a.car) return;
-      const parked = zoneOf(a.x, a.z) === 'ground' ? { car: a.car, x: a.x, z: a.z, r: a.r } : null;
-      p.setCar(a.accountId, null, parked);
+      // v7.1: nothing is left on the street: the valet takes it back to the garage
+      p.setCar(a.accountId, null, null);
       return;
     }
     const no = this.cantDrive(a, car);

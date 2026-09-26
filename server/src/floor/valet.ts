@@ -37,8 +37,13 @@ export class Valet {
 
   /** v7: its owner got into it at the curb and drove off: off the curb at once, no valet driving it away. */
   take(accountId: number, car: string, now: number): void {
-    const mine = this.calls.find((c) => c.id === accountId && c.car === car && c.until > now);
+    const mine = this.calls.find((c) => c.id === accountId && c.until > now);
     if (!mine) return;
+    // v7.1: one car at a time: a different car at the curb goes back with the valet
+    if (mine.car !== car) {
+      this.call({ id: accountId, name: mine.name }, null, null, now);
+      return;
+    }
     this.calls = this.calls.filter((c) => c !== mine);
     this.broadcast({ t: 'car', ...mine, until: now, taken: true });
   }

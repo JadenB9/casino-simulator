@@ -3,7 +3,9 @@
 // the gun store and the home store (world/stores/), guns in hand (world/arms/), the list of who's
 // online, and bailing someone out. boot.ts mounts this once the floor is built.
 
+import * as THREE from 'three';
 import type { Engine3D } from '../render/engine3d.ts';
+import { signAtlas, signMesh } from '../world/city/kit.ts';
 import type { FloorWorld } from '../world/index.ts';
 import type { Sfx } from '../audio/sfx.ts';
 import type { FloorLink } from '../net/presence.ts';
@@ -11,7 +13,7 @@ import type { Person } from '../world/characters.ts';
 import type { Cars } from '../world/cars/index.ts';
 import { Driving } from '../world/drive/index.ts';
 import { button, modal, toast } from '../ui/kit.ts';
-import { overlayCount } from '../ui/keyboard.ts';
+import { isTyping, overlayCount } from '../ui/keyboard.ts';
 import { openOnline, type OnlineRow } from '../ui/hud/online.ts';
 import { whereIs } from '../world/where.ts';
 import { homeTier } from '../../../shared/src/estate.ts';
@@ -29,6 +31,9 @@ import { SLOTS, TABLET } from '../world/home/plan.ts';
 import { SLOT_ORDER, slotItems } from '../world/home/furnish.ts';
 
 const owns = (id: string) => (session.profile?.owned ?? []).includes(id);
+
+/** v7.1: the Residences desk in the casino's lobby (its front faces -z, into the lobby). */
+const RESIDENCES = { x: 5.2, z: 14.25 };
 
 /** Store clerks: the gun store's in a dark polo, the home store's in a blazer. */
 const CLERKS: Record<StoreId, Look> = {
@@ -112,6 +117,41 @@ export class V7 {
     }
     engine.onFrame((dt) => this.frame(dt));
     world.spots((p) => this.spots(p));
+    this.residences();
+    // v7.1: Space jumps, on foot on the floor
+    addEventListener('keydown', (e) => {
+      if (e.code !== 'Space' || e.repeat || isTyping(e) || overlayCount() > 0 || !d.free() || this.driving.driving || world.walker.down || !world.walker.isEnabled) return;
+      const now = performance.now();
+      if (now - this.jumpAt < 800) return;
+      this.jumpAt = now;
+      e.preventDefault();
+      (world.player.character.gesture as ((g: string) => void) | undefined)?.('jump');
+      d.link()?.send({ t: 'jump' });
+    });
+  }
+
+  private jumpAt = 0;
+
+  /** v7.1: the Residences desk in the casino's lobby, east of the doors, where apartments are sold. */
+  private residences(): void {
+    const { engine, world } = this.d;
+    const D = RESIDENCES;
+    const g = new THREE.Group();
+    g.name = 'residences-desk';
+    const stone = new THREE.MeshStandardMaterial({ color: '#1a1716', roughness: 0.3 });
+    const brass = new THREE.MeshStandardMaterial({ color: '#c9a24b', metalness: 0.9, roughness: 0.35 });
+    const box = (m: THREE.Material, w: number, h: number, d: number, y: number) => {
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
+      mesh.position.set(D.x, y + h / 2, D.z);
+      g.add(mesh);
+    };
+    box(stone, 1.8, 1.02, 0.62, 0.001);
+    box(brass, 1.86, 0.04, 0.68, 1.021);
+    const atlas = signAtlas([{ text: 'RESIDENCES', font: '600 88px Cinzel, Georgia, serif', color: '#f4dca6', glow: '#ffb35a' }]);
+    g.add(signMesh(atlas, [{ row: 0, x: D.x, y: 0.6, z: D.z - 0.315, h: 0.22, ry: Math.PI }], 1.6));
+    engine.scene.add(g);
+    world.collider.box(D.x, D.z, 1.9, 0.72, 0, 1.06);
+    engine.onFrame(() => (g.visible = world.zone === 'casino'));
   }
 
   /** The floor socket: the shots, what you own now, a refusal to say. */
@@ -119,6 +159,8 @@ export class V7 {
     this.linkOff?.();
     this.linkOff = link?.subscribe((m) => {
       this.arms.hear(m);
+      // v7.1: someone else jumped
+      if (m.t === 'jump' && m.id !== this.d.link()?.you?.id) (this.d.character(m.id)?.gesture as ((e: string) => void) | undefined)?.('jump');
       if (m.t === 'err' && m.code === 'NOT_ELIGIBLE') toast(m.msg, 'err');
     }) ?? null;
   }
@@ -167,6 +209,10 @@ export class V7 {
   private *spots(p: { x: number; z: number }): Generator<Spot> {
     if (!this.d.free() || this.driving.driving) return;
     const zone = this.d.world.zone;
+    if (zone === 'casino') {
+      const d = Math.hypot(p.x - RESIDENCES.x, p.z - (RESIDENCES.z - 0.8));
+      if (d < 1.6) yield { key: 'residences', x: RESIDENCES.x, z: RESIDENCES.z - 0.8, d, label: 'Residences · buy or upgrade an apartment', any: true, use: () => this.openResidences() };
+    }
     if (zone === 'ground') {
       for (const s of Object.values(STORES)) {
         const d = Math.hypot(p.x - s.counter.x, p.z - s.counter.z);
@@ -213,23 +259,28 @@ export class V7 {
   }
 
   /** The home catalogue: the apartment's steps, then every slot's pieces (or one slot's). */
-  private openHome(only: HomeSlot | null, title = 'Your home'): void {
+  /** v7.1: the Residences desk: the apartment and its upgrades (sold only here). */
+  private openResidences(): void {
+    this.openHome(null, 'Residences', true);
+  }
+
+  private openHome(only: HomeSlot | null, title = 'Your home', residences = false): void {
     const owned = () => session.profile?.owned ?? [];
     const tier = () => homeTier(owned());
     openStore({
       root: this.d.ui,
       title: only ? SLOT_NAMES[only] : title,
-      subtitle: tier() ? `Your apartment: ${APARTMENTS[tier() - 1]!.name}` : 'Buy The Residence, then furnish it',
+      subtitle: residences ? 'Your own floor in the tower: anyone can visit, only you change it' : tier() ? `Your apartment: ${APARTMENTS[tier() - 1]!.name}` : 'Buy The Residence at the casino lobby’s Residences desk, then furnish it',
       sfx: this.d.sfx,
       bought: () => (this.homeAt = 0),
       sections: () => {
         const out: { title: string; rows: StoreRow[] }[] = [];
-        if (!only)
+        if (!only && residences)
           out.push({
             title: 'The apartment',
             rows: APARTMENTS.map((a) => ({ id: a.id, name: a.name, price: a.price, about: a.about, owned: owns(a.id), locked: a.tier > tier() + 1 ? `Needs ${APARTMENTS[a.tier - 2]!.name} first.` : null })),
           });
-        for (const slot of only ? [only] : SLOT_ORDER) {
+        for (const slot of residences ? [] : only ? [only] : SLOT_ORDER) {
           const here = this.d.world.city.homeInterior()?.furnished?.pieces.get(slot)?.id;
           out.push({
             title: SLOT_NAMES[slot],
