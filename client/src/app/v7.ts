@@ -121,7 +121,7 @@ export class V7 {
     d.law.refreshMoney = () => void this.refreshMoney();
     // the stores' clerks behind their counters
     for (const s of Object.values(STORES)) {
-      const p = world.characterFactory.create(CLERKS[s.id], s.id === 'guns' ? 'Clerk' : 'Realtor', { staff: true }) as Person;
+      const p = world.characterFactory.create(CLERKS[s.id], '', { staff: true }) as Person;
       p.root.position.set(s.clerk.x, 0, s.clerk.z);
       p.root.rotation.y = s.clerk.yaw;
       p.showTag(false);
