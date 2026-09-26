@@ -10,7 +10,7 @@
 
 import './editor.css';
 import * as THREE from 'three';
-import { DEFAULT_LOOK, OUTFITS, SKIN_TONES, parseLook, type Body, type Look } from '../../../../shared/src/look.ts';
+import { BUILD, DEFAULT_LOOK, HEIGHT, OUTFITS, SKIN_TONES, parseLook, type Body, type Look } from '../../../../shared/src/look.ts';
 import type { Character, CharacterFactory } from '../../world/contract.ts';
 import { el } from '../kit.ts';
 import type { AccountApi, Closable, EngineLike, SessionLike, SfxLike } from '../menu/deps.ts';
@@ -43,7 +43,7 @@ export interface EditorDeps {
 
 /** The guided walk-through's steps: a title and the fields on it. */
 const STEPS = [
-  { title: 'Body and outfit', note: 'A body and an outfit first; the colours come next.', fields: ['body', 'outfit'] },
+  { title: 'Body and outfit', note: 'A body, its height and build, and an outfit; the colours come next.', fields: ['body', 'shape', 'outfit'] },
   { title: 'Skin and hair', note: 'Your skin tone and your hair colour.', fields: ['skin', 'hair'] },
   { title: 'Clothes', note: 'What you wear. Surprise me deals a whole new look.', fields: ['top', 'bottom', 'shoes'] },
 ] as const;
@@ -368,6 +368,7 @@ export function openEditor(deps: EditorDeps): Closable {
     renderOutfits();
     const fields: Record<FieldId, HTMLElement> = {
       body: body.root,
+      shape: shapeField(look, (o) => update(o)),
       outfit: outfitBox,
       skin: swatchField('Skin', SKINS, SKIN_TONES[look.skin] ?? SKIN_TONES[2], (hex) => update({ skin: Math.max(0, SKIN_TONES.indexOf(hex as (typeof SKIN_TONES)[number])) })),
       hair: swatchField('Hair', HAIR, look.hair, (hex) => update({ hair: hex })),
@@ -532,4 +533,27 @@ export function openEditor(deps: EditorDeps): Closable {
 
   queueMicrotask(() => focusFirst(panel));
   return { root, close: () => finish(null) };
+}
+
+/** v7.1: Height and Build, two sliders (seen by everyone: they're part of the look). */
+function shapeField(look: Look, update: (o: Partial<Look>) => void): HTMLElement {
+  const root = document.createElement('div');
+  root.className = 'ed-field ed-shape';
+  const slider = (label: string, key: 'height' | 'build', range: readonly [number, number]) => {
+    const row = document.createElement('label');
+    row.className = 'ed-slider';
+    const name = document.createElement('span');
+    name.textContent = label;
+    const input = document.createElement('input');
+    input.type = 'range';
+    input.min = String(range[0]);
+    input.max = String(range[1]);
+    input.step = '0.01';
+    input.value = String(look[key] ?? 1);
+    input.addEventListener('input', () => update({ [key]: Number(input.value) } as Partial<Look>));
+    row.append(name, input);
+    return row;
+  };
+  root.append(slider('Height', 'height', HEIGHT), slider('Build', 'build', BUILD));
+  return root;
 }

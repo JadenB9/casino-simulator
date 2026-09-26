@@ -333,6 +333,7 @@ export class Person implements Character {
   setLook(look: Look): void {
     this.look = look = dressed(look);
     this.mountRide(look.ride);
+    this.shape();
     const key = `${look.body}/${look.outfit}`;
     if (key === this.shownKey) {
       this.paint();
@@ -475,6 +476,16 @@ export class Person implements Character {
     if (!m || !m.visible) return null;
     m.updateWorldMatrix(true, false);
     return out.set(0, 0, (m.userData.length as number | undefined) ?? 0.25).applyMatrix4(m.matrixWorld);
+  }
+
+  /** v7.1: the look's height and build on the body (the model scaled from its own size). */
+  private readonly baseScale = new THREE.Vector3(1, 1, 1);
+  private shape(): void {
+    const m = this.model;
+    if (!m) return;
+    const h = this.look.height ?? 1;
+    const b = this.look.build ?? 1;
+    m.scale.set(this.baseScale.x * b, this.baseScale.y * h, this.baseScale.z * b);
   }
 
   /** Turn the head (and a little of the neck) toward a point in world space; null looks ahead. */
@@ -1153,6 +1164,8 @@ export class Person implements Character {
     this.model = model;
     this.modelAt.copy(model.position);
     this.modelQ.copy(model.quaternion);
+    this.baseScale.copy(model.scale);
+    this.shape();
     this.bones = {};
     this.posed.clear();
     for (const [key, name] of Object.entries(BONE_NAMES) as [BoneKey, string][]) {

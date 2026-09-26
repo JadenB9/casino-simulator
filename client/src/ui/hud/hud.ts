@@ -170,12 +170,22 @@ export function mountHud(deps: HudDeps): Hud {
   };
   const clock = window.setInterval(paintSession, 30_000);
 
+  // v7.1: at a table, net worth is what you had off it: your worth when you sat down less the
+  // buy-in, held still until you stand up (the table's own tile counts the chips meanwhile)
+  let lastWorth = 0;
+  let seatedWorth: Cents | null = null;
   const paint = (p: Profile) => {
     who.textContent = p.name;
     rollBalance(p.balance);
     const w = p.bank?.worth ?? p.balance + p.inPlay;
-    worth.tile.hidden = w === p.balance;
-    if (!worth.tile.hidden) rollWorth(w);
+    lastWorth = w;
+    if (seatedWorth !== null) {
+      worth.tile.hidden = false;
+      rollWorth(seatedWorth);
+    } else {
+      worth.tile.hidden = w === p.balance;
+      if (!worth.tile.hidden) rollWorth(w);
+    }
     scheduleSession();
   };
 
@@ -223,7 +233,11 @@ export function mountHud(deps: HudDeps): Hud {
       if (stack === null) {
         seat = null;
         table.tile.hidden = true;
+        seatedWorth = null;
+        const p = deps.session.profile;
+        if (p) paint(p);
       } else {
+        if (seat === null) seatedWorth = Math.max(0, lastWorth - (escrow ?? stack));
         seat = { stack, escrow: escrow ?? seat?.escrow ?? stack };
         table.tile.hidden = false;
         rollTable(stack);

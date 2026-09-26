@@ -73,3 +73,6 @@
   .editor-panel { width: 380px; }
   .ed-foot { padding: 10px 20px 12px; gap: 6px; }
 }
+.ed-shape { display: grid; gap: 10px; }
+.ed-slider { display: grid; grid-template-columns: 70px 1fr; align-items: center; gap: 12px; font-size: 15px; color: var(--ink-2); }
+.ed-slider input { width: 100%; accent-color: var(--brass); height: 28px; }

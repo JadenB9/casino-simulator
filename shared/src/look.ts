@@ -36,6 +36,9 @@ export interface Look {
   hat?: string;
   /** A ride (skateboard, scooter...): worn, you ride it about the floor. */
   ride?: string;
+  /** v7.1: how tall (0.85-1.15 of the model's height) and how broad (0.8-1.35 of its build). */
+  height?: number;
+  build?: number;
   /** A title under your name, from a feat you earned (feats.ts FEATS[].reward.title, by feat id). */
   title?: string;
   /** A bar order in your right hand. */
@@ -64,6 +67,10 @@ export const DEFAULT_LOOK: Look = {
 const HEX = /^#[0-9a-f]{6}$/i;
 
 /** A clean Look from untrusted input, or null. Unknown keys are dropped. */
+/** v7.1: the ranges of the editor's Height and Build sliders. */
+export const HEIGHT: readonly [number, number] = [0.85, 1.15];
+export const BUILD: readonly [number, number] = [0.8, 1.35];
+
 export function parseLook(raw: unknown): Look | null {
   if (!raw || typeof raw !== 'object') return null;
   const o = raw as Record<string, unknown>;
@@ -92,6 +99,12 @@ export function parseLook(raw: unknown): Look | null {
     if (itemOfKind(o[kind], kind)) look[kind] = o[kind] as string;
   }
   if (titleOf(o.title)) look.title = o.title as string;
+  // v7.1: height and build, kept to their ranges (to two places), left out at 1
+  const scale = (v: unknown, lo: number, hi: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(Math.min(hi, Math.max(lo, v)) * 100) / 100 : 1);
+  const h = scale(o.height, HEIGHT[0], HEIGHT[1]);
+  const b = scale(o.build, BUILD[0], BUILD[1]);
+  if (h !== 1) look.height = h;
+  if (b !== 1) look.build = b;
   const held = o.held as Record<string, unknown> | undefined;
   if (held && typeof held === 'object' && barItem(held.item) && isOp(held.order) && Number.isSafeInteger(held.until) && (held.until as number) > 0) {
     look.held = { item: held.item as string, order: held.order as string, until: held.until as number };
