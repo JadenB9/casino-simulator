@@ -171,9 +171,11 @@ export class TouchControls {
     deps.ui.append(this.caption, this.act, this.ride, this.note);
 
     this.layer.addEventListener('pointerdown', this.onDown);
-    this.layer.addEventListener('pointermove', this.onMove);
-    this.layer.addEventListener('pointerup', this.onUp);
-    this.layer.addEventListener('pointercancel', this.onUp);
+    // (on the window: the stick's thumb may have come down before the layer was there to catch
+    // it; both only follow the stick's and the look's own pointers)
+    addEventListener('pointermove', this.onMove);
+    addEventListener('pointerup', this.onUp);
+    addEventListener('pointercancel', this.onUp);
     this.layer.addEventListener('lostpointercapture', this.onUp);
     this.layer.addEventListener('contextmenu', this.stopDefault);
     addEventListener('pointerdown', this.onAnyPointer, true);
@@ -202,6 +204,9 @@ export class TouchControls {
     this.setMode('off');
     clearTimeout(this.noteTimer);
     removeEventListener('pointerdown', this.onAnyPointer, true);
+    removeEventListener('pointermove', this.onMove);
+    removeEventListener('pointerup', this.onUp);
+    removeEventListener('pointercancel', this.onUp);
     removeEventListener('blur', this.onBlur);
     document.removeEventListener('gesturestart', this.stopDefault);
     document.removeEventListener('gesturechange', this.stopDefault);
@@ -327,7 +332,11 @@ export class TouchControls {
     } else {
       return;
     }
-    this.layer.setPointerCapture?.(e.pointerId);
+    try {
+      this.layer.setPointerCapture?.(e.pointerId);
+    } catch {
+      /* the window hears it anyway */
+    }
   };
 
   private onMove = (e: PointerEvent): void => {
@@ -381,6 +390,12 @@ export class TouchControls {
     if (touch === this.on || (e.pointerType !== 'mouse' && !touch)) return;
     this.on = touch;
     this.paintOn();
+    // v7.2: the touch that turned the controls on is the thumb on the stick (or a look) already,
+    // if it came down on the view itself: it used to be lost, so the first push walked nowhere
+    if (touch && (e.target === this.layer || (e.target as Element | null)?.tagName === 'CANVAS')) {
+      this.update();
+      if (this.mode === 'walk' || this.mode === 'table') this.onDown(e);
+    }
   };
 
   private paintOn(): void {

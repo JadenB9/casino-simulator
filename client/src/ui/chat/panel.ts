@@ -99,7 +99,8 @@ export class ChatPanel {
     const kc = el('kbd', 'chat-kc', 'T');
     this.dock.append(icon('chat'), el('span', 'chat-dock-label', 'Chat'), this.dockBadge, kc);
     // Idle on a touch screen the dock stays under the log: a tap there starts typing.
-    this.dock.addEventListener('click', () => (this.open ? this.focus() : this.show(true, true)));
+    // (v7.2: on a touch screen the chat button closes an open chat again; with a keyboard it goes to the box)
+    this.dock.addEventListener('click', () => (!this.open ? this.show(true, true) : touchScreen() ? this.show(false) : this.focus()));
 
     // The open box: tabs and switches, the log, the line.
     const head = el('div', 'chat-head');
@@ -732,4 +733,9 @@ function icon(name: 'chat' | 'muted' | 'shown' | 'hidden' | 'down' | 'send' | 'p
       break;
   }
   return s;
+}
+
+/** A touch screen in use (the floor's touch controls are on), or a coarse pointer at all. */
+function touchScreen(): boolean {
+  return document.documentElement.classList.contains('touch-ui') || matchMedia('(pointer: coarse)').matches;
 }

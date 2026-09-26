@@ -191,3 +191,24 @@ html.touch-ui .world-prompt { display: none !important; }
 
 /* Reduce flashing & motion (app/comfort.ts) */
 body.calm .touch-act, body.calm .touch-caption, body.calm .touch-note { animation: none; }
+
+/* v7.2: every thumb control a size up, easier to hit, and none on top of another: the action
+   button in the corner, the punch to its left, the ride button above the punch (they used to share
+   one spot), the caption over them all. */
+.touch-stick { width: 148px; height: 148px; }
+.touch-act { width: 92px; height: 92px; font-size: 18px; }
+.touch-act-label { max-width: 80px; }
+.touch-ride { right: 132px; bottom: 170px; width: 60px; height: 60px; }
+.touch-ride .ico { width: 30px; height: 30px; }
+.touch-caption { bottom: 246px; }
+@media (max-width: 520px) {
+  .touch-ride { bottom: 206px; }
+  /* upright, the right-hand column is the buttons' (the gun's go up it): the caption over the stick */
+  .touch-caption { right: auto; left: 16px; bottom: 222px; max-width: calc(100vw - 210px); }
+}
+/* v7.2: a phone on its side is short: the round buttons in one row along the foot, right to left
+   (action, punch, ride, then the gun's two: arms.css), under anything down the right-hand side */
+@media (max-height: 480px) {
+  .touch-ride { right: 206px; bottom: 94px; }
+  .touch-caption { bottom: 184px; }
+}

@@ -58,8 +58,8 @@ button.hud-online:focus-visible { outline: 2px solid var(--focus); outline-offse
 
 /* Touch screens: every control a thumb's width. */
 @media (pointer: coarse) {
-  .hud-btn { width: 44px; height: 44px; }
-  .hud-online { height: 44px; }
+  .hud-btn { width: 48px; height: 48px; }
+  .hud-online { height: 48px; }
 }
 
 /* A phone on its side: one slim row, so the table keeps the height. v7.2: your money never gives
@@ -86,7 +86,11 @@ button.hud-online:focus-visible { outline: 2px solid var(--focus); outline-offse
   .hud-online { order: -3; margin-right: auto; }
   .hud .touch-leave { order: -2; }
   .hud::after { content: ''; order: -1; flex-basis: 100%; }
-  .hud-btn { flex: 1 1 0; width: auto; min-width: 0; max-width: 44px; }
+  .hud-btn { flex: 1 1 0; width: auto; min-width: 0; max-width: 48px; }
+  /* v7.2: on a touch screen the buttons in two rows of six, each wide enough for a thumb (twelve
+     in one row came to 31 px) */
+  html.touch-ui { --below-hud: 176px; }
+  html.touch-ui .hud-btn { flex: 1 1 calc((100% - 5 * 4px) / 6); max-width: none; height: 48px; }
   .hud-stat { padding: 5px 12px 6px; }
 }
 

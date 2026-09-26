@@ -11,3 +11,9 @@
 .arms-fire { bottom: 330px; width: 84px; height: 84px; background: rgba(120, 24, 16, 0.85); border-color: #ff7a5a; }
 .arms-touch:active { transform: scale(0.95); }
 @media (max-height: 480px) { .arms-gun { bottom: 150px; right: 104px; } .arms-fire { bottom: 150px; right: 190px; } }
+/* v7.2: a size up, above the action button, clear of the caption (world/touch.css) */
+.arms-touch { width: 80px; height: 80px; right: 22px; }
+.arms-gun { bottom: 190px; }
+.arms-fire { bottom: 282px; width: 92px; height: 92px; }
+@media (max-width: 520px) { .arms-gun { bottom: 226px; } .arms-fire { bottom: 318px; } }
+@media (max-height: 480px) { .arms-gun { bottom: 90px; right: 280px; } .arms-fire { bottom: 84px; right: 374px; } }

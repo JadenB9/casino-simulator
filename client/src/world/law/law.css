@@ -76,3 +76,6 @@
 @media (max-width: 520px) {
   .law-punch { bottom: 126px; }
 }
+/* v7.2: a size up, beside the (larger) action button (world/touch.css) */
+.law-punch { right: 128px; bottom: 92px; width: 64px; height: 64px; font-size: 14px; }
+@media (max-width: 520px) { .law-punch { bottom: 128px; } }

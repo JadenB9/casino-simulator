@@ -461,6 +461,7 @@ export class City {
         if (!this.link?.send({ t: 'apts' })) done([], null);
       },
       (apt) => (this.aptWanted = apt),
+      () => (this.homeTier() > 0 ? (this.link?.you?.id ?? null) : null),
     );
   }
 

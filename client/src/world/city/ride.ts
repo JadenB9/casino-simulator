@@ -12,6 +12,9 @@ export interface PanelHandle {
   close(): void;
 }
 
+/** How long the apartments' page waits for the residents' list before saying it didn't come (ms). */
+const RESIDENTS_MS = 5000;
+
 /** The car's panel. `pick` hears the floor chosen; closing without one calls `onClose`. */
 export function openPanel(
   ui: HTMLElement,
@@ -22,6 +25,8 @@ export function openPanel(
   /** v7.1: the apartments' residents (asked for when that button is pressed), and the choice of one. */
   residents?: (done: (list: { id: number; name: string; floor: number }[], me: number | null) => void) => void,
   choose?: (apt: number) => void,
+  /** v7.2: your own id if you own an apartment (its button shows before the list comes), else null. */
+  own: () => number | null = () => null,
 ): PanelHandle {
   // v7: "Your Apartment" is on an owner's panel only
   const floors = FLOORS.filter((f) => f.zone === here || shows(f.zone));
@@ -41,6 +46,7 @@ export function openPanel(
     if (closed) return;
     closed = true;
     release();
+    removeEventListener('pointerdown', outside, true);
     root.classList.add('closing');
     setTimeout(() => root.remove(), 160);
     if (chosen) pick(chosen);
@@ -64,32 +70,7 @@ export function openPanel(
       if (f.zone === here && f.zone !== 'home') return;
       // v7.1: the apartments: a second page, the residents' floors (yours first)
       if (f.zone === 'home' && residents && choose) {
-        list.replaceChildren(el('li', 'lift-note', 'Finding the residents…'));
-        residents((people, me) => {
-          if (closed) return;
-          const mine = people.filter((r) => r.id === me);
-          const rest = people.filter((r) => r.id !== me);
-          if (!people.length) {
-            list.replaceChildren(el('li', 'lift-note', 'Nobody lives here yet. Maison Home across the street sells the apartments.'));
-            return;
-          }
-          list.replaceChildren(
-            ...[...mine, ...rest].map((r) => {
-              const li = el('li');
-              const rb = el('button', 'lift-btn');
-              rb.type = 'button';
-              rb.append(el('span', 'lift-key', String(r.floor)), el('span', 'lift-name', r.id === me ? 'Your apartment' : `${r.name}'s apartment`), el('span', 'lift-level', `Floor ${r.floor}`));
-              rb.addEventListener('click', () => {
-                choose(r.id);
-                rb.classList.add('lit');
-                setTimeout(() => close('home'), 180);
-              });
-              li.append(rb);
-              return li;
-            }),
-          );
-          (list.querySelector('.lift-btn') as HTMLButtonElement | null)?.focus();
-        });
+        showResidents(residents, choose);
         return;
       }
       b.classList.add('lit');
@@ -98,6 +79,50 @@ export function openPanel(
     li.append(b);
     list.append(li);
     buttons.push(b);
+  }
+  // v7.1: the apartments: a second page, the residents' floors (yours first). v7.2: yours is there
+  // at once (you needn't wait for the list), and a list that doesn't come says so, with a retry.
+  const residentButton = (r: { id: number; name: string; floor: number | null }, me: number | null, pick: (apt: number) => void) => {
+    const li = el('li');
+    const rb = el('button', 'lift-btn');
+    rb.type = 'button';
+    rb.append(el('span', 'lift-key', r.floor === null ? '★' : String(r.floor)), el('span', 'lift-name', r.id === me ? 'Your apartment' : `${r.name}'s apartment`), el('span', 'lift-level', r.floor === null ? 'Your floor' : `Floor ${r.floor}`));
+    rb.addEventListener('click', () => {
+      pick(r.id);
+      rb.classList.add('lit');
+      setTimeout(() => close('home'), 180);
+    });
+    li.append(rb);
+    return li;
+  };
+  function showResidents(ask: NonNullable<typeof residents>, pick: (apt: number) => void): void {
+    const me = own();
+    const mine = me !== null ? [residentButton({ id: me, name: '', floor: null }, me, pick)] : [];
+    list.replaceChildren(...mine, el('li', 'lift-note', 'Finding the residents…'));
+    (list.querySelector('.lift-btn') as HTMLButtonElement | null)?.focus();
+    let answered = false;
+    const late = setTimeout(() => {
+      if (answered || closed) return;
+      const retry = el('button', 'lift-retry', 'Try again');
+      retry.type = 'button';
+      retry.addEventListener('click', () => showResidents(ask, pick));
+      const note = el('li', 'lift-note', 'The other residents’ floors didn’t come through. ');
+      note.append(retry);
+      list.replaceChildren(...mine, note);
+    }, RESIDENTS_MS);
+    ask((people, meNow) => {
+      answered = true;
+      clearTimeout(late);
+      if (closed) return;
+      const you = meNow ?? me;
+      const ordered = [...people.filter((r) => r.id === you), ...people.filter((r) => r.id !== you)];
+      if (!ordered.length) {
+        list.replaceChildren(...mine, el('li', 'lift-note', 'Nobody lives here yet. Maison Home across the street sells the apartments.'));
+        return;
+      }
+      list.replaceChildren(...ordered.map((r) => residentButton(r, you, pick)));
+      (list.querySelector('.lift-btn') as HTMLButtonElement | null)?.focus();
+    });
   }
   const stay = el('button', 'lift-stay');
   stay.type = 'button';
@@ -121,6 +146,11 @@ export function openPanel(
   });
   ui.append(root);
   const release = holdKeyboard(root, () => close(null));
+  // v7.2: a tap or click anywhere off the panel closes it (the doors stay open), as Esc does
+  function outside(e: PointerEvent): void {
+    if (!root.contains(e.target as Node)) close(null);
+  }
+  addEventListener('pointerdown', outside, true);
   // the first floor that isn't this one takes the focus, so Enter goes there
   const first = buttons.find((b) => b.dataset.zone !== here);
   if (first) first.dataset.autofocus = '';

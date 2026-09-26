@@ -336,7 +336,7 @@ html.touch-ui .chat.idle .chat-line { font-size: 15px; }
 
 /* Every control a thumb's width, and no keyboard hints. */
 @media (pointer: coarse) {
-  .chat-dock { height: 44px; }
+  .chat-dock { height: 50px; padding-inline: 18px; }
   .chat-kc { display: none; }
   .chat-head { height: 52px; }
   .chat-tab { height: 44px; }
