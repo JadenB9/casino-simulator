@@ -356,6 +356,7 @@ class Particles {
 }
 
 const _part = new THREE.Vector3();
+const _focus = new THREE.Vector3();
 
 /** The statue's gold: brushed, warm, catching the key and the rim. */
 function statueGold(): THREE.MeshStandardMaterial {
@@ -540,12 +541,12 @@ export class Showroom {
     const at = f.part ? this.character.part?.(f.part, _part) : null;
     if (!at) {
       this.partFor = null;
-      return new THREE.Vector3(...f.at);
+      return _focus.fromArray(f.at);
     }
     if (this.partFor !== this.framing) this.partAt.copy(at);
     else this.partAt.lerp(at, 1 - Math.exp(-dt * 4));
     this.partFor = this.framing;
-    return this.partAt.clone();
+    return _focus.copy(this.partAt);
   }
 
   dispose(): void {

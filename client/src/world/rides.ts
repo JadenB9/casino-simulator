@@ -957,27 +957,28 @@ export function rideKey(deps: RideKeyDeps): () => void {
     if (toggle()) e.preventDefault();
   };
   addEventListener('keydown', onKey);
-  // the hint: the key and what it does, a button a mouse can press as well
-  const hint = deps.ui ? document.createElement('button') : null;
-  const words = document.createElement('span');
+  // the hint: the key and what it does, a button a mouse can press as well (a touch screen has
+  // its own ride button, so none there)
+  const hint = deps.ui && !matchMedia('(pointer: coarse)').matches ? document.createElement('button') : null;
+  const words = hint ? document.createElement('span') : null;
   let shown = '';
   function paint(): void {
-    if (!hint) return;
+    if (!hint || !words) return;
     const r = deps.free?.() ? rideChoice() : null;
     const key = r ? `${r}${busy ? ' busy' : ''}` : '';
     if (key === shown) return;
     shown = key;
     hint.hidden = !r;
     if (!r) return;
-    const label = rideLabel(r);
-    words.textContent = r === 'off' ? 'Step off' : 'Get on your ride';
-    hint.title = `${label} (B)`;
-    hint.setAttribute('aria-label', `${label} (B)`);
+    const label = `${rideLabel(r)} (B)`;
+    words.textContent = r === 'off' ? 'Step off' : rideLabel(r);
+    hint.title = label;
+    hint.setAttribute('aria-label', label);
     hint.classList.toggle('riding', r === 'off');
     hint.disabled = busy;
   }
   let timer = 0;
-  if (hint) {
+  if (hint && words) {
     hint.type = 'button';
     hint.className = 'ride-hint';
     hint.hidden = true;

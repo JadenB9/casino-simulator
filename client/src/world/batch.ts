@@ -32,7 +32,8 @@ export class Batch {
 
   /**
    * Add a piece. The geometry is cloned and baked with `place`, so the same template can be added
-   * many times. Only positions, normals and UVs are kept.
+   * many times. Only positions, normals and UVs are kept. `uv` projects the material's texture a
+   * repeat every so many metres (the material's own userData.uv if not given).
    */
   add(geo: THREE.BufferGeometry, mat: THREE.Material, place: Place, uv?: number): void {
     const m = place instanceof THREE.Matrix4 ? place : compose(place);
@@ -42,6 +43,8 @@ export class Batch {
     }
     g.applyMatrix4(m);
     if (!g.getAttribute('normal')) g.computeVertexNormals();
+    // (v7.2: a material can say how many metres its surface repeats over: userData.uv)
+    uv ??= (mat.userData as { uv?: number }).uv;
     if (uv) projectUVs(g, uv);
     else if (!g.getAttribute('uv')) g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(g.getAttribute('position').count * 2), 2));
     g.clearGroups();

@@ -23,38 +23,42 @@ export function defineHomeMats(mats: Mats): void {
   const std = (o: THREE.MeshStandardMaterialParameters) => new THREE.MeshStandardMaterial(o);
   const lam = (o: THREE.MeshLambertMaterialParameters) => new THREE.MeshLambertMaterial(o);
   // v7.2: each on a surface of its own (surfaces.ts): grain, weave, leather, plaster, stone, brushed
-  // metal; grey canvases the colour tints (a hair lighter, since the canvas takes a little off)
+  // metal; grey canvases the colour tints (a hair lighter, since the canvas takes a little off),
+  // repeating every PIECE_UV metres unless a box says otherwise
   type Surface = Parameters<typeof surface>[0];
-  const both = (name: string, color: string, rough = 0.6, metal = 0, emissive?: string, tex?: Surface) =>
+  const both = (name: string, color: string, o: { rough?: number; metal?: number; emissive?: string; tex?: Surface } = {}) =>
     mats.define1(name, (q) => {
+      const { rough = 0.6, metal = 0, emissive, tex } = o;
       const map = tex ? surface(tex) : null;
-      return q === 'high' ? std({ color, map, roughness: rough, metalness: metal, ...(emissive ? { emissive } : {}) }) : lam({ color, map, ...(emissive ? { emissive } : {}) });
+      const m = q === 'high' ? std({ color, map, roughness: rough, metalness: metal, ...(emissive ? { emissive } : {}) }) : lam({ color, map, ...(emissive ? { emissive } : {}) });
+      if (tex) m.userData.uv = PIECE_UV;
+      return m;
     });
-  both('home-linen', '#d8caae', 0.9, 0, undefined, 'weave');
-  both('home-velvet', '#236a50', 0.8, 0, undefined, 'weave-fine');
-  both('home-cognac', '#9a5428', 0.5, 0, undefined, 'leather');
-  both('home-crimson', '#8a1424', 0.75, 0, undefined, 'weave-fine');
-  both('home-sheet', '#f6f2ea', 0.9, 0, undefined, 'weave');
-  both('home-oak', '#c29466', 0.55, 0, undefined, 'grain');
-  both('home-walnut', '#56361f', 0.45, 0, undefined, 'grain');
-  both('home-white', '#f6f4f0', 0.2, 0, undefined, 'plaster');
-  both('home-screen', '#07080b', 0.08, 0.3);
-  both('home-copper', '#c47444', 0.3, 0.9, undefined, 'brushed');
-  both('home-bronze', '#6a4a2a', 0.4, 0.8);
-  both('home-gold', '#d4a53c', 0.25, 1, '#2a1a04');
-  both('home-steel', '#9a9ea4', 0.35, 0.8, undefined, 'brushed');
-  both('home-felt', '#237444', 0.95, 0, undefined, 'felt');
-  both('home-felt-blue', '#20427a', 0.95, 0, undefined, 'felt');
-  both('home-rug', '#443e38', 1, 0, undefined, 'weave');
-  both('home-persian', '#7a1c1a', 1);
-  both('home-cream', '#efe3cb', 0.9, 0, undefined, 'plaster');
-  both('home-stone', '#e2dcd2', 0.4, 0, undefined, 'veined');
-  both('home-tile', '#2a6a88', 0.2, 0.1);
-  both('home-soil', '#3a2a1c', 1, 0, undefined, 'leather');
-  both('home-leaf', '#3e6a38', 0.8);
+  both('home-linen', '#d8caae', { rough: 0.9, tex: 'weave' });
+  both('home-velvet', '#236a50', { rough: 0.8, tex: 'weave-fine' });
+  both('home-cognac', '#9a5428', { rough: 0.5, tex: 'leather' });
+  both('home-crimson', '#8a1424', { rough: 0.75, tex: 'weave-fine' });
+  both('home-sheet', '#f6f2ea', { rough: 0.9, tex: 'weave' });
+  both('home-oak', '#c29466', { rough: 0.55, tex: 'grain' });
+  both('home-walnut', '#56361f', { rough: 0.45, tex: 'grain' });
+  both('home-white', '#f6f4f0', { rough: 0.2, tex: 'plaster' });
+  both('home-screen', '#07080b', { rough: 0.08, metal: 0.3 });
+  both('home-copper', '#c47444', { rough: 0.3, metal: 0.9, tex: 'brushed' });
+  both('home-bronze', '#6a4a2a', { rough: 0.4, metal: 0.8 });
+  both('home-gold', '#d4a53c', { rough: 0.25, metal: 1, emissive: '#2a1a04' });
+  both('home-steel', '#9a9ea4', { rough: 0.35, metal: 0.8, tex: 'brushed' });
+  both('home-felt', '#237444', { rough: 0.95, tex: 'felt' });
+  both('home-felt-blue', '#20427a', { rough: 0.95, tex: 'felt' });
+  both('home-rug', '#443e38', { rough: 1, tex: 'weave' });
+  both('home-persian', '#7a1c1a', { rough: 1 });
+  both('home-cream', '#efe3cb', { rough: 0.9, tex: 'plaster' });
+  both('home-stone', '#e2dcd2', { rough: 0.4, tex: 'veined' });
+  both('home-tile', '#2a6a88', { rough: 0.2, metal: 0.1 });
+  both('home-soil', '#3a2a1c', { rough: 1, tex: 'leather' });
+  both('home-leaf', '#3e6a38', { rough: 0.8 });
   // v7.2: the aquarium's water, clear enough to see the fish in, and the deep blue behind them
   mats.define1('home-aquarium', () => new THREE.MeshStandardMaterial({ color: '#3aa0c8', transparent: true, opacity: 0.26, roughness: 0.05, metalness: 0.1, depthWrite: false }));
-  both('home-aqua-back', '#0c3350', 0.6, 0, '#06243a');
+  both('home-aqua-back', '#0c3350', { emissive: '#06243a' });
 }
 
 /** v7.2: metres a surface repeats over on a piece (the grain of a table, the weave of a sofa). */
@@ -89,8 +93,8 @@ class At {
     return { x: this.p.x + x * this.c + z * this.s, z: this.p.z - x * this.s + z * this.c };
   }
 
-  /** A box by its local corners (its surface a repeat every PIECE_UV metres, unless `uv` says). */
-  box(mat: string, x0: number, x1: number, y0: number, y1: number, z0: number, z1: number, uv = PIECE_UV): void {
+  /** A box by its local corners (`uv`: metres a repeat of its surface, if not the material's own). */
+  box(mat: string, x0: number, x1: number, y0: number, y1: number, z0: number, z1: number, uv?: number): void {
     const m = this.w((x0 + x1) / 2, (z0 + z1) / 2);
     this.kit.turned(mat, m.x, (y0 + y1) / 2 + this.lift, m.z, x1 - x0, y1 - y0, z1 - z0, this.p.yaw, uv);
   }
@@ -189,7 +193,7 @@ export function furnish(mats: Mats, col: Collider, tier: number, owned: Readonly
   }
   // the kitchen along the north glass: a run of base units and a worktop (always)
   const K = { x0: -141.4, x1: -131.6, z0: 58.08, z1: 58.8 };
-  kit.box(t >= 2 ? 'home-walnut' : 'home-white', K.x0, K.x1, 0.01, 0.86, K.z0, K.z1, PIECE_UV);
+  kit.box(t >= 2 ? 'home-walnut' : 'home-white', K.x0, K.x1, 0.01, 0.86, K.z0, K.z1);
   kit.box(t >= 2 ? 'marble-light' : 'home-stone', K.x0 - 0.02, K.x1 + 0.02, 0.86, 0.9, K.z0, K.z1 + 0.03, 1.2);
   kit.box('home-steel', -136.9, -136, 0.9, 0.905, K.z0 + 0.12, K.z1 - 0.12);
   own.box((K.x0 + K.x1) / 2, (K.z0 + K.z1) / 2, K.x1 - K.x0, K.z1 - K.z0 + 0.06, 0, 0.9);
@@ -661,16 +665,27 @@ const BUILD: Record<HomeSlot, Builder> = {
  * finish, however many guns).
  */
 function gunRack(guns: readonly GunItem[], w: { x0: number; x1: number; z: number }): THREE.Mesh[] {
-  const byMat = new Map<THREE.Material, THREE.BufferGeometry[]>();
   const perRow = Math.max(1, Math.ceil(guns.length / 3));
-  guns.forEach((g, i) => {
-    const model = gunModel(g);
+  return mergedGuns(guns, 'home:guns', (model, i) => {
     const row = Math.floor(i / perRow);
     const col = i % perRow;
     const x = w.x1 - 0.35 - (col + 0.5) * ((w.x1 - w.x0 - 0.5) / perRow) + 0.2;
     // lying flat against the board, the barrel to the left (-x), the grip down
     model.rotation.set(0, -Math.PI / 2, 0);
     model.position.set(x + (model.userData.length as number) / 2, 2.35 - row * 0.55, w.z - 0.12);
+  });
+}
+
+/**
+ * Guns as the models the game draws in your hand, each put in place by `place` (the i-th gun),
+ * merged into one mesh per material (the materials are the models' own, shared: not disposed with
+ * the meshes). For a wall of them: the apartment's rack, the gun store's board.
+ */
+export function mergedGuns(guns: readonly GunItem[], name: string, place: (model: THREE.Group, i: number) => void): THREE.Mesh[] {
+  const byMat = new Map<THREE.Material, THREE.BufferGeometry[]>();
+  guns.forEach((g, i) => {
+    const model = gunModel(g);
+    place(model, i);
     model.updateMatrixWorld(true);
     model.traverse((o) => {
       const m = o as THREE.Mesh;
@@ -688,7 +703,7 @@ function gunRack(guns: readonly GunItem[], w: { x0: number; x1: number; z: numbe
     for (const g of list) g.dispose();
     if (!merged) continue;
     const mesh = new THREE.Mesh(merged, mat);
-    mesh.name = 'home:guns';
+    mesh.name = name;
     out.push(mesh);
   }
   return out;

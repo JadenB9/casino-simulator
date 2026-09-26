@@ -302,7 +302,6 @@ if (checks.includes('riding')) {
     };
     return z0;
   }, [LOOKS, RIDES]);
-  const OFF = new Set(['throwback', 'backflip', 'moonwalk', 'griddy', 'bow']);
   for (const [e, t] of [['throwback', 0.6], ['backflip', 0.8], ['griddy', 0.75], ['moonwalk', 1.2], ['trophy', 1.5], ['dab', 0.9], ['moneyfan', 1.8], ['wave', 0.8], ['bow', 1.2], ['jump', 0.39]]) {
     if (only && !only.includes(e)) continue;
     const m = await page.evaluate(([e, t]) => {
@@ -314,7 +313,8 @@ if (checks.includes('riding')) {
         const r = p.ride;
         r.outer.updateMatrixWorld(true);
         const lift = r.outer.children[0].position.y;
-        return { riding: p.riding, spec: r.spec, aside: +r.outer.position.x.toFixed(3), turned: +r.outer.rotation.y.toFixed(3), lift: +lift.toFixed(3), pos: p.model.position.toArray().map((v) => +v.toFixed(3)), before: before[i].map((v) => +v.toFixed(3)), prop: !!p.prop, body: c.measure(p) };
+        // (how it's done on the ride is the character's own call, made as the emote began)
+        return { mode: p.act?.ride ?? null, riding: p.riding, spec: r.spec, aside: +r.outer.position.x.toFixed(3), turned: +r.outer.rotation.y.toFixed(3), lift: +lift.toFixed(3), pos: p.model.position.toArray().map((v) => +v.toFixed(3)), before: before[i].map((v) => +v.toFixed(3)), prop: !!p.prop, body: c.measure(p) };
       });
     }, [e, t]);
     await place(page, [0, 1.45, z0 + 5.2], [0, 1.0, z0]);
@@ -323,10 +323,12 @@ if (checks.includes('riding')) {
     for (const [i, x] of m.entries()) {
       const name = `riding ${e} ${RIDES[i]}`;
       if (!x.riding) fail(`${name}: not on the ride`);
-      if (!OFF.has(e) && (Math.abs(x.pos[0] - x.before[0]) > 0.001 || Math.abs(x.pos[2] - x.before[2]) > 0.001)) fail(`${name}: the body went somewhere (${x.pos} from ${x.before})`);
+      const off = x.mode === 'off';
+      if (e === 'jump' ? x.mode !== 'ollie' : !['off', 'on'].includes(x.mode)) fail(`${name}: done as ${x.mode}`);
+      if (!off && (Math.abs(x.pos[0] - x.before[0]) > 0.001 || Math.abs(x.pos[2] - x.before[2]) > 0.001)) fail(`${name}: the body went somewhere (${x.pos} from ${x.before})`);
       if ((e === 'trophy' || e === 'moneyfan') && !x.prop) fail(`${name}: nothing in hand`);
       const feet = Math.min(x.body.footR[1], x.body.footL[1]);
-      if (OFF.has(e)) {
+      if (off) {
         if (x.aside > -0.6) fail(`${name}: the ride isn't aside (${x.aside})`);
         if (e !== 'backflip' && feet > 0.16) fail(`${name}: the feet aren't on the floor (${feet})`);
       } else {

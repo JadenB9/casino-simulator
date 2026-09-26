@@ -32,10 +32,9 @@ export class CarMaterials {
 
   private paint(): THREE.Material {
     const common = { color: '#ffffff', vertexColors: true, roughness: 0.34, metalness: 0.42, envMap: this.env, envMapIntensity: 1.1 };
-    const m =
-      this.quality === 'high'
-        ? new THREE.MeshPhysicalMaterial({ ...common, clearcoat: 1, clearcoatRoughness: 0.08 })
-        : new THREE.MeshStandardMaterial(common);
+    if (this.quality !== 'high') return new THREE.MeshStandardMaterial(common);
+    const m = new THREE.MeshPhysicalMaterial({ ...common, clearcoat: 1, clearcoatRoughness: 0.08 });
+    // (on High only: Low leaves every pixel of paint its plain cost)
     flake(m);
     return m;
   }

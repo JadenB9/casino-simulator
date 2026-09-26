@@ -221,8 +221,8 @@ class App {
       // v7.2: on (or off) at once, on your own screen; the server's answer follows, and a failed
       // save puts the look back as it was
       save: async (look) => {
-        const was = session.profile?.look;
         const at = session.profile;
+        const was = at?.look;
         if (at) session.set({ ...at, look });
         try {
           const stored = await api.saveLook(look);

@@ -12,7 +12,7 @@
 .celeb-notice-sub { font-size: 15px; letter-spacing: 0.03em; color: var(--ink-3); text-wrap: balance; }
 
 .celeb-stack { position: fixed; top: var(--below-hud); right: 16px; z-index: 30; display: grid; gap: 8px; justify-items: end; pointer-events: none; }
-.celeb-sighting { display: grid; gap: 1px; width: 236px; padding: 9px 14px 10px; border-color: var(--line-strong); pointer-events: none; animation: celeb-slide 0.4s var(--ease); }
+.celeb-sighting { display: grid; gap: 1px; width: var(--celeb-card-w); padding: 9px 14px 10px; border-color: var(--line-strong); pointer-events: none; animation: celeb-slide 0.4s var(--ease); }
 .celeb-sighting-tag { display: flex; align-items: center; gap: 7px; font-size: 11px; font-weight: 600; letter-spacing: 0.24em; text-transform: uppercase; color: var(--brass); }
 .celeb-sighting-tag::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: #e0556b; box-shadow: 0 0 0 3px rgba(224, 85, 107, 0.22); animation: celeb-live 1.6s ease-in-out infinite; }
 .celeb-sighting.met .celeb-sighting-tag::before { background: var(--brass); box-shadow: none; animation: none; }
@@ -51,16 +51,19 @@ body.calm .celeb-sighting-tag::before { animation: none; }
 
 /* v7.2: a notice keeps clear of the "on the floor" cards down the right (they stay up while it
    passes): centred between that column and its mirror on the left, as narrow as that asks. */
+:root { --celeb-card-w: 236px; --celeb-side: calc(2 * (var(--celeb-card-w) + 32px)); }
 @media (min-width: 721px) {
-  .celeb-notice { min-width: min(280px, calc(100vw - 536px)); max-width: min(560px, calc(100vw - 536px)); }
+  .celeb-notice { min-width: min(280px, calc(100vw - var(--celeb-side))); max-width: min(560px, calc(100vw - var(--celeb-side))); }
 }
 
 @media (max-width: 720px) {
-  /* an upright phone: the notice has the width, and the cards step down under it while it shows */
-  body:has(.celeb-notice) .celeb-stack { top: calc(var(--below-hud) + 150px); transition: top 0.3s var(--ease); }
+  /* an upright phone: the notice has the width, and the cards step aside while it passes */
+  .celeb-stack { transition: opacity 0.3s var(--ease); }
+  body:has(.celeb-notice) .celeb-stack { opacity: 0; }
   .celeb-notice { min-width: 0; padding: 7px 14px 8px 16px; }
   .celeb-notice-title { font-size: 15px; }
-  .celeb-sighting { width: 188px; padding: 7px 11px 8px; }
+  :root { --celeb-card-w: 188px; }
+  .celeb-sighting { padding: 7px 11px 8px; }
   .celeb-photo { width: 220px; bottom: 150px; }
   .celeb-photo-frame { height: 88px; }
 }

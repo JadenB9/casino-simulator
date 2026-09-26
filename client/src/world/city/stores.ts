@@ -11,10 +11,9 @@ import type { Mats } from '../materials.ts';
 import type { Collider } from '../collision.ts';
 import type { Kit } from './kit.ts';
 import { SlidingDoors } from './doors.ts';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { GUNS, type GunItem } from '../../../../shared/src/arms.ts';
-import { disposeGun, gunModel } from '../arms/models.ts';
-import { defineHomeMats, showPiece, type Live } from '../home/furnish.ts';
+import { defineHomeMats, mergedGuns, showPiece, type Live } from '../home/furnish.ts';
+import { APT } from '../home/plan.ts';
 
 export interface StoreBuild {
   doors: SlidingDoors[];
@@ -99,41 +98,16 @@ function shell(kit: Kit, group: THREE.Group, mats: Mats, col: Collider, s: Store
 }
 
 /**
- * The guns on a wall, as the models the game draws them in your hand (v7.2): lying flat against
- * the board facing +z at `z`, in rows from `top` down, spread from x0 to x1; merged per material.
+ * The guns on a wall (v7.2): lying flat against the board facing +z at `z`, the barrel to the
+ * right, in two rows from `top` down, spread from x0 to x1.
  */
 function gunWall(guns: readonly GunItem[], x0: number, x1: number, top: number, z: number): THREE.Mesh[] {
-  const byMat = new Map<THREE.Material, THREE.BufferGeometry[]>();
   const perRow = Math.ceil(guns.length / 2);
-  guns.forEach((g, i) => {
-    const model = gunModel(g);
-    const row = Math.floor(i / perRow);
+  return mergedGuns(guns, 'store:guns', (model, i) => {
     const at = x0 + ((i % perRow) + 0.5) * ((x1 - x0) / perRow);
-    const len = model.userData.length as number;
-    // the barrel to the right (+x), its flat side to the room
     model.rotation.set(0, Math.PI / 2, 0);
-    model.position.set(at - len / 2, top - row * 0.8, z + 0.1);
-    model.updateMatrixWorld(true);
-    model.traverse((o) => {
-      const m = o as THREE.Mesh;
-      if (!m.isMesh) return;
-      const geo = m.geometry.clone().applyMatrix4(m.matrixWorld);
-      const list = byMat.get(m.material as THREE.Material) ?? [];
-      list.push(geo.index ? geo.toNonIndexed() : geo);
-      byMat.set(m.material as THREE.Material, list);
-    });
-    disposeGun(model);
+    model.position.set(at - (model.userData.length as number) / 2, top - Math.floor(i / perRow) * 0.8, z + 0.1);
   });
-  const out: THREE.Mesh[] = [];
-  for (const [mat, list] of byMat) {
-    const merged = mergeGeometries(list, false);
-    for (const g of list) g.dispose();
-    if (!merged) continue;
-    const mesh = new THREE.Mesh(merged, mat);
-    mesh.name = 'store:guns';
-    out.push(mesh);
-  }
-  return out;
 }
 
 /** Ace Arms: glass cases and a counter at the front, guns on a pegboard, the range at the back. */
@@ -205,5 +179,5 @@ function homeStore(kit: Kit, col: Collider, live: Live): void {
   showPiece(kit, col, 'bed', 'canopy', { x: 182.75, z: R.z0 + 2.4, yaw: west }, live, P);
   set(177, 184.2, R.z1 - 3.4, R.z1 - 0.3);
   showPiece(kit, col, 'dining', 'marble', { x: 180.6, z: R.z1 - 1.85, yaw: 0 }, live, P);
-  showPiece(kit, col, 'chandelier', 'crystal', { x: 180.6, z: R.z1 - 1.85, yaw: 0 }, live, s.height - 3.8);
+  showPiece(kit, col, 'chandelier', 'crystal', { x: 180.6, z: R.z1 - 1.85, yaw: 0 }, live, s.height - APT.height);
 }

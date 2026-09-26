@@ -12,25 +12,10 @@
 // medallion in the middle whatever the floor's projection would have done to it.
 
 import * as THREE from 'three';
-
-/** Small, fast, seeded PRNG (mulberry32). */
-function rng(seed: number): () => number {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-function canvas(w: number, h = w): [HTMLCanvasElement, CanvasRenderingContext2D] {
-  const c = document.createElement('canvas');
-  c.width = w;
-  c.height = h;
-  return [c, c.getContext('2d')!];
-}
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { rng } from '../city/sky.ts';
+import { canvas, grain } from '../textures.ts';
+import { canvasTexture } from '../carpet.ts';
 
 /**
  * Draw something again a whole canvas over wherever it crosses an edge, so it comes in at the other
@@ -43,19 +28,6 @@ function wrapped(size: number, draw: (dx: number, dy: number) => void, at?: { x:
       draw(dx, dy);
     }
   }
-}
-
-/** Every pixel times a little noise (fibre, pores, grit), in the grey's own range. */
-function speckle(ctx: CanvasRenderingContext2D, size: number, amount: number, rand: () => number): void {
-  const img = ctx.getImageData(0, 0, size, size);
-  const d = img.data;
-  for (let i = 0; i < d.length; i += 4) {
-    const n = 1 - amount / 2 + rand() * amount;
-    d[i] = Math.min(255, d[i]! * n);
-    d[i + 1] = Math.min(255, d[i + 1]! * n);
-    d[i + 2] = Math.min(255, d[i + 2]! * n);
-  }
-  ctx.putImageData(img, 0, 0);
 }
 
 /** Wood: long grain lines that wave along the board, darker bands of latewood, a few pores. */
@@ -86,7 +58,7 @@ export function drawGrain(size: number, seed: number): HTMLCanvasElement {
     ctx.fillStyle = `rgba(40,40,40,${0.12 + rand() * 0.2})`;
     ctx.fillRect(rand() * size, rand() * size, size / 160 + rand() * (size / 80), Math.max(1, size / 700));
   }
-  speckle(ctx, size, 0.06, rand);
+  grain(ctx, size, size, 0.06, rand);
   return c;
 }
 
@@ -97,26 +69,36 @@ export function drawWeave(size: number, seed: number, threads = 64): HTMLCanvasE
   ctx.fillStyle = 'rgb(222,222,222)';
   ctx.fillRect(0, 0, size, size);
   const t = size / threads;
+  // each square a shade of its own, flat; then the threads' shading over all of them at once: a
+  // tile of four squares (warp, weft, weft, warp), each darker at its thread's edges, as a pattern
   for (let i = 0; i < threads; i++) {
     for (let j = 0; j < threads; j++) {
-      // the warp shows on one square, the weft on the next, each shaded across its thread
-      const warp = (i + j) % 2 === 0;
-      const k = 214 + rand() * 30;
-      const g = warp ? ctx.createLinearGradient(i * t, 0, (i + 1) * t, 0) : ctx.createLinearGradient(0, j * t, 0, (j + 1) * t);
-      g.addColorStop(0, `rgb(${k - 34},${k - 34},${k - 34})`);
-      g.addColorStop(0.5, `rgb(${k},${k},${k})`);
-      g.addColorStop(1, `rgb(${k - 34},${k - 34},${k - 34})`);
-      ctx.fillStyle = g;
+      const k = Math.round(214 + rand() * 30);
+      ctx.fillStyle = `rgb(${k},${k},${k})`;
       ctx.fillRect(i * t, j * t, t, t);
     }
   }
+  const [tile, g] = canvas(Math.max(2, Math.round(2 * t)));
+  const u = tile.width / 2;
+  for (const [x, y, warp] of [[0, 0, true], [u, 0, false], [0, u, false], [u, u, true]] as const) {
+    const sh = warp ? g.createLinearGradient(x, 0, x + u, 0) : g.createLinearGradient(0, y, 0, y + u);
+    sh.addColorStop(0, 'rgb(215,215,215)');
+    sh.addColorStop(0.5, 'rgb(255,255,255)');
+    sh.addColorStop(1, 'rgb(215,215,215)');
+    g.fillStyle = sh;
+    g.fillRect(x, y, u, u);
+  }
+  ctx.globalCompositeOperation = 'multiply';
+  ctx.fillStyle = ctx.createPattern(tile, 'repeat')!;
+  ctx.fillRect(0, 0, size, size);
+  ctx.globalCompositeOperation = 'source-over';
   // slubs: a thread a shade darker for a run
   for (let i = 0; i < threads / 3; i++) {
     ctx.fillStyle = `rgba(80,80,80,${0.06 + rand() * 0.08})`;
     if (rand() < 0.5) ctx.fillRect(0, Math.floor(rand() * threads) * t, size, t);
     else ctx.fillRect(Math.floor(rand() * threads) * t, 0, t, size);
   }
-  speckle(ctx, size, 0.1, rand);
+  grain(ctx, size, size, 0.1, rand);
   return c;
 }
 
@@ -164,7 +146,7 @@ export function drawLeather(size: number, seed: number): HTMLCanvasElement {
       { x, y, r: l },
     );
   }
-  speckle(ctx, size, 0.08, rand);
+  grain(ctx, size, size, 0.08, rand);
   return c;
 }
 
@@ -186,7 +168,7 @@ export function drawPlaster(size: number, seed: number): HTMLCanvasElement {
       ctx.fillRect(x + dx - r, y + dy - r, r * 2, r * 2);
     });
   }
-  speckle(ctx, size, 0.03, rand);
+  grain(ctx, size, size, 0.03, rand);
   return c;
 }
 
@@ -220,7 +202,7 @@ export function drawVeined(size: number, seed: number): HTMLCanvasElement {
   for (let i = 0; i < 5; i++) vein(rand() * size, rand() * size, rand() * 6.28, size * (0.6 + rand() * 0.5), size / 90, 0.35, 2);
   ctx.filter = 'none';
   for (let i = 0; i < 12; i++) vein(rand() * size, rand() * size, rand() * 6.28, size * 0.3, Math.max(1, size / 500), 0.3, 0);
-  speckle(ctx, size, 0.04, rand);
+  grain(ctx, size, size, 0.04, rand);
   return c;
 }
 
@@ -257,10 +239,7 @@ export function surface(kind: 'grain' | 'weave' | 'weave-fine' | 'leather' | 'pl
     : kind === 'plaster' ? drawPlaster(512, 23)
     : kind === 'veined' ? drawVeined(512, 29)
     : drawBrushed(512, 31);
-  t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  t.anisotropy = 4;
+  t = canvasTexture(c, 4);
   t.name = `home-${kind}`;
   cache.set(kind, t);
   return t;
@@ -366,15 +345,7 @@ export function drawPersian(w: number, h: number, seed: number): HTMLCanvasEleme
     rosette(w - b / 2, y);
   }
   // wool: fibres and wear
-  const img = ctx.getImageData(0, 0, w, h);
-  const d = img.data;
-  for (let i = 0; i < d.length; i += 4) {
-    const n = 0.88 + rand() * 0.2;
-    d[i] = Math.min(255, d[i]! * n);
-    d[i + 1] = Math.min(255, d[i + 1]! * n);
-    d[i + 2] = Math.min(255, d[i + 2]! * n);
-  }
-  ctx.putImageData(img, 0, 0);
+  grain(ctx, w, h, 0.2, rand);
   return c;
 }
 
@@ -383,9 +354,8 @@ let persianTex: THREE.CanvasTexture | null = null;
 /** The Persian rug laid flat, `w` by `d` metres, its middle at the origin (the caller places it). */
 export function persianRug(w: number, d: number): THREE.Mesh {
   if (!persianTex) {
-    persianTex = new THREE.CanvasTexture(drawPersian(1024, Math.round((1024 * 3) / 4.2), 37));
-    persianTex.colorSpace = THREE.SRGBColorSpace;
-    persianTex.anisotropy = 8;
+    persianTex = canvasTexture(drawPersian(1024, Math.round((1024 * 3) / 4.2), 37), 8);
+    persianTex.wrapS = persianTex.wrapT = THREE.ClampToEdgeWrapping;
   }
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, d).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ map: persianTex, roughness: 1, metalness: 0 }));
   mesh.name = 'home:persian';
@@ -394,6 +364,19 @@ export function persianRug(w: number, d: number): THREE.Mesh {
 }
 
 // --- the television's picture ------------------------------------------------------------------------
+
+/** The reels' symbols, the night's big wins, the news along the foot. */
+const REEL = ['7', 'BAR', '$', '★', '♦'];
+const BIG_WINS: readonly (readonly [string, string])[] = [
+  ['BLACKJACK', '$25,000'],
+  ['CRAPS', '$118,400'],
+  ['GOLD RUSH SLOTS', '$1,250,000'],
+  ['BACCARAT', '$62,500'],
+  ['ROULETTE · 17', '$350,000'],
+  ['HIGH LIMIT', '$4,000,000'],
+  ['VIDEO POKER · ROYAL', '$400,000'],
+];
+const NEWS = 'CASINO TONIGHT  ·  HAPPY HOUR AT THE BAR  ·  THE HIGH LIMIT SALON IS OPEN  ·  ACE ARMS ACROSS THE STREET  ·  ';
 
 /** Frames a second the picture is drawn at (it's a television across the room, not the game). */
 const TV_FPS = 12;
@@ -409,6 +392,8 @@ export class Channel {
   private readonly ctx: CanvasRenderingContext2D;
   private t = 0;
   private since = 1;
+  /** The news line's width, measured once. */
+  private newsW = 0;
 
   constructor(
     private readonly w = 512,
@@ -448,9 +433,9 @@ export class Channel {
     ctx.fillStyle = '#e8c068';
     ctx.font = '600 16px "Barlow Condensed", sans-serif';
     ctx.textBaseline = 'middle';
-    const news = 'CASINO TONIGHT  ·  HAPPY HOUR AT THE BAR  ·  THE HIGH LIMIT SALON IS OPEN  ·  ACE ARMS ACROSS THE STREET  ·  ';
-    const scroll = (this.t * 60) % (ctx.measureText(news).width || 1);
-    ctx.fillText(news + news, 10 - scroll, h - 15);
+    this.newsW ||= ctx.measureText(NEWS).width || 1;
+    const scroll = (this.t * 60) % this.newsW;
+    ctx.fillText(NEWS + NEWS, 10 - scroll, h - 15);
     ctx.fillStyle = 'rgba(255,255,255,0.8)';
     ctx.font = '700 14px "Barlow Condensed", sans-serif';
     ctx.fillText('CASINO TV', w - 84, 20);
@@ -502,7 +487,6 @@ export class Channel {
   /** Three reels spinning, stopping one after another on sevens, the win flashing. */
   private reels(s: number): void {
     const { ctx, w, h } = this;
-    const SYM = ['7', 'BAR', '$', '★', '♦'];
     const cw = w * 0.22;
     for (let i = 0; i < 3; i++) {
       const x = w / 2 + (i - 1) * (cw + 12) - cw / 2;
@@ -515,7 +499,7 @@ export class Channel {
       ctx.font = '800 64px "Barlow Condensed", sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      const sym = s >= stop ? '7' : SYM[Math.floor(roll) % SYM.length]!;
+      const sym = s >= stop ? '7' : REEL[Math.floor(roll) % REEL.length]!;
       ctx.fillText(sym, x + cw / 2, y + (h - 110) / 2 + (s < stop ? ((roll % 1) - 0.5) * 60 : 0));
     }
     if (s > 4.8 && Math.floor(s * 4) % 2 === 0) {
@@ -530,27 +514,18 @@ export class Channel {
   /** The night's big wins, rolling up the screen. */
   private wins(s: number): void {
     const { ctx, w } = this;
-    const rows = [
-      ['BLACKJACK', '$25,000'],
-      ['CRAPS', '$118,400'],
-      ['GOLD RUSH SLOTS', '$1,250,000'],
-      ['BACCARAT', '$62,500'],
-      ['ROULETTE · 17', '$350,000'],
-      ['HIGH LIMIT', '$4,000,000'],
-      ['VIDEO POKER · ROYAL', '$400,000'],
-    ];
     ctx.fillStyle = '#e8c068';
     ctx.font = '700 26px "Barlow Condensed", sans-serif';
     ctx.fillText("TONIGHT'S BIG WINS", 24, 40);
     ctx.font = '600 22px "Barlow Condensed", sans-serif';
     const off = s * 18;
-    rows.forEach(([what, amount], i) => {
+    BIG_WINS.forEach(([what, amount], i) => {
       const y = 84 + i * 34 - off;
       if (y < 56 || y > 250) return;
       ctx.fillStyle = '#ffffff';
-      ctx.fillText(what!, 24, y);
+      ctx.fillText(what, 24, y);
       ctx.fillStyle = '#7de0a0';
-      ctx.fillText(amount!, w - 24 - ctx.measureText(amount!).width, y);
+      ctx.fillText(amount, w - 24 - ctx.measureText(amount).width, y);
     });
   }
 
@@ -569,19 +544,9 @@ function fishGeometry(len: number): THREE.BufferGeometry {
   tail.rotateZ(Math.PI / 2);
   tail.scale(1, 1, 0.3);
   tail.translate(-len * 0.58, 0, 0);
-  const g = new THREE.BufferGeometry();
-  const parts = [body.toNonIndexed(), tail.toNonIndexed()];
-  const pos: number[] = [];
-  const nor: number[] = [];
-  for (const p of parts) {
-    pos.push(...(p.getAttribute('position').array as Float32Array));
-    nor.push(...(p.getAttribute('normal').array as Float32Array));
-    p.dispose();
-  }
+  const g = mergeGeometries([body.toNonIndexed(), tail.toNonIndexed()], false)!;
   body.dispose();
   tail.dispose();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
   return g;
 }
 
@@ -636,7 +601,8 @@ export class School {
     this.t += dt;
     const { w, h, d } = this;
     const t = this.t;
-    this.paths.forEach((f, i) => {
+    for (let i = 0; i < this.paths.length; i++) {
+      const f = this.paths[i]!;
       const u = t * f.speed + f.phase;
       // a lazy figure of eight through the tank
       const x = Math.sin(u) * (w / 2 - 0.25) * f.a * 2;
@@ -647,7 +613,7 @@ export class School {
       this.e.set(0, Math.atan2(-dz, dx), Math.sin(t * 9 + i) * 0.12, 'YXZ');
       this.m.compose(this.p.set(x, y, z), this.q.setFromEuler(this.e), this.s.set(1, 1, 1));
       this.fish.setMatrixAt(i, this.m);
-    });
+    }
     this.fish.instanceMatrix.needsUpdate = true;
     if (this.sharks) {
       for (let i = 0; i < 2; i++) {

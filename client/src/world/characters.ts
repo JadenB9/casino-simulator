@@ -406,11 +406,11 @@ export class Person implements Character {
   part(p: BodyPart, out: THREE.Vector3): THREE.Vector3 | null {
     const model = this.model;
     if (!model) return null;
-    const bone = (n: string) => model.getObjectByName(n.replace('.', '')) ?? model.getObjectByName(n);
     const [name, dx, dy, dz] = PARTS[p];
-    const b = bone(name);
+    const b = boneOf(model, name);
     if (!b) return null;
-    this.root.updateWorldMatrix(true, true);
+    // (the bone brings its own chain up to date; the root only needs its own matrix for the way back)
+    this.root.updateWorldMatrix(true, false);
     b.getWorldPosition(out);
     this.root.worldToLocal(out);
     // the offsets grow with the body (the look's height scales the model)
@@ -635,9 +635,10 @@ export class Person implements Character {
     const mode = riding ? (act.ride ?? 'upper') : null;
     const seated = this.seatTop !== null || mode === 'upper';
     // (on the deck, the upper-body version: the feet are on the ride)
-    const pose = g.pose(act.t, seated || mode === 'on');
+    const deck = mode === 'on' || mode === 'ollie';
+    const pose = g.pose(act.t, seated || deck);
     // how much the legs are the emote's: stepping off a ride, they come to it as the step is made
-    const ground = mode === 'on' ? 0 : mode === 'off' ? smooth(this.rideStep) : 1;
+    const ground = deck ? 0 : mode === 'off' ? smooth(this.rideStep) : 1;
     const legs = !seated && ground > 0 && movesLegs(pose);
     // walking off ends a dance: it fades from wherever it had got to (not in mid-air)
     if (act.fade < 1 || (legs && this.speed > DANCE_WALK && !pose.flip)) {
@@ -659,14 +660,14 @@ export class Person implements Character {
     }
     for (const key of BONE_ORDER) {
       const turn = pose[key];
-      if (!turn || ((seated || mode === 'on') && (key === 'body' || key === 'hips')) || (lens && LEG_BONES.has(key))) continue;
+      if (!turn || ((seated || deck) && (key === 'body' || key === 'hips')) || (lens && LEG_BONES.has(key))) continue;
       this.turn(key, turn, key === 'body' || key === 'hips' ? kl : k);
     }
     if (lens) this.plant(pose, kl, lens);
     if (pose.handR || pose.handL) this.hands(pose, k);
     if (g.prop && this.prop?.id !== g.prop) this.takeProp(g.prop);
     if (seated) return { y: 0, z: 0, flip: 0, spin: 0 };
-    if (mode === 'on') {
+    if (deck) {
       // an ollie: the ride goes up with you (never down through the floor)
       const y = (pose.hop ?? 0) * k;
       this.ride?.raise(Math.max(0, y));
@@ -990,7 +991,7 @@ export class Person implements Character {
    */
   private measureArms(model: THREE.Object3D): void {
     this.arms = {};
-    const find = (n: string) => model.getObjectByName(n) ?? model.getObjectByName(n.replace('.', '')) ?? null;
+    const find = (n: string) => boneOf(model, n);
     for (const [side, m] of [['R', 1], ['L', -1]] as const) {
       const upper = find(`UpperArm.${side}`);
       const lower = find(`LowerArm.${side}`);
@@ -1034,7 +1035,7 @@ export class Person implements Character {
    */
   private measureStance(model: THREE.Object3D): void {
     this.legsIK = {};
-    const find = (n: string) => model.getObjectByName(n) ?? model.getObjectByName(n.replace('.', '')) ?? null;
+    const find = (n: string) => boneOf(model, n);
     const rootQ = this.root.getWorldQuaternion(new THREE.Quaternion());
     const toRoot = rootQ.clone().invert();
     const chest = this.bones.chest;
@@ -1303,7 +1304,7 @@ export class Person implements Character {
   private rideAct(e: EmoteId | StaffGesture | LawGesture): RideAct {
     const ride = this.riding ? this.ride : null;
     if (!ride) return null;
-    if (e === 'jump') return 'on';
+    if (e === 'jump') return 'ollie';
     if (ride.spec.stance === 'seat') return 'upper';
     if (!dances(e)) return 'on';
     return this.rideSpeed < STEP_OFF_SPEED ? 'off' : 'upper';
@@ -1340,7 +1341,7 @@ export class Person implements Character {
       // off the deck for a dance and back on after it; a board turned to face ahead for an emote
       const a = this.act;
       const step = a?.ride === 'off' ? 1 : 0;
-      const face = a?.ride === 'on' && a.e !== 'jump' && ride.spec.stance === 'side' && this.rideSpeed < STEP_OFF_SPEED ? 1 : 0;
+      const face = a?.ride === 'on' && ride.spec.stance === 'side' && this.rideSpeed < STEP_OFF_SPEED ? 1 : 0;
       const e = dt / STEP_S;
       this.rideStep += THREE.MathUtils.clamp(step - this.rideStep, -e, e);
       this.rideFace += THREE.MathUtils.clamp(face - this.rideFace, -e, e);
@@ -1396,7 +1397,7 @@ export class Person implements Character {
       this.rideHands(ride, { palm: [0, -1, 0.1], fingers: [0.05, -0.15, 1], fist: 0.35, elbow: [-1, -0.8, -0.6] });
       return lift - drop;
     }
-    const find = (n: string) => model.getObjectByName(n.replace('.', '')) ?? model.getObjectByName(n);
+    const find = (n: string) => boneOf(model, n);
     const body = find('Body');
     // the hips down: the knees take it
     if (body?.parent && on > 0) {
@@ -1435,7 +1436,7 @@ export class Person implements Character {
   private rideLegs(spec: RideSpec, up: number, rise: number, shinTo?: number, w = 1): void {
     if (w <= 0) return;
     const model = this.model!;
-    const find = (n: string) => model.getObjectByName(n.replace('.', '')) ?? model.getObjectByName(n);
+    const find = (n: string) => boneOf(model, n);
     for (const [i, s] of [
       ['L', 1],
       ['R', -1],
@@ -1554,9 +1555,15 @@ const PARTS: Record<BodyPart, [bone: string, dx: number, dy: number, dz: number]
 
 /**
  * v7.2: how an emote is done on a ride (Person.rideAct): stepped off beside it ('off'), standing
- * on the deck ('on'), or the seated upper-body version ('upper'); null when it began off a ride.
+ * on the deck ('on'), a jump with the ride going up too ('ollie'), or the seated upper-body version
+ * ('upper'); null when it began off a ride.
  */
-type RideAct = 'off' | 'on' | 'upper' | null;
+type RideAct = 'off' | 'on' | 'ollie' | 'upper' | null;
+
+/** A bone of the model by its name, as the model spells it (without the dot) or as written. */
+function boneOf(model: THREE.Object3D, name: string): THREE.Object3D | null {
+  return model.getObjectByName(name.replace('.', '')) ?? model.getObjectByName(name) ?? null;
+}
 /** Slower than this (m/s) a ride stops for an emote: you step off it for a dance, a board turns to face ahead. */
 const STEP_OFF_SPEED = 0.8;
 /** Seconds to step off a ride or back on (or turn a board to face ahead). */

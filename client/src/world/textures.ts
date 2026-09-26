@@ -14,7 +14,7 @@ function rng(seed: number): () => number {
   };
 }
 
-function canvas(w: number, h = w): [HTMLCanvasElement, CanvasRenderingContext2D] {
+export function canvas(w: number, h = w): [HTMLCanvasElement, CanvasRenderingContext2D] {
   const c = document.createElement('canvas');
   c.width = w;
   c.height = h;
@@ -22,7 +22,7 @@ function canvas(w: number, h = w): [HTMLCanvasElement, CanvasRenderingContext2D]
 }
 
 /** Multiply every pixel by a little noise (pile, grain, grit). */
-function grain(ctx: CanvasRenderingContext2D, w: number, h: number, amount: number, rand: () => number): void {
+export function grain(ctx: CanvasRenderingContext2D, w: number, h: number, amount: number, rand: () => number): void {
   const img = ctx.getImageData(0, 0, w, h);
   const d = img.data;
   for (let i = 0; i < d.length; i += 4) {

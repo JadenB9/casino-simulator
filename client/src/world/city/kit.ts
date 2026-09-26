@@ -208,7 +208,6 @@ export function defineCityMats(mats: Mats): void {
   mats.define1('lift-floor', () => new THREE.MeshLambertMaterial({ map: granite(), color: '#8a8480' }));
   const door = lazy(() => drawLiftDoor(256, 512, 107));
   mats.define1('lift-door', (q) => (hi(q) ? new THREE.MeshStandardMaterial({ map: door(), metalness: 0.8, roughness: 0.34 }) : new THREE.MeshLambertMaterial({ map: door(), emissive: '#141312' })));
-  mats.define1('water', (q) => (hi(q) ? new THREE.MeshStandardMaterial({ color: '#1a3a48', roughness: 0.05, metalness: 0.2 }) : new THREE.MeshLambertMaterial({ color: '#1a3440' })));
 }
 
 /** Honey limestone in big ashlar blocks (1.2 m by 0.6 m a block at 2.4 m a repeat), faint veins. */
