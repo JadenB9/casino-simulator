@@ -133,8 +133,30 @@ export async function dealCard(mesh: CardMesh, from: THREE.Vector3, to: THREE.Ve
     mesh.position.lerpVectors(from, to, k);
     mesh.position.y = from.y + (to.y - from.y) * k + Math.sin(Math.PI * k) * 0.03;
     mesh.rotation.y = startYaw + (endYaw - startYaw) * k;
-    mesh.rotation.x = startFlip + (endFlip - startFlip) * k;
+    turn(mesh, startFlip, endFlip, k);
   }, ease.out);
+  turn(mesh, startFlip, endFlip, 1);
+}
+
+/**
+ * v7.1: a card turns over sideways, about its long edge, as a dealer turns one (not end over end).
+ * The resting states stay rotation.x = 0 (face up) and PI (face down): mid-turn the turn is about
+ * the card's own z (its length), and at the end it's handed back to x (a face-down back looks the
+ * same either way).
+ */
+function turn(mesh: CardMesh, from: number, to: number, k: number): void {
+  if (Math.abs(to - from) < 1e-6) {
+    mesh.rotation.x = to;
+    mesh.rotation.z = 0;
+    return;
+  }
+  if (k >= 1) {
+    mesh.rotation.x = to;
+    mesh.rotation.z = 0;
+    return;
+  }
+  mesh.rotation.x = 0;
+  mesh.rotation.z = from + (to - from) * k;
 }
 
 /** Flip a card in place (it lifts slightly as it turns). */
@@ -143,8 +165,9 @@ export async function flipCard(mesh: CardMesh, faceUp = true, ms = 220): Promise
   const a = mesh.rotation.x;
   const b = faceUp ? 0 : Math.PI;
   await tween(ms, (k) => {
-    mesh.rotation.x = a + (b - a) * k;
+    turn(mesh, a, b, k);
     mesh.position.y = y0 + Math.sin(Math.PI * k) * 0.025;
   }, ease.inOut);
+  turn(mesh, a, b, 1);
   mesh.position.y = y0;
 }
