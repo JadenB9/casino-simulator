@@ -5,12 +5,22 @@ import * as THREE from 'three';
 import type { GunItem, GunModel } from '../../../../shared/src/arms.ts';
 
 const mats = new Map<string, THREE.Material>();
-function mat(color: string, metal = 0.7, rough = 0.4): THREE.Material {
-  const key = `${color}|${metal}|${rough}`;
+function mat(color: string, metal = 0.7, rough = 0.4, glow?: string): THREE.Material {
+  const key = `${color}|${metal}|${rough}|${glow ?? ''}`;
   let m = mats.get(key);
-  if (!m) mats.set(key, (m = new THREE.MeshStandardMaterial({ color, metalness: metal, roughness: rough })));
+  // (v7.1: a clear coat over the metal, so the finish catches the light like a real one)
+  if (!m) mats.set(key, (m = glow ? new THREE.MeshBasicMaterial({ color: new THREE.Color(glow).multiplyScalar(2.2) }) : new THREE.MeshPhysicalMaterial({ color, metalness: metal, roughness: rough, clearcoat: metal > 0.5 ? 0.6 : 0.2, clearcoatRoughness: 0.2 })));
   return m;
 }
+
+/** v7.1: each finish's accent: a band at the muzzle and the sights' glow. */
+const ACCENT: Record<GunItem['finish'], { band: string; sight: string }> = {
+  black: { band: '#8a1c1c', sight: '#3cff7a' },
+  steel: { band: '#1b1c20', sight: '#ffb23c' },
+  wood: { band: '#b8862e', sight: '#3cff7a' },
+  gold: { band: '#1a1206', sight: '#ff3c5a' },
+  chrome: { band: '#b8862e', sight: '#3cc8ff' },
+};
 
 const FINISH: Record<GunItem['finish'], { body: string; metal: number; grip: string }> = {
   black: { body: '#1a1b1e', metal: 0.5, grip: '#141414' },
@@ -115,6 +125,15 @@ export function gunModel(g: GunItem): THREE.Group {
       length = 0.6;
       break;
   }
+  // v7.1: the details that make each one its own: a coloured band near the muzzle, glowing sights
+  // front and back, and on the gold one a dark engraved inlay down the side
+  const a = ACCENT[g.finish];
+  const top = g.model === 'rotary' ? 0.1 : g.model === 'pistol' || g.model === 'cannon' ? 0.06 : 0.075;
+  box(mat(a.band, 0.8, 0.3), 0.036, 0.036, 0.02, 0, g.model === 'rotary' ? 0.02 : 0.035, length - 0.03);
+  box(mat('#000', 0, 1, a.sight), 0.008, 0.008, 0.008, 0, top, length - 0.02);
+  box(mat('#000', 0, 1, a.sight), 0.008, 0.008, 0.008, 0.012, top, length * 0.25);
+  box(mat('#000', 0, 1, a.sight), 0.008, 0.008, 0.008, -0.012, top, length * 0.25);
+  if (g.finish === 'gold') for (const side of [1, -1]) box(mat('#2a1a06', 0.6, 0.5), 0.002, 0.018, length * 0.5, side * 0.018, 0.035, length * 0.4);
   group.userData.length = length;
   group.name = `gun:${g.id}`;
   return group;
