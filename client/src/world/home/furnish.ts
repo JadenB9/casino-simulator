@@ -16,35 +16,55 @@ import { GUNS, type GunItem } from '../../../../shared/src/arms.ts';
 import { gunModel, disposeGun } from '../arms/models.ts';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { APT, BEDROOM, FIREPLACE, HALL, SLOTS, SOUTH_SOLID_TO, TABLET, TERRACE, type SlotPlace } from './plan.ts';
+import { Channel, School, persianRug, surface } from './surfaces.ts';
 
 /** The home's own materials (the rest come from the casino's and the city's). */
 export function defineHomeMats(mats: Mats): void {
   const std = (o: THREE.MeshStandardMaterialParameters) => new THREE.MeshStandardMaterial(o);
   const lam = (o: THREE.MeshLambertMaterialParameters) => new THREE.MeshLambertMaterial(o);
-  const both = (name: string, color: string, rough = 0.6, metal = 0, emissive?: string) =>
-    mats.define1(name, (q) => (q === 'high' ? std({ color, roughness: rough, metalness: metal, ...(emissive ? { emissive } : {}) }) : lam({ color, ...(emissive ? { emissive } : {}) })));
-  both('home-linen', '#cdbfa6', 0.9);
-  both('home-velvet', '#1d5a44', 0.8);
-  both('home-cognac', '#8a4a24', 0.5);
-  both('home-crimson', '#7a1020', 0.75);
-  both('home-sheet', '#eeeae2', 0.9);
-  both('home-oak', '#b58a5c', 0.55);
-  both('home-walnut', '#4a2e1c', 0.45);
-  both('home-white', '#f2f0ec', 0.2);
+  // v7.2: each on a surface of its own (surfaces.ts): grain, weave, leather, plaster, stone, brushed
+  // metal; grey canvases the colour tints (a hair lighter, since the canvas takes a little off)
+  type Surface = Parameters<typeof surface>[0];
+  const both = (name: string, color: string, rough = 0.6, metal = 0, emissive?: string, tex?: Surface) =>
+    mats.define1(name, (q) => {
+      const map = tex ? surface(tex) : null;
+      return q === 'high' ? std({ color, map, roughness: rough, metalness: metal, ...(emissive ? { emissive } : {}) }) : lam({ color, map, ...(emissive ? { emissive } : {}) });
+    });
+  both('home-linen', '#d8caae', 0.9, 0, undefined, 'weave');
+  both('home-velvet', '#236a50', 0.8, 0, undefined, 'weave-fine');
+  both('home-cognac', '#9a5428', 0.5, 0, undefined, 'leather');
+  both('home-crimson', '#8a1424', 0.75, 0, undefined, 'weave-fine');
+  both('home-sheet', '#f6f2ea', 0.9, 0, undefined, 'weave');
+  both('home-oak', '#c29466', 0.55, 0, undefined, 'grain');
+  both('home-walnut', '#56361f', 0.45, 0, undefined, 'grain');
+  both('home-white', '#f6f4f0', 0.2, 0, undefined, 'plaster');
   both('home-screen', '#07080b', 0.08, 0.3);
-  both('home-copper', '#b8683a', 0.3, 0.9);
+  both('home-copper', '#c47444', 0.3, 0.9, undefined, 'brushed');
   both('home-bronze', '#6a4a2a', 0.4, 0.8);
   both('home-gold', '#d4a53c', 0.25, 1, '#2a1a04');
-  both('home-steel', '#8c9096', 0.35, 0.8);
-  both('home-felt', '#1f6a3f', 0.95);
-  both('home-felt-blue', '#1c3a6a', 0.95);
-  both('home-rug', '#3a3632', 1);
+  both('home-steel', '#9a9ea4', 0.35, 0.8, undefined, 'brushed');
+  both('home-felt', '#237444', 0.95, 0, undefined, 'felt');
+  both('home-felt-blue', '#20427a', 0.95, 0, undefined, 'felt');
+  both('home-rug', '#443e38', 1, 0, undefined, 'weave');
   both('home-persian', '#7a1c1a', 1);
-  both('home-cream', '#e8dcc4', 0.9);
-  both('home-stone', '#d8d2c8', 0.5);
+  both('home-cream', '#efe3cb', 0.9, 0, undefined, 'plaster');
+  both('home-stone', '#e2dcd2', 0.4, 0, undefined, 'veined');
   both('home-tile', '#2a6a88', 0.2, 0.1);
-  both('home-soil', '#3a2a1c', 1);
+  both('home-soil', '#3a2a1c', 1, 0, undefined, 'leather');
   both('home-leaf', '#3e6a38', 0.8);
+  // v7.2: the aquarium's water, clear enough to see the fish in, and the deep blue behind them
+  mats.define1('home-aquarium', () => new THREE.MeshStandardMaterial({ color: '#3aa0c8', transparent: true, opacity: 0.26, roughness: 0.05, metalness: 0.1, depthWrite: false }));
+  both('home-aqua-back', '#0c3350', 0.6, 0, '#06243a');
+}
+
+/** v7.2: metres a surface repeats over on a piece (the grain of a table, the weave of a sofa). */
+const PIECE_UV = 0.8;
+
+/** v7.2: the pieces that move or are drawn whole (the television's picture, the fish, a Persian rug). */
+interface Live {
+  group: THREE.Group;
+  updates: ((dt: number) => void)[];
+  disposers: (() => void)[];
 }
 
 /** A slot's own frame: pieces are laid out facing +z from its middle, then turned and moved into place. */
@@ -56,6 +76,7 @@ class At {
     private readonly kit: Kit,
     private readonly col: Collider,
     readonly p: { x: number; z: number; yaw: number },
+    readonly live: Live,
   ) {
     this.c = Math.cos(p.yaw);
     this.s = Math.sin(p.yaw);
@@ -66,10 +87,18 @@ class At {
     return { x: this.p.x + x * this.c + z * this.s, z: this.p.z - x * this.s + z * this.c };
   }
 
-  /** A box by its local corners. */
-  box(mat: string, x0: number, x1: number, y0: number, y1: number, z0: number, z1: number, uv?: number): void {
+  /** A box by its local corners (its surface a repeat every PIECE_UV metres, unless `uv` says). */
+  box(mat: string, x0: number, x1: number, y0: number, y1: number, z0: number, z1: number, uv = PIECE_UV): void {
     const m = this.w((x0 + x1) / 2, (z0 + z1) / 2);
     this.kit.turned(mat, m.x, (y0 + y1) / 2, m.z, x1 - x0, y1 - y0, z1 - z0, this.p.yaw, uv);
+  }
+
+  /** A mesh of its own at local (x, y, z), turned with the slot. */
+  place(mesh: THREE.Object3D, x: number, y: number, z: number, yaw = 0): void {
+    const m = this.w(x, z);
+    mesh.position.set(m.x, y, m.z);
+    mesh.rotation.y = this.p.yaw + yaw;
+    this.live.group.add(mesh);
   }
 
   /** An upright cylinder at local (x, z). */
@@ -101,6 +130,8 @@ export interface Furnished {
   group: THREE.Group;
   /** What stands in each slot now (null: empty). */
   pieces: Map<HomeSlot, HomeItem | null>;
+  /** v7.2: every frame while you're home: the television's picture, the fish. */
+  update(dt: number): void;
   dispose(): void;
 }
 
@@ -156,8 +187,8 @@ export function furnish(mats: Mats, col: Collider, tier: number, owned: Readonly
   }
   // the kitchen along the north glass: a run of base units and a worktop (always)
   const K = { x0: -141.4, x1: -131.6, z0: 58.08, z1: 58.8 };
-  kit.box(t >= 2 ? 'home-walnut' : 'home-white', K.x0, K.x1, 0.01, 0.86, K.z0, K.z1);
-  kit.box(t >= 2 ? 'marble-light' : 'home-stone', K.x0 - 0.02, K.x1 + 0.02, 0.86, 0.9, K.z0, K.z1 + 0.03);
+  kit.box(t >= 2 ? 'home-walnut' : 'home-white', K.x0, K.x1, 0.01, 0.86, K.z0, K.z1, PIECE_UV);
+  kit.box(t >= 2 ? 'marble-light' : 'home-stone', K.x0 - 0.02, K.x1 + 0.02, 0.86, 0.9, K.z0, K.z1 + 0.03, 1.2);
   kit.box('home-steel', -136.9, -136, 0.9, 0.905, K.z0 + 0.12, K.z1 - 0.12);
   own.box((K.x0 + K.x1) / 2, (K.z0 + K.z1) / 2, K.x1 - K.x0, K.z1 - K.z0 + 0.06, 0, 0.9);
   // the tablet by the elevator: the home's catalogue
@@ -184,11 +215,12 @@ export function furnish(mats: Mats, col: Collider, tier: number, owned: Readonly
 
   // --- the pieces ------------------------------------------------------------------------------
   const pieces = new Map<HomeSlot, HomeItem | null>();
+  const live: Live = { group, updates: [], disposers: [] };
   for (const slot of Object.keys(SLOTS) as HomeSlot[]) {
     const item = pieceIn(slot, owned, t, picks[slot] ?? null);
     pieces.set(slot, item);
     if (!item) continue;
-    const at = new At(kit, own, SLOTS[slot]);
+    const at = new At(kit, own, SLOTS[slot], live);
     BUILD[slot](at, item.style, t);
   }
   // the neon sign's words (a sign mesh of its own)
@@ -219,7 +251,11 @@ export function furnish(mats: Mats, col: Collider, tier: number, owned: Readonly
   return {
     group,
     pieces,
+    update(dt) {
+      for (const u of live.updates) u(dt);
+    },
     dispose() {
+      for (const d of live.disposers) d();
       for (const b of own.boxes) {
         const i = col.boxes.indexOf(b);
         if (i >= 0) col.boxes.splice(i, 1);
@@ -320,7 +356,17 @@ const BUILD: Record<HomeSlot, Builder> = {
     a.box('home-walnut', -1.2, 1.2, 0, 0.45, -0.5, 0.0);
     a.solid(-1.2, 1.2, -0.5, 0.0, 0.45);
     a.box('home-screen', -w / 2, w / 2, y, y + h, -0.08, -0.03);
-    a.glow(hdr('#3a6ab8', 0.55), -w / 2 + 0.03, w / 2 - 0.03, y + 0.03, y + h - 0.03, -0.028, -0.026);
+    // v7.2: the picture: the casino's own channel, playing
+    const channel = new Channel();
+    const screen = new THREE.Mesh(new THREE.PlaneGeometry(w - 0.06, h - 0.06), new THREE.MeshBasicMaterial({ map: channel.texture, color: hdr('#ffffff', 0.9), toneMapped: false }));
+    screen.name = 'home:tv';
+    a.place(screen, 0, y + h / 2, -0.025);
+    a.live.updates.push((dt) => channel.update(dt));
+    a.live.disposers.push(() => {
+      channel.dispose();
+      screen.geometry.dispose();
+      (screen.material as THREE.Material).dispose();
+    });
     if (style !== '55') a.box('lacquer', -w / 2 + 0.1, w / 2 - 0.1, y - 0.1, y - 0.02, -0.12, -0.03);
     if (style === 'cinema') for (const s of [-1, 1]) a.box('lacquer', s * (w / 2 + 0.2) - 0.16, s * (w / 2 + 0.2) + 0.16, 0, 1.4, -0.4, -0.05);
   },
@@ -358,11 +404,15 @@ const BUILD: Record<HomeSlot, Builder> = {
   rug(a, style) {
     const w = style === 'persian' ? 4.2 : 3.4;
     const d = style === 'persian' ? 3 : 2.5;
-    a.box(style === 'persian' ? 'home-persian' : 'home-rug', -w / 2, w / 2, 0.01, 0.018, -d / 2, d / 2);
+    a.box(style === 'persian' ? 'home-persian' : 'home-rug', -w / 2, w / 2, 0.01, 0.018, -d / 2, d / 2, style === 'persian' ? undefined : 0.5);
     if (style === 'persian') {
-      a.box('home-cream', -w / 2 + 0.2, w / 2 - 0.2, 0.018, 0.024, -d / 2 + 0.2, -d / 2 + 0.28);
-      a.box('home-cream', -w / 2 + 0.2, w / 2 - 0.2, 0.018, 0.024, d / 2 - 0.28, d / 2 - 0.2);
-      a.box('home-felt-blue', -0.9, 0.9, 0.018, 0.028, -0.6, 0.6);
+      // v7.2: the rug's pattern laid on it whole (a medallion, its border), just over its pile
+      const rug = persianRug(w - 0.01, d - 0.01);
+      a.place(rug, 0, 0.022, 0);
+      a.live.disposers.push(() => {
+        rug.geometry.dispose();
+        (rug.material as THREE.Material).dispose();
+      });
     }
   },
   art(a, style) {
@@ -482,16 +532,20 @@ const BUILD: Record<HomeSlot, Builder> = {
     const h = style === 'shark' ? APT.height - 0.2 : 1.5;
     const y = style === 'shark' ? 0.05 : 0.7;
     a.box('lacquer', -w / 2 - 0.08, w / 2 + 0.08, 0, y, -0.2, 0.55);
-    a.box('water', -w / 2, w / 2, y, y + h, -0.15, 0.5);
+    a.box('home-aqua-back', -w / 2, w / 2, y, y + h, -0.15, -0.13);
+    a.box('home-aquarium', -w / 2, w / 2, y, y + h, -0.13, 0.5);
     a.box('glass', -w / 2, w / 2, y, y + h, 0.5, 0.52);
     a.glow(hdr('#3aa8ff', style === 'shark' ? 1.2 : 0.9), -w / 2 + 0.05, w / 2 - 0.05, y + h - 0.06, y + h - 0.02, -0.1, 0.45);
-    // the fish (and two sharks) as bright specks
-    for (let i = 0; i < (style === 'shark' ? 14 : 9); i++) {
-      const x = -w / 2 + 0.3 + ((i * 0.71) % (w - 0.6));
-      const fy = y + 0.3 + ((i * 0.37) % (h - 0.6));
-      a.glow(hdr(i % 3 === 0 ? '#ffb040' : '#9fe8ff', 1.1), x - 0.06, x + 0.06, fy - 0.02, fy + 0.02, 0.2, 0.26);
+    // v7.2: gravel and weed on the bottom, and the fish (and two sharks) swimming
+    a.box('home-soil', -w / 2 + 0.02, w / 2 - 0.02, y, y + 0.08, -0.13, 0.48, 0.3);
+    for (let i = 0; i < Math.round(w * 2); i++) {
+      const x = -w / 2 + 0.2 + ((i * 0.83) % (w - 0.4));
+      a.cyl('home-leaf', x, -0.02 + ((i * 0.37) % 0.4), 0.03, y + 0.08, y + 0.3 + ((i * 0.53) % 0.5), 5, 0.005);
     }
-    if (style === 'shark') for (const [x, fy] of [[-1.2, 1.6], [1.4, 2.4]] as const) a.box('home-steel', x - 0.5, x + 0.5, fy - 0.1, fy + 0.1, 0.1, 0.3);
+    const school = new School(w - 0.1, h - 0.1, 0.6, style === 'shark' ? 14 : 9, style === 'shark');
+    a.place(school.group, 0, y + 0.05, 0.175);
+    a.live.updates.push((dt) => school.update(dt));
+    a.live.disposers.push(() => school.dispose());
     a.solid(-w / 2 - 0.08, w / 2 + 0.08, -0.2, 0.55, y + h);
   },
   piano(a, style) {

@@ -619,6 +619,74 @@ function buildExtras(s: CarSpec, o: Outline, geos: Geos, roof: { roofY: number; 
   }
 }
 
+/**
+ * v7.2: the close-up details, on the full build only (a car you look at: the showroom, the curb,
+ * your own; the parked rows and the traffic keep the lighter build): the modern lamps become
+ * headlamp units (a smoked housing with two projector lenses and an LED running light along it),
+ * slats run across the grille, the doors get their shut lines and handles, and exhaust tips sit
+ * under the tail.
+ */
+function buildDetail(s: CarSpec, o: Outline, geos: Geos): void {
+  const fz = o.face('front', s.lampY).z;
+  const hx = Math.min(s.lampX * taper(s, o, fz), s.half * taper(s, o, fz) - B - 0.14);
+  if (s.lamps === 'rect' || s.lamps === 'slit') {
+    const [w, h] = s.lamps === 'rect' ? [0.32, 0.12] : [0.4, 0.055];
+    for (const side of [1, -1]) {
+      const x = side * hx;
+      // (each layer stands 4 mm or more clear of the one behind it: the lamp's face is 29 mm out)
+      add(geos, 'trim', onFace(o, 'front', s.lampY, box(w - 0.03, h - 0.022, 0.012), x, 0.04), '#121417');
+      // the running light: along the foot of a tall lamp, along the top of a slit
+      add(geos, 'lamp', onFace(o, 'front', s.lampY, box(w - 0.04, 0.012, 0.012), x, 0.056, s.lamps === 'rect' ? -h / 2 + 0.018 : h / 2 - 0.016), '#eef8ff');
+      // two projector lenses in a tall lamp (a slit is all running light)
+      if (s.lamps === 'rect') {
+        for (const dx of [-w * 0.22, w * 0.18]) {
+          add(geos, 'metal', onFace(o, 'front', s.lampY, new THREE.TorusGeometry(0.034, 0.0075, 4, 14), x + dx, 0.056, 0.012), CHROME);
+          add(geos, 'glass', onFace(o, 'front', s.lampY, lens(0.029, 0.01), x + dx, 0.056, 0.012), '#ffffff');
+        }
+      }
+    }
+  }
+  // slats across the grille (the upright one has its chrome bars already)
+  if (s.grille !== 'upright') {
+    const gy = s.grille === 'intake' ? s.sill + 0.12 : s.lampY - 0.04;
+    const gz = o.face('front', gy).z;
+    const inner = s.lampX * taper(s, o, gz);
+    const [w, h] =
+      s.grille === 'oval' ? [0.42, 0.18]
+      : s.grille === 'wide' ? [Math.max(0.5, 2 * inner - 0.5), 0.17]
+      : [2 * s.half * taper(s, o, gz) - 0.5, 0.13];
+    for (let i = 1; i <= 3; i++) add(geos, 'metal', onFace(o, 'front', gy, box(w - 0.05, 0.011, 0.02), 0, 0.048, -h / 2 + (h * i) / 4), '#2c2f34');
+  }
+  // the doors: a shut line either end, a handle by the back one
+  if (!s.pillars) {
+    const arch = s.wheelR + 0.07 + B + 0.08;
+    const zf = s.front - arch - 0.04;
+    const zr = Math.max(s.rear + arch + 0.1, zf - 1.15);
+    const xAt = (z: number, y: number) => sideAt(s, o, y, z);
+    for (const side of [1, -1] as const) {
+      for (const z of [zf, zr]) {
+        const top = Math.min(s.shoulder + 0.04, o.yAt(z) - 0.08);
+        if (top > s.sill + 0.2) add(geos, 'trim', sideBand(side, [z, s.sill + 0.07], [z, top], 0.007, xAt), '#07080a');
+      }
+      if (!s.chrome) {
+        const hz = zr + 0.24;
+        const hy = Math.min(o.yAt(hz), s.shoulder + 0.1) - 0.1;
+        add(geos, 'trim', box(0.02, 0.022, 0.13, side * (sideAt(s, o, hy, hz) + 0.036), hy, hz), '#1a1c20');
+      }
+    }
+  }
+  // exhaust tips under the tail (not on the lifted truck, whose pipes are out of sight)
+  if (s.sill < 0.5) {
+    const y = Math.max(s.sill + 0.02, o.pts[0]![1] + 0.08);
+    for (const side of [1, -1]) {
+      const x = side * s.half * 0.42;
+      // the tip, and the dark of its bore as a cap just proud of its end
+      add(geos, 'metal', onFace(o, 'rear', y, lens(0.04, 0.1), x, 0.045), CHROME);
+      add(geos, 'trim', onFace(o, 'rear', y, lens(0.03, 0.006), x, 0.102), '#050505');
+    }
+  }
+}
+
 /** One wheel at the origin, its outer face towards +x. */
 function buildWheel(s: CarSpec, geos: Geos, lite: boolean): void {
   const R = s.wheelR;
@@ -731,6 +799,7 @@ export function carKit(id: string, lite = false): CarKit {
   buildLamps(s, o, body);
   buildNose(s, o, body);
   buildExtras(s, o, body, roof);
+  if (!lite) buildDetail(s, o, body);
   const wheel: Geos = new Map();
   buildWheel(s, wheel, lite);
   const wx = s.half * Math.min(taper(s, o, s.front), taper(s, o, s.rear)) + B - s.wheelW / 2 + 0.07;

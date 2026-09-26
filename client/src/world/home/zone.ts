@@ -176,6 +176,7 @@ export function buildHome(mats: Mats, col: Collider, quality: Quality): HomeBuil
     },
     update(dt) {
       beacons.update(dt);
+      furnished?.update(dt);
     },
     setQuality() {},
     dispose() {

@@ -32,9 +32,12 @@ export class CarMaterials {
 
   private paint(): THREE.Material {
     const common = { color: '#ffffff', vertexColors: true, roughness: 0.34, metalness: 0.42, envMap: this.env, envMapIntensity: 1.1 };
-    return this.quality === 'high'
-      ? new THREE.MeshPhysicalMaterial({ ...common, clearcoat: 1, clearcoatRoughness: 0.08 })
-      : new THREE.MeshStandardMaterial(common);
+    const m =
+      this.quality === 'high'
+        ? new THREE.MeshPhysicalMaterial({ ...common, clearcoat: 1, clearcoatRoughness: 0.08 })
+        : new THREE.MeshStandardMaterial(common);
+    flake(m);
+    return m;
   }
 
   private build(): void {
@@ -66,6 +69,41 @@ export class CarMaterials {
     for (const m of this.mats.values()) m.dispose();
     this.mats.clear();
   }
+}
+
+/**
+ * v7.2: metallic flake in the paint: the surface's normal nudged a little, a different way in every
+ * few millimetres of it (from where on the car the point is, so it holds still as the car moves),
+ * so the light glints off the flakes as you walk round; under the clear coat, which keeps its own
+ * smooth normal (the lacquer's reflections stay sharp). It fades out with distance, where the
+ * flakes would be smaller than a pixel and only shimmer.
+ */
+function flake(m: THREE.MeshStandardMaterial): void {
+  m.onBeforeCompile = (s) => {
+    s.vertexShader = s.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vFlake;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvFlake = position;');
+    s.fragmentShader = s.fragmentShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+varying vec3 vFlake;
+vec3 flakeDir(vec3 p) {
+  p = fract(p * vec3(0.1031, 0.1030, 0.0973));
+  p += dot(p, p.yxz + 33.33);
+  return fract((p.xxy + p.yxx) * p.zyx) * 2.0 - 1.0;
+}`,
+      )
+      .replace(
+        '#include <normal_fragment_maps>',
+        `#include <normal_fragment_maps>
+{
+  float near = clamp(1.0 - length(vViewPosition) / 14.0, 0.0, 1.0);
+  normal = normalize(normal + flakeDir(floor(vFlake * 260.0)) * 0.09 * near);
+}`,
+      );
+  };
+  m.customProgramCacheKey = () => 'car-paint-flake-1';
 }
 
 let shared: CarMaterials | null = null;
