@@ -21,6 +21,10 @@ import { Wins, type BigWinReport } from './wins.ts';
 import { Effects, Statues, fxKey, type Reserve } from './fx.ts';
 import { Valet, type CallResult } from './valet.ts'; // v6 cars6
 import { Street } from './street.ts'; // v7
+import { Tower } from './tower.ts'; // v7.1
+import { homeItem } from '../../../shared/src/estate.ts';
+import { zoneOf } from '../../../shared/src/zones.ts';
+import { SPAWN } from './presence.ts';
 import { MAX_RATE, gunItem } from '../../../shared/src/arms.ts'; // v7
 import { ride } from './lift.ts'; // v6 city6
 import { Bucket, KeyedBuckets } from '../ratelimit.ts';
@@ -85,6 +89,7 @@ export class CasinoFloor extends DurableObject<Env> {
   /** v6 cars6: the valet's curb (valet.ts) */
   readonly valet: Valet;
   readonly street: Street; // v7
+  readonly tower: Tower; // v7.1
   /** v6 celebs6: celebrity visits and the gift box (celebs.ts) */
   readonly celebs: Celebs;
   /** v6 bot6: where walks end and when players are active, for fair play (fair.ts) */
@@ -115,6 +120,7 @@ export class CasinoFloor extends DurableObject<Env> {
     });
     this.law = new Law(ctx, env, this.presence, (msg) => this.broadcast(msg), (id, msg) => this.sendTo(id, msg));
     this.valet = new Valet((msg) => this.broadcast(msg)); // v6 cars6
+    this.tower = new Tower(ctx.storage.sql); // v7.1: the apartments
     // v7: driving and guns
     this.street = new Street({
       presence: this.presence,
@@ -186,6 +192,8 @@ export class CasinoFloor extends DurableObject<Env> {
     }
     this.ctx.acceptWebSocket(server, addr ? [`a:${accountId}`, addr] : [`a:${accountId}`]);
     this.presence.onConnect(server, { accountId, name, look, emotes, ...kit });
+    // v7.1: an owner's floor in the tower, up to date
+    if (kit.home > 0) this.tower.upsert({ id: accountId, name, tier: kit.home, items: [...kit.homes, ...kit.guns] });
     this.chat.join(server);
     this.wins.greet(server); // features: the recent big wins, after hello
     this.fx.greet(server, Date.now()); // v6: effects playing or queued
@@ -276,8 +284,23 @@ export class CasinoFloor extends DurableObject<Env> {
       // v6 city6: the elevator (lift.ts): from beside its doors, not at a table, not while held
       this.presence.touch(ws, Date.now());
       const att = ws.deserializeAttachment() as FloorAtt | null;
-      const no = att ? ride(this.presence, att, msg.to) : null;
+      // v7.1: the apartments: someone's floor in the tower (your own if you name none)
+      const apt = msg.to === 'home' && att ? (msg.apt ?? att.accountId) : null;
+      const no = att ? ride(this.presence, att, msg.to, apt !== null && this.tower.has(apt)) : null;
       if (no) this.send(ws, { t: 'lift.no', to: msg.to, msg: no });
+      else if (att) {
+        this.presence.setApt(att.accountId, apt);
+        const info = apt !== null ? this.tower.info(apt) : null;
+        if (info) this.send(ws, { t: 'apt', apt: info });
+      }
+    } else if (msg.t === 'apts') {
+      this.presence.touch(ws, Date.now());
+      this.send(ws, { t: 'apts', list: this.tower.list() });
+    } else if (msg.t === 'home.pick') {
+      // v7.1: only the owner changes their apartment; everyone in it sees the change
+      const id = this.presence.accountOf(ws);
+      this.presence.touch(ws, Date.now());
+      if (id !== null && this.tower.pick(id, msg.slot, msg.item)) this.broadcast({ t: 'apt', apt: this.tower.info(id)! });
     } else if (msg.t === 'punch') {
       // v6 law6
       const id = this.presence.accountOf(ws);
@@ -304,6 +327,15 @@ export class CasinoFloor extends DurableObject<Env> {
       this.presence.onMessage(ws, msg);
       // v6 law6: an inmate stays inside, a free player isn't left in there
       const id = this.presence.accountOf(ws);
+      // v7.1: someone standing on the apartments' floor without an apartment to be in (a
+      // reconnect): their own if they have one, else back down to the casino
+      const a = this.presence.attOf(ws);
+      if (a && a.apt == null && zoneOf(a.x, a.z) === 'home') {
+        if (this.tower.has(a.accountId)) {
+          this.presence.setApt(a.accountId, a.accountId);
+          this.send(ws, { t: 'apt', apt: this.tower.info(a.accountId)! });
+        } else this.presence.teleport(a.accountId, SPAWN.x, SPAWN.z, SPAWN.r);
+      } else if (a && a.apt != null && zoneOf(a.x, a.z) !== 'home') this.presence.setApt(a.accountId, null);
       if (id !== null) {
         this.law.afterMove(id, Date.now());
         void this.law.jailTick(id, Date.now()); // v7: the inmates
@@ -380,9 +412,15 @@ export class CasinoFloor extends DurableObject<Env> {
   }
 
   /** v7: an account owns more now (the shop's purchase): its sockets may drive the car, draw the gun, ride to its apartment. */
-  grantKit(accountId: number, kit: { guns?: string[]; cars?: string[]; home?: number }): void {
-    this.street.grant(accountId, kit);
-    this.sendTo(accountId, { t: 'kit', ...kit });
+  grantKit(accountId: number, kit: { guns?: string[]; cars?: string[]; home?: number; homes?: string[] }): void {
+    const { homes, ...rest } = kit;
+    this.street.grant(accountId, rest);
+    // v7.1: the tower hears of a new owner, a higher step, new pieces and guns
+    const name = this.presence.whereIs(accountId)?.name;
+    if (kit.home && name && !this.tower.has(accountId)) this.tower.upsert({ id: accountId, name, tier: kit.home, items: [...(homes ?? []), ...(kit.guns ?? [])] });
+    else this.tower.add(accountId, { items: [...(homes ?? []), ...(kit.guns ?? [])], ...(kit.home ? { tier: kit.home } : {}) });
+    if (this.tower.has(accountId) && (homes?.length || kit.guns?.length || kit.home)) this.broadcast({ t: 'apt', apt: this.tower.info(accountId)! });
+    this.sendTo(accountId, { t: 'kit', ...rest });
   }
 
   /** v6 cars6: bring a player's car round to the valet's curb (the Worker checked they own it), or send it back (null). */
@@ -625,13 +663,14 @@ export { PROTOCOL_VERSION };
 
 /** Emote ids from a comma list (the Worker's header): known, not free, each once. */
 /** v7: `guns=a,b;cars=c,d;home=2` as the Worker writes it: only known ids, the step 0-3. */
-export function kitOf(raw: string | null): { guns: string[]; cars: string[]; home: number } {
-  const out = { guns: [] as string[], cars: [] as string[], home: 0 };
+export function kitOf(raw: string | null): { guns: string[]; cars: string[]; home: number; homes: string[] } {
+  const out = { guns: [] as string[], cars: [] as string[], home: 0, homes: [] as string[] };
   for (const part of (raw ?? '').split(';')) {
     const [k, v = ''] = part.split('=');
     if (k === 'guns') out.guns = [...new Set(v.split(',').filter((id) => gunItem(id)))];
     else if (k === 'cars') out.cars = [...new Set(v.split(',').filter((id) => carItem(id)))];
     else if (k === 'home') out.home = Math.max(0, Math.min(3, Math.floor(Number(v)) || 0));
+    else if (k === 'homes') out.homes = [...new Set(v.split(',').filter((id) => homeItem(id)))];
   }
   return out;
 }

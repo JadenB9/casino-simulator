@@ -78,6 +78,9 @@ export interface FloorAtt {
   car?: string | null;
   parked?: Parked | null;
   gun?: string | null;
+  /** v7.1: the home pieces owned (the tower's), and whose apartment this player is in now. */
+  homes?: string[];
+  apt?: number | null;
 }
 
 /** v7: the fastest a driven car may go, cm/s (the cars top out near 40 m/s), and its bank. */
@@ -125,7 +128,7 @@ export class Presence {
     }
   }
 
-  onConnect(ws: WebSocket, who: { accountId: number; name: string; look: Look; emotes?: string[]; cars?: string[]; guns?: string[]; home?: number }): void {
+  onConnect(ws: WebSocket, who: { accountId: number; name: string; look: Look; emotes?: string[]; cars?: string[]; guns?: string[]; home?: number; homes?: string[] }): void {
     const now = Date.now();
     // A newer tab taking over from an older one (index.ts closed the old socket a moment ago, in
     // this same turn) goes on standing where the old one stood, and nobody else hears about it.
@@ -148,6 +151,7 @@ export class Presence {
       car: prev?.car ?? null,
       parked: prev?.parked ?? null,
       gun: null,
+      apt: prev?.apt ?? null,
     };
     ws.serializeAttachment(att);
     this.live.set(ws, { att, moving: false, bank: MAX_BANK });
@@ -377,6 +381,11 @@ export class Presence {
     if (this.update(accountId, (a) => ((a.car = car), (a.parked = parked)))) this.broadcast({ t: 'player', id: accountId, car, parked });
   }
 
+  /** v7.1: into someone's apartment (their account id), or out of the apartments (null). */
+  setApt(accountId: number, apt: number | null): void {
+    if (this.update(accountId, (a) => (a.apt = apt))) this.broadcast({ t: 'player', id: accountId, apt });
+  }
+
   setGun(accountId: number, gun: string | null): void {
     if (this.update(accountId, (a) => (a.gun = gun))) this.broadcast({ t: 'player', id: accountId, gun });
   }
@@ -393,14 +402,14 @@ export class Presence {
   }
 
   /** v6 law6: everyone on the floor, once each: where they are (cm) and whether they sit (at a table, or on a seat). */
-  standing(): { accountId: number; name: string; x: number; z: number; at: boolean; seat: boolean; car: boolean }[] {
+  standing(): { accountId: number; name: string; x: number; z: number; at: boolean; seat: boolean; car: boolean; apt: number | null }[] {
     const seen = new Set<number>();
-    const out: { accountId: number; name: string; x: number; z: number; at: boolean; seat: boolean; car: boolean }[] = [];
+    const out: { accountId: number; name: string; x: number; z: number; at: boolean; seat: boolean; car: boolean; apt: number | null }[] = [];
     for (const [ws, w] of this.live) {
       const a = w.att;
       if (seen.has(a.accountId) || ws.readyState !== WebSocket.OPEN) continue;
       seen.add(a.accountId);
-      out.push({ accountId: a.accountId, name: a.name, x: a.x, z: a.z, at: a.at !== null, seat: !!a.seat, car: !!a.car });
+      out.push({ accountId: a.accountId, name: a.name, x: a.x, z: a.z, at: a.at !== null, seat: !!a.seat, car: !!a.car, apt: a.apt ?? null });
     }
     return out;
   }
@@ -511,7 +520,7 @@ export class Presence {
 }
 
 function info(a: FloorAtt): PlayerInfo {
-  return { id: a.accountId, name: a.name, look: a.look, x: a.x, z: a.z, r: a.r, at: a.at, seat: a.seat?.id ?? null, car: a.car ?? null, parked: a.parked ?? null, gun: a.gun ?? null, jailed: !!a.confine };
+  return { id: a.accountId, name: a.name, look: a.look, x: a.x, z: a.z, r: a.r, at: a.at, seat: a.seat?.id ?? null, car: a.car ?? null, parked: a.parked ?? null, gun: a.gun ?? null, jailed: !!a.confine, apt: a.apt ?? null };
 }
 
 /**

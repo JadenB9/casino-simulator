@@ -375,7 +375,7 @@ class App {
       seatFor: (id) => this.world.life.seatFor(id),
       // nobody in a room you can't see into, or behind you, is drawn or animated; in a crowd the
       // nearest are, and everyone's shadow is one draw
-      inView: (x, z) => this.world.canSee(x, z),
+      inView: (x, z, id) => this.world.canSee(x, z, id),
       eye: () => this.engine.camera.position,
       shadow: { geometry: this.world.characterFactory.blobGeometry, material: this.world.characterFactory.blob },
     });

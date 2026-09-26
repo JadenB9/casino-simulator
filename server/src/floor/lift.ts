@@ -12,16 +12,16 @@ const SAY: Record<LiftRefusal, string> = {
   table: 'Stand up from the table first.',
   held: 'Security has you. Not now.',
   far: 'Walk up to the elevator first.',
-  nohome: 'That floor is for residents. Buy an apartment at the home store across the street.',
+  nohome: 'There is no apartment there. Buy one at the home store across the street.',
   driving: 'Park the car first.',
 };
 
 /** Take `att`'s player to `to`: null when they went, or what to tell them when they didn't. */
-export function ride(presence: Presence, att: FloorAtt, to: ZoneId): string | null {
+export function ride(presence: Presence, att: FloorAtt, to: ZoneId, aptExists = false): string | null {
   // where the floor sees them now (a walker's attachment is only saved at rest)
   const at = presence.positionOf(att.accountId);
   if (!at) return SAY.far;
-  const no = liftRefusal({ x: at.x, z: at.z, at: att.at, confine: att.confine, home: att.home, car: att.car }, to);
+  const no = liftRefusal({ x: at.x, z: at.z, at: att.at, confine: att.confine, home: aptExists ? 1 : 0, car: att.car }, to);
   if (no) return SAY[no];
   const a = LIFTS[to].arrive;
   return presence.teleport(att.accountId, a.x, a.z, a.r) ? null : SAY.far;

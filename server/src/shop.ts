@@ -115,6 +115,7 @@ export async function shopApi(request: Request, env: Env, route: string, account
       if (item.kind === 'car') await floorOf(env).grantKit(accountId, { cars: [item.id] });
       if (item.kind === 'gun') await floorOf(env).grantKit(accountId, { guns: [item.id] });
       if (item.kind === 'apartment') await floorOf(env).grantKit(accountId, { home: homeTier((await ownedOf(db, accountId)).items) });
+      if (item.kind === 'home') await floorOf(env).grantKit(accountId, { homes: [item.id] }); // v7.1: the tower shows it
     } catch (err) {
       console.error('floor after purchase failed', item.id, err);
     }

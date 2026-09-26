@@ -30,24 +30,6 @@ import { SLOT_ORDER, slotItems } from '../world/home/furnish.ts';
 
 const owns = (id: string) => (session.profile?.owned ?? []).includes(id);
 
-const PICKS_KEY = 'casino.home.picks';
-
-function loadPicks(): Partial<Record<HomeSlot, string>> {
-  try {
-    return JSON.parse(localStorage.getItem(PICKS_KEY) ?? '{}') as Partial<Record<HomeSlot, string>>;
-  } catch {
-    return {};
-  }
-}
-
-function savePicks(p: Partial<Record<HomeSlot, string>>): void {
-  try {
-    localStorage.setItem(PICKS_KEY, JSON.stringify(p));
-  } catch {
-    /* kept for this visit only */
-  }
-}
-
 /** Store clerks: the gun store's in a dark polo, the home store's in a blazer. */
 const CLERKS: Record<StoreId, Look> = {
   guns: { v: 1, body: 'm', outfit: 'casual', skin: 3, hair: '#2a1d14', top: '#1d2024', bottom: '#3a3f35', shoes: '#15120e' },
@@ -74,7 +56,6 @@ export class V7 {
   readonly arms: Arms;
   private online: { close(): void; closed: boolean } | null = null;
   private linkOff: (() => void) | null = null;
-  private picks = loadPicks();
   private readonly clerks: Person[] = [];
   private homeAt = 0;
 
@@ -152,10 +133,23 @@ export class V7 {
     this.homeAt -= dt;
     if (this.homeAt > 0) return;
     this.homeAt = 0.5;
+    // v7.1: whichever apartment you're in, as the floor described it (visitors see the owner's)
     const home = this.d.world.city.homeInterior();
-    if (!home) return;
-    const owned = session.profile?.owned ?? [];
-    home.set(homeTier(owned), new Set(owned), this.picks);
+    const apt = this.d.world.city.apt;
+    if (!home || !apt) return;
+    if (apt.id !== this.aptShown) {
+      this.aptShown = apt.id;
+      toast(apt.id === this.d.link()?.you?.id ? `Your apartment · floor ${apt.floor}` : `${apt.name}'s apartment · floor ${apt.floor}. Only ${apt.name} can change anything here.`);
+    }
+    home.set(apt.tier, new Set(apt.items), apt.picks as Partial<Record<HomeSlot, string>>);
+  }
+
+  private aptShown = 0;
+
+  /** In your own apartment (the only one you can change). */
+  private get mine(): boolean {
+    const apt = this.d.world.city.apt;
+    return !!apt && apt.id === this.d.link()?.you?.id;
   }
 
   private async refreshMoney(): Promise<void> {
@@ -190,7 +184,7 @@ export class V7 {
         if (inHall) yield { key: 'jail:bail', x: 169, z: -21, d: Math.hypot(p.x - 169, p.z + 21), label: 'Bail someone out', any: true, use: () => this.openOnline() };
       }
     }
-    if (zone === 'home') {
+    if (zone === 'home' && this.mine) {
       const t = Math.hypot(p.x - TABLET.x, p.z - TABLET.z);
       if (t < 1.4) yield { key: 'home:tablet', x: TABLET.x, z: TABLET.z, d: t, label: 'Home · upgrades and furniture', any: true, use: () => this.openHome(null) };
       for (const slot of SLOT_ORDER) {
@@ -255,9 +249,9 @@ export class V7 {
     });
   }
 
+  /** Put one of your pieces in its place: the floor keeps it, and everyone in your apartment sees it. */
   private pick(slot: HomeSlot, id: string): void {
-    this.picks = { ...this.picks, [slot]: id };
-    savePicks(this.picks);
+    if (!this.d.link()?.send({ t: 'home.pick', slot, item: id })) toast('The floor is reconnecting. Try again in a moment.', 'err');
     this.homeAt = 0;
   }
 

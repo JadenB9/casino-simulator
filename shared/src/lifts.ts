@@ -72,8 +72,8 @@ export const LIFTS: Record<ZoneId, LiftBank> = {
 /** The floors on the elevator's panel, top to bottom, with the numbers its indicator counts through. */
 export const FLOORS: { zone: ZoneId; key: string; name: string; level: number }[] = [
   { zone: 'roof', key: 'R', name: 'Sky Terrace', level: 38 },
-  // v7: only on an owner's panel (the server refuses anyone else: liftRefusal's 'nohome')
-  { zone: 'home', key: 'H', name: 'Your Apartment', level: 31 },
+  // v7.1: the apartments: every owner's floor, anyone may visit (the panel lists them)
+  { zone: 'home', key: 'A', name: 'Apartments', level: 31 },
   { zone: 'casino', key: 'C', name: 'Casino', level: 2 },
   { zone: 'ground', key: 'G', name: 'Valet & Street', level: 0 },
 ];
@@ -102,7 +102,7 @@ export function liftRefusal(p: { x: number; z: number; at: unknown; confine?: un
   if (p.confine) return 'held';
   if (p.at) return 'table';
   if (p.car) return 'driving';
-  // v7: the apartments' floor is only for someone who owns one
+  // v7.1: the apartments' floor: to someone's apartment (your own by default); there must be one
   if (to === 'home' && !(p.home && p.home > 0)) return 'nohome';
   const zone = (Object.keys(ZONES) as ZoneId[]).find((id) => inRect(ZONES[id], p.x, p.z)) ?? null;
   if (zone === to) return 'here';

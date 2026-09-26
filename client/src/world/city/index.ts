@@ -18,7 +18,7 @@ import type { Collider } from '../collision.ts';
 import type { Player } from '../player.ts';
 import type { Interact, Spot } from '../interact.ts';
 import type { Seatable } from '../life-points.ts';
-import type { FloorClientMsg, FloorServerMsg } from '../../../../shared/src/protocol.ts';
+import type { AptInfo, FloorClientMsg, FloorServerMsg } from '../../../../shared/src/protocol.ts';
 import { LIFTS, floorOf } from '../../../../shared/src/lifts.ts';
 import { ZONES, zoneOf, type ZoneId } from '../../../../shared/src/zones.ts';
 import { calm } from '../../app/comfort.ts';
@@ -41,7 +41,8 @@ export { GROUND, ROOF, VALET_STAND, PICKUP, ENTRANCES, stalls } from './plan.ts'
 export interface CityLink {
   send(msg: FloorClientMsg): boolean;
   subscribe(fn: (msg: FloorServerMsg) => void): () => void;
-  readonly players: ReadonlyMap<number, { last: { x: number; z: number } | null }>;
+  readonly players: ReadonlyMap<number, { last: { x: number; z: number } | null; info?: { apt?: number | null } }>;
+  readonly you?: { id: number; apt?: number | null } | null;
 }
 
 export interface CityDeps {
@@ -181,6 +182,9 @@ export class City {
     this.offLink = link.subscribe((m) => {
       if (m.t === 'tp') this.moved(m.x / 100, m.z / 100, m.r);
       else if (m.t === 'lift.no') this.refused(m.msg);
+      // v7.1: the apartment you're in (on arrival, and whenever its owner changes it)
+      else if (m.t === 'apt' && [this.aptWanted, this.apt?.id, this.link?.you?.apt].includes(m.apt.id)) this.apt = m.apt;
+      else if (m.t === 'apts') this.onApts?.(m.list);
     });
   }
 
@@ -217,11 +221,14 @@ export class City {
    * Whether someone at (x, z) could be seen from the camera: in the zone you're in and in view.
    * In the casino the floor's own doorway culling says the rest (`inCasino`).
    */
-  sees(x: number, z: number, inCasino: (x: number, z: number) => boolean): boolean {
+  sees(x: number, z: number, inCasino: (x: number, z: number) => boolean, id?: number): boolean {
     const zone = zoneOf(x * 100, z * 100) ?? 'casino';
     if (zone !== this.zone) return false;
-    // v7: everyone's apartment is their own: nobody else is ever seen in yours
-    if (zone === 'home') return false;
+    // v7.1: in the apartments, only whoever is in the same one as you
+    if (zone === 'home') {
+      const theirs = id !== undefined ? this.link?.players.get(id)?.info?.apt : undefined;
+      if (theirs == null || theirs !== (this.link?.you?.apt ?? this.apt?.id)) return false;
+    }
     if (zone === 'casino') return inCasino(x, z);
     const b = this.body;
     b.min.set(x - 0.45, 0, z - 0.45);
@@ -442,12 +449,27 @@ export class City {
       () => {
         this.panel = null;
       },
-      (zone) => zone !== 'home' || this.homeTier() > 0,
+      () => true,
+      // v7.1: the apartments: choose whose floor
+      (done) => {
+        this.onApts = (list) => {
+          this.onApts = null;
+          done(list, this.link?.you?.id ?? null);
+        };
+        if (!this.link?.send({ t: 'apts' })) done([], null);
+      },
+      (apt) => (this.aptWanted = apt),
     );
   }
 
-  /** v7: how far your apartment is done (0: none), for the panel's "Your Apartment" (the app sets it). */
+  /** v7: how far your apartment is done (0: none) (the app sets it). */
   homeTier: () => number = () => 0;
+  /** v7.1: the apartment you're in (or riding to), as the floor described it. */
+  apt: AptInfo | null = null;
+  /** The apartment the next ride to the apartments goes to (its owner's id). */
+  private aptWanted: number | null = null;
+  /** The tower's list, when asked for (the panel's second page). */
+  private onApts: ((list: { id: number; name: string; floor: number }[]) => void) | null = null;
 
   private start(to: ZoneId, car: number): void {
     const f = this.floor;
@@ -477,7 +499,9 @@ export class City {
       this.sounds.ride(screen.secs + 0.6);
       this.ride = { phase: 'riding', from: this.zone, to: r.to, t: 0, screen, tp: null, building: false, ready: false, placed: false };
       if (this.link) {
-        if (!this.link.send({ t: 'lift', to: r.to })) this.refused('The elevator can’t reach the floor right now. Try again.');
+        const apt = r.to === 'home' ? (this.aptWanted ?? this.link.you?.id ?? undefined) : undefined;
+        this.aptWanted = apt ?? null;
+        if (!this.link.send(apt ? { t: 'lift', to: r.to, apt } : { t: 'lift', to: r.to })) this.refused('The elevator can’t reach the floor right now. Try again.');
       } else {
         // the dev floor, with no server: the car goes where the server would send it
         const a = LIFTS[r.to].arrive;

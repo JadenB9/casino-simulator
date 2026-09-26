@@ -246,6 +246,7 @@ export class FloorLink {
         if (m.parked !== undefined) info.parked = m.parked;
         if (m.gun !== undefined) info.gun = m.gun;
         if (m.jailed !== undefined) info.jailed = m.jailed;
+        if (m.apt !== undefined) info.apt = m.apt;
         break;
       }
       case 'online':
@@ -309,6 +310,7 @@ export class FloorLink {
     known.info.parked = info.parked ?? null;
     known.info.gun = info.gun ?? null;
     known.info.jailed = !!info.jailed;
+    known.info.apt = info.apt ?? null;
   }
 
   private sample(p: RemotePlayer, t: number, pose: Pose): void {

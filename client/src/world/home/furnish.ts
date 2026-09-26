@@ -12,6 +12,9 @@ import { Collider } from '../collision.ts';
 import { Kit } from '../city/kit.ts';
 import { signAtlas, signMesh } from '../city/kit.ts';
 import { HOME_ITEMS, pieceIn, type HomeItem, type HomeSlot } from '../../../../shared/src/estate.ts';
+import { GUNS, type GunItem } from '../../../../shared/src/arms.ts';
+import { gunModel, disposeGun } from '../arms/models.ts';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { APT, BEDROOM, FIREPLACE, HALL, SLOTS, SOUTH_SOLID_TO, TABLET, TERRACE, type SlotPlace } from './plan.ts';
 
 /** The home's own materials (the rest come from the casino's and the city's). */
@@ -197,6 +200,16 @@ export function furnish(mats: Mats, col: Collider, tier: number, owned: Readonly
     group.add(neon);
   }
 
+  // v7.1: the gun wall on the games corner's wall: the owner's guns on a lit walnut board
+  const guns = GUNS.filter((g) => owned.has(g.id));
+  let rack: THREE.Mesh[] = [];
+  if (guns.length) {
+    const W = { x0: -153.7, x1: -148.4, z: A.z1 - inner };
+    kit.box('home-walnut', W.x0, W.x1, 0.95, 2.75, W.z - 0.06, W.z);
+    kit.light(GLOW.shelf, (W.x0 + W.x1) / 2, 2.72, W.z - 0.08, W.x1 - W.x0 - 0.3, 0.02, 0.03);
+    rack = gunRack(guns, W);
+    for (const m of rack) group.add(m);
+  }
   const built = kit.batch.build(group, 'home');
   const glows = kit.glow.build(group);
   const pools = kit.pools('#ffd8a8', 0.2);
@@ -222,6 +235,7 @@ export function furnish(mats: Mats, col: Collider, tier: number, owned: Readonly
         mat.map?.dispose();
         mat.dispose();
       }
+      for (const m of rack) m.geometry.dispose();
       if (neon) {
         neon.geometry.dispose();
         const mat = neon.material as THREE.MeshBasicMaterial;
@@ -585,6 +599,44 @@ const BUILD: Record<HomeSlot, Builder> = {
     a.solid(-0.35, 0.35, -0.35, 0.35, 1.3);
   },
 };
+
+/**
+ * The guns hung on the wall in rows, barrels pointing left, merged per material (a draw call a
+ * finish, however many guns).
+ */
+function gunRack(guns: readonly GunItem[], w: { x0: number; x1: number; z: number }): THREE.Mesh[] {
+  const byMat = new Map<THREE.Material, THREE.BufferGeometry[]>();
+  const perRow = Math.max(1, Math.ceil(guns.length / 3));
+  guns.forEach((g, i) => {
+    const model = gunModel(g);
+    const row = Math.floor(i / perRow);
+    const col = i % perRow;
+    const x = w.x1 - 0.35 - (col + 0.5) * ((w.x1 - w.x0 - 0.5) / perRow) + 0.2;
+    // lying flat against the board, the barrel to the left (-x), the grip down
+    model.rotation.set(0, -Math.PI / 2, 0);
+    model.position.set(x + (model.userData.length as number) / 2, 2.35 - row * 0.55, w.z - 0.12);
+    model.updateMatrixWorld(true);
+    model.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      const geo = m.geometry.clone().applyMatrix4(m.matrixWorld);
+      const list = byMat.get(m.material as THREE.Material) ?? [];
+      list.push(geo.index ? geo.toNonIndexed() : geo);
+      byMat.set(m.material as THREE.Material, list);
+    });
+    disposeGun(model);
+  });
+  const out: THREE.Mesh[] = [];
+  for (const [mat, list] of byMat) {
+    const merged = mergeGeometries(list, false);
+    for (const g of list) g.dispose();
+    if (!merged) continue;
+    const mesh = new THREE.Mesh(merged, mat);
+    mesh.name = 'home:guns';
+    out.push(mesh);
+  }
+  return out;
+}
 
 /** Every slot, in the order the catalogue shows them. */
 export const SLOT_ORDER: readonly HomeSlot[] = ['sofa', 'tv', 'rug', 'art', 'plant', 'chandelier', 'dining', 'kitchen', 'bar', 'bed', 'safe', 'games', 'arcade', 'jukebox', 'piano', 'aquarium', 'trophy', 'sculpture', 'neon', 'telescope'];

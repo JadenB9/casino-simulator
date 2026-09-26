@@ -13,7 +13,16 @@ export interface PanelHandle {
 }
 
 /** The car's panel. `pick` hears the floor chosen; closing without one calls `onClose`. */
-export function openPanel(ui: HTMLElement, here: ZoneId, pick: (to: ZoneId) => void, onClose: () => void, shows: (zone: ZoneId) => boolean = () => true): PanelHandle {
+export function openPanel(
+  ui: HTMLElement,
+  here: ZoneId,
+  pick: (to: ZoneId) => void,
+  onClose: () => void,
+  shows: (zone: ZoneId) => boolean = () => true,
+  /** v7.1: the apartments' residents (asked for when that button is pressed), and the choice of one. */
+  residents?: (done: (list: { id: number; name: string; floor: number }[], me: number | null) => void) => void,
+  choose?: (apt: number) => void,
+): PanelHandle {
   // v7: "Your Apartment" is on an owner's panel only
   const floors = FLOORS.filter((f) => f.zone === here || shows(f.zone));
   const root = el('div', 'lift-panel');
@@ -52,7 +61,37 @@ export function openPanel(ui: HTMLElement, here: ZoneId, pick: (to: ZoneId) => v
       b.title = 'You are here';
     }
     b.addEventListener('click', () => {
-      if (f.zone === here) return;
+      if (f.zone === here && f.zone !== 'home') return;
+      // v7.1: the apartments: a second page, the residents' floors (yours first)
+      if (f.zone === 'home' && residents && choose) {
+        list.replaceChildren(el('li', 'lift-note', 'Finding the residents…'));
+        residents((people, me) => {
+          if (closed) return;
+          const mine = people.filter((r) => r.id === me);
+          const rest = people.filter((r) => r.id !== me);
+          if (!people.length) {
+            list.replaceChildren(el('li', 'lift-note', 'Nobody lives here yet. Maison Home across the street sells the apartments.'));
+            return;
+          }
+          list.replaceChildren(
+            ...[...mine, ...rest].map((r) => {
+              const li = el('li');
+              const rb = el('button', 'lift-btn');
+              rb.type = 'button';
+              rb.append(el('span', 'lift-key', String(r.floor)), el('span', 'lift-name', r.id === me ? 'Your apartment' : `${r.name}'s apartment`), el('span', 'lift-level', `Floor ${r.floor}`));
+              rb.addEventListener('click', () => {
+                choose(r.id);
+                rb.classList.add('lit');
+                setTimeout(() => close('home'), 180);
+              });
+              li.append(rb);
+              return li;
+            }),
+          );
+          (list.querySelector('.lift-btn') as HTMLButtonElement | null)?.focus();
+        });
+        return;
+      }
       b.classList.add('lit');
       setTimeout(() => close(f.zone), 180);
     });

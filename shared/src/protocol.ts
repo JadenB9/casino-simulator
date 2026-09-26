@@ -98,6 +98,20 @@ export interface PlayerInfo {
   gun?: string | null;
   /** v7: in the county jail (someone may bail them out). */
   jailed?: boolean;
+  /** v7.1: whose apartment they're in (its owner's account id), on the apartments' floor. */
+  apt?: number | null;
+}
+
+/** v7.1: one apartment in the tower, as its visitors see it (server/src/floor/tower.ts). */
+export interface AptInfo {
+  /** The owner's account id and name, and which floor it is. */
+  id: number;
+  name: string;
+  floor: number;
+  /** The step reached (1-3), the home pieces and guns owned, and which piece stands in each slot. */
+  tier: number;
+  items: string[];
+  picks: Partial<Record<string, string>>;
 }
 
 /** v7: a car someone got out of and left: which, and where (cm, yaw byte). */
@@ -390,7 +404,10 @@ export type FloorClientMsg =
   /** The player is at the keyboard (see HERE_MS); keeps the socket from going idle. */
   | { t: 'here' }
   // v6: take the elevator to another zone (zones.ts); only from beside an elevator door
-  | { t: 'lift'; to: ZoneId }
+  | { t: 'lift'; to: ZoneId; apt?: number }
+  // v7.1: the tower's list (who lives on which floor), and the owner putting a piece in a slot
+  | { t: 'apts' }
+  | { t: 'home.pick'; slot: string; item: string | null }
   | InviteClientMsg // v6 invite6
   // v6 law6: throw a punch, facing `r` (yaw byte); the server finds who it lands on
   | { t: 'punch'; r: number }
@@ -408,7 +425,7 @@ export type FloorServerMsg =
   | { t: 's'; ts: number; p: [id: number, x: number, z: number, r: number, moving: 0 | 1, age?: number][] }
   | { t: 'join'; player: PlayerInfo }
   | { t: 'leave'; id: number }
-  | { t: 'player'; id: number; look?: Look; at?: { station: string } | null; seat?: string | null; car?: string | null; parked?: Parked | null; gun?: string | null; jailed?: boolean }
+  | { t: 'player'; id: number; look?: Look; at?: { station: string } | null; seat?: string | null; car?: string | null; parked?: Parked | null; gun?: string | null; jailed?: boolean; apt?: number | null }
   // a seat you asked for and didn't get (someone got there first, or it's out of reach)
   | { t: 'seat.no'; seat: string; msg: string }
   | { t: 'online'; n: number }
@@ -445,6 +462,9 @@ export type FloorServerMsg =
   | { t: 'shot'; id: number; r: number; hit: number | StaffId | null; d: number }
   // v7: you own more now (bought while connected): guns, cars and your apartment's step, for the floor's checks
   | { t: 'kit'; guns?: string[]; cars?: string[]; home?: number }
+  // v7.1: the apartment you're in (on arrival, and whenever its owner changes it), and the tower's list
+  | { t: 'apt'; apt: AptInfo }
+  | { t: 'apts'; list: { id: number; name: string; floor: number }[] }
   | { t: 'detour'; d: Detour }
   | { t: 'detours'; list: Detour[] }
   | { t: 'law'; ev: LawEvent }
@@ -479,7 +499,13 @@ export function parseFloorMsg(raw: unknown, isGame: (g: unknown) => g is GameId)
       return { t: 'watch', game: raw.game as GameId | null };
     case 'lift':
       if (raw.to !== 'casino' && raw.to !== 'ground' && raw.to !== 'roof' && raw.to !== 'home') return null;
-      return { t: 'lift', to: raw.to };
+      if (raw.apt !== undefined && (!isInt(raw.apt) || raw.apt <= 0)) return null;
+      return raw.apt !== undefined ? { t: 'lift', to: raw.to, apt: raw.apt as number } : { t: 'lift', to: raw.to };
+    case 'apts':
+      return { t: 'apts' };
+    case 'home.pick':
+      if (typeof raw.slot !== 'string' || !/^[a-z]{2,16}$/.test(raw.slot) || (raw.item !== null && !isShortId(raw.item))) return null;
+      return { t: 'home.pick', slot: raw.slot, item: raw.item as string | null };
     // v7:
     case 'drive':
       if (raw.car !== null && !isShortId(raw.car)) return null;

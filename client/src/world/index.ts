@@ -127,7 +127,7 @@ export interface FloorWorld extends World {
    * Whether someone standing at (x, z) could be seen from the camera this frame: in a room being
    * drawn and in view (RemotePlayers' `inView`: nobody else is drawn or animated).
    */
-  canSee(x: number, z: number): boolean;
+  canSee(x: number, z: number, id?: number): boolean;
   /** The dealers, bartender and cashier (npcs.ts). */
   readonly staff: Staff;
   /** The floor's life (world/life/): sitting anywhere, waiters, the bartender, bankers, the shopkeeper. */
@@ -535,7 +535,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
       fx.useRemotes(source);
     },
     // v6 city6: nobody in another zone is drawn
-    canSee: (x, z) => city.sees(x, z, (a, b) => everything || visibility.seesPerson(a, b)),
+    canSee: (x, z, id) => city.sees(x, z, (a, b) => everything || visibility.seesPerson(a, b), id),
     staff,
     life,
     dealerGesture: (id, g) => staff.gesture(id, g),

@@ -169,7 +169,8 @@ export class Law {
     const zone = zoneOf(me.x, me.z) ?? 'casino';
     for (const p of this.presence.standing()) {
       if (p.accountId === accountId || p.at || p.seat || p.car) continue;
-      if ((zoneOf(p.x, p.z) ?? 'casino') !== zone || zone === 'home') continue;
+      if ((zoneOf(p.x, p.z) ?? 'casino') !== zone) continue;
+      if (zone === 'home' && p.apt !== me.apt) continue;
       candidates.push({ id: p.accountId, x: p.x / 100, z: p.z / 100 });
     }
     if (zone === 'casino')

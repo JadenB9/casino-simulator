@@ -46,7 +46,7 @@ export interface RemotePlayersOptions {
    * Whether someone standing at (x, z) could be seen from the camera now (their room is drawn and
    * they're in view). Anyone who can't be isn't drawn or animated until they can; none: everyone is.
    */
-  inView?: (x: number, z: number) => boolean;
+  inView?: (x: number, z: number, id?: number) => boolean;
   /** Where the camera is: with more than MAX_DRAWN people in view, the nearest are drawn. */
   eye?: () => { x: number; z: number };
   /**
@@ -141,7 +141,7 @@ export class RemotePlayers {
       d.placed = this.place(d, id, now, dt);
       if (!d.placed) continue;
       const at = d.ch.root.position;
-      if (this.opts.inView && !this.opts.inView(at.x, at.z)) continue;
+      if (this.opts.inView && !this.opts.inView(at.x, at.z, id)) continue;
       d.rank = (eye ? Math.hypot(at.x - eye.x, at.z - eye.z) : 0) - (d.shown ? KEEP_M : 0);
       seen.push(d);
     }

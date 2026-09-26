@@ -98,7 +98,9 @@ export class Street {
     const candidates: { id: number | string; x: number; z: number }[] = [];
     for (const o of p.standing()) {
       if (o.accountId === a.accountId || o.at || o.seat) continue;
-      if ((zoneOf(o.x, o.z) ?? 'casino') !== zone || zone === 'home') continue;
+      if ((zoneOf(o.x, o.z) ?? 'casino') !== zone) continue;
+      // (v7.1: in the apartments only the people in the same one)
+      if (zone === 'home' && o.apt !== (a.apt ?? null)) continue;
       candidates.push({ id: o.accountId, x: o.x / 100, z: o.z / 100 });
     }
     if (zone === 'casino') for (const s of STAFF) candidates.push({ id: s.id, ...this.d.staffPose(s.id, now) });
