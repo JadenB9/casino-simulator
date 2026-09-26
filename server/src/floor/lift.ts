@@ -21,8 +21,11 @@ export function ride(presence: Presence, att: FloorAtt, to: ZoneId, aptExists = 
   // where the floor sees them now (a walker's attachment is only saved at rest)
   const at = presence.positionOf(att.accountId);
   if (!at) return SAY.far;
-  const no = liftRefusal({ x: at.x, z: at.z, at: att.at, confine: att.confine, home: aptExists ? 1 : 0, car: att.car }, to);
+  // v7.4: a car you're still in (or the floor still thinks you are: a get-in the client gave up
+  // on) doesn't hold you up: the valet takes it back to your garage and up you go
+  const no = liftRefusal({ x: at.x, z: at.z, at: att.at, confine: att.confine, home: aptExists ? 1 : 0, car: null }, to);
   if (no) return SAY[no];
+  if (att.car) presence.setCar(att.accountId, null, null);
   const a = LIFTS[to].arrive;
   return presence.teleport(att.accountId, a.x, a.z, a.r) ? null : SAY.far;
 }

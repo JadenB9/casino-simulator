@@ -54,7 +54,7 @@ const OUT_OF_GARAGE = { x: 162.2, z: 18, yaw: Math.PI };
 /** How near a car's middle you must be to get in (m). */
 const REACH = 3.4;
 /** Wait this long for the floor to say you're in before giving up (ms). */
-const CONFIRM_MS = 3000;
+const CONFIRM_MS = 6000;
 /** A crash this hard (m/s into something) makes a sound and shakes the camera. */
 const CRASH_V = 3;
 
@@ -217,6 +217,11 @@ export class Driving {
     return true;
   }
 
+  /** The floor refused something while a get-in waits for its word: it was the car (it says why). */
+  refused(): void {
+    if (this.mine && !this.mine.confirmed) this.getOut(true);
+  }
+
   /** Out of the car, on the driver's side; it stays where it is. */
   getOut(quiet = false): void {
     const m = this.mine;
@@ -241,7 +246,8 @@ export class Driving {
     m.rig.dispose();
     void me;
     if (m.confirmed) toast(`The valet takes the ${carItem(m.car)?.name ?? 'car'} back to your garage.`);
-    if (m.confirmed) link?.send({ t: 'drive', car: null });
+    // (unconfirmed too: a yes that comes late mustn't leave the floor thinking you drive)
+    link?.send({ t: 'drive', car: null });
     if (!quiet && !m.confirmed) toast("The car wouldn't start. Try again in a moment.");
   }
 

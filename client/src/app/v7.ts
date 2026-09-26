@@ -161,7 +161,11 @@ export class V7 {
       this.arms.hear(m);
       // v7.1: someone else jumped
       if (m.t === 'jump' && m.id !== this.d.link()?.you?.id) (this.d.character(m.id)?.gesture as ((e: string) => void) | undefined)?.('jump');
-      if (m.t === 'err' && m.code === 'NOT_ELIGIBLE') toast(m.msg, 'err');
+      if (m.t === 'err' && m.code === 'NOT_ELIGIBLE') {
+        // (a car the floor refused: its reason is the one to see, not "wouldn't start")
+        this.driving.refused();
+        toast(m.msg, 'err');
+      }
     }) ?? null;
   }
 
