@@ -23,6 +23,7 @@
 
 import * as THREE from 'three';
 import { isTyping, onOverlayChange, overlayCount } from '../ui/keyboard.ts';
+import { held, isKey, type KeyAction } from '../ui/keys.ts';
 import type { Character } from './contract.ts';
 import type { Collider } from './collision.ts';
 
@@ -385,11 +386,11 @@ export class Player {
     let ix = 0;
     let iz = 0;
     const k = this.keys;
-    if (k.has('KeyW') || k.has('ArrowUp')) iz += 1;
-    if (k.has('KeyS') || k.has('ArrowDown')) iz -= 1;
-    if (k.has('KeyD') || k.has('ArrowRight')) ix += 1;
-    if (k.has('KeyA') || k.has('ArrowLeft')) ix -= 1;
-    let run = k.has('ShiftLeft') || k.has('ShiftRight');
+    if (held(k, 'forward')) iz += 1;
+    if (held(k, 'back')) iz -= 1;
+    if (held(k, 'right')) ix += 1;
+    if (held(k, 'left')) ix -= 1;
+    let run = held(k, 'run');
     // the on-screen stick (see the input API below), when no movement key is down
     let pace = 1;
     if (ix === 0 && iz === 0 && this.stickPace > 0) {
@@ -689,10 +690,10 @@ export class Player {
       // nothing walks while a panel holds the keyboard (a key typed into the map's panel still
       // bubbles up to here)
       if (!this.enabled || overlayCount() > 0) return;
-      if (MOVE_KEYS.has(e.code)) {
+      if (MOVE_ACTIONS.some((a) => isKey(e, a))) {
         this.keys.add(e.code);
         if (e.code.startsWith('Arrow')) e.preventDefault();
-      } else if (e.code === 'KeyF' && !e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      } else if (isKey(e, 'view') && !e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey) {
         // (at a table the controls are lent out and F is the game's: Fold)
         this.setView(this.mouse.view === 'first' ? 'third' : 'first');
       }
@@ -896,7 +897,8 @@ export function showsFromFront(gesture: string): boolean {
   return EMOTE_IDS.has(gesture);
 }
 
-const MOVE_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ShiftRight']);
+/** The keys the walker holds (Settings may have moved them: ui/keys.ts). */
+const MOVE_ACTIONS: readonly KeyAction[] = ['forward', 'back', 'left', 'right', 'run'];
 
 /** A mouse or trackpad to hold: touch-only phones and tablets look with a drag (touch.ts) instead. */
 const finePointer = typeof matchMedia === 'function' ? matchMedia('(any-pointer: fine)') : null;

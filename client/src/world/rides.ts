@@ -20,6 +20,7 @@ import type { Look } from '../../../shared/src/look.ts';
 import { GOLD, beforeDraw, fin, reflect, type Finish } from './wearables.ts';
 import { calm } from '../app/comfort.ts';
 import { openPicker } from '../ui/hud/picker.ts';
+import { isKey, keyFor, keyLabel, keyed } from '../ui/keys.ts';
 
 type V3 = THREE.Vector3;
 const V = (x = 0, y = 0, z = 0): V3 => new THREE.Vector3(x, y, z);
@@ -946,8 +947,8 @@ export function rideKey(deps: RideKeyDeps): () => void {
       openPicker({
         root: deps.ui,
         title: 'Your rides',
-        subtitle: 'Pick one to get on. B steps off again.',
-        key: 'KeyB',
+        subtitle: `Pick one to get on. ${keyLabel('ride')} steps off again.`,
+        key: keyFor('ride'),
         rows: mine.map((id) => ({ id, name: (itemOfKind(id, 'ride') as ShopItem).name, ...(id === last ? { note: 'last ridden' } : {}) })),
         pick: (id) => {
           const now = deps.profile();
@@ -974,7 +975,7 @@ export function rideKey(deps: RideKeyDeps): () => void {
       });
   };
   const onKey = (e: KeyboardEvent) => {
-    if (e.code !== 'KeyB' || e.repeat || e.ctrlKey || e.metaKey || e.altKey || busy || !deps.allowed(e)) return;
+    if (!isKey(e, 'ride') || e.repeat || e.ctrlKey || e.metaKey || e.altKey || busy || !deps.allowed(e)) return;
     if (toggle()) e.preventDefault();
   };
   addEventListener('keydown', onKey);
@@ -991,7 +992,7 @@ export function rideKey(deps: RideKeyDeps): () => void {
     shown = key;
     hint.hidden = !r;
     if (!r) return;
-    const label = `${rideLabel(r)} (B)`;
+    const label = `${rideLabel(r)} (${keyLabel('ride')})`;
     words.textContent = r === 'off' ? 'Step off' : rideLabel(r);
     hint.title = label;
     hint.setAttribute('aria-label', label);
@@ -999,13 +1000,18 @@ export function rideKey(deps: RideKeyDeps): () => void {
     hint.disabled = busy;
   }
   let timer = 0;
+  let offKeys = () => {};
   if (hint && words) {
     hint.type = 'button';
     hint.className = 'ride-hint';
     hint.hidden = true;
     const cap = document.createElement('span');
     cap.className = 'world-key';
-    cap.textContent = 'B';
+    offKeys = keyed(() => {
+      cap.textContent = keyLabel('ride');
+      shown = '';
+      paint();
+    });
     hint.append(cap, words);
     // a click here mustn't also reach the floor (a click there throws a punch)
     hint.addEventListener('pointerdown', (e) => e.stopPropagation());
@@ -1020,6 +1026,7 @@ export function rideKey(deps: RideKeyDeps): () => void {
   return () => {
     removeEventListener('keydown', onKey);
     clearInterval(timer);
+    offKeys();
     hint?.remove();
     if (keyDeps === deps) keyDeps = null;
   };

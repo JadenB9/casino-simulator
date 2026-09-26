@@ -46,6 +46,7 @@ import { openValet } from '../ui/cars/valet.ts';
 import * as carsApi from '../ui/cars/api.ts';
 import { serverNow } from '../net/clock.ts';
 import { carItem } from '../../../shared/src/items.ts';
+import { keyLabel } from '../ui/keys.ts';
 import { installCheck } from '../ui/check/check.ts'; // v6 bot6: the Quick check
 import { V7 } from './v7.ts'; // v7
 
@@ -540,7 +541,7 @@ class App {
     this.emotes = mountEmotes({ root: this.ui, send: (e) => void this.link?.emote(e), owned: () => session.profile?.owned, shop: (e) => this.openShop(e) });
     const bar = this.hud.root.querySelector('.hud-right')!;
     const first = bar.querySelector('.hud-btn');
-    bar.insertBefore(socialButton('emotes', 'Emotes (G)', () => this.emotes?.toggle()), first);
+    bar.insertBefore(socialButton('emotes', `Emotes (${keyLabel('emotes')})`, () => this.emotes?.toggle()), first);
     // v6 stats6: at a table, the leaderboards open on its game's boards
     const boards = () => openLeaderboard({ root: this.ui, api: socialApi, ...(this.table ? { game: this.table.station.game } : {}) });
     bar.insertBefore(socialButton('leaderboard', 'Leaderboards', boards), first);

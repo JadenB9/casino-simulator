@@ -30,6 +30,7 @@ import { RESIDENCES, STORES, type StoreId } from '../../../shared/src/stores.ts'
 import { openStore, type StoreRow } from '../ui/stores/store.ts';
 import { SLOTS, TABLET } from '../world/home/plan.ts';
 import { SLOT_ORDER, slotItems } from '../world/home/furnish.ts';
+import { isKey, keyLabel } from '../ui/keys.ts';
 
 const owns = (id: string) => (session.profile?.owned ?? []).includes(id);
 
@@ -121,7 +122,7 @@ export class V7 {
     this.residences();
     // v7.1: Space jumps, on foot on the floor
     addEventListener('keydown', (e) => {
-      if (e.code !== 'Space' || e.repeat || isTyping(e) || overlayCount() > 0 || !d.free() || this.driving.driving || world.walker.down || !world.walker.isEnabled) return;
+      if (!isKey(e, 'jump') || e.repeat || isTyping(e) || overlayCount() > 0 || !d.free() || this.driving.driving || world.walker.down || !world.walker.isEnabled) return;
       const now = performance.now();
       if (now - this.jumpAt < 800) return;
       this.jumpAt = now;
@@ -133,7 +134,7 @@ export class V7 {
     });
     // v7.4: C crouches and stands you up again, on foot on the floor
     addEventListener('keydown', (e) => {
-      if (e.code !== 'KeyC' || e.repeat || e.metaKey || e.ctrlKey || isTyping(e) || overlayCount() > 0 || !d.free() || this.driving.driving || world.walker.down || !world.walker.isEnabled) return;
+      if (!isKey(e, 'crouch') || e.repeat || e.metaKey || e.ctrlKey || isTyping(e) || overlayCount() > 0 || !d.free() || this.driving.driving || world.walker.down || !world.walker.isEnabled) return;
       e.preventDefault();
       this.setCrouch(!this.crouched);
     });
@@ -275,7 +276,7 @@ export class V7 {
       openStore({
         root: this.d.ui,
         title: 'Ace Arms',
-        subtitle: 'V draws your gun and puts it away, a left click fires. Security hears every shot in the casino',
+        subtitle: `${keyLabel('gun')} draws your gun and puts it away, a left click fires. Security hears every shot in the casino`,
         sfx: this.d.sfx,
         // v7.4: yours at once, in your hand (V puts it away)
         bought: (id) => {

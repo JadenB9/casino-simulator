@@ -5,6 +5,7 @@
 // camera only.
 
 import { el } from '../kit.ts';
+import { keyLabel } from '../keys.ts';
 import { segmented } from './parts.ts';
 import { SENS_MAX, SENS_MIN, loadMouse, setMouseSettings, type View } from '../../world/mouse.ts';
 import { drinkFx, setDrinkFx } from '../../world/consumables/prefs.ts';
@@ -26,7 +27,7 @@ export function controlSettings(row: Row): HTMLElement[] {
   const camera = row(
     'Camera',
     view.root,
-    el('p', 'set-note', fine ? 'Third person follows behind you; first person sees the floor through your eyes. F switches on the floor.' : 'Third person follows behind you; first person sees the floor through your eyes.'),
+    el('p', 'set-note', fine ? `Third person follows behind you; first person sees the floor through your eyes. ${keyLabel('view')} switches on the floor.` : 'Third person follows behind you; first person sees the floor through your eyes.'),
   );
   // the bar menu has the same switch (world/consumables/prefs.ts)
   const sway = segmented<'on' | 'off'>(

@@ -9,6 +9,7 @@ import { el } from '../kit.ts';
 import type { SfxLike } from '../menu/deps.ts';
 import { medal } from './icons.ts';
 import { unlockKind, unlockSub } from './lines.ts';
+import { keyLabel } from '../keys.ts';
 
 const SHOW_MS = 5200;
 const OUT_MS = 380;
@@ -61,7 +62,7 @@ export class UnlockCards {
     }
     const card = el('button', `ft-card panel ${f.kind}`);
     card.type = 'button';
-    card.title = 'Achievements (J)';
+    card.title = `Achievements (${keyLabel('feats')})`;
     const text = el('div', 'ft-card-text');
     text.append(
       el('div', 'ft-card-kind', unlockKind(f)),

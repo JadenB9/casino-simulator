@@ -1,0 +1,10 @@
+/* v7.4: the Keys block in Settings (keybinds.ts) */
+.keys-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 2px 20px; }
+.keys-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 40px; border-bottom: 1px solid var(--line); }
+.keys-name { font-size: 15px; color: var(--ink-2); }
+.keys-key { min-width: 64px; height: 30px; padding: 0 10px; border: 1px solid rgba(241, 213, 154, 0.34); border-bottom-width: 2px; border-radius: 4px; background: rgba(255, 255, 255, 0.03); color: var(--ink); font: 600 14px/1 var(--ui); letter-spacing: 0.04em; cursor: pointer; white-space: nowrap; }
+.keys-key:hover { border-color: var(--brass-hi); }
+.keys-key:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.keys-key.waiting { border-color: var(--brass-hi); color: var(--brass-hi); background: rgba(226, 190, 118, 0.12); }
+.keys-note { margin-top: 10px; }
+.keys-reset { margin-top: 10px; }

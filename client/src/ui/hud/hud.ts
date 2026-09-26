@@ -16,6 +16,7 @@ import { openSettings } from './settings.ts';
 import { openShortcuts } from './shortcuts.ts';
 import { netStart, sessionNet } from './net.ts';
 import { calm } from '../../app/comfort.ts';
+import { isKey, keyLabel } from '../keys.ts';
 import { mountReminder } from './reminder.ts'; // v6.1 casino61: the play reminder
 
 export interface HudDeps {
@@ -119,7 +120,7 @@ export function mountHud(deps: HudDeps): Hud {
   const onlineN = el('span', 'money', '');
   online.append(el('i', 'dot'), onlineN, el('span', 'hud-online-label', 'online'));
   online.hidden = true;
-  const mute = iconButton(deps.sfx.muted ? 'muted' : 'sound', 'Mute (M)', () => toggleMute());
+  const mute = iconButton(deps.sfx.muted ? 'muted' : 'sound', `Mute (${keyLabel('mute')})`, () => toggleMute());
   const settings = iconButton('gear', 'Settings', () => (deps.onSettings ? deps.onSettings() : openSettings({ root: deps.root, sfx: deps.sfx, onClose: paintMute })));
   const help = iconButton('help', 'Keyboard shortcuts (?)', () => toggleShortcuts());
   // Tips at the tables: the best play where a game has one. Lit while it's on.
@@ -192,7 +193,7 @@ export function mountHud(deps: HudDeps): Hud {
   const paintMute = () => {
     mute.replaceChildren(icon(deps.sfx.muted ? 'muted' : 'sound'));
     mute.setAttribute('aria-pressed', String(deps.sfx.muted));
-    mute.title = deps.sfx.muted ? 'Unmute (M)' : 'Mute (M)';
+    mute.title = `${deps.sfx.muted ? 'Unmute' : 'Mute'} (${keyLabel('mute')})`;
   };
   const toggleMute = () => {
     deps.sfx.setMuted(!deps.sfx.muted);
@@ -215,7 +216,7 @@ export function mountHud(deps: HudDeps): Hud {
     if (e.key === '?') {
       e.preventDefault();
       toggleShortcuts();
-    } else if (e.code === 'KeyM' && !e.shiftKey) {
+    } else if (isKey(e, 'mute') && !e.shiftKey) {
       e.preventDefault();
       toggleMute();
     }

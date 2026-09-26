@@ -13,6 +13,7 @@ import type { Player } from './player.ts';
 import type { WorldStation } from './stations.ts';
 import { playPoseWorld } from './stations.ts';
 import type { CashierPoint } from './contract.ts';
+import { isKey, keyLabel } from '../ui/keys.ts';
 
 const REACH = 1.6;
 /** In front: the cosine of the widest angle off the facing or the camera's look (about 75 degrees). */
@@ -266,14 +267,14 @@ export class Interact {
       return;
     }
     const parts = t.kind === 'cashier' ? ['Cashier'] : t.kind === 'spot' ? [t.spot.label] : [t.station.name, t.station.limits].filter(Boolean);
-    this.prompt.append('Press ', el('span', 'world-key', 'E'), ...parts.map((x) => ` · ${x}`));
+    this.prompt.append('Press ', el('span', 'world-key', keyLabel('interact')), ...parts.map((x) => ` · ${x}`));
     this.prompt.hidden = false;
   }
 
   private onKey = (e: KeyboardEvent): void => {
     if (isTyping(e)) return;
     // (a key typed into an open panel, the map say, still bubbles up to here: not for us)
-    if (e.code === 'KeyE' && !e.repeat && !this.seated && !this.fly && this.player.isEnabled && this.current && overlayCount() === 0) {
+    if (isKey(e, 'interact') && !e.repeat && !this.seated && !this.fly && this.player.isEnabled && this.current && overlayCount() === 0) {
       e.preventDefault();
       const t = this.current;
       if (t.kind === 'station') this.enter(t.station);

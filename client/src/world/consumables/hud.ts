@@ -8,6 +8,7 @@ import { el } from '../../ui/kit.ts';
 import { barItem } from '../../../../shared/src/items.ts';
 import type { Chip } from './effects.ts';
 import { calm } from '../../app/comfort.ts';
+import { keyLabel, keyed } from '../../ui/keys.ts';
 
 export interface HeldInfo {
   item: string;
@@ -30,6 +31,8 @@ export class DineHud {
   private readonly note = el('span', 'dine-card-note');
   private readonly chips = el('div', 'dine-chips');
   private readonly vignette = el('div', 'dine-vignette');
+  private readonly actKey = el('kbd', 'kc');
+  private readonly offKeys = keyed(() => (this.actKey.textContent = keyLabel('sip')));
   private blurred = 0;
   private chipEls = new Map<string, { root: HTMLElement; time: HTMLElement; name: HTMLElement; bar: HTMLElement }>();
 
@@ -38,7 +41,7 @@ export class DineHud {
     head.append(this.name);
     this.bar.append(this.fill);
     this.act.type = 'button';
-    this.act.append(el('kbd', 'kc', 'Q'), this.actLabel);
+    this.act.append(this.actKey, this.actLabel);
     this.act.addEventListener('click', (e) => {
       e.stopPropagation();
       onAct();
@@ -66,7 +69,7 @@ export class DineHud {
     this.act.hidden = !h.action;
     if (h.action) {
       this.actLabel.textContent = h.action;
-      this.act.setAttribute('aria-label', `${h.action} (Q)`);
+      this.act.setAttribute('aria-label', `${h.action} (${keyLabel('sip')})`);
     }
     this.note.textContent = h.note;
     this.note.hidden = !h.note;
@@ -114,6 +117,7 @@ export class DineHud {
   }
 
   dispose(): void {
+    this.offKeys();
     const canvas = document.getElementById('scene');
     if (canvas && this.blurred > 0) canvas.style.filter = '';
     this.root.remove();

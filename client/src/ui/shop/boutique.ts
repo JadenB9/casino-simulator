@@ -27,6 +27,7 @@ import { mannequins } from '../editor/mannequin.ts';
 import { Showroom, framingFor, type Mood, type Shower } from './showroom.ts';
 import { applyMoney } from './bar.ts';
 import { newOp } from './api.ts';
+import { keyLabel } from '../keys.ts';
 import {
   NEW_IDS, REACH_TEXT, SECTIONS, WEAR_KINDS, clockText, entries, entryOf, inVault, rewardFeat, roomName, secsText, waitFor,
   type Entry, type Section,
@@ -369,7 +370,7 @@ export function openShop(deps: ShopDeps): Closable {
     if (e.section === 'emote') {
       if (!isOwned(e)) return { line: money, ...buy };
       const got = owned?.get(e.id);
-      return { line: { text: `On your emote wheel (G). ${got?.feat ? 'Earned' : 'Yours since'} ${since(e)}.`, kind: '' }, label: 'Show me again', enabled: true };
+      return { line: { text: `On your emote wheel (${keyLabel('emotes')}). ${got?.feat ? 'Earned' : 'Yours since'} ${since(e)}.`, kind: '' }, label: 'Show me again', enabled: true };
     }
     // worn pieces and rides
     const words = wearWords(e);

@@ -19,6 +19,7 @@ import { CHAT_MAX, cleanChat, type ChatLine, type ChatServerMsg } from '../../..
 import { el } from '../kit.ts';
 import { holdKeyboard, isTyping, overlayCount } from '../keyboard.ts';
 import { RoomLog, SendGate, chatLook, nameHue, type RoomId } from './model.ts';
+import { isKey, keyLabel, keyed } from '../keys.ts';
 
 /** Where a room's lines go out: FloorLink.say, or the table socket. False while it's down. */
 export interface RoomLink {
@@ -63,6 +64,7 @@ export class ChatPanel {
   muted = load(MUTED_KEY) === '1';
   private readonly dock = el('button', 'chat-dock');
   private readonly dockBadge = el('span', 'chat-badge');
+  private offKeys: () => void = () => {};
   private readonly box = el('div', 'chat-box');
   private readonly peeks = el('div', 'chat-peeks');
   private readonly scroller = el('div', 'chat-log');
@@ -95,8 +97,11 @@ export class ChatPanel {
     // The dock.
     this.dock.type = 'button';
     this.dock.setAttribute('aria-expanded', 'false');
-    this.dock.title = 'Chat (T or Enter)';
-    const kc = el('kbd', 'chat-kc', 'T');
+    const kc = el('kbd', 'chat-kc');
+    this.offKeys = keyed(() => {
+      kc.textContent = keyLabel('chat');
+      this.dock.title = `Chat (${keyLabel('chat')} or Enter)`;
+    });
     this.dock.append(icon('chat'), el('span', 'chat-dock-label', 'Chat'), this.dockBadge, kc);
     // Idle on a touch screen the dock stays under the log: a tap there starts typing.
     // (v7.2: on a touch screen the chat button closes an open chat again; with a keyboard it goes to the box)
@@ -338,6 +343,7 @@ export class ChatPanel {
   }
 
   dispose(): void {
+    this.offKeys();
     this.input.blur();
     this.release?.();
     this.release = null;
@@ -399,7 +405,7 @@ export class ChatPanel {
 
   private onKey = (e: KeyboardEvent): void => {
     if (!this.visible || this.release || e.defaultPrevented || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
-    if (e.code !== 'KeyT' && e.key !== 'Enter') return;
+    if (!isKey(e, 'chat') && e.key !== 'Enter') return;
     if (isTyping(e) || overlayCount() > 0) return;
     const t = e.target instanceof Element ? e.target : null;
     // Enter on a focused button presses that button; the chat's own buttons handle their keys.

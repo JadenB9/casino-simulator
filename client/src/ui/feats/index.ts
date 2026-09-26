@@ -23,6 +23,7 @@ import { cupIcon } from './icons.ts';
 import { titleText } from './lines.ts';
 import { openFeats, type FeatsApi, type FeatsSheet } from './sheet.ts';
 import { UnlockCards } from './unlock.ts';
+import { isKey, keyLabel, keyed } from '../keys.ts';
 
 export { openFeats, type FeatsApi, type FeatsSheet } from './sheet.ts';
 export { UnlockCards } from './unlock.ts';
@@ -81,15 +82,17 @@ export function mountFeats(deps: FeatsDeps): FeatsUi {
 
   const button = el('button', 'hud-btn');
   button.type = 'button';
-  button.title = 'Achievements (J)';
-  button.setAttribute('aria-label', 'Achievements (J)');
+  const offKeys = keyed(() => {
+    button.title = `Achievements (${keyLabel('feats')})`;
+    button.setAttribute('aria-label', button.title);
+  });
   button.append(cupIcon());
   button.addEventListener('click', toggle);
 
   const onKey = (e: KeyboardEvent) => {
     // (Shift+J joins the newest invite: ui/lobby/invites.ts)
     if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || e.repeat || isTyping(e)) return;
-    if (e.code !== 'KeyJ') return;
+    if (!isKey(e, 'feats')) return;
     e.preventDefault();
     toggle();
   };
@@ -152,6 +155,7 @@ export function mountFeats(deps: FeatsDeps): FeatsUi {
       land(m.feat, Date.now());
     },
     dispose() {
+      offKeys();
       removeEventListener('keydown', onKey);
       offSession();
       sheet?.close();

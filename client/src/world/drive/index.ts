@@ -19,6 +19,7 @@ import { serverNow } from '../../net/clock.ts';
 import { byteToYaw, type FloorLink } from '../../net/presence.ts';
 import { el, toast } from '../../ui/kit.ts';
 import { isTyping, overlayCount } from '../../ui/keyboard.ts';
+import { held, isKey, type KeyAction } from '../../ui/keys.ts';
 import { calm } from '../../app/comfort.ts';
 import type { Sfx } from '../../audio/sfx.ts';
 import type { FloorWorld } from '../index.ts';
@@ -55,6 +56,8 @@ const OUT_OF_GARAGE = { x: 162.2, z: 18, yaw: Math.PI };
 const REACH = 3.4;
 /** Wait this long for the floor to say you're in before giving up (ms). */
 const CONFIRM_MS = 6000;
+/** What the car holds down: the walking keys steer and drive it, the jump is the handbrake. */
+const DRIVE_KEYS: readonly KeyAction[] = ['forward', 'back', 'left', 'right', 'jump'];
 /** A crash this hard (m/s into something) makes a sound and shakes the camera. */
 const CRASH_V = 3;
 
@@ -272,14 +275,14 @@ export class Driving {
       return;
     }
     const k = this.keys;
-    let throttle = (k.has('KeyW') || k.has('ArrowUp') ? 1 : 0) - (k.has('KeyS') || k.has('ArrowDown') ? 1 : 0);
-    let steer = (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0) - (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0);
+    let throttle = (held(k, 'forward') ? 1 : 0) - (held(k, 'back') ? 1 : 0);
+    let steer = (held(k, 'left') ? 1 : 0) - (held(k, 'right') ? 1 : 0);
     const stick = w.walker.stickInput;
     if (throttle === 0 && steer === 0 && stick) {
       throttle = stick.y;
       steer = -stick.x;
     }
-    const handbrake = k.has('Space');
+    const handbrake = held(k, 'jump');
     const was = m.s.v;
     const before = { x: m.s.x, z: m.s.z };
     stepCar(m.s, { throttle: overlayCount() > 0 ? 0 : throttle, steer, handbrake }, m.h, Math.min(dt, 0.05));
@@ -566,13 +569,13 @@ export class Driving {
       return;
     }
     if (overlayCount() > 0) return;
-    if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
+    if (DRIVE_KEYS.some((a) => isKey(e, a))) {
       this.keys.add(e.code);
       e.preventDefault();
       return;
     }
     if (e.repeat) return;
-    if (e.code === 'KeyE') {
+    if (isKey(e, 'interact')) {
       e.preventDefault();
       e.stopImmediatePropagation();
       if (Math.abs(this.mine.s.v) > 3) {
@@ -580,13 +583,13 @@ export class Driving {
         return;
       }
       this.getOut();
-    } else if (e.code === 'KeyH') {
+    } else if (isKey(e, 'horn')) {
       const now = performance.now();
       if (now - this.hornAt > 500) {
         this.hornAt = now;
         this.sounds.horn(0, 0.5);
       }
-    } else if (e.code === 'KeyC') {
+    } else if (isKey(e, 'carView')) {
       this.view = this.view === 'chase' ? 'seat' : 'chase';
       this.cam.set = false;
     }

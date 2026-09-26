@@ -19,6 +19,7 @@ import { drinkFx } from './prefs.ts';
 import { acts, planFor, stateAt, type Plan, type State } from './schedule.ts';
 import { useSound, type AudioOut } from './sounds.ts';
 import { addExtra, addOwnAct, extraAt, firstSeen, now, ownActs, setMyOrder } from './state.ts';
+import { isKey } from '../../ui/keys.ts';
 
 export interface DinerDeps {
   ui: HTMLElement;
@@ -223,7 +224,7 @@ export class Diner {
   }
 
   private onKey = (e: KeyboardEvent): void => {
-    if (e.code !== 'KeyQ' || e.repeat || e.metaKey || e.ctrlKey || e.altKey || isTyping(e) || overlayCount() > 0) return;
+    if (!isKey(e, 'sip') || e.repeat || e.metaKey || e.ctrlKey || e.altKey || isTyping(e) || overlayCount() > 0) return;
     if (this.sip()) e.preventDefault();
   };
 }

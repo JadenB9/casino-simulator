@@ -12,6 +12,8 @@ import { openSheet } from '../menu/sheet.ts';
 import { segmented } from '../menu/parts.ts';
 import { bigWinSettings } from '../feed/settings.ts'; // features: big-win toasts
 import { controlSettings } from '../menu/controls.ts'; // world: the camera and mouse look
+import { keySettings } from '../menu/keybinds.ts';
+import { keyLabel } from '../keys.ts';
 import { inviteSettings } from '../lobby/invite-settings.ts'; // v6 invite6: do not disturb
 import { reminderSettings } from '../menu/reminder.ts'; // v6.1 casino61: the play reminder and loss limit
 
@@ -45,7 +47,16 @@ function row(label: string, control: HTMLElement, note?: HTMLElement): HTMLEleme
 
 export function openSettings(deps: SettingsDeps): Closable {
   const running = deps.quality ?? LOADED_QUALITY;
-  const sheet = openSheet(deps.root, { title: 'Settings', cls: 'settings-sheet', onClose: deps.onClose });
+  // v7.4: rebindable keys, where there's a keyboard
+  const keys = matchMedia('(any-pointer: fine)').matches ? keySettings() : null;
+  const sheet = openSheet(deps.root, {
+    title: 'Settings',
+    cls: 'settings-sheet',
+    onClose: () => {
+      keys?.dispose();
+      deps.onClose?.();
+    },
+  });
 
   // graphics
   const qNote = el('p', 'set-note', '');
@@ -107,9 +118,10 @@ export function openSettings(deps: SettingsDeps): Closable {
     row('Quality', quality.root, qBox),
     row('Flashing & motion', calmCtl.root, el('p', 'set-note', 'Reduced: steady lights instead of flashing and chasing, fewer particles, no camera shake.')),
     el('h3', 'section-label', 'Audio'),
-    row('Sound', sound.root, el('p', 'set-note', 'M mutes and unmutes anywhere.')),
+    row('Sound', sound.root, el('p', 'set-note', `${keyLabel('mute')} mutes and unmutes anywhere.`)),
     row('Volume', volWrap),
     ...controlSettings(row), // world: the camera and mouse look
+    ...(keys?.nodes ?? []),
   );
   return { root: sheet.root, close: () => sheet.close() };
 }

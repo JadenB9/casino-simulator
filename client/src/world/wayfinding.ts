@@ -14,6 +14,7 @@ import { CATALOG } from '../../../shared/src/games/catalog.ts';
 import { roomAt, type FloorPlan, type PlannedRoom } from './layout.ts';
 import { FURNITURE } from './furniture-spec.ts';
 import { stationName } from './stations.ts';
+import { isKey, keyLabel, keyed } from '../ui/keys.ts';
 
 const DIRECTORY_W = FURNITURE.directory.w;
 
@@ -245,11 +246,15 @@ export class MapOverlay {
   private hudCheck = 0;
   private alt: ElsewhereMap | null = null;
 
+  private readonly offKeys: () => void;
+
   constructor(private readonly deps: MapDeps) {
     const b = el('button', 'hud-btn map-btn');
     b.type = 'button';
-    b.title = 'Map (N)';
-    b.setAttribute('aria-label', 'Map of the casino (N)');
+    this.offKeys = keyed(() => {
+      b.title = `Map (${keyLabel('map')})`;
+      b.setAttribute('aria-label', `Map of the casino (${keyLabel('map')})`);
+    });
     b.append(mapIcon());
     b.addEventListener('click', () => this.toggle());
     this.button = b;
@@ -282,7 +287,7 @@ export class MapOverlay {
       sheet.body.append(alt.body);
       this.youEl = alt.you;
       sheet.panel.addEventListener('keydown', (e) => {
-        if (e.code === 'KeyN' && !e.ctrlKey && !e.metaKey && !e.altKey && !isTyping(e)) {
+        if (isKey(e, 'map') && !e.ctrlKey && !e.metaKey && !e.altKey && !isTyping(e)) {
           e.preventDefault();
           this.close();
         }
@@ -302,7 +307,7 @@ export class MapOverlay {
     } else sheet.body.append(this.draw(), this.caption);
     // N closes it again from inside the panel (the sheet keeps other keys to itself)
     sheet.panel.addEventListener('keydown', (e) => {
-      if (e.code === 'KeyN' && !e.ctrlKey && !e.metaKey && !e.altKey && !isTyping(e)) {
+      if (isKey(e, 'map') && !e.ctrlKey && !e.metaKey && !e.altKey && !isTyping(e)) {
         e.preventDefault();
         this.close();
       }
@@ -372,6 +377,7 @@ export class MapOverlay {
   }
 
   dispose(): void {
+    this.offKeys();
     this.close();
     this.button.remove();
     removeEventListener('keydown', this.onKey);
@@ -476,7 +482,7 @@ export class MapOverlay {
   }
 
   private onKey = (e: KeyboardEvent): void => {
-    if (e.code !== 'KeyN' || e.repeat || e.ctrlKey || e.metaKey || e.altKey || isTyping(e)) return;
+    if (!isKey(e, 'map') || e.repeat || e.ctrlKey || e.metaKey || e.altKey || isTyping(e)) return;
     if (this.sheet) return; // the panel's own listener closes it
     if (overlayCount() > 0 || (this.deps.canOpen && !this.deps.canOpen())) return;
     e.preventDefault();

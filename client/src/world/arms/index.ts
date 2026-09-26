@@ -20,6 +20,7 @@ import { StreetSounds } from '../drive/sound.ts';
 import { disposeGun, gunModel, holdOf } from './models.ts';
 import './arms.css';
 import { openPicker } from '../../ui/hud/picker.ts';
+import { isKey, keyFor, keyLabel } from '../../ui/keys.ts';
 
 export interface ArmsDeps {
   engine: { scene: THREE.Scene; camera: THREE.PerspectiveCamera; canvas: HTMLElement; onFrame(fn: (dt: number) => void): () => void };
@@ -141,7 +142,7 @@ export class Arms {
   // v7.4: V, and only V: out comes your gun (a choice of them when you own more than one), and
   // V again puts it away. Left click fires it.
   private onKey = (e: KeyboardEvent): void => {
-    if (e.code !== 'KeyV' || e.repeat || isTyping(e) || overlayCount() > 0 || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (!isKey(e, 'gun') || e.repeat || isTyping(e) || overlayCount() > 0 || e.metaKey || e.ctrlKey || e.altKey) return;
     if (!this.d.free()) return;
     e.preventDefault();
     this.toggle();
@@ -166,8 +167,8 @@ export class Arms {
     openPicker({
       root: this.d.ui,
       title: 'Your guns',
-      subtitle: 'Pick one to draw. V puts it away again.',
-      key: 'KeyV',
+      subtitle: `Pick one to draw. ${keyLabel('gun')} puts it away again.`,
+      key: keyFor('gun'),
       rows: mine.map((g) => ({ id: g.id, name: g.name, note: `${g.mag} rounds${g.auto ? ', automatic' : ''}` })),
       pick: (id) => {
         const g = mine.find((x) => x.id === id);
