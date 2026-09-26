@@ -62,12 +62,17 @@ button.hud-online:focus-visible { outline: 2px solid var(--focus); outline-offse
   .hud-online { height: 44px; }
 }
 
-/* A phone on its side: one slim row, so the table keeps the height. */
+/* A phone on its side: one slim row, so the table keeps the height. v7.2: your money never gives
+   way (the online count used to slide over it); the buttons share what's left, as narrow as 34 px
+   (still a thumb's height). */
 @media (max-height: 480px) {
   :root { --below-hud: 64px; }
   .hud { padding: 8px 12px; }
   .hud-stat { padding: 4px 12px 5px; }
   .hud-stat .stat-value { font-size: 17px; }
+  .hud-left { flex-shrink: 0; }
+  .hud-right { min-width: 0; flex-shrink: 1; gap: 4px; }
+  .hud-right > .hud-btn { flex: 0 1 44px; width: auto; min-width: 34px; }
 }
 
 /* A phone upright: two rows. You, your money, who's online and (at a table) Leave on top; every

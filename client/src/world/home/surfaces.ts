@@ -32,9 +32,17 @@ function canvas(w: number, h = w): [HTMLCanvasElement, CanvasRenderingContext2D]
   return [c, c.getContext('2d')!];
 }
 
-/** Draw something nine times, a whole canvas apart, so what crosses an edge comes in at the other (it tiles). */
-function wrapped(size: number, draw: (dx: number, dy: number) => void): void {
-  for (const dx of [-size, 0, size]) for (const dy of [-size, 0, size]) draw(dx, dy);
+/**
+ * Draw something again a whole canvas over wherever it crosses an edge, so it comes in at the other
+ * (it tiles). `at` and `r`: where it is and how far it reaches (without them, all nine copies).
+ */
+function wrapped(size: number, draw: (dx: number, dy: number) => void, at?: { x: number; y: number; r: number }): void {
+  for (const dx of [-size, 0, size]) {
+    for (const dy of [-size, 0, size]) {
+      if (at && (at.x + dx + at.r < 0 || at.x + dx - at.r > size || at.y + dy + at.r < 0 || at.y + dy - at.r > size)) continue;
+      draw(dx, dy);
+    }
+  }
 }
 
 /** Every pixel times a little noise (fibre, pores, grit), in the grey's own range. */
@@ -123,15 +131,19 @@ export function drawLeather(size: number, seed: number): HTMLCanvasElement {
     const y = rand() * size;
     const r = size / 260 + rand() * (size / 160);
     const k = 214 + rand() * 36;
-    wrapped(size, (dx, dy) => {
-      const g = ctx.createRadialGradient(x + dx - r * 0.3, y + dy - r * 0.3, 0, x + dx, y + dy, r);
-      g.addColorStop(0, `rgba(${k},${k},${k},0.7)`);
-      g.addColorStop(1, 'rgba(170,170,170,0.18)');
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.arc(x + dx, y + dy, r, 0, Math.PI * 2);
-      ctx.fill();
-    });
+    wrapped(
+      size,
+      (dx, dy) => {
+        const g = ctx.createRadialGradient(x + dx - r * 0.3, y + dy - r * 0.3, 0, x + dx, y + dy, r);
+        g.addColorStop(0, `rgba(${k},${k},${k},0.7)`);
+        g.addColorStop(1, 'rgba(170,170,170,0.18)');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(x + dx, y + dy, r, 0, Math.PI * 2);
+        ctx.fill();
+      },
+      { x, y, r },
+    );
   }
   // creases
   ctx.strokeStyle = 'rgba(90,90,90,0.16)';
@@ -141,12 +153,16 @@ export function drawLeather(size: number, seed: number): HTMLCanvasElement {
     const y = rand() * size;
     const a = rand() * Math.PI * 2;
     const l = size * (0.03 + rand() * 0.08);
-    wrapped(size, (dx, dy) => {
-      ctx.beginPath();
-      ctx.moveTo(x + dx, y + dy);
-      ctx.quadraticCurveTo(x + dx + Math.cos(a + 0.6) * l * 0.5, y + dy + Math.sin(a + 0.6) * l * 0.5, x + dx + Math.cos(a) * l, y + dy + Math.sin(a) * l);
-      ctx.stroke();
-    });
+    wrapped(
+      size,
+      (dx, dy) => {
+        ctx.beginPath();
+        ctx.moveTo(x + dx, y + dy);
+        ctx.quadraticCurveTo(x + dx + Math.cos(a + 0.6) * l * 0.5, y + dy + Math.sin(a + 0.6) * l * 0.5, x + dx + Math.cos(a) * l, y + dy + Math.sin(a) * l);
+        ctx.stroke();
+      },
+      { x, y, r: l },
+    );
   }
   speckle(ctx, size, 0.08, rand);
   return c;
