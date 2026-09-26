@@ -324,9 +324,12 @@ export class Presence {
 
   /** v6: keep a player inside `rect` (the jail), or let them go (null). */
   confine(accountId: number, rect: Rect | null): boolean {
-    return this.update(accountId, (a) => {
+    const found = this.update(accountId, (a) => {
       a.confine = rect;
     });
+    // v7: everyone knows who is inside (the online list offers to bail them out)
+    if (found) this.broadcast({ t: 'player', id: accountId, jailed: rect !== null });
+    return found;
   }
 
   /** v6: where a player is now (cm), or null if they aren't on the floor. */
@@ -508,7 +511,7 @@ export class Presence {
 }
 
 function info(a: FloorAtt): PlayerInfo {
-  return { id: a.accountId, name: a.name, look: a.look, x: a.x, z: a.z, r: a.r, at: a.at, seat: a.seat?.id ?? null, car: a.car ?? null, parked: a.parked ?? null, gun: a.gun ?? null };
+  return { id: a.accountId, name: a.name, look: a.look, x: a.x, z: a.z, r: a.r, at: a.at, seat: a.seat?.id ?? null, car: a.car ?? null, parked: a.parked ?? null, gun: a.gun ?? null, jailed: !!a.confine };
 }
 
 /**

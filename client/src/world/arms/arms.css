@@ -1,0 +1,6 @@
+/* v7: a gun drawn: a small crosshair in the middle and the rounds left, low on the right. */
+.arms-cross { position: fixed; left: 50%; top: 50%; width: 18px; height: 18px; margin: -9px 0 0 -9px; pointer-events: none; z-index: 11; }
+.arms-cross::before, .arms-cross::after { content: ''; position: absolute; background: rgba(255, 244, 220, 0.9); box-shadow: 0 0 2px rgba(0, 0, 0, 0.8); }
+.arms-cross::before { left: 8px; top: 0; width: 2px; height: 18px; }
+.arms-cross::after { top: 8px; left: 0; width: 18px; height: 2px; }
+.arms-ammo { position: fixed; right: 16px; bottom: 70px; padding: 8px 14px; font-size: 14px; letter-spacing: 0.06em; color: var(--ink-2); font-variant-numeric: tabular-nums; z-index: 11; pointer-events: none; }

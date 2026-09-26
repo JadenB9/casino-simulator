@@ -290,6 +290,13 @@ export class CasinoFloor extends DurableObject<Env> {
     } else if (msg.t === 'draw') {
       this.presence.touch(ws, Date.now());
       this.street.draw(ws, msg.gun);
+    } else if (msg.t === 'bail') {
+      // v7: pay someone's bail (law.ts)
+      this.presence.touch(ws, Date.now());
+      const id = this.presence.accountOf(ws);
+      const no = id === null ? 'Not here.' : await this.law.bailOut(id, msg.id, Date.now());
+      // (paid: everyone hears the release, with who paid it)
+      if (no) this.send(ws, { t: 'err', code: 'NOT_ELIGIBLE', msg: no });
     } else if (msg.t === 'shoot') {
       this.presence.touch(ws, Date.now());
       this.street.shoot(ws, msg.r, Date.now());

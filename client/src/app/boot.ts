@@ -47,6 +47,7 @@ import * as carsApi from '../ui/cars/api.ts';
 import { serverNow } from '../net/clock.ts';
 import { carItem } from '../../../shared/src/items.ts';
 import { installCheck } from '../ui/check/check.ts'; // v6 bot6: the Quick check
+import { V7 } from './v7.ts'; // v7
 
 export async function boot(): Promise<void> {
   const ui = document.getElementById('ui')!;
@@ -135,6 +136,8 @@ class App {
   readonly diner: Diner;
   /** v6 law6: security, the pit boss, punches and the jail (world/law/). */
   private readonly law: Law;
+  /** v7: driving, apartments, stores, guns, the online list (app/v7.ts). */
+  private v7: V7 | null = null;
   /** v6 feats6: the achievements (HUD cup, J, the sheet, the card when you earn one). */
   private feats: FeatsUi | null = null;
 
@@ -181,7 +184,7 @@ class App {
       ui,
       sfx,
       character: (id) => this.remotes?.character(id) as Person | undefined,
-      canPunch: () => this.hud !== null && this.table === null && world.seated === null,
+      canPunch: () => this.hud !== null && this.table === null && world.seated === null && !this.v7?.busy,
       leaveTable: () => void this.leaveTable(),
       openBank: () => this.openCashier(),
     });
@@ -197,6 +200,19 @@ class App {
     });
     void this.cars.load();
     engine.onFrame((dt) => this.cars.update(dt));
+    // v7: driving, the street's knocks, the online list, apartments, stores and guns
+    this.v7 = new V7({
+      engine,
+      world,
+      sfx,
+      ui,
+      cars: this.cars,
+      link: () => this.link,
+      character: (id) => this.remotes?.character(id) as Person | undefined,
+      free: () => this.hud !== null && this.table === null && this.world.seated === null && !this.away,
+      law: this.law,
+      openValet: () => this.openValet(),
+    });
     session.on((p) => this.cars.setOwned(p.owned, p.name));
     // v6 looks6: B steps off your ride and back on (a look save, so everyone sees it)
     rideKey({
@@ -207,7 +223,7 @@ class App {
         if (now) session.set({ ...now, look: stored });
         return stored;
       },
-      allowed: (e) => !isTyping(e) && overlayCount() === 0 && this.hud !== null && this.table === null && this.world.seated === null,
+      allowed: (e) => !isTyping(e) && overlayCount() === 0 && this.hud !== null && this.table === null && this.world.seated === null && !this.v7?.busy,
       say: (text) => toast(text),
     });
     const rideSound = new RideSound(sfx);
@@ -423,6 +439,7 @@ class App {
     this.world.useFloor(link); // v6 city6: the elevator and the server's moves
     this.world.city.leaveTable = () => void this.leaveTable(); // v6 city6: a move while at a table
     this.law.useLink(link); // v6 law6
+    this.v7?.useLink(link); // v7
     this.world.life.useBar(this.bar);
     this.invites = this.inviteHub(link); // v6 invite6
     this.world.life.useApp({
@@ -452,6 +469,7 @@ class App {
     this.world.life.useLink(null);
     this.world.useFloor(null); // v6 city6
     this.law.useLink(null); // v6 law6
+    this.v7?.useLink(null); // v7
     this.world.useBar(null);
     if (!keepBar) {
       this.bar?.dispose();
@@ -500,6 +518,7 @@ class App {
       onProfile: () => openProfile({ root: this.ui, api, session }),
       onMenu: () => void this.backToMenu(),
       onBreak: () => void this.takeBreak(), // v6.1 casino61: the play reminder
+      onOnline: () => this.v7?.openOnline(), // v7
     });
     this.hud.setOnline(this.link?.onlineCount ?? null);
     // Emotes (G) and the leaderboards, in the HUD's right-hand bar ahead of the tips bulb.

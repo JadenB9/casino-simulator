@@ -245,6 +245,7 @@ export class FloorLink {
         if (m.car !== undefined) info.car = m.car;
         if (m.parked !== undefined) info.parked = m.parked;
         if (m.gun !== undefined) info.gun = m.gun;
+        if (m.jailed !== undefined) info.jailed = m.jailed;
         break;
       }
       case 'online':
@@ -307,6 +308,7 @@ export class FloorLink {
     known.info.car = info.car ?? null;
     known.info.parked = info.parked ?? null;
     known.info.gun = info.gun ?? null;
+    known.info.jailed = !!info.jailed;
   }
 
   private sample(p: RemotePlayer, t: number, pose: Pose): void {

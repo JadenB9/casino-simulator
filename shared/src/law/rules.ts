@@ -171,6 +171,8 @@ export interface LawEvent {
   /** v7: a theft: which inmate (jail.ts INMATES index), what he took (cents) and where he did it (m). */
   inmate?: number;
   amount?: number;
+  /** v7: a release paid by another player: who (their name). */
+  by?: string;
   x?: number;
   z?: number;
 }

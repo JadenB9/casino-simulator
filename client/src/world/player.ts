@@ -348,6 +348,14 @@ export class Player {
     (this.character.gesture as ((e: string) => void) | undefined)?.('knock');
   }
 
+  /** v7: the body faces where the camera looks (a gun drawn: you aim where you look). */
+  faceLook = false;
+
+  /** v7: which way you look (yaw, rotation.y) and how far down (radians, + down). */
+  get aim(): { yaw: number; pitch: number } {
+    return { yaw: this.camYaw + Math.PI, pitch: this.camPitch };
+  }
+
   /** v7: down on the ground after a knock (seconds left), and the slide it gave. */
   private knocked = 0;
   private readonly kvel = new THREE.Vector2();
@@ -421,7 +429,7 @@ export class Player {
     const moved = Math.hypot(p.x - this.position.x, p.z - this.position.z) / Math.max(dt, 1e-4);
     this.position.x = p.x;
     this.position.z = p.z;
-    if (this.mouse.view === 'first' && !this.showing) {
+    if ((this.mouse.view === 'first' || this.faceLook) && !this.showing) {
       // through your eyes the body faces where you look, walking or not, unless a seat holds it
       // (a ride keeps its own heading: it carves where you steer, whatever you look at)
       if (!this.sitting && !ride) this.heading = turn(this.heading, this.camYaw + Math.PI, 1 - Math.exp(-dt * 20));

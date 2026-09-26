@@ -270,6 +270,36 @@ export class Law {
     }
   }
 
+  // --- v7: bailing someone out ------------------------------------------------------------------
+
+  /**
+   * `payer` pays what's left of `inmate`'s bail (the bail less what they've won toward it) from
+   * their balance, and the inmate walks out as if they'd made it. Never from inside, never your own,
+   * never money you don't have (the balance check refuses the batch). Tells the payer why not.
+   */
+  async bailOut(payer: number, inmate: number, now: number): Promise<string | null> {
+    if (payer === inmate) return 'You can’t bail yourself out: win it at the tables.';
+    if (this.isConfined(payer)) return 'Not from in here.';
+    const jail = this.jailOf(inmate);
+    if (!jail) return 'They aren’t in jail.';
+    const db = this.env.DB;
+    const row = await db.prepare(`SELECT id, bail, won FROM casino_jail WHERE account_id = ?1 AND released_at IS NULL`).bind(inmate).first<{ id: number; bail: number; won: number }>();
+    if (!row) return 'They aren’t in jail.';
+    const owed = Math.max(100, row.bail - row.won);
+    try {
+      await db.batch([
+        db.prepare(`INSERT INTO casino_orders (op_id, account_id, item, price, created_at) VALUES (?1, ?2, 'bail-out', ?3, ?4)`).bind(`bail:${payer}:${inmate}:${now}`, payer, owed, now),
+        db.prepare(`UPDATE casino_accounts SET balance = balance - ?2, rev = rev + 1 WHERE id = ?1`).bind(payer, owed),
+      ]);
+    } catch {
+      return 'Not enough on your balance for their bail.';
+    }
+    const by = this.presence.whereIs(payer)?.name ?? 'Someone';
+    this.tell({ k: 'free', id: inmate, name: this.presence.whereIs(inmate)?.name ?? '', staff: null, why: null, by, amount: owed });
+    await this.release(inmate, row.id, now);
+    return null;
+  }
+
   // --- the pit boss --------------------------------------------------------------------------
 
   /** A table's hot streak: caught if the pit boss can see the player now. */

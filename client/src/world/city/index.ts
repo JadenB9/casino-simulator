@@ -32,7 +32,7 @@ import { openPanel, RideScreen, type PanelHandle } from './ride.ts';
 import { LiftSounds } from './sound.ts';
 import type { ZoneBuild } from './zone.ts';
 import type { Knock, RoadCar, Traffic } from './parking.ts';
-import { buildHome } from '../home/zone.ts';
+import { buildHome, type HomeBuild, type HomeInterior } from '../home/zone.ts';
 
 export { LIFTS } from '../../../../shared/src/lifts.ts';
 export { GROUND, ROOF, VALET_STAND, PICKUP, ENTRANCES, stalls } from './plan.ts';
@@ -586,6 +586,11 @@ export class City {
     if (!f || !f.player.isEnabled || f.player.down) return;
     f.player.knock(k.dx, k.dz, 0.8 + Math.min(4, k.speed * 0.25));
     this.onKnock?.(k);
+  }
+
+  /** v7: your apartment's interior, once its floor is built (the app furnishes it). */
+  homeInterior(): HomeInterior | null {
+    return (this.zones.get('home') as HomeBuild | undefined)?.home ?? null;
   }
 
   /** v7: the ground floor's traffic, once it's built. */

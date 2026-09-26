@@ -17,6 +17,7 @@ import { Kit, signAtlas, signMesh } from './kit.ts';
 import { AISLES, ENTRANCES, GROUND, STALL, SURFACE, VALET_STAND, stalls } from './plan.ts';
 import { parkedCars, Traffic } from './parking.ts';
 import { buildStreets } from './streets.ts';
+import { buildStores } from './stores.ts';
 import { LOOP } from './loop.ts';
 import { Beacons, skyDome, skylineRing, towers, rng, type Tower } from './sky.ts';
 import { SlidingDoors } from './doors.ts';
@@ -282,6 +283,8 @@ export function buildGround(mats: Mats, col: Collider, quality: Quality): ZoneBu
   const WE = G.walkEast;
   const cw = G.crosswalk;
   buildStreets(kit);
+  // v7: the gun store and the home store at the block's ends
+  const stores = buildStores(kit, group, mats, col);
   // traffic signals at the plaza's crosswalk
   for (const [x, z, face] of [
     [WW.x1 - 0.5, cw.z0 - 0.8, 1],
@@ -394,15 +397,16 @@ export function buildGround(mats: Mats, col: Collider, quality: Quality): ZoneBu
     ready,
     /** Inside the hall the lobby's warm light; out under the sky the night's. */
     light(x, z) {
-      return x >= B.x0 && x <= H.x1 && z >= H.z0 && z <= H.z1 ? 'inside' : 'outside';
+      return (x >= B.x0 && x <= H.x1 && z >= H.z0 && z <= H.z1) || stores.inside(x, z) ? 'inside' : 'outside';
     },
     ceilingAt(x, z) {
       if (x >= B.x0 && x <= H.x1 && z >= H.z0 && z <= H.z1) return HH;
       if (x >= C.x0 && x <= C.x1 && z >= C.z0 && z <= C.z1) return cy;
-      return null;
+      return stores.ceilingAt(x, z);
     },
     update(dt, people, _calm, me, cars) {
       doors.update(dt, people);
+      for (const d of stores.doors) d.update(dt, people);
       traffic.update(dt, people, me ?? null, cars ?? []);
       beacons.update(dt);
     },
@@ -413,6 +417,7 @@ export function buildGround(mats: Mats, col: Collider, quality: Quality): ZoneBu
     dispose() {
       bank.dispose();
       doors.dispose();
+      for (const d of stores.doors) d.dispose();
       parked.dispose();
       traffic.dispose();
       for (const m of [...meshes.meshes, ...glowMeshes.meshes]) m.dispose();

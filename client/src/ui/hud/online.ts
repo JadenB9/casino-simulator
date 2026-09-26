@@ -11,6 +11,8 @@ export interface OnlineRow {
   /** Where they are, in a few words ("At Blackjack", "The Pit", "On the street"). */
   where: string;
   you?: boolean;
+  /** v7: something to do for them (bail them out). */
+  action?: { label: string; run(): void };
 }
 
 export interface OnlineOpts {
@@ -31,7 +33,7 @@ export function openOnline(o: OnlineOpts): Sheet {
   let last = '';
   const paint = () => {
     const rows = o.rows().sort((a, b) => Number(!!b.you) - Number(!!a.you) || a.name.localeCompare(b.name));
-    const key = rows.map((r) => `${r.id}:${r.name}:${r.where}`).join('|');
+    const key = rows.map((r) => `${r.id}:${r.name}:${r.where}:${r.action?.label ?? ''}`).join('|');
     if (key === last) return;
     last = key;
     sheet.sub.textContent = rows.length === 1 ? 'Just you right now' : `${rows.length.toLocaleString('en-US')} players on the floor`;
@@ -40,6 +42,13 @@ export function openOnline(o: OnlineOpts): Sheet {
       ...rows.map((r) => {
         const li = el('li', `online-row${r.you ? ' you' : ''}`);
         li.append(el('i', 'dot'), el('span', 'online-name', r.name), el('span', 'online-where', r.you ? `${r.where} · you` : r.where));
+        if (r.action) {
+          const b = el('button', 'btn online-act', r.action.label);
+          b.type = 'button';
+          b.addEventListener('click', () => r.action!.run());
+          li.append(b);
+          li.classList.add('has-act');
+        }
         return li;
       }),
     );

@@ -609,7 +609,7 @@ const LINES = `
   UNION ALL
   SELECT bought_at, op_id, 'item', 'item', -price, 0, 0, 0, item, NULL, NULL FROM casino_items WHERE account_id = ?1
   UNION ALL
-  SELECT created_at, op_id, 'order', CASE WHEN op_id LIKE 'fx:%' THEN 'fx' WHEN op_id LIKE 'theft:%' THEN 'theft' ELSE 'bar' END, -price, 0, 0, 0, item, NULL, NULL FROM casino_orders WHERE account_id = ?1
+  SELECT created_at, op_id, 'order', CASE WHEN op_id LIKE 'fx:%' THEN 'fx' WHEN op_id LIKE 'theft:%' THEN 'theft' WHEN op_id LIKE 'bail:%' THEN 'bail' ELSE 'bar' END, -price, 0, 0, 0, item, NULL, NULL FROM casino_orders WHERE account_id = ?1
   UNION ALL
   SELECT b.at, b.op_id, 'bank', b.kind, b.cash, b.saved + b.locked + b.cost, b.units, b.gain, b.ref, p.name, t.note
     FROM casino_bank b LEFT JOIN casino_accounts p ON p.id = b.peer LEFT JOIN casino_transfers t ON t.op_id = b.ref

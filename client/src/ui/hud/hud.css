@@ -35,6 +35,8 @@ button.hud-online:focus-visible { outline: 2px solid var(--focus); outline-offse
 .online-name { font-size: 16px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .online-row.you .online-name { color: var(--brass-hi); }
 .online-where { font-size: 14px; color: var(--ink-3); white-space: nowrap; }
+.online-row.has-act { grid-template-columns: 10px minmax(0, 1fr) auto auto; }
+.online-act { height: 30px; padding: 0 12px; font-size: 13px; }
 .hud-btn { display: grid; place-items: center; width: 36px; height: 36px; padding: 0; background: rgba(14, 12, 10, 0.84); border: 1px solid var(--line); border-radius: 6px; color: var(--ink-2); cursor: pointer; transition: color 0.15s, border-color 0.15s; }
 .hud-btn:hover { color: var(--ink); border-color: var(--line-strong); }
 .hud-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }

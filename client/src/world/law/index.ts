@@ -29,6 +29,8 @@ import { Speech } from '../life/speech.ts';
 import { LawStaff } from './staff.ts';
 import { BANK_SPOT, buildJail, jailCeiling, type Jail } from './jail.ts';
 import { LawSounds } from './sound.ts';
+import { Inmates } from './inmates.ts';
+import type { Characters } from '../characters.ts';
 import './law.css';
 
 export interface LawDeps {
@@ -92,6 +94,10 @@ export class Law {
   /** On a touch screen, a fist beside the action button (there's no V key). */
   private readonly fist = el('button', 'law-punch', 'Punch');
   private readonly ears = new THREE.Vector3();
+  /** v7: the jail's inmates. */
+  readonly inmates: Inmates;
+  /** v7: fetch the balance again after a theft or paying someone's bail (the app sets it). */
+  refreshMoney: (() => void) | null = null;
   private readonly _watch = new THREE.Vector3();
 
   constructor(private readonly deps: LawDeps) {
@@ -102,6 +108,9 @@ export class Law {
     this.staff.nav = world.life.grid;
     engine.scene.add(this.staff.group);
     this.jail = buildJail({ quality: world.quality, collider: world.collider });
+    // v7: the inmates walking the day room and the yard
+    this.inmates = new Inmates(world.characterFactory as unknown as Characters);
+    engine.scene.add(this.inmates.group);
     this.jail.group.visible = false;
     engine.scene.add(this.jail.group);
     // the jail's tables are stations like any other: E sits down, the table view opens
@@ -239,6 +248,26 @@ export class Law {
 
   private onLaw(ev: LawEvent, now: number): void {
     const mine = ev.id === this.me();
+    // v7: an inmate walks over to someone, punches them and takes some money
+    if (ev.k === 'theft') {
+      if (ev.inmate === undefined || ev.x === undefined || ev.z === undefined) return;
+      this.inmates.rob(ev.inmate, ev.x, ev.z, now, () => {
+        const ears = this.deps.engine.camera.getWorldPosition(this.ears);
+        if (mine) {
+          const own = this.deps.world.player.character as Person;
+          own.gesture('hit');
+          this.sounds.thud(null, ears);
+          if (!calm()) this.shake = SHAKE_S;
+          toast(`An inmate punched you and took ${formatMoney(ev.amount ?? 0)}.`, 'err', 6000);
+          this.refreshMoney?.();
+          return;
+        }
+        const ch = this.deps.character(ev.id);
+        ch?.gesture('hit');
+        if (ch) this.sounds.thud(ch.root.position, ears);
+      });
+      return;
+    }
     if (ev.k === 'warn' || ev.k === 'jail') {
       // the word, over whoever came, once he's there
       if (ev.staff && ev.why) {
@@ -251,6 +280,14 @@ export class Law {
           if (m) this.speech.say(m.person.root, line, ev.staff === 'boss' ? 'Pit boss' : 'Security', 2.05);
         }, wait);
       }
+    }
+    // v7: someone paid another player's bail
+    if (ev.k === 'free' && ev.by) {
+      const me = this.link?.you;
+      if (me && ev.by === me.name && !mine) {
+        toast(`You paid ${ev.name}'s bail: ${formatMoney(ev.amount ?? 0)}. They walk out now.`, 'info', 6000);
+        this.refreshMoney?.();
+      } else if (mine) toast(`${ev.by} paid your bail. You're free to go.`, 'info', 7000);
     }
     if (!mine) return;
     if (ev.k === 'warn') {
@@ -340,6 +377,12 @@ export class Law {
     this.punch();
   };
 
+  /** v7: knock down a guard (a StaffId) or an inmate ('i0'..) that a shot hit. */
+  knockNpc(id: string): void {
+    if (isStaffId(id)) (this.staff.get(id)?.person.gesture as ((e: string) => void) | undefined)?.('knock');
+    else this.inmates.knock(id);
+  }
+
   /** Throw a punch the way you face (the V key, or a touch button). */
   punch(): void {
     const now = performance.now();
@@ -362,6 +405,7 @@ export class Law {
   private update(dt: number): void {
     const now = serverNow();
     this.jail.group.visible = this.deps.world.zone === 'ground';
+    this.inmates.update(dt, now, this.jail.group.visible);
     const p = this.deps.world.player.position;
     this.staff.update(dt, now, this._watch.set(p.x, 1.6, p.z));
     this.speech.update(dt);
@@ -432,6 +476,7 @@ export class Law {
     for (const s of this.jail.stations) ws.splice(ws.indexOf(s), 1);
     this.speech.dispose();
     this.staff.dispose();
+    this.inmates.dispose();
     this.jail.dispose();
     this.hud.remove();
     this.fade.remove();

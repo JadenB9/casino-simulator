@@ -1,0 +1,13 @@
+/* v7: a store's catalogue: sections of rows, each the thing, a line about it, its price and a button. */
+.store-sheet { width: min(640px, calc(100vw - 24px)); }
+.store-body { display: grid; gap: 18px; max-height: min(66vh, 640px); overflow: auto; padding-right: 4px; }
+.store-section { display: grid; gap: 2px; }
+.store-head { margin: 0 0 6px; font-family: var(--serif); font-size: 15px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--brass-hi); }
+.store-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 14px; padding: 10px 4px; border-bottom: 1px solid var(--line); }
+.store-row:last-child { border-bottom: 0; }
+.store-name { font-size: 16px; font-weight: 600; color: var(--ink); }
+.store-about { margin-top: 2px; font-size: 14px; line-height: 1.35; color: var(--ink-3); }
+.store-right { display: flex; align-items: center; gap: 10px; }
+.store-price { min-width: 9ch; text-align: right; font-size: 16px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.store-row.owned .store-price { color: var(--win); }
+.store-right .btn { min-width: 96px; }

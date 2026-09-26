@@ -84,6 +84,7 @@ export function describe(l: StatementLine): { text: string; account: Account } {
   if (l.src === 'item') return { text: `${shopOf(l.ref)} · ${itemName(l.ref)}`, account: 'Checking' };
   // v7: an inmate took it
   if (l.src === 'order' && l.kind === 'theft') return { text: 'Stolen in the county jail', account: 'Checking' };
+  if (l.src === 'order' && l.kind === 'bail') return { text: "Paid someone's bail", account: 'Checking' };
   if (l.src === 'order') return { text: `${l.kind === 'fx' ? 'Effect' : 'Bar'} · ${itemName(l.ref)}`, account: 'Checking' };
   const price = l.ref?.includes(':') ? formatPrice(Number(l.ref.split(':')[1])) : '';
   const units = l.units ? formatUnits(Math.abs(l.units)) : '';

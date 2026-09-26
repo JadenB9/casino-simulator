@@ -96,6 +96,8 @@ export interface PlayerInfo {
   parked?: Parked | null;
   /** v7: the gun they have drawn (arms.ts GUNS id), if any. */
   gun?: string | null;
+  /** v7: in the county jail (someone may bail them out). */
+  jailed?: boolean;
 }
 
 /** v7: a car someone got out of and left: which, and where (cm, yaw byte). */
@@ -396,7 +398,9 @@ export type FloorClientMsg =
   | { t: 'drive'; car: string | null }
   // v7: draw a gun you own, or put it away (null); fire the drawn one along `r` (yaw byte)
   | { t: 'draw'; gun: string | null }
-  | { t: 'shoot'; r: number };
+  | { t: 'shoot'; r: number }
+  // v7: pay the rest of another player's bail (they walk out)
+  | { t: 'bail'; id: number };
 
 export type FloorServerMsg =
   | { t: 'hello'; v: number; you: PlayerInfo; players: PlayerInfo[]; online: number; now: number }
@@ -404,7 +408,7 @@ export type FloorServerMsg =
   | { t: 's'; ts: number; p: [id: number, x: number, z: number, r: number, moving: 0 | 1, age?: number][] }
   | { t: 'join'; player: PlayerInfo }
   | { t: 'leave'; id: number }
-  | { t: 'player'; id: number; look?: Look; at?: { station: string } | null; seat?: string | null; car?: string | null; parked?: Parked | null; gun?: string | null }
+  | { t: 'player'; id: number; look?: Look; at?: { station: string } | null; seat?: string | null; car?: string | null; parked?: Parked | null; gun?: string | null; jailed?: boolean }
   // a seat you asked for and didn't get (someone got there first, or it's out of reach)
   | { t: 'seat.no'; seat: string; msg: string }
   | { t: 'online'; n: number }
@@ -486,6 +490,9 @@ export function parseFloorMsg(raw: unknown, isGame: (g: unknown) => g is GameId)
     case 'shoot':
       if (!isInt(raw.r) || raw.r < 0 || raw.r > 255) return null;
       return { t: 'shoot', r: raw.r };
+    case 'bail':
+      if (!isInt(raw.id) || raw.id <= 0) return null;
+      return { t: 'bail', id: raw.id };
     case 'emote':
       if (!isOneOf(raw.e, EMOTES)) return null;
       return { t: 'emote', e: raw.e };
