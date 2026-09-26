@@ -296,7 +296,8 @@ export function fitOf(root: THREE.Object3D): BoardFit | null {
 // --- the controls over the scene -----------------------------------------------------------------
 
 /** Never obstacles: prompts that come and go (a modal, a toast), and boards drawn in the DOM. */
-const NOT_CHROME = ['modal', 'scrim', 'toasts', 'toast', 'world-prompt', 'os-screen', 'celebrate'];
+// (v7.2: a slot win's banner and count-up come and go over the reels: counted as controls they slid the machine aside)
+const NOT_CHROME = ['modal', 'scrim', 'toasts', 'toast', 'world-prompt', 'os-screen', 'celebrate', 'slots-banner', 'slots-countup'];
 /** The hover tips that follow the pointer over a layout (rl-tip, sb-tip, craps-tip...). */
 const POINTER_TIP = /^[a-z]+-tip$/;
 /** How long something that showed keeps its place after it hides, ms. */
