@@ -22,9 +22,10 @@ export type Framing = 'full' | 'chest' | 'face' | 'head' | 'wrist' | 'hand';
 const FRAMES: Record<Framing, { at: [number, number, number]; height: number; yaw: number; sway: number }> = {
   full: { at: [0, 0.97, 0], height: 2.15, yaw: -0.35, sway: 0 },
   chest: { at: [0, 1.43, 0.13], height: 0.62, yaw: -0.25, sway: 0.5 },
-  face: { at: [0, 1.62, 0.2], height: 0.3, yaw: -0.3, sway: 0.45 },
+  // (v7.2: wider on the small pieces, so a pose, a body or a height never leaves them out of shot)
+  face: { at: [0, 1.62, 0.2], height: 0.38, yaw: -0.3, sway: 0.45 },
   head: { at: [0, 1.7, 0.12], height: 0.62, yaw: -0.4, sway: 0.45 },
-  wrist: { at: [0.28, 1.0, 0.06], height: 0.3, yaw: -1.25, sway: 0.35 },
+  wrist: { at: [0.26, 1.02, 0.06], height: 0.5, yaw: -1.25, sway: 0.35 },
   hand: { at: [-0.2, 1.2, 0.3], height: 0.55, yaw: 0.45, sway: 0.35 },
 };
 
