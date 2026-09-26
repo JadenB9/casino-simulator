@@ -38,16 +38,22 @@ if (process.env.GAME === '1') {
   });
   await p.evaluate(([x, z, y]) => window.casino.world.teleport(x, z, y), [car.x, car.z, car.yaw]);
   await p.waitForTimeout(600);
-  await p.evaluate(() => window.casino.app.link.send({ t: 'lift', to: 'ground' }));
-  await p.waitForFunction(() => window.casino.world.zone === 'ground' && !window.casino.world.city.riding, null, { timeout: 30000 });
+  // LIFT=home:<account id> rides to that apartment instead of the ground floor; LIFT=casino stays
+  const [to, apt] = (process.env.LIFT ?? 'ground').split(':');
+  if (to !== 'casino') {
+    await p.evaluate(([to, apt]) => window.casino.app.link.send(apt ? { t: 'lift', to, apt: Number(apt) } : { t: 'lift', to }), [to, apt]);
+    await p.waitForFunction((to) => window.casino.world.zone === to && !window.casino.world.city.riding, to, { timeout: 30000 });
+    await p.waitForTimeout(3000);
+  }
 } else {
   await p.goto(`http://localhost:${port}/casino/src/world/dev-floor.html?quality=${quality}`, { timeout: 300_000 });
   await p.waitForFunction(() => window.casino?.world, null, { timeout: 300_000 });
-  await p.evaluate(async () => {
+  await p.evaluate(async (zone) => {
     const { world } = window.casino;
-    world.teleport(152, 0, Math.PI / 2);
-    await world.city.prepare('ground');
-  });
+    const at = { ground: [152, 0, Math.PI / 2], home: [-150, 70, Math.PI / 2] }[zone];
+    world.teleport(at[0], at[1], at[2]);
+    await world.city.prepare(zone);
+  }, process.env.ZONE ?? 'ground');
 }
 const frames = (n) => p.evaluate(async (n) => { for (let i = 0; i < n; i++) await new Promise((r) => requestAnimationFrame(r)); }, n);
 await frames(40);
@@ -103,6 +109,38 @@ for (const [name, pos, at] of VIEWS) {
     });
     for (const [k, n] of rows) console.log(`   ${String(n).padStart(4)}  ${k}`);
   }
+}
+// PROBE=x,z: what a ray straight down from 3 m finds there, nearest first
+if (process.env.PROBE) {
+  const [px, pz] = process.env.PROBE.split(',').map(Number);
+  const hits = await p.evaluate(([px, pz]) => {
+    const { engine } = window.casino;
+    const THREE_ = window.casino.THREE;
+    const out = [];
+    const shown = (o) => { for (let x = o; x; x = x.parent) if (!x.visible) return false; return true; };
+    engine.scene.traverse((o) => {
+      if (!o.isMesh || !shown(o) || !o.geometry?.attributes?.position) return;
+      const pos = o.geometry.attributes.position;
+      const idx = o.geometry.index;
+      const e = o.matrixWorld.elements;
+      const w = (i) => { const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i); return [e[0]*x+e[4]*y+e[8]*z+e[12], e[1]*x+e[5]*y+e[9]*z+e[13], e[2]*x+e[6]*y+e[10]*z+e[14]]; };
+      const n = idx ? idx.count : pos.count;
+      for (let t = 0; t < n; t += 3) {
+        const [a, b, c] = [0, 1, 2].map((k) => w(idx ? idx.getX(t + k) : t + k));
+        // point in triangle (xz), then height by barycentric
+        const d = (b[2] - c[2]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[2] - c[2]);
+        if (Math.abs(d) < 1e-9) continue;
+        const l1 = ((b[2] - c[2]) * (px - c[0]) + (c[0] - b[0]) * (pz - c[2])) / d;
+        const l2 = ((c[2] - a[2]) * (px - c[0]) + (a[0] - c[0]) * (pz - c[2])) / d;
+        const l3 = 1 - l1 - l2;
+        if (l1 < 0 || l2 < 0 || l3 < 0) continue;
+        const y = l1 * a[1] + l2 * b[1] + l3 * c[1];
+        if (y < 3) out.push([y, `${o.name || '?'} [${[].concat(o.material).map((m) => m.name || m.type).join(',')}]`]);
+      }
+    });
+    return out.sort((a, b) => b[0] - a[0]).slice(0, 8);
+  }, [px, pz]);
+  for (const [y, what] of hits) console.log(`   y ${y.toFixed(4)}  ${what}`);
 }
 console.log(errors.length ? `errors: ${errors.join(' | ')}` : 'no page errors');
 await browser.close();

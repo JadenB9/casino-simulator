@@ -22,6 +22,13 @@ export const HALL = { x0: APT.x0, x1: -150, z0: 66, z1: 74 } as const;
 /** The bedroom's partitions: along z (its south side, a door by the hall) and along x (its east side). */
 export const BEDROOM = { x1: -143, z1: 65.8, door: { x0: -153.5, x1: -152 } } as const;
 
+/**
+ * v7.4: the en-suite bathroom in the bedroom's south-east corner, inside the bedroom's two
+ * partitions (east and south) and two walls of its own (west, and north with the door toward the
+ * bed): the room inside its walls, and the door's x range.
+ */
+export const BATH = { x0: -147.3, x1: -143, z0: 61.2, z1: 65.68, door: { x0: -146.9, x1: -146 }, wall: 0.1 } as const;
+
 /** The south wall is solid this far east (the television's wall), glass the rest of the way. */
 export const SOUTH_SOLID_TO = -137.6;
 
@@ -64,6 +71,8 @@ export const SLOTS: Record<HomeSlot, SlotPlace> = {
   sculpture: { x: -138.4, z: 71.8, yaw: 0, reach: 1.6 },
   neon: { x: -147.4, z: 65.9, yaw: 0, reach: 0 },
   telescope: { x: -131.3, z: 60.4, yaw: Math.PI / 2, reach: 1.4 },
+  // v7.4: the bathroom (E inside it, or at its door)
+  bath: { x: -145.15, z: 63.44, yaw: 0, reach: 2.2 },
 };
 
 /** The fireplace (the Grand step) on the living room's wall, beside the television. */

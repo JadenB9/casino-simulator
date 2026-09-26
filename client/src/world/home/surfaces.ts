@@ -224,10 +224,64 @@ export function drawBrushed(size: number, seed: number): HTMLCanvasElement {
   return c;
 }
 
+/**
+ * v7.4: square wall and floor tiles, eight a repeat, grout between; `dirty`: the grout gone dark,
+ * tiles a little uneven and stained, a crack or two (the apartment's old bathroom).
+ */
+export function drawTiles(size: number, seed: number, dirty: boolean): HTMLCanvasElement {
+  const [c, ctx] = canvas(size);
+  const rand = rng(seed);
+  const n = 8;
+  const t = size / n;
+  const g = Math.max(2, size / 128);
+  ctx.fillStyle = dirty ? 'rgb(120,116,100)' : 'rgb(214,212,206)';
+  ctx.fillRect(0, 0, size, size);
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) {
+      const v = 240 - (dirty ? rand() * 26 : rand() * 8);
+      ctx.fillStyle = `rgb(${v},${v},${v - (dirty ? 6 : 2)})`;
+      ctx.fillRect(i * t + g / 2, j * t + g / 2, t - g, t - g);
+      // the glaze catching the light along the top of each tile
+      ctx.fillStyle = 'rgba(255,255,255,0.18)';
+      ctx.fillRect(i * t + g, j * t + g, t - 2 * g, g);
+    }
+  }
+  if (dirty) {
+    for (let k = 0; k < 14; k++) {
+      const x = rand() * size;
+      const y = rand() * size;
+      const r = size * (0.03 + rand() * 0.08);
+      wrapped(size, (dx, dy) => {
+        const s = ctx.createRadialGradient(x + dx, y + dy, 0, x + dx, y + dy, r);
+        s.addColorStop(0, `rgba(${110 + rand() * 30},${96 + rand() * 20},60,0.22)`);
+        s.addColorStop(1, 'rgba(110,96,60,0)');
+        ctx.fillStyle = s;
+        ctx.fillRect(x + dx - r, y + dy - r, r * 2, r * 2);
+      });
+    }
+    ctx.strokeStyle = 'rgba(60,56,48,0.6)';
+    ctx.lineWidth = Math.max(1, size / 512);
+    for (let k = 0; k < 3; k++) {
+      let x = rand() * size;
+      let y = rand() * size;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      for (let s = 0; s < 6; s++) {
+        x += (rand() - 0.5) * t * 0.8;
+        y += (rand() - 0.2) * t * 0.6;
+        ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+  }
+  grain(ctx, size, size, dirty ? 0.06 : 0.02, rand);
+  return c;
+}
+
 const cache = new Map<string, THREE.CanvasTexture>();
 
 /** One of the surfaces as a repeating texture (drawn the first time it's asked for). */
-export function surface(kind: 'grain' | 'weave' | 'weave-fine' | 'leather' | 'plaster' | 'veined' | 'brushed' | 'felt'): THREE.CanvasTexture {
+export function surface(kind: 'grain' | 'weave' | 'weave-fine' | 'leather' | 'plaster' | 'veined' | 'brushed' | 'felt' | 'tile' | 'tile-dirty'): THREE.CanvasTexture {
   let t = cache.get(kind);
   if (t) return t;
   const c =
@@ -238,6 +292,8 @@ export function surface(kind: 'grain' | 'weave' | 'weave-fine' | 'leather' | 'pl
     : kind === 'leather' ? drawLeather(512, 19)
     : kind === 'plaster' ? drawPlaster(512, 23)
     : kind === 'veined' ? drawVeined(512, 29)
+    : kind === 'tile' ? drawTiles(512, 37, false)
+    : kind === 'tile-dirty' ? drawTiles(512, 41, true)
     : drawBrushed(512, 31);
   t = canvasTexture(c, 4);
   t.name = `home-${kind}`;

@@ -101,7 +101,7 @@ export function buildHome(mats: Mats, col: Collider, quality: Quality): HomeBuil
   const rnd = rng(0x40e7);
   const cx = (A.x0 + TERRACE.x1) / 2;
   const cz = (A.z0 + A.z1) / 2;
-  const own: Tower = { x: (A.x0 + TERRACE.x1) / 2, z: cz, w: TERRACE.x1 - A.x0 + 2.4, d: A.z1 - A.z0 + 2.4, h: DEPTH - 0.62, y0: -DEPTH };
+  const own: Tower = { x: (A.x0 + TERRACE.x1) / 2, z: cz, w: TERRACE.x1 - A.x0 + 2.4, d: A.z1 - A.z0 + 2.4, h: DEPTH - 0.62, y0: -DEPTH, crown: false };
   const near: Tower[] = [own];
   for (let i = 0; i < 40; i++) {
     const a = rnd() * Math.PI * 2;

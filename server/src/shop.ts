@@ -27,8 +27,7 @@ import { FX_KEEP_MS, eventFromOrder, fxKey, statueOf, statuesQuery, type StatueR
 import type { CasinoFloor } from './floor/index.ts';
 import { valetApi } from './cars.ts'; // v6 cars6
 import { gunItem } from '../../shared/src/arms.ts'; // v7
-import { STORES } from '../../shared/src/stores.ts'; // v7.1
-import { ROOMS } from '../../shared/src/law/plan.ts'; // v7.1
+import { RESIDENCES, STORES } from '../../shared/src/stores.ts'; // v7.1
 import { APARTMENTS, apartmentItem, homeItem, homeTier } from '../../shared/src/estate.ts'; // v7
 
 /** Purchases per account per minute, for the shop, the effects and the bar each. */
@@ -94,11 +93,12 @@ async function soldWhere(env: Env, accountId: number, item: Sold): Promise<strin
     const r = STORES.guns.room;
     return x >= r.x0 && x <= r.x1 && z >= r.z0 && z <= r.z1 ? null : 'Guns are sold at Ace Arms, across the street from the valet.';
   }
-  const L = ROOMS.lobby!;
+  // v7.4: the Residences desk is the hotel lobby's, on the ground floor
+  const L = RESIDENCES.hall;
   const H = STORES.homes.room;
   const inLobby = x >= L.x0 && x <= L.x1 && z >= L.z0 && z <= L.z1;
   const inStore = x >= H.x0 && x <= H.x1 && z >= H.z0 && z <= H.z1;
-  return inLobby || inStore ? null : 'Apartments are sold at the Residences desk in the casino’s lobby and at Maison Home.';
+  return inLobby || inStore ? null : 'Apartments are sold at the Residences desk in the hotel lobby (the elevator, G) and at Maison Home.';
 }
 
 /** Why the boutique won't sell something it knows (a reward, a free emote), or null. */

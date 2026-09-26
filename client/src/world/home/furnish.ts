@@ -15,7 +15,7 @@ import { HOME_ITEMS, pieceIn, type HomeItem, type HomeSlot } from '../../../../s
 import { GUNS, type GunItem } from '../../../../shared/src/arms.ts';
 import { gunModel, disposeGun } from '../arms/models.ts';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { APT, BEDROOM, FIREPLACE, HALL, SLOTS, SOUTH_SOLID_TO, TABLET, TERRACE, type SlotPlace } from './plan.ts';
+import { APT, BATH, BEDROOM, FIREPLACE, HALL, SLOTS, SOUTH_SOLID_TO, TABLET, TERRACE, type SlotPlace } from './plan.ts';
 import { Channel, School, persianRug, surface } from './surfaces.ts';
 
 /** The home's own materials (the rest come from the casino's and the city's). */
@@ -59,6 +59,17 @@ export function defineHomeMats(mats: Mats): void {
   // v7.2: the aquarium's water, clear enough to see the fish in, and the deep blue behind them
   mats.define1('home-aquarium', () => new THREE.MeshStandardMaterial({ color: '#3aa0c8', transparent: true, opacity: 0.26, roughness: 0.05, metalness: 0.1, depthWrite: false }));
   both('home-aqua-back', '#0c3350', { emissive: '#06243a' });
+  // v7.4: the old kitchen and bathroom every apartment comes with, and their replacements
+  both('home-tile-old', '#c9cbb6', { rough: 0.35, tex: 'tile-dirty' });
+  both('home-tile-new', '#f2f0ea', { rough: 0.12, tex: 'tile' });
+  both('home-porcelain', '#f7f6f2', { rough: 0.1 });
+  both('home-porcelain-old', '#e0d4b0', { rough: 0.45 });
+  both('home-laminate', '#d3c49c', { rough: 0.65, tex: 'plaster' });
+  both('home-worktop-old', '#86775f', { rough: 0.85, tex: 'veined' });
+  both('home-mildew', '#a2ab8a', { rough: 0.95, tex: 'weave' });
+  both('home-mirror', '#c0ccd4', { rough: 0.04, metal: 0.95 });
+  both('home-mirror-old', '#848a82', { rough: 0.4, metal: 0.55 });
+  both('home-quartz', '#ecebe6', { rough: 0.2, tex: 'veined' });
 }
 
 /** v7.2: metres a surface repeats over on a piece (the grain of a table, the weave of a sofa). */
@@ -191,12 +202,46 @@ export function furnish(mats: Mats, col: Collider, tier: number, owned: Readonly
       kit.pool(x, z, 2.2);
     }
   }
-  // the kitchen along the north glass: a run of base units and a worktop (always)
+  // the kitchen along the north glass: a run of base units and a worktop (always). v7.4: until a
+  // new one is bought it's the old one the flat came with: tired laminate, a stained worktop, a
+  // yellowed fridge and a two-ring stove
   const K = { x0: -141.4, x1: -131.6, z0: 58.08, z1: 58.8 };
-  kit.box(t >= 2 ? 'home-walnut' : 'home-white', K.x0, K.x1, 0.01, 0.86, K.z0, K.z1);
-  kit.box(t >= 2 ? 'marble-light' : 'home-stone', K.x0 - 0.02, K.x1 + 0.02, 0.86, 0.9, K.z0, K.z1 + 0.03, 1.2);
+  const kitchenStyle = pieceIn('kitchen', owned, t, picks.kitchen ?? null)?.style ?? null;
+  const newKitchen = kitchenStyle === 'modern' || kitchenStyle === 'chef';
+  kit.box(!newKitchen ? 'home-laminate' : t >= 2 || kitchenStyle === 'chef' ? 'home-walnut' : 'home-white', K.x0, K.x1, 0.01, 0.86, K.z0, K.z1);
+  kit.box(!newKitchen ? 'home-worktop-old' : kitchenStyle === 'modern' ? 'home-quartz' : 'marble-light', K.x0 - 0.02, K.x1 + 0.02, 0.86, 0.9, K.z0, K.z1 + 0.03, 1.2);
   kit.box('home-steel', -136.9, -136, 0.9, 0.905, K.z0 + 0.12, K.z1 - 0.12);
   own.box((K.x0 + K.x1) / 2, (K.z0 + K.z1) / 2, K.x1 - K.x0, K.z1 - K.z0 + 0.06, 0, 0.9);
+  // the fridge at the run's west end, and the hob
+  const F = { x0: -142.25, x1: -141.45, z0: 58.1, z1: 58.86 };
+  kit.box(newKitchen ? 'home-steel' : 'home-porcelain-old', F.x0, F.x1, 0.01, newKitchen ? 2.0 : 1.62, F.z0, F.z1);
+  kit.box(newKitchen ? 'chrome' : 'home-steel', F.x1 + 0.005, F.x1 + 0.025, newKitchen ? 0.9 : 0.95, newKitchen ? 1.7 : 1.35, F.z1 - 0.14, F.z1 - 0.1);
+  // (the old one's freezer door, a seam round it)
+  if (!newKitchen) kit.box('home-rug', F.x0 - 0.003, F.x1 + 0.003, 1.1, 1.112, F.z0 - 0.003, F.z1 + 0.003);
+  own.box((F.x0 + F.x1) / 2, (F.z0 + F.z1) / 2, F.x1 - F.x0, F.z1 - F.z0, 0, 2);
+  if (!newKitchen) {
+    // two coil rings on a chipped enamel top, the knobs on its front
+    kit.box('home-porcelain-old', -140.7, -140.0, 0.9, 0.92, K.z0 + 0.08, K.z1 - 0.06);
+    for (const x of [-140.52, -140.18]) kit.cylinder('home-screen', x, (K.z0 + K.z1) / 2, 0.1, 0.92, 0.93, 14);
+    for (const x of [-140.6, -140.1]) kit.cylinder('home-screen', x, K.z1 + 0.035, 0.022, 0.72, 0.76, 8);
+  } else if (kitchenStyle === 'modern') {
+    kit.box('home-screen', -140.8, -140.0, 0.9, 0.906, K.z0 + 0.1, K.z1 - 0.08);
+  }
+
+  // v7.4: the en-suite bathroom's own walls, west and north (the bedroom's partitions are its east
+  // and south); each runs a little into the partition it meets, so no end shows in a face
+  {
+    const B = BATH;
+    const w = B.wall;
+    kit.box('home-cream', B.x0 - w, B.x0, 0.01, H, B.z0 - w, B.z1 + 0.04, 2.4);
+    own.box(B.x0 - w / 2, (B.z0 - w + B.z1) / 2, w, B.z1 - B.z0 + w, 0, H);
+    for (const [x0, x1] of [[B.x0 - w, B.door.x0], [B.door.x1, B.x1 + 0.05]] as const) {
+      kit.box('home-cream', x0, x1, 0.01, H, B.z0 - w, B.z0, 2.4);
+      own.box((x0 + x1) / 2, B.z0 - w / 2, x1 - x0, w, 0, H);
+    }
+    kit.box('home-cream', B.door.x0, B.door.x1, 2.2, H, B.z0 - w, B.z0, 2.4);
+    for (const x of [B.door.x0, B.door.x1 - 0.06]) kit.box(t >= 2 ? 'home-walnut' : 'home-white', x, x + 0.06, 0.01, 2.2, B.z0 - w - 0.02, B.z0 + 0.02);
+  }
   // the tablet by the elevator: the home's catalogue
   kit.box('home-screen', TABLET.x - 0.2, TABLET.x + 0.2, 1.2, 1.5, TABLET.z - 0.02, TABLET.z);
   kit.light(hdr('#7fb4ff', 1.4), TABLET.x, 1.35, TABLET.z - 0.025, 0.34, 0.24, 0.005);
@@ -229,6 +274,8 @@ export function furnish(mats: Mats, col: Collider, tier: number, owned: Readonly
     const at = new At(kit, own, SLOTS[slot], live);
     BUILD[slot](at, item.style, t);
   }
+  // v7.4: no new bathroom yet: the old one
+  if (!pieces.get('bath')) bathroom(new At(kit, own, SLOTS.bath, live), 'old');
   // the neon sign's words (a sign mesh of its own)
   let neon: THREE.Mesh | null = null;
   if (pieces.get('neon')) {
@@ -324,6 +371,87 @@ function terrace(kit: Kit, col: Collider): void {
 }
 
 type Builder = (a: At, style: string, tier: number) => void;
+
+/**
+ * v7.4: the en-suite's fittings, in the bath slot's frame (the room's middle; its west wall at
+ * x -1.42, the east wall and its door at x 1.39, the glass end at z -2.62, the south wall at 2.6):
+ *   old     what the flat came with: dingy tiles to shoulder height, a yellowed tub with a
+ *           mildewed curtain, a pedestal sink under a spotted mirror and a bare bulb
+ *   marble  marble floor to ceiling, a walk-in shower behind glass, a floating walnut vanity
+ *   spa     the marble with gold, a round copper tub, a rain shower, a lit ceiling
+ */
+function bathroom(a: At, style: string): void {
+  // the room's inside in the slot's frame, the tiles standing just off the walls
+  const X0 = BATH.x0 - a.p.x + 0.005;
+  const X1 = BATH.x1 - a.p.x - 0.005;
+  const Z0 = BATH.z0 - a.p.z + 0.005;
+  const Z1 = BATH.z1 - a.p.z - 0.005;
+  const D0 = BATH.door.x0 - a.p.x;
+  const D1 = BATH.door.x1 - a.p.x;
+  const old = style === 'old';
+  const spa = style === 'spa';
+  const tile = old ? 'home-tile-old' : 'marble-light';
+  const top = old ? 1.55 : APT.height - 0.02;
+  const pot = old ? 'home-porcelain-old' : 'home-porcelain';
+  const metal = spa ? 'home-gold' : 'chrome';
+  // the tiles: the floor, and the walls to shoulder height (the old) or the ceiling
+  a.box(tile, X0 + 0.012, X1 - 0.012, 0.012, 0.02, Z0 + 0.012, Z1 - 0.012, 1.2);
+  a.box(tile, X0, X0 + 0.01, 0.02, top, Z0, Z1, 1.2);
+  a.box(tile, X1 - 0.01, X1, 0.02, top, Z0, Z1, 1.2);
+  a.box(tile, X0 + 0.01, X1 - 0.01, 0.02, top, Z1 - 0.01, Z1, 1.2);
+  // (the north wall either side of the door)
+  a.box(tile, X0 + 0.01, D0 - 0.03, 0.02, top, Z0, Z0 + 0.01, 1.2);
+  a.box(tile, D1 + 0.03, X1 - 0.01, 0.02, top, Z0, Z0 + 0.01, 1.2);
+  // the toilet by the east wall
+  a.cyl(pot, X1 - 0.42, -0.2, 0.17, 0.018, 0.38, 16, 0.2);
+  a.box(pot, X1 - 0.22, X1 - 0.02, 0.4, 0.82, -0.39, -0.01);
+  a.box(old ? 'home-laminate' : pot, X1 - 0.66, X1 - 0.24, 0.38, 0.41, -0.39, -0.01);
+  a.solid(X1 - 0.66, X1, -0.41, 0.01, 0.8);
+  if (old) {
+    // the tub along the south wall, its curtain on a sagging rail
+    a.box(pot, X0 + 0.02, X0 + 1.62, 0.018, 0.56, Z1 - 0.72, Z1 - 0.01);
+    a.box('home-tile-new', X0 + 0.1, X0 + 1.54, 0.5, 0.562, Z1 - 0.64, Z1 - 0.08);
+    a.box('chrome', X0 + 0.02, X0 + 1.62, 1.94, 1.96, Z1 - 0.76, Z1 - 0.74);
+    a.box('home-mildew', X0 + 0.04, X0 + 0.62, 0.62, 1.93, Z1 - 0.77, Z1 - 0.73);
+    a.solid(X0, X0 + 1.64, Z1 - 0.74, Z1, 0.56);
+    // the pedestal sink and its mirror, a bare bulb over it
+    a.cyl(pot, X0 + 0.24, -0.9, 0.09, 0.018, 0.76, 12, 0.07);
+    a.box(pot, X0 + 0.02, X0 + 0.46, 0.76, 0.88, -1.14, -0.66);
+    a.box('home-mirror-old', X0 + 0.012, X0 + 0.022, 1.18, 1.72, -1.1, -0.7);
+    a.cyl('chrome', X0 + 0.1, -0.9, 0.012, 0.88, 1.0, 8);
+    a.solid(X0, X0 + 0.48, -1.16, -0.64, 0.88);
+    a.ball('home-porcelain', X0 + 0.12, 1.9, -0.9, 0.05);
+    a.glow(GLOW.bulb, X0 + 0.08, X0 + 0.16, 1.86, 1.94, -0.94, -0.86);
+    return;
+  }
+  // the shower along the south wall behind a glass screen, a rain head over it
+  a.box('home-tile-new', X0 + 0.012, X0 + 1.9, 0.02, 0.05, Z1 - 1.1, Z1 - 0.012, 1.2);
+  a.box('glass', X0 + 0.9, X0 + 0.92, 0.05, 2.1, Z1 - 1.12, Z1 - 0.02);
+  a.box('glass', X0 + 0.02, X0 + 0.9, 0.05, 2.1, Z1 - 1.12, Z1 - 1.1);
+  a.cyl(metal, X0 + 0.45, Z1 - 0.55, spa ? 0.2 : 0.14, 2.28, 2.3, 18);
+  a.cyl(metal, X0 + 0.45, Z1 - 0.55, 0.012, 2.3, APT.height - 0.01, 8);
+  a.solid(X0 + 0.88, X0 + 0.94, Z1 - 1.12, Z1, 2.1);
+  a.solid(X0, X0 + 0.9, Z1 - 1.12, Z1 - 1.08, 2.1);
+  // the vanity floating on the west wall, a wide mirror lit along its top
+  const vz0 = spa ? -1.8 : -1.4;
+  a.box('home-walnut', X0 + 0.02, X0 + 0.52, 0.5, 0.82, vz0, -0.5);
+  a.box('marble-light', X0 + 0.02, X0 + 0.55, 0.82, 0.86, vz0 - 0.02, -0.48);
+  for (const z of spa ? [-1.6, -0.9] : [-0.95]) {
+    a.box(pot, X0 + 0.14, X0 + 0.44, 0.86, 0.95, z - 0.18, z + 0.18);
+    a.cyl(metal, X0 + 0.07, z, 0.014, 0.86, 1.08, 8);
+  }
+  a.box('home-mirror', X0 + 0.012, X0 + 0.022, 1.05, 2.1, vz0, -0.5);
+  a.glow(GLOW.warm, X0 + 0.03, X0 + 0.06, 2.12, 2.15, vz0, -0.5);
+  a.solid(X0, X0 + 0.56, vz0 - 0.02, -0.48, 0.95);
+  if (spa) {
+    // a round copper tub in the middle, a gold spout, the ceiling lit
+    a.cyl('home-copper', 0.35, 0.95, 0.62, 0.018, 0.6, 28, 0.66);
+    a.cyl('home-porcelain', 0.35, 0.95, 0.56, 0.55, 0.585, 28);
+    a.cyl('home-gold', 0.95, 0.95, 0.02, 0.018, 0.9, 8);
+    a.solid(-0.3, 1.0, 0.3, 1.6, 0.6);
+    a.glow(GLOW.warm, X0 + 0.3, X1 - 0.3, APT.height - 0.04, APT.height - 0.02, Z0 + 0.3, Z1 - 0.3);
+  }
+}
 
 const BUILD: Record<HomeSlot, Builder> = {
   sofa(a, style) {
@@ -484,7 +612,12 @@ const BUILD: Record<HomeSlot, Builder> = {
       }
     }
   },
+  bath(a, style) {
+    bathroom(a, style);
+  },
   kitchen(a, style) {
+    // v7.4: the Modern Kitchen is the run itself (its units, the steel fridge, the hob: above)
+    if (style === 'modern') return;
     if (style === 'chef') {
       // a range in the run, a copper hood over it, and an island with stools
       a.box('home-steel', -0.8, 0.8, 0, 0.94, -1.72, -1.02);
@@ -712,7 +845,7 @@ export function showPiece(kit: Kit, col: Collider, slot: HomeSlot, style: string
 }
 
 /** Every slot, in the order the catalogue shows them. */
-export const SLOT_ORDER: readonly HomeSlot[] = ['sofa', 'tv', 'rug', 'art', 'plant', 'chandelier', 'dining', 'kitchen', 'bar', 'bed', 'safe', 'games', 'arcade', 'jukebox', 'piano', 'aquarium', 'trophy', 'sculpture', 'neon', 'telescope'];
+export const SLOT_ORDER: readonly HomeSlot[] = ['sofa', 'tv', 'rug', 'art', 'plant', 'chandelier', 'dining', 'kitchen', 'bath', 'bar', 'bed', 'safe', 'games', 'arcade', 'jukebox', 'piano', 'aquarium', 'trophy', 'sculpture', 'neon', 'telescope'];
 
 /** The pieces for a slot, cheapest first. */
 export function slotItems(slot: HomeSlot): HomeItem[] {

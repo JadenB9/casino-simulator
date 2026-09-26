@@ -46,7 +46,7 @@ export function buildRoof(mats: Mats, col: Collider, quality: Quality): ZoneBuil
   kit.box('stone-warm', D.x1, D.x1 + edge, -0.7, 0.06, D.z0, P.z0, 1.6);
   kit.box('stone-warm', D.x1, D.x1 + edge, -0.7, 0.06, P.z1, D.z1, 1.6);
   // (the tower's own east face takes in the pavilion over its edge)
-  const below: Tower[] = [{ x: (D.x0 - 0.4 + P.x1 + 0.2) / 2, z: 0, w: P.x1 + 0.2 - (D.x0 - 0.4), d: D.z1 - D.z0 + 0.8, h: ROOF.depth - 0.72, y0: -ROOF.depth }];
+  const below: Tower[] = [{ x: (D.x0 - 0.4 + P.x1 + 0.2) / 2, z: 0, w: P.x1 + 0.2 - (D.x0 - 0.4), d: D.z1 - D.z0 + 0.8, h: ROOF.depth - 0.72, y0: -ROOF.depth, crown: false }];
 
   // --- the glass railing round the deck -----------------------------------------------------------------
   const rail = (x0: number, z0: number, x1: number, z1: number) => {

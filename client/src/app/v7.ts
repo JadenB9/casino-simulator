@@ -26,15 +26,15 @@ import type { Look } from '../../../shared/src/look.ts';
 import { Arms } from '../world/arms/index.ts';
 import { GUNS } from '../../../shared/src/arms.ts';
 import { APARTMENTS, SLOT_NAMES, type HomeSlot } from '../../../shared/src/estate.ts';
-import { STORES, type StoreId } from '../../../shared/src/stores.ts';
+import { RESIDENCES, STORES, type StoreId } from '../../../shared/src/stores.ts';
 import { openStore, type StoreRow } from '../ui/stores/store.ts';
 import { SLOTS, TABLET } from '../world/home/plan.ts';
 import { SLOT_ORDER, slotItems } from '../world/home/furnish.ts';
 
 const owns = (id: string) => (session.profile?.owned ?? []).includes(id);
 
-/** v7.1: the Residences desk in the casino's lobby (its front faces -z, into the lobby). */
-const RESIDENCES = { x: 5.2, z: 14.25 };
+/** v7.4: the Residences desk's clerk, in a dark suit. */
+const RESIDENCES_CLERK: Look = { v: 1, body: 'm', outfit: 'smart', skin: 2, hair: '#1c140e', top: '#1c1e24', bottom: '#1c1e24', shoes: '#0e0c0a' };
 
 /** Store clerks: the gun store's in a dark polo, the home store's in a blazer. */
 const CLERKS: Record<StoreId, Look> = {
@@ -151,26 +151,27 @@ export class V7 {
 
   private jumpAt = 0;
 
-  /** v7.1: the Residences desk in the casino's lobby, east of the doors, where apartments are sold. */
+  /** The Residences desk (v7.4: the hotel lobby's front desk, ground floor), where apartments are sold. */
   private residences(): void {
+    // v7.4: the hotel lobby's front desk on the ground floor (city/ground.ts builds the desk): its
+    // name lit on the panel behind it, and someone at it selling the apartments
     const { engine, world } = this.d;
-    const D = RESIDENCES;
+    const R = RESIDENCES;
     const g = new THREE.Group();
     g.name = 'residences-desk';
-    const stone = new THREE.MeshStandardMaterial({ color: '#1a1716', roughness: 0.3 });
-    const brass = new THREE.MeshStandardMaterial({ color: '#c9a24b', metalness: 0.9, roughness: 0.35 });
-    const box = (m: THREE.Material, w: number, h: number, d: number, y: number) => {
-      const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
-      mesh.position.set(D.x, y + h / 2, D.z);
-      g.add(mesh);
-    };
-    box(stone, 1.8, 1.02, 0.62, 0.001);
-    box(brass, 1.86, 0.04, 0.68, 1.021);
-    const atlas = signAtlas([{ text: 'RESIDENCES', font: '600 88px Cinzel, Georgia, serif', color: '#f4dca6', glow: '#ffb35a' }]);
-    g.add(signMesh(atlas, [{ row: 0, x: D.x, y: 0.6, z: D.z - 0.315, h: 0.22, ry: Math.PI }], 1.6));
+    const atlas = signAtlas([{ text: 'THE RESIDENCES', font: '600 88px Cinzel, Georgia, serif', color: '#f4dca6', glow: '#ffb35a' }]);
+    g.add(signMesh(atlas, [{ row: 0, x: (R.desk.x0 + R.desk.x1) / 2, y: 2.35, z: R.hall.z0 + 0.16, h: 0.3, ry: 0 }], 1.6));
+    const clerk = world.characterFactory.create(RESIDENCES_CLERK, '', { staff: true }) as Person;
+    clerk.root.position.set(R.clerk.x, 0, R.clerk.z);
+    clerk.root.rotation.y = R.clerk.yaw;
+    clerk.showTag(false);
+    g.add(clerk.root);
     engine.scene.add(g);
-    world.collider.box(D.x, D.z, 1.9, 0.72, 0, 1.06);
-    engine.onFrame(() => (g.visible = world.zone === 'casino'));
+    world.collider.post(R.clerk.x, R.clerk.z, 0.3, 1.9);
+    engine.onFrame((dt) => {
+      g.visible = world.zone === 'ground';
+      if (g.visible) clerk.update(dt);
+    });
   }
 
   /** The floor socket: the shots, what you own now, a refusal to say. */
@@ -235,11 +236,10 @@ export class V7 {
   private *spots(p: { x: number; z: number }): Generator<Spot> {
     if (!this.d.free() || this.driving.driving) return;
     const zone = this.d.world.zone;
-    if (zone === 'casino') {
-      const d = Math.hypot(p.x - RESIDENCES.x, p.z - (RESIDENCES.z - 0.8));
-      if (d < 1.6) yield { key: 'residences', x: RESIDENCES.x, z: RESIDENCES.z - 0.8, d, label: 'Residences · buy or upgrade an apartment', any: true, use: () => this.openResidences() };
-    }
     if (zone === 'ground') {
+      const c = RESIDENCES.counter;
+      const d = Math.hypot(p.x - c.x, p.z - c.z);
+      if (d < 2) yield { key: 'residences', x: c.x, z: c.z, d, label: 'The Residences · buy or upgrade an apartment', any: true, use: () => this.openResidences() };
       for (const s of Object.values(STORES)) {
         const d = Math.hypot(p.x - s.counter.x, p.z - s.counter.z);
         if (d < 1.8) yield { key: `store:${s.id}`, x: s.counter.x, z: s.counter.z, d, label: s.id === 'guns' ? 'Ace Arms · buy a gun' : 'Maison Home · apartments and furniture', any: true, use: () => this.openStore(s.id) };
@@ -301,7 +301,7 @@ export class V7 {
     openStore({
       root: this.d.ui,
       title: only ? SLOT_NAMES[only] : title,
-      subtitle: residences ? 'Your own floor in the tower: anyone can visit, only you change it' : tier() ? `Your apartment: ${APARTMENTS[tier() - 1]!.name}` : 'Buy The Residence at the casino lobby’s Residences desk, then furnish it',
+      subtitle: residences ? 'Your own floor in the tower: anyone can visit, only you change it' : tier() ? `Your apartment: ${APARTMENTS[tier() - 1]!.name}` : 'Buy The Residence at the Residences desk in the hotel lobby (ground floor), then furnish it',
       sfx: this.d.sfx,
       bought: () => (this.homeAt = 0),
       sections: () => {

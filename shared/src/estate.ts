@@ -45,7 +45,7 @@ export function homeTier(owned: Iterable<string>): number {
 }
 
 /** Where a piece goes in the apartment (client/src/world/home/plan.ts places each). */
-export type HomeSlot = 'sofa' | 'tv' | 'bed' | 'rug' | 'art' | 'plant' | 'dining' | 'kitchen' | 'bar' | 'aquarium' | 'piano' | 'games' | 'arcade' | 'jukebox' | 'safe' | 'trophy' | 'sculpture' | 'neon' | 'telescope' | 'chandelier';
+export type HomeSlot = 'sofa' | 'tv' | 'bed' | 'rug' | 'art' | 'plant' | 'dining' | 'kitchen' | 'bar' | 'aquarium' | 'piano' | 'games' | 'arcade' | 'jukebox' | 'safe' | 'trophy' | 'sculpture' | 'neon' | 'telescope' | 'chandelier' | 'bath';
 
 export interface HomeItem {
   id: string;
@@ -81,6 +81,10 @@ export const HOME_ITEMS: readonly HomeItem[] = [
   { id: 'dining-oak', kind: 'home', slot: 'dining', name: 'Oak Dining Table', price: 6_000 * DOLLAR, about: 'Solid oak for six, with upholstered chairs.', style: 'oak' },
   { id: 'dining-marble', kind: 'home', slot: 'dining', name: 'Marble Dining Table', price: 70_000 * DOLLAR, about: 'Calacatta marble for ten on a brass base.', style: 'marble' },
   { id: 'kitchen-espresso', kind: 'home', slot: 'kitchen', name: 'Espresso Machine', price: 5_000 * DOLLAR, about: 'A twin-boiler machine in brushed steel.', style: 'espresso' },
+  // v7.4: every apartment comes with a tired old kitchen and bathroom; these replace them
+  { id: 'kitchen-modern', kind: 'home', slot: 'kitchen', name: 'Modern Kitchen', price: 25_000 * DOLLAR, about: 'White flat-front units, quartz tops, a steel fridge and an induction hob, in place of the old kitchen.', style: 'modern' },
+  { id: 'bath-marble', kind: 'home', slot: 'bath', name: 'Marble Bathroom', price: 40_000 * DOLLAR, about: 'Marble walls, a glass walk-in shower and a floating vanity, in place of the old bathroom.', style: 'marble' },
+  { id: 'bath-spa', kind: 'home', slot: 'bath', name: 'Spa Bathroom', price: 350_000 * DOLLAR, about: 'A copper soaking tub, a rain shower and gold taps under a lit ceiling.', style: 'spa', tier: 2 },
   { id: 'kitchen-chef', kind: 'home', slot: 'kitchen', name: "Chef's Kitchen", price: 120_000 * DOLLAR, about: 'A six-burner range, a copper hood and a marble island.', style: 'chef' },
   { id: 'bar-cart', kind: 'home', slot: 'bar', name: 'Brass Bar Cart', price: 3_500 * DOLLAR, about: 'Two tiers of brass and glass, stocked.', style: 'cart' },
   { id: 'bar-wine', kind: 'home', slot: 'bar', name: 'Wine Wall', price: 200_000 * DOLLAR, about: 'Four hundred bottles behind glass, kept at 55 degrees.', style: 'wine', tier: 2 },
@@ -135,6 +139,7 @@ export const SLOT_NAMES: Record<HomeSlot, string> = {
   neon: 'Neon',
   telescope: 'Telescope',
   chandelier: 'Chandelier',
+  bath: 'Bathroom',
 };
 
 /**

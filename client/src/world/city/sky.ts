@@ -254,6 +254,8 @@ export interface Tower {
   h: number;
   /** Its foot (the roof's towers stand on the streets far below). */
   y0?: number;
+  /** v7.4: false for the building you're standing on (its roof is your floor): no parapet or plant room. */
+  crown?: boolean;
 }
 
 /**
@@ -309,9 +311,10 @@ export function towers(list: Tower[], kind: SkyKind, seed: number, size = 1024):
     // one repeat of the tile is 16 bays across and 16 floors up; a tower's bays are 1.5 to 2.1 m
     const bay = 1.5 + rnd() * 0.6;
     const uv = { su: 1 / (COLS * bay), sv: 1 / (ROWS * FLOOR_M), ou: rnd(), ov: Math.floor(rnd() * ROWS) / ROWS + 0.001 };
-    (isOffice ? office : homes).push({ x: t.x, y: y0 + t.h / 2, z: t.z, w: t.w, h: t.h, d: t.d, tint, uv, lift: y0 <= 0 });
+    (isOffice ? office : homes).push({ x: t.x, y: y0 + t.h / 2, z: t.z, w: t.w, h: t.h, d: t.d, tint, uv, lift: y0 === 0 });
     // the crown: a parapet round the roof, a plant room in one corner, a water tank in another
     const top = y0 + t.h;
+    if (t.crown === false) continue;
     const dark = tint.clone().multiplyScalar(0.5);
     crown.push({ x: t.x, y: top + 0.35, z: t.z, w: t.w + 0.3, h: 1.3, d: t.d + 0.3, tint: dark });
     const sx = rnd() < 0.5 ? -1 : 1;
@@ -326,7 +329,8 @@ export function towers(list: Tower[], kind: SkyKind, seed: number, size = 1024):
       crown.push({ x: t.x - sx * (t.w / 2 - r - 1.2), y: top + 1 + 0.55, z: t.z - sz * (t.d / 2 - r - 1.2), w: r * 1.6, h: 1.1, d: r * 1.6, tint: new THREE.Color('#1c1c20') });
     }
     // a storefront round the foot of a tower standing on the street
-    if (y0 <= 0 && t.h > 12) shops.push({ x: t.x, y: PODIUM / 2, z: t.z, w: t.w + 0.3, h: PODIUM, d: t.d + 0.3, tint: new THREE.Color(1, 1, 1), uv: { su: 1 / SHOPS_M, sv: 1 / PODIUM, ou: rnd(), ov: 0 } });
+    // (only on the street you walk: the roof's and the apartments' towers stand far below)
+    if (y0 === 0 && t.h > 12) shops.push({ x: t.x, y: PODIUM / 2, z: t.z, w: t.w + 0.3, h: PODIUM, d: t.d + 0.3, tint: new THREE.Color(1, 1, 1), uv: { su: 1 / SHOPS_M, sv: 1 / PODIUM, ou: rnd(), ov: 0 } });
   }
   const group = new THREE.Group();
   group.name = 'towers';
