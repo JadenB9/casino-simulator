@@ -7,7 +7,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { env, exports } from 'cloudflare:workers';
 import { DEFAULT_LOOK } from '../../shared/src/look.ts';
 import { DOLLAR, STARTING_BALANCE } from '../../shared/src/money.ts';
-import { HOLD_MS, SHOP_ITEMS, barItem, shopItem } from '../../shared/src/items.ts';
+import { ORDER_LIFE_MS, SHOP_ITEMS, barItem, shopItem } from '../../shared/src/items.ts';
 import { ORIGIN, TEST_PASSWORD, api, connect } from './helpers.ts';
 import { awayFromHappyHour } from './quiet-bar.ts';
 
@@ -288,7 +288,7 @@ describe('POST /bar/order', () => {
     expect(res.status).toBe(200);
     const body = await res.json<any>();
     expect(body.order).toMatchObject({ id, item: 'beer', price: 9 * DOLLAR });
-    expect(body.order.until).toBe(body.order.at + HOLD_MS);
+    expect(body.order.until).toBe(body.order.at + ORDER_LIFE_MS); // v7.4: five in hand after up to fifteen in line
     expect(body).toMatchObject({ balance: before.balance - 900, inPlay: 0, rev: before.rev + 1 });
     expect(await money(a.id)).toMatchObject({ balance: before.balance - 900 });
     const row = await env.DB.prepare(`SELECT account_id, item, price, created_at FROM casino_orders WHERE op_id = ?1`).bind(`bar:${a.id}:${id}`).first<any>();
@@ -378,7 +378,7 @@ describe('holding an order', () => {
       expect((await res.json<any>()).look.held, JSON.stringify(held)).toBeUndefined();
     }
     // an order paid more than five minutes ago has left your hand
-    await env.DB.prepare(`UPDATE casino_orders SET created_at = ?2 WHERE op_id = ?1`).bind(`bar:${a.id}:${mine.id}`, Date.now() - HOLD_MS - 1).run();
+    await env.DB.prepare(`UPDATE casino_orders SET created_at = ?2 WHERE op_id = ?1`).bind(`bar:${a.id}:${mine.id}`, Date.now() - ORDER_LIFE_MS - 1).run();
     const late = await putLook(a.token, { ...DEFAULT_LOOK, held: { item: 'beer', order: mine.id, until: 9e12 } });
     expect((await late.json<any>()).look.held).toBeUndefined();
   });
