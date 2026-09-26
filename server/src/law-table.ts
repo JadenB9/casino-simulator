@@ -3,7 +3,9 @@
 //   At a jail table: every finished round's net, toward the inmate's bail.
 //   Anywhere else: a player whose net winnings here over the last few minutes reach the table's
 //   hot amount (rules.ts), or who just hit a big win (wins.ts), is reported, at most every
-//   HOT_REPORT_GAP_MS. Whether the pit boss saw it is the floor's call; once he has caught it,
+//   HOT_REPORT_GAP_MS. v7.2: only a player who is up, over those minutes and on this round: a big
+//   win among bigger losses (a spot that paid beside the ones that lost, a hand after a run of
+//   them) never is. Losing, however much, is never the pit boss's business. Whether the pit boss saw it is the floor's call; once he has caught it,
 //   the floor says so and the streak starts again from nothing.
 //
 // The windows are memory only: a restart forgets a streak, which is the player's luck.
@@ -27,14 +29,15 @@ export class TableLaw {
   /** The notes for the floor from a step's finished rounds. `who` names a seat's player (bots and empty seats: undefined). */
   rounds(rounds: readonly RoundResult[], who: (seat: number) => { accountId: number; name: string } | undefined, limits: TableLimits | null, now: number): LawNote[] {
     const notes: LawNote[] = [];
-    const net = new Map<number, { name: string; net: number; big: boolean }>();
+    const net = new Map<number, { name: string; wagered: number; returned: number; net: number }>();
     for (const r of rounds) {
       const w = who(r.seat);
       if (!w || !Number.isSafeInteger(r.wagered) || !Number.isSafeInteger(r.returned)) continue;
-      // several spots of one player are one sum
-      const n = net.get(w.accountId) ?? { name: w.name, net: 0, big: false };
+      // several spots of one player are one sum (a big win is the sum's, not one spot's)
+      const n = net.get(w.accountId) ?? { name: w.name, wagered: 0, returned: 0, net: 0 };
+      n.wagered += r.wagered;
+      n.returned += r.returned;
       n.net += r.returned - r.wagered;
-      n.big ||= isBigWin(r.wagered, r.returned);
       net.set(w.accountId, n);
     }
     for (const [accountId, n] of net) {
@@ -46,7 +49,9 @@ export class TableLaw {
       list.push({ at: now, net: n.net });
       this.wins.set(accountId, list);
       const sum = list.reduce((a, w) => a + w.net, 0);
-      if (!n.big && sum < hotAmount(limits)) continue;
+      // up on this round and over the window, or it's none of his business
+      if (n.net <= 0 || sum <= 0) continue;
+      if (!isBigWin(n.wagered, n.returned) && sum < hotAmount(limits)) continue;
       if (now - (this.reported.get(accountId) ?? -Infinity) < HOT_REPORT_GAP_MS) continue;
       this.reported.set(accountId, now);
       notes.push({ kind: 'hot', accountId, name: n.name, amount: Math.max(sum, n.net) });

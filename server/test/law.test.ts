@@ -457,6 +457,20 @@ describe('a table, for the law', { timeout: 20_000 }, () => {
     expect(law.rounds([{ seat: 0, wagered: 10_000, returned: 20_000 }], who, limits, t + 60_000)).toEqual([]);
   });
 
+  it('never reports a player who is down: a big win among bigger losses, or after a run of them', () => {
+    const t = 1_000_000;
+    // one spot pays big, the others lose more: down on the round
+    const a = new TableLaw('bj-abcdefghij');
+    expect(a.rounds([{ seat: 0, wagered: 10_000, returned: 1_000_000 }, { seat: 0, wagered: 2_000_000, returned: 0 }], who, limits, t)).toEqual([]);
+    // a run of big losses, then a big win that doesn't get them back up
+    const b = new TableLaw('bj-abcdefghij');
+    b.rounds([{ seat: 0, wagered: 5_000_000, returned: 0 }], who, limits, t);
+    expect(b.rounds([{ seat: 0, wagered: 100_000, returned: 2_000_000 }], who, limits, t + 1_000)).toEqual([]);
+    // and losing, however much, never is
+    const c = new TableLaw('bj-abcdefghij');
+    expect(c.rounds([{ seat: 0, wagered: 50_000_000, returned: 0 }], who, limits, t)).toEqual([]);
+  });
+
   it('forgets winnings older than the window, and counts losses against them', () => {
     const law = new TableLaw('bj-abcdefghij');
     const t = 1_000_000;

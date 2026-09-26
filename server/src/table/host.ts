@@ -39,7 +39,7 @@ import { ipKey } from '../floor/directory.ts';
 import { spendTicket } from '../tickets.ts';
 import type { CasinoFloor } from '../floor/index.ts';
 import { ChatRoom } from '../floor/chat.ts';
-import { bigWinsIn, type BigWinReport } from '../floor/wins.ts'; // features: big wins
+import { bigWinsIn, revealAt, type BigWinReport } from '../floor/wins.ts'; // features: big wins
 import { TableLaw, type LawNote } from '../law-table.ts'; // v6 law6
 import { FeatBook, stepFacts } from '../feats.ts'; // v6 feats: achievements and challenges
 import { RunBook } from '../stats.ts'; // v6 stats6: win runs, day and week nets
@@ -50,6 +50,8 @@ import { canTip, tipRefusal } from '../../../shared/src/tip.ts'; // v6.1 casino6
 
 /** How long a dropped player keeps their seat before being cashed out. */
 export const GRACE_MS = 120_000;
+/** v7.2: after a round has shown, how long its win has to play out before the pit boss hears of a hot streak (ms). */
+export const LAW_AFTER_WIN_MS = 3_500;
 /** After a restart, turn timers get this much extra so reconnecting players aren't timed out. */
 export const RESTART_SHIFT_MS = 20_000;
 /** Lobby tables tell the floor they're alive this often. */
@@ -192,7 +194,9 @@ export interface InitParams {
 /** A game's Standard config, at the given limits when there are any to choose. */
 function configAt(engine: Engine, p: { game: GameId; variant: string; mode: TableMode; limits?: TableLimits | null }): TableConfig {
   const cfg = engine.config(p.variant, p.mode);
-  const l = p.limits ? clampLimits(p.game, p.limits) : null;
+  // (the worker has already held them to the room's ceiling, the salon's only in the salon: here
+  // they're held to the most any room allows)
+  const l = p.limits ? clampLimits(p.game, p.limits, true) : null;
   return l ? applyLimits(cfg, l) : cfg;
 }
 
@@ -380,7 +384,7 @@ export class CasinoTable extends DurableObject<Env> {
   private relimit(asked: TableLimits | null, now: number): void {
     const m = this.meta!;
     const engine = this.engine!;
-    const want = asked ? clampLimits(m.game, asked) : null;
+    const want = asked ? clampLimits(m.game, asked, true) : null;
     if (!want || sameLimits(want, limitsOf(m.config))) return;
     for (const mem of this.members.values()) if (mem.status !== 'watching' || mem.stack > 0 || mem.live > 0) return;
     if (this.sql.exec<{ n: number }>(`SELECT count(*) AS n FROM outbox WHERE state = 'pending'`).one().n > 0) return;
@@ -1592,10 +1596,15 @@ export class CasinoTable extends DurableObject<Env> {
       const mem = bySeat.get(seat);
       return mem ? { accountId: mem.account_id, name: mem.name } : undefined;
     };
-    for (const n of this.law.rounds(step.rounds ?? [], who, hasLimitChoice(m.game) ? limitsOf(m.config) : null, now)) this.ctx.waitUntil(this.sendLaw(n));
+    // v7.2: a hot streak is told once the player has seen the round and its win play out (the pit
+    // boss used to take you before the cards had turned); a jail table's rounds at once
+    const seen = revealAt(m.game, step.events, now) + LAW_AFTER_WIN_MS;
+    for (const n of this.law.rounds(step.rounds ?? [], who, hasLimitChoice(m.game) ? limitsOf(m.config) : null, now)) this.ctx.waitUntil(this.sendLaw(n, n.kind === 'hot' ? seen : 0));
   }
 
-  private async sendLaw(n: LawNote): Promise<void> {
+  private async sendLaw(n: LawNote, notBefore = 0): Promise<void> {
+    const wait = Math.min(notBefore - Date.now(), 90_000);
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
     try {
       if (n.kind === 'jail') {
         await this.floor().jailRound(n.accountId, n.net);

@@ -7,7 +7,9 @@ import { isValidName } from '../../shared/src/names.ts';
 import { PASSWORD_MAX, PASSWORD_MIN, isValidPassword } from '../../shared/src/password.ts';
 import { parseLook, lookFromJson } from '../../shared/src/look.ts';
 import { CATALOG, isGameId, soloTableName, TABLE_ID_RE, variantOf } from '../../shared/src/games/catalog.ts';
-import { clampLimits, limitsParam, parseLimits, parseLimitsParam } from '../../shared/src/limits.ts';
+import { SALON_GAMES, clampLimits, limitsParam, parseLimits, parseLimitsParam } from '../../shared/src/limits.ts';
+import type { GameId } from '../../shared/src/engine.ts';
+import { ROOMS } from '../../shared/src/law/plan.ts';
 import { notYet } from '../../shared/src/bank.ts';
 import { closeWith, corsHeaders, fail, json, originAllowed, readJson } from './http.ts';
 import { bearer, logIn, signToken, verifyToken } from './auth.ts';
@@ -208,7 +210,7 @@ async function handleApi(request: Request, env: Env, route: string, cors: Record
     // nearest table it allows (shared/src/limits.ts), and the table's snapshot shows what it got.
     const asked = body?.limits === undefined ? null : parseLimits(body.limits);
     if (body?.limits !== undefined && !asked) return fail(400, 'BAD_REQUEST', 'Limits are a minimum and a maximum in cents.', cors);
-    const limits = asked ? clampLimits(game, asked) : null;
+    const limits = asked ? clampLimits(game, asked, await inSalon(env, game, claims.a)) : null;
     const made = await floor(env).createLobby({ game, visibility, accountId: claims.a, ip });
     if ('error' in made) return fail(429, 'RATE_LIMITED', 'Slow down a little.', cors);
     await table(env, made.tableId).init({ name: made.tableId, game, variant, mode: 'multi', visibility, pin: made.pin, limits });
@@ -398,7 +400,7 @@ async function handleSocket(request: Request, env: Env, url: URL, route: string,
     headers.set('x-casino-solo', `${game}|${variant}`);
     // This sitting's limits, moved to the nearest the game allows (none for the machines).
     const asked = parseLimitsParam(url.searchParams.get('limits'));
-    const limits = jail ? jailLimits(game, jail.bail) : asked ? clampLimits(game, asked) : null;
+    const limits = jail ? jailLimits(game, jail.bail) : asked ? clampLimits(game, asked, await inSalon(env, game, ticket.a)) : null;
     if (limits) headers.set('x-casino-limits', limitsParam(limits));
     return tableStub(env, name).fetch(forward(request, headers));
   }
@@ -421,6 +423,22 @@ function trustedHeaders(request: Request, accountId: number, name: string, look:
 }
 
 /** A copy of the upgrade request carrying only headers this Worker set. */
+/**
+ * v7.2: whether a table of `game` opened now takes the High Limit Salon's limits: a salon game,
+ * and you're standing in the salon (where the floor last heard you were; not what the client says).
+ */
+async function inSalon(env: Env, game: GameId, accountId: number): Promise<boolean> {
+  if (!SALON_GAMES.has(game)) return false;
+  let at: { x: number; z: number } | null = null;
+  try {
+    at = await floor(env).positionOf(accountId);
+  } catch {
+    /* the floor didn't answer: the ordinary limits */
+  }
+  const r = ROOMS.salon!;
+  return !!at && at.x / 100 >= r.x0 && at.x / 100 <= r.x1 && at.z / 100 >= r.z0 && at.z / 100 <= r.z1;
+}
+
 function forward(request: Request, headers: Headers): Request {
   return new Request(request.url, { method: 'GET', headers });
 }

@@ -189,15 +189,15 @@ describe('per-spot limits scale with the table', () => {
 
 describe('custom limits', () => {
   it('explains each rule it breaks', () => {
-    expect(limitsProblem('blackjack', { min: 50, max: 500_000 })).toMatch(/minimum is \$1 to \$10,000,000,000/);
+    expect(limitsProblem('blackjack', { min: 50, max: 500_000 })).toMatch(/minimum is \$1 to \$100,000/);
     expect(limitsProblem('blackjack', { min: 20_000_000_000 * D, max: 200_000_000_000 * D })).toMatch(/minimum is/);
     expect(limitsProblem('blackjack', { min: 25 * D, max: 200 * D })).toBe('The maximum is at least 10 times the minimum ($250).');
-    expect(limitsProblem('blackjack', { min: 25 * D, max: 1_500_000 * D })).toBeNull();
-    expect(limitsProblem('blackjack', { min: 25 * D, max: 150_000_000_000 * D })).toBe('The maximum here is at most $100,000,000,000.');
+    expect(limitsProblem('blackjack', { min: 25 * D, max: 1_000_000 * D })).toBeNull();
+    expect(limitsProblem('blackjack', { min: 25 * D, max: 1_500_000 * D })).toBe('The maximum here is at most $1,000,000.');
     // the high-limit rooms: a $1,000,000 table, and a Big Six spot up to $100,000
     expect(limitsProblem('blackjack', { min: 10_000 * D, max: 1_000_000 * D })).toBeNull();
     expect(limitsProblem('bigsix', { min: 1_000 * D, max: 200_000 * D })).toBeNull();
-    expect(limitsProblem('plinko', { min: 1_000 * D, max: 900_000 * D })).toBe('The maximum here is at most $500,000.');
+    expect(limitsProblem('plinko', { min: 1_000 * D, max: 1_500_000 * D })).toBe('The maximum here is at most $1,000,000.');
     expect(limitsProblem('blackjack', { min: 25 * D, max: 2_550 })).toMatch(/whole number of dollars/);
     expect(limitsProblem('blackjack', { min: 30 * D, max: 3_000 * D })).toBeNull();
     expect(limitsProblem('slots', { min: D, max: 10 * D })).not.toBeNull();
@@ -222,8 +222,13 @@ describe('custom limits', () => {
   it('the clamp brings anything to the nearest allowed table', () => {
     expect(clampLimits('blackjack', { min: 1, max: 1 })).toEqual({ min: D, max: 10 * D });
     // (v7.1: a custom table goes to $100 billion a bet)
-    expect(clampLimits('blackjack', { min: 9_999_999_999, max: 9_999_999_999 })).toEqual({ min: 99_999_999 * D, max: 999_999_990 * D });
-    expect(clampLimits('blackjack', { min: 1e15, max: 1e15 })).toEqual({ min: 10_000_000_000 * D, max: 100_000_000_000 * D });
+    // v7.2: $1,000,000 a bet at an ordinary table; the High Limit Salon's to $1 trillion
+    expect(clampLimits('blackjack', { min: 9_999_999_999, max: 9_999_999_999 })).toEqual({ min: 100_000 * D, max: 1_000_000 * D });
+    expect(clampLimits('blackjack', { min: 1e15, max: 1e15 })).toEqual({ min: 100_000 * D, max: 1_000_000 * D });
+    expect(clampLimits('blackjack', { min: 9_999_999_999, max: 9_999_999_999 }, true)).toEqual({ min: 99_999_999 * D, max: 999_999_990 * D });
+    expect(clampLimits('blackjack', { min: 1e15, max: 1e15 }, true)).toEqual({ min: 100_000_000_000 * D, max: 1_000_000_000_000 * D });
+    // a game the salon has no table for takes no salon limits
+    expect(clampLimits('sicbo', { min: 1e15, max: 1e15 }, true)).toEqual(clampLimits('sicbo', { min: 1e15, max: 1e15 }));
     expect(clampLimits('blackjack', { min: 2_550, max: 500_099 })).toEqual({ min: 25 * D, max: 5_000 * D });
     expect(clampLimits('blackjack', { min: 25 * D, max: 100 * D })).toEqual({ min: 25 * D, max: 250 * D });
     expect(clampLimits('holdem', { min: 10 * D, max: 500 * D })).toEqual({ min: 10 * D, max: 30 * D });

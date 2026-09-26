@@ -30,6 +30,8 @@ export interface TableFlowOpts {
   root?: HTMLElement;
   /** The limits tier a table here opens at by default (the high limit salon's), by its name. */
   prefer?: string;
+  /** v7.2: a table in the High Limit Salon (its custom limits go higher). */
+  salon?: boolean;
   /** The two server calls, replaceable in tests. */
   api?: { createTable: typeof apiCreateTable; joinByPin: typeof apiJoinByPin };
 }
@@ -86,7 +88,7 @@ class TableFlow {
   ) {
     this.info = CATALOG[opts.game];
     this.api = opts.api ?? { createTable: apiCreateTable, joinByPin: apiJoinByPin };
-    this.picker = hasLimitChoice(opts.game) ? new LimitsPicker(opts.game, opts.variant ?? '', { prefer: opts.prefer }) : null;
+    this.picker = hasLimitChoice(opts.game) ? new LimitsPicker(opts.game, opts.variant ?? '', { prefer: opts.prefer, salon: opts.salon }) : null;
     this.picker?.onChange(() => this.limitsChanged());
     this.box.setAttribute('role', 'dialog');
     this.box.setAttribute('aria-label', `${this.info.name}: how do you want to play?`);

@@ -700,6 +700,8 @@ class App {
       root: this.ui,
       // the high limit salon's tables open at high limits
       prefer: station.tier === 'high' ? HIGH_TIER : undefined,
+      // v7.2: the High Limit Salon's tables take custom limits to $1 trillion (the server checks you're there)
+      salon: station.id.startsWith('vip-'),
     });
     if (!choice) {
       await this.world.exitTable();

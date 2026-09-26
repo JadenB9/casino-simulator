@@ -70,20 +70,23 @@ function bets(key: string, tierList: LimitTier[], ceiling: number): LimitSpec {
   };
 }
 
-/** Table games go up to $500,000 a bet as a tier and $1,000,000 as custom limits. */
-// v7.1: custom limits reach $100 billion a bet at the tables: the most whose biggest payout (sic bo's
-// 180 to 1, with the rest of the layout) still counts to the cent (money is integer cents, exact to
-// about $90 trillion). The online games' multipliers run far higher, so they keep their own ceiling.
-const TABLE_CEILING = 100_000_000_000;
-/** The Big Six wheel, the Bandit Wheel and the online games stop at $100,000. */
-const WHEEL_CEILING = 100_000;
-/** v7.1: the wheels and Let It Ride pay at most 45 to 1: they go as high as the tables. */
-const BIG_WHEEL_CEILING = 100_000_000_000;
+/**
+ * v7.2: custom limits reach $1,000,000 a bet, at the tables and on the computers' games alike;
+ * the High Limit Salon's tables (SALON_GAMES, the salon's own: blackjack, baccarat and roulette)
+ * go to $1,000,000,000,000 a bet, and only there (the server checks you're standing in it). Money is
+ * integer cents, exact to about $90 trillion: the salon's games' biggest payouts at $1 trillion (a
+ * few dozen times the bet, the whole layout at once) stay well under it, and the computers' games
+ * pay at most a few million times the bet (limbo and hi-lo 1,000,000x, mines about 5,000,000x).
+ */
+const TABLE_CEILING = 1_000_000;
+const BIG_WHEEL_CEILING = 1_000_000;
+const ONLINE_CEILING = 1_000_000;
+export const SALON_CEILING = 1_000_000_000_000;
+/** The games the High Limit Salon has tables for, which take the salon's ceiling there. */
+export const SALON_GAMES: ReadonlySet<GameId> = new Set<GameId>(['blackjack', 'baccarat', 'roulette']);
 
 /** The online games and the Bandit Wheel: $1 to $1,000 a bet at Standard. */
-// v7.1: the computers' games to $500,000 a bet: crash and limbo pay up to 100,000,000 times, and a
-// payout must still count to the cent
-const ONLINE = (): LimitSpec => bets('default', ladder([1, 100], [1, 1_000], [5, 5_000], [25, 10_000], [100, 50_000], [1_000, 100_000]), 500_000);
+const ONLINE = (): LimitSpec => bets('default', ladder([1, 100], [1, 1_000], [5, 5_000], [25, 10_000], [100, 50_000], [1_000, 100_000]), ONLINE_CEILING);
 
 export const LIMITS: Partial<Record<GameId, LimitSpec>> = {
   blackjack: bets('default', ladder([5, 500], [25, 5_000], [100, 10_000], [500, 50_000], [1_000, 100_000], [5_000, 500_000]), TABLE_CEILING),
@@ -148,9 +151,17 @@ export const LIMITS: Partial<Record<GameId, LimitSpec>> = {
   highcard: ONLINE(),
 };
 
-export function limitSpec(game: GameId): LimitSpec | null {
-  return LIMITS[game] ?? null;
+/**
+ * A game's limits; `salon`: at a table in the High Limit Salon, where the salon's games take custom
+ * limits up to SALON_CEILING (the same tiers; a higher custom minimum and maximum).
+ */
+export function limitSpec(game: GameId, salon = false): LimitSpec | null {
+  const spec = LIMITS[game] ?? null;
+  if (!spec || !salon || !SALON_GAMES.has(game)) return spec;
+  return (salonSpecs[game] ??= bets(spec.key, [...spec.tiers], SALON_CEILING));
 }
+
+const salonSpecs: Partial<Record<GameId, LimitSpec>> = {};
 
 /** Whether a table of this game has limits to choose (machines keep their coin values instead). */
 export function hasLimitChoice(game: GameId): boolean {
@@ -240,8 +251,8 @@ export function limitsProblem(game: GameId, l: TableLimits): string | null {
  * The nearest limits this game allows: the minimum into its range and step, the maximum into
  * the range that minimum allows. What the server does with every choice a client sends.
  */
-export function clampLimits(game: GameId, l: TableLimits): TableLimits | null {
-  const spec = limitSpec(game);
+export function clampLimits(game: GameId, l: TableLimits, salon = false): TableLimits | null {
+  const spec = limitSpec(game, salon);
   if (!spec) return null;
   const { low, high } = spec.min;
   const min = Math.min(high, Math.max(low, floorMin(spec, l.min)));

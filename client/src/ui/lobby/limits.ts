@@ -74,9 +74,9 @@ export class LimitsPicker {
     private readonly game: GameId,
     private readonly variant: string,
     /** `prefer`: the tier this table opens at (a high-limit room's), unless your last pick was higher still. */
-    opts: { prefer?: string } = {},
+    opts: { prefer?: string; salon?: boolean } = {},
   ) {
-    this.spec = limitSpec(game)!;
+    this.spec = limitSpec(game, opts.salon)!;
     const blinds = this.spec.kind === 'blinds';
     const saved = remembered(game);
     const tiers = this.spec.tiers;
