@@ -18,6 +18,7 @@ import { AISLES, ENTRANCES, GROUND, STALL, SURFACE, VALET_STAND, stalls } from '
 import { parkedCars, Traffic } from './parking.ts';
 import { buildStreets } from './streets.ts';
 import { buildStores } from './stores.ts';
+import { STORES } from '../../../../shared/src/stores.ts';
 import { LOOP } from './loop.ts';
 import { Beacons, skyDome, skylineRing, towers, rng, type Tower } from './sky.ts';
 import { SlidingDoors } from './doors.ts';
@@ -367,6 +368,9 @@ export function buildGround(mats: Mats, col: Collider, quality: Quality): ZoneBu
     { text: 'VALET', font: '600 96px Cinzel, Georgia, serif', color: '#ffe6b8', glow: '#ffb35a' },
     { text: 'CONCIERGE', font: '600 88px Cinzel, Georgia, serif', color: '#f4dca6' },
     { text: 'CASINO SIMULATOR', font: '600 80px Cinzel, Georgia, serif', color: '#e8c68a' },
+    // v7.2: the stores' names on their fascias, in their neon's colours
+    { text: 'ACE ARMS', font: '700 104px "Barlow Condensed", "Arial Narrow", sans-serif', color: '#ffe0d8', glow: '#ff3a2a' },
+    { text: 'MAISON HOME', font: '600 88px Cinzel, Georgia, serif', color: '#e8fff4', glow: '#3affb0' },
   ]);
   const signs = signMesh(
     atlas,
@@ -375,6 +379,7 @@ export function buildGround(mats: Mats, col: Collider, quality: Quality): ZoneBu
       { row: 1, x: C.x1 + 0.03, y: cy + 0.28, z: 0, h: 0.44, ry: Math.PI / 2 },
       { row: 2, x: 117, y: 2.7, z: H.z0 + 0.13, h: 0.36, ry: 0 },
       { row: 3, x: P.x1 - 0.595, y: 0.68, z: 5.9, h: 0.5, ry: Math.PI / 2 },
+      ...([STORES.guns, STORES.homes] as const).map((st, i) => ({ row: 4 + i, x: st.room.x0 - 0.1, y: st.height + 0.31, z: (st.room.z0 + st.room.z1) / 2, h: 0.42, ry: -Math.PI / 2 })),
     ],
     1.6,
   );
@@ -418,6 +423,7 @@ export function buildGround(mats: Mats, col: Collider, quality: Quality): ZoneBu
       bank.dispose();
       doors.dispose();
       for (const d of stores.doors) d.dispose();
+      stores.dispose();
       parked.dispose();
       traffic.dispose();
       for (const m of [...meshes.meshes, ...glowMeshes.meshes]) m.dispose();

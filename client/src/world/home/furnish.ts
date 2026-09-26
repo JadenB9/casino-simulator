@@ -61,7 +61,7 @@ export function defineHomeMats(mats: Mats): void {
 const PIECE_UV = 0.8;
 
 /** v7.2: the pieces that move or are drawn whole (the television's picture, the fish, a Persian rug). */
-interface Live {
+export interface Live {
   group: THREE.Group;
   updates: ((dt: number) => void)[];
   disposers: (() => void)[];
@@ -77,6 +77,8 @@ class At {
     private readonly col: Collider,
     readonly p: { x: number; z: number; yaw: number },
     readonly live: Live,
+    /** v7.2: everything this far up (a store's platform under a room set). */
+    private readonly lift = 0,
   ) {
     this.c = Math.cos(p.yaw);
     this.s = Math.sin(p.yaw);
@@ -90,13 +92,13 @@ class At {
   /** A box by its local corners (its surface a repeat every PIECE_UV metres, unless `uv` says). */
   box(mat: string, x0: number, x1: number, y0: number, y1: number, z0: number, z1: number, uv = PIECE_UV): void {
     const m = this.w((x0 + x1) / 2, (z0 + z1) / 2);
-    this.kit.turned(mat, m.x, (y0 + y1) / 2, m.z, x1 - x0, y1 - y0, z1 - z0, this.p.yaw, uv);
+    this.kit.turned(mat, m.x, (y0 + y1) / 2 + this.lift, m.z, x1 - x0, y1 - y0, z1 - z0, this.p.yaw, uv);
   }
 
   /** A mesh of its own at local (x, y, z), turned with the slot. */
   place(mesh: THREE.Object3D, x: number, y: number, z: number, yaw = 0): void {
     const m = this.w(x, z);
-    mesh.position.set(m.x, y, m.z);
+    mesh.position.set(m.x, y + this.lift, m.z);
     mesh.rotation.y = this.p.yaw + yaw;
     this.live.group.add(mesh);
   }
@@ -104,25 +106,25 @@ class At {
   /** An upright cylinder at local (x, z). */
   cyl(mat: string, x: number, z: number, r: number, y0: number, y1: number, seg = 18, rTop = r): void {
     const m = this.w(x, z);
-    this.kit.cylinder(mat, m.x, m.z, r, y0, y1, seg, rTop);
+    this.kit.cylinder(mat, m.x, m.z, r, y0 + this.lift, y1 + this.lift, seg, rTop);
   }
 
   /** A lit box (a screen, a strip of light). */
   glow(color: THREE.Color, x0: number, x1: number, y0: number, y1: number, z0: number, z1: number): void {
     const m = this.w((x0 + x1) / 2, (z0 + z1) / 2);
-    this.kit.light(color, m.x, (y0 + y1) / 2, m.z, x1 - x0, y1 - y0, z1 - z0, this.p.yaw);
+    this.kit.light(color, m.x, (y0 + y1) / 2 + this.lift, m.z, x1 - x0, y1 - y0, z1 - z0, this.p.yaw);
   }
 
   /** Solid to the walker, by its local corners. */
   solid(x0: number, x1: number, z0: number, z1: number, top = 1.2): void {
     const m = this.w((x0 + x1) / 2, (z0 + z1) / 2);
-    this.col.box(m.x, m.z, x1 - x0, z1 - z0, this.p.yaw, top);
+    this.col.box(m.x, m.z, x1 - x0, z1 - z0, this.p.yaw, top + this.lift);
   }
 
   /** A sphere (a pendant, a bulb, a ball). */
   ball(mat: string, x: number, y: number, z: number, r: number): void {
     const m = this.w(x, z);
-    this.kit.batch.add(new THREE.SphereGeometry(r, 14, 10), this.kit.mat(mat), { x: m.x, y, z: m.z });
+    this.kit.batch.add(new THREE.SphereGeometry(r, 14, 10), this.kit.mat(mat), { x: m.x, y: y + this.lift, z: m.z });
   }
 }
 
@@ -690,6 +692,15 @@ function gunRack(guns: readonly GunItem[], w: { x0: number; x1: number; z: numbe
     out.push(mesh);
   }
   return out;
+}
+
+/**
+ * v7.2: one piece built somewhere other than an apartment (a store's showroom): `slot`'s piece in
+ * `style` at `place`, `lift` metres up (on a platform), into the kit and solid in `col`; what moves
+ * or is drawn whole goes into `live`.
+ */
+export function showPiece(kit: Kit, col: Collider, slot: HomeSlot, style: string, place: { x: number; z: number; yaw: number }, live: Live, lift = 0): void {
+  BUILD[slot](new At(kit, col, place, live, lift), style, 3);
 }
 
 /** Every slot, in the order the catalogue shows them. */

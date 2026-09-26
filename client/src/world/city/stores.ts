@@ -11,9 +11,15 @@ import type { Mats } from '../materials.ts';
 import type { Collider } from '../collision.ts';
 import type { Kit } from './kit.ts';
 import { SlidingDoors } from './doors.ts';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { GUNS, type GunItem } from '../../../../shared/src/arms.ts';
+import { disposeGun, gunModel } from '../arms/models.ts';
+import { defineHomeMats, showPiece, type Live } from '../home/furnish.ts';
 
 export interface StoreBuild {
   doors: SlidingDoors[];
+  /** v7.2: let go of what's drawn apart from the kit (the guns on the wall, the showroom's own pieces). */
+  dispose(): void;
   /** The ceiling inside a store (the follow camera keeps under it), or null. */
   ceilingAt(x: number, z: number): number | null;
   /** Inside a store (its own light)? */
@@ -23,8 +29,11 @@ export interface StoreBuild {
 export function buildStores(kit: Kit, group: THREE.Group, mats: Mats, col: Collider): StoreBuild {
   const doors: SlidingDoors[] = [];
   for (const s of Object.values(STORES)) doors.push(shell(kit, group, mats, col, s));
-  gunStore(kit);
-  homeStore(kit);
+  const guns = gunStore(kit, group);
+  // v7.2: the showroom's sets are the pieces it sells, built as an apartment builds them
+  defineHomeMats(mats);
+  const live: Live = { group, updates: [], disposers: [] };
+  homeStore(kit, col, live);
   const inRoom = (s: Store, x: number, z: number) => x >= s.room.x0 && x <= s.room.x1 && z >= s.room.z0 && z <= s.room.z1;
   return {
     doors,
@@ -35,6 +44,13 @@ export function buildStores(kit: Kit, group: THREE.Group, mats: Mats, col: Colli
     inside(x, z) {
       return Object.values(STORES).some((s) => inRoom(s, x, z));
     },
+    dispose() {
+      for (const m of guns) {
+        m.geometry.dispose();
+        m.removeFromParent();
+      }
+      for (const d of live.disposers) d();
+    },
   };
 }
 
@@ -44,7 +60,8 @@ function shell(kit: Kit, group: THREE.Group, mats: Mats, col: Collider, s: Store
   const H = s.height;
   const T = 0.25;
   const guns = s.id === 'guns';
-  kit.box(guns ? 'concrete' : 'floor-wood', R.x0, R.x1, -0.1, 0.03, R.z0, R.z1, guns ? 3 : 1.6);
+  // (v7.2: the gun store on polished black stone, like the counter of a jeweller's)
+  kit.box(guns ? 'marble-black' : 'floor-wood', R.x0, R.x1, -0.1, 0.03, R.z0, R.z1, guns ? 2.4 : 1.6);
   // back and side walls, outside faces in stone, inside in the store's own finish
   const wall = guns ? 'wall-dark' : 'wall-cream';
   kit.box('limestone', R.x1, R.x1 + T, 0, H + 0.6, R.z0 - T, R.z1 + T, 2.4);
@@ -73,15 +90,54 @@ function shell(kit: Kit, group: THREE.Group, mats: Mats, col: Collider, s: Store
   kit.solid(fx - 0.1, fx + 0.1, D.z0 - 0.1, D.z1 + 0.1, H, { walk: false, bottom: 2.9 });
   const doors = new SlidingDoors({ x: fx, z0: D.z0 - 0.1, z1: D.z1 + 0.1, height: 2.9 }, mats, col);
   group.add(doors.group);
-  // a mat inside the door, an awning over it, the name on the fascia
+  // a mat inside the door, an awning over it, the name on the fascia (ground.ts: its neon letters)
+  // over a line of light along the fascia's foot
   kit.box('fabric', fx + 0.1, fx + 1.6, 0.03, 0.036, D.z0, D.z1);
   kit.box(guns ? 'lacquer-red' : 'velvet-green', fx - 1.1, fx - 0.06, 3.0, 3.08, D.z0 - 0.6, D.z1 + 0.6);
-  kit.light(guns ? hdr('#ff4a3a', 2.4) : hdr('#9effc8', 2.0), fx - 0.13, H + 0.3, (R.z0 + R.z1) / 2, 0.02, 0.06, R.z1 - R.z0 - 1);
+  kit.light(guns ? hdr('#ff4a3a', 2.4) : hdr('#9effc8', 2.0), fx - 0.13, H + 0.05, (R.z0 + R.z1) / 2, 0.02, 0.03, R.z1 - R.z0 - 1);
   return doors;
 }
 
+/**
+ * The guns on a wall, as the models the game draws them in your hand (v7.2): lying flat against
+ * the board facing +z at `z`, in rows from `top` down, spread from x0 to x1; merged per material.
+ */
+function gunWall(guns: readonly GunItem[], x0: number, x1: number, top: number, z: number): THREE.Mesh[] {
+  const byMat = new Map<THREE.Material, THREE.BufferGeometry[]>();
+  const perRow = Math.ceil(guns.length / 2);
+  guns.forEach((g, i) => {
+    const model = gunModel(g);
+    const row = Math.floor(i / perRow);
+    const at = x0 + ((i % perRow) + 0.5) * ((x1 - x0) / perRow);
+    const len = model.userData.length as number;
+    // the barrel to the right (+x), its flat side to the room
+    model.rotation.set(0, Math.PI / 2, 0);
+    model.position.set(at - len / 2, top - row * 0.8, z + 0.1);
+    model.updateMatrixWorld(true);
+    model.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      const geo = m.geometry.clone().applyMatrix4(m.matrixWorld);
+      const list = byMat.get(m.material as THREE.Material) ?? [];
+      list.push(geo.index ? geo.toNonIndexed() : geo);
+      byMat.set(m.material as THREE.Material, list);
+    });
+    disposeGun(model);
+  });
+  const out: THREE.Mesh[] = [];
+  for (const [mat, list] of byMat) {
+    const merged = mergeGeometries(list, false);
+    for (const g of list) g.dispose();
+    if (!merged) continue;
+    const mesh = new THREE.Mesh(merged, mat);
+    mesh.name = 'store:guns';
+    out.push(mesh);
+  }
+  return out;
+}
+
 /** Ace Arms: glass cases and a counter at the front, guns on a pegboard, the range at the back. */
-function gunStore(kit: Kit): void {
+function gunStore(kit: Kit, group: THREE.Group): THREE.Mesh[] {
   const s = STORES.guns;
   const R = s.room;
   const c = s.counter;
@@ -90,14 +146,12 @@ function gunStore(kit: Kit): void {
   kit.box('glass', c.x - 2.2, c.x + 2.2, 0.95, 0.97, c.z - 1.05, c.z - 0.55);
   kit.light(GLOW.shelf, c.x, 0.9, c.z - 0.8, 4.2, 0.02, 0.3);
   kit.solid(c.x - 2.2, c.x + 2.2, c.z - 1.05, c.z - 0.55, 0.97);
-  // the pegboard on the side wall behind the clerk, guns hung as dark shapes
+  // the wall behind the clerk: a walnut board with every gun the store sells on it, each on its pegs
+  // under a strip of light (v7.2: the models themselves, as they're drawn in your hand)
   kit.box('planks', R.x0 + 1, R.x0 + 7.6, 1.0, 2.9, R.z0 + 0.02, R.z0 + 0.06, 1.2);
-  for (let i = 0; i < 10; i++) {
-    const x = R.x0 + 1.5 + (i % 5) * 1.25;
-    const y = 1.5 + Math.floor(i / 5) * 0.8;
-    kit.box('steel', x - 0.35, x + 0.35, y, y + 0.1, R.z0 + 0.07, R.z0 + 0.1);
-    kit.box('wood', x - 0.4, x - 0.15, y - 0.12, y + 0.08, R.z0 + 0.075, R.z0 + 0.095);
-  }
+  kit.light(GLOW.shelf, R.x0 + 4.3, 2.84, R.z0 + 0.1, 6.4, 0.02, 0.03);
+  const wall = gunWall(GUNS, R.x0 + 1.2, R.x0 + 7.4, 2.35, R.z0 + 0.06);
+  for (const m of wall) group.add(m);
   // cases along the far side, and a flag of red light over the range's window
   kit.box('wood', R.x0 + 1.2, R.x0 + 8, 0.03, 0.9, R.z1 - 0.8, R.z1 - 0.1);
   kit.box('glass', R.x0 + 1.2, R.x0 + 8, 0.9, 0.92, R.z1 - 0.8, R.z1 - 0.1);
@@ -112,13 +166,19 @@ function gunStore(kit: Kit): void {
   kit.light(hdr('#ff3322', 2.2), W, 2.9, (R.z0 + R.z1) / 2, 0.04, 0.12, 3);
   // signs on the side wall: a red RANGE light and a rules board
   kit.box('lacquer', R.x1 - 0.6, R.x1 - 0.04, 2.6, 3.2, R.z0 + 0.04, R.z0 + 0.08);
+  return wall;
   function H(): number {
     return s.height;
   }
 }
 
-/** Maison Home: room sets on platforms, the realtor's desk at the front with a model of the tower. */
-function homeStore(kit: Kit): void {
+/**
+ * Maison Home: room sets on platforms, the realtor's desk at the front with a model of the tower.
+ * v7.2: each set is pieces the store sells, built as an apartment builds them: the Velvet Sectional
+ * with its table, the King Canopy Bed with its lamps, the Marble Dining Table under the Crystal
+ * Chandelier.
+ */
+function homeStore(kit: Kit, col: Collider, live: Live): void {
   const s = STORES.homes;
   const R = s.room;
   const c = s.counter;
@@ -131,22 +191,19 @@ function homeStore(kit: Kit): void {
   kit.box('glass', c.x + 3.25, c.x + 3.75, 0.9, 2.2, c.z + 0.65, c.z + 1.15);
   kit.light(GLOW.warm, c.x + 3.5, 2.1, c.z + 0.9, 0.3, 0.02, 0.3);
   kit.solid(c.x + 3, c.x + 4, c.z + 0.4, c.z + 1.4, 1.2);
-  // room sets: a living set, a bedroom set, a dining set on low platforms
+  // room sets on low carpeted platforms, facing the street door (west)
+  const P = 0.15;
   const set = (x0: number, x1: number, z0: number, z1: number) => {
-    kit.box('carpet-lounge', x0, x1, 0.03, 0.15, z0, z1, 2);
-    kit.solid(x0, x1, z0, z1, 0.15);
+    kit.box('carpet-lounge', x0, x1, 0.03, P, z0, z1, 2);
+    kit.solid(x0, x1, z0, z1, P);
   };
+  const west = -Math.PI / 2;
   set(176, 180.5, R.z0 + 0.4, R.z0 + 4);
-  kit.box('cushion', 176.6, 179.9, 0.15, 0.55, R.z0 + 0.6, R.z0 + 1.5);
-  kit.box('cushion', 176.6, 179.9, 0.55, 0.95, R.z0 + 0.6, R.z0 + 0.9);
-  kit.box('wood', 177.4, 179.1, 0.15, 0.5, R.z0 + 2.3, R.z0 + 3.1);
+  showPiece(kit, col, 'sofa', 'velvet', { x: 179.6, z: R.z0 + 2.2, yaw: west }, live, P);
+  showPiece(kit, col, 'plant', 'olive', { x: 176.7, z: R.z0 + 1.0, yaw: 0 }, live, P);
   set(181.2, 184.3, R.z0 + 0.4, R.z0 + 4.4);
-  kit.box('cushion', 181.6, 183.9, 0.15, 0.7, R.z0 + 0.6, R.z0 + 2.8);
-  kit.box('wood', 181.5, 184.0, 0.15, 1.3, R.z0 + 0.48, R.z0 + 0.6);
+  showPiece(kit, col, 'bed', 'canopy', { x: 182.75, z: R.z0 + 2.4, yaw: west }, live, P);
   set(177, 184.2, R.z1 - 3.4, R.z1 - 0.3);
-  kit.box('marble-light', 178.2, 182, 0.85, 0.9, R.z1 - 2.4, R.z1 - 1.3);
-  kit.box('brass', 179.9, 180.3, 0.15, 0.85, R.z1 - 2, R.z1 - 1.7);
-  for (let x = 178.5; x < 182; x += 1.1) for (const z of [R.z1 - 2.7, R.z1 - 1.0]) kit.box('velvet-green', x - 0.2, x + 0.2, 0.15, 0.6, z - 0.2, z + 0.2);
-  // pendants over the sets
-  for (const x of [178.2, 182.7, 180.1]) kit.glow.add(new THREE.SphereGeometry(0.14, 12, 8), GLOW.bulb, { x, y: 3.2, z: x === 180.1 ? R.z1 - 1.85 : R.z0 + 2 });
+  showPiece(kit, col, 'dining', 'marble', { x: 180.6, z: R.z1 - 1.85, yaw: 0 }, live, P);
+  showPiece(kit, col, 'chandelier', 'crystal', { x: 180.6, z: R.z1 - 1.85, yaw: 0 }, live, s.height - 3.8);
 }
