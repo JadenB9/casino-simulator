@@ -118,13 +118,18 @@ export function furnish(mats: Mats, col: Collider, tier: number, owned: Readonly
   const floor = t >= 2 ? 'marble-floor' : 'floor-wood';
   kit.box(floor, A.x0, A.x1, -0.1, 0.01, A.z0, A.z1, t >= 2 ? 2.4 : 1.6);
   // the walls' inner faces: cream paint, or walnut panelling to the dado and cream above
-  const wallMat = t >= 2 ? 'wainscot' : 'wall-cream';
   const inner = 0.02;
-  // west wall either side of the elevator, south wall's solid part, the bedroom's partitions
+  // west wall either side of the elevator, south wall's solid part: cream plaster, and from the
+  // Grand step walnut panelling to the dado under it
   const lift = { z0: 68.6, z1: 71.4 };
-  kit.box(wallMat, A.x0, A.x0 + inner, 0.01, H, A.z0, lift.z0, 2.4);
-  kit.box(wallMat, A.x0, A.x0 + inner, 0.01, H, lift.z1, A.z1, 2.4);
-  kit.box(wallMat, A.x0, SOUTH_SOLID_TO, 0.01, H, A.z1 - inner, A.z1, 2.4);
+  const dado = t >= 2 ? 1.25 : 0.01;
+  const face = (x0: number, x1: number, z0: number, z1: number) => {
+    if (t >= 2) kit.box('home-walnut', x0, x1, 0.01, dado, z0, z1, 1.2);
+    kit.box('home-cream', x0, x1, dado, H, z0, z1, 2.4);
+  };
+  face(A.x0, A.x0 + inner, A.z0, lift.z0);
+  face(A.x0, A.x0 + inner, lift.z1, A.z1);
+  face(A.x0, SOUTH_SOLID_TO, A.z1 - inner, A.z1);
   // skirting and a picture rail in brass (gold on the Penthouse)
   const trim = t >= 3 ? 'home-gold' : 'brass';
   kit.box(trim, A.x0 + inner, A.x0 + inner + 0.015, 2.62, 2.66, A.z0, lift.z0);
@@ -133,7 +138,7 @@ export function furnish(mats: Mats, col: Collider, tier: number, owned: Readonly
   kit.box(t >= 2 ? 'home-walnut' : 'home-white', A.x0 + inner, A.x0 + inner + 0.02, 0.01, 0.12, A.z0, lift.z0);
   kit.box(t >= 2 ? 'home-walnut' : 'home-white', A.x0 + inner, A.x0 + inner + 0.02, 0.01, 0.12, lift.z1, A.z1);
   // the ceiling, and a lit cove round its edge from the Grand step
-  kit.box('ceiling', A.x0, A.x1, H, H + 0.1, A.z0, A.z1, 2.4);
+  kit.box('home-white', A.x0, A.x1, H, H + 0.1, A.z0, A.z1, 2.4);
   if (t >= 2) {
     kit.light(GLOW.warm, (A.x0 + A.x1) / 2, H - 0.06, A.z0 + 0.3, A.x1 - A.x0 - 1, 0.02, 0.02);
     kit.light(GLOW.warm, (A.x0 + A.x1) / 2, H - 0.06, A.z1 - 0.3, A.x1 - A.x0 - 1, 0.02, 0.02);
@@ -261,7 +266,7 @@ function terrace(kit: Kit, col: Collider): void {
   kit.box('glass', T.x1 - 0.02, T.x1, 0.01, 1.1, T.z0, T.z1);
   kit.box('glass', T.x0, T.x1, 0.01, 1.1, T.z0, T.z0 + 0.02);
   kit.box('glass', T.x0, T.x1, 0.01, 1.1, T.z1 - 0.02, T.z1);
-  kit.box('chrome', T.x1 - 0.05, T.x1 + 0.02, 1.08, 1.12, T.z0, T.z1);
+  kit.box('chrome', T.x1 - 0.05, T.x1 + 0.02, 1.08, 1.12, T.z0 + 0.03, T.z1 - 0.03);
   col.box(T.x1, (T.z0 + T.z1) / 2, 0.2, T.z1 - T.z0, 0, 1.1);
   col.box((T.x0 + T.x1) / 2, T.z0, T.x1 - T.x0, 0.2, 0, 1.1);
   col.box((T.x0 + T.x1) / 2, T.z1, T.x1 - T.x0, 0.2, 0, 1.1);
@@ -341,9 +346,9 @@ const BUILD: Record<HomeSlot, Builder> = {
     const d = style === 'persian' ? 3 : 2.5;
     a.box(style === 'persian' ? 'home-persian' : 'home-rug', -w / 2, w / 2, 0.01, 0.018, -d / 2, d / 2);
     if (style === 'persian') {
-      a.box('home-cream', -w / 2 + 0.2, w / 2 - 0.2, 0.018, 0.02, -d / 2 + 0.2, -d / 2 + 0.28);
-      a.box('home-cream', -w / 2 + 0.2, w / 2 - 0.2, 0.018, 0.02, d / 2 - 0.28, d / 2 - 0.2);
-      a.box('home-felt-blue', -0.9, 0.9, 0.018, 0.021, -0.6, 0.6);
+      a.box('home-cream', -w / 2 + 0.2, w / 2 - 0.2, 0.018, 0.024, -d / 2 + 0.2, -d / 2 + 0.28);
+      a.box('home-cream', -w / 2 + 0.2, w / 2 - 0.2, 0.018, 0.024, d / 2 - 0.28, d / 2 - 0.2);
+      a.box('home-felt-blue', -0.9, 0.9, 0.018, 0.028, -0.6, 0.6);
     }
   },
   art(a, style) {
@@ -419,9 +424,9 @@ const BUILD: Record<HomeSlot, Builder> = {
   kitchen(a, style) {
     if (style === 'chef') {
       // a range in the run, a copper hood over it, and an island with stools
-      a.box('home-steel', -0.8, 0.8, 0, 0.9, -1.72, -1.02);
-      a.box('lacquer', -0.7, 0.7, 0.905, 0.92, -1.62, -1.12);
-      for (const x of [-0.45, 0, 0.45]) for (const z of [-1.52, -1.22]) a.cyl('home-steel', x, z, 0.09, 0.92, 0.93, 12);
+      a.box('home-steel', -0.8, 0.8, 0, 0.94, -1.72, -1.02);
+      a.box('lacquer', -0.7, 0.7, 0.94, 0.955, -1.62, -1.12);
+      for (const x of [-0.45, 0, 0.45]) for (const z of [-1.52, -1.22]) a.cyl('home-steel', x, z, 0.09, 0.955, 0.965, 12);
       a.box('home-copper', -0.9, 0.9, 1.7, 2.2, -1.9, -1.2);
       a.box('home-copper', -0.25, 0.25, 2.2, APT.height, -1.75, -1.35);
       a.box('home-walnut', -1.6, 1.6, 0, 0.88, 1.2, 2.2);
@@ -520,7 +525,7 @@ const BUILD: Record<HomeSlot, Builder> = {
     a.box('home-walnut', -0.5, 0.5, 0, 1.2, -0.3, 0.3);
     a.cyl('home-walnut', 0, 0, 0.5, 1.2, 1.25, 20);
     a.box('chrome', -0.46, 0.46, 0.75, 1.15, 0.3, 0.32);
-    for (const x of [-0.45, 0.45]) a.glow(hdr(x < 0 ? '#ff7a2a' : '#ffd23a', 1.5), x - 0.04, x + 0.04, 0.1, 1.2, 0.28, 0.33);
+    for (const x of [-0.45, 0.45]) a.glow(hdr(x < 0 ? '#ff7a2a' : '#ffd23a', 1.5), x - 0.04, x + 0.04, 0.1, 1.18, 0.28, 0.33);
     a.glow(hdr('#7affff', 1.1), -0.3, 0.3, 0.4, 0.6, 0.31, 0.32);
     a.solid(-0.5, 0.5, -0.3, 0.33, 1.25);
   },
@@ -576,7 +581,7 @@ const BUILD: Record<HomeSlot, Builder> = {
     for (const ang of [0, 2.1, 4.2]) a.box('brass', Math.cos(ang) * 0.3 - 0.015, Math.cos(ang) * 0.3 + 0.015, 0, 1.1, Math.sin(ang) * 0.3 - 0.015, Math.sin(ang) * 0.3 + 0.015);
     a.cyl('brass', 0, 0, 0.05, 1.1, 1.2, 10);
     a.box('brass', -0.07, 0.07, 1.22, 1.36, -0.55, 0.65);
-    a.cyl('glass', 0, 0.66, 0.07, 1.22, 1.36, 12);
+    a.cyl('glass', 0, 0.66, 0.075, 1.225, 1.355, 12);
     a.solid(-0.35, 0.35, -0.35, 0.35, 1.3);
   },
 };

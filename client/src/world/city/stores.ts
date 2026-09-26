@@ -51,12 +51,14 @@ function shell(kit: Kit, group: THREE.Group, mats: Mats, col: Collider, s: Store
   kit.box('limestone', R.x0, R.x1, 0, H + 0.6, R.z0 - T, R.z0, 2.4);
   kit.box('limestone', R.x0, R.x1, 0, H + 0.6, R.z1, R.z1 + T, 2.4);
   kit.box(wall, R.x1 - 0.02, R.x1, 0.03, H, R.z0, R.z1, 2.4);
-  kit.box(wall, R.x0, R.x1 - 0.02, 0.03, H, R.z0, R.z0 + 0.02, 2.4);
-  kit.box(wall, R.x0, R.x1 - 0.02, 0.03, H, R.z1 - 0.02, R.z1, 2.4);
+  kit.box(wall, R.x0 + 0.03, R.x1 - 0.02, 0.03, H, R.z0, R.z0 + 0.02, 2.4);
+  kit.box(wall, R.x0 + 0.03, R.x1 - 0.02, 0.03, H, R.z1 - 0.02, R.z1, 2.4);
   kit.solid(R.x1, R.x1 + T, R.z0 - T, R.z1 + T, H);
   kit.solid(R.x0, R.x1, R.z0 - T, R.z0, H);
   kit.solid(R.x0, R.x1, R.z1, R.z1 + T, H);
-  kit.box('ceiling', R.x0, R.x1 + T, H, H + 0.6, R.z0 - T, R.z1 + T, 2.4);
+  // the ceiling between the walls and behind the fascia, and the roof slab over it
+  kit.box('ceiling', R.x0 + 0.09, R.x1, H, H + 0.5, R.z0, R.z1, 2.4);
+  kit.box('concrete', R.x0 + 0.09, R.x1, H + 0.5, H + 0.56, R.z0, R.z1, 3);
   for (let x = R.x0 + 2; x < R.x1 - 1; x += 3) kit.light(GLOW.warm, x, H - 0.03, (R.z0 + R.z1) / 2, 0.12, 0.03, R.z1 - R.z0 - 2);
   // the glass front on the street (west), mullions, the door's gap
   const D = s.door;
@@ -64,8 +66,8 @@ function shell(kit: Kit, group: THREE.Group, mats: Mats, col: Collider, s: Store
   kit.box('glass', fx - 0.02, fx + 0.02, 0.03, H, R.z0, D.z0 - 0.1);
   kit.box('glass', fx - 0.02, fx + 0.02, 0.03, H, D.z1 + 0.1, R.z1);
   kit.box('glass', fx - 0.02, fx + 0.02, 2.9, H, D.z0 - 0.1, D.z1 + 0.1);
-  for (const z of [R.z0, D.z0 - 0.1, D.z1 + 0.1, R.z1]) kit.box('lacquer', fx - 0.06, fx + 0.06, 0.03, H + 0.6, z - 0.05, z + 0.05);
-  kit.box('lacquer', fx - 0.08, fx + 0.08, H, H + 0.6, R.z0, R.z1);
+  for (const z of [R.z0 + 0.06, D.z0 - 0.1, D.z1 + 0.1, R.z1 - 0.06]) kit.box('lacquer', fx - 0.06, fx + 0.06, 0.02, H, z - 0.05, z + 0.05);
+  kit.box('lacquer', fx - 0.08, fx + 0.08, H, H + 0.58, R.z0 + 0.01, R.z1 - 0.01);
   kit.solid(fx - 0.1, fx + 0.1, R.z0, D.z0 - 0.1, H);
   kit.solid(fx - 0.1, fx + 0.1, D.z1 + 0.1, R.z1, H);
   kit.solid(fx - 0.1, fx + 0.1, D.z0 - 0.1, D.z1 + 0.1, H, { walk: false, bottom: 2.9 });
@@ -94,7 +96,7 @@ function gunStore(kit: Kit): void {
     const x = R.x0 + 1.5 + (i % 5) * 1.25;
     const y = 1.5 + Math.floor(i / 5) * 0.8;
     kit.box('steel', x - 0.35, x + 0.35, y, y + 0.1, R.z0 + 0.07, R.z0 + 0.1);
-    kit.box('wood', x - 0.4, x - 0.15, y - 0.12, y + 0.08, R.z0 + 0.07, R.z0 + 0.1);
+    kit.box('wood', x - 0.4, x - 0.15, y - 0.12, y + 0.08, R.z0 + 0.075, R.z0 + 0.095);
   }
   // cases along the far side, and a flag of red light over the range's window
   kit.box('wood', R.x0 + 1.2, R.x0 + 8, 0.03, 0.9, R.z1 - 0.8, R.z1 - 0.1);
@@ -140,7 +142,7 @@ function homeStore(kit: Kit): void {
   kit.box('wood', 177.4, 179.1, 0.15, 0.5, R.z0 + 2.3, R.z0 + 3.1);
   set(181.2, 184.3, R.z0 + 0.4, R.z0 + 4.4);
   kit.box('cushion', 181.6, 183.9, 0.15, 0.7, R.z0 + 0.6, R.z0 + 2.8);
-  kit.box('wood', 181.6, 183.9, 0.15, 1.3, R.z0 + 0.5, R.z0 + 0.62);
+  kit.box('wood', 181.5, 184.0, 0.15, 1.3, R.z0 + 0.48, R.z0 + 0.6);
   set(177, 184.2, R.z1 - 3.4, R.z1 - 0.3);
   kit.box('marble-light', 178.2, 182, 0.85, 0.9, R.z1 - 2.4, R.z1 - 1.3);
   kit.box('brass', 179.9, 180.3, 0.15, 0.85, R.z1 - 2, R.z1 - 1.7);

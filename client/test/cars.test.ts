@@ -75,7 +75,8 @@ describe('garage', () => {
 
   it('has a bay for every car, inside the walls, apart, with the door aisle clear', () => {
     const b = bays();
-    expect(b.length).toBe(CARS.length);
+    // (v7: more cars than bays: the showroom holds thirteen, yours first)
+    expect(b.length).toBe(Math.min(CARS.length, 13));
     expect(b.filter((x) => x.hero)).toHaveLength(1);
     expect(inRect(LOTS.garage, GARAGE.x0 * 100, GARAGE.z0 * 100) && inRect(LOTS.garage, GARAGE.x1 * 100, GARAGE.z1 * 100)).toBe(true);
     for (const bay of b) {
@@ -91,12 +92,12 @@ describe('garage', () => {
   it('shows your cars dearest first, the dearest on the turntable, then empty bays for the rest', () => {
     const none = collection([]);
     expect(none.every((c) => !c.owned)).toBe(true);
-    expect(none.map((c) => c.car)).toEqual(CARS.map((c) => c.id));
+    expect(none.map((c) => c.car)).toEqual(CARS.slice(0, 13).map((c) => c.id));
     const some = collection(['halden-roadster', 'ombra-oro', 'not-a-car', 'raffica-v10']);
     expect(some.slice(0, 3).map((c) => c.car)).toEqual(['ombra-oro', 'raffica-v10', 'halden-roadster']);
     expect(some[0]!.bay.hero).toBe(true);
     expect(some.slice(3).every((c) => !c.owned)).toBe(true);
-    expect(new Set(some.map((c) => c.car)).size).toBe(CARS.length);
+    expect(new Set(some.map((c) => c.car)).size).toBe(Math.min(CARS.length, 13));
     const all = collection(CARS.map((c) => c.id));
     expect(all.every((c) => c.owned)).toBe(true);
     expect(all[0]!.car).toBe('ombra-oro');
@@ -113,7 +114,8 @@ describe('car models', () => {
       expect(k.width, c.id).toBeGreaterThan(1.4);
       expect(k.width, c.id).toBeLessThan(2.2);
       expect(k.height, c.id).toBeGreaterThan(0.8);
-      expect(k.height, c.id).toBeLessThan(2.1);
+      // (v7: a lifted truck stands taller than the rest)
+      expect(k.height, c.id).toBeLessThan(c.id === 'kodiak-monster' ? 2.5 : 2.1);
       expect(k.wheels).toHaveLength(4);
       for (const w of k.wheels) {
         expect(Math.abs(w.z), c.id).toBeLessThan(k.length / 2);

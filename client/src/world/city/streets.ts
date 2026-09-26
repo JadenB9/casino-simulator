@@ -145,11 +145,17 @@ export function buildStreets(kit: Kit): void {
   }
 
   // --- the block's own ground round the stores, and a pocket garden outside each street corner -----
+  // (inside the curbs' curves: a strip to where the bends start, the middle out to the road, and
+  // a quarter round in each corner, so the paving never lies under a sidewalk)
+  const ri = R - H - INNER;
   for (const side of [-1, 1] as const) {
-    const a = side > 0 ? 45 : LOOP.z0 + H + INNER;
-    const b = side > 0 ? LOOP.z1 - H - INNER : -45;
-    kit.box('pavers', WE.x1, LOOP.x1 - H - INNER, -0.1, 0.004, a, b, 3.2);
+    const zs = side * (LOOP.z1 - R);
+    const zo = side * (LOOP.z1 - H - INNER);
+    const zi = side * 45;
+    kit.box('pavers', WE.x1, LOOP.x1 - H - INNER, -0.1, 0.004, Math.min(zi, zs), Math.max(zi, zs), 3.2);
+    kit.box('pavers', x0, x1, -0.1, 0.004, Math.min(zs, zo), Math.max(zs, zo), 3.2);
   }
+  for (const c of CORNERS) kit.sector('pavers', c.x, c.z, 0, ri - 0.02, c.a0, c.a1, -0.1, 0.004, 3.2);
 
   // --- street lamps along every run (their arms out over the road), two round each bend -------------
   for (let z = -54; z <= 54; z += 18) {

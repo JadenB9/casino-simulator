@@ -210,12 +210,18 @@ if (checks.includes('dev')) {
 
 if (checks.includes('zfight')) {
   const { p, ctx, errors } = await devFloor('high');
-  for (const zone of ['ground', 'roof', 'casino']) {
+  for (const zone of ['ground', 'roof', 'casino', 'home']) {
     const r = await p.evaluate(async (zone) => {
       const Z = await import('/casino/src/world/zfight.ts');
       const { THREE, world, engine } = window.casino;
       const city = world.city;
       if (zone !== 'casino') await city.prepare(zone);
+      // v7: the apartment at the Penthouse step with one of everything in it
+      if (zone === 'home') {
+        const { SLOT_ORDER, slotItems } = await import('/casino/src/world/home/furnish.ts');
+        const all = new Set(SLOT_ORDER.flatMap((s) => slotItems(s).map((h) => h.id)));
+        city.homeInterior().set(3, all, {});
+      }
       engine.scene.updateMatrixWorld(true);
       const surfaces = [];
       const m = new THREE.Matrix4();

@@ -291,7 +291,7 @@ export const CARS: readonly CarItem[] = [
   { id: 'vanta-wedge', kind: 'car', name: "Vanta Wedge '87", price: 18_000_000 * DOLLAR, about: 'A show-stand wedge in pearl white, pink neon underneath.' },
   { id: 'nocturne-v16', kind: 'car', name: 'Nocturne V16', price: 35_000_000 * DOLLAR, about: 'Art deco coachwork, a sixteen-cylinder engine, gold wire wheels.' },
   { id: 'strale-gt', kind: 'car', name: "Strale GT '63", price: 45_000_000 * DOLLAR, about: 'An aluminium-bodied grand tourer, one of 36 ever built.' },
-  { id: 'lumen-lm', kind: 'car', name: 'Lumen LM Prototype', price: 60_000_000 * DOLLAR, about: 'A Le Mans prototype made road legal: a shark fin, a wing and a light bar.' },
+  { id: 'lumen-lm', kind: 'car', name: 'Lumen LM Prototype', price: 60_000_000 * DOLLAR, about: 'A Le Mans prototype made road legal: shark fin, wing and a light bar.' },
   { id: 'ombra-hyper', kind: 'car', name: 'Ombra Hyper', price: 90_000_000 * DOLLAR, about: 'Carbon tub, hybrid V8, 1,500 horsepower, 12 made.' },
   { id: 'spectre-ev', kind: 'car', name: 'Spectre EV', price: 120_000_000 * DOLLAR, about: 'Two thousand electric horsepower, light bars fore and aft, violet neon.' },
   { id: 'halden-boattail', kind: 'car', name: 'Halden Boattail', price: 250_000_000 * DOLLAR, about: 'A coachbuilt one-off with a teak rear deck and a champagne chest.' },

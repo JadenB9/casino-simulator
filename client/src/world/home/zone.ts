@@ -64,14 +64,14 @@ export function buildHome(mats: Mats, col: Collider, quality: Quality): HomeBuil
   glass(A.x1 + 0.06, A.x1 + 0.08, A.z0, TERRACE.door.z0);
   glass(A.x1 + 0.06, A.x1 + 0.08, TERRACE.door.z1, A.z1);
   // mullions every 2.4 m, and the frames top and bottom
-  for (let x = A.x0 + 2.4; x < A.x1; x += 2.4) kit.box('lacquer', x - 0.03, x + 0.03, 0.02, H, A.z0 - 0.12, A.z0 - 0.02);
-  for (let z = A.z0 + 2.4; z < A.z1; z += 2.4) if (z < TERRACE.door.z0 - 0.1 || z > TERRACE.door.z1 + 0.1) kit.box('lacquer', A.x1 + 0.02, A.x1 + 0.12, 0.02, H, z - 0.03, z + 0.03);
-  for (let x = SOUTH_SOLID_TO + 2.4; x < A.x1; x += 2.4) kit.box('lacquer', x - 0.03, x + 0.03, 0.02, H, A.z1 + 0.02, A.z1 + 0.12);
-  kit.box('lacquer', A.x0, A.x1, H - 0.1, H, A.z0 - 0.13, A.z0 - 0.01);
-  kit.box('lacquer', A.x1 + 0.01, A.x1 + 0.13, H - 0.1, H, A.z0, A.z1);
+  for (let x = A.x0 + 2.4; x < A.x1; x += 2.4) kit.box('lacquer', x - 0.03, x + 0.03, 0.03, H - 0.1, A.z0 - 0.12, A.z0 - 0.02);
+  for (let z = A.z0 + 2.4; z < A.z1; z += 2.4) if (z < TERRACE.door.z0 - 0.1 || z > TERRACE.door.z1 + 0.1) kit.box('lacquer', A.x1 + 0.02, A.x1 + 0.12, 0.03, H - 0.1, z - 0.03, z + 0.03);
+  for (let x = SOUTH_SOLID_TO + 2.4; x < A.x1; x += 2.4) kit.box('lacquer', x - 0.03, x + 0.03, 0.03, H - 0.1, A.z1 + 0.02, A.z1 + 0.12);
+  kit.box('lacquer', A.x0 + 0.01, A.x1 - 0.01, H - 0.1, H - 0.005, A.z0 - 0.13, A.z0 - 0.01);
+  kit.box('lacquer', A.x1 + 0.01, A.x1 + 0.13, H - 0.1, H - 0.005, A.z0 + 0.01, A.z1 - 0.01);
   // the terrace door's frame; the doorway itself is shut by `terraceDoor` until the Penthouse step
-  kit.box('lacquer', A.x1 + 0.02, A.x1 + 0.12, 0.02, H, TERRACE.door.z0 - 0.05, TERRACE.door.z0);
-  kit.box('lacquer', A.x1 + 0.02, A.x1 + 0.12, 0.02, H, TERRACE.door.z1, TERRACE.door.z1 + 0.05);
+  kit.box('lacquer', A.x1 + 0.02, A.x1 + 0.12, 0.03, H - 0.1, TERRACE.door.z0 - 0.05, TERRACE.door.z0);
+  kit.box('lacquer', A.x1 + 0.02, A.x1 + 0.12, 0.03, H - 0.1, TERRACE.door.z1, TERRACE.door.z1 + 0.05);
   kit.box('lacquer', A.x1 + 0.02, A.x1 + 0.12, 2.6, H, TERRACE.door.z0, TERRACE.door.z1);
   const doorGlass = new THREE.Mesh(new THREE.BoxGeometry(0.02, 2.58, TERRACE.door.z1 - TERRACE.door.z0), mats.get('glass'));
   doorGlass.position.set(A.x1 + 0.07, 1.31, (TERRACE.door.z0 + TERRACE.door.z1) / 2);
@@ -79,10 +79,10 @@ export function buildHome(mats: Mats, col: Collider, quality: Quality): HomeBuil
   const terraceDoor = col.box(A.x1 + 0.07, (TERRACE.door.z0 + TERRACE.door.z1) / 2, 0.2, TERRACE.door.z1 - TERRACE.door.z0, 0, H);
   // the bedroom's partitions: its south side with a door by the hall, its east side solid
   const B = BEDROOM;
-  kit.box('wall', A.x0, B.door.x0, 0, H, B.z1 - 0.12, B.z1, 2.4);
-  kit.box('wall', B.door.x1, B.x1, 0, H, B.z1 - 0.12, B.z1, 2.4);
-  kit.box('wall', B.door.x0, B.door.x1, 2.2, H, B.z1 - 0.12, B.z1, 2.4);
-  kit.box('wall', B.x1, B.x1 + 0.12, 0, H, A.z0, B.z1, 2.4);
+  kit.box('home-cream', A.x0, B.door.x0, 0, H, B.z1 - 0.12, B.z1, 2.4);
+  kit.box('home-cream', B.door.x1, B.x1, 0, H, B.z1 - 0.12, B.z1, 2.4);
+  kit.box('home-cream', B.door.x0, B.door.x1, 2.2, H, B.z1 - 0.12, B.z1, 2.4);
+  kit.box('home-cream', B.x1, B.x1 + 0.12, 0.012, H, A.z0 + 0.005, B.z1, 2.4);
   kit.solid(A.x0, B.door.x0, B.z1 - 0.12, B.z1, H);
   kit.solid(B.door.x1, B.x1 + 0.12, B.z1 - 0.12, B.z1, H);
   kit.solid(B.x1, B.x1 + 0.12, A.z0, B.z1, H);

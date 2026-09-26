@@ -64,8 +64,8 @@ describe('the elevators', () => {
   });
 
   it('the panel lists the floors top to bottom, and the indicator reads them', () => {
-    expect(FLOORS.map((f) => f.zone)).toEqual(['roof', 'casino', 'ground']);
-    expect(new Set(FLOORS.map((f) => f.key)).size).toBe(3);
+    expect(FLOORS.map((f) => f.zone)).toEqual(['roof', 'home', 'casino', 'ground']);
+    expect(new Set(FLOORS.map((f) => f.key)).size).toBe(4);
     for (let i = 1; i < FLOORS.length; i++) expect(FLOORS[i]!.level).toBeLessThan(FLOORS[i - 1]!.level);
     expect(floorOf('casino').key).toBe('C');
     expect(levelLabel(0)).toBe('G');

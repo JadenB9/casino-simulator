@@ -32,8 +32,8 @@ const CAR_D = 1.85;
 const CAR_H = 2.98;
 const SIDE = 0.15;
 // v7: the doors open as you walk up, not once you're at them, and let you through half open
-const SENSE = 3.0;
-const OPEN_S = 0.75;
+const SENSE = 1.7;
+const OPEN_S = 0.6;
 const PASSABLE = 0.5;
 const CLOSE_S = 1.4;
 const DWELL_S = 1.6;

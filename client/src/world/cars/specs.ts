@@ -362,7 +362,7 @@ const boattail: CarSpec = {
 
 const monster: CarSpec = {
   body: [[-2.3, 1.02], [-2.3, 1.5], [-2.2, 1.6], [1.4, 1.6], [2.2, 1.52], [2.3, 1.32], [2.3, 1.02]],
-  half: 1.18,
+  half: 1.02,
   front: 1.5,
   rear: -1.5,
   wheelR: 0.62,
@@ -373,7 +373,7 @@ const monster: CarSpec = {
   shoulder: 1.42,
   tumble: 0.04,
   cabin: [[-1.2, 1.56], [-1.1, 2.2], [-0.9, 2.28], [0.6, 2.28], [1.2, 1.58]],
-  cabinHalf: 1.02,
+  cabinHalf: 0.92,
   cabinTumble: 0.08,
   sail: -1.0,
   paint: '#c2410c',

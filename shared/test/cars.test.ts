@@ -10,7 +10,7 @@ const ID = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 describe('cars', () => {
   it('sells ten to fourteen cars, cheapest first, from $250,000 to over a billion', () => {
     expect(CARS.length).toBeGreaterThanOrEqual(10);
-    expect(CARS.length).toBeLessThanOrEqual(14);
+    expect(CARS.length).toBeLessThanOrEqual(20);
     const prices = CARS.map((c) => c.price);
     expect([...prices].sort((a, b) => a - b)).toEqual(prices);
     expect(prices[0]).toBe(250_000 * DOLLAR);
