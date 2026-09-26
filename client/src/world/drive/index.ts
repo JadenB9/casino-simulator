@@ -70,6 +70,8 @@ interface Mine {
   hw: number;
   /** Sent the floor our getting in, when (performance ms); confirmed once it says so. */
   sentAt: number;
+  /** Asked the floor a second time (no word after a while). */
+  asked: boolean;
   confirmed: boolean;
   /** The seat (car-local) and whether you're seen in it (an open car). */
   seat: THREE.Vector3;
@@ -200,6 +202,7 @@ export class Driving {
       hl: kit.length / 2,
       hw: kit.width / 2,
       sentAt: performance.now(),
+      asked: false,
       confirmed: false,
       seat: new THREE.Vector3(0.36, spec.sill + 0.02, cabin - 0.15),
       shown: !!spec.open || spec.sill > 0.7,
@@ -251,7 +254,7 @@ export class Driving {
     if (m.confirmed) toast(`The valet takes the ${carItem(m.car)?.name ?? 'car'} back to your garage.`);
     // (unconfirmed too: a yes that comes late mustn't leave the floor thinking you drive)
     link?.send({ t: 'drive', car: null });
-    if (!quiet && !m.confirmed) toast("The car wouldn't start. Try again in a moment.");
+    if (!quiet && !m.confirmed) toast("The floor didn't answer, so the car stays put. If this keeps happening, reload the page.");
   }
 
   // --- every frame ----------------------------------------------------------------------------
@@ -264,7 +267,11 @@ export class Driving {
     const link = this.d.link();
     if (!m.confirmed) {
       if (link?.you?.car === m.car) m.confirmed = true;
-      else if (performance.now() - m.sentAt > CONFIRM_MS) {
+      else if (!m.asked && performance.now() - m.sentAt > CONFIRM_MS / 2.4) {
+        // (v7.4: no word yet: ask once more, the floor takes the same car twice as once)
+        m.asked = true;
+        link?.send({ t: 'drive', car: m.car });
+      } else if (performance.now() - m.sentAt > CONFIRM_MS) {
         this.getOut();
         return;
       }

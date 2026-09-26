@@ -20,6 +20,7 @@ import { StreetSounds } from '../drive/sound.ts';
 import { disposeGun, gunModel, holdOf } from './models.ts';
 import './arms.css';
 import { openPicker } from '../../ui/hud/picker.ts';
+import { paceBoost } from '../player.ts';
 import { isKey, keyFor, keyLabel } from '../../ui/keys.ts';
 
 export interface ArmsDeps {
@@ -43,6 +44,8 @@ interface Tracer {
 }
 
 const TRACER_S = 0.09;
+/** How far the view narrows aiming in: this much of its field of view. */
+const AIM_ZOOM = 0.55;
 
 export class Arms {
   private gun: GunItem | null = null;
@@ -51,6 +54,11 @@ export class Arms {
   private reloadUntil = 0;
   private lastShot = 0;
   private trigger = false;
+  /** v7.4: the right button held, and how far into the aim the view is (0-1), from this field of view. */
+  private aiming = false;
+  private aimK = 0;
+  private baseFov = 50;
+  private aimFrom: 'first' | 'third' = 'third';
   private readonly tracers: Tracer[] = [];
   private readonly tracerMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(4, 3.2, 1.6), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
   private readonly flashMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(6, 4, 1.5), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
@@ -89,6 +97,7 @@ export class Arms {
     this.offs.push(d.engine.onFrame((dt) => this.update(dt)));
     addEventListener('keydown', this.onKey);
     d.engine.canvas.addEventListener('pointerdown', this.onDown);
+    d.engine.canvas.addEventListener('contextmenu', this.onMenu);
     addEventListener('pointerup', this.onUp);
     addEventListener('blur', this.onUp);
   }
@@ -195,6 +204,7 @@ export class Arms {
     if (!this.gun) return;
     this.gun = null;
     this.trigger = false;
+    this.aiming = false;
     const ch = this.d.world.player.character as unknown as Person;
     ch.holdGun(0, null);
     if (this.model) disposeGun(this.model);
@@ -214,11 +224,46 @@ export class Arms {
 
   private onDown = (e: PointerEvent): void => {
     if (e.button === 0 && this.gun?.auto && this.d.world.walker.captured) this.trigger = true;
+    // v7.4: the right button held aims in
+    if (e.button === 2 && this.gun) this.aiming = true;
   };
 
-  private onUp = (): void => {
-    this.trigger = false;
+  private onUp = (e?: Event): void => {
+    const b = (e as PointerEvent | undefined)?.button;
+    if (b === undefined || b === 0) this.trigger = false;
+    if (b === undefined || b === 2) this.aiming = false;
   };
+
+  /** No browser menu on a right click while a gun's out (it aims). */
+  private onMenu = (e: Event): void => {
+    if (this.gun) e.preventDefault();
+  };
+
+  /**
+   * v7.4: aiming in (the right button held): the view narrows to AIM_ZOOM of the engine's own
+   * and back, eased; the crosshair tightens; you walk steadily and can't run.
+   */
+  private aimView(dt: number): void {
+    const cam = this.d.engine.camera;
+    const want = this.aiming && this.gun ? 1 : 0;
+    if (want === 0 && this.aimK === 0) return;
+    const walker = this.d.world.walker;
+    if (this.aimK === 0) {
+      this.baseFov = cam.fov;
+      // aiming is through the eyes (behind your back, your own shoulders would hide the sights)
+      this.aimFrom = walker.view;
+      if (this.aimFrom === 'third') walker.setView('first');
+    }
+    this.aimK += (want - this.aimK) * (1 - Math.exp(-dt * 14));
+    if (want === 0 && this.aimK < 0.01) {
+      this.aimK = 0;
+      if (this.aimFrom === 'third' && walker.view === 'first') walker.setView('third');
+    }
+    cam.fov = this.baseFov * (1 - (1 - AIM_ZOOM) * this.aimK);
+    cam.updateProjectionMatrix();
+    paceBoost.aim = this.aimK > 0.5;
+    this.cross.classList.toggle('aiming', this.aimK > 0.5);
+  }
 
   private fire(): void {
     const g = this.gun!;
@@ -269,7 +314,7 @@ export class Arms {
     if (!g) return;
     this.ammo.hidden = false;
     const reloading = performance.now() < this.reloadUntil;
-    this.ammo.textContent = `${g.name} · ${reloading ? 'reloading' : `${this.rounds} / ${g.mag}`} · R next gun`;
+    this.ammo.textContent = `${g.name} · ${reloading ? 'reloading' : `${this.rounds} / ${g.mag}`} · ${keyLabel('gun')} holster · right-click aims`;
   }
 
   private shake = 0;
@@ -333,11 +378,12 @@ export class Arms {
     const world = this.d.world;
     // put it away for a table, a car, the menu
     if (this.gun && !this.d.free()) this.holster();
+    this.aimView(dt);
     const touch = document.documentElement.classList.contains('touch-ui') && this.d.free() && this.d.owned().some((id) => gunItem(id));
     if (this.gunBtn.hidden === touch) this.gunBtn.hidden = !touch;
     const fire = touch && !!this.gun;
     if (this.fireBtn.hidden === fire) this.fireBtn.hidden = !fire;
-    this.gunBtn.textContent = this.gun ? 'Next gun' : 'Gun';
+    this.gunBtn.textContent = this.gun ? 'Holster' : 'Gun';
     if (this.gun) {
       const ch = world.player.character as unknown as Person;
       ch.aimGun(-world.walker.aim.pitch * 0.8);
@@ -397,6 +443,7 @@ export class Arms {
     for (const off of this.offs) off();
     removeEventListener('keydown', this.onKey);
     this.d.engine.canvas.removeEventListener('pointerdown', this.onDown);
+    this.d.engine.canvas.removeEventListener('contextmenu', this.onMenu);
     removeEventListener('pointerup', this.onUp);
     removeEventListener('blur', this.onUp);
     for (const m of this.targetMeshes) m.removeFromParent();

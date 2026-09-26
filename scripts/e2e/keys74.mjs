@@ -26,6 +26,8 @@ await p.keyboard.press('Escape');
 await p.waitForTimeout(300);
 await p.click('.hud [aria-label^="Settings"], .hud [title^="Settings"]');
 await p.waitForSelector('.keys-list');
+// the Keys block is near the top: in view without scrolling
+ok(await p.evaluate(() => { const r = document.querySelector('.keys-list').getBoundingClientRect(); return r.top < innerHeight; }), 'Keys shows without scrolling Settings');
 const walk = p.locator('.keys-key[aria-label^="Walk forward"]');
 await walk.scrollIntoViewIfNeeded();
 await walk.click();
@@ -59,6 +61,27 @@ await p.locator('.keys-reset').scrollIntoViewIfNeeded();
 await p.click('.keys-reset');
 ok((await walk.textContent()) === 'W', 'reset puts W back');
 ok(await p.evaluate(() => localStorage.getItem('casino.keys') === null), 'nothing kept once back on the defaults');
+// v7.4: aiming in with a gun (the account is given one in the local database first: GUN=<id>)
+if (process.env.GUN) {
+  await p.keyboard.press('Escape');
+  await p.waitForTimeout(400);
+  await p.keyboard.press('KeyV');
+  await p.waitForTimeout(600);
+  const fov0 = await p.evaluate(() => window.casino.engine.camera.fov);
+  const box = await p.locator('#scene').boundingBox();
+  await p.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await p.mouse.down({ button: 'right' });
+  await p.waitForTimeout(600);
+  const fov1 = await p.evaluate(() => window.casino.engine.camera.fov);
+  const tight = await p.evaluate(() => document.querySelector('.arms-cross')?.classList.contains('aiming'));
+  await p.screenshot({ path: `${out}/keys74-aim.png` });
+  await p.mouse.up({ button: 'right' });
+  await p.waitForTimeout(600);
+  const fov2 = await p.evaluate(() => window.casino.engine.camera.fov);
+  ok(fov1 < fov0 * 0.65, `aiming narrows the view (${fov0.toFixed(1)} -> ${fov1.toFixed(1)})`);
+  ok(tight, 'the crosshair tightens');
+  ok(Math.abs(fov2 - fov0) < 0.1, `letting go puts the view back (${fov2.toFixed(1)})`);
+}
 ok(errors.length === 0, `no page errors ${errors.join(' | ')}`);
 console.log(failed ? `${failed} failed` : 'all passed');
 await browser.close();

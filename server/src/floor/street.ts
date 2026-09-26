@@ -40,7 +40,14 @@ export class Street {
   drive(ws: WebSocket, car: string | null): void {
     const p = this.d.presence;
     const a = p.attOf(ws);
-    if (!a) return;
+    if (!a) {
+      // (v7.4: never silent: a get-in that hears nothing just says "wouldn't start")
+      if (car !== null) {
+        console.error('drive: no attachment for this socket');
+        this.d.send(ws, { t: 'err', code: 'NOT_ELIGIBLE', msg: 'The floor lost track of you. Reload the page and try again.', about: 'drive' });
+      }
+      return;
+    }
     if (car === null) {
       if (!a.car) return;
       // v7.1: nothing is left on the street: the valet takes it back to the garage

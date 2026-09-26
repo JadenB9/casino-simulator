@@ -69,7 +69,7 @@ export function buildHome(mats: Mats, col: Collider, quality: Quality): HomeBuil
   for (let x = SOUTH_SOLID_TO + 2.4; x < A.x1; x += 2.4) kit.box('lacquer', x - 0.03, x + 0.03, 0.03, H - 0.1, A.z1 + 0.02, A.z1 + 0.12);
   kit.box('lacquer', A.x0 + 0.01, A.x1 - 0.01, H - 0.1, H - 0.005, A.z0 - 0.13, A.z0 - 0.01);
   kit.box('lacquer', A.x1 + 0.01, A.x1 + 0.13, H - 0.1, H - 0.005, A.z0 + 0.01, A.z1 - 0.01);
-  // the terrace door's frame; the doorway itself is shut by `terraceDoor` until the Penthouse step
+  // the terrace door's frame; the doorway, shut by `terraceDoor` until the flat is furnished, then open
   kit.box('lacquer', A.x1 + 0.02, A.x1 + 0.12, 0.03, H - 0.1, TERRACE.door.z0 - 0.05, TERRACE.door.z0);
   kit.box('lacquer', A.x1 + 0.02, A.x1 + 0.12, 0.03, H - 0.1, TERRACE.door.z1, TERRACE.door.z1 + 0.05);
   kit.box('lacquer', A.x1 + 0.02, A.x1 + 0.12, 2.6, H, TERRACE.door.z0, TERRACE.door.z1);
@@ -149,15 +149,15 @@ export function buildHome(mats: Mats, col: Collider, quality: Quality): HomeBuil
       furnished?.dispose();
       furnished = furnish(mats, col, t, owned, picks);
       group.add(furnished.group);
-      // the terrace door opens with the Penthouse step
-      terraceDoor.walk = t < 3;
-      doorGlass.visible = t < 3;
+      // (v7.4: the terrace door stands open for every owner: the balcony is theirs from the first step)
+      terraceDoor.walk = false;
+      doorGlass.visible = false;
     },
     get furnished() {
       return furnished;
     },
     get terrace() {
-      return tier >= 3;
+      return tier >= 1;
     },
   };
 

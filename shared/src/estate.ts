@@ -24,7 +24,7 @@ export interface ApartmentItem {
 export const APARTMENTS: readonly ApartmentItem[] = [
   { id: 'apt-residence', kind: 'apartment', name: 'The Residence', price: 150_000 * DOLLAR, about: 'Floor 31: an open-plan flat with a kitchen, a bedroom and the city out of every window.', tier: 1 },
   { id: 'apt-grand', kind: 'apartment', name: 'Grand Renovation', price: 1_500_000 * DOLLAR, about: 'Marble floors, walnut panelling, a fireplace, a wet bar and lights in the ceiling coves.', tier: 2 },
-  { id: 'apt-penthouse', kind: 'apartment', name: 'Penthouse Upgrade', price: 12_000_000 * DOLLAR, about: 'Gold fittings throughout and the terrace outside: an infinity pool, a hot tub and a fire pit.', tier: 3 },
+  { id: 'apt-penthouse', kind: 'apartment', name: 'Penthouse Upgrade', price: 12_000_000 * DOLLAR, about: 'Gold fittings throughout, and on your balcony an infinity pool, a hot tub and a fire pit.', tier: 3 },
 ];
 
 const APT_BY_ID = new Map(APARTMENTS.map((a) => [a.id, a]));

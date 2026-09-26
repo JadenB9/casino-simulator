@@ -263,7 +263,7 @@ export function furnish(mats: Mats, col: Collider, tier: number, owned: Readonly
     own.box(-131, 65.8, 1.8, 5.4, 0, 1.07);
   }
   // the terrace: the Penthouse step opens it (pool, hot tub, fire pit, loungers)
-  if (t >= 3) terrace(kit, own);
+  terrace(kit, own, t >= 3);
 
   // --- the pieces ------------------------------------------------------------------------------
   const pieces = new Map<HomeSlot, HomeItem | null>();
@@ -331,32 +331,35 @@ export function furnish(mats: Mats, col: Collider, tier: number, owned: Readonly
 }
 
 /** The terrace past the east glass: teak, an infinity pool along the rail, a hot tub, a fire pit, loungers. */
-function terrace(kit: Kit, col: Collider): void {
+function terrace(kit: Kit, col: Collider, full: boolean): void {
   const T = TERRACE;
   kit.box('deck', T.x0 + 0.02, T.x1, -0.1, 0.01, T.z0, T.z1, 2.8);
-  // the pool: tiled, lit from inside, its far edge a sheet of glass over the drop
-  const P = { x0: -128.2, x1: -122.6, z0: 63.6, z1: 78.4 };
-  kit.box('home-tile', P.x0, P.x1, -0.1, 0.02, P.z0, P.z1, 1);
-  kit.box('water-pool', P.x0 + 0.1, P.x1 - 0.05, 0.02, 0.28, P.z0 + 0.1, P.z1 - 0.1);
-  kit.box('stone-warm', P.x0 - 0.3, P.x0, 0.01, 0.34, P.z0, P.z1, 1.6);
-  kit.box('stone-warm', P.x0 - 0.3, P.x1, 0.01, 0.34, P.z0 - 0.3, P.z0, 1.6);
-  kit.box('stone-warm', P.x0 - 0.3, P.x1, 0.01, 0.34, P.z1, P.z1 + 0.3, 1.6);
-  kit.light(hdr('#5fd8ff', 1.3), (P.x0 + P.x1) / 2, 0.29, (P.z0 + P.z1) / 2, P.x1 - P.x0 - 0.4, 0.004, P.z1 - P.z0 - 0.4);
-  col.box((P.x0 + P.x1) / 2 - 0.15, (P.z0 + P.z1) / 2, P.x1 - P.x0 + 0.3, P.z1 - P.z0 + 0.6, 0, 0.34);
-  // the hot tub, round, steaming blue
-  kit.cylinder('stone-warm', -125.4, 80.6, 1.25, 0.01, 0.62, 28);
-  kit.cylinder('water-pool', -125.4, 80.6, 1.08, 0.5, 0.58, 28);
-  kit.light(hdr('#7fe4ff', 1.2), -125.4, 0.59, 80.6, 1.6, 0.004, 1.6);
-  col.post(-125.4, 80.6, 1.3, 0.62);
-  // the fire pit with its ring of low seats
-  kit.cylinder('granite', -125.4, 61.6, 0.75, 0.01, 0.42, 24);
-  kit.cylinder('fire', -125.4, 61.6, 0.45, 0.42, 0.5, 16, 0.3);
-  col.post(-125.4, 61.6, 0.8, 0.5);
-  // loungers along the glass by the pool's head
-  for (const z of [65.2, 68.2, 71.2, 74.2]) {
-    kit.box('teak', -129.6, -128.7, 0.01, 0.34, z - 0.35, z + 0.35);
-    kit.box('cushion', -129.55, -128.75, 0.34, 0.42, z - 0.33, z + 0.33);
-    col.box(-129.15, z, 0.9, 0.7, 0, 0.42);
+  // v7.4: the balcony is every owner's; the pool, the hot tub, the fire pit and the loungers are the Penthouse's
+  if (full) {
+    // the pool: tiled, lit from inside, its far edge a sheet of glass over the drop
+    const P = { x0: -128.2, x1: -122.6, z0: 63.6, z1: 78.4 };
+    kit.box('home-tile', P.x0, P.x1, -0.1, 0.02, P.z0, P.z1, 1);
+    kit.box('water-pool', P.x0 + 0.1, P.x1 - 0.05, 0.02, 0.28, P.z0 + 0.1, P.z1 - 0.1);
+    kit.box('stone-warm', P.x0 - 0.3, P.x0, 0.01, 0.34, P.z0, P.z1, 1.6);
+    kit.box('stone-warm', P.x0 - 0.3, P.x1, 0.01, 0.34, P.z0 - 0.3, P.z0, 1.6);
+    kit.box('stone-warm', P.x0 - 0.3, P.x1, 0.01, 0.34, P.z1, P.z1 + 0.3, 1.6);
+    kit.light(hdr('#5fd8ff', 1.3), (P.x0 + P.x1) / 2, 0.29, (P.z0 + P.z1) / 2, P.x1 - P.x0 - 0.4, 0.004, P.z1 - P.z0 - 0.4);
+    col.box((P.x0 + P.x1) / 2 - 0.15, (P.z0 + P.z1) / 2, P.x1 - P.x0 + 0.3, P.z1 - P.z0 + 0.6, 0, 0.34);
+    // the hot tub, round, steaming blue
+    kit.cylinder('stone-warm', -125.4, 80.6, 1.25, 0.01, 0.62, 28);
+    kit.cylinder('water-pool', -125.4, 80.6, 1.08, 0.5, 0.58, 28);
+    kit.light(hdr('#7fe4ff', 1.2), -125.4, 0.59, 80.6, 1.6, 0.004, 1.6);
+    col.post(-125.4, 80.6, 1.3, 0.62);
+    // the fire pit with its ring of low seats
+    kit.cylinder('granite', -125.4, 61.6, 0.75, 0.01, 0.42, 24);
+    kit.cylinder('fire', -125.4, 61.6, 0.45, 0.42, 0.5, 16, 0.3);
+    col.post(-125.4, 61.6, 0.8, 0.5);
+    // loungers along the glass by the pool's head
+    for (const z of [65.2, 68.2, 71.2, 74.2]) {
+      kit.box('teak', -129.6, -128.7, 0.01, 0.34, z - 0.35, z + 0.35);
+      kit.box('cushion', -129.55, -128.75, 0.34, 0.42, z - 0.33, z + 0.33);
+      col.box(-129.15, z, 0.9, 0.7, 0, 0.42);
+    }
   }
   // the glass rail round the edge, and the walker stays behind it
   kit.box('glass', T.x1 - 0.02, T.x1, 0.01, 1.1, T.z0, T.z1);

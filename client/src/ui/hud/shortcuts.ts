@@ -24,6 +24,7 @@ export const SHORTCUTS: readonly { title: string; rows: readonly Row[] }[] = [
       [() => keyLabel('run'), 'Run, held while walking'],
       [() => keyLabel('jump'), 'Jump'],
       [() => keyLabel('crouch'), 'Crouch, and stand up again'],
+      ['Right-click', 'Aim in, held, with a gun out'],
       [() => keyLabel('gun'), 'Draw your gun (pick one if you own several), again to put it away; click fires'],
       [() => keyLabel('interact'), 'Whatever the prompt offers; again to stand up'],
       [() => keyLabel('view'), 'First or third person'],
@@ -117,7 +118,7 @@ function keys(spec: string): HTMLElement {
 }
 
 export function openShortcuts(deps: { root: HTMLElement; onClose?(): void }): Closable {
-  const sheet = openSheet(deps.root, { title: 'Keyboard', subtitle: 'Keys work when no text field has focus. Settings, Keys changes any of the floor\'s.', cls: 'shortcuts-sheet', onClose: deps.onClose });
+  const sheet = openSheet(deps.root, { title: 'Keyboard', subtitle: 'Change any floor key in Settings (the gear, top right), under Keys. Keys work when no text field has focus.', cls: 'shortcuts-sheet', onClose: deps.onClose });
   const grid = el('div', 'sc-grid');
   for (const group of SHORTCUTS) {
     const g = el('section', 'sc-group');

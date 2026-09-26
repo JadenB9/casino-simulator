@@ -17,3 +17,7 @@
 .arms-fire { bottom: 282px; width: 92px; height: 92px; }
 @media (max-width: 520px) { .arms-gun { bottom: 226px; } .arms-fire { bottom: 318px; } }
 @media (max-height: 480px) { .arms-gun { bottom: 90px; right: 280px; } .arms-fire { bottom: 84px; right: 374px; } }
+/* v7.4: aiming in: a tight cross with a dot */
+.arms-cross.aiming { width: 12px; height: 12px; margin: -6px 0 0 -6px; }
+.arms-cross.aiming::before { left: 5px; width: 2px; height: 12px; opacity: 0.55; }
+.arms-cross.aiming::after { top: 5px; width: 12px; height: 2px; opacity: 0.55; }

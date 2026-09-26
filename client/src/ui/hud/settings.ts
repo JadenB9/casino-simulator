@@ -109,6 +109,9 @@ export function openSettings(deps: SettingsDeps): Closable {
 
   const tipsCtl = segmented<'on' | 'off'>('Tips', [{ id: 'on', label: 'On' }, { id: 'off', label: 'Off' }], tips.on ? 'on' : 'off', (v) => tips.set(v === 'on'));
   sheet.body.append(
+    // v7.4: the controls and the keys first, where they're found
+    ...controlSettings(row), // world: the camera and mouse look
+    ...(keys?.nodes ?? []),
     el('h3', 'section-label', 'Tables'),
     row('Tips', tipsCtl.root, el('p', 'set-note', 'Shows the best play where a game has one (basic strategy, the video poker holds, Q-6-4) and which bets are better elsewhere.')),
     ...bigWinSettings(row), // features: big-win toasts
@@ -120,8 +123,6 @@ export function openSettings(deps: SettingsDeps): Closable {
     el('h3', 'section-label', 'Audio'),
     row('Sound', sound.root, el('p', 'set-note', `${keyLabel('mute')} mutes and unmutes anywhere.`)),
     row('Volume', volWrap),
-    ...controlSettings(row), // world: the camera and mouse look
-    ...(keys?.nodes ?? []),
   );
   return { root: sheet.root, close: () => sheet.close() };
 }
