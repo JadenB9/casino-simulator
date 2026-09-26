@@ -93,6 +93,8 @@ export const STAFF: readonly StaffSpec[] = [
       { x: 4.3, z: -16 },
       { x: 1.2, z: -18.6 },
       { x: 0, z: -22 },
+      // (v7.4: round the salon's poker table's east end)
+      { x: -1.4, z: -24.3 },
       { x: -5, z: -24.3, wait: 7, face: N, sweep: 0.5 },
       { x: 5, z: -24.3, wait: 7, face: N, sweep: 0.5 },
       { x: 1.2, z: -19.4 },

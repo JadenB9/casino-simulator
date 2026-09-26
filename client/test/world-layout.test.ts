@@ -91,8 +91,8 @@ describe('the building', () => {
     const p = plan();
     const count = (f: (s: Placement) => boolean) => p.stations.filter(f).length;
     expect(count((s) => s.room === 'pit')).toBe(10);
-    expect(count((s) => s.room === 'salon' && s.tier === 'high')).toBe(3);
-    expect(count((s) => s.game === 'holdem')).toBe(4);
+    expect(count((s) => s.room === 'salon' && s.tier === 'high')).toBe(4); // v7.4: and the nosebleed Hold'em
+    expect(count((s) => s.game === 'holdem')).toBe(5);
     expect(p.banks).toHaveLength(12);
     expect(count((s) => s.game === 'slots')).toBe(48);
     expect(count((s) => s.zone === 'online')).toBe(24);

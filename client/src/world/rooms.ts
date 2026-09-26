@@ -557,11 +557,11 @@ export const ROOMS: RoomSpec[] = [
           { id: 'vip-rl-1', game: 'roulette', variant: 'european' },
         ],
       },
+      // v7.4: nosebleed Hold'em where the west chairs were, $25K/$50K blinds by default (a $1M to
+      // $12.5M buy-in; $100K/$200K takes $50M)
+      { kind: 'station', id: 'vip-pk-1', game: 'holdem', x: -5.0, z: 3.3, yaw: 0, tier: 'high' },
     ],
     furniture: [
-      { kind: 'tub', x: -7.8, z: 3.5, yaw: Math.PI / 2 },
-      { kind: 'tub', x: -6.4, z: 4.9, yaw: Math.PI },
-      { kind: 'side', x: -7.7, z: 4.8, yaw: 0 },
       { kind: 'tub', x: 7.8, z: 3.5, yaw: -Math.PI / 2 },
       { kind: 'tub', x: 6.4, z: 4.9, yaw: Math.PI },
       { kind: 'side', x: 7.7, z: 4.8, yaw: 0 },
@@ -910,7 +910,9 @@ export const ROUTES: [RoomId | 'pickup', number, number, number?][][] = [
   [
     ['pit', 0, -9.6],
     ['salon', 0, 4.6],
-    ['salon', -5.6, 1.2, 3],
+    // (v7.4: round the poker table's east end)
+    ['salon', -1.4, 1.0],
+    ['salon', -5.6, 1.0, 3],
     ['salon', 5.6, 1.2, 3],
     ['salon', 7.6, 1.2],
     ['salon', 7.6, -4.9],

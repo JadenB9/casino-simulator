@@ -81,7 +81,8 @@ export class LimitsPicker {
     const saved = remembered(game);
     const tiers = this.spec.tiers;
     let at = saved ? tiers.findIndex((t) => sameLimits(t, saved)) : this.spec.standard;
-    const preferred = opts.prefer ? tiers.findIndex((t) => t.name === opts.prefer) : -1;
+    // (v7.4: Hold'em's tiers are its blinds, unnamed: in the salon it opens at the second highest)
+    const preferred = opts.prefer ? (blinds && opts.salon ? tiers.length - 2 : tiers.findIndex((t) => t.name === opts.prefer)) : -1;
     if (preferred >= 0 && (!saved || saved.max < tiers[preferred]!.max)) at = preferred;
     this.pick = at >= 0 ? at : tiers.length;
     this.customLimits = saved ?? standardLimits(game)!;
