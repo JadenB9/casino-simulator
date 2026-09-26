@@ -183,7 +183,8 @@ export function limitsParam(l: TableLimits): string {
 }
 
 export function parseLimitsParam(s: string | null): TableLimits | null {
-  const m = s ? /^(\d{1,12})-(\d{1,12})$/.exec(s) : null;
+  // (up to 16 digits: any whole number of cents that counts exactly, which parseLimits checks)
+  const m = s ? /^(\d{1,16})-(\d{1,16})$/.exec(s) : null;
   return m ? parseLimits({ min: Number(m[1]), max: Number(m[2]) }) : null;
 }
 

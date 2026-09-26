@@ -260,8 +260,15 @@ describe('parsing', () => {
     expect(parseLimitsParam(limitsParam({ min: 2_500, max: 500_000 }))).toEqual({ min: 2_500, max: 500_000 });
     expect(parseLimitsParam('25-5000x')).toBeNull();
     expect(parseLimitsParam('-5-5000')).toBeNull();
-    expect(parseLimitsParam('9999999999999-1')).toBeNull();
+    expect(parseLimitsParam('99999999999999999-1')).toBeNull();
+    expect(parseLimitsParam('9007199254740993-1')).toBeNull();
     expect(parseLimitsParam(null)).toBeNull();
+    // the top of every game's custom limits reaches a solo table (v7.1 took them to $100 billion)
+    for (const game of GAMES) {
+      const spec = LIMITS[game]!;
+      const top = { min: spec.min.high, max: spec.max.ceiling };
+      expect(parseLimitsParam(limitsParam(top)), game).toEqual(top);
+    }
   });
 });
 
