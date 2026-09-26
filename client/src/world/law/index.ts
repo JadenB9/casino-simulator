@@ -27,7 +27,7 @@ import type { Person } from '../characters.ts';
 import type { SpotProvider } from '../interact.ts';
 import { Speech } from '../life/speech.ts';
 import { LawStaff } from './staff.ts';
-import { BANK_SPOT, buildJail, jailCeiling, type Jail } from './jail.ts';
+import { BANK_SPOT, buildJail, jailCeiling, seesInside, type Jail } from './jail.ts';
 import { LawSounds } from './sound.ts';
 import { Inmates } from './inmates.ts';
 import type { Characters } from '../characters.ts';
@@ -405,7 +405,12 @@ export class Law {
   private update(dt: number): void {
     const now = serverNow();
     this.jail.group.visible = this.deps.world.zone === 'ground';
-    this.inmates.update(dt, now, this.jail.group.visible);
+    // the tables and the inmates inside are only drawn from where they can be seen (the floor's
+    // stand-ins don't cover the jail's tables; an inmate's walk is a function of the time)
+    const cam = this.deps.engine.camera.position;
+    const seen = this.jail.group.visible && seesInside(cam.x, cam.z);
+    for (const s of this.jail.stations) s.anchor.visible = seen;
+    this.inmates.update(dt, now, seen);
     const p = this.deps.world.player.position;
     this.staff.update(dt, now, this._watch.set(p.x, 1.6, p.z));
     this.speech.update(dt);

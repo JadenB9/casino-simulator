@@ -250,8 +250,7 @@ export function furnish(mats: Mats, col: Collider, tier: number, owned: Readonly
   }
   const built = kit.batch.build(group, 'home');
   const glows = kit.glow.build(group);
-  const pools = kit.pools('#ffd8a8', 0.2);
-  if (pools) group.add(pools);
+  // (no pools of light on the floor in here: the owner found the circles too plain to see)
   for (const b of own.boxes) col.boxes.push(b);
   for (const p of own.posts) col.posts.push(p);
   return {
@@ -271,12 +270,6 @@ export function furnish(mats: Mats, col: Collider, tier: number, owned: Readonly
         if (i >= 0) col.posts.splice(i, 1);
       }
       for (const m of [...built.meshes, ...glows.meshes]) m.dispose();
-      if (pools) {
-        pools.geometry.dispose();
-        const mat = pools.material as THREE.MeshBasicMaterial;
-        mat.map?.dispose();
-        mat.dispose();
-      }
       for (const m of rack) m.geometry.dispose();
       if (neon) {
         neon.geometry.dispose();

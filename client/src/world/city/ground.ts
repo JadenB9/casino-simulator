@@ -337,7 +337,7 @@ export function buildGround(mats: Mats, col: Collider, quality: Quality): ZoneBu
   near.push({ x: 158, z: 91, w: 16, d: 22, h: 44 }, { x: 158, z: -91, w: 16, d: 22, h: 52 });
   // and west, behind the lobby and its lots (the casino's floor is out that way: they stand between)
   near.push({ x: 90, z: -40, w: 16, d: 38, h: 56 }, { x: 89, z: 0, w: 18, d: 40, h: 92 }, { x: 90, z: 40, w: 16, d: 38, h: 64 });
-  const towerMesh = towers(near, 'night', 0x7a11);
+  const towerMesh = towers(near, 'night', 0x7a11, high ? 1024 : 512);
   group.add(towerMesh);
   // (the walls the walker can't pass are streets.ts's: the outer sidewalks' backs, the lots' ends)
   const beacons = new Beacons(near.filter((t) => t.h > 80).map((t) => new THREE.Vector3(t.x, (t.y0 ?? 0) + t.h + 1.5, t.z)), 17);

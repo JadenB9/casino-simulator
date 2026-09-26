@@ -51,6 +51,13 @@ export class Kit {
     this.batch.add(new THREE.CylinderGeometry(rTop, r, y1 - y0, seg), this.mat(mat), { x, y: (y0 + y1) / 2, z });
   }
 
+  /** A rounded lump (a tree's crown): an icosahedron of radius r, squashed by `sy`. */
+  blob(mat: string, x: number, y: number, z: number, r: number, sy = 1): void {
+    const geo = new THREE.IcosahedronGeometry(r, 1);
+    geo.scale(1, sy, 1);
+    this.batch.add(geo, this.mat(mat), { x, y, z });
+  }
+
   /** A flat piece lying on the ground at height y (a marking, a rug): a thin box. */
   flat(mat: string, x0: number, x1: number, z0: number, z1: number, y: number, uv?: number): void {
     this.box(mat, x0, x1, y - 0.004, y, z0, z1, uv);
@@ -134,7 +141,10 @@ export class Kit {
     this.seats.push({ ...s, room: this.zone });
   }
 
-  /** The pools as one additive mesh (tinted `color`, `k` strong). */
+  /**
+   * The pools as one additive mesh (tinted `color`, `k` strong, then scaled by POOL_K: the owner
+   * asked for the circles of light to be a hint at most).
+   */
   pools(color: string, k: number): THREE.Mesh | null {
     if (this.poolGeos.length === 0) return null;
     const merged = new THREE.BufferGeometry();
@@ -151,7 +161,7 @@ export class Kit {
     merged.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
     const tex = canvasTexture(poolCanvas(128), 1);
     tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
-    const m = new THREE.MeshBasicMaterial({ map: tex, color: new THREE.Color(color).multiplyScalar(k), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+    const m = new THREE.MeshBasicMaterial({ map: tex, color: new THREE.Color(color).multiplyScalar(k * POOL_K), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
     m.name = 'city-pools';
     const mesh = new THREE.Mesh(merged, m);
     mesh.name = `${this.zone}:pools`;
@@ -159,6 +169,9 @@ export class Kit {
     return mesh;
   }
 }
+
+/** v7.4: how strong the pools are drawn, of what each zone asks for. */
+const POOL_K = 0.3;
 
 /** A pool's falloff: bright in the middle, a long soft edge. */
 function poolCanvas(size: number): HTMLCanvasElement {
@@ -181,7 +194,7 @@ export function defineCityMats(mats: Mats): void {
     let t: THREE.Texture | null = null;
     return () => (t ??= canvasTexture(draw(), 8));
   };
-  const asphalt = lazy(() => drawAsphalt(512, 71));
+  const asphalt = lazy(() => drawAsphalt(1024, 71));
   const pavers = lazy(() => drawPavers(512, 73));
   const hedge = lazy(() => drawHedge(256, 79));
   const hi = (q: string) => q === 'high';
@@ -191,6 +204,7 @@ export function defineCityMats(mats: Mats): void {
   mats.define1('paint-white', () => new THREE.MeshLambertMaterial({ color: '#d8d6cf' }));
   mats.define1('paint-yellow', () => new THREE.MeshLambertMaterial({ color: '#d9a52a' }));
   mats.define1('hedge', () => new THREE.MeshLambertMaterial({ map: hedge(), color: '#6a8a5a' }));
+  mats.define1('bark', () => new THREE.MeshLambertMaterial({ color: '#3a2e26' }));
   mats.define1('car-glass', (q) => (hi(q) ? new THREE.MeshStandardMaterial({ color: '#0e1218', roughness: 0.1, metalness: 0.5 }) : new THREE.MeshLambertMaterial({ color: '#10141a' })));
   mats.define1('sidewalk', () => new THREE.MeshLambertMaterial({ map: sidewalk() }));
   mats.define1('cushion', () => new THREE.MeshLambertMaterial({ color: '#e6ddcc' }));
@@ -394,24 +408,71 @@ function drawGranite(size: number, seed: number): HTMLCanvasElement {
   return c;
 }
 
+/**
+ * Asphalt, 6 m a repeat: the binder's broad unevenness (soft blotches lighter and darker), the
+ * aggregate's specks, a patch or two cut in with a darker fresh surface, tar-sealed cracks
+ * wandering across it, and the odd oil stain.
+ */
 function drawAsphalt(size: number, seed: number): HTMLCanvasElement {
   const c = document.createElement('canvas');
   c.width = c.height = size;
   const g = c.getContext('2d')!;
   const rnd = rng(seed);
-  g.fillStyle = '#34343a';
+  g.fillStyle = '#34353a';
   g.fillRect(0, 0, size, size);
-  // aggregate: thousands of specks, lighter and darker
-  for (let i = 0; i < size * size * 0.12; i++) {
-    const v = 40 + Math.floor(rnd() * 40);
-    g.fillStyle = `rgb(${v},${v},${v + 4})`;
-    g.fillRect(Math.floor(rnd() * size), Math.floor(rnd() * size), 1, 1);
+  // broad unevenness, drawn wrapped so the repeat has no seam
+  const blot = (x: number, y: number, r: number, color: string) => {
+    for (const dx of [-size, 0, size]) {
+      for (const dy of [-size, 0, size]) {
+        const grad = g.createRadialGradient(x + dx, y + dy, 0, x + dx, y + dy, r);
+        grad.addColorStop(0, color);
+        grad.addColorStop(1, 'rgba(0,0,0,0)');
+        g.fillStyle = grad;
+        g.fillRect(x + dx - r, y + dy - r, r * 2, r * 2);
+      }
+    }
+  };
+  for (let i = 0; i < 26; i++) blot(rnd() * size, rnd() * size, size * (0.08 + rnd() * 0.2), rnd() < 0.5 ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.09)');
+  // aggregate: specks, lighter and darker
+  const n = size * size * 0.14;
+  for (let i = 0; i < n; i++) {
+    const v = 38 + Math.floor(rnd() * 46);
+    g.fillStyle = `rgb(${v},${v},${v + 3})`;
+    const s = rnd() < 0.1 ? 2 : 1;
+    g.fillRect(Math.floor(rnd() * size), Math.floor(rnd() * size), s, s);
   }
-  // a few faint patches
-  for (let i = 0; i < 6; i++) {
-    g.fillStyle = `rgba(20,20,24,${0.04 + rnd() * 0.05})`;
-    g.fillRect(rnd() * size, rnd() * size, 40 + rnd() * 120, 30 + rnd() * 90);
+  // a patch cut in, darker and smoother, its edge a thin seam
+  for (let i = 0; i < 2; i++) {
+    const w = size * (0.15 + rnd() * 0.2);
+    const h = size * (0.1 + rnd() * 0.15);
+    const x = rnd() * (size - w);
+    const y = rnd() * (size - h);
+    g.fillStyle = 'rgba(18,18,22,0.35)';
+    g.fillRect(x, y, w, h);
+    g.strokeStyle = 'rgba(10,10,12,0.55)';
+    g.lineWidth = Math.max(1, size / 512);
+    g.strokeRect(x, y, w, h);
   }
+  // tar-sealed cracks: dark wandering lines
+  g.strokeStyle = 'rgba(12,12,14,0.75)';
+  for (let i = 0; i < 5; i++) {
+    g.lineWidth = (size / 512) * (1.5 + rnd() * 2.5);
+    let x = rnd() * size;
+    let y = rnd() * size;
+    let a = rnd() * Math.PI * 2;
+    g.beginPath();
+    g.moveTo(x, y);
+    const steps = 8 + Math.floor(rnd() * 14);
+    for (let k = 0; k < steps; k++) {
+      a += (rnd() - 0.5) * 0.9;
+      x = Math.min(size, Math.max(0, x + Math.cos(a) * size * 0.03));
+      y = Math.min(size, Math.max(0, y + Math.sin(a) * size * 0.03));
+      g.lineTo(x, y);
+    }
+    g.stroke();
+  }
+  // oil stains
+  for (let i = 0; i < 4; i++) blot(rnd() * size, rnd() * size, size * (0.02 + rnd() * 0.04), 'rgba(8,8,10,0.35)');
   return c;
 }
 

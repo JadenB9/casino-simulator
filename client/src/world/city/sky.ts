@@ -289,129 +289,462 @@ export function separate(list: readonly Tower[], gap = 0.6): Tower[] {
 }
 
 /**
- * Near towers as one merged mesh: facades of glass and stone with windows at a real pitch
- * (world-projected, so every tower keeps the same floor height), lit windows in the emissive map,
- * a flat roof. The sun and the hemisphere light them.
+ * Near towers (v7.4): each one is an office block in a curtain wall or a residential tower of
+ * punched windows in stone, so there are two facade materials; the stone or glass is tinted per
+ * tower (vertex colours, a little brighter near the street's light), and its bays are its own
+ * width, so no two towers read as one wallpaper. On top, a parapet, a plant room and on some a
+ * water tank, all one plain mesh. Towers standing on the street get a storefront podium: shops,
+ * lit or shuttered, their names over the windows. Four draw calls however many towers.
  */
-export function towers(list: Tower[], kind: SkyKind, seed: number): THREE.Mesh {
-  const geos: THREE.BufferGeometry[] = [];
+export function towers(list: Tower[], kind: SkyKind, seed: number, size = 1024): THREE.Group {
+  const rnd = rng(seed ^ 0x5eed);
+  const office: Box[] = [];
+  const homes: Box[] = [];
+  const crown: Box[] = [];
+  const shops: Box[] = [];
   for (const t of separate(list)) {
-    const g = new THREE.BoxGeometry(t.w, t.h, t.d);
-    g.translate(t.x, (t.y0 ?? 0) + t.h / 2, t.z);
-    // world-projected UVs: one texture repeat is 8 windows across and 8 floors up
+    const y0 = t.y0 ?? 0;
+    const isOffice = rnd() < 0.5;
+    const tint = pickTint(isOffice ? OFFICE_TINTS : STONE_TINTS, rnd);
+    // one repeat of the tile is 16 bays across and 16 floors up; a tower's bays are 1.5 to 2.1 m
+    const bay = 1.5 + rnd() * 0.6;
+    const uv = { su: 1 / (COLS * bay), sv: 1 / (ROWS * FLOOR_M), ou: rnd(), ov: Math.floor(rnd() * ROWS) / ROWS + 0.001 };
+    (isOffice ? office : homes).push({ x: t.x, y: y0 + t.h / 2, z: t.z, w: t.w, h: t.h, d: t.d, tint, uv, lift: y0 <= 0 });
+    // the crown: a parapet round the roof, a plant room in one corner, a water tank in another
+    const top = y0 + t.h;
+    const dark = tint.clone().multiplyScalar(0.5);
+    crown.push({ x: t.x, y: top + 0.35, z: t.z, w: t.w + 0.3, h: 1.3, d: t.d + 0.3, tint: dark });
+    const sx = rnd() < 0.5 ? -1 : 1;
+    const sz = rnd() < 0.5 ? -1 : 1;
+    const pw = t.w * (0.25 + rnd() * 0.15);
+    const pd = t.d * (0.25 + rnd() * 0.15);
+    const ph = 2.8 + rnd() * 2.2;
+    crown.push({ x: t.x + sx * (t.w / 2 - pw / 2 - 1), y: top + 1 + ph / 2, z: t.z + sz * (t.d / 2 - pd / 2 - 1), w: pw, h: ph, d: pd, tint: dark.clone().multiplyScalar(0.8) });
+    if (!isOffice && rnd() < 0.6) {
+      const r = 1.3 + rnd() * 0.5;
+      crown.push({ x: t.x - sx * (t.w / 2 - r - 1.2), y: top + 1 + 2.4, z: t.z - sz * (t.d / 2 - r - 1.2), w: r * 2, h: 2.6, d: r * 2, tint: new THREE.Color('#3a2a22'), round: true });
+      crown.push({ x: t.x - sx * (t.w / 2 - r - 1.2), y: top + 1 + 0.55, z: t.z - sz * (t.d / 2 - r - 1.2), w: r * 1.6, h: 1.1, d: r * 1.6, tint: new THREE.Color('#1c1c20') });
+    }
+    // a storefront round the foot of a tower standing on the street
+    if (y0 <= 0 && t.h > 12) shops.push({ x: t.x, y: PODIUM / 2, z: t.z, w: t.w + 0.3, h: PODIUM, d: t.d + 0.3, tint: new THREE.Color(1, 1, 1), uv: { su: 1 / SHOPS_M, sv: 1 / PODIUM, ou: rnd(), ov: 0 } });
+  }
+  const group = new THREE.Group();
+  group.name = 'towers';
+  const tiles = facadeTextures(kind, seed, size);
+  const glow = kind === 'night' ? 1.15 : 0.9;
+  const add = (boxes: Box[], mat: THREE.Material, name: string) => {
+    if (!boxes.length) return;
+    mat.name = 'towers';
+    const mesh = new THREE.Mesh(mergeBoxes(boxes), mat);
+    mesh.name = name;
+    group.add(mesh);
+  };
+  add(office, new THREE.MeshLambertMaterial({ map: tiles.office.map, emissiveMap: tiles.office.lit, emissive: new THREE.Color(1, 1, 1).multiplyScalar(glow), vertexColors: true }), 'towers:office');
+  add(homes, new THREE.MeshLambertMaterial({ map: tiles.homes.map, emissiveMap: tiles.homes.lit, emissive: new THREE.Color(1, 1, 1).multiplyScalar(glow), vertexColors: true }), 'towers:homes');
+  add(crown, new THREE.MeshLambertMaterial({ vertexColors: true }), 'towers:crown');
+  if (shops.length) {
+    // 48 m of shops a repeat: twice the facades' width, so a metre of it is as sharp
+    const s = storefrontTextures(seed, Math.min(2048, size * 2));
+    add(shops, new THREE.MeshLambertMaterial({ map: s.map, emissiveMap: s.lit, emissive: new THREE.Color(1, 1, 1).multiplyScalar(0.85), vertexColors: true }), 'towers:shops');
+  }
+  // the tiles themselves aren't on any mesh
+  if (!office.length) disposeTile(tiles.office);
+  if (!homes.length) disposeTile(tiles.homes);
+  return group;
+}
+
+/** The storefront podium's height (m): one tall shop storey and its fascia; its tile's length. */
+const PODIUM = 5.6;
+const SHOPS_M = 48;
+/** A floor's height (m). */
+const FLOOR_M = 3.6;
+
+interface Box {
+  x: number;
+  y: number;
+  z: number;
+  w: number;
+  h: number;
+  d: number;
+  tint: THREE.Color;
+  /** World-projected facade UVs (scale and offset); none: one flat colour. */
+  uv?: { su: number; sv: number; ou: number; ov: number };
+  /** Brighter toward the foot (the street's light on it). */
+  lift?: boolean;
+  /** A short octagonal drum instead of a box (a water tank). */
+  round?: boolean;
+}
+
+const OFFICE_TINTS = ['#aeb8c8', '#9fb2b0', '#c2b49c', '#b8b8bc', '#a4acbc'];
+const STONE_TINTS = ['#c9b89a', '#b7a58e', '#a4715e', '#c4c0b6', '#8e8274', '#b89a82'];
+
+function pickTint(list: string[], rnd: () => number): THREE.Color {
+  const c = new THREE.Color(list[Math.floor(rnd() * list.length)]!);
+  const k = 0.9 + rnd() * 0.2;
+  return c.multiplyScalar(k);
+}
+
+function disposeTile(t: { map: THREE.Texture; lit: THREE.Texture }): void {
+  t.map.dispose();
+  t.lit.dispose();
+}
+
+/** Boxes (and drums) into one geometry with normals, per-vertex colours and facade UVs. */
+function mergeBoxes(list: Box[]): THREE.BufferGeometry {
+  const geos: THREE.BufferGeometry[] = [];
+  const col = new THREE.Color();
+  for (const b of list) {
+    const g = b.round ? new THREE.CylinderGeometry(b.w / 2, b.w / 2, b.h, 8) : new THREE.BoxGeometry(b.w, b.h, b.d);
+    g.translate(b.x, b.y, b.z);
     const pos = g.getAttribute('position');
     const nor = g.getAttribute('normal');
     const uv = g.getAttribute('uv') as THREE.BufferAttribute;
-    const off = (t.x * 0.37 + t.z * 0.61) % 1;
+    const colors = new Float32Array(pos.count * 3);
+    const y0 = b.y - b.h / 2;
     for (let i = 0; i < pos.count; i++) {
       const nx = Math.abs(nor.getX(i));
       const ny = Math.abs(nor.getY(i));
-      const u = ny > 0.5 ? 0 : nx > 0.5 ? pos.getZ(i) : pos.getX(i);
-      const v = ny > 0.5 ? 0 : pos.getY(i);
-      uv.setXY(i, u / 27.2 + off, v / 28.8 + 0.001);
+      if (b.uv) {
+        // world-projected: along the face and up it; roofs take the tile's corner (a pier)
+        const u = ny > 0.5 ? 0 : nx > 0.5 ? pos.getZ(i) : pos.getX(i);
+        const v = ny > 0.5 ? 0 : pos.getY(i) - (b.lift === undefined ? y0 : 0);
+        uv.setXY(i, ny > 0.5 ? 0.001 : u * b.uv.su + b.uv.ou, ny > 0.5 ? 0.001 : v * b.uv.sv + b.uv.ov);
+      } else uv.setXY(i, 0, 0);
+      // the street's glow on the lower floors: 1.5 at the foot, 1 by 30 m up
+      const lift = b.lift ? 1 + 0.5 * Math.max(0, 1 - pos.getY(i) / 30) : 1;
+      col.copy(b.tint).multiplyScalar(lift);
+      colors[i * 3] = col.r;
+      colors[i * 3 + 1] = col.g;
+      colors[i * 3 + 2] = col.b;
     }
-    geos.push(g);
+    g.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    geos.push(g.index ? g.toNonIndexed() : g);
+    if (g.index) g.dispose();
   }
-  const merged = mergeBoxes(geos);
-  const { map, lit } = facadeTextures(kind, seed);
-  const material = new THREE.MeshLambertMaterial({ map, emissiveMap: lit, emissive: new THREE.Color(1, 1, 1).multiplyScalar(kind === 'night' ? 1.5 : 1.1) });
-  material.name = 'towers';
-  const mesh = new THREE.Mesh(merged, material);
-  mesh.name = 'towers';
-  return mesh;
-}
-
-function mergeBoxes(list: THREE.BufferGeometry[]): THREE.BufferGeometry {
   let verts = 0;
-  let idx = 0;
-  for (const g of list) {
-    verts += g.getAttribute('position').count;
-    idx += g.index!.count;
-  }
-  const pos = new Float32Array(verts * 3);
-  const nor = new Float32Array(verts * 3);
-  const uv = new Float32Array(verts * 2);
-  const index = new Uint32Array(idx);
-  let v = 0;
-  let k = 0;
-  for (const g of list) {
-    pos.set(g.getAttribute('position').array as Float32Array, v * 3);
-    nor.set(g.getAttribute('normal').array as Float32Array, v * 3);
-    uv.set(g.getAttribute('uv').array as Float32Array, v * 2);
-    const gi = g.index!.array;
-    for (let i = 0; i < gi.length; i++) index[k++] = gi[i]! + v;
-    v += g.getAttribute('position').count;
-    g.dispose();
-  }
+  for (const g of geos) verts += g.getAttribute('position').count;
   const out = new THREE.BufferGeometry();
-  out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  out.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
-  out.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
-  out.setIndex(new THREE.BufferAttribute(index, 1));
+  for (const [name, n] of [['position', 3], ['normal', 3], ['uv', 2], ['color', 3]] as const) {
+    const arr = new Float32Array(verts * n);
+    let v = 0;
+    for (const g of geos) {
+      arr.set(g.getAttribute(name).array as Float32Array, v * n);
+      v += g.getAttribute('position').count;
+    }
+    out.setAttribute(name, new THREE.BufferAttribute(arr, n));
+  }
+  for (const g of geos) g.dispose();
   out.computeBoundingSphere();
   return out;
 }
 
+type Tile = { map: THREE.Texture; lit: THREE.Texture };
+
 /**
- * A facade tile, 16 windows across and 8 floors up (1.7 m by 3.6 m each): a stone spandrel at
- * each floor, a mullion between windows and a pier every fourth, glass catching the sky high in
- * each pane; the emissive map holds which windows are lit (some with their blinds half down).
+ * The two facade tiles, 16 bays across and 16 floors up each (a bay 64 px, a floor 64 at 1024):
+ *   office  a curtain wall: vision glass over a dark spandrel at each floor, aluminium mullions;
+ *           a floor is dark, all lit or lit along a run of bays, cool light with the ceiling's
+ *           fittings brightest and the desks' partitions dark across the foot of the glass
+ *   homes   punched windows in stone with sills and heads, every other pair closer together;
+ *           a quarter of the rooms lit warm, some with curtains drawn to the sides, some with a
+ *           blind half down, now and then a television's blue; furniture dark across the foot
+ * The albedo is drawn light and neutral (the tower's vertex colour tints it); lit rooms are in the
+ * emissive map only. Sunset: fewer rooms lit, the glass catching the warm sky.
  */
-function facadeTextures(kind: SkyKind, seed: number): { map: THREE.Texture; lit: THREE.Texture } {
-  const COLS = 16;
-  const ROWS = 8;
-  const S = 512;
-  const cw = S / COLS;
-  const ch = S / ROWS;
+function facadeTextures(kind: SkyKind, seed: number, S: number): { office: Tile; homes: Tile } {
+  return { office: officeTile(kind, seed, S), homes: homesTile(kind, seed + 1, S) };
+}
+
+const COLS = 16;
+const ROWS = 16;
+
+function tileCanvases(S: number): [CanvasRenderingContext2D, CanvasRenderingContext2D, HTMLCanvasElement, HTMLCanvasElement] {
   const a = document.createElement('canvas');
   const b = document.createElement('canvas');
   a.width = a.height = b.width = b.height = S;
   const ga = a.getContext('2d')!;
   const gb = b.getContext('2d')!;
-  const rnd = rng(seed);
-  const stone = kind === 'night' ? '#4a4a50' : '#8a7870';
-  ga.fillStyle = stone;
-  ga.fillRect(0, 0, S, S);
   gb.fillStyle = '#000';
   gb.fillRect(0, 0, S, S);
-  const glassTop = kind === 'night' ? '#2a3448' : '#c08a70';
-  const glassLow = kind === 'night' ? '#0e121c' : '#3a3448';
+  return [ga, gb, a, b];
+}
+
+/** A lit room seen through a pane: brightest at the ceiling, dimmer down the room, the foot dark. */
+function room(gb: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, c: THREE.Color, k: number, rnd: () => number, office: boolean): void {
+  const grad = gb.createLinearGradient(0, y, 0, y + h);
+  const at = (f: number) => `rgb(${Math.round(c.r * 255 * f * k)},${Math.round(c.g * 255 * f * k)},${Math.round(c.b * 255 * f * k)})`;
+  grad.addColorStop(0, at(1));
+  grad.addColorStop(0.18, at(office ? 0.95 : 0.85));
+  grad.addColorStop(0.6, at(office ? 0.62 : 0.55));
+  grad.addColorStop(1, at(0.3));
+  gb.fillStyle = grad;
+  gb.fillRect(x, y, w, h);
+  if (office) {
+    // the ceiling's fittings, a bright line across the top of the glass
+    gb.fillStyle = at(1.1);
+    gb.fillRect(x, y + h * 0.04, w, Math.max(1, h * 0.035));
+    // partitions and screens across the foot
+    gb.fillStyle = at(0.14);
+    gb.fillRect(x, y + h * 0.72, w, h * 0.28);
+    if (rnd() < 0.5) {
+      gb.fillStyle = 'rgb(120,150,190)';
+      gb.fillRect(x + rnd() * (w - 6), y + h * 0.66, Math.max(3, w * 0.12), h * 0.06);
+    }
+  } else {
+    // furniture against the light: a sofa's back, a lamp, a chair
+    gb.fillStyle = at(0.12);
+    const n = 1 + Math.floor(rnd() * 2);
+    for (let i = 0; i < n; i++) {
+      const fw = w * (0.25 + rnd() * 0.4);
+      const fh = h * (0.12 + rnd() * 0.2);
+      gb.fillRect(x + rnd() * (w - fw), y + h - fh, fw, fh);
+    }
+    if (rnd() < 0.35) {
+      // a lamp's warm spot on the wall
+      const lx = x + w * (0.2 + rnd() * 0.6);
+      const ly = y + h * 0.45;
+      const spot = gb.createRadialGradient(lx, ly, 0, lx, ly, w * 0.35);
+      spot.addColorStop(0, 'rgba(255,220,160,0.55)');
+      spot.addColorStop(1, 'rgba(255,220,160,0)');
+      gb.fillStyle = spot;
+      gb.fillRect(x, y, w, h);
+    }
+  }
+}
+
+function officeTile(kind: SkyKind, seed: number, S: number): Tile {
+  const [ga, gb, a, b] = tileCanvases(S);
+  const rnd = rng(seed);
+  const cw = S / COLS;
+  const ch = S / ROWS;
+  const night = kind === 'night';
+  // aluminium frame everywhere, then glass
+  ga.fillStyle = '#9aa0a8';
+  ga.fillRect(0, 0, S, S);
+  const skyTop = night ? '#46546e' : '#d8a888';
+  const skyLow = night ? '#141a26' : '#4a4658';
   for (let j = 0; j < ROWS; j++) {
-    const floorLit = rnd() < 0.18 ? 0.02 : rnd() < 0.12 ? 0.85 : kind === 'night' ? 0.34 : 0.14;
     const y = j * ch;
-    // the floor's spandrel band along its foot
+    const spandrel = ch * 0.3;
+    // the spandrel: dark glass over the slab
+    ga.fillStyle = night ? '#23272e' : '#3a3438';
+    ga.fillRect(0, y + ch - spandrel, S, spandrel);
+    const vy = y + 3;
+    const vh = ch - spandrel - 5;
+    // how the floor is lit: dark, all on, or a run of bays (the cleaners, a late team)
+    const r = rnd();
+    const lit = night ? (r < 0.52 ? 'dark' : r < 0.64 ? 'all' : 'run') : r < 0.8 ? 'dark' : 'run';
+    const run0 = Math.floor(rnd() * COLS);
+    const runN = 2 + Math.floor(rnd() * 6);
+    const tone = new THREE.Color(['#d8e0f0', '#f0e8d8', '#e4e4e0'][Math.floor(rnd() * 3)]!);
+    const k = (lit === 'all' ? 0.42 : 0.5) + rnd() * 0.25;
     for (let i = 0; i < COLS; i++) {
-      const pier = i % 4 === 0 ? 3 : 1;
-      const x = i * cw + pier;
-      const w = cw - pier - 1;
-      const h = ch * 0.66;
-      const gy = y + ch * 0.12;
-      const grad = ga.createLinearGradient(0, gy, 0, gy + h);
-      grad.addColorStop(0, glassTop);
-      grad.addColorStop(0.45, glassLow);
-      grad.addColorStop(1, glassLow);
+      const x = i * cw + 2;
+      const w = cw - 4;
+      const grad = ga.createLinearGradient(0, vy, 0, vy + vh);
+      grad.addColorStop(0, skyTop);
+      grad.addColorStop(0.5, skyLow);
+      grad.addColorStop(1, skyLow);
       ga.fillStyle = grad;
-      ga.fillRect(x, gy, w, h);
-      if (rnd() < floorLit) {
-        const c = ['#ffcf8a', '#ffe0b0', '#ffd49a', '#e0e8ff', '#ffb870'][Math.floor(rnd() * 5)]!;
-        const blind = rnd() < 0.3 ? h * (0.3 + rnd() * 0.4) : 0;
-        gb.fillStyle = c;
-        gb.globalAlpha = 0.35 + rnd() * 0.5;
-        gb.fillRect(x, gy + blind, w, h - blind);
-        gb.globalAlpha = 1;
-        if (blind) {
-          ga.fillStyle = '#b8a890';
-          ga.fillRect(x, gy, w, blind);
+      ga.fillRect(x, vy, w, vh);
+      const on = lit === 'all' ? rnd() < 0.92 : lit === 'run' ? (i - run0 + COLS) % COLS < runN : false;
+      if (on) room(gb, x, vy, w, vh, tone, k * (0.85 + rnd() * 0.15), rnd, true);
+    }
+  }
+  return { map: canvasTexture(a, 8), lit: canvasTexture(b, 8) };
+}
+
+function homesTile(kind: SkyKind, seed: number, S: number): Tile {
+  const [ga, gb, a, b] = tileCanvases(S);
+  const rnd = rng(seed);
+  const cw = S / COLS;
+  const ch = S / ROWS;
+  const night = kind === 'night';
+  // the wall: stone in courses, a faint grain
+  ga.fillStyle = '#b8b2a8';
+  ga.fillRect(0, 0, S, S);
+  for (let y = 0; y < S; y += ch / 6) {
+    ga.fillStyle = 'rgba(0,0,0,0.06)';
+    ga.fillRect(0, y, S, 1);
+  }
+  for (let i = 0; i < S * 6; i++) {
+    const v = rnd() < 0.5 ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.05)';
+    ga.fillStyle = v;
+    ga.fillRect(rnd() * S, rnd() * S, 2, 2);
+  }
+  const warm = ['#ffd49a', '#ffc987', '#ffe2b8', '#ffbf7a', '#ffd9a8'];
+  for (let j = 0; j < ROWS; j++) {
+    const y = j * ch;
+    // the floor's slab band
+    ga.fillStyle = 'rgba(0,0,0,0.14)';
+    ga.fillRect(0, y + ch - 6, S, 6);
+    for (let i = 0; i < COLS; i++) {
+      // windows in pairs: the pair's two sit closer together
+      const pairOff = i % 2 === 0 ? cw * 0.12 : -cw * 0.12;
+      const w = cw * 0.52;
+      const x = i * cw + (cw - w) / 2 + pairOff;
+      const h = ch * 0.52;
+      const wy = y + ch * 0.2;
+      // head and sill
+      ga.fillStyle = '#d8d2c6';
+      ga.fillRect(x - 3, wy - 5, w + 6, 5);
+      ga.fillRect(x - 4, wy + h, w + 8, 6);
+      ga.fillStyle = 'rgba(0,0,0,0.35)';
+      ga.fillRect(x - 4, wy + h + 6, w + 8, 2);
+      // the glass, the sky in it
+      const grad = ga.createLinearGradient(0, wy, 0, wy + h);
+      grad.addColorStop(0, night ? '#3a4660' : '#d0a080');
+      grad.addColorStop(0.55, night ? '#10141e' : '#3e3a48');
+      grad.addColorStop(1, night ? '#0c0f16' : '#2a2834');
+      ga.fillStyle = grad;
+      ga.fillRect(x, wy, w, h);
+      // the frame's middle bar
+      ga.fillStyle = '#2a2a2e';
+      ga.fillRect(x + w / 2 - 1, wy, 2, h);
+      if (rnd() < (night ? 0.27 : 0.09)) {
+        const tv = rnd() < 0.08;
+        const c = new THREE.Color(tv ? '#8fb4ff' : warm[Math.floor(rnd() * warm.length)]!);
+        room(gb, x, wy, w, h, c, (tv ? 0.55 : 0.7) + rnd() * 0.3, rnd, false);
+        const style = rnd();
+        if (style < 0.35) {
+          // curtains drawn to the sides, lit through
+          const cw2 = w * (0.16 + rnd() * 0.1);
+          const cc = `rgba(${Math.round(c.r * 180)},${Math.round(c.g * 120)},${Math.round(c.b * 80)},0.9)`;
+          gb.fillStyle = cc;
+          gb.fillRect(x, wy, cw2, h);
+          gb.fillRect(x + w - cw2, wy, cw2, h);
+        } else if (style < 0.6) {
+          // a blind part way down: glowing softly through it
+          const bh = h * (0.25 + rnd() * 0.45);
+          gb.fillStyle = `rgba(${Math.round(c.r * 150)},${Math.round(c.g * 120)},${Math.round(c.b * 90)},1)`;
+          gb.fillRect(x, wy, w, bh);
+          ga.fillStyle = '#c8bca8';
+          ga.fillRect(x, wy, w, bh);
         }
+        // the frame's bar over the light
+        gb.fillStyle = '#000';
+        gb.fillRect(x + w / 2 - 1, wy, 2, h);
+      } else if (rnd() < 0.3) {
+        // drawn curtains in a dark room
+        ga.fillStyle = ['#6a5a4a', '#4a4e58', '#7a6a58', '#5a4640'][Math.floor(rnd() * 4)]!;
+        ga.fillRect(x, wy, w, h);
       }
     }
-    // a thin shadow line under each spandrel
-    ga.fillStyle = 'rgba(0,0,0,0.25)';
-    ga.fillRect(0, y + ch * 0.78, S, 2);
   }
-  const map = canvasTexture(a, 8);
-  const lit = canvasTexture(b, 8);
-  return { map, lit };
+  return { map: canvasTexture(a, 8), lit: canvasTexture(b, 8) };
+}
+
+const SHOP_NAMES = ['PHARMACY', 'DELI', 'CAFE', 'WINE & SPIRITS', 'PIZZA', 'FLOWERS', 'BAKERY', 'NAILS', 'OPTICAL', 'SUSHI', 'LAUNDRY', 'SHOES', 'BOOKS', 'NEWS', 'BAR', 'NOODLES', 'GELATO', 'TAILOR', 'BARBER', 'MARKET', 'DINER', 'JEWELRY', 'TOBACCO', 'FITNESS'];
+const SIGN_COLORS = ['#ffdca0', '#ff8a6a', '#9fe0ff', '#ffe27a', '#ff9ad0', '#b8ffb0', '#ffffff'];
+
+/**
+ * The storefront band, 24 m of shops a repeat (1024 px across, the podium's height up): shops 4
+ * to 7 m wide between stone piers, each with its name over the window (lit letters), an awning on
+ * some, the window lit warm with shelves and a door, or a steel shutter pulled down for the night.
+ */
+function storefrontTextures(seed: number, W: number): Tile {
+  const H = Math.round((W / SHOPS_M) * PODIUM * 2);
+  const a = document.createElement('canvas');
+  const b = document.createElement('canvas');
+  a.width = b.width = W;
+  a.height = b.height = H;
+  const ga = a.getContext('2d')!;
+  const gb = b.getContext('2d')!;
+  const rnd = rng(seed ^ 0x5409);
+  const px = W / SHOPS_M;
+  ga.fillStyle = '#6a645c';
+  ga.fillRect(0, 0, W, H);
+  gb.fillStyle = '#000';
+  gb.fillRect(0, 0, W, H);
+  // canvas y runs down; the texture's v runs up, so the foot is at the canvas's bottom
+  const fascia = { y0: H * 0.06, y1: H * 0.24 };
+  const win = { y0: H * 0.3, y1: H * 0.98 };
+  let x = 0;
+  const names = [...SHOP_NAMES].sort(() => rnd() - 0.5);
+  let n = 0;
+  while (x < W - 2 * px) {
+    const pier = 0.45 * px;
+    let w = (4 + rnd() * 3) * px;
+    if (W - (x + w) < 3.5 * px) w = W - x;
+    // the pier
+    ga.fillStyle = '#8a8276';
+    ga.fillRect(x, 0, pier, H);
+    const sx = x + pier;
+    const sw = w - pier;
+    // the fascia and its lettering
+    ga.fillStyle = '#1a1a1e';
+    ga.fillRect(sx, fascia.y0, sw, fascia.y1 - fascia.y0);
+    const open = rnd() < 0.72;
+    const name = names[n++ % names.length]!;
+    const sign = SIGN_COLORS[Math.floor(rnd() * SIGN_COLORS.length)]!;
+    const fs = Math.min((fascia.y1 - fascia.y0) * 0.62, (sw * 0.9) / (name.length * 0.62));
+    for (const g of [ga, gb]) {
+      g.font = `600 ${fs.toFixed(0)}px sans-serif`;
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      g.fillStyle = g === ga ? '#e8e0d0' : open ? sign : '#3a3024';
+      g.fillText(name, sx + sw / 2, (fascia.y0 + fascia.y1) / 2);
+    }
+    if (open) {
+      // the window: the shop lit inside, shelves and goods, a door with its bright glass
+      const c = new THREE.Color(['#ffe6c0', '#fff4e4', '#e6eeff', '#ffd8a8', '#f4f0e8'][Math.floor(rnd() * 5)]!).multiplyScalar(0.55 + rnd() * 0.35);
+      const grad = gb.createLinearGradient(0, win.y0, 0, win.y1);
+      grad.addColorStop(0, `rgb(${Math.round(c.r * 255)},${Math.round(c.g * 255)},${Math.round(c.b * 255)})`);
+      grad.addColorStop(1, `rgb(${Math.round(c.r * 120)},${Math.round(c.g * 110)},${Math.round(c.b * 100)})`);
+      gb.fillStyle = grad;
+      gb.fillRect(sx + 2, win.y0, sw - 4, win.y1 - win.y0);
+      for (let s = 0; s < 3; s++) {
+        const sy = win.y0 + (win.y1 - win.y0) * (0.3 + s * 0.22);
+        gb.fillStyle = 'rgba(60,40,30,0.8)';
+        gb.fillRect(sx + 4, sy, sw * 0.62, 2);
+        for (let k = 0; k < 10; k++) {
+          gb.fillStyle = `hsl(${Math.floor(rnd() * 360)},30%,${25 + Math.floor(rnd() * 20)}%)`;
+          const gw = 0.12 * px + rnd() * 0.2 * px;
+          const gh = 0.15 * px + rnd() * 0.3 * px;
+          gb.fillRect(sx + 6 + rnd() * (sw * 0.6 - gw), sy - gh, gw, gh);
+        }
+      }
+      ga.fillStyle = '#20242a';
+      ga.fillRect(sx + 2, win.y0, sw - 4, win.y1 - win.y0);
+      // the door, and its frame
+      const dx = sx + sw * 0.72;
+      const dw = Math.min(sw * 0.22, 1.1 * px);
+      gb.fillStyle = `rgb(${Math.round(c.r * 255)},${Math.round(c.g * 250)},${Math.round(c.b * 240)})`;
+      gb.fillRect(dx, win.y0 + (win.y1 - win.y0) * 0.1, dw, (win.y1 - win.y0) * 0.9);
+      for (const g of [ga, gb]) {
+        g.fillStyle = '#101012';
+        g.fillRect(dx - 2, win.y0 + (win.y1 - win.y0) * 0.1, 3, (win.y1 - win.y0) * 0.9);
+        g.fillRect(dx + dw - 1, win.y0 + (win.y1 - win.y0) * 0.1, 3, (win.y1 - win.y0) * 0.9);
+      }
+      // mullions across the window
+      for (const g of [ga, gb]) {
+        g.fillStyle = '#101012';
+        g.fillRect(sx, win.y0, sw, 3);
+        g.fillRect(sx + sw * 0.36, win.y0, 3, win.y1 - win.y0);
+      }
+      if (rnd() < 0.45) {
+        // an awning over it
+        const cols = [['#7a1e22', '#e8dcc8'], ['#1e3a5a', '#e8e0d0'], ['#244a2a', '#e0d8c0'], ['#2a2a2a', '#9a8a6a']][Math.floor(rnd() * 4)]!;
+        const stripe = 0.35 * px;
+        for (let k = 0; sx + k * stripe < sx + sw; k++) {
+          ga.fillStyle = cols[k % 2]!;
+          ga.fillRect(sx + k * stripe, fascia.y1, Math.min(stripe, sx + sw - (sx + k * stripe)), win.y0 - fascia.y1 + 4);
+        }
+        gb.fillStyle = '#000';
+        gb.fillRect(sx, fascia.y1, sw, win.y0 - fascia.y1 + 4);
+      }
+    } else {
+      // a roll-down shutter: steel slats, a little of the street's light on it
+      for (let y = win.y0; y < win.y1; y += 4) {
+        ga.fillStyle = (y / 4) % 2 < 1 ? '#8c9096' : '#72767c';
+        ga.fillRect(sx + 2, y, sw - 4, 4);
+      }
+      ga.fillStyle = '#4a4e54';
+      ga.fillRect(sx + 2, win.y0 - 6, sw - 4, 6);
+    }
+    x += w;
+  }
+  return { map: canvasTexture(a, 8), lit: canvasTexture(b, 8) };
 }
 
 /** The streets far below the roof: a grid of lit avenues and dark blocks on one disc. */

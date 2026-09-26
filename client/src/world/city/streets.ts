@@ -176,6 +176,28 @@ export function buildStreets(kit: Kit): void {
     streetLamp(kit, c.x + Math.cos(a) * r, c.z + Math.sin(a) * r, -Math.cos(a), -Math.sin(a));
   }
 
+  // --- in the road: manhole covers in the lanes, drains in the gutters (clear of the crosswalks) ------
+  const clear = (z: number) => CROSSWALKS.every((c) => Math.abs(z - c) > 5);
+  for (let z = z0 + 7; z < z1 - 4; z += 27) {
+    if (clear(z)) kit.cylinder('steel', mid + (z % 2 > 1 ? 1.25 : -1.25), z, 0.34, 0, 0.007, 16);
+  }
+  for (let z = z0 + 12; z < z1 - 4; z += 24) {
+    if (!clear(z)) continue;
+    kit.box('steel', road.x0 + 0.05, road.x0 + 0.5, 0, 0.007, z - 0.5, z + 0.5);
+    kit.box('steel', road.x1 - 0.5, road.x1 - 0.05, 0, 0.007, z - 0.5, z + 0.5);
+  }
+  for (const side of [-1, 1] as const) {
+    for (let x = x0 + 10; x < x1 - 4; x += 30) kit.cylinder('steel', x, side * LOOP.z1 + (side > 0 ? 1.25 : -1.25), 0.34, 0, 0.007, 16);
+  }
+  for (let z = z0 + 20; z < z1 - 4; z += 30) kit.cylinder('steel', LOOP.x1 - 1.25, z, 0.34, 0, 0.007, 16);
+
+  // --- street trees on the outer sidewalks, between the lamps, each in its grate --------------------
+  for (const side of [-1, 1] as const) {
+    const zt = side * (LOOP.z1 + H + OUTER - 1.0);
+    for (let x = x0 + 13; x < x1 - 2; x += 18) streetTree(kit, x, zt);
+  }
+  for (let z = -45; z <= 54; z += 18) streetTree(kit, LOOP.x1 + H + OUTER - 1.0, z);
+
   // --- the walls the walker can't pass: the backs of the outer sidewalks, and the valet's lots ------
   const back = OUTER + 0.4;
   kit.solid(LOOP.x1 + H + back, LOOP.x1 + H + back + 1, z0, z1, 6);
@@ -187,6 +209,17 @@ export function buildStreets(kit: Kit): void {
     kit.solid(G.walk.x0 - 1, WW.x0, Math.min(zv, zv + side), Math.max(zv, zv + side), 6);
   }
   kit.solid(G.walk.x0 - 1, G.walk.x0, -G.walk.z1, G.walk.z1, 6);
+}
+
+/** A street tree: a trunk out of an iron grate, a crown of three lumps of leaves. */
+function streetTree(kit: Kit, x: number, z: number): void {
+  kit.box('steel', x - 0.6, x + 0.6, 0, 0.01, z - 0.6, z + 0.6);
+  kit.cylinder('bark', x, z, 0.13, 0, 3.4, 8, 0.09);
+  const k = ((x * 7.3 + z * 3.1) % 1 + 1) % 1;
+  kit.blob('hedge', x, 4.3 + k * 0.4, z, 1.5 + k * 0.3, 0.8);
+  kit.blob('hedge', x + 0.7, 3.8, z - 0.3, 1.0, 0.85);
+  kit.blob('hedge', x - 0.6, 3.9 + k * 0.3, z + 0.4, 1.05, 0.85);
+  kit.post(x, z, 0.25, 3);
 }
 
 /**

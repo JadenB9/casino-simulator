@@ -56,6 +56,16 @@ export const BANK_SPOT = { x: 175.1, z: -27.25 };
 export function jailCeiling(x: number, z: number): number | null {
   return x > B.x0 && x < B.x1 && z > YARD_Z && z < B.z1 ? CEIL - 0.12 : null;
 }
+/**
+ * Whether a camera at (x, z) can see into the jail: inside its walls (the yard too), or out in
+ * front of the visitors' door. Its slit windows are dark glass and its roof is solid, so from
+ * anywhere else the tables inside are only draw calls.
+ */
+export function seesInside(x: number, z: number): boolean {
+  if (x > B.x0 - 0.5 && x < B.x1 + 0.5 && z > B.z0 - 0.5 && z < B.z1 + 0.5) return true;
+  return x > B.x0 - 14 && x <= B.x0 && z > DOOR.z0 - 8 && z < DOOR.z1 + 8;
+}
+
 /** The bail board on the yard wall, facing the day room. */
 const BOARD = { x: 189.2, y: 2.25, w: 3.2, h: 1.8 };
 
