@@ -119,7 +119,14 @@ export class Driving {
     this.hud.hidden = true;
     const name = el('div', 'drive-name');
     const keysHint = el('div', 'drive-keys', 'W S drive · A D steer · Space handbrake · H horn · C view · E get out');
-    this.hud.append(this.speedEl, name, keysHint);
+    // v7.1: a touch screen has no E: its own button out of the car
+    const out = el('button', 'btn drive-out', 'Get out');
+    out.type = 'button';
+    out.addEventListener('click', () => {
+      if (this.mine && Math.abs(this.mine.s.v) > 3) toast('Slow down to get out.');
+      else this.getOut();
+    });
+    this.hud.append(this.speedEl, name, keysHint, out);
     d.ui.append(this.hud);
     // the doorways a car can't go through (a walker can)
     const doorway = (x: number, z0: number, z1: number) => this.doors.box(x, (z0 + z1) / 2, 0.8, z1 - z0 + 0.6, 0, 3);

@@ -91,3 +91,24 @@
   .celebrate-title { font-size: 24px; }
   .celebrate.tier-huge .celebrate-title { font-size: 32px; }
 }
+
+/* v7.1: saved to the home screen the game runs full screen, under the notch and over the home bar:
+   the whole UI layer keeps inside the safe area (its transform makes it the fixed children's box, so
+   every panel, bar and button placed against the screen's edges lands inside it), the site's back
+   chip has no place in the app, and every control is a thumb's size. */
+#ui {
+  top: env(safe-area-inset-top, 0px);
+  right: env(safe-area-inset-right, 0px);
+  bottom: env(safe-area-inset-bottom, 0px);
+  left: env(safe-area-inset-left, 0px);
+  transform: translateZ(0);
+}
+@media (display-mode: standalone), (display-mode: fullscreen) {
+  .j4-back { display: none !important; }
+}
+@media (pointer: coarse) {
+  #ui button, #ui .btn { min-height: 40px; touch-action: manipulation; }
+  #ui .x-btn { min-width: 44px; min-height: 44px; }
+  .chat .chat-icon { min-width: 44px; min-height: 44px; }
+}
+html, body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }

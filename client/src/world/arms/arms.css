@@ -4,3 +4,10 @@
 .arms-cross::before { left: 8px; top: 0; width: 2px; height: 18px; }
 .arms-cross::after { top: 8px; left: 0; width: 18px; height: 2px; }
 .arms-ammo { position: fixed; right: 16px; bottom: 70px; padding: 8px 14px; font-size: 14px; letter-spacing: 0.06em; color: var(--ink-2); font-variant-numeric: tabular-nums; z-index: 11; pointer-events: none; }
+
+/* v7.1: touch: the Gun and Fire buttons, stacked over the Punch button on the right */
+.arms-touch { position: fixed; right: 18px; width: 72px; height: 72px; border-radius: 50%; border: 1px solid var(--line-strong); background: rgba(14, 12, 10, 0.78); color: var(--ink); font: 600 14px var(--ui); letter-spacing: 0.08em; text-transform: uppercase; z-index: 12; touch-action: none; user-select: none; -webkit-user-select: none; }
+.arms-gun { bottom: 250px; }
+.arms-fire { bottom: 330px; width: 84px; height: 84px; background: rgba(120, 24, 16, 0.85); border-color: #ff7a5a; }
+.arms-touch:active { transform: scale(0.95); }
+@media (max-height: 480px) { .arms-gun { bottom: 150px; right: 104px; } .arms-fire { bottom: 150px; right: 190px; } }

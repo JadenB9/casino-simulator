@@ -56,6 +56,8 @@ export class Arms {
   private readonly sounds: StreetSounds;
   private readonly cross = el('div', 'arms-cross');
   private readonly ammo = el('div', 'arms-ammo panel');
+  private readonly gunBtn = el('button', 'arms-touch arms-gun', 'Gun');
+  private readonly fireBtn = el('button', 'arms-touch arms-fire', 'Fire');
   private readonly offs: (() => void)[] = [];
   private readonly _v = new THREE.Vector3();
   /** Range targets knocked flat (lane index -> seconds left down). */
@@ -66,7 +68,20 @@ export class Arms {
     this.sounds = new StreetSounds(d.sfx);
     this.cross.hidden = true;
     this.ammo.hidden = true;
-    d.ui.append(this.cross, this.ammo);
+    // v7.1: on a touch screen, a Gun button (draw, next, put away) and a Fire button to hold
+    this.gunBtn.type = 'button';
+    this.fireBtn.type = 'button';
+    this.gunBtn.hidden = true;
+    this.fireBtn.hidden = true;
+    this.gunBtn.addEventListener('click', () => this.cycle());
+    this.fireBtn.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      if (!this.gun) return;
+      this.fire();
+      if (this.gun.auto) this.trigger = true;
+    });
+    this.fireBtn.addEventListener('contextmenu', (e) => e.preventDefault());
+    d.ui.append(this.cross, this.ammo, this.gunBtn, this.fireBtn);
     this.buildTargets();
     this.offs.push(d.world.walker.onClick(() => this.click(), 10));
     this.offs.push(d.engine.onFrame((dt) => this.update(dt)));
@@ -132,11 +147,18 @@ export class Arms {
       return;
     }
     e.preventDefault();
+    this.cycle();
+  };
+
+  /** The next gun you own, or put away after the last. */
+  private cycle(): void {
+    if (!this.d.free()) return;
+    const mine = GUNS.filter((g) => this.d.owned().includes(g.id));
     const i = this.gun ? mine.findIndex((g) => g.id === this.gun!.id) : -1;
     const next = mine[i + 1] ?? null;
     if (next) this.draw(next);
     else this.holster();
-  };
+  }
 
   draw(g: GunItem): void {
     this.holster(true);
@@ -294,6 +316,11 @@ export class Arms {
     const world = this.d.world;
     // put it away for a table, a car, the menu
     if (this.gun && !this.d.free()) this.holster();
+    const touch = document.documentElement.classList.contains('touch-ui') && this.d.free() && this.d.owned().some((id) => gunItem(id));
+    if (this.gunBtn.hidden === touch) this.gunBtn.hidden = !touch;
+    const fire = touch && !!this.gun;
+    if (this.fireBtn.hidden === fire) this.fireBtn.hidden = !fire;
+    this.gunBtn.textContent = this.gun ? 'Next gun' : 'Gun';
     if (this.gun) {
       const ch = world.player.character as unknown as Person;
       ch.aimGun(-world.walker.aim.pitch * 0.8);
@@ -358,6 +385,8 @@ export class Arms {
     for (const m of this.targetMeshes) m.removeFromParent();
     this.cross.remove();
     this.ammo.remove();
+    this.gunBtn.remove();
+    this.fireBtn.remove();
   }
 }
 

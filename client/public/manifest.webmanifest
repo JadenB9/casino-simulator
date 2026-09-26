@@ -1,0 +1,16 @@
+{
+  "name": "Casino Simulator",
+  "short_name": "Casino",
+  "description": "A 3D casino with real odds, other players, cars, apartments and more.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "any",
+  "background_color": "#0b0908",
+  "theme_color": "#0b0908",
+  "icons": [
+    { "src": "./apple-touch-icon.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "./icon.png", "sizes": "64x64", "type": "image/png" }
+  ]
+}

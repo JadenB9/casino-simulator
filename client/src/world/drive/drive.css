@@ -5,3 +5,5 @@
 .drive-keys { margin-top: 3px; font-size: 13px; letter-spacing: 0.06em; color: var(--ink-3); white-space: nowrap; }
 @media (pointer: coarse) { .drive-keys { display: none; } }
 @media (max-width: 560px) { .drive-hud { bottom: 150px; } }
+.drive-out { display: none; pointer-events: auto; margin-top: 6px; }
+@media (pointer: coarse) { .drive-out { display: inline-flex; min-width: 120px; min-height: 44px; } }

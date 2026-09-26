@@ -344,3 +344,8 @@ html.touch-ui .chat.idle .chat-line { font-size: 15px; }
   .chat-input { height: 44px; }
   .chat-send { width: 44px; height: 44px; }
 }
+
+/* v7.1: on a touch screen the close is big and plain to see */
+@media (pointer: coarse) {
+  .chat-close { min-width: 44px; min-height: 44px; border-radius: 8px; background: rgba(255, 255, 255, 0.1); color: var(--ink); }
+}
