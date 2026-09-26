@@ -67,7 +67,7 @@ export function openBarMenu(deps: BarMenuDeps): Closable {
   const offs: (() => void)[] = [];
   const sheet = openSheet(deps.root, {
     title: 'The Bar',
-    subtitle: 'Paid when you order and brought to you. Have it in your hand for five minutes, or until you sit down to play.',
+    subtitle: 'Paid when you order and brought to you, one after another if you order a round. Each lasts five minutes in your hand, or until you sit down to play.',
     cls: 'bar-sheet dine-sheet',
     onClose: () => {
       clearInterval(clock);

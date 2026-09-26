@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import { BAR_MENU, HOLD_MS, barItem } from '../../shared/src/items.ts';
 import { ACT_SECS, END_MS, FIRST_MS, GAP_MS, LATE_MS, PROFILES, acts, extraWeights, planFor, profileOf, stateAt, weights, type Act } from '../src/world/consumables/schedule.ts';
-import { Effects, ITEM_EFFECTS, PACE_CAP, SOBER_MS, TIPSY_MAX } from '../src/world/consumables/effects.ts';
+import { DRUNK_MS, Effects, ITEM_EFFECTS, PACE_CAP, SOBER_FADE_MS, TIPSY_MAX } from '../src/world/consumables/effects.ts';
 
 const T0 = 1_700_000_000_000;
 /** An order paid at T0, handed over 30 s later. */
@@ -217,23 +217,26 @@ describe('effects', () => {
     for (let i = 0; i < 4; i++) fx.portion('whiskey', T0, i === 0);
     expect(fx.sway(T0)).toBeGreaterThan(one);
     expect(fx.chips(T0).find((c) => c.id === 'tipsy')).toBeDefined();
-    // one drink's worth wears off every SOBER_MS
-    expect(fx.tipsyNow(T0 + SOBER_MS)).toBeCloseTo(fx.tipsyNow(T0) - 1, 9);
-    expect(fx.sway(T0 + 60 * 60_000)).toBe(0);
+    // v7.4: drunk holds two minutes after the last sip, then wears off over SOBER_FADE_MS
+    expect(fx.tipsyNow(T0 + DRUNK_MS)).toBeCloseTo(fx.tipsyNow(T0), 9);
+    expect(fx.tipsyNow(T0 + DRUNK_MS + SOBER_FADE_MS / 2)).toBeCloseTo(fx.tipsyNow(T0) / 2, 9);
+    expect(fx.sway(T0 + DRUNK_MS + SOBER_FADE_MS)).toBe(0);
+    expect(fx.chips(T0).find((c) => c.id === 'tipsy')!.left).toBe(DRUNK_MS + SOBER_FADE_MS);
     // never more than TIPSY_MAX
     for (let i = 0; i < 100; i++) fx.portion('whiskey', T0, false);
     expect(fx.tipsyNow(T0)).toBe(TIPSY_MAX);
     expect(fx.sway(T0)).toBe(1);
   });
 
-  it('sobers you up twice as fast on a full stomach', () => {
+  it('sobers you up in half the time on a full stomach', () => {
     const a = new Effects();
     const b = new Effects();
     for (const fx of [a, b]) for (let i = 0; i < 8; i++) fx.portion('beer', T0, i === 0);
     b.finished('ribeye', T0);
     expect(b.isFed(T0 + 1000)).toBe(true);
-    const t = T0 + SOBER_MS / 2;
-    expect(1 - b.tipsyNow(t)).toBeCloseTo(2 * (1 - a.tipsyNow(t)), 9);
+    const t = T0 + DRUNK_MS / 2 + SOBER_FADE_MS;
+    expect(b.tipsyNow(t)).toBe(0);
+    expect(a.tipsyNow(t)).toBe(1);
   });
 
   it('shows a timed chip for each thing on you', () => {

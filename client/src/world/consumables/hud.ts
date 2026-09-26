@@ -7,6 +7,7 @@ import './dine.css';
 import { el } from '../../ui/kit.ts';
 import { barItem } from '../../../../shared/src/items.ts';
 import type { Chip } from './effects.ts';
+import { calm } from '../../app/comfort.ts';
 
 export interface HeldInfo {
   item: string;
@@ -29,6 +30,7 @@ export class DineHud {
   private readonly note = el('span', 'dine-card-note');
   private readonly chips = el('div', 'dine-chips');
   private readonly vignette = el('div', 'dine-vignette');
+  private blurred = 0;
   private chipEls = new Map<string, { root: HTMLElement; time: HTMLElement; name: HTMLElement; bar: HTMLElement }>();
 
   constructor(ui: HTMLElement, onAct: () => void) {
@@ -100,10 +102,20 @@ export class DineHud {
 
   /** The warm edge round the view, 0 none to 1 the most (a few drinks). */
   warmth(k: number): void {
-    this.vignette.style.opacity = (Math.max(0, Math.min(1, k)) * 0.85).toFixed(3);
+    const v = Math.max(0, Math.min(1, k));
+    this.vignette.style.opacity = Math.min(1, v * 1.15).toFixed(3);
+    // v7.4: past merry the whole view goes soft (the scene's canvas), more the drunker
+    const blur = v > 0.35 && !calm() ? ((v - 0.35) / 0.65) * 1.6 : 0;
+    if (Math.abs(blur - this.blurred) > 0.05) {
+      this.blurred = blur;
+      const canvas = document.getElementById('scene');
+      if (canvas) canvas.style.filter = blur > 0 ? `blur(${blur.toFixed(2)}px) saturate(${(1 + v * 0.25).toFixed(2)})` : '';
+    }
   }
 
   dispose(): void {
+    const canvas = document.getElementById('scene');
+    if (canvas && this.blurred > 0) canvas.style.filter = '';
     this.root.remove();
     this.vignette.remove();
   }

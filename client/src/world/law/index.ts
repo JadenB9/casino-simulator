@@ -294,7 +294,7 @@ export class Law {
       this.warnUntil = ev.until ?? now + STRIKE_WINDOW_MS;
       const who = ev.staff === 'boss' ? 'The pit boss' : 'Security';
       const what = ev.why === 'win' ? 'has noticed how much you are winning' : ev.why === 'shot' ? 'heard that shot' : 'saw that';
-      toast(`Warning. ${who} ${what}. Get caught again in the next five minutes and you go to jail.`, 'err', 7000);
+      toast(`Warning. ${who} ${what}. Get caught again in the next two minutes and you go to jail.`, 'err', 7000);
       this.showState();
     } else if (ev.k === 'jail') {
       this.warnUntil = 0;

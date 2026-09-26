@@ -99,6 +99,7 @@ export class Diner {
     // what it does for you
     paceBoost.k = floor ? this.effects.paceNow(wall) : 1;
     const sway = this.effects.sway(wall);
+    paceBoost.stagger = floor && drinkFx() && !calm() ? sway : 0;
     setMySway(sway);
     const fx = drinkFx() && floor;
     this.hud.show(floor);
@@ -126,6 +127,7 @@ export class Diner {
   dispose(): void {
     removeEventListener('keydown', this.onKey);
     paceBoost.k = 1;
+    paceBoost.stagger = 0;
     setMySway(0);
     setMyOrder(null);
     this.hud.dispose();
@@ -211,9 +213,10 @@ export class Diner {
     if (k <= 0.001) return;
     w.q0.copy(cam.quaternion);
     const c = this.clock;
-    cam.rotateZ(0.032 * k * Math.sin(c * 0.83) + 0.01 * k * Math.sin(c * 2.1));
-    cam.rotateY(0.012 * k * Math.sin(c * 0.51 + 1));
-    cam.rotateX(0.008 * k * Math.sin(c * 0.67 + 2));
+    // v7.4: the owner wanted drunk to show: a real roll of the view, the horizon drifting
+    cam.rotateZ(0.085 * k * Math.sin(c * 0.83) + 0.025 * k * Math.sin(c * 2.1));
+    cam.rotateY(0.035 * k * Math.sin(c * 0.51 + 1));
+    cam.rotateX(0.022 * k * Math.sin(c * 0.67 + 2));
     cam.updateMatrixWorld();
     w.set.copy(cam.quaternion);
     w.on = true;

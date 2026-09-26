@@ -353,6 +353,13 @@ export function barItem(id: unknown): BarItem | null {
 
 /** How long an order stays in your hand after it's paid for, unless you sit down at a table first. */
 export const HOLD_MS = 5 * 60_000;
+/**
+ * v7.4: how long a paid order may wait its turn while you finish what's in your hand (orders
+ * queue up); an order's `until` is paid + LINE_MS + HOLD_MS, and its five minutes in hand count
+ * from when it reaches you (consumables/schedule.ts).
+ */
+export const LINE_MS = 15 * 60_000;
+export const ORDER_LIFE_MS = HOLD_MS + LINE_MS;
 
 /** Operation ids the client picks for a purchase, so a retry is the same purchase. */
 const OP_RE = /^[A-Za-z0-9_-]{8,40}$/;

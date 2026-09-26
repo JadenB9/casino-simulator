@@ -2,7 +2,7 @@
 
 import { STARTING_BALANCE } from '../../shared/src/money.ts';
 import { lookFromJson, type Look } from '../../shared/src/look.ts';
-import { HOLD_MS, ITEM_KINDS, wornItem } from '../../shared/src/items.ts';
+import { ORDER_LIFE_MS, ITEM_KINDS, wornItem } from '../../shared/src/items.ts';
 import { featOf, titleOf } from '../../shared/src/feats.ts';
 import type { GameId, } from '../../shared/src/engine.ts';
 import type { GameStats, Profile } from '../../shared/src/protocol.ts';
@@ -107,7 +107,7 @@ export async function wornLook(db: D1Database, accountId: number, look: Look, no
   if (look.title && !owned.feats.has(look.title)) return { error: `You haven't earned the ${titleOf(look.title)?.reward.title ?? 'title'} title yet.` };
   if (!look.held) return { look };
   const { held, ...rest } = look;
-  const until = order ? order.created_at + HOLD_MS : 0;
+  const until = order ? order.created_at + ORDER_LIFE_MS : 0;
   if (!order || order.item !== held.item || until <= now) return { look: rest };
   return { look: { ...rest, held: { ...held, until } } };
 }

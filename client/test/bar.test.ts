@@ -82,13 +82,35 @@ describe('the bar', () => {
     expect(session.profile!.look.held).toBeUndefined();
     await bar.hold('sliders');
     expect(session.profile!.look.held?.order).toBe(b.id);
+    // v7.4: the hand is full: the beer waits its turn instead of knocking the sliders out
     await bar.hold(a.id);
+    expect(session.profile!.look.held?.order).toBe(b.id);
+    expect(bar.waiting).toBe(1);
+    // the sliders leave your hand: the beer comes to it
+    await bar.drop();
     expect(session.profile!.look.held?.order).toBe(a.id);
     expect(bar.pending).toEqual([]);
+    expect(bar.waiting).toBe(0);
     // an order that isn't pending (already handed over, or never paid) does nothing
     await bar.hold(a.id);
     await bar.hold('lobster');
     expect(session.profile!.look.held?.order).toBe(a.id);
+  });
+
+  it('queues a round: three orders brought at once come to hand one after another, oldest first', async () => {
+    const { bar, session } = rig();
+    const a = await bar.order('beer');
+    const b = await bar.order('whiskey');
+    const c = await bar.order('sliders');
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(session.profile!.look.held?.order).toBe(a.id);
+    expect(bar.waiting).toBe(2);
+    await bar.drop();
+    expect(session.profile!.look.held?.order).toBe(b.id);
+    await bar.drop();
+    expect(session.profile!.look.held?.order).toBe(c.id);
+    await bar.drop();
+    expect(session.profile!.look.held).toBeUndefined();
   });
 
   it('puts it down when you sit at a table, and waits by your seat for one on its way', async () => {

@@ -24,7 +24,7 @@ import type { Rect } from '../zones.ts';
 import type { StaffId } from './patrol.ts';
 
 /** A warning lasts this long; a second catch inside it means jail. */
-export const STRIKE_WINDOW_MS = 5 * 60_000;
+export const STRIKE_WINDOW_MS = 2 * 60_000; // v7.4: the owner's two minutes (was five)
 /**
  * After a warning, the same moment can't catch you twice: the pit boss's report of the streak
  * he just warned you about, a guard seeing the punch the other guard saw.

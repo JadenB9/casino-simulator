@@ -14,7 +14,7 @@
 
 import { formatMoney, type Cents } from '../../shared/src/money.ts';
 import {
-  EFFECTS, EMOTE_ITEMS, HOLD_MS, SHOP_ITEMS, STATUE, barItem, carItem, theName, effectItem, emoteItem, isFreeEmote, isOp, shopEmote, shopItem, wornItem,
+  EFFECTS, EMOTE_ITEMS, ORDER_LIFE_MS, SHOP_ITEMS, STATUE, barItem, carItem, theName, effectItem, emoteItem, isFreeEmote, isOp, shopEmote, shopItem, wornItem,
   type BarItem, type BuyResponse, type EffectItem, type EffectResponse, type FxEvent, type OrderResponse, type ShopResponse,
 } from '../../shared/src/items.ts';
 import type { EmoteId } from '../../shared/src/protocol.ts';
@@ -346,7 +346,7 @@ export async function placeOrder(db: D1Database, accountId: number, item: BarIte
   try {
     // (the row keeps what was paid: half the menu's price in happy hour)
     const row = db.prepare(`INSERT INTO casino_orders (op_id, account_id, item, price, created_at) VALUES (?1, ?2, ?3, ?4, ?5)`).bind(opId, accountId, item.id, price, now);
-    return { kind: 'ordered', id: op, item: item.id, price, at: now, until: now + HOLD_MS, ...(await pay(db, row, accountId, price, now)) };
+    return { kind: 'ordered', id: op, item: item.id, price, at: now, until: now + ORDER_LIFE_MS, ...(await pay(db, row, accountId, price, now)) };
   } catch (err) {
     // The key holds the account, so a row here is this account's own order with this op: a
     // retry, answered with what was ordered the first time.
@@ -354,7 +354,7 @@ export async function placeOrder(db: D1Database, accountId: number, item: BarIte
       .prepare(`SELECT item, price, created_at FROM casino_orders WHERE op_id = ?1`)
       .bind(opId)
       .first<{ item: string; price: number; created_at: number }>();
-    if (row) return { kind: 'ordered', id: op, item: row.item, price: row.price, at: row.created_at, until: row.created_at + HOLD_MS, ...(await money(db, accountId)) };
+    if (row) return { kind: 'ordered', id: op, item: row.item, price: row.price, at: row.created_at, until: row.created_at + ORDER_LIFE_MS, ...(await money(db, accountId)) };
     if (overdraft(err)) return { kind: 'short', ...(await money(db, accountId)) };
     throw err;
   }

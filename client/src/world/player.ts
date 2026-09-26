@@ -36,7 +36,7 @@ const RADIUS = 0.3;
 const WALK = 2.6;
 const RUN = 4.8;
 /** A factor on walking and running speed from outside the walker (an espresso at the bar, consumables/); 1 = none. */
-export const paceBoost = { k: 1 };
+export const paceBoost = { k: 1, /** v7.4: drunk, 0-1: the walk weaves */ stagger: 0 };
 /** Nothing the walker does goes faster than this (m/s): the floor server allows 9. */
 const MAX_PACE = 8.5;
 /** The speeds the walk and run cycles were made for; the blend between them follows these. */
@@ -413,6 +413,13 @@ export class Player {
     if (len > 0) {
       mx /= len;
       mz /= len;
+    }
+    // v7.4: drunk, the walk weaves off the line you steer, more the drunker you are
+    if (!ride && len > 0 && paceBoost.stagger > 0) {
+      const a = paceBoost.stagger * (0.38 * Math.sin(this.clock * 1.7) + 0.16 * Math.sin(this.clock * 4.3 + 1));
+      const ca = Math.cos(a);
+      const sa = Math.sin(a);
+      [mx, mz] = [mx * ca - mz * sa, mx * sa + mz * ca];
     }
     if (ride && len > 0) {
       // a ride goes where it points, and swings round to where you steer at its own pace: it carves

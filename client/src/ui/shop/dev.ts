@@ -17,7 +17,7 @@ import { Sfx } from '../../audio/sfx.ts';
 import * as realApi from '../../net/api.ts';
 import { session } from '../../app/session.ts';
 import { DEFAULT_LOOK, type Look } from '../../../../shared/src/look.ts';
-import { theName, EFFECTS, EMOTE_ITEMS, FX_GAP_MS, HOLD_MS, ITEM_KINDS, SHOP_ITEMS, STATUE, effectItem, shopEmote, shopItem, type BuyResponse, type EffectResponse, type FxEvent, type OrderResponse, type Statue } from '../../../../shared/src/items.ts';
+import { theName, EFFECTS, EMOTE_ITEMS, FX_GAP_MS, ORDER_LIFE_MS, ITEM_KINDS, SHOP_ITEMS, STATUE, effectItem, shopEmote, shopItem, type BuyResponse, type EffectResponse, type FxEvent, type OrderResponse, type Statue } from '../../../../shared/src/items.ts';
 import { barItem } from '../../../../shared/src/items.ts';
 import type { Profile } from '../../../../shared/src/protocol.ts';
 import { ApiError } from '../../net/api.ts';
@@ -145,7 +145,7 @@ function fixtureApi(floor: ReturnType<typeof fixtureFloor>): ShopApi & { order(i
       await wait();
       const it = barItem(item)!;
       const at = Date.now();
-      return { order: { id: op, item, price: it.price, at, until: at + HOLD_MS }, ...money(it.price) };
+      return { order: { id: op, item, price: it.price, at, until: at + ORDER_LIFE_MS }, ...money(it.price) };
     },
   };
 }

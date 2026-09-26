@@ -48,19 +48,23 @@ export const PACE_CAP = 1.3;
 export const PACE_STACK_MS = 8 * MIN;
 /** Well fed stacks (a second plate adds its time) up to this much ahead (ms). */
 export const FED_STACK_MS = 12 * MIN;
-/** Tipsiness wears off at one drink every this many ms; twice as fast on a full stomach. */
-export const SOBER_MS = 6 * MIN;
-/** You can't get tipsier than this many drinks (the sway stays mild). */
-export const TIPSY_MAX = 6;
+/**
+ * v7.4 (the owner's two minutes): drunk holds where it is for this long after your last sip, then
+ * wears off over SOBER_FADE_MS; on a full stomach it holds half as long.
+ */
+export const DRUNK_MS = 2 * MIN;
+export const SOBER_FADE_MS = 20_000;
+/** You can't get drunker than this many drinks. */
+export const TIPSY_MAX = 4;
 /** Tipsy starts to show at this many drinks in you. */
-export const TIPSY_FROM = 0.6;
+export const TIPSY_FROM = 0.3;
 
 export type ChipId = 'wired' | 'tipsy' | 'bubbly' | 'party' | 'fed';
 
 export interface Chip {
   id: ChipId;
   name: string;
-  /** Time left (ms), or null for one that wears off gradually (tipsy). */
+  /** Time left (ms), or null for one with no clock. */
   left: number | null;
   /** 0-1: how strong (tipsy's sway, a pace boost's size). */
   level: number;
@@ -98,9 +102,6 @@ export class Effects {
   finished(item: string, now: number): void {
     const e = ITEM_EFFECTS[item];
     if (e?.fed) {
-      // settle the tipsiness at the old rate up to now, then the full stomach speeds it
-      this.tipsy = this.tipsyNow(now);
-      this.tipsyAt = now;
       this.fed = Math.min(now + FED_STACK_MS, Math.max(this.fed, now) + e.fed);
     }
   }
@@ -108,10 +109,20 @@ export class Effects {
   /** Drinks' worth in you now. */
   tipsyNow(now: number): number {
     const dt = Math.max(0, now - this.tipsyAt);
-    // a full stomach doubles the rate for as long as it lasts
-    const fedFor = Math.max(0, Math.min(dt, this.fed - this.tipsyAt));
-    const gone = (dt + fedFor) / SOBER_MS;
-    return Math.max(0, this.tipsy - gone);
+    const hold = this.holdMs();
+    if (dt <= hold) return this.tipsy;
+    return Math.max(0, this.tipsy * (1 - (dt - hold) / SOBER_FADE_MS));
+  }
+
+  /** How long drunk holds after the last sip: half as long on a full stomach. */
+  private holdMs(): number {
+    return this.fed > this.tipsyAt ? DRUNK_MS / 2 : DRUNK_MS;
+  }
+
+  /** Until sober (ms), 0 when you are. */
+  soberIn(now: number): number {
+    if (this.tipsyNow(now) <= 0) return 0;
+    return Math.max(0, this.tipsyAt + this.holdMs() + SOBER_FADE_MS - now);
   }
 
   /** How tipsy it looks, 0-1: nothing below TIPSY_FROM, growing to 1 at TIPSY_MAX. */
@@ -143,7 +154,7 @@ export class Effects {
     const out: Chip[] = [];
     if (this.pace.until > now) out.push({ id: 'wired', name: this.pace.k >= 1.3 ? 'Buzzing' : 'Wired', left: this.pace.until - now, level: (this.pace.k - 1) / (PACE_CAP - 1) });
     const sway = this.sway(now);
-    if (sway > 0) out.push({ id: 'tipsy', name: sway > 0.6 ? 'Merry' : 'Tipsy', left: null, level: sway });
+    if (sway > 0) out.push({ id: 'tipsy', name: sway > 0.7 ? 'Drunk' : sway > 0.35 ? 'Merry' : 'Tipsy', left: this.soberIn(now), level: sway });
     if (this.bubbly > now) out.push({ id: 'bubbly', name: 'Bubbly', left: this.bubbly - now, level: 1 });
     if (this.party > now) out.push({ id: 'party', name: 'Celebrating', left: this.party - now, level: 1 });
     if (this.fed > now) out.push({ id: 'fed', name: 'Well fed', left: this.fed - now, level: 1 });

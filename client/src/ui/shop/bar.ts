@@ -5,8 +5,11 @@
 // in hold() here) when it reaches you.
 //
 // Holding is part of your look (look.held), so everyone on the floor sees it, and the server
-// keeps it only while it's a recent paid order of yours. It leaves your hand when its time is up
-// (HOLD_MS after it was paid), when you sit down at a table, or when you put it down.
+// keeps it only while it's a recent paid order of yours. It leaves your hand when its time is up,
+// when you sit down at a table, or when you put it down (a waiter takes the empty).
+//
+// v7.4: orders queue. One brought over while your hand is full waits its turn (LINE_MS at most)
+// and is handed over as soon as what you're holding leaves your hand, oldest first.
 
 import type { Cents } from '../../../../shared/src/money.ts';
 import type { BarOrder, OrderResponse } from '../../../../shared/src/items.ts';
@@ -48,6 +51,10 @@ export class Bar {
   private readonly timers = new Set<ReturnType<typeof setTimeout>>();
   private expiry: ReturnType<typeof setTimeout> | undefined;
   private readonly offs: (() => void)[];
+  /** Brought over while your hand was full: waiting their turn (order ids). */
+  private readonly arrived = new Set<string>();
+  /** The order being put in your hand (before the saved look says so). */
+  private handing: string | null = null;
   /** Look changes go out one at a time, in order. */
   private chain: Promise<void> = Promise.resolve();
   private disposed = false;
@@ -94,18 +101,36 @@ export class Bar {
       this.later(() => void this.hold(o.id), 2000);
       return;
     }
-    this.queue.splice(i, 1);
     if (o.until <= serverNow()) {
+      this.queue.splice(i, 1);
+      this.arrived.delete(o.id);
       this.changed();
       return;
     }
+    // your hand is full: it waits its turn
+    if (this.handing !== null || this.held()) {
+      this.arrived.add(o.id);
+      this.changed();
+      return;
+    }
+    this.queue.splice(i, 1);
+    this.arrived.delete(o.id);
+    this.handing = o.id;
     await this.setHeld({ item: o.item, order: o.id, until: o.until });
+    this.handing = null;
   }
 
-  /** Put down what you're holding. */
+  /** Put down what you're holding; the next one waiting its turn comes to hand. */
   async drop(): Promise<void> {
-    if (!this.deps.session.profile?.look.held) return;
-    await this.setHeld(null);
+    if (this.deps.session.profile?.look.held) await this.setHeld(null);
+    const next = this.queue.find((o) => this.arrived.has(o.id));
+    // (at a table it waits by your seat until you stand up: hold() sees to that)
+    if (next) await this.hold(next.id);
+  }
+
+  /** Orders brought over and waiting for your hand to be free. */
+  get waiting(): number {
+    return this.arrived.size;
   }
 
   /** Hear each order as it's paid for (the waiters walk it over). */
