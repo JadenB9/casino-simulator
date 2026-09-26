@@ -58,7 +58,20 @@ async function player(name) {
   }
   await page.waitForSelector('.hud', { timeout: 20_000 });
   const id = await page.evaluate(() => window.casino.session.profile.id);
+  await laterCheck({ page, name });
   return { page, name, id };
+}
+
+/**
+ * The live server asks accounts that play like bots (these do) for a Quick check now and then,
+ * and the floor waits behind it: put it off, as a player can, so the walk and the tables go on.
+ */
+async function laterCheck(p) {
+  const modal = await p.page.waitForSelector('.check-modal', { timeout: 2_500 }).catch(() => null);
+  if (!modal) return;
+  await p.page.click('.check-modal button:has-text("Later")');
+  await p.page.waitForSelector('.check-modal', { state: 'detached', timeout: 5_000 });
+  log(`${p.name}: put off the server's Quick check`);
 }
 
 const shot = (p, file) => p.page.screenshot({ path: `${out}/${file}.png` });
@@ -198,10 +211,17 @@ try {
     if (recent.length >= 5) await a.page.waitForTimeout(61_000 - (Date.now() - recent[0]));
     created.push(Date.now());
     await a.page.click('.lobby-actions .btn:has-text("Private")');
-    await a.page.waitForSelector('.party-pin-digits', { timeout: 10_000 }).catch(async (err) => {
+    const opened = await a.page.waitForSelector('.party-pin-digits, .check-modal', { timeout: 10_000 }).catch(async (err) => {
       await shot(a, `multi-${game}-private-failed`);
       throw err;
     });
+    // The live server's bot defence can want a Quick check before this account opens a table.
+    // It's there to stop scripts like this one, so the tables go unchecked here (not failed).
+    if ((await opened.getAttribute('class'))?.includes('check-modal')) {
+      await shot(a, `multi-${game}-quick-check`);
+      log(`SKIPPED the tables: the server wants a Quick check before ${a.name} opens one (its bot defence)`);
+      break;
+    }
     const pin = (await a.page.textContent('.party-pin-digits .lb-seg-lit')).trim();
     await openLobby(b, station);
     await b.page.fill('.lobby-pin-input', pin);
