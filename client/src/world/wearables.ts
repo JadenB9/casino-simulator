@@ -730,8 +730,10 @@ interface Path {
  */
 function chainPath(fit: Fit, drop: number, thick: number): Path {
   const K = 96;
-  const clear = thick / 2 + 0.0022;
-  const gap = 0.016 + thick / 2;
+  // (v7.1: far enough off the skin that the chest moving under it, walking and breathing, never
+  // comes through the chain: it used to lie 2 mm off and disappear into the body)
+  const clear = thick / 2 + 0.009;
+  const gap = 0.022 + thick / 2;
   const ring = (th: number): V3 => {
     const s = Math.sin(th);
     const c = Math.cos(th);
