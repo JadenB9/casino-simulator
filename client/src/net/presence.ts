@@ -247,6 +247,7 @@ export class FloorLink {
         if (m.gun !== undefined) info.gun = m.gun;
         if (m.jailed !== undefined) info.jailed = m.jailed;
         if (m.apt !== undefined) info.apt = m.apt;
+        if (m.crouch !== undefined) info.crouch = m.crouch;
         break;
       }
       case 'online':

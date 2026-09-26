@@ -255,30 +255,57 @@ const SPIN_END = 3.35;
 const STRIDE = 0.075;
 
 const SHOP: Record<Exclude<EmoteId, FreeEmote>, Gesture> = {
-  // Turned a quarter away and bent over, hands on the knees, looking back over the shoulder, and
-  // the hips popping back four times a second: the pelvis tips while the shoulders hold still, so
-  // only the hips move, and side-on they show from wherever you watch. Seated: the shoulders bounce.
+  // Throw It Back (v7.4, told apart from the twerk): standing, turned a quarter away and bent at
+  // the hips with the hands on the knees, looking back over the shoulder, and the whole body
+  // rocking back into it on the beat: the hips pushed back and the chest dipping with them, twice
+  // a second, big and slow next to the twerk's shake. Seated: the shoulders rock back.
   throwback: {
     dur: 4,
     beat: BEAT,
     pose: (t, seated) => {
-      const p = snap(t * 4);
+      // back on the beat, easing forward again between
+      const p = 0.5 - 0.5 * Math.cos((2 * Math.PI * t) / BEAT);
       const head: Turn = [0, 0.18 * Math.sin((Math.PI * t) / BEAT), 0];
       if (seated) {
         const s: Turn = [0, 0, -0.16 * p];
-        return { torso: [0.14 + 0.1 * p, 0, 0], chest: [0.06 * p, 0, 0], shoulderR: s, shoulderL: mirror(s), head: [-0.1, head[1], 0] };
+        return { torso: [0.14 + 0.12 * p, 0, 0], chest: [0.06 * p, 0, 0], shoulderR: s, shoulderL: mirror(s), head: [-0.1, head[1], 0] };
       }
-      const foot: Foot = { at: [-0.2, 0, 0.1], toe: 0.4, knee: [-0.75, 0, 1] };
+      const foot: Foot = { at: [-0.19, 0, 0.06], toe: 0.35, knee: [-0.6, 0, 1] };
       return {
-        pelvis: [0, -0.21 + 0.08 * p, -0.08 - 0.08 * p],
-        body: [0.66 + 0.46 * p, 0, 0],
-        hips: [0.36 - 0.46 * p, 0, 0],
-        chest: [0.12, 0, 0],
+        pelvis: [0, -0.13 + 0.03 * p, -0.04 - 0.2 * p],
+        body: [0.62 + 0.24 * p, 0, 0],
+        hips: [0.3 - 0.3 * p, 0, 0],
+        chest: [0.1 + 0.06 * p, 0, 0],
         neck: [-0.4, -0.25, 0],
         head: [-0.5, -0.5 + head[1] * 0.5, 0],
         footR: foot,
         footL: foot,
         ...both({ knee: [0.01, 0.09, -0.05], elbow: [-1, 0.1, -0.1], palm: [0.2, -1, -0.2], fingers: [0.3, -0.45, 1] }),
+        spin: 0.85 * ramp(t, 0, 0.35),
+      };
+    },
+  },
+  // Twerk (v7.4): down in a deep, wide squat, turned a quarter away, the hands braced on the
+  // thighs and the back flat; the chest holds dead still while only the hips shake, up and down
+  // and quick, eight times a second, the rest of the body barely moving. Seated: the hips bounce.
+  twerk: {
+    dur: 4,
+    beat: BEAT,
+    pose: (t, seated) => {
+      const shake = Math.sin(2 * Math.PI * 8 * t * 0.5);
+      const w = ramp(t, 0, 0.3) * (1 - ramp(t, 3.7, 4));
+      if (seated) return { torso: [0.1, 0, 0], hips: [0.12 * shake * w, 0, 0], head: [-0.05, 0, 0] };
+      const foot: Foot = { at: [-0.32, 0, 0.02], toe: 0.6, knee: [-1, 0, 0.8] };
+      return {
+        pelvis: [0, (-0.3 + 0.025 * shake) * w, (-0.12 + 0.02 * shake) * w],
+        body: [0.72 * w, 0, 0],
+        hips: [(-0.22 + 0.3 * shake) * w, 0, 0.05 * shake * w],
+        chest: [-0.12 * w, 0, 0],
+        neck: [-0.35, -0.3, 0],
+        head: [-0.45, -0.55, 0],
+        footR: foot,
+        footL: foot,
+        ...both({ knee: [0.05, 0.16, 0.02], elbow: [-1, 0.2, -0.2], palm: [0.1, -1, -0.1], fingers: [0.2, -0.5, 1] }),
         spin: 0.85 * ramp(t, 0, 0.35),
       };
     },
@@ -633,7 +660,9 @@ const LAW_GESTURES: Record<LawGesture, Gesture> = {
     pose: (t) => {
       const air = t < 0.12 ? 0 : t > 0.66 ? 0 : Math.sin((Math.PI * (t - 0.12)) / 0.54);
       const crouch = Math.max(0, 1 - Math.abs(t - 0.08) / 0.08) + Math.max(0, 1 - Math.abs(t - 0.7) / 0.08);
-      const arm: Hand = { upper: [-0.4, 0.2 + 0.7 * air, 0.3], fore: [-0.2, 0.6 + 0.3 * air, 0.3], palm: [0, 0, 1], fist: 0.3 };
+      // v7.4: the arms swing forward to about the waist with the spring and hang back on landing,
+      // never up past the chest (the owner found a hand over the head odd)
+      const arm: Hand = { upper: [-0.15, -1, 0.1 + 0.55 * air - 0.35 * crouch], fore: [-0.05, -0.6 + 0.5 * air, 0.6], palm: [0, 0, 1], fist: 0.3 };
       return {
         hop: 0.62 * air - 0.08 * crouch,
         // (never quite 0: a jump while walking plays through rather than fading)

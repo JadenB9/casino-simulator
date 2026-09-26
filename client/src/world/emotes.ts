@@ -52,6 +52,7 @@ const LABELS: Record<EmoteId, string> = {
   bow: 'takes a bow',
   trophy: 'lifts the trophy',
   moonwalk: 'moonwalks',
+  twerk: 'twerks',
 };
 
 export interface EmotesDeps {

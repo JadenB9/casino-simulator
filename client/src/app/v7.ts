@@ -12,6 +12,7 @@ import type { FloorLink } from '../net/presence.ts';
 import type { Person } from '../world/characters.ts';
 import type { Cars } from '../world/cars/index.ts';
 import { Driving } from '../world/drive/index.ts';
+import { paceBoost } from '../world/player.ts';
 import { button, modal, toast } from '../ui/kit.ts';
 import { isTyping, overlayCount } from '../ui/keyboard.ts';
 import { openOnline, type OnlineRow } from '../ui/hud/online.ts';
@@ -92,7 +93,7 @@ export class V7 {
     };
     // "Your Apartment" on the elevator's panel for owners
     city.homeTier = () => homeTier(session.profile?.owned ?? []);
-    // guns: R draws, a left click fires
+    // guns: V draws (a choice when you own several) and puts away, a left click fires
     this.arms = new Arms({
       engine: { scene: engine.scene, camera: engine.camera, canvas: engine.renderer.domElement, onFrame: (fn) => engine.onFrame(fn) },
       world,
@@ -125,9 +126,27 @@ export class V7 {
       if (now - this.jumpAt < 800) return;
       this.jumpAt = now;
       e.preventDefault();
+      // (a jump stands you up out of a crouch)
+      if (this.crouched) this.setCrouch(false);
       (world.player.character.gesture as ((g: string) => void) | undefined)?.('jump');
       d.link()?.send({ t: 'jump' });
     });
+    // v7.4: C crouches and stands you up again, on foot on the floor
+    addEventListener('keydown', (e) => {
+      if (e.code !== 'KeyC' || e.repeat || e.metaKey || e.ctrlKey || isTyping(e) || overlayCount() > 0 || !d.free() || this.driving.driving || world.walker.down || !world.walker.isEnabled) return;
+      e.preventDefault();
+      this.setCrouch(!this.crouched);
+    });
+  }
+
+  /** v7.4: crouched (C). */
+  private crouched = false;
+
+  private setCrouch(on: boolean): void {
+    this.crouched = on;
+    paceBoost.crouch = on;
+    (this.d.world.player.character as { crouch?(on: boolean): void }).crouch?.(on);
+    this.d.link()?.send({ t: 'crouch', on });
   }
 
   private jumpAt = 0;
@@ -170,6 +189,9 @@ export class V7 {
   }
 
   private frame(dt: number): void {
+    // v7.4: a crouch ends in a car, on a seat, at a table or when knocked down; everyone else's as the floor says
+    if (this.crouched && (this.driving.driving || this.d.world.seated || !this.d.free() || this.d.world.walker.down)) this.setCrouch(false);
+    for (const [id, p] of this.d.link()?.players ?? []) (this.d.character(id) as { crouch?(on: boolean): void } | undefined)?.crouch?.(!!p.info.crouch);
     const shown = this.d.world.zone === 'ground';
     for (const c of this.clerks) {
       c.root.visible = shown;
@@ -253,8 +275,13 @@ export class V7 {
       openStore({
         root: this.d.ui,
         title: 'Ace Arms',
-        subtitle: 'R draws your gun, a left click fires. Security hears every shot in the casino',
+        subtitle: 'V draws your gun and puts it away, a left click fires. Security hears every shot in the casino',
         sfx: this.d.sfx,
+        // v7.4: yours at once, in your hand (V puts it away)
+        bought: (id) => {
+          const g = GUNS.find((x) => x.id === id);
+          if (g) this.arms.draw(g);
+        },
         sections: () => [{ title: 'Guns', rows: GUNS.map((g) => ({ id: g.id, name: g.name, price: g.price, about: `${g.about} ${g.auto ? 'Automatic' : 'Semi-automatic'}, ${g.mag} rounds.`, owned: owns(g.id), use: { label: this.arms.drawn?.id === g.id ? 'Drawn' : 'Draw', done: this.arms.drawn?.id === g.id, run: () => this.arms.draw(g) } })) }],
       });
       return;

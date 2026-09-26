@@ -298,6 +298,11 @@ export class CasinoFloor extends DurableObject<Env> {
       const id = this.presence.accountOf(ws);
       this.presence.touch(ws, Date.now());
       if (id !== null && b.emote.take()) this.broadcast({ t: 'jump', id });
+    } else if (msg.t === 'crouch') {
+      // v7.4: down into a crouch or up again (the emote's limit keeps it from being a flood)
+      const id = this.presence.accountOf(ws);
+      this.presence.touch(ws, Date.now());
+      if (id !== null && b.emote.take()) this.presence.setCrouch(id, msg.on);
     } else if (msg.t === 'apts') {
       this.presence.touch(ws, Date.now());
       this.send(ws, { t: 'apts', list: this.tower.list() });

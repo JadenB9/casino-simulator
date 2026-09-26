@@ -21,7 +21,6 @@ import { isStaffId, parseDetour, type Detour, type StaffId } from '../../../../s
 import { ESCORT_TALK_MS, JAIL, JAIL_GAMES, PUNCH_GAP_MS, RELEASE_MS, STRIKE_WINDOW_MS, jailLimits, type JailState, type LawEvent, type Offence } from '../../../../shared/src/law/rules.ts';
 import { SPAWN } from '../layout.ts';
 import { el, toast } from '../../ui/kit.ts';
-import { isTyping, overlayCount } from '../../ui/keyboard.ts';
 import { calm } from '../../app/comfort.ts';
 import type { Person } from '../characters.ts';
 import type { SpotProvider } from '../interact.ts';
@@ -124,7 +123,7 @@ export class Law {
     this.fist.addEventListener('click', () => this.link?.you && deps.canPunch() && this.punch());
     deps.ui.append(this.hud, this.fade, this.fist);
     this.offs.push(world.spots(this.spots));
-    // a left click on the floor throws one too (V still does)
+    // a left click on the floor throws a punch (v7.4: V is the gun's key now)
     this.offs.push(
       world.walker.onClick(() => {
         if (!this.link?.you || !deps.canPunch()) return false;
@@ -135,7 +134,6 @@ export class Law {
     // under the jail's roof the follow camera keeps below it (the city's ceilings)
     this.offs.push(world.city.addCeiling(jailCeiling));
     this.offs.push(engine.onFrame((dt) => this.update(dt)));
-    addEventListener('keydown', this.onKey);
     this.showState();
   }
 
@@ -370,12 +368,6 @@ export class Law {
 
   // --- punching ------------------------------------------------------------------------------
 
-  private onKey = (e: KeyboardEvent): void => {
-    if (e.code !== 'KeyV' || e.repeat || isTyping(e) || overlayCount() > 0) return;
-    if (!this.link?.you || !this.deps.canPunch()) return;
-    e.preventDefault();
-    this.punch();
-  };
 
   /** v7: knock down a guard (a StaffId) or an inmate ('i0'..) that a shot hit. */
   knockNpc(id: string): void {
@@ -473,7 +465,6 @@ export class Law {
   }
 
   dispose(): void {
-    removeEventListener('keydown', this.onKey);
     if (this.helloTimer) clearTimeout(this.helloTimer);
     this.useLink(null);
     for (const off of this.offs) off();

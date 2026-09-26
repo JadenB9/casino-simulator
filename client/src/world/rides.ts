@@ -19,6 +19,7 @@ import { itemOfKind, withItem, type ShopItem } from '../../../shared/src/items.t
 import type { Look } from '../../../shared/src/look.ts';
 import { GOLD, beforeDraw, fin, reflect, type Finish } from './wearables.ts';
 import { calm } from '../app/comfort.ts';
+import { openPicker } from '../ui/hud/picker.ts';
 
 type V3 = THREE.Vector3;
 const V = (x = 0, y = 0, z = 0): V3 => new THREE.Vector3(x, y, z);
@@ -938,6 +939,27 @@ export function rideKey(deps: RideKeyDeps): () => void {
       return false;
     }
     if (riding) rememberRide(riding.id);
+    // v7.4: more than one ride to step onto: pick which
+    const mine = (p.owned ?? []).filter((id) => itemOfKind(id, 'ride'));
+    if (!riding && mine.length > 1 && deps.ui) {
+      const last = lastRide();
+      openPicker({
+        root: deps.ui,
+        title: 'Your rides',
+        subtitle: 'Pick one to get on. B steps off again.',
+        key: 'KeyB',
+        rows: mine.map((id) => ({ id, name: (itemOfKind(id, 'ride') as ShopItem).name, ...(id === last ? { note: 'last ridden' } : {}) })),
+        pick: (id) => {
+          const now = deps.profile();
+          if (now && !itemOfKind(now.look.ride, 'ride')) put(withItem(now.look, 'ride', id));
+        },
+      });
+      return true;
+    }
+    put(next);
+    return true;
+  };
+  const put = (next: Look): void => {
     busy = true;
     paint();
     deps
@@ -950,7 +972,6 @@ export function rideKey(deps: RideKeyDeps): () => void {
         busy = false;
         paint();
       });
-    return true;
   };
   const onKey = (e: KeyboardEvent) => {
     if (e.code !== 'KeyB' || e.repeat || e.ctrlKey || e.metaKey || e.altKey || busy || !deps.allowed(e)) return;

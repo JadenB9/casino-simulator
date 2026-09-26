@@ -100,6 +100,8 @@ export interface PlayerInfo {
   jailed?: boolean;
   /** v7.1: whose apartment they're in (its owner's account id), on the apartments' floor. */
   apt?: number | null;
+  /** v7.4: crouched (C), for everyone to see. */
+  crouch?: boolean;
 }
 
 /** v7.1: one apartment in the tower, as its visitors see it (server/src/floor/tower.ts). */
@@ -360,9 +362,10 @@ export interface StatsResponse {
  * floor only passes on an emote the account has (the free ones, or a casino_items / reward row).
  */
 export const FREE_EMOTES = ['wave', 'cheer', 'clap', 'thumbs', 'shrug', 'sixseven'] as const;
-export const SHOP_EMOTES = ['throwback', 'griddy', 'floss', 'dab', 'robot', 'backflip', 'moneyfan', 'bow'] as const;
+export const SHOP_EMOTES = ['throwback', 'griddy', 'floss', 'dab', 'robot', 'backflip', 'moneyfan', 'bow', 'twerk'] as const;
 export const REWARD_EMOTES = ['trophy', 'moonwalk'] as const;
-export const EMOTES = [...FREE_EMOTES, ...SHOP_EMOTES, ...REWARD_EMOTES] as const;
+// (v7.4: the Twerk, sold after the rewards were made, goes on the end like any new one)
+export const EMOTES = [...FREE_EMOTES, ...SHOP_EMOTES.slice(0, 8), ...REWARD_EMOTES, ...SHOP_EMOTES.slice(8)] as const;
 export type EmoteId = (typeof EMOTES)[number];
 
 /**
@@ -409,6 +412,7 @@ export type FloorClientMsg =
   | { t: 'apts' }
   // v7.1: a jump (everyone sees you hop)
   | { t: 'jump' }
+  | { t: 'crouch'; on: boolean }
   | { t: 'home.pick'; slot: string; item: string | null }
   | InviteClientMsg // v6 invite6
   // v6 law6: throw a punch, facing `r` (yaw byte); the server finds who it lands on
@@ -427,7 +431,7 @@ export type FloorServerMsg =
   | { t: 's'; ts: number; p: [id: number, x: number, z: number, r: number, moving: 0 | 1, age?: number][] }
   | { t: 'join'; player: PlayerInfo }
   | { t: 'leave'; id: number }
-  | { t: 'player'; id: number; look?: Look; at?: { station: string } | null; seat?: string | null; car?: string | null; parked?: Parked | null; gun?: string | null; jailed?: boolean; apt?: number | null }
+  | { t: 'player'; id: number; look?: Look; at?: { station: string } | null; seat?: string | null; car?: string | null; parked?: Parked | null; gun?: string | null; jailed?: boolean; apt?: number | null; crouch?: boolean }
   // a seat you asked for and didn't get (someone got there first, or it's out of reach)
   | { t: 'seat.no'; seat: string; msg: string }
   | { t: 'online'; n: number }
@@ -508,6 +512,8 @@ export function parseFloorMsg(raw: unknown, isGame: (g: unknown) => g is GameId)
       return { t: 'apts' };
     case 'jump':
       return { t: 'jump' };
+    case 'crouch':
+      return typeof raw.on === 'boolean' ? { t: 'crouch', on: raw.on } : null;
     case 'home.pick':
       if (typeof raw.slot !== 'string' || !/^[a-z]{2,16}$/.test(raw.slot) || (raw.item !== null && !isShortId(raw.item))) return null;
       return { t: 'home.pick', slot: raw.slot, item: raw.item as string | null };

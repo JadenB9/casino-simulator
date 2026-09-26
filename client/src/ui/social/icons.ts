@@ -129,6 +129,17 @@ export function emoteGlyph(e: EmoteId): SVGSVGElement {
       line(s, 'M4.7 8.2c-1 1.3-1.2 3-.5 4.5');
       line(s, 'M2.4 6.6c-1.6 1.9-1.9 4.6-.8 6.9');
       break;
+    case 'twerk':
+      // Side on, down in a deep squat, back flat, hands on the thighs; the hips shaking up and down.
+      dot(s, 18.6, 9.4, 2.4);
+      bar(s, 15.8, 11.6, 9.2, 12.6, 4.4);
+      bar(s, 9.4, 13.6, 14.2, 16.6, 3);
+      bar(s, 14.2, 16.6, 12.6, 21.4, 2.4);
+      bar(s, 15.6, 12.8, 14.2, 15.2, 2.1);
+      line(s, 'M5.4 9.2v3.4');
+      line(s, 'M3 8.2v5.4');
+      line(s, 'M5.4 16.2v2.4');
+      break;
     case 'griddy':
       // Side on: a heel kicked out with the toes up, a hand made into goggles at the eye.
       dot(s, 12.2, 5.2, 2.4);

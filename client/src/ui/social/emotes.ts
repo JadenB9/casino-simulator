@@ -52,10 +52,11 @@ export interface EmoteWheel {
 
 /** The inner ring (1-6), then the outer ring (Q-P): the sold ones, then the feats' rewards. */
 const INNER: readonly EmoteId[] = FREE_EMOTES;
-const OUTER: readonly EmoteId[] = [...SHOP_EMOTES, ...REWARD_EMOTES];
+// (v7.4: the Twerk came after the rewards, so it goes after them and nobody's keys move)
+const OUTER: readonly EmoteId[] = [...SHOP_EMOTES.slice(0, 8), ...REWARD_EMOTES, ...SHOP_EMOTES.slice(8)];
 export const WHEEL_EMOTES: readonly EmoteId[] = [...INNER, ...OUTER];
 /** The outer ring's keys, clockwise from the top: the keyboard's top row. */
-const OUTER_KEYS = 'QWERTYUIOP';
+const OUTER_KEYS = 'QWERTYUIOP[';
 
 const BURST = 3;
 /** The server refills at 0.5 a second; a tenth slower here absorbs network jitter. */
@@ -64,12 +65,12 @@ const REFILL_PER_S = 0.45;
 const RADIUS = 92;
 const RADIUS_OUT = 170;
 const WHEEL_PX = 432;
-const HINT = '1-6 · Q-P · Esc';
+const HINT = '1-6 · Q-[ · Esc';
 
 /** The emote a key picks on the wheel: 1 to 6 the inner ring, Q to P (by key position) the outer, or null. */
 export function emoteForKey(key: string, code = ''): EmoteId | null {
   if (/^[1-9]$/.test(key)) return INNER[Number(key) - 1] ?? null;
-  const letter = /^Key[A-Z]$/.test(code) ? code.slice(3) : /^[a-z]$/i.test(key) ? key.toUpperCase() : '';
+  const letter = /^Key[A-Z]$/.test(code) ? code.slice(3) : code === 'BracketLeft' || key === '[' ? '[' : /^[a-z]$/i.test(key) ? key.toUpperCase() : '';
   const i = letter ? OUTER_KEYS.indexOf(letter) : -1;
   return i >= 0 ? (OUTER[i] ?? null) : null;
 }

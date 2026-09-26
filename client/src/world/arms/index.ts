@@ -1,5 +1,5 @@
-// v7: guns in hand. R draws the gun you own (again for the next one, and put away after the
-// last); drawn, you face where you look and a left click fires (held, an automatic keeps firing),
+// v7: guns in hand. V draws the gun you own (v7.4: a choice of them when you own several, and V
+// again puts it away; one bought is in your hand at once); drawn, you face where you look and a left click fires (held, an automatic keeps firing),
 // the rounds count down and it reloads itself when it's empty. A shot is played at once where you
 // are (the kick, the flash, the tracer, the bang) and sent to the floor, which decides what it hit
 // (server/src/floor/street.ts): everyone sees your shot and whoever it knocks down. Nobody is hurt.
@@ -19,6 +19,7 @@ import type { Person } from '../characters.ts';
 import { StreetSounds } from '../drive/sound.ts';
 import { disposeGun, gunModel, holdOf } from './models.ts';
 import './arms.css';
+import { openPicker } from '../../ui/hud/picker.ts';
 
 export interface ArmsDeps {
   engine: { scene: THREE.Scene; camera: THREE.PerspectiveCamera; canvas: HTMLElement; onFrame(fn: (dt: number) => void): () => void };
@@ -73,7 +74,7 @@ export class Arms {
     this.fireBtn.type = 'button';
     this.gunBtn.hidden = true;
     this.fireBtn.hidden = true;
-    this.gunBtn.addEventListener('click', () => this.cycle());
+    this.gunBtn.addEventListener('click', () => this.toggle());
     this.fireBtn.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       if (!this.gun) return;
@@ -137,27 +138,42 @@ export class Arms {
 
   // --- drawing and firing ----------------------------------------------------------------------
 
+  // v7.4: V, and only V: out comes your gun (a choice of them when you own more than one), and
+  // V again puts it away. Left click fires it.
   private onKey = (e: KeyboardEvent): void => {
-    if (e.code !== 'KeyR' || e.repeat || isTyping(e) || overlayCount() > 0 || e.metaKey || e.ctrlKey) return;
+    if (e.code !== 'KeyV' || e.repeat || isTyping(e) || overlayCount() > 0 || e.metaKey || e.ctrlKey || e.altKey) return;
     if (!this.d.free()) return;
-    const mine = GUNS.filter((g) => this.d.owned().includes(g.id));
-    if (!mine.length) {
-      if (this.gun) this.holster();
-      else toast('No guns yet. Ace Arms across the street sells them.');
-      return;
-    }
     e.preventDefault();
-    this.cycle();
+    this.toggle();
   };
 
-  /** The next gun you own, or put away after the last. */
-  private cycle(): void {
+  /** V (or the touch Gun button): put the drawn gun away, or draw one: yours, or the one you pick. */
+  toggle(): void {
     if (!this.d.free()) return;
+    if (this.gun) {
+      this.holster();
+      return;
+    }
     const mine = GUNS.filter((g) => this.d.owned().includes(g.id));
-    const i = this.gun ? mine.findIndex((g) => g.id === this.gun!.id) : -1;
-    const next = mine[i + 1] ?? null;
-    if (next) this.draw(next);
-    else this.holster();
+    if (!mine.length) {
+      toast('No guns yet. Ace Arms across the street sells them.');
+      return;
+    }
+    if (mine.length === 1) {
+      this.draw(mine[0]!);
+      return;
+    }
+    openPicker({
+      root: this.d.ui,
+      title: 'Your guns',
+      subtitle: 'Pick one to draw. V puts it away again.',
+      key: 'KeyV',
+      rows: mine.map((g) => ({ id: g.id, name: g.name, note: `${g.mag} rounds${g.auto ? ', automatic' : ''}` })),
+      pick: (id) => {
+        const g = mine.find((x) => x.id === id);
+        if (g && this.d.free()) this.draw(g);
+      },
+    });
   }
 
   draw(g: GunItem): void {

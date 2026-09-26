@@ -18,8 +18,10 @@ describe('emote wheel', () => {
   });
 
   it('the top row of letters picks the outer ring, by key position', () => {
-    const outer = [...SHOP_EMOTES, ...REWARD_EMOTES];
+    const outer = [...SHOP_EMOTES.slice(0, 8), ...REWARD_EMOTES];
     expect([...'QWERTYUIOP'].map((l) => emoteForKey(l.toLowerCase(), `Key${l}`))).toEqual(outer);
+    // v7.4: the Twerk, after the rewards, on the key after P
+    expect(emoteForKey('[', 'BracketLeft')).toBe('twerk');
     expect(emoteForKey('q')).toBe('throwback');
     expect(emoteForKey('W')).toBe('griddy');
     expect(emoteForKey('p')).toBe('moonwalk');
@@ -28,15 +30,15 @@ describe('emote wheel', () => {
     expect(emoteForKey('q', 'KeyA')).toBeNull();
     // G closes the wheel, and walking keys other than W mean nothing to it
     for (const [k, c] of [['g', 'KeyG'], ['s', 'KeyS'], ['d', 'KeyD']]) expect(emoteForKey(k!, c)).toBeNull();
-    for (const e of EMOTES) expect(emoteForKey(keyOf(e).toLowerCase(), /\d/.test(keyOf(e)) ? '' : `Key${keyOf(e)}`)).toBe(e);
+    for (const e of EMOTES) expect(emoteForKey(keyOf(e).toLowerCase(), /\d/.test(keyOf(e)) ? '' : keyOf(e) === '[' ? 'BracketLeft' : `Key${keyOf(e)}`)).toBe(e);
   });
 
-  it('shows every emote once, the free six inside and the ten others outside', () => {
+  it('shows every emote once, the free six inside and the eleven others outside', () => {
     expect([...WHEEL_EMOTES].sort()).toEqual([...EMOTES].sort());
     const layout = wheelLayout();
-    expect(layout).toHaveLength(16);
+    expect(layout).toHaveLength(17);
     expect(layout.filter((b) => b.ring === 0).map((b) => b.e)).toEqual([...FREE_EMOTES]);
-    expect(layout.filter((b) => b.ring === 1).map((b) => b.e)).toEqual([...SHOP_EMOTES, ...REWARD_EMOTES]);
+    expect(layout.filter((b) => b.ring === 1).map((b) => b.e)).toEqual([...SHOP_EMOTES.slice(0, 8), ...REWARD_EMOTES, 'twerk']);
     for (const e of EMOTES) expect(EMOTE_LABELS[e]).toBeTruthy();
   });
 
@@ -68,11 +70,12 @@ describe('emote wheel', () => {
   });
 
   it('locks what you neither have for free nor own', () => {
-    expect(lockedEmotes(undefined)).toEqual([...SHOP_EMOTES, ...REWARD_EMOTES]);
-    expect(lockedEmotes([])).toEqual([...SHOP_EMOTES, ...REWARD_EMOTES]);
+    const all = [...SHOP_EMOTES.slice(0, 8), ...REWARD_EMOTES, 'twerk'];
+    expect(lockedEmotes(undefined)).toEqual(all);
+    expect(lockedEmotes([])).toEqual(all);
     // owned lists items and emotes together; the items mean nothing here
     const owned = ['gold-chain', 'throwback', 'dab', 'moonwalk', 'skateboard'];
-    expect(lockedEmotes(owned)).toEqual(['griddy', 'floss', 'robot', 'backflip', 'moneyfan', 'bow', 'trophy']);
+    expect(lockedEmotes(owned)).toEqual(['griddy', 'floss', 'robot', 'backflip', 'moneyfan', 'bow', 'trophy', 'twerk']);
     expect(lockedEmotes([...SHOP_EMOTES, ...REWARD_EMOTES])).toEqual([]);
     const have = new Set(owned);
     for (const e of FREE_EMOTES) expect(hasEmote(e, new Set())).toBe(true);

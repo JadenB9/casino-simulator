@@ -81,6 +81,8 @@ export interface FloorAtt {
   /** v7.1: the home pieces owned (the tower's), and whose apartment this player is in now. */
   homes?: string[];
   apt?: number | null;
+  /** v7.4: crouched. */
+  crouch?: boolean;
 }
 
 /** v7: the fastest a driven car may go, cm/s (the cars top out near 40 m/s), and its bank. */
@@ -391,6 +393,12 @@ export class Presence {
     if (this.update(accountId, (a) => (a.apt = apt))) this.broadcast({ t: 'player', id: accountId, apt });
   }
 
+  /** v7.4: crouched or stood up again: everyone hears it. */
+  setCrouch(accountId: number, on: boolean): void {
+    let changed = false;
+    if (this.update(accountId, (a) => ((changed = !!a.crouch !== on), (a.crouch = on))) && changed) this.broadcast({ t: 'player', id: accountId, crouch: on });
+  }
+
   setGun(accountId: number, gun: string | null): void {
     if (this.update(accountId, (a) => (a.gun = gun))) this.broadcast({ t: 'player', id: accountId, gun });
   }
@@ -525,7 +533,7 @@ export class Presence {
 }
 
 function info(a: FloorAtt): PlayerInfo {
-  return { id: a.accountId, name: a.name, look: a.look, x: a.x, z: a.z, r: a.r, at: a.at, seat: a.seat?.id ?? null, car: a.car ?? null, parked: a.parked ?? null, gun: a.gun ?? null, jailed: !!a.confine, apt: a.apt ?? null };
+  return { id: a.accountId, name: a.name, look: a.look, x: a.x, z: a.z, r: a.r, at: a.at, seat: a.seat?.id ?? null, car: a.car ?? null, parked: a.parked ?? null, gun: a.gun ?? null, jailed: !!a.confine, apt: a.apt ?? null, ...(a.crouch ? { crouch: true } : {}) };
 }
 
 /**

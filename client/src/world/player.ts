@@ -36,7 +36,7 @@ const RADIUS = 0.3;
 const WALK = 2.6;
 const RUN = 4.8;
 /** A factor on walking and running speed from outside the walker (an espresso at the bar, consumables/); 1 = none. */
-export const paceBoost = { k: 1, /** v7.4: drunk, 0-1: the walk weaves */ stagger: 0 };
+export const paceBoost = { k: 1, /** v7.4: drunk, 0-1: the walk weaves */ stagger: 0, /** v7.4: crouched: a slow creep, no running */ crouch: false };
 /** Nothing the walker does goes faster than this (m/s): the floor server allows 9. */
 const MAX_PACE = 8.5;
 /** The speeds the walk and run cycles were made for; the blend between them follows these. */
@@ -408,8 +408,8 @@ export class Player {
     // v6 looks6: on a ride, its own speeds; it gets going and rolls to a stop more slowly
     const ride = ridePace(this.character);
     // v6 dine6: an espresso's quicker pace, on foot only (a ride keeps its own speeds)
-    const boost = ride ? 1 : paceBoost.k;
-    const speed = len > 0 ? Math.min(MAX_PACE, (run ? (ride?.run ?? RUN) : (ride?.walk ?? WALK) * pace) * boost) : 0;
+    const boost = ride ? 1 : paceBoost.crouch ? 0.45 : paceBoost.k;
+    const speed = len > 0 ? Math.min(MAX_PACE, (run && !(paceBoost.crouch && !ride) ? (ride?.run ?? RUN) : (ride?.walk ?? WALK) * pace) * boost) : 0;
     if (len > 0) {
       mx /= len;
       mz /= len;

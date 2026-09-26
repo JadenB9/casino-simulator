@@ -289,6 +289,9 @@ export class Person implements Character {
   private swayT = 0;
   /** Seat top above the feet while sitting, and how far the model is lowered for it. */
   private seatTop: number | null = null;
+  /** v7.4: crouched (wanted), and how far down it is now (0-1, eased). */
+  private crouchOn = false;
+  private crouchK = 0;
   private seated = 0;
   private legs: { hip: number; thigh: number; knee: number; thighTip: number; shinTip: number } | null = null;
   /** Idle clip speed and phase (staff breathe out of step with each other). */
@@ -540,6 +543,15 @@ export class Person implements Character {
     this.seatTop = seatTop;
   }
 
+  /** v7.4: down into a crouch (knees bent, hips low, leaning in), or up again. */
+  crouch(on: boolean): void {
+    this.crouchOn = on;
+  }
+
+  get crouched(): boolean {
+    return this.crouchOn;
+  }
+
   /**
    * A still copy of the character as posed now, in its root's frame: skinned on the CPU, in its
    * own colours, for a far-away stand-in (world/npcs.ts). Null until its model has loaded.
@@ -608,6 +620,9 @@ export class Person implements Character {
     if (this.seatTop !== null) drop = this.sitPose();
     else if (riding) this.model!.position.y = this.modelAt.y + this.ridePose();
     else if (this.swaySeed !== null) this.swayPose(dt);
+    this.crouchK += ((this.crouchOn ? 1 : 0) - this.crouchK) * (1 - Math.exp(-dt * 9));
+    if (this.crouchK < 0.005) this.crouchK = 0;
+    if (this.crouchK > 0 && !this.act && this.seatTop === null && !riding) this.crouchPose();
     this.lookPose(dt);
     if (this.gun.kind || this.gun.k > 0) this.gunPose(dt);
     const whole = this.act ? this.perform(dt, riding) : null;
@@ -615,6 +630,25 @@ export class Person implements Character {
     if (this.prop) this.holdProp();
     if (this.gun.mesh) this.placeGun();
     this.settle(drop);
+  }
+
+  /**
+   * v7.4: the crouch: the hips down, the body leaning in over the knees, the head up. Standing
+   * still the feet take a crouching stance; walking, they stay where the walk puts them and the
+   * knees bend to reach (a crouched walk).
+   */
+  private crouchPose(): void {
+    const k = smooth(this.crouchK);
+    const lens = this.legLengths();
+    const body = this.bones.body;
+    if (!lens || !body) return;
+    const moving = Math.min(1, this.speed * 2);
+    const drop = 0.34 - 0.08 * moving;
+    this.shift(body, _v.set(0, -drop * k, -0.05 * k).add(local(body, _w)));
+    this.turn('body', [0.34 + 0.08 * moving, 0, 0], k);
+    this.turn('chest', [0.1, 0, 0], k);
+    this.turn('head', [-0.36, 0, 0], k);
+    this.plant(CROUCH, k * (1 - moving), lens);
   }
 
   /**
@@ -1543,6 +1577,8 @@ const SIT_LOWER: Turn = [-0.72, 0.3, 0];
 const BALL = 0.18;
 /** A walk faster than this ends a dance (it eases out from wherever it had got to). */
 const DANCE_WALK = 0.3;
+/** v7.4: the crouching stance: feet a little apart, one ahead, knees out over the toes. */
+const CROUCH: Pose = { footR: { at: [-0.14, 0, 0.14], toe: 0.3, knee: [-0.3, 0, 1] }, footL: { at: [-0.13, 0, -0.08], toe: 0.3, heel: 0.5, knee: [-0.3, 0, 1] } };
 
 /** v7.2: each body part's bone, and where the part is from its joint (metres, the character's frame). */
 const PARTS: Record<BodyPart, [bone: string, dx: number, dy: number, dz: number]> = {
