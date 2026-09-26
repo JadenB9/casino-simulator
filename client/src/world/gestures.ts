@@ -297,12 +297,12 @@ const SHOP: Record<Exclude<EmoteId, FreeEmote>, Gesture> = {
       if (seated) return { torso: [0.1, 0, 0], hips: [0.12 * shake * w, 0, 0], head: [-0.05, 0, 0] };
       const foot: Foot = { at: [-0.32, 0, 0.02], toe: 0.6, knee: [-1, 0, 0.8] };
       return {
-        pelvis: [0, (-0.3 + 0.025 * shake) * w, (-0.12 + 0.02 * shake) * w],
-        body: [0.72 * w, 0, 0],
-        hips: [(-0.22 + 0.3 * shake) * w, 0, 0.05 * shake * w],
-        chest: [-0.12 * w, 0, 0],
-        neck: [-0.35, -0.3, 0],
-        head: [-0.45, -0.55, 0],
+        pelvis: [0, (-0.3 + 0.025 * shake) * w, (-0.14 + 0.02 * shake) * w],
+        body: [0.82 * w, 0, 0],
+        hips: [(0.26 + 0.2 * shake) * w, 0, 0.05 * shake * w],
+        chest: [0.08 * w, 0, 0],
+        neck: [-0.55, -0.3, 0],
+        head: [-0.5, -0.5, 0],
         footR: foot,
         footL: foot,
         ...both({ knee: [0.05, 0.16, 0.02], elbow: [-1, 0.2, -0.2], palm: [0.1, -1, -0.1], fingers: [0.2, -0.5, 1] }),
