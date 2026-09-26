@@ -14,6 +14,7 @@ import type { Chandelier } from '../room.ts';
 import type { Seatable } from '../life-points.ts';
 import { canvasTexture } from '../carpet.ts';
 import { rng } from './sky.ts';
+import { wrapped } from '../home/surfaces.ts';
 
 export class Kit {
   readonly batch = new Batch();
@@ -141,10 +142,7 @@ export class Kit {
     this.seats.push({ ...s, room: this.zone });
   }
 
-  /**
-   * The pools as one additive mesh (tinted `color`, `k` strong, then scaled by POOL_K: the owner
-   * asked for the circles of light to be a hint at most).
-   */
+  /** The pools as one additive mesh (tinted `color`, `k` strong). */
   pools(color: string, k: number): THREE.Mesh | null {
     if (this.poolGeos.length === 0) return null;
     const merged = new THREE.BufferGeometry();
@@ -161,7 +159,7 @@ export class Kit {
     merged.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
     const tex = canvasTexture(poolCanvas(128), 1);
     tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
-    const m = new THREE.MeshBasicMaterial({ map: tex, color: new THREE.Color(color).multiplyScalar(k * POOL_K), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+    const m = new THREE.MeshBasicMaterial({ map: tex, color: new THREE.Color(color).multiplyScalar(k), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
     m.name = 'city-pools';
     const mesh = new THREE.Mesh(merged, m);
     mesh.name = `${this.zone}:pools`;
@@ -169,9 +167,6 @@ export class Kit {
     return mesh;
   }
 }
-
-/** v7.4: how strong the pools are drawn, of what each zone asks for. */
-const POOL_K = 0.3;
 
 /** A pool's falloff: bright in the middle, a long soft edge. */
 function poolCanvas(size: number): HTMLCanvasElement {
@@ -421,26 +416,38 @@ function drawAsphalt(size: number, seed: number): HTMLCanvasElement {
   g.fillStyle = '#34353a';
   g.fillRect(0, 0, size, size);
   // broad unevenness, drawn wrapped so the repeat has no seam
-  const blot = (x: number, y: number, r: number, color: string) => {
-    for (const dx of [-size, 0, size]) {
-      for (const dy of [-size, 0, size]) {
+  const blot = (x: number, y: number, r: number, color: string) =>
+    wrapped(
+      size,
+      (dx, dy) => {
         const grad = g.createRadialGradient(x + dx, y + dy, 0, x + dx, y + dy, r);
         grad.addColorStop(0, color);
         grad.addColorStop(1, 'rgba(0,0,0,0)');
         g.fillStyle = grad;
         g.fillRect(x + dx - r, y + dy - r, r * 2, r * 2);
-      }
-    }
-  };
+      },
+      { x, y, r },
+    );
   for (let i = 0; i < 26; i++) blot(rnd() * size, rnd() * size, size * (0.08 + rnd() * 0.2), rnd() < 0.5 ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.09)');
-  // aggregate: specks, lighter and darker
+  // aggregate: specks, lighter and darker (written into the pixels: a fillRect each is slow)
+  const img = g.getImageData(0, 0, size, size);
+  const px = img.data;
   const n = size * size * 0.14;
   for (let i = 0; i < n; i++) {
     const v = 38 + Math.floor(rnd() * 46);
-    g.fillStyle = `rgb(${v},${v},${v + 3})`;
     const s = rnd() < 0.1 ? 2 : 1;
-    g.fillRect(Math.floor(rnd() * size), Math.floor(rnd() * size), s, s);
+    const x0 = Math.floor(rnd() * size);
+    const y0 = Math.floor(rnd() * size);
+    for (let y = y0; y < Math.min(size, y0 + s); y++) {
+      for (let x = x0; x < Math.min(size, x0 + s); x++) {
+        const o = (y * size + x) * 4;
+        px[o] = v;
+        px[o + 1] = v;
+        px[o + 2] = v + 3;
+      }
+    }
   }
+  g.putImageData(img, 0, 0);
   // a patch cut in, darker and smoother, its edge a thin seam
   for (let i = 0; i < 2; i++) {
     const w = size * (0.15 + rnd() * 0.2);

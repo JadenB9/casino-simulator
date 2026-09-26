@@ -4,6 +4,7 @@
 
 import { el } from '../kit.ts';
 import { openSheet, type Sheet } from '../menu/sheet.ts';
+import { keycap } from '../menu/parts.ts';
 import './picker.css';
 
 export interface PickRow {
@@ -27,12 +28,7 @@ export interface PickOpts {
 
 let open: Sheet | null = null;
 
-/** Whether a picker is open now. */
-export function picking(): boolean {
-  return !!open && !open.closed;
-}
-
-export function openPicker(o: PickOpts): Sheet {
+export function openPicker(o: PickOpts): void {
   open?.close();
   const sheet = openSheet(o.root, { title: o.title, subtitle: o.subtitle, cls: 'pick-sheet', onClose: () => removeEventListener('keydown', onKey, true) });
   open = sheet;
@@ -47,7 +43,7 @@ export function openPicker(o: PickOpts): Sheet {
     const text = el('span', 'pick-text');
     text.append(el('span', 'pick-name', r.name));
     if (r.note || r.current) text.append(el('span', 'pick-note', [r.note, r.current ? 'in use' : ''].filter(Boolean).join(' · ')));
-    b.append(el('span', 'kc', String(i + 1)), text);
+    b.append(keycap(String(i + 1)), text);
     b.addEventListener('click', () => choose(r.id));
     const li = el('li');
     li.append(b);
@@ -72,5 +68,4 @@ export function openPicker(o: PickOpts): Sheet {
   };
   addEventListener('keydown', onKey, true);
   (list.querySelector('button') as HTMLButtonElement | null)?.focus();
-  return sheet;
 }

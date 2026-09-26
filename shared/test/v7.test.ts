@@ -48,11 +48,10 @@ describe('apartments', () => {
     expect(pieceIn('tv', owned, 3, null)).toBeNull();
     expect(new Set(HOME_ITEMS.map((h) => h.id)).size).toBe(HOME_ITEMS.length);
   });
-  it('are reached only by owners, and not from a car', () => {
+  it('are reached only by owners', () => {
     const at = { x: LIFTS.casino.arrive.x, z: LIFTS.casino.arrive.z, at: null };
     expect(liftRefusal({ ...at, home: 0 }, 'home')).toBe('nohome');
     expect(liftRefusal({ ...at, home: 1 }, 'home')).toBeNull();
-    expect(liftRefusal({ ...at, home: 1, car: 'spectre-ev' }, 'home')).toBe('driving');
     expect(zoneOf(LIFTS.home.arrive.x, LIFTS.home.arrive.z)).toBe('home');
   });
 });

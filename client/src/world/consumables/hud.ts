@@ -5,6 +5,7 @@
 
 import './dine.css';
 import { el } from '../../ui/kit.ts';
+import { keycap } from '../../ui/menu/parts.ts';
 import { barItem } from '../../../../shared/src/items.ts';
 import type { Chip } from './effects.ts';
 import { calm } from '../../app/comfort.ts';
@@ -31,7 +32,7 @@ export class DineHud {
   private readonly note = el('span', 'dine-card-note');
   private readonly chips = el('div', 'dine-chips');
   private readonly vignette = el('div', 'dine-vignette');
-  private readonly actKey = el('kbd', 'kc');
+  private readonly actKey = keycap('');
   private readonly offKeys = keyed(() => (this.actKey.textContent = keyLabel('sip')));
   private blurred = 0;
   private chipEls = new Map<string, { root: HTMLElement; time: HTMLElement; name: HTMLElement; bar: HTMLElement }>();

@@ -108,35 +108,24 @@ export class V7 {
     });
     d.law.refreshMoney = () => void this.refreshMoney();
     // the stores' clerks behind their counters
-    for (const s of Object.values(STORES)) {
-      const p = world.characterFactory.create(CLERKS[s.id], '', { staff: true }) as Person;
-      p.root.position.set(s.clerk.x, 0, s.clerk.z);
-      p.root.rotation.y = s.clerk.yaw;
-      p.showTag(false);
-      engine.scene.add(p.root);
-      this.clerks.push(p);
-      world.collider.post(s.clerk.x, s.clerk.z, 0.3, 1.9);
-    }
+    for (const s of Object.values(STORES)) this.addClerk(CLERKS[s.id], s.clerk);
     engine.onFrame((dt) => this.frame(dt));
     world.spots((p) => this.spots(p));
     this.residences();
-    // v7.1: Space jumps, on foot on the floor
+    // v7.1: the jump (Space) and v7.4 the crouch (C), on foot on the floor
     addEventListener('keydown', (e) => {
-      if (!isKey(e, 'jump') || e.repeat || isTyping(e) || overlayCount() > 0 || !d.free() || this.driving.driving || world.walker.down || !world.walker.isEnabled) return;
+      const jump = isKey(e, 'jump');
+      if ((!jump && !isKey(e, 'crouch')) || e.repeat || e.metaKey || e.ctrlKey || isTyping(e) || overlayCount() > 0) return;
+      if (!d.free() || this.driving.driving || world.walker.down || !world.walker.isEnabled) return;
+      e.preventDefault();
+      if (!jump) return this.setCrouch(!this.crouched);
       const now = performance.now();
       if (now - this.jumpAt < 800) return;
       this.jumpAt = now;
-      e.preventDefault();
       // (a jump stands you up out of a crouch)
       if (this.crouched) this.setCrouch(false);
       (world.player.character.gesture as ((g: string) => void) | undefined)?.('jump');
       d.link()?.send({ t: 'jump' });
-    });
-    // v7.4: C crouches and stands you up again, on foot on the floor
-    addEventListener('keydown', (e) => {
-      if (!isKey(e, 'crouch') || e.repeat || e.metaKey || e.ctrlKey || isTyping(e) || overlayCount() > 0 || !d.free() || this.driving.driving || world.walker.down || !world.walker.isEnabled) return;
-      e.preventDefault();
-      this.setCrouch(!this.crouched);
     });
   }
 
@@ -146,11 +135,23 @@ export class V7 {
   private setCrouch(on: boolean, tell = true): void {
     this.crouched = on;
     paceBoost.crouch = on;
-    (this.d.world.player.character as { crouch?(on: boolean): void }).crouch?.(on);
+    this.d.world.player.character.crouch?.(on);
     if (tell) this.d.link()?.send({ t: 'crouch', on });
   }
 
   private jumpAt = 0;
+
+  /** Someone behind a counter on the ground floor (a store's, the Residences desk's), updated with the rest in frame(). */
+  private addClerk(look: Look, at: { x: number; z: number; yaw: number }): void {
+    const { engine, world } = this.d;
+    const p = world.characterFactory.create(look, '', { staff: true }) as Person;
+    p.root.position.set(at.x, 0, at.z);
+    p.root.rotation.y = at.yaw;
+    p.showTag(false);
+    engine.scene.add(p.root);
+    this.clerks.push(p);
+    world.collider.post(at.x, at.z, 0.3, 1.9);
+  }
 
   /** The Residences desk (v7.4: the hotel lobby's front desk, ground floor), where apartments are sold. */
   private residences(): void {
@@ -162,17 +163,9 @@ export class V7 {
     g.name = 'residences-desk';
     const atlas = signAtlas([{ text: 'THE RESIDENCES', font: '600 88px Cinzel, Georgia, serif', color: '#f4dca6', glow: '#ffb35a' }]);
     g.add(signMesh(atlas, [{ row: 0, x: (R.desk.x0 + R.desk.x1) / 2, y: 2.35, z: R.hall.z0 + 0.16, h: 0.3, ry: 0 }], 1.6));
-    const clerk = world.characterFactory.create(RESIDENCES_CLERK, '', { staff: true }) as Person;
-    clerk.root.position.set(R.clerk.x, 0, R.clerk.z);
-    clerk.root.rotation.y = R.clerk.yaw;
-    clerk.showTag(false);
-    g.add(clerk.root);
     engine.scene.add(g);
-    world.collider.post(R.clerk.x, R.clerk.z, 0.3, 1.9);
-    engine.onFrame((dt) => {
-      g.visible = world.zone === 'ground';
-      if (g.visible) clerk.update(dt);
-    });
+    engine.onFrame(() => (g.visible = world.zone === 'ground'));
+    this.addClerk(RESIDENCES_CLERK, R.clerk);
   }
 
   /** The floor socket: the shots, what you own now, a refusal to say. */
@@ -195,7 +188,7 @@ export class V7 {
   private frame(dt: number): void {
     // v7.4: a crouch ends in a car, on a seat, at a table or when knocked down; everyone else's as the floor says
     if (this.crouched && (this.driving.driving || this.d.world.seated || !this.d.free() || this.d.world.walker.down)) this.setCrouch(false);
-    for (const [id, p] of this.d.link()?.players ?? []) (this.d.character(id) as { crouch?(on: boolean): void } | undefined)?.crouch?.(!!p.info.crouch);
+    for (const [id, p] of this.d.link()?.players ?? []) this.d.character(id)?.crouch?.(!!p.info.crouch);
     const shown = this.d.world.zone === 'ground';
     for (const c of this.clerks) {
       c.root.visible = shown;

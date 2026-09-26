@@ -548,9 +548,6 @@ export class Person implements Character {
     this.crouchOn = on;
   }
 
-  get crouched(): boolean {
-    return this.crouchOn;
-  }
 
   /**
    * A still copy of the character as posed now, in its root's frame: skinned on the CPU, in its
@@ -620,8 +617,10 @@ export class Person implements Character {
     if (this.seatTop !== null) drop = this.sitPose();
     else if (riding) this.model!.position.y = this.modelAt.y + this.ridePose();
     else if (this.swaySeed !== null) this.swayPose(dt);
-    this.crouchK += ((this.crouchOn ? 1 : 0) - this.crouchK) * (1 - Math.exp(-dt * 9));
-    if (this.crouchK < 0.005) this.crouchK = 0;
+    if (this.crouchOn || this.crouchK > 0) {
+      this.crouchK += ((this.crouchOn ? 1 : 0) - this.crouchK) * (1 - Math.exp(-dt * 9));
+      if (this.crouchK < 0.005) this.crouchK = 0;
+    }
     if (this.crouchK > 0 && !this.act && this.seatTop === null && !riding) this.crouchPose();
     this.lookPose(dt);
     if (this.gun.kind || this.gun.k > 0) this.gunPose(dt);

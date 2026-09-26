@@ -21,7 +21,7 @@ import { canvasTexture } from '../carpet.ts';
  * Draw something again a whole canvas over wherever it crosses an edge, so it comes in at the other
  * (it tiles). `at` and `r`: where it is and how far it reaches (without them, all nine copies).
  */
-function wrapped(size: number, draw: (dx: number, dy: number) => void, at?: { x: number; y: number; r: number }): void {
+export function wrapped(size: number, draw: (dx: number, dy: number) => void, at?: { x: number; y: number; r: number }): void {
   for (const dx of [-size, 0, size]) {
     for (const dy of [-size, 0, size]) {
       if (at && (at.x + dx + at.r < 0 || at.x + dx - at.r > size || at.y + dy + at.r < 0 || at.y + dy - at.r > size)) continue;

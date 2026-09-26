@@ -108,7 +108,12 @@ function clash(a: Where, b: Where): boolean {
   return a === 'both' || b === 'both' || a === b;
 }
 
-const same = (a: string, b: string) => a === b || (/^Shift/.test(a) && /^Shift/.test(b));
+const same = (a: string, b: string) => a === b || (a.startsWith('Shift') && b.startsWith('Shift'));
+
+/** An action's name and where it works. */
+export function keySpec(action: KeyAction): KeySpec {
+  return SPEC.get(action)!;
+}
 
 /** The key bound to an action (a KeyboardEvent.code). */
 export function keyFor(action: KeyAction): string {
@@ -122,8 +127,9 @@ export function isKey(e: { code: string }, action: KeyAction): boolean {
 
 /** Whether a set of held key codes has the action's key down. */
 export function held(keys: ReadonlySet<string>, action: KeyAction): boolean {
-  for (const k of keys) if (isKey({ code: k }, action)) return true;
-  return false;
+  const k = map[action];
+  if (keys.has(k) || keys.has(ALSO[action] ?? '')) return true;
+  return k.startsWith('Shift') && (keys.has('ShiftLeft') || keys.has('ShiftRight'));
 }
 
 /** Whether `code` is free for `action`: nothing it could clash with has it. */

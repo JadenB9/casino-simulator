@@ -11,11 +11,15 @@ import { keyLabel, type KeyAction } from '../keys.ts';
 /** A row: its keys (v7.4: or what the rebindable ones are now: ui/keys.ts) and what they do. */
 type Row = [keys: string | (() => string), action: string];
 
+/** The four walking (and driving) keys as they're bound now. */
+const WALK: readonly KeyAction[] = ['forward', 'left', 'back', 'right'];
+const walkKeys = () => WALK.map(keyLabel).join(' ');
+
 export const SHORTCUTS: readonly { title: string; rows: readonly Row[] }[] = [
   {
     title: 'Floor',
     rows: [
-      [() => ['forward', 'left', 'back', 'right'].map((a) => keyLabel(a as KeyAction)).join(' '), 'Walk'],
+      [walkKeys, 'Walk'],
       ['↑ ← ↓ →', 'Walk, on the arrow keys'],
       [() => keyLabel('run'), 'Run, held while walking'],
       [() => keyLabel('jump'), 'Jump'],
@@ -33,7 +37,7 @@ export const SHORTCUTS: readonly { title: string; rows: readonly Row[] }[] = [
   {
     title: 'Driving',
     rows: [
-      [() => ['forward', 'left', 'back', 'right'].map((a) => keyLabel(a as KeyAction)).join(' '), 'Drive and steer (the arrow keys too)'],
+      [walkKeys, 'Drive and steer (the arrow keys too)'],
       [() => keyLabel('jump'), 'Handbrake'],
       [() => keyLabel('horn'), 'Horn'],
       [() => keyLabel('carView'), 'Car camera'],

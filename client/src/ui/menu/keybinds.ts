@@ -3,7 +3,7 @@
 // had swaps the two, and the note under the list says so. Reset puts every key back.
 
 import { el } from '../kit.ts';
-import { KEY_SPECS, bindKey, customised, keyLabel, keyName, onKeysChange, resetKeys, reservedKey, type KeyAction } from '../keys.ts';
+import { KEY_SPECS, bindKey, customised, keyLabel, keyName, keySpec, keyed, resetKeys, reservedKey, type KeyAction } from '../keys.ts';
 import './keybinds.css';
 
 /** The block's nodes, and what to call when the sheet closes. */
@@ -39,9 +39,9 @@ export function keySettings(): { nodes: HTMLElement[]; dispose(): void } {
         note.textContent = `${keyName(e.code)} stays the game's own (menus, emotes, the help). Pick another key.`;
         return;
       }
-      const spec = KEY_SPECS.find((s) => s.action === action)!;
+      const spec = keySpec(action);
       const moved = bindKey(action, e.code) || [];
-      const others = moved.map((a) => `${KEY_SPECS.find((s) => s.action === a)!.name} moved to ${keyLabel(a)}.`);
+      const others = moved.map((a) => `${keySpec(a).name} moved to ${keyLabel(a)}.`);
       note.textContent = [`${spec.name}: ${keyLabel(action)}.`, ...others].join(' ');
       stop();
     };
@@ -69,8 +69,7 @@ export function keySettings(): { nodes: HTMLElement[]; dispose(): void } {
     resetKeys();
     note.textContent = 'Every key is back where it started.';
   });
-  const off = onKeysChange(paint);
-  paint();
+  const off = keyed(paint);
   return {
     nodes: [el('h3', 'section-label', 'Keys'), list, note, reset],
     dispose() {

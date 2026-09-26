@@ -114,7 +114,7 @@ export function buildHome(mats: Mats, col: Collider, quality: Quality): HomeBuil
     if (near.some((t) => Math.abs(t.x - x) < (t.w + w) / 2 + 4 && Math.abs(t.z - z) < (t.d + d) / 2 + 4)) continue;
     near.push({ x, z, w, d, h: top + DEPTH, y0: -DEPTH });
   }
-  group.add(towers(near, 'night', 0x40e9, high ? 1024 : 512));
+  group.add(towers(near, 'night', 0x40e9, { high }));
   const beacons = new Beacons(
     near.filter((t) => t !== own && (t.y0 ?? 0) + t.h > 10).map((t) => new THREE.Vector3(t.x, (t.y0 ?? 0) + t.h + 1.2, t.z)),
     31,

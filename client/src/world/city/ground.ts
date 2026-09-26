@@ -337,7 +337,7 @@ export function buildGround(mats: Mats, col: Collider, quality: Quality): ZoneBu
   near.push({ x: 158, z: 91, w: 16, d: 22, h: 44 }, { x: 158, z: -91, w: 16, d: 22, h: 52 });
   // and west, behind the lobby and its lots (the casino's floor is out that way: they stand between)
   near.push({ x: 90, z: -40, w: 16, d: 38, h: 56 }, { x: 89, z: 0, w: 18, d: 40, h: 92 }, { x: 90, z: 40, w: 16, d: 38, h: 64 });
-  const towerMesh = towers(near, 'night', 0x7a11, high ? 1024 : 512);
+  const towerMesh = towers(near, 'night', 0x7a11, { high, street: true });
   group.add(towerMesh);
   // (the walls the walker can't pass are streets.ts's: the outer sidewalks' backs, the lots' ends)
   const beacons = new Beacons(near.filter((t) => t.h > 80).map((t) => new THREE.Vector3(t.x, (t.y0 ?? 0) + t.h + 1.5, t.z)), 17);
@@ -388,7 +388,8 @@ export function buildGround(mats: Mats, col: Collider, quality: Quality): ZoneBu
   // --- build -------------------------------------------------------------------------------------------
   const meshes = kit.batch.build(group, 'ground');
   const glowMeshes = kit.glow.build(group);
-  const pools = kit.pools('#ffc98a', 0.22);
+  // (v7.4: a hint of each lamp's light, no more: the owner found the circles too plain)
+  const pools = kit.pools('#ffc98a', 0.066);
   if (pools) group.add(pools);
   const props = new Props(quality);
   group.add(props.group);

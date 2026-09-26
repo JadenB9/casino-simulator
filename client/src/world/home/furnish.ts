@@ -195,11 +195,10 @@ export function furnish(mats: Mats, col: Collider, tier: number, owned: Readonly
     kit.light(GLOW.warm, (A.x0 + A.x1) / 2, H - 0.06, A.z1 - 0.3, A.x1 - A.x0 - 1, 0.02, 0.02);
     kit.light(GLOW.warm, A.x1 - 0.3, H - 0.06, (A.z0 + A.z1) / 2, 0.02, 0.02, A.z1 - A.z0 - 1);
   }
-  // downlights, their pools on the floor
+  // downlights
   for (let x = A.x0 + 3; x < A.x1 - 1; x += 4) {
     for (let z = A.z0 + 3; z < A.z1 - 1; z += 4.5) {
       kit.glow.add(new THREE.CylinderGeometry(0.08, 0.08, 0.012, 14), GLOW.bulb, { x, y: H - 0.008, z });
-      kit.pool(x, z, 2.2);
     }
   }
   // the kitchen along the north glass: a run of base units and a worktop (always). v7.4: until a
@@ -210,7 +209,7 @@ export function furnish(mats: Mats, col: Collider, tier: number, owned: Readonly
   // there sits on the new worktop, it doesn't bring the old one back)
   const kitchenStyle = pieceIn('kitchen', owned, t, picks.kitchen ?? null)?.style ?? null;
   const chef = kitchenStyle === 'chef';
-  const newKitchen = chef || owned.has('kitchen-modern') || owned.has('kitchen-chef');
+  const newKitchen = owned.has('kitchen-modern') || owned.has('kitchen-chef');
   kit.box(!newKitchen ? 'home-laminate' : t >= 2 || chef ? 'home-walnut' : 'home-white', K.x0, K.x1, 0.01, 0.86, K.z0, K.z1);
   kit.box(!newKitchen ? 'home-worktop-old' : chef ? 'marble-light' : 'home-quartz', K.x0 - 0.02, K.x1 + 0.02, 0.86, 0.9, K.z0, K.z1 + 0.03, 1.2);
   kit.box('home-steel', -136.9, -136, 0.9, 0.905, K.z0 + 0.12, K.z1 - 0.12);
@@ -256,7 +255,6 @@ export function furnish(mats: Mats, col: Collider, tier: number, owned: Readonly
     kit.box('lacquer', F.x - 0.75, F.x + 0.75, 0.2, 0.9, F.z - 0.36, F.z - 0.34);
     kit.light(hdr('#ff8a2a', 2.6), F.x, 0.32, F.z - 0.37, 1.2, 0.12, 0.02);
     kit.box('fire', F.x - 0.6, F.x + 0.6, 0.24, 0.5, F.z - 0.33, F.z - 0.3);
-    kit.pool(F.x, F.z - 1.4, 2.4);
     own.box(F.x, F.z - 0.1, 2.6, 0.9, 0, 1.28);
     // the wet bar: a lacquered counter with a brass rail
     kit.box('lacquer', -131.8, -130.2, 0.01, 1.02, 63.2, 68.4);
@@ -353,7 +351,6 @@ function terrace(kit: Kit, col: Collider): void {
   // the fire pit with its ring of low seats
   kit.cylinder('granite', -125.4, 61.6, 0.75, 0.01, 0.42, 24);
   kit.cylinder('fire', -125.4, 61.6, 0.45, 0.42, 0.5, 16, 0.3);
-  kit.pool(-125.4, 61.6, 3);
   col.post(-125.4, 61.6, 0.8, 0.5);
   // loungers along the glass by the pool's head
   for (const z of [65.2, 68.2, 71.2, 74.2]) {

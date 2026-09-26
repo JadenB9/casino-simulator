@@ -271,7 +271,7 @@ export function buildRoof(mats: Mats, col: Collider, quality: Quality): ZoneBuil
     if (near.some((t) => Math.abs(t.x - x) < (t.w + w) / 2 + 4 && Math.abs(t.z - z) < (t.d + d) / 2 + 4)) continue;
     near.push({ x, z, w, d, h: top + ROOF.depth, y0: -ROOF.depth });
   }
-  group.add(towers(near, 'sunset', 0x70e7, high ? 1024 : 512));
+  group.add(towers(near, 'sunset', 0x70e7, { high }));
   const beacons = new Beacons(
     near.filter((t) => t !== below[0] && (t.y0 ?? 0) + t.h > -12).map((t) => new THREE.Vector3(t.x, (t.y0 ?? 0) + t.h + 1.2, t.z)),
     29,
@@ -298,7 +298,7 @@ export function buildRoof(mats: Mats, col: Collider, quality: Quality): ZoneBuil
 
   const meshes = kit.batch.build(group, 'roof');
   const glowMeshes = kit.glow.build(group);
-  const pools = kit.pools('#ffb070', 0.2);
+  const pools = kit.pools('#ffb070', 0.06);
   if (pools) group.add(pools);
   const props = new Props(quality);
   group.add(props.group);

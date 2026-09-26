@@ -28,6 +28,8 @@ export interface Character {
   gesture?(e: EmoteId): void;
   /** Sit on a seat this high above the feet (metres), or stand again with null, if the character can. */
   sit?(seatTop: number | null): void;
+  /** v7.4: crouched, or standing (characters.ts). */
+  crouch?(on: boolean): void;
   /**
    * v7.2: where a part of the body is as posed now, in the character's own frame (x to its left, y
    * up, z ahead; metres from its feet), written into `out`; null before the model is in. The shop's

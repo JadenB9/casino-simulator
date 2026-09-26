@@ -368,7 +368,6 @@ export class Law {
 
   // --- punching ------------------------------------------------------------------------------
 
-
   /** v7: knock down a guard (a StaffId) or an inmate ('i0'..) that a shot hit. */
   knockNpc(id: string): void {
     if (isStaffId(id)) (this.staff.get(id)?.person.gesture as ((e: string) => void) | undefined)?.('knock');

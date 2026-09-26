@@ -19,14 +19,14 @@
 // sends one the server would drop, and says so instead.
 
 import './social.css';
-import { FREE_EMOTES, REWARD_EMOTES, SHOP_EMOTES, type EmoteId } from '../../../../shared/src/protocol.ts';
+import { EMOTES, FREE_EMOTES, type EmoteId } from '../../../../shared/src/protocol.ts';
 import { emoteItem, isFreeEmote } from '../../../../shared/src/items.ts';
 import { FEATS } from '../../../../shared/src/feats.ts';
 import { formatCompact, formatMoney } from '../../../../shared/src/money.ts';
 import { el } from '../kit.ts';
 import { GLOBAL_KEYS, holdKeyboard, isTyping, overlayCount } from '../keyboard.ts';
 import { EMOTE_LABELS, emoteGlyph, lockGlyph } from './icons.ts';
-import { isKey } from '../keys.ts';
+import { isKey, keyName } from '../keys.ts';
 
 export interface EmoteDeps {
   root: HTMLElement;
@@ -53,8 +53,8 @@ export interface EmoteWheel {
 
 /** The inner ring (1-6), then the outer ring (Q-P): the sold ones, then the feats' rewards. */
 const INNER: readonly EmoteId[] = FREE_EMOTES;
-// (v7.4: the Twerk came after the rewards, so it goes after them and nobody's keys move)
-const OUTER: readonly EmoteId[] = [...SHOP_EMOTES.slice(0, 8), ...REWARD_EMOTES, ...SHOP_EMOTES.slice(8)];
+// (the protocol's order: new ones on the end, so nobody's keys move)
+const OUTER: readonly EmoteId[] = EMOTES.slice(FREE_EMOTES.length);
 export const WHEEL_EMOTES: readonly EmoteId[] = [...INNER, ...OUTER];
 /** The outer ring's keys, clockwise from the top: the keyboard's top row. */
 const OUTER_KEYS = 'QWERTYUIOP[';
@@ -71,7 +71,7 @@ const HINT = '1-6 · Q-[ · Esc';
 /** The emote a key picks on the wheel: 1 to 6 the inner ring, Q to P (by key position) the outer, or null. */
 export function emoteForKey(key: string, code = ''): EmoteId | null {
   if (/^[1-9]$/.test(key)) return INNER[Number(key) - 1] ?? null;
-  const letter = /^Key[A-Z]$/.test(code) ? code.slice(3) : code === 'BracketLeft' || key === '[' ? '[' : /^[a-z]$/i.test(key) ? key.toUpperCase() : '';
+  const letter = code ? keyName(code) : key === '[' ? '[' : /^[a-z]$/i.test(key) ? key.toUpperCase() : '';
   const i = letter ? OUTER_KEYS.indexOf(letter) : -1;
   return i >= 0 ? (OUTER[i] ?? null) : null;
 }

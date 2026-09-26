@@ -95,13 +95,13 @@ export function atLift(zone: ZoneId, x: number, z: number): boolean {
   return inRect(ZONES[zone], x, z) && Math.hypot(x - b.x, z - b.z) <= LIFT_REACH_CM;
 }
 
-export type LiftRefusal = 'here' | 'table' | 'held' | 'far' | 'nohome' | 'driving';
+export type LiftRefusal = 'here' | 'table' | 'held' | 'far' | 'nohome';
 
 /** Why the floor won't send someone to `to`, or null to go (server/src/floor/lift.ts says it in words). */
-export function liftRefusal(p: { x: number; z: number; at: unknown; confine?: unknown; home?: number; car?: unknown }, to: ZoneId): LiftRefusal | null {
+// (v7.4: a car out isn't a refusal: the floor sends it home as you ride, server/src/floor/lift.ts)
+export function liftRefusal(p: { x: number; z: number; at: unknown; confine?: unknown; home?: number }, to: ZoneId): LiftRefusal | null {
   if (p.confine) return 'held';
   if (p.at) return 'table';
-  if (p.car) return 'driving';
   // v7.1: the apartments' floor: to someone's apartment (your own by default); there must be one
   if (to === 'home' && !(p.home && p.home > 0)) return 'nohome';
   const zone = (Object.keys(ZONES) as ZoneId[]).find((id) => inRect(ZONES[id], p.x, p.z)) ?? null;

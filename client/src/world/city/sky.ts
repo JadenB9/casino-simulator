@@ -7,6 +7,8 @@
 
 import * as THREE from 'three';
 import { canvasTexture } from '../carpet.ts';
+import { canvas } from '../textures.ts';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { calmUniform } from '../../app/comfort.ts';
 
 export type SkyKind = 'night' | 'sunset';
@@ -298,7 +300,8 @@ export function separate(list: readonly Tower[], gap = 0.6): Tower[] {
  * water tank, all one plain mesh. Towers standing on the street get a storefront podium: shops,
  * lit or shuttered, their names over the windows. Four draw calls however many towers.
  */
-export function towers(list: Tower[], kind: SkyKind, seed: number, size = 1024): THREE.Group {
+export function towers(list: Tower[], kind: SkyKind, seed: number, o: { high: boolean; street?: boolean }): THREE.Group {
+  const size = o.high ? 1024 : 512;
   const rnd = rng(seed ^ 0x5eed);
   const office: Box[] = [];
   const homes: Box[] = [];
@@ -311,7 +314,7 @@ export function towers(list: Tower[], kind: SkyKind, seed: number, size = 1024):
     // one repeat of the tile is 16 bays across and 16 floors up; a tower's bays are 1.5 to 2.1 m
     const bay = 1.5 + rnd() * 0.6;
     const uv = { su: 1 / (COLS * bay), sv: 1 / (ROWS * FLOOR_M), ou: rnd(), ov: Math.floor(rnd() * ROWS) / ROWS + 0.001 };
-    (isOffice ? office : homes).push({ x: t.x, y: y0 + t.h / 2, z: t.z, w: t.w, h: t.h, d: t.d, tint, uv, lift: y0 === 0 });
+    (isOffice ? office : homes).push({ x: t.x, y: y0 + t.h / 2, z: t.z, w: t.w, h: t.h, d: t.d, tint, uv, lift: !!o.street && y0 === 0 });
     // the crown: a parapet round the roof, a plant room in one corner, a water tank in another
     const top = y0 + t.h;
     if (t.crown === false) continue;
@@ -329,12 +332,11 @@ export function towers(list: Tower[], kind: SkyKind, seed: number, size = 1024):
       crown.push({ x: t.x - sx * (t.w / 2 - r - 1.2), y: top + 1 + 0.55, z: t.z - sz * (t.d / 2 - r - 1.2), w: r * 1.6, h: 1.1, d: r * 1.6, tint: new THREE.Color('#1c1c20') });
     }
     // a storefront round the foot of a tower standing on the street
-    // (only on the street you walk: the roof's and the apartments' towers stand far below)
-    if (y0 === 0 && t.h > 12) shops.push({ x: t.x, y: PODIUM / 2, z: t.z, w: t.w + 0.3, h: PODIUM, d: t.d + 0.3, tint: new THREE.Color(1, 1, 1), uv: { su: 1 / SHOPS_M, sv: 1 / PODIUM, ou: rnd(), ov: 0 } });
+    // (only in the zone whose street you walk, and on towers standing on it: not the lobby's, on its roof)
+    if (o.street && y0 === 0 && t.h > 12) shops.push({ x: t.x, y: PODIUM / 2, z: t.z, w: t.w + 0.3, h: PODIUM, d: t.d + 0.3, tint: new THREE.Color(1, 1, 1), uv: { su: 1 / SHOPS_M, sv: 1 / PODIUM, ou: rnd(), ov: 0 } });
   }
   const group = new THREE.Group();
   group.name = 'towers';
-  const tiles = facadeTextures(kind, seed, size);
   const glow = kind === 'night' ? 1.15 : 0.9;
   const add = (boxes: Box[], mat: THREE.Material, name: string) => {
     if (!boxes.length) return;
@@ -343,17 +345,20 @@ export function towers(list: Tower[], kind: SkyKind, seed: number, size = 1024):
     mesh.name = name;
     group.add(mesh);
   };
-  add(office, new THREE.MeshLambertMaterial({ map: tiles.office.map, emissiveMap: tiles.office.lit, emissive: new THREE.Color(1, 1, 1).multiplyScalar(glow), vertexColors: true }), 'towers:office');
-  add(homes, new THREE.MeshLambertMaterial({ map: tiles.homes.map, emissiveMap: tiles.homes.lit, emissive: new THREE.Color(1, 1, 1).multiplyScalar(glow), vertexColors: true }), 'towers:homes');
+  // (each tile drawn only if some tower wears it)
+  const facade = (boxes: Box[], tile: () => Tile, name: string) => {
+    if (!boxes.length) return;
+    const t = tile();
+    add(boxes, new THREE.MeshLambertMaterial({ map: t.map, emissiveMap: t.lit, emissive: new THREE.Color(1, 1, 1).multiplyScalar(glow), vertexColors: true }), name);
+  };
+  facade(office, () => officeTile(kind, seed, size), 'towers:office');
+  facade(homes, () => homesTile(kind, seed + 1, size), 'towers:homes');
   add(crown, new THREE.MeshLambertMaterial({ vertexColors: true }), 'towers:crown');
   if (shops.length) {
     // 48 m of shops a repeat: twice the facades' width, so a metre of it is as sharp
     const s = storefrontTextures(seed, Math.min(2048, size * 2));
     add(shops, new THREE.MeshLambertMaterial({ map: s.map, emissiveMap: s.lit, emissive: new THREE.Color(1, 1, 1).multiplyScalar(0.85), vertexColors: true }), 'towers:shops');
   }
-  // the tiles themselves aren't on any mesh
-  if (!office.length) disposeTile(tiles.office);
-  if (!homes.length) disposeTile(tiles.homes);
   return group;
 }
 
@@ -388,11 +393,6 @@ function pickTint(list: string[], rnd: () => number): THREE.Color {
   return c.multiplyScalar(k);
 }
 
-function disposeTile(t: { map: THREE.Texture; lit: THREE.Texture }): void {
-  t.map.dispose();
-  t.lit.dispose();
-}
-
 /** Boxes (and drums) into one geometry with normals, per-vertex colours and facade UVs. */
 function mergeBoxes(list: Box[]): THREE.BufferGeometry {
   const geos: THREE.BufferGeometry[] = [];
@@ -425,18 +425,7 @@ function mergeBoxes(list: Box[]): THREE.BufferGeometry {
     geos.push(g.index ? g.toNonIndexed() : g);
     if (g.index) g.dispose();
   }
-  let verts = 0;
-  for (const g of geos) verts += g.getAttribute('position').count;
-  const out = new THREE.BufferGeometry();
-  for (const [name, n] of [['position', 3], ['normal', 3], ['uv', 2], ['color', 3]] as const) {
-    const arr = new Float32Array(verts * n);
-    let v = 0;
-    for (const g of geos) {
-      arr.set(g.getAttribute(name).array as Float32Array, v * n);
-      v += g.getAttribute('position').count;
-    }
-    out.setAttribute(name, new THREE.BufferAttribute(arr, n));
-  }
+  const out = mergeGeometries(geos)!;
   for (const g of geos) g.dispose();
   out.computeBoundingSphere();
   return out;
@@ -455,19 +444,13 @@ type Tile = { map: THREE.Texture; lit: THREE.Texture };
  * The albedo is drawn light and neutral (the tower's vertex colour tints it); lit rooms are in the
  * emissive map only. Sunset: fewer rooms lit, the glass catching the warm sky.
  */
-function facadeTextures(kind: SkyKind, seed: number, S: number): { office: Tile; homes: Tile } {
-  return { office: officeTile(kind, seed, S), homes: homesTile(kind, seed + 1, S) };
-}
 
 const COLS = 16;
 const ROWS = 16;
 
 function tileCanvases(S: number): [CanvasRenderingContext2D, CanvasRenderingContext2D, HTMLCanvasElement, HTMLCanvasElement] {
-  const a = document.createElement('canvas');
-  const b = document.createElement('canvas');
-  a.width = a.height = b.width = b.height = S;
-  const ga = a.getContext('2d')!;
-  const gb = b.getContext('2d')!;
+  const [a, ga] = canvas(S);
+  const [b, gb] = canvas(S);
   gb.fillStyle = '#000';
   gb.fillRect(0, 0, S, S);
   return [ga, gb, a, b];
@@ -648,12 +631,8 @@ const SIGN_COLORS = ['#ffdca0', '#ff8a6a', '#9fe0ff', '#ffe27a', '#ff9ad0', '#b8
  */
 function storefrontTextures(seed: number, W: number): Tile {
   const H = Math.round((W / SHOPS_M) * PODIUM * 2);
-  const a = document.createElement('canvas');
-  const b = document.createElement('canvas');
-  a.width = b.width = W;
-  a.height = b.height = H;
-  const ga = a.getContext('2d')!;
-  const gb = b.getContext('2d')!;
+  const [a, ga] = canvas(W, H);
+  const [b, gb] = canvas(W, H);
   const rnd = rng(seed ^ 0x5409);
   const px = W / SHOPS_M;
   ga.fillStyle = '#6a645c';

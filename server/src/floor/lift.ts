@@ -13,7 +13,6 @@ const SAY: Record<LiftRefusal, string> = {
   held: 'Security has you. Not now.',
   far: 'Walk up to the elevator first.',
   nohome: 'There is no apartment there. Buy one at the home store across the street.',
-  driving: 'Park the car first.',
 };
 
 /** Take `att`'s player to `to`: null when they went, or what to tell them when they didn't. */
@@ -21,12 +20,12 @@ export function ride(presence: Presence, att: FloorAtt, to: ZoneId, aptExists = 
   // where the floor sees them now (a walker's attachment is only saved at rest)
   const at = presence.positionOf(att.accountId);
   if (!at) return SAY.far;
-  // v7.4: a car you're still in (or the floor still thinks you are: a get-in the client gave up
-  // on) doesn't hold you up: the valet takes it back to your garage and up you go
-  const no = liftRefusal({ x: at.x, z: at.z, at: att.at, confine: att.confine, home: aptExists ? 1 : 0, car: null }, to);
+  const no = liftRefusal({ x: at.x, z: at.z, at: att.at, confine: att.confine, home: aptExists ? 1 : 0 }, to);
   if (no) return SAY[no];
   const a = LIFTS[to].arrive;
   if (!presence.teleport(att.accountId, a.x, a.z, a.r)) return SAY.far;
+  // v7.4: a car you're still in (or the floor thinks you are: a get-in the client gave up on)
+  // doesn't hold you up: the valet takes it back to your garage once you've gone
   if (att.car) presence.setCar(att.accountId, null, null);
   return null;
 }
