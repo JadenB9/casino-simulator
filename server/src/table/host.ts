@@ -259,6 +259,15 @@ export class CasinoTable extends DurableObject<Env> {
     for (const r of this.sql.exec<MemberRow>(`SELECT * FROM members`).toArray()) this.members.set(r.account_id, { ...r });
     const st = this.sql.exec<{ json: string }>(`SELECT json FROM state WHERE id = 1`).toArray()[0];
     this.state = st ? JSON.parse(st.json) : null;
+    // v7: a game with no limits to choose (the machines) takes its limits from the game as it is
+    // now, not as it was when this table was first opened: a machine opened before its high-limit
+    // coins refused every bet its own buttons offered above the old maximum.
+    if (!hasLimitChoice(m.game)) {
+      const fresh = this.engine.config(m.config.variant, m.config.mode);
+      m.config = { ...m.config, limits: fresh.limits, buyIn: fresh.buyIn, options: fresh.options };
+      const s = this.state as { cfg?: TableConfig } | null;
+      if (s && typeof s === 'object' && s.cfg) s.cfg = { ...s.cfg, limits: fresh.limits, buyIn: fresh.buyIn, options: fresh.options };
+    }
 
     const now = Date.now();
     const voided = m.engineVersion !== this.engine.stateVersion || this.state === null;

@@ -228,8 +228,10 @@
 .chat-send:hover { border-color: var(--brass-hi); }
 .chat.silenced .chat-send { opacity: 0.4; cursor: default; }
 
-/* The pin: brass while the chat is kept up. */
-.chat-pin[aria-pressed='true'] { color: var(--brass-hi); }
+/* The pin: filled brass while the chat is kept up, an outline when it isn't. */
+.chat-pin[aria-pressed='true'] { background: var(--brass-hi); border-color: var(--brass-hi); color: #1d140a; }
+.chat-pin[aria-pressed='true'] svg, .chat-pin[aria-pressed='true'] svg * { fill: currentColor; }
+.chat-pin[aria-pressed='true']:hover { background: #f6dfa9; }
 
 /* Pinned and not typing (panel.ts `idle`): the log stays up while you walk, look round, sit and
    play, lighter, and lets clicks and drags through to the game underneath; the head's buttons and

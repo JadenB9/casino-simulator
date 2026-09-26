@@ -19,7 +19,7 @@ export const SHORTCUTS: readonly { title: string; rows: readonly Row[] }[] = [
       ['E', 'Whatever the prompt offers; again to stand up'],
       ['F', 'First or third person'],
       ['B', 'Step off your ride, and back on'],
-      ['V', 'Throw a punch'],
+      ['Click · V', 'Throw a punch (a drawn gun fires instead)'],
       ['Q', 'Take a sip or a bite of what you hold'],
       ['N', 'Map of the casino'],
       ['T or Enter', 'Chat'],

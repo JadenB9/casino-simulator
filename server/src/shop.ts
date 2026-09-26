@@ -26,6 +26,8 @@ import { barPrice } from './happy.ts'; // v6 celebs6: happy hour
 import { FX_KEEP_MS, eventFromOrder, fxKey, statueOf, statuesQuery, type StatueRow } from './floor/fx.ts';
 import type { CasinoFloor } from './floor/index.ts';
 import { valetApi } from './cars.ts'; // v6 cars6
+import { gunItem } from '../../shared/src/arms.ts'; // v7
+import { APARTMENTS, apartmentItem, homeItem, homeTier } from '../../shared/src/estate.ts'; // v7
 
 /** Purchases per account per minute, for the shop, the effects and the bar each. */
 const LIMIT = 20;
@@ -35,7 +37,7 @@ interface Sold {
   id: string;
   name: string;
   price: Cents;
-  kind: 'item' | 'emote' | 'statue' | 'car';
+  kind: 'item' | 'emote' | 'statue' | 'car' | 'gun' | 'home' | 'apartment';
 }
 
 function sold(id: unknown): Sold | null {
@@ -47,6 +49,31 @@ function sold(id: unknown): Sold | null {
   // v6 cars6: the valet's cars, bought once and kept like the rest (a casino_items row)
   const car = carItem(id);
   if (car) return { id: car.id, name: car.name, price: car.price, kind: 'car' };
+  // v7: the gun store's, the home store's, and the apartment and its upgrades
+  const gun = gunItem(id);
+  if (gun) return { id: gun.id, name: gun.name, price: gun.price, kind: 'gun' };
+  const home = homeItem(id);
+  if (home) return { id: home.id, name: home.name, price: home.price, kind: 'home' };
+  const apt = apartmentItem(id);
+  if (apt) return { id: apt.id, name: apt.name, price: apt.price, kind: 'apartment' };
+  return null;
+}
+
+/**
+ * v7: what an apartment step or a home piece needs first: the step before it, or an apartment at
+ * all (and the step the piece fits). Null when it may be bought.
+ */
+async function needs(db: D1Database, accountId: number, item: Sold): Promise<string | null> {
+  if (item.kind !== 'apartment' && item.kind !== 'home') return null;
+  const tier = homeTier((await ownedOf(db, accountId)).items);
+  if (item.kind === 'apartment') {
+    const want = apartmentItem(item.id)!.tier;
+    if (want > tier + 1) return `Buy ${theName(APARTMENTS[want - 2]!.name)} first.`;
+    return null;
+  }
+  const piece = homeItem(item.id)!;
+  if (tier < 1) return 'Home goods go in an apartment: buy The Residence first.';
+  if ((piece.tier ?? 1) > tier) return `${theName(piece.name, true)} needs ${theName(APARTMENTS[(piece.tier ?? 1) - 1]!.name)}.`;
   return null;
 }
 
@@ -74,6 +101,8 @@ export async function shopApi(request: Request, env: Env, route: string, account
     }
     if (!isOp(body?.op)) return fail(400, 'BAD_REQUEST', 'A purchase needs an operation id.', cors);
     if (!(await bumpRate(db, 'casino-shop', `a${accountId}`, LIMIT, 60_000, now))) return fail(429, 'RATE_LIMITED', 'Give it a minute.', cors);
+    const first = await needs(db, accountId, item); // v7
+    if (first) return fail(409, 'NOT_ELIGIBLE', first, cors);
     const r = await buyItem(db, accountId, item, body.op, now);
     if (r.kind === 'owned') return fail(409, 'NOT_ELIGIBLE', `You already own ${theName(item.name)}.`, cors);
     if (r.kind === 'short') return notEnough(item, r, cors);
@@ -82,6 +111,10 @@ export async function shopApi(request: Request, env: Env, route: string, account
     try {
       if (item.kind === 'emote') await floorOf(env).grant(accountId, [item.id as EmoteId]);
       if (item.kind === 'statue') await floorOf(env).statueBought();
+      // v7: the floor may let them drive it, draw it, or ride up to their apartment now
+      if (item.kind === 'car') await floorOf(env).grantKit(accountId, { cars: [item.id] });
+      if (item.kind === 'gun') await floorOf(env).grantKit(accountId, { guns: [item.id] });
+      if (item.kind === 'apartment') await floorOf(env).grantKit(accountId, { home: homeTier((await ownedOf(db, accountId)).items) });
     } catch (err) {
       console.error('floor after purchase failed', item.id, err);
     }

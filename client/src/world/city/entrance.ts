@@ -31,8 +31,10 @@ const WALL = 0.15;
 const CAR_D = 1.85;
 const CAR_H = 2.98;
 const SIDE = 0.15;
-const SENSE = 1.3;
-const OPEN_S = 1.2;
+// v7: the doors open as you walk up, not once you're at them, and let you through half open
+const SENSE = 3.0;
+const OPEN_S = 0.75;
+const PASSABLE = 0.5;
 const CLOSE_S = 1.4;
 const DWELL_S = 1.6;
 
@@ -281,7 +283,7 @@ export class EntranceLift implements Lift {
     if (next === this.open) return;
     this.open = next;
     if (this.doorBox) {
-      this.doorBox.walk = next < 0.72;
+      this.doorBox.walk = next < PASSABLE;
       this.doorBox.cam = next < 0.3;
     }
     this.place();

@@ -561,6 +561,56 @@ function buildExtras(s: CarSpec, o: Outline, geos: Geos, roof: { roofY: number; 
     // the teak's seams
     for (let i = -3; i <= 3; i++) add(geos, 'trim', topStrip((z) => o.yAt(z), z0 + 0.04, z1 - 0.04, () => i * 0.12 - 0.006, () => i * 0.12 + 0.006, 0.02), '#3a2412');
   }
+  // v7: a lifted truck shows what's under it: the frame rails, the axles and their diffs, and a
+  // dark disc inside each wheel (a hub, so the tyre never reads as a hollow ring)
+  if (s.sill > 0.7) {
+    const y = s.wheelR;
+    const wx = s.half * 0.9;
+    for (const z of [s.front, s.rear]) {
+      add(geos, 'trim', new THREE.CylinderGeometry(0.07, 0.07, 2 * wx, 10).rotateZ(Math.PI / 2).translate(0, y, z), DARK);
+      add(geos, 'trim', new THREE.SphereGeometry(0.2, 12, 8).scale(1, 0.8, 1).translate(0, y, z), DARK);
+      for (const side of [1, -1]) add(geos, 'trim', new THREE.CylinderGeometry(s.wheelR * 0.72, s.wheelR * 0.72, 0.04, 18).rotateZ(Math.PI / 2).translate(side * (wx + 0.02), y, z), DARK);
+    }
+    for (const side of [1, -1]) add(geos, 'trim', box(0.1, 0.16, s.front - s.rear + 0.9, side * 0.45, y + 0.12, (s.front + s.rear) / 2), DARK);
+    for (const z of [s.front - 0.25, s.rear + 0.25]) add(geos, 'metal', box(0.06, s.sill - y, 0.06, 0, (s.sill + y) / 2, z), '#6d7278');
+  }
+  // v7: neon along both sills and under the bumpers, just clear of the ground
+  if (s.underglow) {
+    const y = Math.max(0.06, s.sill - 0.05);
+    const zA = s.rear + s.wheelR + 0.12;
+    const zB = s.front - s.wheelR - 0.12;
+    for (const side of [1, -1]) {
+      const x = side * (sideAt(s, o, s.sill + 0.04, (zA + zB) / 2) - 0.06);
+      add(geos, 'lamp', box(0.03, 0.025, zB - zA, x, y, (zA + zB) / 2), s.underglow);
+    }
+    const w = s.half * 1.4;
+    add(geos, 'lamp', box(w, 0.025, 0.03, 0, y, o.zF - 0.18), s.underglow);
+    add(geos, 'lamp', box(w, 0.025, 0.03, 0, y, o.zR + 0.18), s.underglow);
+  }
+  // v7: an LED bar across the nose between the headlamps, and a red one across the tail
+  if (s.lightbar) {
+    const w = 2 * s.lampX * 0.96;
+    add(geos, 'lamp', onFace(o, 'front', s.lampY + 0.05, box(w, 0.018, 0.05), 0, 0.006), s.lightbar);
+    add(geos, 'lamp', onFace(o, 'rear', s.tailY - 0.04, box(w, 0.02, 0.05), 0, 0.006), '#ff2436');
+  }
+  // v7: a shark fin down the middle of the engine cover
+  if (s.fin) {
+    const z0 = o.zR + 0.25;
+    const z1 = (s.cabin ? s.cabin[0]![0] : s.rear) + 0.1;
+    if (z1 > z0 + 0.3) {
+      const y0 = o.yAt(z1);
+      const fin = new THREE.Shape();
+      fin.moveTo(z0, o.yAt(z0) - 0.02);
+      fin.lineTo(z0, o.yAt(z0) + 0.36);
+      fin.lineTo(z1, y0 + 0.08);
+      fin.lineTo(z1, y0 - 0.02);
+      fin.closePath();
+      const g = new THREE.ExtrudeGeometry(fin, { depth: 0.03, bevelEnabled: false });
+      g.rotateY(-Math.PI / 2);
+      g.translate(0.015, B, 0);
+      add(geos, 'paint', g, '#ffffff');
+    }
+  }
   // door handles and a shut line hint: chrome dashes on the older cars
   if (s.chrome) {
     const hz = (s.front + s.rear) / 2 + 0.25;

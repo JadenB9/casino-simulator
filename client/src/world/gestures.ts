@@ -566,7 +566,8 @@ const STAFF_GESTURES: Record<StaffGesture, { dur: number; pose: (t: number) => P
 };
 
 // v6 law6: a punch thrown, a punch taken, and a guard brushing one off (world/law/).
-export type LawGesture = 'punch' | 'hit' | 'brush';
+// v7: knocked off your feet (a car, a shot) and back up again.
+export type LawGesture = 'punch' | 'hit' | 'brush' | 'knock';
 
 const LAW_GESTURES: Record<LawGesture, Gesture> = {
   // the left fist up by the chin, the right drawn back and thrown straight out at head height as
@@ -599,6 +600,30 @@ const LAW_GESTURES: Record<LawGesture, Gesture> = {
         head: [-0.42 * snap, 0.38 * snap, 0.12 * snap],
         handR: hand,
         handL: hand,
+      };
+    },
+  },
+  // v7: knocked flat: over backwards onto the ground, arms thrown out, a moment lying there, then
+  // up onto the feet again. (The whole body goes over about its middle and drops, so it lies on its
+  // back with the feet toward where it was hit from.)
+  knock: {
+    dur: 2.6,
+    pose: (t) => {
+      const fall = ramp(t, 0, 0.34);
+      const rise = ramp(t, 1.55, 2.4);
+      const down = fall * (1 - rise);
+      const flail = Math.sin(t * 13) * Math.max(0, 1 - t / 0.7) * 0.35;
+      const arm: Hand = { upper: [-0.85, -0.25 + flail, 0.25 - 0.6 * rise], fore: [-0.5, 0.35, 0.4], palm: [0, -1, 0.2], fist: 0.2 };
+      return {
+        // (never quite 0, so a walker still sliding from the knock doesn't cut it short)
+        flip: -1.46 * down - 0.001,
+        hop: -0.8 * down,
+        torso: [-0.08 * down + 0.25 * rise * (1 - rise) * 4 * 0.2, 0, 0],
+        neck: [0.25 * down, 0, 0],
+        head: [0.3 * down, 0.2 * flail, 0],
+        handR: arm,
+        handL: arm,
+        pelvis: [0, -0.05 * rise * (1 - rise) * 4, 0],
       };
     },
   },

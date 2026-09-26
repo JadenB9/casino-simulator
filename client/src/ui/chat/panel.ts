@@ -190,11 +190,22 @@ export class ChatPanel {
       if (e.target !== this.input) return;
       this.typingStopped();
       if (!this.visible || !this.open) return;
-      // A click somewhere in the box (the log, say) means it's wanted: keep it open.
-      if (this.pressing) this.pin();
-      else if (!(e.relatedTarget instanceof Node && root.contains(e.relatedTarget))) this.afterTyping();
+      // A click somewhere in the box (the log, say) keeps it up for now; only the pin keeps it up
+      // for good (v7: a click inside used to pin it without saying so).
+      if (this.pressing) return;
+      if (!(e.relatedTarget instanceof Node && root.contains(e.relatedTarget))) this.afterTyping();
     });
     root.addEventListener('pointerdown', () => (this.pressing = true));
+    // v7: unpinned, a click anywhere outside the chat puts it away
+    const outside = (e: PointerEvent) => {
+      if (!this.visible || !this.open || this.pinned || this.mutedLeft() > 0) return;
+      if (e.target instanceof Node && root.contains(e.target)) return;
+      this.input.blur();
+      this.show(false);
+      this.paintLook();
+    };
+    addEventListener('pointerdown', outside, true);
+    this.offs.push(() => removeEventListener('pointerdown', outside, true));
     const up = () => (this.pressing = false);
     addEventListener('pointerup', up);
     addEventListener('pointercancel', up);

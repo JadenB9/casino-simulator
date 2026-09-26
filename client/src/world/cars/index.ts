@@ -62,7 +62,6 @@ export class Cars {
   /** The camera's short shows: your car pulling up, your best car as you walk into the garage. */
   readonly show: Showcase;
   private shownCall = '';
-  private wasInGarage = false;
   private readonly lot: Lot | null;
   private readonly offSpots: () => void;
   private readonly offCeiling: () => void;
@@ -133,12 +132,9 @@ export class Cars {
     this.show.update(dt);
   }
 
-  /** Start a show when there's one to see: your car on its way round, or you walking into the garage. */
+  /** Start a show when there's one to see: your car on its way round. */
   private shows(): void {
     const p = this.deps.world.player.position;
-    const inGarage = p.x > GARAGE.x0 && p.x < GARAGE.x1 && p.z > GARAGE.z0 && p.z < GARAGE.z1;
-    const entered = inGarage && !this.wasInGarage;
-    this.wasInGarage = inGarage;
     if (this.show.playing) return;
     const a = this.valet.arriving();
     if (a && a.key !== this.shownCall && Math.hypot(p.x - CURB[a.call.slot]!.x, p.z - CURB[a.call.slot]!.z) < 16) {
@@ -160,10 +156,7 @@ export class Cars {
       }
       return;
     }
-    if (entered) {
-      const v = this.garage.bestView();
-      if (v) this.show.play({ from: () => v.from, at: () => v.at, secs: 3.4 });
-    }
+    // (v7: walking into the garage no longer takes the camera: the door is just a door)
   }
 
   private handedFor = 0;

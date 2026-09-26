@@ -14,7 +14,9 @@ import { bearer, logIn, signToken, verifyToken } from './auth.ts';
 import { signTicket, ticketTarget, verifyTicket } from './tickets.ts';
 import { API_BURST, API_PER_SEC, KeyedBuckets } from './ratelimit.ts';
 import { bumpRate, escrowsOf, getAccount, loadProfile, ownedOf, setLook } from './db.ts';
-import { isFreeEmote, emoteItem } from '../../shared/src/items.ts';
+import { carItem, isFreeEmote, emoteItem } from '../../shared/src/items.ts';
+import { gunItem } from '../../shared/src/arms.ts'; // v7
+import { homeTier } from '../../shared/src/estate.ts'; // v7
 import { featsOf } from './feats.ts';
 import type { FeatsResponse } from '../../shared/src/feats.ts';
 import { refillCounted, takeLoan } from './transfer.ts';
@@ -361,6 +363,9 @@ async function handleSocket(request: Request, env: Env, url: URL, route: string,
     // v6: the emotes this account may send besides the free six (the floor drops the rest)
     const owned = await ownedOf(env.DB, ticket.a);
     headers.set('x-casino-emotes', [...owned.items].filter((id) => emoteItem(id) && !isFreeEmote(id)).join(','));
+    // v7: the cars and guns it may drive and draw, and how far its apartment is done
+    const items = [...owned.items];
+    headers.set('x-casino-kit', `guns=${items.filter((id) => gunItem(id)).join(',')};cars=${items.filter((id) => carItem(id)).join(',')};home=${homeTier(items)}`);
     return floorStub(env).fetch(forward(request, headers));
   }
 

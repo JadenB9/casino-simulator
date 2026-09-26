@@ -277,7 +277,7 @@ export interface CarItem {
   about: string;
 }
 
-/** Cheapest first. */
+/** Cheapest first (v7's showpieces in among the rest). */
 export const CARS: readonly CarItem[] = [
   { id: 'halden-roadster', kind: 'car', name: "Halden Roadster '58", price: 250_000 * DOLLAR, about: 'Two seats, wire wheels and a straight six, in racing green.' },
   { id: 'brenner-rally', kind: 'car', name: 'Brenner Rally S', price: 400_000 * DOLLAR, about: 'A gravel-spec hatch with a roll cage and four roof lamps.' },
@@ -286,10 +286,16 @@ export const CARS: readonly CarItem[] = [
   { id: 'ardent-overland', kind: 'car', name: 'Ardent Overland', price: 1_200_000 * DOLLAR, about: 'A full-size SUV in black on black, with armoured glass.' },
   { id: 'aurelian-saloon', kind: 'car', name: 'Aurelian Saloon', price: 2_000_000 * DOLLAR, about: 'Long-wheelbase V12 saloon with reclining rear seats.' },
   { id: 'aurelian-stretch', kind: 'car', name: 'Aurelian Stretch', price: 3_500_000 * DOLLAR, about: 'Twenty-two feet of saloon, a bar and a starlit ceiling.' },
+  { id: 'kodiak-monster', kind: 'car', name: 'Kodiak Monster', price: 5_000_000 * DOLLAR, about: 'A lifted V8 pickup on 66-inch tyres, roof lamps and all.' },
   { id: 'raffica-v10', kind: 'car', name: 'Raffica V10', price: 8_000_000 * DOLLAR, about: 'Mid-engined V10, scissor doors, 211 mph flat out.' },
+  { id: 'vanta-wedge', kind: 'car', name: "Vanta Wedge '87", price: 18_000_000 * DOLLAR, about: 'A show-stand wedge in pearl white, pink neon underneath.' },
+  { id: 'nocturne-v16', kind: 'car', name: 'Nocturne V16', price: 35_000_000 * DOLLAR, about: 'Art deco coachwork, a sixteen-cylinder engine, gold wire wheels.' },
   { id: 'strale-gt', kind: 'car', name: "Strale GT '63", price: 45_000_000 * DOLLAR, about: 'An aluminium-bodied grand tourer, one of 36 ever built.' },
+  { id: 'lumen-lm', kind: 'car', name: 'Lumen LM Prototype', price: 60_000_000 * DOLLAR, about: 'A Le Mans prototype made road legal: a shark fin, a wing and a light bar.' },
   { id: 'ombra-hyper', kind: 'car', name: 'Ombra Hyper', price: 90_000_000 * DOLLAR, about: 'Carbon tub, hybrid V8, 1,500 horsepower, 12 made.' },
+  { id: 'spectre-ev', kind: 'car', name: 'Spectre EV', price: 120_000_000 * DOLLAR, about: 'Two thousand electric horsepower, light bars fore and aft, violet neon.' },
   { id: 'halden-boattail', kind: 'car', name: 'Halden Boattail', price: 250_000_000 * DOLLAR, about: 'A coachbuilt one-off with a teak rear deck and a champagne chest.' },
+  { id: 'aerion-concept', kind: 'car', name: 'Aerion Concept', price: 400_000_000 * DOLLAR, about: 'A liquid-silver concept under a glass canopy, lit blue from below.' },
   { id: 'ombra-oro', kind: 'car', name: 'Ombra Oro', price: 2_000_000_000 * DOLLAR, about: 'The Ombra plated in 24k gold, down to the wheel nuts.' },
 ];
 

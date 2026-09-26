@@ -197,7 +197,8 @@ export const engine: GameEngine<SlotsState, SlotsAction, SlotsView> = {
       return refuse('BAD_REQUEST', m.kind === 'stepper' ? `Bet 1 to ${m.maxCoins} coins.` : `Bet 1 to ${m.maxCoins} credits per line.`);
     }
     const bet = betOf(m, action.coins, action.denom);
-    if (checkBet(bet, state.cfg.limits.default)) return refuse('LIMIT', "That bet is outside this machine's limits.");
+    // (the machine's own range, whatever an older table stored: every bet its buttons offer is good)
+    if (checkBet(bet, betRange(m))) return refuse('LIMIT', "That bet is outside this machine's limits.");
     if (bet > me.stack) return refuse('NOT_ENOUGH_CHIPS', 'Not enough credits for that bet.');
     return spin(structuredClone(state), seat, action, me.stack, ctx);
   },

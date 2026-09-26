@@ -269,6 +269,11 @@ export class Person implements Character {
   private readonly chestRest = new THREE.Quaternion();
   /** Something an emote holds (a fan of bills, a trophy), while it plays. */
   private prop: { id: PropId; mesh: THREE.Mesh } | null = null;
+  /**
+   * v7: a gun in hand (world/arms/): held out in the right hand (1, a pistol) or at the shoulder
+   * with both hands (2, a long gun), eased in and out (k); where it points up or down; a shot's kick.
+   */
+  private readonly gun = { kind: 0 as 0 | 1 | 2, k: 0, pitch: 0, recoil: 0, mesh: null as THREE.Object3D | null };
   /** The model's own place in the root, which a hop, glide, flip or spin moves it from. */
   private readonly modelAt = new THREE.Vector3();
   private readonly modelQ = new THREE.Quaternion();
@@ -436,6 +441,42 @@ export class Person implements Character {
     }
   }
 
+  /**
+   * v7: hold a gun (world/arms/models.ts builds it; its muzzle is on its +z, its grip at its
+   * origin): 1 in the right hand held out, 2 at the shoulder in both hands, 0 put away (the arms
+   * ease back and the model goes when they're down). The model is the caller's to dispose.
+   */
+  holdGun(kind: 0 | 1 | 2, mesh: THREE.Object3D | null): void {
+    const g = this.gun;
+    if (mesh !== g.mesh) {
+      g.mesh?.removeFromParent();
+      g.mesh = mesh;
+      if (mesh) {
+        mesh.visible = false;
+        this.root.add(mesh);
+      }
+    }
+    g.kind = mesh ? kind : 0;
+  }
+
+  /** v7: where the gun points, radians up (+) or down. */
+  aimGun(pitch: number): void {
+    this.gun.pitch = Math.max(-0.7, Math.min(0.7, pitch));
+  }
+
+  /** v7: a shot's kick (the hands jump up and back, and settle). */
+  kick(): void {
+    this.gun.recoil = 1;
+  }
+
+  /** v7: the gun's muzzle in world space (its model's +z tip), or null with none in hand. */
+  muzzle(out: THREE.Vector3): THREE.Vector3 | null {
+    const m = this.gun.mesh;
+    if (!m || !m.visible) return null;
+    m.updateWorldMatrix(true, false);
+    return out.set(0, 0, (m.userData.length as number | undefined) ?? 0.25).applyMatrix4(m.matrixWorld);
+  }
+
   /** Turn the head (and a little of the neck) toward a point in world space; null looks ahead. */
   lookAt(p: THREE.Vector3 | null): void {
     if (p) (this.gaze ??= new THREE.Vector3()).copy(p);
@@ -526,9 +567,11 @@ export class Person implements Character {
     else if (riding) this.model!.position.y = this.modelAt.y + this.ridePose();
     else if (this.swaySeed !== null) this.swayPose(dt);
     this.lookPose(dt);
+    if (this.gun.kind || this.gun.k > 0) this.gunPose(dt);
     const whole = this.act ? this.perform(dt, riding) : null;
     if (whole) this.carry(whole);
     if (this.prop) this.holdProp();
+    if (this.gun.mesh) this.placeGun();
     this.settle(drop);
   }
 
@@ -575,6 +618,57 @@ export class Person implements Character {
     if (g.prop && this.prop?.id !== g.prop) this.takeProp(g.prop);
     if (seated) return { y: 0, z: 0, flip: 0, spin: 0 };
     return { y: (pose.hop ?? 0) * k, z: (pose.glide ?? 0) * k, flip: (pose.flip ?? 0) * k, spin: (pose.spin ?? 0) * k };
+  }
+
+  /**
+   * v7: the arms holding a gun, eased in by gun.k: a pistol out at arm's length in the right hand
+   * with the left cupping it, or a long gun's stock at the right shoulder and the left hand out
+   * along the barrel; raised or lowered with the aim, jumping with a shot's kick. An emote or a
+   * knock that moves the arms takes over while it plays.
+   */
+  private gunPose(dt: number): void {
+    const g = this.gun;
+    g.k += ((g.kind ? 1 : 0) - g.k) * (1 - Math.exp(-dt * 10));
+    if (!g.kind && g.k < 0.02) g.k = 0;
+    g.recoil = Math.max(0, g.recoil - dt * 7);
+    if (g.k <= 0 || this.act || this.seatTop !== null) return;
+    const up = Math.sin(g.pitch) * 0.85;
+    const r = g.recoil;
+    const pose: Pose =
+      g.kind === 2
+        ? {
+            handR: { at: [-0.13, 0.16 + up * 0.55 + 0.05 * r, 0.44 - 0.08 * r], elbow: [-1, -0.9, 0], palm: [1, 0, 0], fingers: [0, 0.1, 1], fist: 0.85, thumb: 'tuck' },
+            handL: { at: [0.03, 0.14 + up + 0.04 * r, 0.88 - 0.06 * r], elbow: [-1, -1, 0], palm: [0, 1, 0.2], fingers: [0.2, 0, 1], fist: 0.45 },
+          }
+        : {
+            handR: { at: [-0.06, 0.24 + up + 0.1 * r, 0.93 - 0.12 * r], elbow: [-1, -0.6, 0], palm: [1, 0, 0], fingers: [0, 0.15, 1], fist: 0.9, thumb: 'tuck' },
+            handL: { at: [0.02, 0.2 + up + 0.08 * r, 0.86 - 0.1 * r], elbow: [-1, -0.8, 0], palm: [-0.2, 0.3, 1], fingers: [0.3, 0.2, 1], fist: 0.55 },
+          };
+    this.turn('torso', [0, g.kind === 2 ? -0.28 : -0.1, 0], g.k);
+    this.hands(pose, g.k);
+  }
+
+  /** v7: the gun in the right hand: along the forearm (a pistol), or from the right hand toward the left (a long gun). */
+  private placeGun(): void {
+    const g = this.gun;
+    const mesh = g.mesh!;
+    const r = this.arms.R;
+    const l = this.arms.L;
+    if (!r || !l || !this.model || g.k < 0.35) {
+      mesh.visible = false;
+      return;
+    }
+    mesh.visible = true;
+    const at = (o: THREE.Object3D, out: THREE.Vector3) => this.root.worldToLocal(o.getWorldPosition(out));
+    const wrist = at(r.wrist, _gw);
+    const fwd = g.kind === 2 ? at(l.wrist, _gf).sub(wrist) : _gf.subVectors(wrist, at(r.lower, _gf));
+    fwd.normalize();
+    // the grip in the palm: a little on from the wrist, the barrel along `fwd`, level across
+    mesh.position.copy(wrist).addScaledVector(fwd, g.kind === 2 ? 0.02 : 0.07);
+    mesh.position.y -= 0.02;
+    _gx.set(0, 1, 0).cross(fwd).normalize();
+    _gy.crossVectors(fwd, _gx);
+    mesh.quaternion.setFromRotationMatrix(_gm.makeBasis(_gx, _gy, fwd));
   }
 
   /** Lift, glide, flip and spin the whole model (about PIVOT, the middle of the body). */
@@ -1399,6 +1493,11 @@ const KNEE: Vec = [0, 0, 1];
 
 // The posing works in the character's own frame: update() sets these from its root each frame.
 const _rootQ = new THREE.Quaternion();
+const _gw = new THREE.Vector3();
+const _gf = new THREE.Vector3();
+const _gx = new THREE.Vector3();
+const _gy = new THREE.Vector3();
+const _gm = new THREE.Matrix4();
 const _rootInv = new THREE.Matrix4();
 
 /** Where a bone's joint is, in the character's frame. */

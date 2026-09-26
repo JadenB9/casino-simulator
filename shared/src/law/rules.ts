@@ -156,15 +156,21 @@ export interface JailState {
 }
 
 /** What made a member of staff come over. */
-export type Offence = 'punch' | 'win';
+export type Offence = 'punch' | 'win' | 'shot';
 
 /** A catch, a lock-up or a release, as everyone hears it. */
 export interface LawEvent {
-  k: 'warn' | 'jail' | 'free';
+  /** v7: 'theft' is an inmate (inmate: which) punching someone in the jail and taking `amount`. */
+  k: 'warn' | 'jail' | 'free' | 'theft';
   id: number;
   name: string;
   staff: StaffId | null;
   why: Offence | null;
   /** A warning's end (server ms): caught again before this, it's jail. */
   until?: number;
+  /** v7: a theft: which inmate (jail.ts INMATES index), what he took (cents) and where he did it (m). */
+  inmate?: number;
+  amount?: number;
+  x?: number;
+  z?: number;
 }

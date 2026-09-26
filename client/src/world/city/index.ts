@@ -31,6 +31,8 @@ import { buildRoof, SUN_DIR } from './roof.ts';
 import { openPanel, RideScreen, type PanelHandle } from './ride.ts';
 import { LiftSounds } from './sound.ts';
 import type { ZoneBuild } from './zone.ts';
+import type { Knock, RoadCar, Traffic } from './parking.ts';
+import { buildHome } from '../home/zone.ts';
 
 export { LIFTS } from '../../../../shared/src/lifts.ts';
 export { GROUND, ROOF, VALET_STAND, PICKUP, ENTRANCES, stalls } from './plan.ts';
@@ -87,6 +89,11 @@ const LIGHT = {
     outside: { sky: new THREE.Color('#ffc8a4'), ground: new THREE.Color('#5a3a4a'), k: 1.3, sun: new THREE.Color('#ffa860'), sunK: 1.7, dir: SUN_DIR },
     inside: { sky: new THREE.Color('#ffc8a4'), ground: new THREE.Color('#5a3a4a'), k: 1.3, sun: new THREE.Color('#ffa860'), sunK: 1.7, dir: SUN_DIR },
   },
+  // v7: the apartment at night: warm lamps inside, the city's blue on the terrace
+  home: {
+    outside: { sky: new THREE.Color('#4a5a88'), ground: new THREE.Color('#2a2030'), k: 1.1, sun: new THREE.Color('#9fb0e0'), sunK: 0.35, dir: new THREE.Vector3(0.4, 0.7, 0.5) },
+    inside: { sky: new THREE.Color('#fff0dc'), ground: new THREE.Color('#5a4030'), k: 1.6, sun: new THREE.Color('#ffe2c0'), sunK: 0.45, dir: new THREE.Vector3(-0.3, 0.8, 0.4) },
+  },
 };
 
 /** Far enough to see the skyline from the roof; the casino keeps the engine's own. */
@@ -126,6 +133,15 @@ export class City {
   leaveTable: (() => void) | null = null;
   /** Tests and the e2e script: what happened with the last ride. */
   lastRide: { to: ZoneId; ok: boolean; msg?: string } | null = null;
+  /** v7: the cars being driven on the ground floor (world/drive/ keeps it): the traffic brakes for them. */
+  roadCars: readonly RoadCar[] = [];
+  /** v7: whether the walker is on foot (not driving): only then can a car knock them down. */
+  onFoot: () => boolean = () => true;
+  /** v7: a car knocked the walker down (the sound, a word). */
+  onKnock: ((k: Knock) => void) | null = null;
+  /** v7: the traffic crashed into a driven car, and a horn out on the street. */
+  onCrash: ((speed: number) => void) | null = null;
+  onHorn: ((at: { x: number; z: number }) => void) | null = null;
 
   constructor(
     private readonly deps: CityDeps,
@@ -204,6 +220,8 @@ export class City {
   sees(x: number, z: number, inCasino: (x: number, z: number) => boolean): boolean {
     const zone = zoneOf(x * 100, z * 100) ?? 'casino';
     if (zone !== this.zone) return false;
+    // v7: everyone's apartment is their own: nobody else is ever seen in yours
+    if (zone === 'home') return false;
     if (zone === 'casino') return inCasino(x, z);
     const b = this.body;
     b.min.set(x - 0.45, 0, z - 0.45);
@@ -229,7 +247,8 @@ export class City {
     }
     this.bank.update(dt, this.people);
     const z = this.zones.get(this.zone);
-    z?.update(dt, this.people, calm());
+    const me = !this.ride && f.player.isEnabled && this.onFoot() ? this.people[0]! : null;
+    z?.update(dt, this.people, calm(), me, this.roadCars);
     this.step(dt);
   }
 
@@ -241,7 +260,7 @@ export class City {
     const z = this.zones.get(this.zone);
     const side = z?.light(f.player.position.x, f.player.position.z) ?? 'outside';
     if (side !== this.lightSide) this.lightSide = side;
-    const L = LIGHT[this.zone as 'ground' | 'roof'][this.lightSide];
+    const L = LIGHT[this.zone as 'ground' | 'roof' | 'home'][this.lightSide];
     const k = this.lightMix < 1 ? 1 : 1 - Math.exp(-dt * 3);
     this.lightMix = 1;
     l.hemi.color.lerp(this.hemiTo.sky.copy(L.sky), k);
@@ -345,8 +364,14 @@ export class City {
     const had = this.zones.get(zone);
     if (had) return had;
     const d = this.deps;
-    const z = zone === 'ground' ? buildGround(d.mats, d.col, this.quality) : buildRoof(d.mats, d.col, this.quality);
+    const z = zone === 'ground' ? buildGround(d.mats, d.col, this.quality) : zone === 'home' ? buildHome(d.mats, d.col, this.quality) : buildRoof(d.mats, d.col, this.quality);
     z.group.visible = false;
+    // v7: a car that reaches the walker knocks them down
+    if (z.traffic) {
+      z.traffic.onKnock = (k) => this.knocked(k);
+      z.traffic.onCrash = (_car, speed) => this.onCrash?.(speed);
+      z.traffic.onHorn = (at) => this.onHorn?.(at);
+    }
     d.root.add(z.group);
     this.zones.set(zone, z);
     this.hearDoors(z.bank);
@@ -417,8 +442,12 @@ export class City {
       () => {
         this.panel = null;
       },
+      (zone) => zone !== 'home' || this.homeTier() > 0,
     );
   }
+
+  /** v7: how far your apartment is done (0: none), for the panel's "Your Apartment" (the app sets it). */
+  homeTier: () => number = () => 0;
 
   private start(to: ZoneId, car: number): void {
     const f = this.floor;
@@ -549,6 +578,19 @@ export class City {
     this.syncZone();
     // (placed first, so the camera flies back from the table to behind you where you are now)
     if (f.seated()) this.leaveTable?.();
+  }
+
+  /** v7: the traffic hit the walker: down they go, slid the way the car was going. */
+  private knocked(k: Knock): void {
+    const f = this.floor;
+    if (!f || !f.player.isEnabled || f.player.down) return;
+    f.player.knock(k.dx, k.dz, 0.8 + Math.min(4, k.speed * 0.25));
+    this.onKnock?.(k);
+  }
+
+  /** v7: the ground floor's traffic, once it's built. */
+  traffic(): Traffic | null {
+    return this.zones.get('ground')?.traffic ?? null;
   }
 
   private hearDoors(bank: Lift): void {

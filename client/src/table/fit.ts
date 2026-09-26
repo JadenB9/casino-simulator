@@ -297,6 +297,8 @@ export function fitOf(root: THREE.Object3D): BoardFit | null {
 
 /** Never obstacles: prompts that come and go (a modal, a toast), and boards drawn in the DOM. */
 const NOT_CHROME = ['modal', 'scrim', 'toasts', 'toast', 'world-prompt', 'os-screen', 'celebrate'];
+/** The hover tips that follow the pointer over a layout (rl-tip, sb-tip, craps-tip...). */
+const POINTER_TIP = /^[a-z]+-tip$/;
 /** How long something that showed keeps its place after it hides, ms. */
 const REMEMBER = 12_000;
 /** How often the controls are measured, ms (and at once when the window changes size). */
@@ -313,7 +315,9 @@ export function measureChrome(elements: Iterable<Element>, w: number, h: number)
   const out: { el: Element; rect: Rect }[] = [];
   const visit = (e: Element, depth: number) => {
     if (!(e instanceof HTMLElement) || e.hidden) return;
-    if (e.dataset.fit === 'ignore' || NOT_CHROME.some((c) => e.classList.contains(c))) return;
+    // (v7: and the betting spots' hover tips, which follow the pointer: counted as controls they
+    // slid the whole table away from the mouse)
+    if (e.dataset.fit === 'ignore' || NOT_CHROME.some((c) => e.classList.contains(c)) || [...e.classList].some((c) => POINTER_TIP.test(c))) return;
     const cs = getComputedStyle(e);
     if (cs.display === 'none' || cs.visibility === 'hidden' || Number(cs.opacity) < 0.05) return;
     if (e.classList.contains('pass') || e.dataset.fit === 'pass') {

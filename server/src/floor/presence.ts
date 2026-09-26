@@ -17,7 +17,7 @@
 // socket's attachment, and the book of who sits where is rebuilt from them on wake. Standing up,
 // walking off (a position more than SEAT_KEEP_CM from the seat) and leaving the floor free it.
 
-import type { FloorClientMsg, FloorServerMsg, PlayerInfo } from '../../../shared/src/protocol.ts';
+import type { FloorClientMsg, FloorServerMsg, Parked, PlayerInfo } from '../../../shared/src/protocol.ts';
 import { PROTOCOL_VERSION } from '../../../shared/src/protocol.ts';
 import { ZONES, clampTo, zoneOf, type Rect } from '../../../shared/src/zones.ts';
 import type { Look } from '../../../shared/src/look.ts';
@@ -69,7 +69,20 @@ export interface FloorAtt {
    * hello put it, so reconnecting isn't a way to jump across the floor. Dropped once placed.
    */
   from?: { x: number; z: number; t: number } | null;
+  /** v7: what this account owns that the floor checks (the Worker reads it from D1 at connect; `kit` adds to it). */
+  cars?: string[];
+  guns?: string[];
+  /** v7: the apartment's step reached (0: none), for the elevator's "Your Apartment". */
+  home?: number;
+  /** v7: the car being driven (a faster speed limit, drawn as the car), the one left parked, the gun drawn. */
+  car?: string | null;
+  parked?: Parked | null;
+  gun?: string | null;
 }
+
+/** v7: the fastest a driven car may go, cm/s (the cars top out near 40 m/s), and its bank. */
+export const MAX_DRIVE_SPEED = 4_800;
+export const MAX_DRIVE_BANK = MAX_DRIVE_SPEED + 100;
 
 type Broadcast = (msg: FloorServerMsg, except?: WebSocket) => void;
 
@@ -112,7 +125,7 @@ export class Presence {
     }
   }
 
-  onConnect(ws: WebSocket, who: { accountId: number; name: string; look: Look; emotes?: string[] }): void {
+  onConnect(ws: WebSocket, who: { accountId: number; name: string; look: Look; emotes?: string[]; cars?: string[]; guns?: string[]; home?: number }): void {
     const now = Date.now();
     // A newer tab taking over from an older one (index.ts closed the old socket a moment ago, in
     // this same turn) goes on standing where the old one stood, and nobody else hears about it.
@@ -131,6 +144,10 @@ export class Presence {
       fresh: true,
       active: now,
       from: last,
+      // v7: a newer tab keeps the car it was driving and the one it left parked
+      car: prev?.car ?? null,
+      parked: prev?.parked ?? null,
+      gun: null,
     };
     ws.serializeAttachment(att);
     this.live.set(ws, { att, moving: false, bank: MAX_BANK });
@@ -171,7 +188,9 @@ export class Presence {
     } else {
       // Presence carries no money, so the only checks are the floor bounds and a speed limit:
       // allowance accrues at MAX_SPEED up to MAX_BANK, and a move beyond it stops short on its line.
-      w.bank = Math.min(MAX_BANK, w.bank + (MAX_SPEED * Math.max(0, now - a.t)) / 1000);
+      // (v7: a driven car, on the ground floor only, goes faster)
+      const driving = !!a.car && zoneOf(a.x, a.z) === 'ground';
+      w.bank = Math.min(driving ? MAX_DRIVE_BANK : MAX_BANK, w.bank + ((driving ? MAX_DRIVE_SPEED : MAX_SPEED) * Math.max(0, now - a.t)) / 1000);
       const dx = x - a.x;
       const dz = z - a.z;
       const dist = Math.hypot(dx, dz);
@@ -277,6 +296,13 @@ export class Presence {
       found = true;
       const a = w.att;
       if (a.seat) this.unseat(ws, a);
+      // v7: nobody is moved in a car: out of it, the car left where it was
+      if (a.car) {
+        const parked = zoneOf(a.x, a.z) === 'ground' ? { car: a.car, x: a.x, z: a.z, r: a.r } : null;
+        a.car = null;
+        a.parked = parked;
+        this.broadcast({ t: 'player', id: a.accountId, car: null, parked });
+      }
       const to = clampTo(a.confine ?? ZONES[zoneOf(x, z) ?? 'casino'], x, z);
       a.x = to.x;
       a.z = to.z;
@@ -333,6 +359,25 @@ export class Presence {
     return [...fresh];
   }
 
+  /** v7: a live player's attachment by socket (the street's checks read and change it through `change`). */
+  attOf(ws: WebSocket): FloorAtt | null {
+    return this.live.get(ws)?.att ?? null;
+  }
+
+  /** v7: change an account's attachment on every live socket (kit, car, gun); false if not on the floor. */
+  change(accountId: number, fn: (a: FloorAtt) => void): boolean {
+    return this.update(accountId, fn);
+  }
+
+  /** v7: into a car or out of it (leaving it parked where you are), a gun drawn or put away: everyone hears it. */
+  setCar(accountId: number, car: string | null, parked: Parked | null): void {
+    if (this.update(accountId, (a) => ((a.car = car), (a.parked = parked)))) this.broadcast({ t: 'player', id: accountId, car, parked });
+  }
+
+  setGun(accountId: number, gun: string | null): void {
+    if (this.update(accountId, (a) => (a.gun = gun))) this.broadcast({ t: 'player', id: accountId, gun });
+  }
+
   /** v6: where a player on the floor stands now (cm), and their name; null if they aren't here. */
   whereIs(accountId: number): { x: number; z: number; name: string } | null {
     const w = this.walkerOf(accountId);
@@ -345,14 +390,14 @@ export class Presence {
   }
 
   /** v6 law6: everyone on the floor, once each: where they are (cm) and whether they sit (at a table, or on a seat). */
-  standing(): { accountId: number; name: string; x: number; z: number; at: boolean; seat: boolean }[] {
+  standing(): { accountId: number; name: string; x: number; z: number; at: boolean; seat: boolean; car: boolean }[] {
     const seen = new Set<number>();
-    const out: { accountId: number; name: string; x: number; z: number; at: boolean; seat: boolean }[] = [];
+    const out: { accountId: number; name: string; x: number; z: number; at: boolean; seat: boolean; car: boolean }[] = [];
     for (const [ws, w] of this.live) {
       const a = w.att;
       if (seen.has(a.accountId) || ws.readyState !== WebSocket.OPEN) continue;
       seen.add(a.accountId);
-      out.push({ accountId: a.accountId, name: a.name, x: a.x, z: a.z, at: a.at !== null, seat: !!a.seat });
+      out.push({ accountId: a.accountId, name: a.name, x: a.x, z: a.z, at: a.at !== null, seat: !!a.seat, car: !!a.car });
     }
     return out;
   }
@@ -463,7 +508,7 @@ export class Presence {
 }
 
 function info(a: FloorAtt): PlayerInfo {
-  return { id: a.accountId, name: a.name, look: a.look, x: a.x, z: a.z, r: a.r, at: a.at, seat: a.seat?.id ?? null };
+  return { id: a.accountId, name: a.name, look: a.look, x: a.x, z: a.z, r: a.r, at: a.at, seat: a.seat?.id ?? null, car: a.car ?? null, parked: a.parked ?? null, gun: a.gun ?? null };
 }
 
 /**

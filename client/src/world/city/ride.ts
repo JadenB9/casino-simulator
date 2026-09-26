@@ -13,7 +13,9 @@ export interface PanelHandle {
 }
 
 /** The car's panel. `pick` hears the floor chosen; closing without one calls `onClose`. */
-export function openPanel(ui: HTMLElement, here: ZoneId, pick: (to: ZoneId) => void, onClose: () => void): PanelHandle {
+export function openPanel(ui: HTMLElement, here: ZoneId, pick: (to: ZoneId) => void, onClose: () => void, shows: (zone: ZoneId) => boolean = () => true): PanelHandle {
+  // v7: "Your Apartment" is on an owner's panel only
+  const floors = FLOORS.filter((f) => f.zone === here || shows(f.zone));
   const root = el('div', 'lift-panel');
   root.setAttribute('role', 'dialog');
   root.setAttribute('aria-label', 'Elevator panel');
@@ -35,14 +37,14 @@ export function openPanel(ui: HTMLElement, here: ZoneId, pick: (to: ZoneId) => v
     if (chosen) pick(chosen);
     else onClose();
   };
-  for (const f of FLOORS) {
+  for (const f of floors) {
     const li = el('li');
     const b = el('button', 'lift-btn');
     b.type = 'button';
     b.dataset.zone = f.zone;
     const key = el('span', 'lift-key', f.key);
     const name = el('span', 'lift-name', f.name);
-    const level = el('span', 'lift-level', f.zone === 'roof' ? `Floor ${f.level}` : f.zone === 'ground' ? 'Street level' : `Floor ${f.level}`);
+    const level = el('span', 'lift-level', f.zone === 'ground' ? 'Street level' : f.zone === 'home' ? `Floor ${f.level} · private` : `Floor ${f.level}`);
     b.append(key, name, level);
     if (f.zone === here) {
       b.classList.add('here');
@@ -65,10 +67,10 @@ export function openPanel(ui: HTMLElement, here: ZoneId, pick: (to: ZoneId) => v
   root.append(head, list, stay);
   root.addEventListener('keydown', (e) => {
     const k = e.key.toUpperCase();
-    const byKey = FLOORS.find((f) => f.key === k) ?? FLOORS[Number(k) - 1];
+    const byKey = floors.find((f) => f.key === k) ?? floors[Number(k) - 1];
     if (byKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
       e.preventDefault();
-      buttons[FLOORS.indexOf(byKey)]!.click();
+      buttons[floors.indexOf(byKey)]!.click();
       return;
     }
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {

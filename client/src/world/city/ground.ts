@@ -16,13 +16,13 @@ import { Bank, panelTexture } from './bank.ts';
 import { Kit, signAtlas, signMesh } from './kit.ts';
 import { AISLES, ENTRANCES, GROUND, STALL, SURFACE, VALET_STAND, stalls } from './plan.ts';
 import { parkedCars, Traffic } from './parking.ts';
+import { buildStreets } from './streets.ts';
+import { LOOP } from './loop.ts';
 import { Beacons, skyDome, skylineRing, towers, rng, type Tower } from './sky.ts';
 import { SlidingDoors } from './doors.ts';
 import type { ZoneBuild } from './zone.ts';
 
 const G = GROUND;
-/** The second crosswalk, to the jail's front door (plan.ts ENTRANCES.jail). */
-const JAIL_WALK = ENTRANCES.jail.z;
 
 export function buildGround(mats: Mats, col: Collider, quality: Quality): ZoneBuild {
   const kit = new Kit('ground', mats, col);
@@ -276,56 +276,13 @@ export function buildGround(mats: Mats, col: Collider, quality: Quality): ZoneBu
     }
   }
 
-  // --- the street -------------------------------------------------------------------------------------
+  // --- the street and the loop road round the block (v7: streets.ts) ---------------------------------
   const R = G.road;
   const WW = G.walkWest;
   const WE = G.walkEast;
-  const z0 = G.zone.z0;
-  const z1 = G.zone.z1;
-  // (the west sidewalk is cut where the drive's two driveways cross it to the street)
-  const cuts = [-45.5, -40.5, 40.5, 45.5];
-  for (const [a, b] of [
-    [z0, cuts[0]!],
-    [cuts[1]!, cuts[2]!],
-    [cuts[3]!, z1],
-  ] as const) {
-    // (the sidewalk's edge tucked inside the curb, so their faces on the street never share a plane)
-    kit.box('sidewalk', WW.x0, WW.x1 - 0.1, -0.1, 0.006, a, b, 2.4);
-    kit.box('curb', WW.x1 - 0.22, WW.x1, -0.1, 0.01, a + 0.01, b - 0.01);
-  }
-  for (const side of [-1, 1] as const) {
-    const za = side * 40.5;
-    const zb = side * 45.5;
-    kit.box('asphalt', G.drive.x0, WW.x1, -0.1, 0, Math.min(za, zb), Math.max(za, zb), 6);
-  }
-  kit.box('sidewalk', WE.x0 + 0.1, WE.x1, -0.1, 0.006, z0, z1, 2.4);
-  kit.box('curb', WE.x0, WE.x0 + 0.22, -0.1, 0.01, z0 + 0.01, z1 - 0.01);
-  kit.box('asphalt', R.x0, R.x1, -0.1, 0, z0, z1, 6);
-  // the double yellow down the middle, dashed lane lines, the crosswalk's zebra and stop lines
-  const mid = (R.x0 + R.x1) / 2;
   const cw = G.crosswalk;
-  const along = (x0: number, x1: number, mat: string, dash: number, gap: number) => {
-    for (let z = z0; z < z1; z += dash + gap) {
-      const a = Math.max(z0 + 0.02, z);
-      const b = Math.min(z1 - 0.02, z + dash);
-      // (the markings stop at the crosswalk)
-      if ((b > cw.z0 - 2.2 && a < cw.z1 + 2.2) || (b > JAIL_WALK - 4.2 && a < JAIL_WALK + 4.2)) continue;
-      kit.flat(mat, x0, x1, a, b, 0.003);
-    }
-  };
-  along(mid - 0.2, mid - 0.08, 'paint-yellow', 200, 0);
-  along(mid + 0.08, mid + 0.2, 'paint-yellow', 200, 0);
-  along(R.x0 + 2.45, R.x0 + 2.57, 'paint-white', 3, 6);
-  along(R.x1 - 2.57, R.x1 - 2.45, 'paint-white', 3, 6);
-  // the crosswalks: from the plaza's walk, and to the jail's door
-  for (const zc of [(cw.z0 + cw.z1) / 2, JAIL_WALK]) for (let x = R.x0 + 0.3; x < R.x1 - 0.4; x += 0.9) kit.flat('paint-white', x, x + 0.5, zc - 2, zc + 2, 0.003);
-  kit.flat('paint-white', R.x0, mid - 0.3, cw.z0 - 1.6, cw.z0 - 1.2, 0.003);
-  kit.flat('paint-white', mid + 0.3, R.x1, cw.z1 + 1.2, cw.z1 + 1.6, 0.003);
-  // street lamps along both sides, arms over the road; traffic signals at the crosswalk
-  for (let z = -54; z <= 54; z += 18) {
-    streetLamp(kit, WW.x1 - 0.6, z, 1);
-    streetLamp(kit, WE.x0 + 0.6, z + 9, -1);
-  }
+  buildStreets(kit);
+  // traffic signals at the plaza's crosswalk
   for (const [x, z, face] of [
     [WW.x1 - 0.5, cw.z0 - 0.8, 1],
     [WE.x0 + 0.5, cw.z1 + 0.8, -1],
@@ -364,19 +321,21 @@ export function buildGround(mats: Mats, col: Collider, quality: Quality): ZoneBu
       t += w;
     }
   };
-  addRow(200, 238, -60, 60, 24, 30, 110);
-  addRow(98, 200, 62, 62, 20, 18, 70);
-  addRow(98, 200, -62, -62, 20, 18, 70);
+  // v7: back behind the loop road's outer sidewalks (east, and both ends), and the valet lots' ends
+  const back = LOOP.half + (G.walkWest.x1 - G.walkWest.x0) + 1.2;
+  addRow(LOOP.x1 + back, LOOP.x1 + back + 24, -104, 104, 24, 30, 110);
+  addRow(LOOP.x0 + LOOP.r - 2, LOOP.x1 + back, LOOP.z1 + back, LOOP.z1 + back, 20, 18, 80);
+  addRow(LOOP.x0 + LOOP.r - 2, LOOP.x1 + back, LOOP.z0 - back, LOOP.z0 - back, 20, 18, 80);
+  addRow(98, 150, 62, 62, 20, 18, 70);
+  addRow(98, 150, -62, -62, 20, 18, 70);
   near.push({ x: 110, z: 68, w: 20, d: 12, h: 46 });
+  // the corners' pockets beyond the street's bends, behind the curve of the sidewalk
+  near.push({ x: 158, z: 91, w: 16, d: 22, h: 44 }, { x: 158, z: -91, w: 16, d: 22, h: 52 });
   // and west, behind the lobby and its lots (the casino's floor is out that way: they stand between)
   near.push({ x: 90, z: -40, w: 16, d: 38, h: 56 }, { x: 89, z: 0, w: 18, d: 40, h: 92 }, { x: 90, z: 40, w: 16, d: 38, h: 64 });
   const towerMesh = towers(near, 'night', 0x7a11);
   group.add(towerMesh);
-  // backdrop walls the walker can't pass (the towers' feet, the lots' far ends)
-  kit.solid(G.walk.x0 - 1, G.walk.x1 + 1, G.walk.z1, G.walk.z1 + 1, 6);
-  kit.solid(G.walk.x0 - 1, G.walk.x1 + 1, G.walk.z0 - 1, G.walk.z0, 6);
-  kit.solid(G.walk.x1, G.walk.x1 + 1, G.walk.z0, G.walk.z1, 6);
-  kit.solid(G.walk.x0 - 1, G.walk.x0, G.walk.z0, G.walk.z1, 6);
+  // (the walls the walker can't pass are streets.ts's: the outer sidewalks' backs, the lots' ends)
   const beacons = new Beacons(near.filter((t) => t.h > 80).map((t) => new THREE.Vector3(t.x, (t.y0 ?? 0) + t.h + 1.5, t.z)), 17);
   group.add(beacons.points);
   const moon = new THREE.Vector3(0.35, 0.62, -0.7);
@@ -395,20 +354,8 @@ export function buildGround(mats: Mats, col: Collider, quality: Quality): ZoneBu
   // --- what moves: the cars, the doors ---------------------------------------------------------------
   const parked = parkedCars(stalls(), mats, col, 0xca75);
   group.add(parked.group);
-  const traffic = new Traffic(
-    [
-      { x: R.x0 + 1.25, dir: 1 },
-      { x: R.x0 + 3.75, dir: 1 },
-      { x: R.x1 - 3.75, dir: -1 },
-      { x: R.x1 - 1.25, dir: -1 },
-    ],
-    z0 - 12,
-    z1 + 12,
-    R,
-    mats,
-    0x7aff,
-    high ? 3 : 2,
-  );
+  // v7: round the loop road, one car a lane (fewer than the street had), and they can hit you
+  const traffic = new Traffic(mats, 0x7aff, 1);
   group.add(traffic.group);
 
   // --- signs: the name over the canopy, VALET on its fascia, CONCIERGE, the monument ------------------
@@ -454,11 +401,12 @@ export function buildGround(mats: Mats, col: Collider, quality: Quality): ZoneBu
       if (x >= C.x0 && x <= C.x1 && z >= C.z0 && z <= C.z1) return cy;
       return null;
     },
-    update(dt, people) {
+    update(dt, people, _calm, me, cars) {
       doors.update(dt, people);
-      traffic.update(dt, people);
+      traffic.update(dt, people, me ?? null, cars ?? []);
       beacons.update(dt);
     },
+    traffic,
     setQuality(q) {
       void props.setQuality(q);
     },
@@ -497,18 +445,4 @@ function lamp(kit: Kit, x: number, z: number, h: number, heads: number): void {
     kit.light(hdr('#ffd8a0', 2.4), hx, h - 0.205, z, 0.6, 0.01, 0.36);
     kit.pool(hx, z, 7);
   }
-}
-
-/** A street lamp on the sidewalk, its arm reaching `dir` (+1 east, -1 west) over the road. */
-function streetLamp(kit: Kit, x: number, z: number, dir: 1 | -1): void {
-  const h = 7.2;
-  kit.cylinder('steel', x, z, 0.11, 0, h, 10, 0.08);
-  kit.cylinder('steel', x, z, 0.2, 0, 0.6, 12);
-  kit.post(x, z, 0.2, h);
-  const reach = 2.4;
-  kit.box('steel', Math.min(x, x + dir * reach), Math.max(x, x + dir * reach), h - 0.08, h, z - 0.05, z + 0.05);
-  const hx = x + dir * reach;
-  kit.box('steel', hx - 0.36, hx + 0.36, h - 0.24, h - 0.06, z - 0.18, z + 0.18);
-  kit.light(hdr('#ffcf8a', 2.6), hx, h - 0.245, z, 0.62, 0.01, 0.3);
-  kit.pool(hx, z, 7.5);
 }

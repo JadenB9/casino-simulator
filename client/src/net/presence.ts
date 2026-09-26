@@ -25,6 +25,8 @@ import type { FxEvent, Statue } from '../../../shared/src/items.ts';
 export { SEND_MS };
 /** A sample this far from the previous one (cm) is a jump, not a step: snap instead of gliding. */
 const SNAP_CM = 300;
+/** v7: the same for someone driving (a car at speed is several metres on between samples). */
+const SNAP_DRIVE_CM = 2_000;
 const TAU = Math.PI * 2;
 
 /** Yaw in radians (a character's rotation.y) to the wire's byte, 0-255 for one full turn. */
@@ -239,6 +241,10 @@ export class FloorLink {
           info.at = m.at;
           this.emit('at', m.id, m.at);
         }
+        // v7: into or out of a car (the one left parked), a gun drawn or put away
+        if (m.car !== undefined) info.car = m.car;
+        if (m.parked !== undefined) info.parked = m.parked;
+        if (m.gun !== undefined) info.gun = m.gun;
         break;
       }
       case 'online':
@@ -297,11 +303,16 @@ export class FloorLink {
       known.info.at = info.at;
       this.emit('at', info.id, info.at);
     }
+    // v7
+    known.info.car = info.car ?? null;
+    known.info.parked = info.parked ?? null;
+    known.info.gun = info.gun ?? null;
   }
 
   private sample(p: RemotePlayer, t: number, pose: Pose): void {
     // A jump (a reconnect placing someone across the room) snaps rather than gliding through tables.
-    if (p.last && Math.hypot(pose.x - p.last.x, pose.z - p.last.z) > SNAP_CM) p.track = new Track();
+    // (v7: someone driving covers metres between samples: only a far bigger jump is one)
+    if (p.last && Math.hypot(pose.x - p.last.x, pose.z - p.last.z) > (p.info.car ? SNAP_DRIVE_CM : SNAP_CM)) p.track = new Track();
     p.track.push(t, pose);
     p.last = pose;
   }

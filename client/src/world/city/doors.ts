@@ -6,10 +6,14 @@ import * as THREE from 'three';
 import type { Mats } from '../materials.ts';
 import type { Box, Collider } from '../collision.ts';
 
-const SENSE = 2.2;
-const OPEN_S = 0.9;
+// v7: they sense you from further off and open quicker, so a walk (or a run: 4.8 m/s covers the
+// sensing distance in about a second) never reaches the glass before there's room to pass.
+const SENSE = 4.6;
+const OPEN_S = 0.55;
 const CLOSE_S = 1.2;
-const DWELL_S = 1.4;
+const DWELL_S = 1.6;
+/** Open this far (0..1) there's room to walk through (each pane has slid well over a metre). */
+const PASSABLE = 0.32;
 
 export class SlidingDoors {
   readonly group = new THREE.Group();
@@ -66,7 +70,7 @@ export class SlidingDoors {
     const next = want > this.open ? Math.min(1, this.open + dt / OPEN_S) : Math.max(0, this.open - dt / CLOSE_S);
     if (next === this.open) return;
     this.open = next;
-    this.box.walk = next < 0.7;
+    this.box.walk = next < PASSABLE;
     this.box.cam = next < 0.3;
     this.write();
   }

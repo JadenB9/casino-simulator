@@ -1,5 +1,5 @@
 // The ground floor and the roof as data, in world metres (x east, z south, like the casino). The
-// ground zone (shared/src/zones.ts) runs x 100-220, z -60..60: the valet lobby at its west end
+// ground zone (shared/src/zones.ts) runs x 100-230, z -90..90 (v7: the loop road, loop.ts): the valet lobby at its west end
 // (LOTS.lobby), the drive, the valet's parking and a plaza (LOTS.valet), the street (LOTS.street),
 // and across it the jail and the garage (LOTS.jail, LOTS.garage: the law's and the cars' to
 // build). The big surface lots north and south of the lobby are the valet's too. The roof zone
@@ -24,7 +24,8 @@ const area = (r: { minX: number; maxX: number; minZ: number; maxZ: number }): Ar
 
 export const GROUND = {
   /** The whole zone, and where anyone can walk in it (the backdrop starts past it). */
-  zone: { x0: 100, x1: 220, z0: -60, z1: 60 },
+  zone: { x0: 100, x1: 230, z0: -90, z1: 90 },
+  /** The valet's side: its west wall and its lots' ends (v7: past the street, the loop road's own walls). */
   walk: { x0: 100.6, x1: 199.5, z0: -58, z1: 58 },
   /** The valet lobby's hall (inside faces of its walls) and the building round it. */
   hall: { x0: m(LIFTS.ground.x), x1: 127.6, z0: -12.6, z1: 12.6 },

@@ -23,6 +23,18 @@ button.hud-who:focus-visible { outline: 2px solid var(--focus); outline-offset: 
 .hud-online { display: flex; align-items: center; gap: 7px; height: 36px; padding: 0 12px; font-size: 14px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-2); }
 .hud-online .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--win); box-shadow: 0 0 8px rgba(127, 209, 139, 0.55); }
 .hud-online .money { color: var(--ink); }
+button.hud-online { font: inherit; font-size: 14px; letter-spacing: 0.1em; cursor: pointer; transition: border-color 0.15s, color 0.15s; }
+button.hud-online:hover { border-color: var(--line-strong); color: var(--ink); }
+button.hud-online:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+/* v7: the list of who's online */
+.online-sheet { width: min(460px, calc(100vw - 24px)); }
+.online-list { list-style: none; margin: 0; padding: 0; max-height: min(60vh, 520px); overflow: auto; }
+.online-row { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 9px 4px; border-bottom: 1px solid var(--line); }
+.online-row:last-child { border-bottom: 0; }
+.online-row .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--win); box-shadow: 0 0 8px rgba(127, 209, 139, 0.55); }
+.online-name { font-size: 16px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.online-row.you .online-name { color: var(--brass-hi); }
+.online-where { font-size: 14px; color: var(--ink-3); white-space: nowrap; }
 .hud-btn { display: grid; place-items: center; width: 36px; height: 36px; padding: 0; background: rgba(14, 12, 10, 0.84); border: 1px solid var(--line); border-radius: 6px; color: var(--ink-2); cursor: pointer; transition: color 0.15s, border-color 0.15s; }
 .hud-btn:hover { color: var(--ink); border-color: var(--line-strong); }
 .hud-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }

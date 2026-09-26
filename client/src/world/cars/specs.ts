@@ -63,6 +63,12 @@ export interface CarSpec {
   intakes?: boolean;
   /** The paint is gold leaf: the body and the metal are all gold. */
   gold?: boolean;
+  /** v7: neon under the sills and the bumpers, this colour (lit). */
+  underglow?: string;
+  /** v7: an LED bar the width of the nose (this colour) and a red one across the tail. */
+  lightbar?: string;
+  /** v7: a shark fin down the middle of the engine cover, behind the cockpit. */
+  fin?: boolean;
 }
 
 const roadster: CarSpec = {
@@ -352,6 +358,186 @@ const boattail: CarSpec = {
   deck: [-2.7, -1.3],
 };
 
+// --- v7: the showpieces -------------------------------------------------------------------------
+
+const monster: CarSpec = {
+  body: [[-2.3, 1.02], [-2.3, 1.5], [-2.2, 1.6], [1.4, 1.6], [2.2, 1.52], [2.3, 1.32], [2.3, 1.02]],
+  half: 1.18,
+  front: 1.5,
+  rear: -1.5,
+  wheelR: 0.62,
+  wheelW: 0.5,
+  sill: 0.98,
+  nose: [0.04, 0.3],
+  tail: [0.03, 0.3],
+  shoulder: 1.42,
+  tumble: 0.04,
+  cabin: [[-1.2, 1.56], [-1.1, 2.2], [-0.9, 2.28], [0.6, 2.28], [1.2, 1.58]],
+  cabinHalf: 1.02,
+  cabinTumble: 0.08,
+  sail: -1.0,
+  paint: '#c2410c',
+  stripes: '#141414',
+  interior: '#222222',
+  lamps: 'rect',
+  lampY: 1.36,
+  lampX: 0.74,
+  tailY: 1.42,
+  rim: 'five',
+  rimColor: '#a7adb4',
+  grille: 'upright',
+  roofLamps: true,
+};
+
+const wedge: CarSpec = {
+  body: [[-2.2, 0.34], [-2.2, 0.9], [-2.1, 0.98], [-0.9, 0.98], [0.4, 0.82], [2.05, 0.52], [2.25, 0.4], [2.25, 0.3]],
+  half: 0.98,
+  front: 1.4,
+  rear: -1.3,
+  wheelR: 0.35,
+  wheelW: 0.3,
+  sill: 0.2,
+  nose: [0.1, 0.6],
+  tail: [0.04, 0.4],
+  shoulder: 0.52,
+  tumble: 0.1,
+  cabin: [[-1.0, 0.96], [-0.55, 1.12], [0.0, 1.13], [0.9, 0.8]],
+  cabinHalf: 0.74,
+  cabinTumble: 0.2,
+  sail: -0.7,
+  paint: '#f2efe6',
+  interior: '#b0232a',
+  lamps: 'slit',
+  lampY: 0.5,
+  lampX: 0.66,
+  tailY: 0.8,
+  rim: 'turbine',
+  rimColor: '#cfd3d8',
+  grille: 'intake',
+  underglow: '#ff3b8a',
+  lightbar: '#fff2f6',
+};
+
+const deco: CarSpec = {
+  body: [[-2.8, 0.44], [-2.8, 0.86], [-2.5, 0.96], [-1.6, 0.98], [-1.4, 0.92], [2.5, 0.9], [2.75, 0.76], [2.8, 0.46]],
+  half: 0.94,
+  front: 1.9,
+  rear: -1.75,
+  wheelR: 0.4,
+  wheelW: 0.22,
+  sill: 0.3,
+  nose: [0.25, 0.9],
+  tail: [0.35, 1.2],
+  shoulder: 0.62,
+  tumble: 0.06,
+  cabin: [[-2.3, 0.94], [-1.95, 1.36], [-0.9, 1.38], [-0.3, 0.92]],
+  cabinHalf: 0.8,
+  cabinTumble: 0.16,
+  sail: -1.9,
+  paint: '#0b0b0d',
+  interior: '#6b1d1d',
+  lamps: 'round',
+  lampY: 0.78,
+  lampX: 0.6,
+  tailY: 0.8,
+  rim: 'wire',
+  rimColor: '#d4af37',
+  whitewall: true,
+  chrome: true,
+  grille: 'upright',
+};
+
+const prototype: CarSpec = {
+  body: [[-2.4, 0.26], [-2.4, 0.92], [-2.2, 0.96], [-1.3, 0.9], [-0.6, 1.02], [0.4, 0.95], [1.5, 0.6], [2.3, 0.34], [2.4, 0.24]],
+  half: 1.0,
+  front: 1.5,
+  rear: -1.45,
+  wheelR: 0.36,
+  wheelW: 0.34,
+  sill: 0.14,
+  nose: [0.12, 0.8],
+  tail: [0.05, 0.5],
+  shoulder: 0.45,
+  tumble: 0.12,
+  cabin: [[-0.9, 0.98], [-0.5, 1.16], [0.05, 1.17], [0.7, 0.9]],
+  cabinHalf: 0.5,
+  cabinTumble: 0.3,
+  sail: -0.6,
+  paint: '#0e2f6e',
+  stripes: '#f5b82e',
+  interior: '#111111',
+  lamps: 'slit',
+  lampY: 0.46,
+  lampX: 0.72,
+  tailY: 0.86,
+  rim: 'five',
+  rimColor: '#e8e8e8',
+  grille: 'intake',
+  wing: { z: -2.28, y: 1.2, half: 0.95 },
+  fin: true,
+  intakes: true,
+  lightbar: '#f5f7ff',
+};
+
+const ev: CarSpec = {
+  body: [[-2.35, 0.36], [-2.35, 0.8], [-2.2, 0.9], [-0.6, 0.94], [0.8, 0.82], [2.1, 0.6], [2.35, 0.44], [2.35, 0.34]],
+  half: 0.97,
+  front: 1.5,
+  rear: -1.45,
+  wheelR: 0.37,
+  wheelW: 0.28,
+  sill: 0.24,
+  nose: [0.18, 0.8],
+  tail: [0.1, 0.6],
+  shoulder: 0.55,
+  tumble: 0.1,
+  cabin: [[-2.0, 0.88], [-0.8, 1.2], [0.2, 1.24], [1.1, 0.8]],
+  cabinHalf: 0.76,
+  cabinTumble: 0.22,
+  sail: -1.6,
+  paint: '#17132a',
+  interior: '#2a2440',
+  lamps: 'slit',
+  lampY: 0.62,
+  lampX: 0.7,
+  tailY: 0.8,
+  rim: 'turbine',
+  rimColor: '#111317',
+  grille: 'intake',
+  lightbar: '#7df9ff',
+  underglow: '#b44dff',
+};
+
+const concept: CarSpec = {
+  body: [[-2.4, 0.3], [-2.4, 0.7], [-2.2, 0.78], [0.0, 0.8], [1.9, 0.52], [2.4, 0.34], [2.4, 0.26]],
+  half: 1.02,
+  front: 1.55,
+  rear: -1.5,
+  wheelR: 0.36,
+  wheelW: 0.32,
+  sill: 0.16,
+  nose: [0.3, 1.0],
+  tail: [0.2, 0.8],
+  shoulder: 0.44,
+  tumble: 0.14,
+  cabin: [[-1.3, 0.76], [-0.9, 1.12], [0.2, 1.16], [1.1, 0.72]],
+  cabinHalf: 0.62,
+  cabinTumble: 0.35,
+  sail: -1.2,
+  paint: '#aab7c4',
+  interior: '#12161c',
+  lamps: 'slit',
+  lampY: 0.46,
+  lampX: 0.78,
+  tailY: 0.62,
+  rim: 'turbine',
+  rimColor: '#9fd7ff',
+  grille: 'intake',
+  underglow: '#2fb5ff',
+  lightbar: '#bfe8ff',
+  fin: true,
+};
+
 /** Each catalog car's shape (items.ts CARS). */
 export const CAR_SPECS: Record<string, CarSpec> = {
   'halden-roadster': roadster,
@@ -366,6 +552,13 @@ export const CAR_SPECS: Record<string, CarSpec> = {
   'ombra-hyper': hyper,
   'halden-boattail': boattail,
   'ombra-oro': { ...hyper, paint: '#d4a53c', gold: true, rimColor: '#e0b84a' },
+  // v7
+  'kodiak-monster': monster,
+  'vanta-wedge': wedge,
+  'nocturne-v16': deco,
+  'lumen-lm': prototype,
+  'spectre-ev': ev,
+  'aerion-concept': concept,
 };
 
 /** Colours a parked car might be, for the valet lot (real paint colours, mostly quiet). */

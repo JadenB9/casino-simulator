@@ -1,0 +1,7 @@
+/* v7: the driving HUD: the speed, the car's name and the keys, low in the middle, out of the road's way. */
+.drive-hud { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); display: grid; justify-items: center; gap: 2px; padding: 10px 22px 11px; z-index: 12; pointer-events: none; }
+.drive-speed { font: 600 30px var(--ui); font-variant-numeric: tabular-nums; letter-spacing: 0.02em; color: var(--ink); }
+.drive-name { font-family: var(--serif); font-size: 15px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--brass-hi); }
+.drive-keys { margin-top: 3px; font-size: 13px; letter-spacing: 0.06em; color: var(--ink-3); white-space: nowrap; }
+@media (pointer: coarse) { .drive-keys { display: none; } }
+@media (max-width: 560px) { .drive-hud { bottom: 150px; } }

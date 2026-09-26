@@ -47,6 +47,8 @@ export interface CarCall {
   /** Server time it was called, and when it leaves (sent back early, until is the time it was). */
   at: number;
   until: number;
+  /** v7: its owner got in and drove it off (it leaves the curb with them, not with the valet). */
+  taken?: true;
 }
 
 /** POST /shop/valet: bring this car round (a car you own), or send yours back (null). */

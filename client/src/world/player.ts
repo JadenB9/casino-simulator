@@ -42,6 +42,8 @@ const MAX_PACE = 8.5;
 /** The speeds the walk and run cycles were made for; the blend between them follows these. */
 const WALK_CYCLE = 1.75;
 const RUN_CYCLE = 3.9;
+/** v7: how long a knock keeps you down (the 'knock' gesture is on the ground about this long). */
+const KNOCK_S = 2.1;
 /** The follow camera's target over the walker's feet (m). */
 export const EYE = 1.5;
 /** Radians per pixel: dragging (a hand on the button covers less ground), and held. */
@@ -332,9 +334,45 @@ export class Player {
     return { position: this.want.clone(), target: this.target.clone() };
   }
 
+  /**
+   * v7: knocked off your feet (a car, a shot): slid `push` metres or so along (dx, dz), down on the
+   * ground and back up (the 'knock' gesture), the keys ignored until you're up.
+   */
+  knock(dx: number, dz: number, push: number): void {
+    if (this.knocked > KNOCK_S - 0.4) return;
+    this.knocked = KNOCK_S;
+    const n = Math.hypot(dx, dz) || 1;
+    // a slide that decays over about a third of a second covers `push` metres
+    this.kvel.set((dx / n) * push * 3.2, (dz / n) * push * 3.2);
+    this.vel.set(0, 0);
+    (this.character.gesture as ((e: string) => void) | undefined)?.('knock');
+  }
+
+  /** v7: down on the ground after a knock (seconds left), and the slide it gave. */
+  private knocked = 0;
+  private readonly kvel = new THREE.Vector2();
+
+  /** v7: on the ground after a knock: the keys wait. */
+  get down(): boolean {
+    return this.knocked > 0;
+  }
+
   update(dt: number): void {
     this.clock += dt;
     if (!this.enabled) return;
+    if (this.knocked > 0) {
+      this.knocked = Math.max(0, this.knocked - dt);
+      const p = { x: this.position.x + this.kvel.x * dt, z: this.position.z + this.kvel.y * dt };
+      this.kvel.multiplyScalar(Math.exp(-dt * 3.2));
+      this.col.resolve(p, RADIUS);
+      this.position.x = p.x;
+      this.position.z = p.z;
+      this.speed = 0;
+      this.character.setMotion(0);
+      this.syncCharacter();
+      this.placeCamera(dt);
+      return;
+    }
     // input, relative to the camera's heading
     let ix = 0;
     let iz = 0;
@@ -426,6 +464,11 @@ export class Player {
     this.stick.set(x / len, y / len);
     this.stickPace = Math.min(1, len);
     this.stickRun = run;
+  }
+
+  /** v7: the on-screen stick as it's held now (x right, y forward, up to 1), or null when let go (the driving reads it). */
+  get stickInput(): { x: number; y: number } | null {
+    return this.stickPace > 0 ? { x: this.stick.x * this.stickPace, y: this.stick.y * this.stickPace } : null;
   }
 
   /** A touch drag turning the camera, in radians: +dx turns right, +dy looks down. */
@@ -647,7 +690,33 @@ export class Player {
     this.keys.clear();
   };
 
+  /**
+   * A left click on the floor: with the mouse held, every click; with the lock off in Settings, a
+   * click that didn't drag. The law punches with it (world/law/), a drawn gun fires (world/arms/).
+   * Handlers run highest priority first; the first to take it (true) ends it.
+   */
+  onClick(fn: () => boolean, priority = 0): () => void {
+    const h = { fn, priority };
+    this.clicks.push(h);
+    this.clicks.sort((a, b) => b.priority - a.priority);
+    return () => {
+      const i = this.clicks.indexOf(h);
+      if (i >= 0) this.clicks.splice(i, 1);
+    };
+  }
+
+  private readonly clicks: { fn: () => boolean; priority: number }[] = [];
+
+  private click(): void {
+    if (!this.enabled || overlayCount() > 0 || textFocused()) return;
+    for (const h of this.clicks) if (h.fn()) return;
+  }
+
   private onDown = (e: PointerEvent): void => {
+    if (this.locked && this.enabled && e.button === 0) {
+      this.click();
+      return;
+    }
     if (!this.enabled || e.button !== 0 || this.locked) return;
     this.drag = { id: e.pointerId, x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, moved: false, mouse: e.pointerType === 'mouse' };
     this.canvas.setPointerCapture?.(e.pointerId);
@@ -675,8 +744,12 @@ export class Player {
     const d = this.drag;
     if (!d || e.pointerId !== d.id) return;
     this.drag = null;
-    // a click (not a drag) with the mouse on the floor view: hold it for looking around
-    if (e.type === 'pointerup' && !d.moved && d.mouse) this.capture();
+    // a click (not a drag) with the mouse on the floor view: hold it for looking around; with the
+    // lock off in Settings a click is a click (a punch, a shot)
+    if (e.type === 'pointerup' && !d.moved && d.mouse) {
+      if (this.canCapture()) this.capture();
+      else if (!this.mouse.capture) this.click();
+    }
   };
 
   /** Turn the camera: yaw right for +dx, look down for +dy, pitch clamped to the view's range. */

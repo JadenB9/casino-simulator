@@ -257,13 +257,45 @@ export interface Tower {
 }
 
 /**
+ * v7: towers that would stand in each other (their facades fought, windows flickering through
+ * windows) are pulled apart: a later one that overlaps an earlier one gives up the overlap along
+ * whichever side costs it less, leaving a gap, or is left out if that would leave a sliver.
+ */
+export function separate(list: readonly Tower[], gap = 0.6): Tower[] {
+  const out: Tower[] = [];
+  for (const t0 of list) {
+    let t: Tower | null = { ...t0 };
+    for (const o of out) {
+      if (!t) break;
+      const c: Tower = t;
+      const lo = Math.max(c.y0 ?? 0, o.y0 ?? 0);
+      const hi = Math.min((c.y0 ?? 0) + c.h, (o.y0 ?? 0) + o.h);
+      if (hi <= lo) continue;
+      const ox: number = (c.w + o.w) / 2 + gap - Math.abs(c.x - o.x);
+      const oz: number = (c.d + o.d) / 2 + gap - Math.abs(c.z - o.z);
+      if (ox <= 0 || oz <= 0) continue;
+      // shrink away from the other along the cheaper axis
+      if (ox / c.w <= oz / c.d) {
+        const w: number = c.w - ox;
+        t = w < 4 ? null : { ...c, w, x: c.x + (Math.sign(c.x - o.x) || 1) * (ox / 2) };
+      } else {
+        const d: number = c.d - oz;
+        t = d < 4 ? null : { ...c, d, z: c.z + (Math.sign(c.z - o.z) || 1) * (oz / 2) };
+      }
+    }
+    if (t) out.push(t);
+  }
+  return out;
+}
+
+/**
  * Near towers as one merged mesh: facades of glass and stone with windows at a real pitch
  * (world-projected, so every tower keeps the same floor height), lit windows in the emissive map,
  * a flat roof. The sun and the hemisphere light them.
  */
 export function towers(list: Tower[], kind: SkyKind, seed: number): THREE.Mesh {
   const geos: THREE.BufferGeometry[] = [];
-  for (const t of list) {
+  for (const t of separate(list)) {
     const g = new THREE.BoxGeometry(t.w, t.h, t.d);
     g.translate(t.x, (t.y0 ?? 0) + t.h / 2, t.z);
     // world-projected UVs: one texture repeat is 8 windows across and 8 floors up

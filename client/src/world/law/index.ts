@@ -1,5 +1,5 @@
 // The law, on the client: the floor's security and the pit boss walking their loops, punches
-// (V throws one; everyone sees it land, nobody is hurt), the staff's words when they catch someone,
+// (a left click or V throws one; everyone sees it land, nobody is hurt), the staff's words when they catch someone,
 // and jail: the building across the street, its two tables, the bank at booking, the bail board
 // and your own time inside in the HUD. The server decides everything (server/src/law.ts); this
 // draws it and asks.
@@ -18,7 +18,7 @@ import type { FloorServerMsg } from '../../../../shared/src/protocol.ts';
 import { formatMoney } from '../../../../shared/src/money.ts';
 import { limitsLabel } from '../../../../shared/src/limits.ts';
 import { isStaffId, parseDetour, type Detour, type StaffId } from '../../../../shared/src/law/patrol.ts';
-import { ESCORT_TALK_MS, JAIL, JAIL_GAMES, PUNCH_GAP_MS, RELEASE_MS, STRIKE_WINDOW_MS, jailLimits, type JailState, type LawEvent } from '../../../../shared/src/law/rules.ts';
+import { ESCORT_TALK_MS, JAIL, JAIL_GAMES, PUNCH_GAP_MS, RELEASE_MS, STRIKE_WINDOW_MS, jailLimits, type JailState, type LawEvent, type Offence } from '../../../../shared/src/law/rules.ts';
 import { SPAWN } from '../layout.ts';
 import { el, toast } from '../../ui/kit.ts';
 import { isTyping, overlayCount } from '../../ui/keyboard.ts';
@@ -49,14 +49,16 @@ export interface LawDeps {
 /** What the lobby flow is skipped for: the jail's tables are solo, at the jail's limits (the server sets them). */
 export type LawChoice = { kind: 'solo' } | 'refuse';
 
-const LINES: Record<'warn' | 'jail', Record<'punch' | 'win', string[]>> = {
+const LINES: Record<'warn' | 'jail', Record<Offence, string[]>> = {
   warn: {
     punch: ['Hands to yourself. Next time you go across the street.', "That's your warning. Keep your hands down.", 'Not in here. Do it again and you spend the night in county.'],
     win: ["You're having quite a night. I'll be watching this table.", 'Nice run. Easy does it from here.', "Lucky streak? Let's keep it lucky."],
+    shot: ['Put that away. Now.', 'No guns on the floor. One more shot and you go across the street.', "Holster it. That's your only warning."],
   },
   jail: {
     punch: ["That's twice. You're coming with me.", 'I warned you. Across the street, let\'s go.'],
     win: ["The house has seen enough. Let's take a walk.", 'Twice now. Come with me.'],
+    shot: ["I told you to put it away. You're coming with me.", 'That was your warning. Across the street.'],
   },
 };
 const FREE_LINE = "Bail's made. You're free to go.";
@@ -113,6 +115,14 @@ export class Law {
     this.fist.addEventListener('click', () => this.link?.you && deps.canPunch() && this.punch());
     deps.ui.append(this.hud, this.fade, this.fist);
     this.offs.push(world.spots(this.spots));
+    // a left click on the floor throws one too (V still does)
+    this.offs.push(
+      world.walker.onClick(() => {
+        if (!this.link?.you || !deps.canPunch()) return false;
+        this.punch();
+        return true;
+      }),
+    );
     // under the jail's roof the follow camera keeps below it (the city's ceilings)
     this.offs.push(world.city.addCeiling(jailCeiling));
     this.offs.push(engine.onFrame((dt) => this.update(dt)));
@@ -246,7 +256,7 @@ export class Law {
     if (ev.k === 'warn') {
       this.warnUntil = ev.until ?? now + STRIKE_WINDOW_MS;
       const who = ev.staff === 'boss' ? 'The pit boss' : 'Security';
-      const what = ev.why === 'win' ? 'has noticed how much you are winning' : 'saw that';
+      const what = ev.why === 'win' ? 'has noticed how much you are winning' : ev.why === 'shot' ? 'heard that shot' : 'saw that';
       toast(`Warning. ${who} ${what}. Get caught again in the next five minutes and you go to jail.`, 'err', 7000);
       this.showState();
     } else if (ev.k === 'jail') {

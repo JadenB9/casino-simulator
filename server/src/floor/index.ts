@@ -13,13 +13,15 @@ import { CLOSE, EMOTES, IDLE_MS, MAX_FLOOR_FRAME, PROTOCOL_VERSION, parseFloorMs
 import { isGameId } from '../../../shared/src/games/catalog.ts';
 import type { GameId } from '../../../shared/src/engine.ts';
 import { lookFromJson, type Look } from '../../../shared/src/look.ts';
-import { effectItem, isFreeEmote, type FxEvent, type Statue } from '../../../shared/src/items.ts';
+import { carItem, effectItem, isFreeEmote, type FxEvent, type Statue } from '../../../shared/src/items.ts';
 import { Presence, type FloorAtt } from './presence.ts';
 import { Directory, ipKey } from './directory.ts';
 import { FloorChat } from './chat.ts';
 import { Wins, type BigWinReport } from './wins.ts';
 import { Effects, Statues, fxKey, type Reserve } from './fx.ts';
 import { Valet, type CallResult } from './valet.ts'; // v6 cars6
+import { Street } from './street.ts'; // v7
+import { MAX_RATE, gunItem } from '../../../shared/src/arms.ts'; // v7
 import { ride } from './lift.ts'; // v6 city6
 import { Bucket, KeyedBuckets } from '../ratelimit.ts';
 import { spendTicket } from '../tickets.ts';
@@ -62,6 +64,8 @@ interface FloorLimits {
   move: Bucket;
   misc: Bucket;
   emote: Bucket;
+  /** v7: shots (an automatic fires up to MAX_RATE a second: arms.ts) */
+  shots: Bucket;
   strikes: Bucket;
 }
 
@@ -80,6 +84,7 @@ export class CasinoFloor extends DurableObject<Env> {
   readonly law: Law;
   /** v6 cars6: the valet's curb (valet.ts) */
   readonly valet: Valet;
+  readonly street: Street; // v7
   /** v6 celebs6: celebrity visits and the gift box (celebs.ts) */
   readonly celebs: Celebs;
   /** v6 bot6: where walks end and when players are active, for fair play (fair.ts) */
@@ -110,6 +115,16 @@ export class CasinoFloor extends DurableObject<Env> {
     });
     this.law = new Law(ctx, env, this.presence, (msg) => this.broadcast(msg), (id, msg) => this.sendTo(id, msg));
     this.valet = new Valet((msg) => this.broadcast(msg)); // v6 cars6
+    // v7: driving and guns
+    this.street = new Street({
+      presence: this.presence,
+      broadcast: (msg) => this.broadcast(msg),
+      send: (ws, msg) => this.send(ws, msg),
+      shotFired: (id, name, now) => this.law.shot(id, name, now),
+      confined: (id) => this.law.isConfined(id),
+      staffPose: (id, now) => this.law.staffPose(id, now),
+      takeFromCurb: (id, car) => this.valet.take(id, car, Date.now()),
+    });
     this.fair = new FloorFair(() => env.DB, autoChecks(env), (p) => ctx.waitUntil(p)); // v6 bot6
     // v6 celebs6
     this.celebs = new Celebs({
@@ -132,6 +147,8 @@ export class CasinoFloor extends DurableObject<Env> {
     const ip = request.headers.get('x-casino-ip') ?? '';
     // v6: the emotes this account owns beyond the free six, as the Worker read them from D1
     const emotes = ownedEmotes(request.headers.get('x-casino-emotes'));
+    // v7: the cars and guns it owns and its apartment's step (the Worker's `x-casino-kit`)
+    const kit = kitOf(request.headers.get('x-casino-kit'));
     const pair = new WebSocketPair();
     const client = pair[0];
     const server = pair[1];
@@ -168,7 +185,7 @@ export class CasinoFloor extends DurableObject<Env> {
       this.presence.onClose(old);
     }
     this.ctx.acceptWebSocket(server, addr ? [`a:${accountId}`, addr] : [`a:${accountId}`]);
-    this.presence.onConnect(server, { accountId, name, look, emotes });
+    this.presence.onConnect(server, { accountId, name, look, emotes, ...kit });
     this.chat.join(server);
     this.wins.greet(server); // features: the recent big wins, after hello
     this.fx.greet(server, Date.now()); // v6: effects playing or queued
@@ -232,7 +249,7 @@ export class CasinoFloor extends DurableObject<Env> {
       }
       return;
     }
-    const ok = msg.t === 'mv' || msg.t === 'st' ? b.move.take() : b.misc.take();
+    const ok = msg.t === 'mv' || msg.t === 'st' ? b.move.take() : msg.t === 'shoot' ? b.shots.take() : b.misc.take();
     if (!ok) {
       this.strike(ws, b);
       return;
@@ -242,6 +259,8 @@ export class CasinoFloor extends DurableObject<Env> {
       this.presence.touch(ws, Date.now());
     } else if (msg.t === 'here') {
       this.presence.touch(ws, Date.now());
+      const id = this.presence.accountOf(ws);
+      if (id !== null) void this.law.jailTick(id, Date.now()); // v7: the inmates don't wait for you to move
     } else if (msg.t === 'sit') {
       // sitting down or getting up is someone at the keyboard too
       this.presence.sit(ws, msg);
@@ -264,11 +283,24 @@ export class CasinoFloor extends DurableObject<Env> {
       const id = this.presence.accountOf(ws);
       this.presence.touch(ws, Date.now());
       if (id !== null) this.law.punch(id, msg.r, Date.now());
+    } else if (msg.t === 'drive') {
+      // v7: into a car you own, or out of it (street.ts)
+      this.presence.touch(ws, Date.now());
+      this.street.drive(ws, msg.car);
+    } else if (msg.t === 'draw') {
+      this.presence.touch(ws, Date.now());
+      this.street.draw(ws, msg.gun);
+    } else if (msg.t === 'shoot') {
+      this.presence.touch(ws, Date.now());
+      this.street.shoot(ws, msg.r, Date.now());
     } else {
       this.presence.onMessage(ws, msg);
       // v6 law6: an inmate stays inside, a free player isn't left in there
       const id = this.presence.accountOf(ws);
-      if (id !== null) this.law.afterMove(id, Date.now());
+      if (id !== null) {
+        this.law.afterMove(id, Date.now());
+        void this.law.jailTick(id, Date.now()); // v7: the inmates
+      }
     }
   }
 
@@ -338,6 +370,12 @@ export class CasinoFloor extends DurableObject<Env> {
   playerLook(accountId: number, look: Look): void {
     this.presence.setLook(accountId, look);
     this.statues.lookChanged(accountId, look);
+  }
+
+  /** v7: an account owns more now (the shop's purchase): its sockets may drive the car, draw the gun, ride to its apartment. */
+  grantKit(accountId: number, kit: { guns?: string[]; cars?: string[]; home?: number }): void {
+    this.street.grant(accountId, kit);
+    this.sendTo(accountId, { t: 'kit', ...kit });
   }
 
   /** v6 cars6: bring a player's car round to the valet's curb (the Worker checked they own it), or send it back (null). */
@@ -509,6 +547,7 @@ export class CasinoFloor extends DurableObject<Env> {
         move: new Bucket(30, 16),
         misc: new Bucket(10, 4),
         emote: new Bucket(3, 0.5),
+        shots: new Bucket(MAX_RATE, MAX_RATE),
         strikes: new Bucket(FLOOR_STRIKES, 1),
       };
       this.buckets.set(ws, b);
@@ -578,6 +617,18 @@ export class CasinoFloor extends DurableObject<Env> {
 export { PROTOCOL_VERSION };
 
 /** Emote ids from a comma list (the Worker's header): known, not free, each once. */
+/** v7: `guns=a,b;cars=c,d;home=2` as the Worker writes it: only known ids, the step 0-3. */
+export function kitOf(raw: string | null): { guns: string[]; cars: string[]; home: number } {
+  const out = { guns: [] as string[], cars: [] as string[], home: 0 };
+  for (const part of (raw ?? '').split(';')) {
+    const [k, v = ''] = part.split('=');
+    if (k === 'guns') out.guns = [...new Set(v.split(',').filter((id) => gunItem(id)))];
+    else if (k === 'cars') out.cars = [...new Set(v.split(',').filter((id) => carItem(id)))];
+    else if (k === 'home') out.home = Math.max(0, Math.min(3, Math.floor(Number(v)) || 0));
+  }
+  return out;
+}
+
 function ownedEmotes(raw: string | null): string[] {
   if (!raw) return [];
   const known = new Set<string>(EMOTES);

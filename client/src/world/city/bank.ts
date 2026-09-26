@@ -27,11 +27,11 @@ export const DOOR_H = 2.25;
 export const CAR_H = 2.45;
 /** The end piers either side of the bank. */
 const END = 0.4;
-/** Doors this open (or more) let people through. */
-const PASSABLE = 0.72;
-/** Standing this near a car's doorway (m, either side) or inside the car opens its doors. */
-const SENSE = 1.15;
-const OPEN_S = 1.1;
+/** Doors this open (or more) let people through (v7: sooner, so a walk in never stops at the doors). */
+const PASSABLE = 0.55;
+/** Standing this near a car's doorway (m, either side) or inside the car opens its doors (v7: a stride sooner). */
+const SENSE = 2.4;
+const OPEN_S = 0.7;
 const CLOSE_S = 1.3;
 /** A door the sensor opened stays open this long after nobody is there. */
 const DWELL_S = 1.6;

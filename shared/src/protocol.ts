@@ -90,6 +90,20 @@ export interface PlayerInfo {
   at: { station: string } | null;
   /** The chair, stool, sofa place or bench the player sits on (seats.ts), if any. */
   seat?: string | null;
+  /** v7: driving this car (items.ts CARS id): drawn in it, not on foot. */
+  car?: string | null;
+  /** v7: the car they last got out of, left where they parked it (cm, yaw byte). */
+  parked?: Parked | null;
+  /** v7: the gun they have drawn (arms.ts GUNS id), if any. */
+  gun?: string | null;
+}
+
+/** v7: a car someone got out of and left: which, and where (cm, yaw byte). */
+export interface Parked {
+  car: string;
+  x: number;
+  z: number;
+  r: number;
 }
 
 export interface LobbySummary {
@@ -377,7 +391,12 @@ export type FloorClientMsg =
   | { t: 'lift'; to: ZoneId }
   | InviteClientMsg // v6 invite6
   // v6 law6: throw a punch, facing `r` (yaw byte); the server finds who it lands on
-  | { t: 'punch'; r: number };
+  | { t: 'punch'; r: number }
+  // v7: get into a car you own (its id), or out of the one you're driving (null: left where you are)
+  | { t: 'drive'; car: string | null }
+  // v7: draw a gun you own, or put it away (null); fire the drawn one along `r` (yaw byte)
+  | { t: 'draw'; gun: string | null }
+  | { t: 'shoot'; r: number };
 
 export type FloorServerMsg =
   | { t: 'hello'; v: number; you: PlayerInfo; players: PlayerInfo[]; online: number; now: number }
@@ -385,7 +404,7 @@ export type FloorServerMsg =
   | { t: 's'; ts: number; p: [id: number, x: number, z: number, r: number, moving: 0 | 1, age?: number][] }
   | { t: 'join'; player: PlayerInfo }
   | { t: 'leave'; id: number }
-  | { t: 'player'; id: number; look?: Look; at?: { station: string } | null; seat?: string | null }
+  | { t: 'player'; id: number; look?: Look; at?: { station: string } | null; seat?: string | null; car?: string | null; parked?: Parked | null; gun?: string | null }
   // a seat you asked for and didn't get (someone got there first, or it's out of reach)
   | { t: 'seat.no'; seat: string; msg: string }
   | { t: 'online'; n: number }
@@ -418,6 +437,10 @@ export type FloorServerMsg =
   // a member of staff leaving his loop (shared/src/law/patrol.ts), and the ones under way after
   // hello; a warning, a lock-up or a release; and your own time in jail (null: you're free)
   | { t: 'punch'; id: number; hit: number | StaffId | null }
+  // v7: a shot (who fired, along which way, what it hit first and how far away, or null and the gun's reach)
+  | { t: 'shot'; id: number; r: number; hit: number | StaffId | null; d: number }
+  // v7: you own more now (bought while connected): guns, cars and your apartment's step, for the floor's checks
+  | { t: 'kit'; guns?: string[]; cars?: string[]; home?: number }
   | { t: 'detour'; d: Detour }
   | { t: 'detours'; list: Detour[] }
   | { t: 'law'; ev: LawEvent }
@@ -435,6 +458,11 @@ export type FloorServerMsg =
 // (v6 city6: maxZ takes in the elevator car behind the lobby's street doors, to 17 m)
 export const FLOOR_BOUNDS = { minX: -3120, maxX: 3120, minZ: -4320, maxZ: 1700 } as const;
 
+/** v7: an item id on the wire (a car's, a gun's): short, plain. */
+function isShortId(x: unknown): x is string {
+  return typeof x === 'string' && /^[a-z0-9-]{2,32}$/.test(x);
+}
+
 export function parseFloorMsg(raw: unknown, isGame: (g: unknown) => g is GameId): FloorClientMsg | null {
   if (!isObj(raw)) return null;
   switch (raw.t) {
@@ -446,8 +474,18 @@ export function parseFloorMsg(raw: unknown, isGame: (g: unknown) => g is GameId)
       if (raw.game !== null && !isGame(raw.game)) return null;
       return { t: 'watch', game: raw.game as GameId | null };
     case 'lift':
-      if (raw.to !== 'casino' && raw.to !== 'ground' && raw.to !== 'roof') return null;
+      if (raw.to !== 'casino' && raw.to !== 'ground' && raw.to !== 'roof' && raw.to !== 'home') return null;
       return { t: 'lift', to: raw.to };
+    // v7:
+    case 'drive':
+      if (raw.car !== null && !isShortId(raw.car)) return null;
+      return { t: 'drive', car: raw.car as string | null };
+    case 'draw':
+      if (raw.gun !== null && !isShortId(raw.gun)) return null;
+      return { t: 'draw', gun: raw.gun as string | null };
+    case 'shoot':
+      if (!isInt(raw.r) || raw.r < 0 || raw.r > 255) return null;
+      return { t: 'shoot', r: raw.r };
     case 'emote':
       if (!isOneOf(raw.e, EMOTES)) return null;
       return { t: 'emote', e: raw.e };

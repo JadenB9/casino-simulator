@@ -35,6 +35,14 @@ export class Valet {
     return { call: r.call };
   }
 
+  /** v7: its owner got into it at the curb and drove off: off the curb at once, no valet driving it away. */
+  take(accountId: number, car: string, now: number): void {
+    const mine = this.calls.find((c) => c.id === accountId && c.car === car && c.until > now);
+    if (!mine) return;
+    this.calls = this.calls.filter((c) => c !== mine);
+    this.broadcast({ t: 'car', ...mine, until: now, taken: true });
+  }
+
   /** What's at the curb, for a newcomer. */
   greet(ws: WebSocket, now: number): void {
     this.calls = this.calls.filter((c) => c.until > now);

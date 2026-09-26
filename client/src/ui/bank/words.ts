@@ -3,7 +3,9 @@
 
 import { formatMoney, type Cents } from '../../../../shared/src/money.ts';
 import { FUND_NAME, formatPrice, formatUnits, termOf, type StatementLine } from '../../../../shared/src/bank.ts';
-import { STATUE, barItem, effectItem, emoteItem, wornItem } from '../../../../shared/src/items.ts';
+import { STATUE, barItem, carItem, effectItem, emoteItem, wornItem } from '../../../../shared/src/items.ts';
+import { gunItem } from '../../../../shared/src/arms.ts';
+import { apartmentItem, homeItem } from '../../../../shared/src/estate.ts';
 import { CATALOG, isGameId } from '../../../../shared/src/games/catalog.ts';
 
 /**
@@ -35,7 +37,15 @@ function gameOf(tableId: string | null | undefined): string {
 function itemName(id: string | null | undefined): string {
   if (!id) return 'an item';
   if (id === STATUE.id) return STATUE.name;
-  return wornItem(id)?.name ?? emoteItem(id)?.name ?? barItem(id)?.name ?? effectItem(id)?.name ?? id;
+  return wornItem(id)?.name ?? emoteItem(id)?.name ?? barItem(id)?.name ?? effectItem(id)?.name ?? carItem(id)?.name ?? gunItem(id)?.name ?? homeItem(id)?.name ?? apartmentItem(id)?.name ?? id;
+}
+
+/** v7: where a kept purchase was made: the valet's cars, the gun store, the home store, else the boutique. */
+function shopOf(id: string | null | undefined): string {
+  if (carItem(id)) return 'Cars';
+  if (gunItem(id)) return 'Ace Arms';
+  if (homeItem(id) || apartmentItem(id)) return 'Maison Home';
+  return 'Boutique';
 }
 
 function dayOf(ref: string | null | undefined): string {
@@ -71,7 +81,9 @@ export function describe(l: StatementLine): { text: string; account: Account } {
     }
     return { text: l.kind, account: 'Checking' };
   }
-  if (l.src === 'item') return { text: `Boutique · ${itemName(l.ref)}`, account: 'Checking' };
+  if (l.src === 'item') return { text: `${shopOf(l.ref)} · ${itemName(l.ref)}`, account: 'Checking' };
+  // v7: an inmate took it
+  if (l.src === 'order' && l.kind === 'theft') return { text: 'Stolen in the county jail', account: 'Checking' };
   if (l.src === 'order') return { text: `${l.kind === 'fx' ? 'Effect' : 'Bar'} · ${itemName(l.ref)}`, account: 'Checking' };
   const price = l.ref?.includes(':') ? formatPrice(Number(l.ref.split(':')[1])) : '';
   const units = l.units ? formatUnits(Math.abs(l.units)) : '';

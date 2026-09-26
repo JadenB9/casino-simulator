@@ -65,11 +65,15 @@ export const LIFTS: Record<ZoneId, LiftBank> = {
   casino: bank('casino', 0, 1500, 128, 1),
   ground: bank('ground', 10_500, 0, 64, 3),
   roof: bank('roof', -11_300, 0, 192, 2),
+  // v7: the apartment's private elevator, in its entry hall's west wall, facing into the flat
+  home: bank('home', -15_400, 7_000, 64, 1),
 };
 
 /** The floors on the elevator's panel, top to bottom, with the numbers its indicator counts through. */
 export const FLOORS: { zone: ZoneId; key: string; name: string; level: number }[] = [
   { zone: 'roof', key: 'R', name: 'Sky Terrace', level: 38 },
+  // v7: only on an owner's panel (the server refuses anyone else: liftRefusal's 'nohome')
+  { zone: 'home', key: 'H', name: 'Your Apartment', level: 31 },
   { zone: 'casino', key: 'C', name: 'Casino', level: 2 },
   { zone: 'ground', key: 'G', name: 'Valet & Street', level: 0 },
 ];
@@ -91,12 +95,15 @@ export function atLift(zone: ZoneId, x: number, z: number): boolean {
   return inRect(ZONES[zone], x, z) && Math.hypot(x - b.x, z - b.z) <= LIFT_REACH_CM;
 }
 
-export type LiftRefusal = 'here' | 'table' | 'held' | 'far';
+export type LiftRefusal = 'here' | 'table' | 'held' | 'far' | 'nohome' | 'driving';
 
 /** Why the floor won't send someone to `to`, or null to go (server/src/floor/lift.ts says it in words). */
-export function liftRefusal(p: { x: number; z: number; at: unknown; confine?: unknown }, to: ZoneId): LiftRefusal | null {
+export function liftRefusal(p: { x: number; z: number; at: unknown; confine?: unknown; home?: number; car?: unknown }, to: ZoneId): LiftRefusal | null {
   if (p.confine) return 'held';
   if (p.at) return 'table';
+  if (p.car) return 'driving';
+  // v7: the apartments' floor is only for someone who owns one
+  if (to === 'home' && !(p.home && p.home > 0)) return 'nohome';
   const zone = (Object.keys(ZONES) as ZoneId[]).find((id) => inRect(ZONES[id], p.x, p.z)) ?? null;
   if (zone === to) return 'here';
   if (!zone || !atLift(zone, p.x, p.z)) return 'far';

@@ -81,6 +81,8 @@ export interface WorldOptions {
 
 export interface FloorWorld extends World {
   stations: WorldStation[];
+  /** v7: the walker itself (clicks, the camera's yaw, handing the controls to a car). */
+  readonly walker: Player;
   characterFactory: Characters;
   plan: FloorPlan;
   onEnter(cb: (station: WorldStation) => void): () => void;
@@ -416,6 +418,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
     lod,
     glow: (on) => bloom.mute(!on),
     collider: col,
+    walker: player,
     player: {
       character,
       position: player.position,

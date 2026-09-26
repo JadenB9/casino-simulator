@@ -36,7 +36,8 @@ import {
   type LawEvent,
   type Offence,
 } from '../../shared/src/law/rules.ts';
-import { inRect } from '../../shared/src/zones.ts';
+import { inRect, zoneOf } from '../../shared/src/zones.ts';
+import { INMATE_IDS, THEFT_FIRST_MS, THEFT_GAP_MS, nearestInmate, theftAmount } from '../../shared/src/law/inmates.ts';
 import type { Presence } from './floor/presence.ts';
 import { SPAWN } from './floor/presence.ts';
 import { escrowsOf } from './db.ts';
@@ -156,22 +157,26 @@ export class Law {
   /** A punch thrown by this player facing `r` (yaw byte). */
   punch(accountId: number, r: number, now: number): void {
     const me = this.presence.standing().find((p) => p.accountId === accountId);
-    // not from a chair or a table, and not faster than a fist can go
-    if (!me || me.at || me.seat) return;
+    // not from a chair, a table or a car, and not faster than a fist can go
+    if (!me || me.at || me.seat || me.car) return;
     if (now - (this.lastPunch.get(accountId) ?? -Infinity) < PUNCH_GAP_MS) return;
     this.lastPunch.set(accountId, now);
     const x = me.x / 100;
     const z = me.z / 100;
     const yaw = (r / 256) * TAU;
     const candidates: { id: number | StaffId; x: number; z: number }[] = [];
+    // (only someone in the same place: never through the zones, never in anyone's apartment)
+    const zone = zoneOf(me.x, me.z) ?? 'casino';
     for (const p of this.presence.standing()) {
-      if (p.accountId === accountId || p.at || p.seat) continue;
+      if (p.accountId === accountId || p.at || p.seat || p.car) continue;
+      if ((zoneOf(p.x, p.z) ?? 'casino') !== zone || zone === 'home') continue;
       candidates.push({ id: p.accountId, x: p.x / 100, z: p.z / 100 });
     }
-    for (const s of STAFF) {
-      const pose = this.poseOf(s.id, now);
-      candidates.push({ id: s.id, x: pose.x, z: pose.z });
-    }
+    if (zone === 'casino')
+      for (const s of STAFF) {
+        const pose = this.poseOf(s.id, now);
+        candidates.push({ id: s.id, x: pose.x, z: pose.z });
+      }
     const hit = punchTarget(x, z, yaw, candidates);
     this.broadcast({ t: 'punch', id: accountId, hit });
     if (hit === null) return;
@@ -186,6 +191,83 @@ export class Law {
       }
     }
     if (by) void this.strike(accountId, me.name, by, 'punch', now);
+  }
+
+  // --- v7: gunshots --------------------------------------------------------------------------
+
+  /** Where a member of staff is now (with his detour), for the street's shots (floor/street.ts). */
+  staffPose(id: StaffId, now: number): { x: number; z: number } {
+    const p = this.poseOf(id, now);
+    return { x: p.x, z: p.z };
+  }
+
+  /**
+   * A shot fired in the casino: every guard hears a gunshot, seen or not, and the nearest one not
+   * busy comes over. A strike like a punch (the second inside the window is jail).
+   */
+  shot(accountId: number, name: string, now: number): void {
+    const pos = this.presence.positionOf(accountId);
+    if (!pos) return;
+    let by: StaffId | null = null;
+    let best = Infinity;
+    for (const s of STAFF) {
+      if (s.kind !== 'guard') continue;
+      const p = this.poseOf(s.id, now);
+      if (p.busy) continue;
+      const d = Math.hypot(p.x - pos.x / 100, p.z - pos.z / 100);
+      if (d < best) {
+        best = d;
+        by = s.id;
+      }
+    }
+    if (by) void this.strike(accountId, name, by, 'shot', now);
+  }
+
+  // --- v7: the inmates' thefts -----------------------------------------------------------------
+
+  /** When each account inside the prison is next robbed (in memory: a restart only delays it). */
+  private readonly nextTheft = new Map<number, number>();
+  private readonly robbing = new Set<number>();
+
+  /**
+   * Someone did something (moved, said they're here): if they stand inside the prison proper (an
+   * inmate, or a visitor let into the day room) and their time has come, the nearest inmate walks
+   * over, punches them and takes a few per cent of their balance (inmates.ts theftAmount). The
+   * money leaves in one D1 batch (a casino_orders row, 'theft:...', and the balance); everyone
+   * hears it as a `law` event and the clients play it out.
+   */
+  async jailTick(accountId: number, now: number): Promise<void> {
+    const me = this.presence.standing().find((p) => p.accountId === accountId);
+    if (!me || !inRect(JAIL_RECT, me.x, me.z)) {
+      this.nextTheft.delete(accountId);
+      return;
+    }
+    const due = this.nextTheft.get(accountId);
+    if (due === undefined) {
+      this.nextTheft.set(accountId, now + between(THEFT_FIRST_MS));
+      return;
+    }
+    if (now < due || this.robbing.has(accountId) || me.at || me.seat) return;
+    this.robbing.add(accountId);
+    this.nextTheft.set(accountId, now + between(THEFT_GAP_MS));
+    try {
+      const db = this.env.DB;
+      const acct = await db.prepare(`SELECT balance FROM casino_accounts WHERE id = ?1`).bind(accountId).first<{ balance: number }>();
+      const amount = theftAmount(acct?.balance ?? 0);
+      if (amount <= 0) return;
+      const op = `theft:${accountId}:${now}`;
+      await db.batch([
+        db.prepare(`INSERT INTO casino_orders (op_id, account_id, item, price, created_at) VALUES (?1, ?2, 'inmate-theft', ?3, ?4)`).bind(op, accountId, amount, now),
+        db.prepare(`UPDATE casino_accounts SET balance = balance - ?2, rev = rev + 1 WHERE id = ?1`).bind(accountId, amount),
+      ]);
+      const inmate = INMATE_IDS.indexOf(nearestInmate(me.x / 100, me.z / 100, now));
+      this.tell({ k: 'theft', id: accountId, name: me.name, staff: null, why: null, inmate, amount, x: me.x / 100, z: me.z / 100 });
+    } catch (err) {
+      // (short of money by the time the batch ran: the balance check refused it, nothing moved)
+      console.error('theft failed', accountId, err);
+    } finally {
+      this.robbing.delete(accountId);
+    }
   }
 
   // --- the pit boss --------------------------------------------------------------------------
@@ -338,6 +420,11 @@ export class Law {
       }),
     );
   }
+}
+
+/** A random time in [lo, hi] ms. */
+function between([lo, hi]: readonly [number, number]): number {
+  return lo + Math.random() * (hi - lo);
 }
 
 function yawByte(yaw: number): number {

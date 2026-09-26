@@ -65,6 +65,54 @@ export class Kit {
     this.col.post(x, z, r, top);
   }
 
+  /**
+   * v7: a curved slab lying on the ground: the part of a ring between radii r0 and r1 round
+   * (cx, cz), from angle a0 to a1 (a point is at cx + cos a * r, cz + sin a * r), from y0 up to y1,
+   * its top and both curved sides (a sidewalk, a curb round a corner). World-projected UVs.
+   */
+  sector(mat: string, cx: number, cz: number, r0: number, r1: number, a0: number, a1: number, y0: number, y1: number, uv = 2.4): void {
+    const seg = Math.max(6, Math.ceil((Math.abs(a1 - a0) * r1) / 1.2));
+    const pos: number[] = [];
+    const nor: number[] = [];
+    const at = (r: number, a: number, y: number) => [cx + Math.cos(a) * r, y, cz + Math.sin(a) * r];
+    const quad = (p: number[][], n: number[][]) => {
+      // two triangles, wound so the face points along n (checked against the first normal)
+      const [a, b, c, d] = p;
+      const ux = b![0]! - a![0]!, uy = b![1]! - a![1]!, uz = b![2]! - a![2]!;
+      const vx = c![0]! - a![0]!, vy = c![1]! - a![1]!, vz = c![2]! - a![2]!;
+      const face = [uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx];
+      const flip = face[0]! * n[0]![0]! + face[1]! * n[0]![1]! + face[2]! * n[0]![2]! < 0;
+      const tri = flip ? [a, c, b, b, c, d] : [a, b, c, b, d, c];
+      const ntri = flip ? [n[0], n[2], n[1], n[1], n[2], n[3]] : [n[0], n[1], n[2], n[1], n[3], n[2]];
+      for (const v of tri) pos.push(...v!);
+      for (const v of ntri) nor.push(...v!);
+    };
+    for (let i = 0; i < seg; i++) {
+      const aa = a0 + ((a1 - a0) * i) / seg;
+      const ab = a0 + ((a1 - a0) * (i + 1)) / seg;
+      const up = [0, 1, 0];
+      quad([at(r0, aa, y1), at(r1, aa, y1), at(r0, ab, y1), at(r1, ab, y1)], [up, up, up, up]);
+      const out = (a: number) => [Math.cos(a), 0, Math.sin(a)];
+      const inn = (a: number) => [-Math.cos(a), 0, -Math.sin(a)];
+      quad([at(r1, aa, y0), at(r1, ab, y0), at(r1, aa, y1), at(r1, ab, y1)], [out(aa), out(ab), out(aa), out(ab)]);
+      if (r0 > 0.01) quad([at(r0, aa, y0), at(r0, ab, y0), at(r0, aa, y1), at(r0, ab, y1)], [inn(aa), inn(ab), inn(aa), inn(ab)]);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+    this.batch.add(g, this.mat(mat), {}, uv);
+    g.dispose();
+  }
+
+  /** v7: posts round an arc (a wall the walker can't pass that curves round a corner). */
+  arcWall(cx: number, cz: number, r: number, a0: number, a1: number, top = 6, step = 0.8): void {
+    const n = Math.max(2, Math.ceil((Math.abs(a1 - a0) * r) / step));
+    for (let i = 0; i <= n; i++) {
+      const a = a0 + ((a1 - a0) * i) / n;
+      this.col.post(cx + Math.cos(a) * r, cz + Math.sin(a) * r, step * 0.75, top);
+    }
+  }
+
   /** A glowing box (a light strip, a lamp's face), coloured past 1 so it blooms on High. */
   light(color: THREE.Color, cx: number, cy: number, cz: number, sx: number, sy: number, sz: number, ry = 0): void {
     this.glow.box(color, cx, cy, cz, sx, sy, sz, ry);

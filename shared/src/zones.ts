@@ -12,7 +12,7 @@
 
 import { FLOOR_BOUNDS } from './protocol.ts';
 
-export type ZoneId = 'casino' | 'ground' | 'roof';
+export type ZoneId = 'casino' | 'ground' | 'roof' | 'home';
 
 export interface Rect {
   minX: number;
@@ -23,8 +23,12 @@ export interface Rect {
 
 export const ZONES: Record<ZoneId, Rect> = {
   casino: { ...FLOOR_BOUNDS },
-  ground: { minX: 10_000, maxX: 22_000, minZ: -6_000, maxZ: 6_000 },
+  // v7: out to the loop road round the jail's and the garage's block (x to 230 m, z to ±90 m)
+  ground: { minX: 10_000, maxX: 23_000, minZ: -9_000, maxZ: 9_000 },
   roof: { minX: -16_000, maxX: -11_000, minZ: -2_000, maxZ: 2_000 },
+  // v7: the apartments' floor. One plan for everyone, each owner alone in their own (nobody else is
+  // drawn there), furnished from what they own.
+  home: { minX: -16_000, maxX: -12_000, minZ: 5_000, maxZ: 9_000 },
 };
 
 /** Lots on the ground floor (inside ZONES.ground). */
@@ -38,6 +42,9 @@ export const LOTS = {
   /** Across the street: the jail (south) and the garage (north). */
   jail: { minX: 16_600, maxX: 19_600, minZ: -4_500, maxZ: -500 },
   garage: { minX: 16_600, maxX: 20_000, minZ: 500, maxZ: 4_500 },
+  /** v7: the stores at the block's ends, facing the street: the gun store (north), the home store (south). */
+  guns: { minX: 16_660, maxX: 18_500, minZ: 4_700, maxZ: 5_800 },
+  homes: { minX: 16_660, maxX: 18_500, minZ: -5_800, maxZ: -4_700 },
 } as const satisfies Record<string, Rect>;
 
 export function inRect(r: Rect, x: number, z: number): boolean {

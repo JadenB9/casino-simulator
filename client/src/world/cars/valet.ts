@@ -31,8 +31,8 @@ const DRIVE_S = ARRIVE_MS / 1000 - 3;
 const LEAVE_S = 12;
 const WALK = 1.35;
 
-/** A car rigged to drive: its body, and its four wheels to turn. */
-class Rig {
+/** A car rigged to drive: its body, and its four wheels to turn (v7: and the front two to steer). */
+export class Rig {
   readonly root = new THREE.Group();
   private readonly wheels: THREE.Group[] = [];
   private readonly geos: THREE.BufferGeometry[] = [];
@@ -62,11 +62,19 @@ class Rig {
     parent.add(new THREE.Mesh(g, m));
   }
 
-  /** Roll the wheels on by `d` metres. */
-  roll(d: number): void {
+  /** Roll the wheels on by `d` metres (v7: the front pair turned `steer` radians, left +). */
+  roll(d: number, steer = 0): void {
     this.spin += d / this.radius;
     const kit = carKit(this.car);
-    this.wheels.forEach((w, i) => w.matrix.copy(wheelMatrix(kit, i, this.spin)));
+    this.wheels.forEach((w, i) => {
+      w.matrix.copy(wheelMatrix(kit, i, this.spin));
+      // (the front wheels are the first two: turned about their own middle)
+      if (steer && i < 2) {
+        const p = kit.wheels[i]!;
+        _steer.makeRotationY(steer);
+        w.matrix.premultiply(_toO.makeTranslation(-p.x, -p.y, -p.z)).premultiply(_steer).premultiply(_back.makeTranslation(p.x, p.y, p.z));
+      }
+    });
   }
 
   dispose(): void {
@@ -74,6 +82,10 @@ class Rig {
     for (const g of new Set(this.geos)) g.dispose();
   }
 }
+
+const _steer = new THREE.Matrix4();
+const _toO = new THREE.Matrix4();
+const _back = new THREE.Matrix4();
 
 interface Out {
   call: CarCall;
@@ -201,6 +213,11 @@ export class Valet {
   hear(call: CarCall): void {
     const key = `${call.id}:${call.at}`;
     const same = this.out.get(key);
+    // v7: its owner got in and drove it off: it's their car on the road now, not the valet's
+    if (call.taken) {
+      this.drop(key);
+      return;
+    }
     if (same) {
       same.call = call;
       return;

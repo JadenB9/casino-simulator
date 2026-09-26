@@ -30,6 +30,8 @@ export interface HudDeps {
   onMenu?(): void;
   /** v6.1 casino61: the play reminder's Take a break: stand up from any table, close any table flow. */
   onBreak?(): void;
+  /** v7: the online count opens the list of who's on (ui/hud/online.ts). */
+  onOnline?(): void;
 }
 
 export interface Hud extends Closable {
@@ -109,7 +111,11 @@ export function mountHud(deps: HudDeps): Hud {
 
   // right: the room and the controls
   const right = el('div', 'hud-right');
-  const online = el('div', 'hud-bar hud-online');
+  const online = el('button', 'hud-bar hud-online');
+  online.type = 'button';
+  online.title = 'Who is online';
+  online.setAttribute('aria-label', 'Who is online');
+  online.addEventListener('click', () => deps.onOnline?.());
   const onlineN = el('span', 'money', '');
   online.append(el('i', 'dot'), onlineN, el('span', 'hud-online-label', 'online'));
   online.hidden = true;
