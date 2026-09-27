@@ -24,7 +24,8 @@ async function login(ctx) {
   const p = await ctx.newPage();
   p.errors = [];
   p.on('pageerror', (e) => p.errors.push(String(e)));
-  p.on('console', (m) => m.type() === 'error' && p.errors.push(`console: ${m.text()}`));
+  // (live, Cloudflare's own injected inline script is refused by the page's CSP: not the game's)
+  p.on('console', (m) => m.type() === 'error' && !/inline script violates/.test(m.text()) && p.errors.push(`console: ${m.text()}`));
   await p.goto(`${BASE}/casino/`);
   await p.waitForSelector('.name-input', { timeout: 300000 });
   await p.fill('.name-input', NAME);
@@ -49,7 +50,7 @@ const id = await p.evaluate(() => window.casino.app.link.you.id);
 // every car in the catalogue (shared/src/items.ts, read as text: the shared folder isn't served)
 const CARS = [...readFileSync('shared/src/items.ts', 'utf8').matchAll(/\{ id: '([a-z0-9-]+)', kind: 'car'/g)].map((m) => m[1]);
 const owned = LIVE ? await p.evaluate(() => window.casino.session.profile.owned ?? []) : null;
-const all = LIVE ? CARS.filter((c) => owned.includes(c)) : process.env.CARS ? process.env.CARS.split(',') : CARS;
+const all = LIVE ? CARS.filter((c) => owned.includes(c)).slice(-1) : process.env.CARS ? process.env.CARS.split(',') : CARS;
 ok(Array.isArray(all) && all.length > 0, `the cars to try (${all?.length})`);
 if (!LIVE) sql(`INSERT OR IGNORE INTO casino_items (account_id, item, price, bought_at, op_id) VALUES ${all.map((c, i) => `(${id}, '${c}', 100, ${Date.now()}, 'getin-${id}-${i}')`).join(', ')}`);
 await p.close();
@@ -63,7 +64,9 @@ await p.waitForFunction(() => window.casino.world.zone === 'ground' && !window.c
 await p.waitForTimeout(2500);
 
 for (const car of all) {
-  const bay = await p.evaluate(async (car) => {
+  // (live: no source modules to ask, so the one car tried is the dearest, which stands on the
+  // turntable ahead of the door: cars/layout.ts bays()[0])
+  const bay = LIVE ? { x: 180, z: 15.5, owned: true } : await p.evaluate(async (car) => {
     const { collection } = await import('/casino/src/world/cars/layout.ts');
     const c = collection(window.casino.session.profile.owned).find((x) => x.car === car);
     return c ? { x: c.bay.x, z: c.bay.z, owned: c.owned } : null;
