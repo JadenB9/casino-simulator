@@ -48,7 +48,9 @@ const ctx = await browser.newContext({ viewport: { width: 1400, height: 860 } })
 let p = await login(ctx);
 const id = await p.evaluate(() => window.casino.app.link.you.id);
 // every car in the catalogue (shared/src/items.ts, read as text: the shared folder isn't served)
-const CARS = [...readFileSync('shared/src/items.ts', 'utf8').matchAll(/\{ id: '([a-z0-9-]+)', kind: 'car'/g)].map((m) => m[1]);
+const CAR_ROWS = [...readFileSync('shared/src/items.ts', 'utf8').matchAll(/\{ id: '([a-z0-9-]+)', kind: 'car', name: (?:"([^"]+)"|'([^']+)')/g)];
+const CARS = CAR_ROWS.map((m) => m[1]);
+const CAR_NAMES = Object.fromEntries(CAR_ROWS.map((m) => [m[1], m[2] ?? m[3]]));
 const owned = LIVE ? await p.evaluate(() => window.casino.session.profile.owned ?? []) : null;
 const all = LIVE ? CARS.filter((c) => owned.includes(c)).slice(-1) : process.env.CARS ? process.env.CARS.split(',') : CARS;
 ok(Array.isArray(all) && all.length > 0, `the cars to try (${all?.length})`);
@@ -72,7 +74,22 @@ for (const car of all) {
     return c ? { x: c.bay.x, z: c.bay.z, owned: c.owned } : null;
   }, car);
   if (!bay) {
-    ok(false, `${car}: has a bay in the garage`);
+    // (more cars than bays: this one waits in the back, asked for from beside the door)
+    await p.evaluate(() => window.casino.world.teleport(171.2, 13.6, 0));
+    await p.waitForTimeout(700);
+    const prompt = await p.evaluate(() => document.querySelector('.world-prompt:not([hidden])')?.textContent ?? null);
+    await p.keyboard.press('KeyE');
+    const row = p.locator('.pick-sheet button', { hasText: CAR_NAMES[car] });
+    const shown = await row.first().waitFor({ timeout: 4000 }).then(() => true, () => false);
+    ok(shown, `${car}: "${prompt?.trim()}" lists it`);
+    if (!shown) continue;
+    await row.first().click();
+    const got = await p.waitForFunction((car) => window.casino.app.link.you?.car === car && window.casino.app.v7.driving.driving, car, { timeout: 8000 }).then(() => true, () => false);
+    ok(got, `${car}: picked from the back, you drive it out`);
+    await p.waitForTimeout(1200);
+    await p.evaluate(() => window.casino.app.v7.driving.getOut(true));
+    await p.waitForFunction(() => !window.casino.app.link.you?.car, null, { timeout: 5000 }).catch(() => {});
+    await p.waitForTimeout(800);
     continue;
   }
   // stand beside the bay, facing it, and read the prompt

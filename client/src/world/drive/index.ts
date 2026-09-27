@@ -11,7 +11,8 @@
 // everyone draws your car there (anyone's car they're driving, and every car left parked).
 
 import * as THREE from 'three';
-import { carItem } from '../../../../shared/src/items.ts';
+import { CARS, carItem, type CarItem } from '../../../../shared/src/items.ts';
+import { openPicker } from '../../ui/hud/picker.ts';
 import type { PlayerInfo } from '../../../../shared/src/protocol.ts';
 import { CURB } from '../../../../shared/src/valet.ts';
 import { ZONES, inRect } from '../../../../shared/src/zones.ts';
@@ -52,6 +53,8 @@ export interface DrivingDeps {
 
 /** Where a garage car comes out: the street's inner lane by the garage's door, facing up it. */
 const OUT_OF_GARAGE = { x: 162.2, z: 18, yaw: Math.PI };
+/** v1.2.1: inside the garage's door, where the cars that don't fit in the bays are asked for. */
+const BACK_ROOM = { x: 171.2, z: 15.2 };
 /** How near a car's middle you must be to get in (m). */
 const REACH = 3.4;
 /** Wait this long for the floor to say you're in before giving up (ms). */
@@ -176,12 +179,29 @@ export class Driving {
     }
     // the garage: your cars in their bays
     if (p.x > GARAGE.x0 && p.x < GARAGE.x1 && p.z > GARAGE.z0 && p.z < GARAGE.z1) {
-      for (const c of collection(this.d.owned())) {
-        if (!c.owned) continue;
+      const shown = collection(this.d.owned()).filter((c) => c.owned);
+      for (const c of shown) {
         const d = Math.hypot(p.x - c.bay.x, p.z - c.bay.z);
         if (d < REACH + 0.6) yield { key: `drive:garage:${c.car}`, x: c.bay.x, z: c.bay.z, d: Math.max(0, d - 2), label: `Take the ${carItem(c.car)?.name ?? 'car'} out`, any: true, use: () => this.getIn(c.car, OUT_OF_GARAGE.x, OUT_OF_GARAGE.z, OUT_OF_GARAGE.yaw) };
       }
+      // v1.2.1: more cars than bays: the rest wait in the back, taken out from beside the door
+      const back = CARS.filter((c) => this.d.owned().includes(c.id) && !shown.some((s) => s.car === c.id));
+      const d = Math.hypot(p.x - BACK_ROOM.x, p.z - BACK_ROOM.z);
+      if (back.length && d < REACH + 0.4) yield { key: 'drive:garage:back', x: BACK_ROOM.x, z: BACK_ROOM.z, d, label: `Your other cars (${back.length}) · take one out`, any: true, use: () => this.pickBack(back) };
     }
+  }
+
+  /** Choose one of your cars kept in the back (the garage's bays are full) and drive it out. */
+  private pickBack(back: readonly CarItem[]): void {
+    openPicker({
+      root: this.d.ui,
+      title: 'Your other cars',
+      subtitle: 'Kept in the back: the bays show your dearest',
+      rows: [...back].reverse().map((c) => ({ id: c.id, name: c.name })),
+      pick: (id) => {
+        if (this.d.free()) this.getIn(id, OUT_OF_GARAGE.x, OUT_OF_GARAGE.z, OUT_OF_GARAGE.yaw);
+      },
+    });
   }
 
   /** Into `car`, standing at (x, z) facing `yaw`. */

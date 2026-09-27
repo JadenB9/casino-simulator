@@ -13,6 +13,7 @@
 
 import { el } from '../ui/kit.ts';
 import { overlayCount } from '../ui/keyboard.ts';
+import { keyFor, type KeyAction } from '../ui/keys.ts';
 import { isMobile } from '../render/engine3d.ts';
 import type { Player } from './player.ts';
 import type { WorldStation } from './stations.ts';
@@ -73,6 +74,12 @@ export interface TouchDeps {
 function press(key: string, code: string): void {
   document.body.dispatchEvent(new KeyboardEvent('keydown', { key, code, bubbles: true, cancelable: true }));
   document.body.dispatchEvent(new KeyboardEvent('keyup', { key, code, bubbles: true, cancelable: true }));
+}
+
+/** Press whatever key an action has now (Settings may have moved it off E or B). */
+function pressAction(action: KeyAction): void {
+  const code = keyFor(action);
+  press(code.startsWith('Key') ? code.slice(3).toLowerCase() : code, code);
 }
 
 /**
@@ -146,7 +153,7 @@ export class TouchControls {
     this.act.type = 'button';
     this.act.hidden = true;
     this.act.append(this.actLabel);
-    this.act.addEventListener('click', () => press('e', 'KeyE'));
+    this.act.addEventListener('click', () => pressAction('interact'));
     this.caption.hidden = true;
     this.caption.setAttribute('role', 'status');
 
@@ -160,7 +167,7 @@ export class TouchControls {
     this.ride.type = 'button';
     this.ride.hidden = true;
     this.ride.append(lineIcon('M3 14h18', 'M5 14c0-1.6 1-2 2-2h10c1 0 2 .4 2 2', 'M7 17.5a1.5 1.5 0 1 0 0 .01', 'M17 17.5a1.5 1.5 0 1 0 0 .01'));
-    this.ride.addEventListener('click', () => press('b', 'KeyB'));
+    this.ride.addEventListener('click', () => pressAction('ride'));
 
     this.note.hidden = true;
     this.note.setAttribute('role', 'status');
