@@ -15,12 +15,13 @@ import { collide } from './collide.ts';
 import { Furniture } from './furniture.ts';
 import { Mannequins } from './mannequins.ts';
 import { RoomVisibility } from './visibility.ts';
-import { MapOverlay, buildDirectories } from './wayfinding.ts';
+import { MapOverlay, buildDirectories, type MapPerson } from './wayfinding.ts';
+import { Bulletin } from './bulletin.ts';
 import { buildRoom } from './room.ts';
 import { buildStations, type WorldStation } from './stations.ts';
 import { buildDecor } from './decor.ts';
 import { tickWater } from './decor-themes.ts';
-import { buildSigns, floorSigns, loadSignFonts, signGain } from './signs.ts';
+import { buildSigns, floorSigns, loadSignFonts, signGain, signProblems } from './signs.ts';
 import { GlowMerge, Lighting, buildPools } from './lighting.ts';
 import { Props } from './props.ts';
 import { Characters } from './characters.ts';
@@ -40,7 +41,7 @@ import type { Sfx } from '../audio/sfx.ts';
 import { el } from '../ui/kit.ts';
 import { City, type CityLink } from './city/index.ts'; // v6 city6
 import { zoneMap } from './city/map.ts'; // v6 city6
-import type { ZoneId } from '../../../shared/src/zones.ts';
+import { zoneOf, type ZoneId } from '../../../shared/src/zones.ts';
 import { FxPlayer, type Hanger } from './fx/index.ts';
 import { marqueePlacement, type Marquee } from './marquee.ts';
 import type { FxEvent, Statue } from '../../../shared/src/items.ts';
@@ -95,6 +96,8 @@ export interface FloorWorld extends World {
   /** The station the player is standing at, if any. */
   readonly focus: WorldStation | null;
   /** Draw calls and triangles of the last frame (renderer.info, counted across the bloom passes). */
+  /** 1.3: every sign and what is wrong with it, for the look script (e2e/signs-look.mjs). */
+  signs(): ReturnType<typeof signProblems>;
   stats(): { calls: number; triangles: number; programs: number; pixelRatio: number };
   /** The far stand-ins and their draw-call budget (for the dev floor and the headless checks). */
   readonly lod: StationLod;
@@ -245,6 +248,9 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
   const furniture = new Furniture(plan, mats);
   root.add(furniture.group);
   const directories = buildDirectories(plan, root, aniso);
+  // 1.3: the notice board beside the directory, what's new (E reads it all)
+  const bulletin = new Bulletin(plan, ui0);
+  bulletin.build(root, aniso);
   progress(0.55);
 
   const props = new Props(quality);
@@ -306,7 +312,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
     furniture.setRooms(vis);
     props.setRooms(vis);
     mannequins.setRooms(vis);
-    for (const d of directories.meshes) d.visible = vis.has(d.userData.room as string);
+    for (const d of [...directories.meshes, ...bulletin.meshes]) d.visible = vis.has(d.userData.room as string);
   };
   const sees = (room: string, box: THREE.Box3) => visibility.sees(room, box);
   let everything = false;
@@ -321,6 +327,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
   });
   // v6 world6: E at a directory board opens it big (the Map, as the Floor Directory)
   interact.spots(map.spots);
+  interact.spots(bulletin.spots);
   // On the floor with the mouse free (after Esc, or before the first click on the dev floor): how
   // to get looking around back. Only where there's a mouse to hold (the player knows).
   const hint = el('div', 'world-hint');
@@ -336,7 +343,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
     player,
     interact,
     lighting,
-    casino: [...staticMeshes.meshes, ...glowMeshes.meshes, ...(signs ? [signs.mesh] : []), ...directories.meshes, furniture.group, props.group, stationRoot, staff.group, mannequins.group, life.crew.group],
+    casino: [...staticMeshes.meshes, ...glowMeshes.meshes, ...(signs ? [signs.mesh] : []), ...directories.meshes, ...bulletin.meshes, furniture.group, props.group, stationRoot, staff.group, mannequins.group, life.crew.group],
     addSeats: (seats) => life.seating.add(seats),
     standUp: () => life.seating.stand({ send: false, walk: true }),
     seated: () => interact.seated !== null,
@@ -513,6 +520,8 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
       pr.update(dt);
       life.late(dt);
     },
+    // 1.3: every sign and what's wrong with it (e2e/signs-look.mjs)
+    signs: () => signProblems(plan, signSpecs),
     stats: () => ({ calls: lastCalls, triangles: lastTris, programs: renderer.info.programs?.length ?? 0, pixelRatio: renderer.getPixelRatio() }),
     teleport: (x, z, heading) => player.spawn(x, z, heading),
     get mouse() {
@@ -564,7 +573,24 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
     get zone() {
       return city.zone;
     },
-    useFloor: (link) => city.useLink(link),
+    useFloor: (link) => {
+      city.useLink(link);
+      // 1.3: everyone else on the map that's open: the zone you're in (your apartment's own guests only)
+      map.usePeople(
+        link
+          ? () => {
+              const out: MapPerson[] = [];
+              const zone = city.zone;
+              for (const [id, p] of link.players) {
+                if (!p.last || (zoneOf(p.last.x, p.last.z) ?? 'casino') !== zone) continue;
+                if (zone === 'home' && (p.info?.apt ?? null) !== (link.you?.apt ?? null)) continue;
+                out.push({ id, name: p.info?.name ?? '', x: p.last.x / 100, z: p.last.z / 100 });
+              }
+              return out;
+            }
+          : null,
+      );
+    },
     spots: (fn) => interact.spots(fn),
     playFx: (ev) => fx.play(ev),
     syncFx: (list) => fx.sync(list),
@@ -580,6 +606,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
       fx.dispose();
       map.dispose();
       directories.dispose();
+      bulletin.dispose();
       mannequins.dispose();
       furniture.dispose();
       hint.remove();

@@ -558,6 +558,7 @@ const BUILDERS: Partial<Record<Kind, () => Part[]>> = {
   'plank-bench': plankBench,
   podium,
   directory: directoryStand,
+  bulletin: directoryStand,
   folding: foldingChair,
   'parlour-stool': parlourStool,
   vending,

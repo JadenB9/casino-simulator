@@ -33,6 +33,9 @@
 .map-glass line { stroke: #9fd8e8; stroke-width: 0.2; stroke-dasharray: 0.5 0.3; pointer-events: none; }
 .map-labels text { font-family: var(--serif); font-weight: 600; letter-spacing: 0.06em; fill: #fff4dc; paint-order: stroke; stroke: rgba(0, 0, 0, 0.7); stroke-width: 0.12; pointer-events: none; }
 .map-entry path { fill: var(--brass-hi); }
+/* 1.3: everyone else, a blue dot with their name */
+.map-person circle { fill: #7cc4ff; stroke: #0d2a44; }
+.map-person text { fill: #eaf4ff; paint-order: stroke; stroke: rgba(10, 16, 28, 0.85); stroke-width: 0.12em; font-weight: 600; pointer-events: none; }
 .map-you circle { fill: #fff4dc; stroke: #ff4b3e; stroke-width: 0.18; }
 .map-you path { fill: #ff4b3e; }
 .map-you .map-you-halo { fill: rgba(255, 75, 62, 0.25); stroke: none; transform-origin: 0 0; animation: map-pulse 1.6s ease-out infinite; }

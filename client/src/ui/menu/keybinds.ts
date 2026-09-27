@@ -34,7 +34,7 @@ export function keySettings(): { nodes: HTMLElement[]; dispose(): void } {
       e.preventDefault();
       e.stopImmediatePropagation();
       if (e.code === 'Escape') return stop();
-      if (/^(Meta|Control|Alt)/.test(e.code)) return;
+      if (/^(Meta|Alt)/.test(e.code)) return;
       if (reservedKey(e.code)) {
         note.textContent = `${keyName(e.code)} stays the game's own (menus, emotes, the help). Pick another key.`;
         return;

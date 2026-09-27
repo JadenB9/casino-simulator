@@ -1,10 +1,10 @@
 // v7.4: the floor's controls, rebindable (Settings, Controls). Each action has one key, by its
 // physical place on the keyboard (KeyboardEvent.code, so an AZERTY board's keys stay where the
-// defaults put them); the arrow keys always walk and steer as well, and Shift counts either side.
+// defaults put them); the arrow keys always walk and steer as well, and Shift and Ctrl count either side.
 // A key given to an action takes it from any other action it could clash with (one used where the
 // other is: on foot, in a car, or both), and that action gets the old key, so nothing is ever left
-// without one or doubled up. Esc, Enter, Tab, ?, 1-9 and the modifiers other than Shift stay the
-// game's own. What you choose is kept in this browser.
+// without one or doubled up. Esc, Enter, Tab, ?, 1-9, Alt and Cmd stay the game's own (1.3: Ctrl
+// can be bound, and runs by default). What you choose is kept in this browser.
 
 export type KeyAction =
   | 'forward'
@@ -44,19 +44,19 @@ export const KEY_SPECS: readonly KeySpec[] = [
   { action: 'back', name: 'Walk back / brake', where: 'both', default: 'KeyS' },
   { action: 'left', name: 'Walk left / steer left', where: 'both', default: 'KeyA' },
   { action: 'right', name: 'Walk right / steer right', where: 'both', default: 'KeyD' },
-  { action: 'run', name: 'Run (held)', where: 'foot', default: 'ShiftLeft' },
+  { action: 'run', name: 'Run (held)', where: 'foot', default: 'ControlLeft' },
   { action: 'jump', name: 'Jump / handbrake', where: 'both', default: 'Space' },
-  { action: 'crouch', name: 'Crouch', where: 'foot', default: 'KeyC' },
+  { action: 'crouch', name: 'Crouch', where: 'foot', default: 'ShiftLeft' },
   { action: 'interact', name: 'Use what the prompt offers / get out', where: 'both', default: 'KeyE' },
   { action: 'view', name: 'First or third person', where: 'foot', default: 'KeyF' },
   { action: 'gun', name: 'Draw or put away your gun', where: 'foot', default: 'KeyV' },
   { action: 'ride', name: 'Get on or off your ride', where: 'foot', default: 'KeyB' },
   { action: 'sip', name: 'Sip or bite what you hold', where: 'foot', default: 'KeyQ' },
   { action: 'emotes', name: 'Emotes', where: 'both', default: 'KeyG' },
-  { action: 'map', name: 'Map', where: 'both', default: 'KeyN' },
+  { action: 'map', name: 'Map', where: 'both', default: 'KeyM' },
   { action: 'chat', name: 'Chat', where: 'both', default: 'KeyT' },
   { action: 'feats', name: 'Achievements and challenges', where: 'both', default: 'KeyJ' },
-  { action: 'mute', name: 'Mute or unmute', where: 'both', default: 'KeyM' },
+  { action: 'mute', name: 'Mute or unmute', where: 'both', default: 'KeyN' },
   { action: 'horn', name: 'Horn', where: 'car', default: 'KeyH' },
   { action: 'carView', name: 'Car camera', where: 'car', default: 'KeyC' },
   { action: 'turn', name: 'Turn a piece you are moving (your apartment)', where: 'foot', default: 'KeyR' },
@@ -69,7 +69,7 @@ const ALSO: Partial<Record<KeyAction, string>> = { forward: 'ArrowUp', back: 'Ar
 
 /** Keys that stay the game's own: menus, the emote wheel's and pickers' numbers, the help. */
 export function reservedKey(code: string): boolean {
-  return /^(Escape|Enter|NumpadEnter|Tab|Slash|Backquote|Digit\d|Numpad\d|Arrow\w+|Meta\w*|Control\w*|Alt\w*|CapsLock|ContextMenu|F\d+|OS\w*)$/.test(code) || code === '';
+  return /^(Escape|Enter|NumpadEnter|Tab|Slash|Backquote|Digit\d|Numpad\d|Arrow\w+|Meta\w*|Alt\w*|CapsLock|ContextMenu|F\d+|OS\w*)$/.test(code) || code === '';
 }
 
 const STORE = 'casino.keys';
@@ -87,6 +87,14 @@ function load(): Record<KeyAction, string> {
     for (const s of KEY_SPECS) {
       const v = raw[s.action];
       if (typeof v === 'string' && !reservedKey(v)) out[s.action] = v;
+    }
+    // 1.3: the defaults moved (Map M, Crouch Shift, Run Ctrl): a control left on its default that
+    // now shares a key with one you chose moves to the first letter nothing else has
+    const letters = Array.from({ length: 26 }, (_, i) => `Key${String.fromCharCode(65 + i)}`);
+    const clashes = (a: KeySpec, k: string) => KEY_SPECS.some((o) => o !== a && same(out[o.action], k) && clash(a.where, o.where));
+    for (const s of KEY_SPECS) {
+      if (typeof raw[s.action] === 'string' || !clashes(s, out[s.action])) continue;
+      out[s.action] = letters.find((k) => !clashes(s, k)) ?? out[s.action];
     }
   } catch {
     /* storage blocked or corrupt: the defaults */
@@ -110,7 +118,13 @@ function clash(a: Where, b: Where): boolean {
   return a === 'both' || b === 'both' || a === b;
 }
 
-const same = (a: string, b: string) => a === b || (a.startsWith('Shift') && b.startsWith('Shift'));
+/** Either side's Shift (or Ctrl) is the same key. */
+function side(k: string): string {
+  return k.startsWith('Shift') ? 'Shift' : k.startsWith('Control') ? 'Control' : k;
+}
+function same(a: string, b: string): boolean {
+  return side(a) === side(b);
+}
 
 /** An action's name and where it works. */
 export function keySpec(action: KeyAction): KeySpec {
@@ -122,6 +136,14 @@ export function keyFor(action: KeyAction): string {
   return map[action];
 }
 
+/**
+ * Alt or Cmd held, or Ctrl when no control has it: a shortcut of the browser's or the system's,
+ * not a press of the game's. (With Ctrl bound, running, E and the rest still work while it's held.)
+ */
+export function modified(e: { ctrlKey: boolean; metaKey: boolean; altKey: boolean }): boolean {
+  return e.metaKey || e.altKey || (e.ctrlKey && !KEY_SPECS.some((s) => side(map[s.action]) === 'Control'));
+}
+
 /** Whether this key press is the action (Shift either side; the arrows for walking). */
 export function isKey(e: { code: string }, action: KeyAction): boolean {
   return same(e.code, map[action]) || ALSO[action] === e.code;
@@ -131,7 +153,8 @@ export function isKey(e: { code: string }, action: KeyAction): boolean {
 export function held(keys: ReadonlySet<string>, action: KeyAction): boolean {
   const k = map[action];
   if (keys.has(k) || keys.has(ALSO[action] ?? '')) return true;
-  return k.startsWith('Shift') && (keys.has('ShiftLeft') || keys.has('ShiftRight'));
+  const both = side(k);
+  return both !== k && (keys.has(`${both}Left`) || keys.has(`${both}Right`));
 }
 
 /** Whether `code` is free for `action`: nothing it could clash with has it. */
@@ -186,6 +209,8 @@ const NAMES: Record<string, string> = {
   Space: 'Space',
   ShiftLeft: '⇧',
   ShiftRight: '⇧',
+  ControlLeft: 'Ctrl',
+  ControlRight: 'Ctrl',
   Backspace: '⌫',
   Minus: '-',
   Equal: '=',
@@ -221,4 +246,16 @@ export function keyLabel(action: KeyAction): string {
 export function keyed(paint: () => void): () => void {
   paint();
   return onKeysChange(paint);
+}
+
+// 1.3: running with Ctrl on Windows and Linux, W is one slip from Ctrl+W, which closes the tab and
+// can't be stopped: while Ctrl is held for a control, the browser asks before the page goes.
+if (typeof addEventListener === 'function' && !/Mac|iPhone|iPad/.test(navigator.platform)) {
+  let ctrlDown = false;
+  addEventListener('keydown', (e) => (ctrlDown = e.ctrlKey), true);
+  addEventListener('keyup', (e) => (ctrlDown = e.ctrlKey), true);
+  addEventListener('blur', () => (ctrlDown = false));
+  addEventListener('beforeunload', (e) => {
+    if (ctrlDown && KEY_SPECS.some((s) => side(map[s.action]) === 'Control')) e.preventDefault();
+  });
 }

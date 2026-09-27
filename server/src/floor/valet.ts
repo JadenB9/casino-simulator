@@ -29,7 +29,8 @@ export class Valet {
     if (!at || !atStand(at.x / 100, at.z / 100)) return { error: 'AWAY' };
     const r = callCar(this.calls, who, car, now);
     if ('error' in r) return r;
-    const fresh = r.call.at === now;
+    // (a retry hands back the call already out; 1.3: a new one may set off later than now)
+    const fresh = !this.calls.includes(r.call);
     this.calls = r.list;
     if (fresh) this.broadcast({ t: 'car', ...r.call });
     return { call: r.call };

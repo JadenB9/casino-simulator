@@ -13,7 +13,7 @@ import { DOLLAR } from '../../shared/src/money.ts';
 import { STAFF, loopPose, staffSpec, type StaffId, type StaffSpec } from '../../shared/src/law/patrol.ts';
 import { sees } from '../../shared/src/law/sight.ts';
 import { roomAt } from '../../shared/src/law/plan.ts';
-import { JAIL, JAIL_RECT, STRIKE_QUIET_MS, STRIKE_WINDOW_MS, bailFor, jailLimits } from '../../shared/src/law/rules.ts';
+import { ACT_QUIET_MS, JAIL, JAIL_RECT, STRIKE_QUIET_MS, STRIKE_WINDOW_MS, bailFor, jailLimits } from '../../shared/src/law/rules.ts';
 import { inRect } from '../../shared/src/zones.ts';
 import { SPAWN } from '../src/floor/presence.ts';
 import { TableLaw } from '../src/law-table.ts';
@@ -242,6 +242,19 @@ describe('strikes', { timeout: 20_000 }, () => {
     await leave(ca);
   });
 
+  it('a shot fired again after the warning is jail; the same burst is only the one warning', async () => {
+    const a = await player('lw_shot');
+    const hidden = outOfSight();
+    const ca = await onFloor(a, hidden.x, hidden.z);
+    const r = await runInDurableObject(floor(), async (f: CasinoFloor) => {
+      const now = Date.now();
+      return [await f.law.strike(a.id, a.name, 'g2', 'shot', now), await f.law.strike(a.id, a.name, 'g3', 'shot', now + 400), await f.law.strike(a.id, a.name, 'g3', 'shot', now + ACT_QUIET_MS + 1)];
+    });
+    expect(r).toEqual(['warned', 'quiet', 'jailed']);
+    expect(await jailRow(a.id)).toMatchObject({ released_at: null });
+    await leave(ca);
+  });
+
   it('run out: a catch after the window is a fresh warning, not jail', async () => {
     const a = await player('lw_exp');
     const hidden = outOfSight();
@@ -330,7 +343,8 @@ describe('jail', { timeout: 20_000 }, () => {
     const before = await money(a.id);
     expect(before.in_play).toBe(20_000);
     await arrest(a);
-    expect((await closedWith(t, 5_000)).code).toBe(CLOSE.FORBIDDEN);
+    // (1.3: once the guard has walked over and had his word)
+    expect((await closedWith(t, 10_000)).code).toBe(CLOSE.FORBIDDEN);
     for (let i = 0; i < 50 && (await money(a.id)).in_play > 0; i++) await sleep(100);
     const after = await money(a.id);
     // the undealt bet came back with the rest of the stack
@@ -407,7 +421,8 @@ describe('jail', { timeout: 20_000 }, () => {
     const stack = settled?.stack ?? 18_000;
     const net = stack - 20_000;
     let won = -1;
-    for (let i = 0; i < 40; i++) {
+    // (told once the dice have been shown: 1.3)
+    for (let i = 0; i < 200; i++) {
       won = (await jailRow(a.id))!.won;
       if (won === Math.max(0, net)) break;
       await sleep(50);

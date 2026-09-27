@@ -206,7 +206,8 @@ export class TableSession {
         // A fresh snapshot supersedes whatever was still queued from before it (a reconnect).
         this.gen++;
         if (m.meta.pin) this.pin = m.meta.pin;
-        if (!this.snapshot) this.checkLimits(m);
+        const first = !this.snapshot;
+        if (first) this.checkLimits(m);
         this.snapshot = m;
         // the table's sign shows this table's limits while you are at it
         showLimits(this.stage.anchor, m.meta.config);
@@ -214,7 +215,9 @@ export class TableSession {
         view.onTable(m);
         this.paintTip();
         this.hooks.onTable?.(m);
-        if (m.you.status === 'watching' && (m.meta.mode === 'solo' || m.meta.started)) void this.promptBuyIn();
+        // 1.3: a lobby you've just come into (an invite, a PIN, the list) asks for the buy-in at
+        // once as well, before it starts: sitting down is one step, not a button to find
+        if (m.you.status === 'watching' && (m.meta.mode === 'solo' || m.meta.started || (first && m.meta.mode === 'multi'))) void this.promptBuyIn();
         break;
       }
       case 'ev': {
@@ -228,14 +231,24 @@ export class TableSession {
           .finally(() => this.pending--);
         break;
       }
-      case 'seat':
+      case 'seat': {
         // Keep the snapshot's idea of you current (status and stack change after it was taken).
         if (this.snapshot) this.snapshot.you = { ...this.snapshot.you, status: m.status, stack: m.stack, seat: m.seat ?? this.snapshot.you.seat };
-        this.view?.onSeat(m);
-        this.paintTip();
         this.hooks.onSeat?.(m);
-        if (m.status === 'watching' && this.snapshot?.meta.mode === 'solo' && m.stack === 0) void this.promptBuyIn();
+        // 1.3: the stack a round leaves comes straight after the round's events, so the view hears
+        // it once it has played them out (the ball in its pocket, the cards turned), never before;
+        // only the latest is shown, and not after a fresh snapshot
+        this.seatNext = m;
+        const gen = this.gen;
+        this.afterShown(() => {
+          if (this.seatNext !== m || gen !== this.gen) return;
+          this.seatNext = null;
+          this.view?.onSeat(m);
+          this.paintTip();
+          if (m.status === 'watching' && this.snapshot?.meta.mode === 'solo' && m.stack === 0) void this.promptBuyIn();
+        });
         break;
+      }
       case 'balance':
         session.balance(m.balance, m.inPlay, m.rev);
         break;
@@ -287,6 +300,8 @@ export class TableSession {
   private leavePending = false;
   /** The socket dropped and hasn't come back yet ("Reconnecting…" is showing). */
   private lost = false;
+  /** The last seat message, until the view has been told it (see 'seat'). */
+  private seatNext: SeatMsg | null = null;
   /** Bumped by each full snapshot; event batches queued before it are skipped. */
   private gen = 0;
   /** Left or closed: nothing more is reported to the app. */

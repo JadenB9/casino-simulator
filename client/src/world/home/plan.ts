@@ -13,9 +13,16 @@
 import type { HomePlace, HomeSlot } from '../../../../shared/src/estate.ts';
 import { LIFTS } from '../../../../shared/src/lifts.ts';
 import { byteToYaw } from '../../net/presence.ts';
+import { bankSpan } from '../city/bank.ts';
 
 /** The flat inside its walls, the ceiling's height, the walls' thickness. */
 export const APT = { x0: LIFTS.home.x / 100, x1: -130, z0: 58, z1: 84, height: 3.8, wall: 0.24 } as const;
+
+/**
+ * 1.3: the west wall's opening for the elevator, exactly the bank's width (it was 2.8 m for a 2.7 m
+ * bank, and the 5 cm either side looked straight out at the city).
+ */
+export const LIFT_OPENING = { z0: LIFTS.home.z / 100 - bankSpan(LIFTS.home.cars) / 2, z1: LIFTS.home.z / 100 + bankSpan(LIFTS.home.cars) / 2 } as const;
 
 /** The entry hall by the elevator. */
 export const HALL = { x0: APT.x0, x1: -150, z0: 66, z1: 74 } as const;

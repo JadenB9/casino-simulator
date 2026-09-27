@@ -118,6 +118,7 @@ export type FurnitureKind =
   | 'drum-fire'
   | 'plank-bench'
   | 'directory'
+  | 'bulletin'
   | 'podium'
   | 'lamp'
   | 'palm'
@@ -271,6 +272,9 @@ export const ROOMS: RoomSpec[] = [
       // the directory stands between the ways to the cashier and to the pit, facing the doors: in
       // view as you come in, clear of the palms' fronds and of anyone's path
       { kind: 'directory', x: -3.6, z: -0.3, yaw: 0.72 },
+      // 1.3: the notice board beside it, what's new (bulletin.ts), in line with its face (the lobby's
+      // guard walks round it: patrol.ts g4)
+      { kind: 'bulletin', x: -4.91, z: 0.85, yaw: 0.72 },
       { kind: 'bench', x: -6.2, z: -3.3, yaw: Math.PI / 2 },
       { kind: 'bench', x: 6.2, z: -3.3, yaw: -Math.PI / 2 },
       // two palms flank the way on to the pit

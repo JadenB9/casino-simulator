@@ -26,6 +26,7 @@ import {
   JAIL_RECT,
   PUNCH_GAP_MS,
   RELEASE_MS,
+  ACT_QUIET_MS,
   STRIKE_QUIET_MS,
   STRIKE_WINDOW_MS,
   WARN_TALK_MS,
@@ -319,7 +320,7 @@ export class Law {
   async strike(accountId: number, name: string, staff: StaffId, why: Offence, now: number): Promise<StrikeResult> {
     if (this.jailing.has(accountId) || this.isConfined(accountId)) return 'jailed';
     const warned = this.warnOf(accountId, now);
-    if (warned && now - warned.at < STRIKE_QUIET_MS) return 'quiet';
+    if (warned && now - warned.at < (why === 'win' ? STRIKE_QUIET_MS : ACT_QUIET_MS)) return 'quiet';
     if (warned) {
       await this.arrest(accountId, name, staff, why, now);
       return 'jailed';
@@ -362,7 +363,10 @@ export class Law {
       if (!acct) return;
       await db
         .prepare(`INSERT OR IGNORE INTO casino_jail (account_id, at, bail, won, why) VALUES (?1, ?2, ?3, 0, ?4)`)
-        .bind(accountId, now, bailFor(acct.worth), why)
+        // (1.3: the table's column takes 'punch' or 'win' only (migration 019), and OR IGNORE
+        // dropped a 'shot' row without a word, so a second shot never jailed anyone: a shot is
+        // kept as the violence it is; everyone still hears it was a shot)
+        .bind(accountId, now, bailFor(acct.worth), why === 'shot' ? 'punch' : why)
         .run();
       const jail = await jailOf(db, accountId);
       if (!jail) return;
@@ -373,12 +377,15 @@ export class Law {
       this.moveAt.set(accountId, moveAt);
       this.watch.add(accountId);
       this.tell({ k: 'jail', id: accountId, name, staff, why });
-      this.sendTo(accountId, { t: 'jail', jail });
+      this.sendTo(accountId, { t: 'jail', jail, move: moveAt });
+      // 1.3: you stay at your table (the round you won playing out) until he's there and has
+      // had his word; then you're stood up and taken
       setTimeout(() => {
         this.moveAt.delete(accountId);
-        if (this.isConfined(accountId)) this.lockUp(accountId);
+        if (!this.isConfined(accountId)) return;
+        this.lockUp(accountId);
+        void this.evict(accountId, (t) => !isJailTable(t));
       }, moveAt - Date.now());
-      await this.evict(accountId, (t) => !isJailTable(t));
     } catch (err) {
       console.error('arrest failed', accountId, err);
     } finally {
@@ -427,14 +434,16 @@ export class Law {
     this.sql.exec(`DELETE FROM law_warn WHERE account_id = ?1`, accountId);
     const name = this.presence.whereIs(accountId)?.name ?? '';
     this.tell({ k: 'free', id: accountId, name, staff: null, why: null });
-    this.sendTo(accountId, { t: 'jail', jail: null });
-    this.moveAt.set(accountId, Date.now() + RELEASE_MS);
+    const moveAt = Date.now() + RELEASE_MS;
+    this.sendTo(accountId, { t: 'jail', jail: null, move: moveAt });
+    this.moveAt.set(accountId, moveAt);
     this.watch.add(accountId);
     setTimeout(() => {
       this.moveAt.delete(accountId);
-      if (!this.isConfined(accountId)) this.letOut(accountId);
+      if (this.isConfined(accountId)) return;
+      this.letOut(accountId);
+      void this.evict(accountId, isJailTable);
     }, RELEASE_MS);
-    await this.evict(accountId, isJailTable);
   }
 
   /** Stand this account up from its tables (those `which` picks), the way leaving does. */

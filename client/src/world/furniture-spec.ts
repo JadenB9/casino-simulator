@@ -78,6 +78,8 @@ export const FURNITURE: Record<FurnitureKind, FurnitureSpec> = {
   'plank-bench': { w: 1.9, d: 0.46, h: 0.48, seats: [-0.46, 0.46].map((x) => ({ x, z: 0, yaw: 0 })), top: 0.48, seatKind: 'bench' },
   // the lobby's directory: a board on two posts
   directory: { w: 1.5, d: 0.36, h: 2.36 },
+  // 1.3: the notice board beside it, on the same stand
+  bulletin: { w: 1.5, d: 0.36, h: 2.36 },
   // a host stand
   podium: { w: 0.92, d: 0.56, h: 1.52 },
   lamp: { w: 0.84, d: 0.84, h: 1.45, round: true },

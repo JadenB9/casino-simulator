@@ -26,7 +26,7 @@ import { formatCompact, formatMoney } from '../../../../shared/src/money.ts';
 import { el } from '../kit.ts';
 import { GLOBAL_KEYS, holdKeyboard, isTyping, overlayCount } from '../keyboard.ts';
 import { EMOTE_LABELS, emoteGlyph, lockGlyph } from './icons.ts';
-import { isKey, keyName } from '../keys.ts';
+import { isKey, keyName, modified } from '../keys.ts';
 
 export interface EmoteDeps {
   root: HTMLElement;
@@ -254,7 +254,7 @@ export function mountEmotes(deps: EmoteDeps): EmoteWheel {
         e.preventDefault();
         if (ui && !hasEmote(picked, ui.have)) focusOn(picked);
         else pick(picked);
-      } else if (isKey(e, 'emotes') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      } else if (isKey(e, 'emotes') && !modified(e)) {
         e.preventDefault();
         close();
       } else if (e.key.startsWith('Arrow')) {
@@ -296,7 +296,7 @@ export function mountEmotes(deps: EmoteDeps): EmoteWheel {
   };
 
   const onKey = (e: KeyboardEvent) => {
-    if (ui || !isKey(e, 'emotes') || e.repeat || e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (ui || !isKey(e, 'emotes') || e.repeat || e.defaultPrevented || modified(e)) return;
     if (isTyping(e) || overlayCount() > 0) return;
     e.preventDefault();
     open();

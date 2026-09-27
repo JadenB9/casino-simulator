@@ -20,7 +20,7 @@ import type { Look } from '../../../shared/src/look.ts';
 import { GOLD, beforeDraw, fin, reflect, type Finish } from './wearables.ts';
 import { calm } from '../app/comfort.ts';
 import { openPicker } from '../ui/hud/picker.ts';
-import { isKey, keyFor, keyLabel, keyed } from '../ui/keys.ts';
+import { isKey, keyFor, keyLabel, keyed, modified } from '../ui/keys.ts';
 
 type V3 = THREE.Vector3;
 const V = (x = 0, y = 0, z = 0): V3 => new THREE.Vector3(x, y, z);
@@ -975,7 +975,7 @@ export function rideKey(deps: RideKeyDeps): () => void {
       });
   };
   const onKey = (e: KeyboardEvent) => {
-    if (!isKey(e, 'ride') || e.repeat || e.ctrlKey || e.metaKey || e.altKey || busy || !deps.allowed(e)) return;
+    if (!isKey(e, 'ride') || e.repeat || modified(e) || busy || !deps.allowed(e)) return;
     if (toggle()) e.preventDefault();
   };
   addEventListener('keydown', onKey);

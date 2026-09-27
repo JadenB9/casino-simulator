@@ -26,10 +26,16 @@ import type { StaffId } from './patrol.ts';
 /** A warning lasts this long; a second catch inside it means jail. */
 export const STRIKE_WINDOW_MS = 2 * 60_000; // v7.4: the owner's two minutes (was five)
 /**
- * After a warning, the same moment can't catch you twice: the pit boss's report of the streak
- * he just warned you about, a guard seeing the punch the other guard saw.
+ * After a warning for winning, the same streak can't catch you twice: the pit boss's next report
+ * of the run he just warned you about.
  */
 export const STRIKE_QUIET_MS = 15_000;
+/**
+ * 1.3: a punch or a shot is its own act: only the same burst (a few shots inside a second or so)
+ * is the one moment. Fire again after that, warned, and it's jail (it used to be quiet for the
+ * streak's fifteen seconds, so shooting on and on was only ever the one warning).
+ */
+export const ACT_QUIET_MS = 2_000;
 /** How long the word lasts once he's there. */
 export const WARN_TALK_MS = 4_000;
 /** How long the guard takes to walk you out: from his arrival to the fade, and then the door. */

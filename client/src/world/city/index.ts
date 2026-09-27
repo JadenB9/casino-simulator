@@ -30,6 +30,7 @@ import { buildGround } from './ground.ts';
 import { buildRoof, SUN_DIR } from './roof.ts';
 import { openPanel, RideScreen, type PanelHandle } from './ride.ts';
 import { LiftSounds } from './sound.ts';
+import type { StreetLamps } from './lamps.ts';
 import type { ZoneBuild } from './zone.ts';
 import type { Knock, RoadCar, Traffic } from './parking.ts';
 import { buildHome, type HomeBuild, type HomeInterior } from '../home/zone.ts';
@@ -41,7 +42,7 @@ export { GROUND, ROOF, VALET_STAND, PICKUP, ENTRANCES, stalls } from './plan.ts'
 export interface CityLink {
   send(msg: FloorClientMsg): boolean;
   subscribe(fn: (msg: FloorServerMsg) => void): () => void;
-  readonly players: ReadonlyMap<number, { last: { x: number; z: number } | null; info?: { apt?: number | null } }>;
+  readonly players: ReadonlyMap<number, { last: { x: number; z: number } | null; info?: { apt?: number | null; name?: string } }>;
   readonly you?: { id: number; apt?: number | null } | null;
 }
 
@@ -623,6 +624,16 @@ export class City {
   /** v7: your apartment's interior, once its floor is built (the app furnishes it). */
   homeInterior(): HomeInterior | null {
     return (this.zones.get('home') as HomeBuild | undefined)?.home ?? null;
+  }
+
+  /** 1.3: the ground floor's street lamps, once it's built (the look scripts). */
+  lamps(): StreetLamps | null {
+    return this.zones.get('ground')?.lamps ?? null;
+  }
+
+  /** 1.3: the standing lamp nearest a point, for the look scripts. */
+  lampNear(x: number, z: number): { x: number; z: number } | null {
+    return this.lamps()?.nearest(x, z) ?? null;
   }
 
   /** v7: the ground floor's traffic, once it's built. */

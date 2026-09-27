@@ -16,6 +16,7 @@ import { Bank, panelTexture } from './bank.ts';
 import { Kit, signAtlas, signMesh } from './kit.ts';
 import { AISLES, ENTRANCES, GROUND, STALL, SURFACE, VALET_STAND, stalls } from './plan.ts';
 import { parkedCars, Traffic } from './parking.ts';
+import { StreetLamps } from './lamps.ts';
 import { buildStreets } from './streets.ts';
 import { buildStores } from './stores.ts';
 import { STORES } from '../../../../shared/src/stores.ts';
@@ -310,18 +311,33 @@ export function buildGround(mats: Mats, col: Collider, quality: Quality): ZoneBu
   }
 
   // --- the city round it all -------------------------------------------------------------------------
+  /** 1.3: how deep the block behind each gap in a row of towers is (m). */
+  const BACKER = 8;
   // near towers beyond the lots, the far ends of the street and behind the lobby's lots
   const rnd = rng(0x51ee7);
   const near: Tower[] = [...T];
-  const addRow = (x0: number, x1: number, z0: number, z1: number, depth: number, lo: number, hi: number) => {
+  const addRow = (x0: number, x1: number, z0: number, z1: number, depth: number, lo: number, hi: number, out?: 1 | -1) => {
     const alongX = Math.abs(x1 - x0) > Math.abs(z1 - z0);
     const len = alongX ? x1 - x0 : z1 - z0;
     let t = 0;
+    let last = 0;
+    // 1.3: the 1.2 m between two towers in a row (so their facades never fight) looked straight
+    // through to nothing: a lower block stands behind each gap, back from the row, closing it
+    const back = depth + 0.8 + BACKER / 2;
+    // (which way is away from the street: by default, away from the middle of the block)
+    const sx = out ?? Math.sign(x0);
+    const sz = out ?? Math.sign(z0 || 1);
     while (t < len - 6) {
       const w = Math.min(len - t, 14 + rnd() * 18);
       const h = lo + rnd() * (hi - lo);
-      if (alongX) near.push({ x: x0 + t + w / 2, z: z0 + (depth / 2) * Math.sign(z0 || 1), w: w - 1.2, d: depth, h });
-      else near.push({ x: x0 + (depth / 2) * Math.sign(x0), z: z0 + t + w / 2, w: depth, d: w - 1.2, h });
+      if (alongX) near.push({ x: x0 + t + w / 2, z: z0 + (depth / 2) * sz, w: w - 1.2, d: depth, h });
+      else near.push({ x: x0 + (depth / 2) * sx, z: z0 + t + w / 2, w: depth, d: w - 1.2, h });
+      if (t > 0) {
+        const hb = Math.min(h, last) - 2;
+        if (alongX) near.push({ x: x0 + t - 0.6, z: z0 + back * sz, w: 10, d: BACKER, h: hb });
+        else near.push({ x: x0 + back * sx, z: z0 + t - 0.6, w: BACKER, d: 10, h: hb });
+      }
+      last = h;
       t += w;
     }
   };
@@ -337,6 +353,28 @@ export function buildGround(mats: Mats, col: Collider, quality: Quality): ZoneBu
   near.push({ x: 158, z: 91, w: 16, d: 22, h: 44 }, { x: 158, z: -91, w: 16, d: 22, h: 52 });
   // and west, behind the lobby and its lots (the casino's floor is out that way: they stand between)
   near.push({ x: 90, z: -40, w: 16, d: 38, h: 56 }, { x: 89, z: 0, w: 18, d: 40, h: 92 }, { x: 90, z: 40, w: 16, d: 38, h: 64 });
+  // 1.3: and a ring of blocks round all of that, so a gap anywhere between the towers (where two
+  // rows meet, past a row's end) shows more city at street level, never the night sky
+  {
+    let mx0 = Infinity;
+    let mx1 = -Infinity;
+    let mz0 = Infinity;
+    let mz1 = -Infinity;
+    for (const t of near) {
+      mx0 = Math.min(mx0, t.x - t.w / 2);
+      mx1 = Math.max(mx1, t.x + t.w / 2);
+      mz0 = Math.min(mz0, t.z - t.d / 2);
+      mz1 = Math.max(mz1, t.z + t.d / 2);
+    }
+    const g = BACKER + 3;
+    // ground under all of it (a little below the zone's own, so they never fight), out past the ring
+    const far = g + 16 + BACKER + 12;
+    kit.box('asphalt', mx0 - far, mx1 + far, -0.4, -0.07, mz0 - far, mz1 + far, 6);
+    addRow(mx0 - g, mx1 + g, mz0 - g, mz0 - g, 16, 26, 64, -1);
+    addRow(mx0 - g, mx1 + g, mz1 + g, mz1 + g, 16, 26, 64, 1);
+    addRow(mx0 - g, mx0 - g, mz0 - g, mz1 + g, 16, 26, 64, -1);
+    addRow(mx1 + g, mx1 + g, mz0 - g, mz1 + g, 16, 26, 64, 1);
+  }
   const towerMesh = towers(near, 'night', 0x7a11, { high, street: true });
   group.add(towerMesh);
   // (the walls the walker can't pass are streets.ts's: the outer sidewalks' backs, the lots' ends)
@@ -391,6 +429,9 @@ export function buildGround(mats: Mats, col: Collider, quality: Quality): ZoneBu
   // (v7.4: a hint of each lamp's light, no more: the owner found the circles too plain)
   const pools = kit.pools('#ffc98a', 0.066);
   if (pools) group.add(pools);
+  // 1.3: the street lamps, which a car can knock over
+  const lamps = new StreetLamps(kit.lamps, mats, col);
+  group.add(lamps.group);
   const props = new Props(quality);
   group.add(props.group);
   const ready = props.build(kit.props, kit.chandeliers).catch((err) => console.warn('ground props failed', err));
@@ -414,9 +455,11 @@ export function buildGround(mats: Mats, col: Collider, quality: Quality): ZoneBu
       doors.update(dt, people);
       for (const d of stores.doors) d.update(dt, people);
       traffic.update(dt, people, me ?? null, cars ?? []);
+      lamps.update(dt, cars ?? []);
       beacons.update(dt);
     },
     traffic,
+    lamps,
     setQuality(q) {
       void props.setQuality(q);
     },
@@ -427,6 +470,7 @@ export function buildGround(mats: Mats, col: Collider, quality: Quality): ZoneBu
       stores.dispose();
       parked.dispose();
       traffic.dispose();
+      lamps.dispose();
       for (const m of [...meshes.meshes, ...glowMeshes.meshes]) m.dispose();
       group.traverse((o) => {
         const mesh = o as THREE.Mesh;

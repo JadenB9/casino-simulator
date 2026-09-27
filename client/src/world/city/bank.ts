@@ -27,6 +27,11 @@ export const DOOR_H = 2.25;
 export const CAR_H = 2.45;
 /** The end piers either side of the bank. */
 const END = 0.4;
+
+/** 1.3: a bank's front, pier to pier (m): what a wall's opening for it must be, to the centimetre. */
+export function bankSpan(cars: number): number {
+  return cars * PITCH + 2 * END;
+}
 /** Doors this open (or more) let people through (v7: sooner, so a walk in never stops at the doors). */
 const PASSABLE = 0.55;
 /** Standing this near a car's doorway (m, either side) or inside the car opens its doors (v7: a stride sooner). */
@@ -116,7 +121,7 @@ export class Bank implements Lift {
     this.yaw = (spec.r / 256) * Math.PI * 2;
     this.local = frame(spec);
     const N = spec.cars;
-    const span = N * PITCH + 2 * END;
+    const span = bankSpan(N);
     const clad = mats.get(opts.clad);
     const trim = mats.get(opts.trim);
     // the cars are panelled in the casino's wainscot

@@ -77,7 +77,8 @@ export const STAFF: readonly StaffSpec[] = [
     name: 'the pit boss',
     speed: 0.85,
     offset: 0,
-    range: 9,
+    // (1.3: he has to be near to notice a win: 6 m, not 9, so a table across the pit is out of it)
+    range: 6,
     half: 1.0,
     route: [
       { x: -1.9, z: -12.6, wait: 6, face: N, sweep: 0.5 },
@@ -197,6 +198,9 @@ export const STAFF: readonly StaffSpec[] = [
       { x: -1.4, z: 6.4, wait: 5, face: S, sweep: 0.8 },
       { x: -6.7, z: 8.8 },
       { x: -12, z: 9.5, wait: 5, face: N, sweep: 0.7 },
+      // (1.3: in through the cashier's doorway and round the lobby's notice board, beside the directory)
+      { x: -6.4, z: 9.6 },
+      { x: -6.0, z: 11.2 },
       { x: -0.2, z: 11 },
       { x: 6.2, z: 10.6 },
       { x: 6.7, z: 10.1 },

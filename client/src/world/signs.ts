@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import type { Batch } from './batch.ts';
 import type { Mats } from './materials.ts';
-import { WALL, ceilingAt, type FloorPlan, type Hanging } from './layout.ts';
+import { WALL, ceilingAt, roomAt, type FloorPlan, type Hanging } from './layout.ts';
 
 export type Arrow = 'left' | 'right' | 'up' | 'down';
 
@@ -107,11 +107,21 @@ export function floorSigns(plan: FloorPlan, b: Batch, m: Mats): SignSpec[] {
       const text = there === 'lobby' && r.id === 'pit' ? 'LOBBY · EXIT' : beyond.sign;
       // which way is into this room from the wall
       const n = d.axis === 'x' ? (r.bounds.z1 === d.c ? -1 : 1) : r.bounds.x1 === d.c ? -1 : 1;
-      const h = style.kind === 'neon' ? 0.5 : 0.42;
+      // 1.3: under whatever hangs lowest along this wall (a tray's band and its lip, a truss's
+      // lights), not the room's full height: the BINGO over the bingo hall's door sat up behind the
+      // band's lip; a doorway with little wall over it gets a slimmer sign rather than a hidden one
+      const top = wallTop(r.style) - 0.08;
+      const want = style.kind === 'neon' ? 0.5 : 0.42;
+      const roomy = top - (d.height + 0.08) >= 0.28;
+      // (squeezed: a slim sign in what wall there is, when the fascia can't take it either)
+      const squeeze = wallTop(r.style) - 0.02 - (d.height + 0.04);
+      // (no wall to speak of over a tall doorway: a plate hung in the top of the opening instead)
+      const plate = !roomy && squeeze < 0.24;
+      const h = roomy ? Math.min(want, top - (d.height + 0.08)) : plate ? 0.32 : Math.min(want, squeeze);
       const span = d.a1 - d.a0;
       // as wide as its words want, a little over the doorway at least, never wider than the wall allows
       const w = Math.min(Math.max(text.length * (style.kind === 'neon' ? 0.3 : 0.26) + 0.7, Math.min(span + 0.6, 2.4)), d.kind === 'shopfront' ? 5.2 : span + 2.6, 6.2);
-      const y = Math.min(d.height + 0.36 + h / 2, r.style.ceiling - h / 2 - 0.12);
+      const y = roomy ? Math.min(d.height + 0.36 + h / 2, top - h / 2) : plate ? d.height - h / 2 - 0.02 : d.height + 0.04 + h / 2;
       // in front of everything on the wall there (the crown at 0.1, the rail at 0.12, a keystone or
       // an entablature's band at 0.13): in any of their planes it would flicker against them
       const off = WALL / 2 + 0.14;
@@ -119,18 +129,91 @@ export function floorSigns(plan: FloorPlan, b: Batch, m: Mats): SignSpec[] {
       const at: [number, number, number] = d.axis === 'x' ? [mid, y, d.c + n * off] : [d.c + n * off, y, mid];
       // facing into the room: +z is ry 0, -z is PI, +x is PI/2, -x is -PI/2
       const ry = d.axis === 'x' ? (n > 0 ? 0 : Math.PI) : n > 0 ? Math.PI / 2 : -Math.PI / 2;
+      // 1.3: too little wall over the doorway under a tray's band (the poker room's door to the
+      // bingo hall): the sign goes on the band's fascia instead, straight out from the door
+      const fascia = roomy ? null : onFascia(r, d.axis, mid, w);
+      if (fascia) {
+        const [fx, fy, fz] = [d.axis === 'x' ? mid : d.c + n * (WALL / 2 + fascia.band + 0.03), fascia.y, d.axis === 'x' ? d.c + n * (WALL / 2 + fascia.band + 0.03) : mid];
+        out.push({ kind: style.kind, text, color: style.color, font: style.font, at: [fx, fy, fz], ry, w: fascia.w, h: fascia.h });
+        continue;
+      }
       out.push({ kind: style.kind, text, color: style.color, font: style.font, at, ry, w, h });
     }
   }
 
   // the rooms' wall neons (HOUSE ORIGINALS, HIGH LIMIT)
-  for (const n of plan.neons) out.push({ kind: 'neon', text: n.text, color: n.color, font: n.font, at: [n.x, n.y, n.z], ry: n.ry, w: n.w, h: n.h });
+  for (const n of plan.neons) {
+    // (1.3: kept under a tray's band, like the doors' signs)
+    const r = byId.get(n.room);
+    const y = r ? Math.min(n.y, wallTop(r.style) - 0.08 - n.h / 2) : n.y;
+    out.push({ kind: 'neon', text: n.text, color: n.color, font: n.font, at: [n.x, y, n.z], ry: n.ry, w: n.w, h: n.h });
+  }
 
   // the casino's name over the doors, seen on the way out
   const lobby = byId.get('lobby');
   const top = lobby ? lobby.style.ceiling : 3.4;
   out.push({ kind: 'neon', text: 'Casino Simulator', color: '#ffc861', font: 'Limelight', at: [(plan.door.x0 + plan.door.x1) / 2, Math.min(plan.door.height + 0.7, top - 0.5), plan.door.z - WALL / 2 - 0.04], ry: Math.PI, w: 4.6, h: 0.56 });
   return out;
+}
+
+/**
+ * 1.3: the lowest thing along a room's walls up top (room.ts ceiling()): a tray's band sits 0.42
+ * under the ceiling with its lip 0.1 under that, a truss room's lamps hang at 0.55.
+ */
+export function wallTop(style: { ceiling: number; kind: string; cove?: string | null }): number {
+  if (style.kind === 'tray') return style.ceiling - TRAY_DROP - 0.1;
+  // (a panels room's cove: a glowing strip along the walls 0.21 under the ceiling, 2 cm behind a sign)
+  if (style.kind === 'panels' && style.cove) return style.ceiling - 0.24;
+  // (the purlins along a yard's walls; its trusses stand well in from them)
+  if (style.kind === 'truss') return style.ceiling - 0.2;
+  return style.ceiling;
+}
+
+/** A tray's band: its depth down from the ceiling (room.ts ceiling()). */
+const TRAY_DROP = 0.42;
+
+/**
+ * 1.3: where a sign over a doorway at `mid` along a tray room's wall fits on the band's fascia
+ * (its width in from the wall, room.ts), clear of the corners: its height, width and centre height;
+ * null if the fascia there is too short for it.
+ */
+function onFascia(r: FloorPlan['rooms'][number], axis: 'x' | 'z', mid: number, w: number): { band: number; y: number; w: number; h: number } | null {
+  if (r.style.kind !== 'tray') return null;
+  const I = r.inner;
+  const band = Math.min(1.3, (I.x1 - I.x0) / 5, (I.z1 - I.z0) / 5);
+  const [lo, hi] = axis === 'x' ? [I.x0 + band, I.x1 - band] : [I.z0 + band, I.z1 - band];
+  const room = 2 * Math.min(mid - lo, hi - mid) - 0.1;
+  if (room < 1.2) return null;
+  return { band, y: r.style.ceiling - TRAY_DROP / 2, w: Math.min(w, room), h: TRAY_DROP - 0.08 };
+}
+
+/**
+ * 1.3, for the look script (e2e/signs-look.mjs): each sign with what's wrong with it, if anything:
+ * its top up behind the lowest thing along its wall, or its face across another sign's on the same
+ * wall.
+ */
+export function signProblems(plan: FloorPlan, specs: readonly SignSpec[]): (SignSpec & { hidden?: string; overlaps?: string[] })[] {
+  return specs.map((s, i) => {
+    const [x, y, z] = s.at;
+    const r = roomAt(plan, x + Math.sin(s.ry) * 0.3, z + Math.cos(s.ry) * 0.3);
+    const out: SignSpec & { hidden?: string; overlaps?: string[] } = { ...s };
+    const I = r?.inner;
+    const fromWall = I ? Math.min(Math.abs(x - I.x0), Math.abs(x - I.x1), Math.abs(z - I.z0), Math.abs(z - I.z1)) : 0;
+    const limit = r ? (fromWall > 0.5 ? r.style.ceiling : wallTop(r.style)) : Infinity;
+    if (r && s.kind !== 'way' && y + s.h / 2 > limit + 0.005 && !plan.hanging.some((hs) => Math.hypot(hs.x - x, hs.z - z) < 0.2)) out.hidden = `top ${(y + s.h / 2).toFixed(2)} over ${limit.toFixed(2)} in ${r.id}`;
+    const ax = Math.cos(s.ry);
+    const az = -Math.sin(s.ry);
+    for (const [j, o] of specs.entries()) {
+      if (j === i || Math.abs(Math.sin(o.ry - s.ry)) > 0.05 || Math.cos(o.ry - s.ry) < 0) continue;
+      const dx = o.at[0] - x;
+      const dz = o.at[2] - z;
+      // the same wall: within a hand of the one plane
+      if (Math.abs(dx * Math.sin(s.ry) + dz * Math.cos(s.ry)) > 0.12) continue;
+      const along = dx * ax + dz * az;
+      if (Math.abs(along) < (s.w + o.w) / 2 && Math.abs(o.at[1] - y) < (s.h + o.h) / 2) (out.overlaps ??= []).push(o.text || 'a sign');
+    }
+    return out;
+  });
 }
 
 interface Placed {
@@ -142,6 +225,9 @@ interface Placed {
   padX: number;
   padY: number;
 }
+
+/** Clear pixels between faces in the atlas (1.3: 2 let the smaller mips bleed a neighbour's letters in). */
+const GUTTER = 16;
 
 /** How bright the sign faces are: on High neon's core sits well past the floor's bloom threshold. */
 export function signGain(quality: 'high' | 'low'): number {
@@ -166,18 +252,19 @@ export function buildSigns(specs: SignSpec[], parent: THREE.Object3D, quality: '
     const ph = Math.round(spec.h * ppm) + padY * 2;
     if (x + pw > W) {
       x = 0;
-      y += shelf + 2;
+      y += shelf + GUTTER;
       shelf = 0;
     }
     placed.push({ spec, x, y, pw, ph, padX, padY });
-    x += pw + 2;
+    x += pw + GUTTER;
     shelf = Math.max(shelf, ph);
   }
   const H = THREE.MathUtils.ceilPowerOfTwo(y + shelf);
   const canvas = document.createElement('canvas');
   canvas.width = W;
   canvas.height = H;
-  const ctx = canvas.getContext('2d')!;
+  // (1.3: drawn on the CPU: a GPU canvas this tall drew each lit box's words a second time above it)
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
   for (const p of placed) drawFace(ctx, p);
 
   const texture = new THREE.CanvasTexture(canvas);
@@ -283,9 +370,12 @@ function drawFace(ctx: CanvasRenderingContext2D, p: Placed): void {
     const size = fit(ctx, s.text, s.font, w * 0.86, h * 0.62, '600');
     ctx.font = `600 ${size}px "${s.font}"`;
     ctx.letterSpacing = `${Math.round(size * 0.12)}px`;
-    ctx.shadowColor = s.color;
-    ctx.shadowBlur = size * 0.35;
     ctx.fillStyle = s.color;
+    // the glow as a blurred copy under the letters (1.3: a canvas shadow with letter spacing drew
+    // a ghost of the words above the box, showing over the doors as a row of dashes)
+    ctx.filter = `blur(${Math.max(1, size * 0.14).toFixed(1)}px)`;
+    ctx.fillText(s.text, w / 2, h / 2 + size * 0.04);
+    ctx.filter = 'none';
     ctx.fillText(s.text, w / 2, h / 2 + size * 0.04);
   } else {
     // wayfinding: navy panel, cream letters, brass arrows

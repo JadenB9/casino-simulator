@@ -481,7 +481,8 @@ export type FloorServerMsg =
   | { t: 'detour'; d: Detour }
   | { t: 'detours'; list: Detour[] }
   | { t: 'law'; ev: LawEvent }
-  | { t: 'jail'; jail: JailState | null }
+  // (1.3: `move`, server ms: when the floor takes you across the street; your table stays till then)
+  | { t: 'jail'; jail: JailState | null; move?: number }
   // v6 bank6: another player sent you money (shared/src/bank.ts); only to you
   | { t: 'bank.in'; id: string; from: string; amount: Cents; note: string | null; at: number }
   // (v7.4: `about: 'drive'` on a refused get-in, so the client drops only that)

@@ -15,7 +15,7 @@ import { HOME_ITEMS, pieceIn, type HomeItem, type HomePlace, type HomeSlot } fro
 import { GUNS, type GunItem } from '../../../../shared/src/arms.ts';
 import { gunModel, disposeGun } from '../arms/models.ts';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { APT, BATH, BEDROOM, FIREPLACE, HALL, SLOTS, SOUTH_SOLID_TO, TABLET, TERRACE, placeOf, type SlotPlace } from './plan.ts';
+import { APT, BATH, BEDROOM, FIREPLACE, HALL, LIFT_OPENING, SLOTS, SOUTH_SOLID_TO, TABLET, TERRACE, placeOf, type SlotPlace } from './plan.ts';
 import { Channel, School, persianRug, surface } from './surfaces.ts';
 
 /** The home's own materials (the rest come from the casino's and the city's). */
@@ -177,7 +177,7 @@ export function furnish(mats: Mats, col: Collider, tier: number, owned: Readonly
   const inner = 0.02;
   // west wall either side of the elevator, south wall's solid part: cream plaster, and from the
   // Grand step walnut panelling to the dado under it
-  const lift = { z0: 68.6, z1: 71.4 };
+  const lift = LIFT_OPENING;
   const dado = t >= 2 ? 1.25 : 0.01;
   const face = (x0: number, x1: number, z0: number, z1: number) => {
     if (t >= 2) kit.box('home-walnut', x0, x1, 0.01, dado, z0, z1, 1.2);
@@ -185,6 +185,8 @@ export function furnish(mats: Mats, col: Collider, tier: number, owned: Readonly
   };
   face(A.x0, A.x0 + inner, A.z0, lift.z0);
   face(A.x0, A.x0 + inner, lift.z1, A.z1);
+  // (1.3: and over the elevator, above its cornice, the same plaster, not the shell's wallpaper)
+  kit.box('home-cream', A.x0, A.x0 + inner, 3.0, H, lift.z0, lift.z1, 2.4);
   face(A.x0, SOUTH_SOLID_TO, A.z1 - inner, A.z1);
   // skirting and a picture rail in brass (gold on the Penthouse)
   const trim = t >= 3 ? 'home-gold' : 'brass';

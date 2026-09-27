@@ -224,23 +224,12 @@ function streetTree(kit: Kit, x: number, z: number): void {
 
 /**
  * A street lamp on a sidewalk at (x, z), its arm reaching over the road along (ax, az) (a unit
- * vector along x or z, or a corner's diagonal).
+ * vector along x or z, or a corner's diagonal). 1.3: the lamp itself is lamps.ts's (a car can
+ * knock it over); the street keeps its pool of light.
  */
 export function streetLamp(kit: Kit, x: number, z: number, ax: number, az: number): void {
-  const h = 7.2;
-  kit.cylinder('steel', x, z, 0.11, 0, h, 10, 0.08);
-  kit.cylinder('steel', x, z, 0.2, 0, 0.6, 12);
-  kit.post(x, z, 0.2, h);
   const reach = 2.4;
   const len = Math.hypot(ax, az) || 1;
-  const ux = ax / len;
-  const uz = az / len;
-  const yaw = Math.atan2(ux, uz);
-  // the arm, and the head at its end
-  kit.turned('steel', x + (ux * reach) / 2, h - 0.04, z + (uz * reach) / 2, 0.1, 0.08, reach, yaw);
-  const hx = x + ux * reach;
-  const hz = z + uz * reach;
-  kit.turned('steel', hx, h - 0.15, hz, 0.36, 0.18, 0.72, yaw);
-  kit.light(hdr('#ffcf8a', 2.6), hx, h - 0.245, hz, 0.3, 0.01, 0.62, yaw);
-  kit.pool(hx, hz, 7.5);
+  kit.lamps.push({ x, z, ax: ax / len, az: az / len });
+  kit.pool(x + (ax / len) * reach, z + (az / len) * reach, 7.5);
 }

@@ -254,7 +254,7 @@ export function buildThemes(plan: FloorPlan, b: Batch, m: Mats, glow: GlowMerge,
     b.add(new THREE.TorusGeometry(R + 0.25, 0.014, 8, 64), m.get('lacquer-gold'), place(0.146, MOONGATE.y));
     b.add(new THREE.CircleGeometry(R, 48), m.get('painting'), place(0.092, MOONGATE.y));
     const sign = wallPoint(g, 0.03);
-    out.signs.push({ kind: 'lit', text: 'JADE ROOM', color: '#f2cf7c', font: 'Cinzel', at: [sign.x, MOONGATE.y + R + 0.52, sign.z], ry: g.ry, w: 2.1, h: 0.34 });
+    out.signs.push({ kind: 'lit', text: 'JADE ROOM', color: '#f2cf7c', font: 'Cinzel', at: [sign.x, MOONGATE.y + R + 0.43, sign.z], ry: g.ry, w: 2.1, h: 0.28 });
     const pool = wallPoint(g, 1.2);
     out.pools.push({ x: pool.x, z: pool.z, r: 1.8, room: g.room });
   }

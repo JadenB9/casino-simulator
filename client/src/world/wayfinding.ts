@@ -1,7 +1,7 @@
 // Finding your way round a bigger casino: the directory board in the lobby (the floor's plan with
 // every room named and a "You are here"), and the Map: a panel over the floor (the HUD's map button
-// or N) drawing the rooms, their doors and walls, the tables and machines in them, and you, with
-// the way you face. Click a room to light it up and read what's there. Both are drawn from the
+// or M) drawing the rooms, their doors and walls, the tables and machines in them, and you, with
+// the way you face, and (1.3) everyone else where they are. Click a room to light it up and read what's there. Both are drawn from the
 // floor plan, so a room added to rooms.ts appears on them.
 
 import * as THREE from 'three';
@@ -14,7 +14,7 @@ import { CATALOG } from '../../../shared/src/games/catalog.ts';
 import { roomAt, type FloorPlan, type PlannedRoom } from './layout.ts';
 import { FURNITURE } from './furniture-spec.ts';
 import { stationName } from './stations.ts';
-import { isKey, keyLabel, keyed } from '../ui/keys.ts';
+import { isKey, keyLabel, keyed, modified } from '../ui/keys.ts';
 
 const DIRECTORY_W = FURNITURE.directory.w;
 
@@ -152,7 +152,8 @@ export function buildDirectories(plan: FloorPlan, parent: THREE.Object3D, anisot
     g.font = '600 26px "Cinzel", Georgia, serif';
     g.fillStyle = '#c9b07a';
     g.fillText('FLOOR  DIRECTORY', W / 2, 140);
-    drawPlan(g, plan, 40, 170, W - 80, 560, { x: f.x, z: f.z });
+    // (1.3: the plan a little shorter, so all fourteen rooms fit under it clear of YOU ARE HERE)
+    drawPlan(g, plan, 40, 162, W - 80, 520, { x: f.x, z: f.z });
     // the legend: every room and what's in it, two columns
     g.textAlign = 'left';
     const rooms = [...plan.rooms].sort((a, b) => a.name.localeCompare(b.name));
@@ -160,7 +161,7 @@ export function buildDirectories(plan: FloorPlan, parent: THREE.Object3D, anisot
       const col = i % 2;
       const row = Math.floor(i / 2);
       const x = 52 + col * ((W - 104) / 2);
-      const y = 770 + row * 34;
+      const y = 714 + row * 31;
       g.fillStyle = TINT[r.id] ?? '#444';
       g.fillRect(x, y - 11, 18, 18);
       g.fillStyle = '#f4efe4';
@@ -170,7 +171,7 @@ export function buildDirectories(plan: FloorPlan, parent: THREE.Object3D, anisot
     g.fillStyle = '#ff4b3e';
     g.font = '600 20px "Cinzel", Georgia, serif';
     g.textAlign = 'center';
-    g.fillText('★  YOU ARE HERE', W / 2, H - 30);
+    g.fillText('★  YOU ARE HERE', W / 2, H - 26);
     const tex = new THREE.CanvasTexture(c);
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.anisotropy = anisotropy;
@@ -227,6 +228,14 @@ export interface MapDeps {
   elsewhere?: () => ElsewhereMap | null;
 }
 
+/** 1.3: someone else on the map (metres), where you'd see them if you were there. */
+export interface MapPerson {
+  id: number;
+  name: string;
+  x: number;
+  z: number;
+}
+
 /** v6 city6: a map of somewhere else (city/map.ts): its body, you on it, and what to call where you are. */
 export interface ElsewhereMap {
   title: string;
@@ -245,6 +254,10 @@ export class MapOverlay {
   private here = '';
   private hudCheck = 0;
   private alt: ElsewhereMap | null = null;
+  /** 1.3: everyone else, on whichever map is open (usePeople). */
+  private people: (() => MapPerson[]) | null = null;
+  private peopleEl: SVGGElement | null = null;
+  private peopleWait = 0;
 
   private readonly offKeys: () => void;
 
@@ -263,6 +276,11 @@ export class MapOverlay {
 
   get open(): boolean {
     return this.sheet !== null;
+  }
+
+  /** 1.3: who else is where you are, for the map to show them (null with no floor to ask). */
+  usePeople(fn: (() => MapPerson[]) | null): void {
+    this.people = fn;
   }
 
   toggle(): void {
@@ -287,7 +305,7 @@ export class MapOverlay {
       sheet.body.append(alt.body);
       this.youEl = alt.you;
       sheet.panel.addEventListener('keydown', (e) => {
-        if (isKey(e, 'map') && !e.ctrlKey && !e.metaKey && !e.altKey && !isTyping(e)) {
+        if (isKey(e, 'map') && !modified(e) && !isTyping(e)) {
           e.preventDefault();
           this.close();
         }
@@ -305,9 +323,9 @@ export class MapOverlay {
       plan.append(this.draw(), this.caption);
       sheet.body.append(plan, this.legend());
     } else sheet.body.append(this.draw(), this.caption);
-    // N closes it again from inside the panel (the sheet keeps other keys to itself)
+    // the map key closes it again from inside the panel (the sheet keeps other keys to itself)
     sheet.panel.addEventListener('keydown', (e) => {
-      if (isKey(e, 'map') && !e.ctrlKey && !e.metaKey && !e.altKey && !isTyping(e)) {
+      if (isKey(e, 'map') && !modified(e) && !isTyping(e)) {
         e.preventDefault();
         this.close();
       }
@@ -353,6 +371,10 @@ export class MapOverlay {
       if (bar && this.button.parentElement !== bar) bar.insertBefore(this.button, bar.querySelector('.hud-btn'));
     }
     if (!this.sheet || !this.youEl) return;
+    if ((this.peopleWait -= dt) <= 0) {
+      this.peopleWait = 0.25;
+      this.drawPeople();
+    }
     const you = this.deps.you();
     // Object3D yaw turns +z toward +x; on the map +z is down, so the arrow turns the other way
     this.youEl.setAttribute('transform', `translate(${you.x.toFixed(2)} ${you.z.toFixed(2)}) rotate(${((-you.heading * 180) / Math.PI).toFixed(1)})`);
@@ -383,7 +405,35 @@ export class MapOverlay {
     removeEventListener('keydown', this.onKey);
   }
 
+  /** 1.3: a dot and a name for everyone else on this map, under you (redrawn a few times a second). */
+  private drawPeople(): void {
+    const you = this.youEl;
+    if (!you?.parentNode) return;
+    if (!this.peopleEl || this.peopleEl.parentNode !== you.parentNode) {
+      this.peopleEl?.remove();
+      this.peopleEl = svgEl('g', {}, 'map-people');
+      you.parentNode.insertBefore(this.peopleEl, you);
+    }
+    // sized from your own dot, so each map's scale fits
+    const r = Number(you.querySelector('circle:not(.map-you-halo)')?.getAttribute('r') ?? 0.55);
+    const list = this.people?.() ?? [];
+    const g = this.peopleEl;
+    g.replaceChildren();
+    for (const p of list) {
+      const dot = svgEl('g', { transform: `translate(${p.x.toFixed(2)} ${p.z.toFixed(2)})` }, 'map-person');
+      const title = svgEl('title');
+      title.textContent = p.name;
+      const name = svgEl('text', { y: (-r * 1.9).toFixed(2), 'font-size': (r * 2.1).toFixed(2), 'text-anchor': 'middle' });
+      name.textContent = p.name;
+      dot.append(title, svgEl('circle', { r: (r * 0.85).toFixed(2), 'stroke-width': (r * 0.3).toFixed(2) }), name);
+      g.append(dot);
+    }
+    if (this.sheet) this.sheet.panel.dataset.people = String(list.length);
+  }
+
   private closed(): void {
+    this.peopleEl = null;
+    this.peopleWait = 0;
     this.sheet = null;
     this.alt = null;
     this.youEl = null;
@@ -482,7 +532,8 @@ export class MapOverlay {
   }
 
   private onKey = (e: KeyboardEvent): void => {
-    if (!isKey(e, 'map') || e.repeat || e.ctrlKey || e.metaKey || e.altKey || isTyping(e)) return;
+    // (a press the panel's own listener used to close it comes on up here too: not a new open)
+    if (!isKey(e, 'map') || e.repeat || e.defaultPrevented || modified(e) || isTyping(e)) return;
     if (this.sheet) return; // the panel's own listener closes it
     if (overlayCount() > 0 || (this.deps.canOpen && !this.deps.canOpen())) return;
     e.preventDefault();

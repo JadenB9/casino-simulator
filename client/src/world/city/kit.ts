@@ -15,6 +15,7 @@ import type { Seatable } from '../life-points.ts';
 import { canvasTexture } from '../carpet.ts';
 import { rng } from './sky.ts';
 import { wrapped } from '../home/surfaces.ts';
+import type { LampSpec } from './lamps.ts';
 
 export class Kit {
   readonly batch = new Batch();
@@ -22,6 +23,8 @@ export class Kit {
   readonly props: PropPlace[] = [];
   readonly chandeliers: Chandelier[] = [];
   readonly seats: Seatable[] = [];
+  /** 1.3: the street lamps, built apart so a car can knock them over (lamps.ts). */
+  readonly lamps: LampSpec[] = [];
   private readonly poolGeos: THREE.BufferGeometry[] = [];
 
   constructor(

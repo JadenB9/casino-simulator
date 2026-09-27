@@ -1,0 +1,11 @@
+/* 1.3: the lobby's notice board, read (bulletin.ts): the same sheet as the map's, a list of news. */
+
+.sheet.news-sheet { width: min(720px, 100%); }
+.news-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
+.news-item { padding: 12px 0 13px; border-bottom: 1px solid var(--line); }
+.news-item:first-child { padding-top: 2px; }
+.news-item:last-child { border-bottom: 0; }
+.news-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.news-title { margin: 0; color: var(--brass-hi); font-family: var(--serif); font-size: 17px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+.news-where { font-size: 13px; font-style: italic; color: var(--ink-3); }
+.news-body { margin: 5px 0 0; font-size: 15px; line-height: 1.45; color: var(--ink-2); }

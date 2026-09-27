@@ -23,7 +23,7 @@
 
 import * as THREE from 'three';
 import { isTyping, onOverlayChange, overlayCount } from '../ui/keyboard.ts';
-import { held, isKey, type KeyAction } from '../ui/keys.ts';
+import { held, isKey, type KeyAction, modified } from '../ui/keys.ts';
 import type { Character } from './contract.ts';
 import type { Collider } from './collision.ts';
 
@@ -693,8 +693,9 @@ export class Player {
       if (!this.enabled || overlayCount() > 0) return;
       if (MOVE_ACTIONS.some((a) => isKey(e, a))) {
         this.keys.add(e.code);
-        if (e.code.startsWith('Arrow')) e.preventDefault();
-      } else if (isKey(e, 'view') && !e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        // (1.3: and with Ctrl held to run, W A S D aren't the browser's Ctrl+S, Ctrl+D...)
+        if (e.code.startsWith('Arrow') || e.ctrlKey) e.preventDefault();
+      } else if (isKey(e, 'view') && !e.repeat && !modified(e)) {
         // (at a table the controls are lent out and F is the game's: Fold)
         this.setView(this.mouse.view === 'first' ? 'third' : 'first');
       }

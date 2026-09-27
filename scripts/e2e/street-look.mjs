@@ -48,7 +48,8 @@ if (process.env.GAME === '1') {
 } else {
   await p.goto(`http://localhost:${port}/casino/src/world/dev-floor.html?quality=${quality}`, { timeout: 300_000 });
   await p.waitForFunction(() => window.casino?.world, null, { timeout: 300_000 });
-  await p.evaluate(async (zone) => {
+  // (ZONE=casino: the casino floor itself, as the dev floor opens)
+  if ((process.env.ZONE ?? 'ground') !== 'casino') await p.evaluate(async (zone) => {
     const { world } = window.casino;
     const at = { ground: [152, 0, Math.PI / 2], home: [-150, 70, Math.PI / 2] }[zone];
     world.teleport(at[0], at[1], at[2]);

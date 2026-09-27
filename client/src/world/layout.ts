@@ -428,7 +428,7 @@ export const PODIUM = { w: 1.4, d: 0.64, h: 1.49 };
 /** The bar counter's height (the video poker bar-top units stand on it). */
 export const BAR_TOP = 1.08;
 /** The Jade Room's moon gate: the round opening's radius and its middle's height. */
-export const MOONGATE = { r: 1.15, y: 1.62 };
+export const MOONGATE = { r: 1.15, y: 1.54 }; // (1.3: down 8 cm, so JADE ROOM over it clears the band ceiling)
 /** A bingo pattern board: its face, its middle's height. */
 export const PATTERN_BOARD = { w: 1.08, h: 1.3, y: 1.72 };
 /** A paper lantern: its radius (the tall ones are a little taller than wide) and height. */

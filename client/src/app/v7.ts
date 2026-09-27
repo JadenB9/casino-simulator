@@ -36,7 +36,7 @@ import { Mover, type Carried } from '../world/home/mover.ts';
 import { Kit } from '../world/city/kit.ts';
 import { Collider } from '../world/collision.ts';
 import type { Sheet } from '../ui/menu/sheet.ts';
-import { isKey, keyLabel } from '../ui/keys.ts';
+import { isKey, keyFor, keyLabel, modified } from '../ui/keys.ts';
 
 const owns = (id: string) => (session.profile?.owned ?? []).includes(id);
 
@@ -135,11 +135,20 @@ export class V7 {
       onClick: (fn, priority) => world.walker.onClick(fn, priority),
       onFrame: (fn) => engine.onFrame(fn),
     });
-    // v7.1: the jump (Space) and v7.4 the crouch (C), on foot on the floor
+    // v7.1: the jump (Space) and v7.4 the crouch (1.3: Shift), on foot on the floor
+    const can = (e: KeyboardEvent) => !modified(e) && !isTyping(e) && overlayCount() === 0 && d.free() && !this.driving.driving && !world.walker.down && world.walker.isEnabled;
+    // 1.3: a crouch on Shift or Ctrl crouches on a tap, pressed and let go with no other key in
+    // between, so Shift+J (the newest invite) or Shift+R (a piece turned back) doesn't crouch too
+    let tap = false;
     addEventListener('keydown', (e) => {
+      const crouch = isKey(e, 'crouch');
+      if (!crouch) tap = false;
+      else if (/^(Shift|Control)/.test(keyFor('crouch'))) {
+        if (!e.repeat) tap = true;
+        return;
+      }
       const jump = isKey(e, 'jump');
-      if ((!jump && !isKey(e, 'crouch')) || e.repeat || e.metaKey || e.ctrlKey || isTyping(e) || overlayCount() > 0) return;
-      if (!d.free() || this.driving.driving || world.walker.down || !world.walker.isEnabled) return;
+      if ((!jump && !crouch) || e.repeat || !can(e)) return;
       e.preventDefault();
       if (!jump) return this.setCrouch(!this.crouched);
       const now = performance.now();
@@ -150,9 +159,15 @@ export class V7 {
       (world.player.character.gesture as ((g: string) => void) | undefined)?.('jump');
       d.link()?.send({ t: 'jump' });
     });
+    addEventListener('keyup', (e) => {
+      if (!tap || !isKey(e, 'crouch')) return;
+      tap = false;
+      if (can(e)) this.setCrouch(!this.crouched);
+    });
+    addEventListener('mousedown', () => (tap = false));
   }
 
-  /** v7.4: crouched (C). */
+  /** v7.4: crouched (1.3: a tap of Shift). */
   private crouched = false;
 
   private setCrouch(on: boolean, tell = true): void {

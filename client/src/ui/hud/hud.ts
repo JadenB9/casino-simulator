@@ -16,7 +16,7 @@ import { openSettings } from './settings.ts';
 import { openShortcuts } from './shortcuts.ts';
 import { netStart, sessionNet } from './net.ts';
 import { calm } from '../../app/comfort.ts';
-import { isKey, keyLabel } from '../keys.ts';
+import { isKey, keyLabel, modified } from '../keys.ts';
 import { mountReminder } from './reminder.ts'; // v6.1 casino61: the play reminder
 
 export interface HudDeps {
@@ -211,7 +211,7 @@ export function mountHud(deps: HudDeps): Hud {
   };
 
   const onKey = (e: KeyboardEvent) => {
-    if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.defaultPrevented || modified(e)) return;
     if (isTyping(e)) return;
     if (e.key === '?') {
       e.preventDefault();

@@ -6,6 +6,7 @@ import type { ZoneId } from '../../../../shared/src/zones.ts';
 import type { Seatable } from '../life-points.ts';
 import type { Bank } from './bank.ts';
 import type { RoadCar, Traffic } from './parking.ts';
+import type { StreetLamps } from './lamps.ts';
 
 export interface ZoneBuild {
   id: ZoneId;
@@ -26,6 +27,8 @@ export interface ZoneBuild {
   update(dt: number, people: { x: number; z: number }[], calm: boolean, me?: { x: number; z: number } | null, cars?: readonly RoadCar[]): void;
   /** v7: the ground floor's traffic (loop.ts), for the driving and the knocks. */
   traffic?: Traffic;
+  /** 1.3: the ground floor's street lamps (lamps.ts), for the look scripts. */
+  lamps?: StreetLamps;
   setQuality(q: Quality): void;
   dispose(): void;
 }

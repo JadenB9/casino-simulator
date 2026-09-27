@@ -14,7 +14,7 @@ import { Bank, panelTexture } from '../city/bank.ts';
 import { Kit } from '../city/kit.ts';
 import { Beacons, cityBelow, rng, skyDome, skylineRing, towers, type Tower } from '../city/sky.ts';
 import type { ZoneBuild } from '../city/zone.ts';
-import { APT, BEDROOM, DEPTH, SOUTH_SOLID_TO, TERRACE, inFlat, onTerrace } from './plan.ts';
+import { APT, BEDROOM, DEPTH, LIFT_OPENING, SOUTH_SOLID_TO, TERRACE, inFlat, onTerrace } from './plan.ts';
 import { defineHomeMats, furnish, type Furnished } from './furnish.ts';
 
 /** What the app does with the apartment once it's built: furnish it for its owner. */
@@ -44,8 +44,8 @@ export function buildHome(mats: Mats, col: Collider, quality: Quality): HomeBuil
   // the west wall with the elevator in it
   const bank = new Bank(LIFTS.home, kit.batch, kit.glow, mats, col, { height: 3.0, clad: 'marble-black', trim: 'brass', door: 'lift-door' }, panelTexture('home'));
   group.add(bank.group);
-  const liftZ0 = 68.6;
-  const liftZ1 = 71.4;
+  const liftZ0 = LIFT_OPENING.z0;
+  const liftZ1 = LIFT_OPENING.z1;
   kit.box('wall', A.x0 - T, A.x0, 0, H, A.z0 - T, liftZ0, 2.4);
   kit.box('wall', A.x0 - T, A.x0, 0, H, liftZ1, A.z1 + T, 2.4);
   kit.box('wall', A.x0 - T, A.x0, 3.0, H, liftZ0, liftZ1, 2.4);

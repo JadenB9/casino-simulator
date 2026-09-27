@@ -20,18 +20,24 @@ export const CALL_REACH = 8;
 /**
  * The curb's spaces, where a called car stops: in the drive's near lane, nose south (-z), the
  * driver's door to the sidewalk. The first is the city's pickup point under the porte-cochère;
- * the others further down the curb, a stretch limousine's length apart.
+ * the others further down the curb. (1.3: 11 m apart, not 8: a stretch limousine is 7.7 m, and
+ * the next car cutting in ahead of it clipped its nose.)
  */
 export const CURB: readonly { x: number; z: number }[] = [
   { x: 132.2, z: 2.0 },
-  { x: 132.2, z: -6.0 },
-  { x: 132.2, z: -14.0 },
+  { x: 132.2, z: -9.0 },
+  { x: 132.2, z: -20.0 },
 ];
 
 /** From the call to the car standing at the curb, and the keys handed over (ms). */
 export const ARRIVE_MS = 11_000;
 /** How long a called car waits at the curb before the valet takes it back (ms, from the call). */
 export const CURB_MS = 120_000;
+/**
+ * 1.3: a call this soon after the last one waits its turn, so two cars never come down the drive
+ * on top of each other (each is well on its way before the next pulls out).
+ */
+export const STAGGER_MS = 4_000;
 /** Calls per account per minute (the HTTP route's limit). */
 export const CALLS_PER_MIN = 6;
 
@@ -44,7 +50,7 @@ export interface CarCall {
   car: string;
   /** Which curb space (an index into CURB). */
   slot: number;
-  /** Server time it was called, and when it leaves (sent back early, until is the time it was). */
+  /** Server time it sets off (1.3: the call's, or its turn after the car before), and when it leaves (sent back early, until is the time it was). */
   at: number;
   until: number;
   /** v7: its owner got in and drove it off (it leaves the curb with them, not with the valet). */
@@ -84,7 +90,9 @@ export function callCar(calls: readonly CarCall[], who: { id: number; name: stri
     slot = CURB.findIndex((_, i) => !used.has(i));
     if (slot < 0) return { error: 'BUSY', wait: Math.min(...live.map((c) => c.until)) - now };
   }
-  const call: CarCall = { id: who.id, name: who.name, car, slot, at: now, until: now + CURB_MS };
+  // (its turn: after the last car to set off, by STAGGER_MS)
+  const at = Math.max(now, ...live.filter((c) => c.id !== who.id).map((c) => c.at + STAGGER_MS));
+  const call: CarCall = { id: who.id, name: who.name, car, slot, at, until: at + CURB_MS };
   return { call, list: [...live.filter((c) => c.id !== who.id), call] };
 }
 

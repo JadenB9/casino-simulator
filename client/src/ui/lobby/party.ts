@@ -227,7 +227,8 @@ export class PartyPanel {
 
     const row = el('div', 'party-row');
     if (this.opts.sit && mine?.status === 'watching') {
-      const sit = el('button', 'btn', 'Sit down');
+      // (1.3: the way in for anyone who joined, so it's the button that stands out)
+      const sit = el('button', 'btn primary', 'Buy in and sit down');
       sit.type = 'button';
       sit.addEventListener('click', () => this.opts.sit?.());
       row.append(sit);

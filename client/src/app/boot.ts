@@ -187,6 +187,7 @@ class App {
       character: (id) => this.remotes?.character(id) as Person | undefined,
       canPunch: () => this.hud !== null && this.table === null && world.seated === null && !this.v7?.busy,
       leaveTable: () => void this.leaveTable(),
+      afterTable: (fn) => (this.table ? this.table.session.afterShown(fn) : fn()),
       openBank: () => this.openCashier(),
     });
     // v6 cars6: the valet lot, the curb and your garage; E at the podium opens the valet
@@ -862,6 +863,11 @@ class App {
     const open = this.table;
     if (!open || open.session !== closed) return;
     if (this.endsSession(code)) return;
+    // 1.3: stood up by the escort to jail (or out of it): the table first shows what it was showing
+    if (code === CLOSE.FORBIDDEN && this.law.escorted) {
+      closed.afterShown(() => this.table?.session === closed && void this.leaveTable());
+      return;
+    }
     this.table = null;
     open.session.close();
     open.party?.dispose();

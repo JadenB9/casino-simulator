@@ -159,10 +159,6 @@ interface SocketLimits {
   strikes: Bucket;
 }
 
-/** Why a Hold'em buy-in the balance covers was refused (transfer.ts buyInStatements). */
-export const HELD_OFF_POKER =
-  "The house's money from the last three days (past $5,000 of your starting stake: top-ups, bonuses, tips and gifts too), and money players sent you in the last day, can't be taken to a Hold'em table with other players. Play it anywhere else, or against the bots.";
-
 /** A card code as the engines write them ("As", "Td"). */
 const CARD_RE = /^[2-9TJQKA][shdc]$/;
 
@@ -1087,13 +1083,8 @@ export class CasinoTable extends DurableObject<Env> {
     const now = Date.now();
     try {
       if (job.kind === 'buyin' || job.kind === 'topup') {
-        // Chips at a multiplayer Hold'em table go from player to player, so the house's money
-        // stays off them as it stays out of transfers (transfer.ts buyInStatements).
-        const held = m.game === 'holdem' && m.mode === 'multi';
-        const out = await applyTransfer(db, buyInStatements(db, { opId: job.op_id, accountId: job.account_id, tableId: m.name, amount: job.amount, now, held }), job.op_id);
-        let why: string | undefined;
-        if (out.kind !== 'applied' && held && ((await moneyOf(db, job.account_id))?.balance ?? 0) >= job.amount) why = HELD_OFF_POKER;
-        this.finishBuyIn(job, out.kind === 'applied', Date.now(), why);
+        const out = await applyTransfer(db, buyInStatements(db, { opId: job.op_id, accountId: job.account_id, tableId: m.name, amount: job.amount, now }), job.op_id);
+        this.finishBuyIn(job, out.kind === 'applied', Date.now());
         if (out.kind === 'applied') await this.sendBalance(job.account_id, out);
       } else if (job.kind === 'cashout') {
         const stats = job.payload ? (JSON.parse(job.payload) as SeatStats) : null;
@@ -1597,9 +1588,10 @@ export class CasinoTable extends DurableObject<Env> {
       return mem ? { accountId: mem.account_id, name: mem.name } : undefined;
     };
     // v7.2: a hot streak is told once the player has seen the round and its win play out (the pit
-    // boss used to take you before the cards had turned); a jail table's rounds at once
-    const seen = revealAt(m.game, step.events, now) + LAW_AFTER_WIN_MS;
-    for (const n of this.law.rounds(step.rounds ?? [], who, hasLimitChoice(m.game) ? limitsOf(m.config) : null, now)) this.ctx.waitUntil(this.sendLaw(n, n.kind === 'hot' ? seen : 0));
+    // boss used to take you before the cards had turned); 1.3: a jail table's round once its dice
+    // or cards have been shown too, so the round that makes bail is seen before the door buzzes
+    const shown = revealAt(m.game, step.events, now);
+    for (const n of this.law.rounds(step.rounds ?? [], who, hasLimitChoice(m.game) ? limitsOf(m.config) : null, now)) this.ctx.waitUntil(this.sendLaw(n, n.kind === 'hot' ? shown + LAW_AFTER_WIN_MS : shown));
   }
 
   private async sendLaw(n: LawNote, notBefore = 0): Promise<void> {

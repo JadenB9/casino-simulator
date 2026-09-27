@@ -43,6 +43,8 @@ export interface LawDeps {
   canPunch: () => boolean;
   /** Stand up from whatever table you're at (the normal leave: bets settle, chips go home). */
   leaveTable: () => void;
+  /** Run `fn` once the table you're at has shown the rounds it was sent (at once away from a table). */
+  afterTable: (fn: () => void) => void;
   /** Open the bank (the cashier's window) over the floor. */
   openBank: () => void;
 }
@@ -86,6 +88,8 @@ export class Law {
   private moving: 'in' | 'out' | null = null;
   private helloTimer: ReturnType<typeof setTimeout> | null = null;
   private darkTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Bumped by each walk off a table (offTable): only the latest one leaves. */
+  private leaving = 0;
   private lightTimer: ReturnType<typeof setTimeout> | null = null;
   private heardJail = false;
   private readonly hud = el('div', 'law-hud');
@@ -158,6 +162,12 @@ export class Law {
     return this.state;
   }
 
+  /** Taken to jail or let out in the last half minute: a table closed now is the escort's doing. */
+  get escorted(): boolean {
+    return performance.now() - this.movedAt < 30_000;
+  }
+  private movedAt = -Infinity;
+
   // --- messages --------------------------------------------------------------------------------
 
   private onMessage(m: FloorServerMsg): void {
@@ -185,7 +195,7 @@ export class Law {
         break;
       case 'jail':
         this.heardJail = true;
-        this.onJail(m.jail);
+        this.onJail(m.jail, false, m.move);
         break;
       case 'tp':
         if (this.moving) this.arrived();
@@ -303,7 +313,8 @@ export class Law {
     }
   }
 
-  private onJail(jail: JailState | null, quiet = false): void {
+  /** `move`: when the floor takes you across the street (server ms), as it says. */
+  private onJail(jail: JailState | null, quiet = false, move?: number): void {
     const was = this.state;
     this.state = jail;
     this.jail.board.show(jail);
@@ -313,13 +324,13 @@ export class Law {
     }
     if (jail && !was) {
       // locked up (or back inside after a reconnect: the move comes at once)
-      this.leaveForJail('in', 0);
+      this.leaveForJail('in', move === undefined ? 0 : move - serverNow());
     } else if (!jail && was && !quiet) {
       toast(`Bail made. You walk out with everything you won.`, 'info', 6000);
       this.sounds.buzzer();
       const officer = this.staff.get('officer-booking');
       if (officer) this.speech.say(officer.person.root, FREE_LINE, 'Officer', 2.05);
-      this.leaveForJail('out', RELEASE_MS);
+      this.leaveForJail('out', move === undefined ? RELEASE_MS : move - serverNow());
     }
     this.showState();
   }
@@ -329,11 +340,25 @@ export class Law {
    * from now: the world (city/) makes the move when `tp` comes, and the dark hides the jump.
    */
   private leaveForJail(dir: 'in' | 'out', inMs: number): void {
-    if (this.deps.world.seated) this.deps.leaveTable();
+    this.movedAt = performance.now();
     if (this.moving === dir) return;
     this.moving = dir;
     if (this.darkTimer) clearTimeout(this.darkTimer);
-    this.darkTimer = setTimeout(() => this.darken(), Math.max(0, inMs - FADE_MS));
+    // 1.3: the table you're at plays out the round it was showing (the win he came over for, the
+    // round that made bail) and stays up while he walks over; you stand up just before the dark
+    this.darkTimer = setTimeout(() => this.offTable(), Math.max(0, inMs - FADE_MS));
+  }
+
+  /** Up from the table once it has shown what it was showing, then dark (a short dip if the move came first). */
+  private offTable(): void {
+    this.darkTimer = null;
+    const go = ++this.leaving;
+    this.deps.afterTable(() => {
+      if (go !== this.leaving) return;
+      if (this.deps.world.seated) this.deps.leaveTable();
+      this.darken();
+      if (this.moving === null) setTimeout(() => this.lighten(), FADE_MS);
+    });
   }
 
   private darken(): void {
@@ -360,8 +385,8 @@ export class Law {
     if (this.darkTimer) {
       // the move came before the dark did (a reconnect): a short dip instead
       clearTimeout(this.darkTimer);
-      this.darkTimer = null;
-      this.darken();
+      this.offTable();
+      return;
     }
     setTimeout(() => this.lighten(), FADE_MS);
   }
