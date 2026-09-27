@@ -11,11 +11,11 @@ import { GLOW } from '../lighting.ts';
 import { Collider } from '../collision.ts';
 import { Kit } from '../city/kit.ts';
 import { signAtlas, signMesh } from '../city/kit.ts';
-import { HOME_ITEMS, pieceIn, type HomeItem, type HomeSlot } from '../../../../shared/src/estate.ts';
+import { HOME_ITEMS, pieceIn, type HomeItem, type HomePlace, type HomeSlot } from '../../../../shared/src/estate.ts';
 import { GUNS, type GunItem } from '../../../../shared/src/arms.ts';
 import { gunModel, disposeGun } from '../arms/models.ts';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { APT, BATH, BEDROOM, FIREPLACE, HALL, SLOTS, SOUTH_SOLID_TO, TABLET, TERRACE, type SlotPlace } from './plan.ts';
+import { APT, BATH, BEDROOM, FIREPLACE, HALL, SLOTS, SOUTH_SOLID_TO, TABLET, TERRACE, placeOf, type SlotPlace } from './plan.ts';
 import { Channel, School, persianRug, surface } from './surfaces.ts';
 
 /** The home's own materials (the rest come from the casino's and the city's). */
@@ -70,6 +70,10 @@ export function defineHomeMats(mats: Mats): void {
   both('home-mirror', '#c0ccd4', { rough: 0.04, metal: 0.95 });
   both('home-mirror-old', '#848a82', { rough: 0.4, metal: 0.55 });
   both('home-quartz', '#ecebe6', { rough: 0.2, tex: 'veined' });
+  // v1.1: the Chesterfield's oxblood, the silk rug, the platform bed's grey linen
+  both('home-oxblood', '#5c1616', { rough: 0.45, tex: 'leather' });
+  both('home-silk', '#1c2850', { rough: 0.35, tex: 'weave-fine' });
+  both('home-grey', '#8c8e92', { rough: 0.9, tex: 'weave' });
 }
 
 /** v7.2: metres a surface repeats over on a piece (the grain of a table, the weave of a sofa). */
@@ -154,9 +158,10 @@ export interface Furnished {
 
 /**
  * Build the finishes for step `tier` and the pieces `owned` (picked per slot where the owner chose
- * one) into a group, adding their collision to `col` (taken out again on dispose).
+ * one, and standing where they moved it) into a group, adding their collision to `col` (taken out
+ * again on dispose). The Poker Table is the Hold'em table itself (home/poker.ts), not built here.
  */
-export function furnish(mats: Mats, col: Collider, tier: number, owned: ReadonlySet<string>, picks: Partial<Record<HomeSlot, string>>): Furnished {
+export function furnish(mats: Mats, col: Collider, tier: number, owned: ReadonlySet<string>, picks: Partial<Record<HomeSlot, string>>, places: Partial<Record<HomeSlot, HomePlace>> = {}): Furnished {
   const own = new Collider();
   const kit = new Kit('home', mats, own);
   const group = new THREE.Group();
@@ -271,8 +276,8 @@ export function furnish(mats: Mats, col: Collider, tier: number, owned: Readonly
   for (const slot of Object.keys(SLOTS) as HomeSlot[]) {
     const item = pieceIn(slot, owned, t, picks[slot] ?? null);
     pieces.set(slot, item);
-    if (!item) continue;
-    const at = new At(kit, own, SLOTS[slot], live);
+    if (!item || isPokerTable(item)) continue;
+    const at = new At(kit, own, placeOf(slot, places), live);
     BUILD[slot](at, item.style, t);
   }
   // v7.4: no new bathroom yet: the old one
@@ -309,14 +314,7 @@ export function furnish(mats: Mats, col: Collider, tier: number, owned: Readonly
     },
     dispose() {
       for (const d of live.disposers) d();
-      for (const b of own.boxes) {
-        const i = col.boxes.indexOf(b);
-        if (i >= 0) col.boxes.splice(i, 1);
-      }
-      for (const p of own.posts) {
-        const i = col.posts.indexOf(p);
-        if (i >= 0) col.posts.splice(i, 1);
-      }
+      for (const shape of [...own.boxes, ...own.posts]) col.remove(shape);
       for (const m of [...built.meshes, ...glows.meshes]) m.dispose();
       for (const m of rack) m.geometry.dispose();
       if (neon) {
@@ -458,6 +456,7 @@ function bathroom(a: At, style: string): void {
 
 const BUILD: Record<HomeSlot, Builder> = {
   sofa(a, style) {
+    if (style === 'chesterfield') return chesterfield(a);
     const m = style === 'leather' ? 'home-cognac' : style === 'velvet' ? 'home-velvet' : 'home-linen';
     const W = style === 'velvet' ? 3.4 : 2.8;
     a.box(style === 'linen' ? 'home-oak' : 'lacquer', -W / 2 + 0.1, W / 2 - 0.1, 0, 0.12, -0.42, 0.42);
@@ -510,6 +509,7 @@ const BUILD: Record<HomeSlot, Builder> = {
       a.solid(-1.45, 1.45, -1.15, 1.75, 0.66);
       return;
     }
+    if (style === 'platform') return platformBed(a);
     const W = style === 'canopy' ? 2.0 : 1.6;
     const L = 2.2;
     const frame = style === 'canopy' ? 'home-walnut' : 'home-linen';
@@ -532,6 +532,12 @@ const BUILD: Record<HomeSlot, Builder> = {
     }
   },
   rug(a, style) {
+    if (style === 'silk') {
+      // midnight silk inside a border of gold
+      a.box('home-silk', -1.8, 1.8, 0.01, 0.018, -1.3, 1.3, 0.6);
+      for (const [x0, x1, z0, z1] of [[-1.7, 1.7, -1.2, -1.14], [-1.7, 1.7, 1.14, 1.2], [-1.7, -1.64, -1.2, 1.2], [1.64, 1.7, -1.2, 1.2]] as const) a.box('home-gold', x0, x1, 0.018, 0.02, z0, z1);
+      return;
+    }
     const w = style === 'persian' ? 4.2 : 3.4;
     const d = style === 'persian' ? 3 : 2.5;
     a.box(style === 'persian' ? 'home-persian' : 'home-rug', -w / 2, w / 2, 0.01, 0.018, -d / 2, d / 2, style === 'persian' ? undefined : 0.5);
@@ -555,6 +561,8 @@ const BUILD: Record<HomeSlot, Builder> = {
     if (style === 'abstract') a.glow(hdr('#e0b050', 0.9), -w / 2 + 0.3, -w / 2 + 0.9, y - 0.3, y + 0.3, 0.05, 0.052);
   },
   plant(a, style) {
+    if (style === 'palm') return palm(a);
+    if (style === 'bonsai') return bonsai(a);
     if (style === 'olive') {
       a.cyl('home-copper', 0, 0, 0.42, 0, 0.7, 20, 0.5);
       a.cyl('home-soil', 0, 0, 0.44, 0.66, 0.68, 20);
@@ -593,6 +601,7 @@ const BUILD: Record<HomeSlot, Builder> = {
     }
   },
   dining(a, style) {
+    if (style === 'glass') return glassTable(a);
     const W = style === 'marble' ? 3.4 : 2.2;
     const D = 1.1;
     if (style === 'marble') {
@@ -698,6 +707,7 @@ const BUILD: Record<HomeSlot, Builder> = {
     a.solid(-0.4, 0.4, 1.0, 1.4, 0.52);
   },
   games(a, style) {
+    if (style === 'air') return airHockey(a);
     const felt = style === 'poker' ? 'home-felt-blue' : 'home-felt';
     if (style === 'poker') {
       a.cyl('home-walnut', 0, 0, 1.25, 0.7, 0.78, 32);
@@ -716,7 +726,8 @@ const BUILD: Record<HomeSlot, Builder> = {
     a.box('home-velvet', -0.9, 0.9, 2.3, 2.45, -0.2, 0.2);
     a.glow(GLOW.warm, -0.8, 0.8, 2.28, 2.3, -0.15, 0.15);
   },
-  arcade(a) {
+  arcade(a, style) {
+    if (style === 'pinball') return pinball(a);
     a.box('lacquer', -0.36, 0.36, 0, 1.85, -0.35, 0.35);
     a.box('home-screen', -0.28, 0.28, 1.05, 1.5, 0.28, 0.3);
     a.glow(hdr('#57ffb0', 0.9), -0.26, 0.26, 1.07, 1.48, 0.3, 0.302);
@@ -787,7 +798,285 @@ const BUILD: Record<HomeSlot, Builder> = {
     a.cyl('glass', 0, 0.66, 0.075, 1.225, 1.355, 12);
     a.solid(-0.35, 0.35, -0.35, 0.35, 1.3);
   },
+  // v1.1:
+  lamp(a, style) {
+    if (style === 'crystal') {
+      a.cyl('home-gold', 0, 0, 0.2, 0, 0.05, 20);
+      a.cyl('home-gold', 0, 0, 0.025, 0.05, 1.45, 8);
+      for (const [r, y, n] of [[0.2, 1.1, 10], [0.15, 1.25, 8], [0.1, 1.38, 6]] as const) {
+        for (let i = 0; i < n; i++) {
+          const t = (i / n) * Math.PI * 2;
+          a.ball('glass', Math.cos(t) * r, y, Math.sin(t) * r, 0.035);
+        }
+      }
+      a.cyl('home-cream', 0, 0, 0.26, 1.45, 1.75, 20, 0.18);
+      a.glow(GLOW.warm, -0.12, 0.12, 1.44, 1.46, -0.12, 0.12);
+      a.solid(-0.22, 0.22, -0.22, 0.22, 1.75);
+      return;
+    }
+    // a steel arc from a marble foot, the shade hanging over the end of the sofa
+    a.box('marble-black', -0.2, 0.2, 0, 0.08, -0.2, 0.2);
+    a.cyl('home-steel', 0, 0, 0.02, 0.08, 1.7, 8);
+    a.box('home-steel', -0.02, 0.5, 1.7, 1.73, -0.015, 0.015);
+    a.box('home-steel', 0.48, 0.51, 1.7, 2.05, -0.015, 0.015);
+    a.box('home-steel', 0.48, 1.25, 2.02, 2.05, -0.015, 0.015);
+    a.box('home-steel', 1.22, 1.25, 1.78, 2.05, -0.015, 0.015);
+    a.cyl('home-steel', 1.24, 0, 0.22, 1.6, 1.78, 20, 0.08);
+    a.glow(GLOW.warm, 1.12, 1.36, 1.58, 1.6, -0.12, 0.12);
+    a.solid(-0.2, 0.2, -0.2, 0.2, 1.7);
+  },
+  books(a, style) {
+    const library = style === 'library';
+    const W = library ? 3.6 : 2.4;
+    const H = library ? APT.height - 0.05 : 2.0;
+    const wood = library ? 'home-walnut' : 'home-oak';
+    a.box(wood, -W / 2, W / 2, 0, H, -0.19, -0.16);
+    for (const x of [-W / 2, W / 2 - 0.03]) a.box(wood, x, x + 0.03, 0, H, -0.19, 0.19);
+    const shelves = library ? 8 : 5;
+    const gap = (H - 0.1) / shelves;
+    const spines = ['lacquer-red', 'home-velvet', 'home-felt-blue', 'home-cognac', 'home-cream', 'home-oxblood', 'home-grey'];
+    let k = 7;
+    for (let i = 0; i <= shelves; i++) {
+      const y = 0.05 + i * gap;
+      a.box(wood, -W / 2 + 0.03, W / 2 - 0.03, y - 0.025, y, -0.16, 0.19);
+      if (i === shelves) break;
+      // a row of books, their heights and colours varied, a gap here and there
+      let x = -W / 2 + 0.05;
+      while (x < W / 2 - 0.12) {
+        k = (k * 1103515245 + 12345) & 0x7fffffff;
+        const t = 0.03 + (k % 5) * 0.008;
+        const h = gap * (0.62 + ((k >> 4) % 6) * 0.05);
+        if ((k >> 8) % 11 === 0) {
+          x += 0.12;
+          continue;
+        }
+        a.box(spines[(k >> 12) % spines.length]!, x, x + t, y, y + h, -0.13, 0.12 + ((k >> 6) % 3) * 0.02);
+        x += t + 0.004;
+      }
+    }
+    if (library) {
+      // the brass rail along the top and the rolling ladder on it
+      a.box('brass', -W / 2, W / 2, H - 0.45, H - 0.43, 0.3, 0.32);
+      for (const x of [0.4, 0.85]) a.box('brass', x - 0.015, x + 0.015, 0, H - 0.43, 0.3 + 0.02, 0.36);
+      for (let y = 0.3; y < H - 0.5; y += 0.3) a.box('brass', 0.4, 0.85, y, y + 0.02, 0.32, 0.35);
+      a.glow(GLOW.shelf, -W / 2 + 0.1, W / 2 - 0.1, H - 0.08, H - 0.06, -0.1, 0.1);
+    }
+    a.solid(-W / 2, W / 2, -0.19, library ? 0.36 : 0.19, H);
+  },
+  desk(a, style) {
+    // the chair's on the +z side, looking over the desk (and out of the window)
+    if (style === 'exec') {
+      a.box('lacquer', -1.0, 1.0, 0.72, 0.77, -0.4, 0.4);
+      for (const x of [-0.95, 0.95]) a.box('lacquer', x - 0.05, x + 0.05, 0, 0.72, -0.4, 0.4);
+      a.box('home-cognac', -0.5, 0.5, 0.77, 0.775, -0.05, 0.3);
+      // three screens along the back
+      for (const [x, t] of [[-0.62, 0.35], [0, 0], [0.62, -0.35]] as const) {
+        a.box('home-screen', x - 0.3, x + 0.3, 0.95, 1.3, -0.3 + Math.abs(t) * 0.2, -0.28 + Math.abs(t) * 0.2);
+        a.glow(hdr('#6aa8ff', 0.8), x - 0.28, x + 0.28, 0.97, 1.28, -0.278 + Math.abs(t) * 0.2, -0.276 + Math.abs(t) * 0.2);
+        a.box('home-steel', x - 0.02, x + 0.02, 0.77, 0.95, -0.33, -0.3);
+      }
+      executiveChair(a, 0.75);
+      a.solid(-1.0, 1.0, -0.4, 0.4, 0.77);
+      return;
+    }
+    a.box('home-walnut', -0.7, 0.7, 0.72, 0.76, -0.35, 0.35);
+    for (const x of [-0.65, 0.65]) for (const z of [-0.3, 0.3]) a.box('home-walnut', x - 0.03, x + 0.03, 0, 0.72, z - 0.03, z + 0.03);
+    a.box('home-walnut', -0.6, 0.6, 0.6, 0.72, -0.33, 0.33);
+    // a brass lamp, a blotter, a pen
+    a.cyl('brass', -0.5, -0.2, 0.08, 0.76, 0.78, 12);
+    a.cyl('brass', -0.5, -0.2, 0.012, 0.78, 1.12, 6);
+    a.cyl('home-felt', -0.5, -0.12, 0.1, 1.08, 1.16, 12, 0.06);
+    a.glow(GLOW.warm, -0.56, -0.44, 1.07, 1.08, -0.18, -0.06);
+    a.box('home-cognac', -0.25, 0.3, 0.76, 0.765, -0.15, 0.2);
+    a.box('home-gold', 0.35, 0.5, 0.765, 0.775, 0.05, 0.06);
+    // the chair, pushed in a little
+    a.box('home-linen', -0.24, 0.24, 0.44, 0.5, 0.45, 0.9);
+    a.box('home-linen', -0.24, 0.24, 0.5, 0.95, 0.84, 0.9);
+    for (const lx of [-0.2, 0.2]) for (const lz of [0.49, 0.86]) a.box('home-walnut', lx - 0.02, lx + 0.02, 0, 0.44, lz - 0.02, lz + 0.02);
+    a.solid(-0.7, 0.7, -0.35, 0.35, 0.76);
+    a.solid(-0.24, 0.24, 0.45, 0.9, 0.95);
+  },
+  grill(a, style) {
+    if (style === 'outdoor') {
+      // a stone counter with a steel grill in it, a bar fridge, a hood; the cook stands at +z
+      a.box('stone-warm', -1.2, 1.2, 0, 0.9, -0.35, 0.35, 1.2);
+      a.box('granite', -1.24, 1.24, 0.9, 0.95, -0.38, 0.38);
+      a.box('home-steel', -0.45, 0.45, 0.95, 1.12, -0.28, 0.28);
+      a.box('home-steel', -0.45, 0.45, 1.12, 1.2, -0.3, -0.24);
+      a.box('home-steel', 0.7, 1.1, 0.08, 0.8, 0.35, 0.37);
+      a.glow(hdr('#9ad8ff', 0.6), 0.74, 1.06, 0.12, 0.76, 0.371, 0.373);
+      for (const x of [-1.0, -0.7]) a.box('chrome', x, x + 0.2, 0.6, 0.62, 0.35, 0.38);
+      a.glow(hdr('#ff6a1a', 1.8), -0.4, 0.4, 0.95, 0.97, -0.24, 0.24);
+      a.solid(-1.24, 1.24, -0.38, 0.38, 1.2);
+      return;
+    }
+    // a black kettle on three legs, its lid on
+    for (const t of [0, 2.1, 4.2]) a.box('home-steel', Math.cos(t) * 0.24 - 0.012, Math.cos(t) * 0.24 + 0.012, 0, 0.62, Math.sin(t) * 0.24 - 0.012, Math.sin(t) * 0.24 + 0.012);
+    a.cyl('home-screen', 0, 0, 0.3, 0.62, 0.86, 20, 0.34);
+    a.cyl('home-screen', 0, 0, 0.34, 0.86, 1.0, 20, 0.12);
+    a.cyl('home-steel', 0, 0, 0.03, 1.0, 1.04, 8);
+    a.solid(-0.34, 0.34, -0.34, 0.34, 1.0);
+  },
 };
+
+/** v1.1: the Chesterfield: oxblood leather, deep-buttoned back and arms of one height, brass studs. */
+function chesterfield(a: At): void {
+  const W = 2.6;
+  const m = 'home-oxblood';
+  for (const x of [-W / 2 + 0.12, W / 2 - 0.12]) for (const z of [-0.36, 0.36]) a.cyl('home-walnut', x, z, 0.04, 0, 0.12, 10, 0.03);
+  a.box(m, -W / 2, W / 2, 0.12, 0.44, -0.45, 0.45);
+  a.box(m, -W / 2, W / 2, 0.44, 0.8, -0.45, -0.2);
+  for (const s of [-1, 1]) {
+    const x0 = s > 0 ? W / 2 - 0.24 : -W / 2;
+    a.box(m, x0, x0 + 0.24, 0.44, 0.8, -0.45, 0.45);
+    // the roll along the arm's top
+    a.box(m, x0 - 0.02, x0 + 0.26, 0.74, 0.82, -0.45, 0.47);
+    for (let z = -0.4; z <= 0.42; z += 0.06) a.ball('brass', s > 0 ? W / 2 + 0.005 : -W / 2 - 0.005, 0.5, z, 0.01);
+  }
+  // the buttons in the back, in diamonds
+  for (let r = 0; r < 3; r++) {
+    for (let i = 0; i < 9; i++) {
+      const x = -W / 2 + 0.36 + i * ((W - 0.72) / 8) + (r % 2 ? (W - 0.72) / 16 : 0);
+      if (x > W / 2 - 0.3) continue;
+      a.ball(m, x, 0.54 + r * 0.08, -0.205, 0.011);
+    }
+  }
+  for (let i = 0; i < 3; i++) a.box(m, -W / 2 + 0.26 + i * ((W - 0.52) / 3) + 0.01, -W / 2 + 0.26 + (i + 1) * ((W - 0.52) / 3) - 0.01, 0.44, 0.54, -0.2, 0.43);
+  a.solid(-W / 2, W / 2, -0.45, 0.47, 0.82);
+  // a walnut table in front
+  a.box('home-walnut', -0.6, 0.6, 0.38, 0.42, 0.95, 1.55);
+  for (const x of [-0.55, 0.55]) for (const z of [1.0, 1.5]) a.box('home-walnut', x - 0.03, x + 0.03, 0, 0.38, z - 0.03, z + 0.03);
+  a.solid(-0.6, 0.6, 0.95, 1.55, 0.42);
+}
+
+/** v1.1: a tall kentia palm: a white planter, a few stems, fronds stepping down and out in a star. */
+function palm(a: At): void {
+  a.cyl('home-white', 0, 0, 0.3, 0, 0.55, 20, 0.34);
+  a.cyl('home-soil', 0, 0, 0.32, 0.53, 0.55, 20);
+  const stems: [number, number, number][] = [[0, 0, 1.9], [0.1, 0.06, 1.6], [-0.08, -0.06, 1.75]];
+  for (const [x, z, h] of stems) {
+    a.cyl('home-leaf', x, z, 0.02, 0.55, h, 6, 0.012);
+    for (let i = 0; i < 6; i++) {
+      const t = (i / 6) * Math.PI * 2 + x * 9;
+      const c = Math.cos(t);
+      const sn = Math.sin(t);
+      // each frond: three steps, each lower and further out
+      for (let j = 0; j < 3; j++) {
+        const r0 = 0.08 + j * 0.2;
+        const cx = x + c * (r0 + 0.1);
+        const cz = z + sn * (r0 + 0.1);
+        const y = h - j * 0.09;
+        const along = Math.abs(c) > Math.abs(sn);
+        a.box('home-leaf', cx - (along ? 0.12 : 0.05), cx + (along ? 0.12 : 0.05), y - 0.012, y, cz - (along ? 0.05 : 0.12), cz + (along ? 0.05 : 0.12));
+      }
+    }
+  }
+  a.solid(-0.35, 0.35, -0.35, 0.35, 1.2);
+}
+
+/** v1.1: a juniper bonsai in a dark tray on a walnut plinth. */
+function bonsai(a: At): void {
+  a.box('home-walnut', -0.28, 0.28, 0, 0.85, -0.28, 0.28);
+  a.box('lacquer', -0.26, 0.26, 0.85, 0.93, -0.18, 0.18);
+  a.box('home-soil', -0.24, 0.24, 0.92, 0.935, -0.16, 0.16);
+  a.cyl('home-walnut', -0.04, 0, 0.045, 0.93, 1.12, 8, 0.035);
+  a.cyl('home-walnut', 0.04, 0.02, 0.035, 1.1, 1.3, 8, 0.02);
+  for (const [x, y, z, r] of [[-0.14, 1.17, 0.02, 0.1], [0.12, 1.32, 0.04, 0.11], [0.02, 1.42, -0.04, 0.08], [0.2, 1.22, -0.06, 0.07]] as const) a.ball('home-leaf', x, y, z, r);
+  a.solid(-0.28, 0.28, -0.28, 0.28, 1.2);
+}
+
+/** v1.1: a low oak platform, a padded headboard, grey linen; floating shelves either side. */
+function platformBed(a: At): void {
+  const W = 1.8;
+  const L = 2.2;
+  a.box('home-oak', -W / 2 - 0.15, W / 2 + 0.15, 0, 0.22, -L / 2, L / 2 + 0.1);
+  a.box('home-sheet', -W / 2, W / 2, 0.22, 0.46, -L / 2 + 0.05, L / 2 - 0.02);
+  a.box('home-grey', -W / 2 - 0.01, W / 2 + 0.01, 0.44, 0.49, 0.05, L / 2 + 0.01);
+  a.box('home-grey', -W / 2 - 0.3, W / 2 + 0.3, 0.22, 1.15, -L / 2 - 0.1, -L / 2);
+  for (const x of [-W / 4, W / 4]) a.box('home-sheet', x - 0.34, x + 0.34, 0.46, 0.62, -L / 2 + 0.08, -L / 2 + 0.42);
+  for (const s of [-1, 1]) {
+    const x = s * (W / 2 + 0.5);
+    a.box('home-oak', x - 0.22, x + 0.22, 0.42, 0.46, -L / 2, -L / 2 + 0.4);
+    a.cyl('home-steel', x, -L / 2 + 0.2, 0.06, 0.46, 0.62, 10, 0.03);
+    a.glow(GLOW.warm, x - 0.05, x + 0.05, 0.62, 0.7, -L / 2 + 0.15, -L / 2 + 0.25);
+  }
+  a.solid(-W / 2 - 0.3, W / 2 + 0.3, -L / 2 - 0.1, L / 2 + 0.1, 0.62);
+}
+
+/** v1.1: smoked glass on two chrome sleds, eight white leather chairs. */
+function glassTable(a: At): void {
+  const W = 2.6;
+  const D = 1.1;
+  a.box('home-screen', -W / 2, W / 2, 0.73, 0.75, -D / 2, D / 2);
+  for (const x of [-W / 2 + 0.3, W / 2 - 0.34]) {
+    a.box('chrome', x, x + 0.04, 0.02, 0.73, -D / 2 + 0.1, -D / 2 + 0.14);
+    a.box('chrome', x, x + 0.04, 0.02, 0.73, D / 2 - 0.14, D / 2 - 0.1);
+    a.box('chrome', x, x + 0.04, 0, 0.03, -D / 2 + 0.1, D / 2 - 0.1);
+  }
+  a.solid(-W / 2, W / 2, -D / 2, D / 2, 0.75);
+  for (let i = 0; i < 4; i++) {
+    const x = -W / 2 + (W / 4) * (i + 0.5);
+    for (const s of [-1, 1]) {
+      const z = s * (D / 2 + 0.35);
+      a.box('home-white', x - 0.22, x + 0.22, 0.44, 0.5, z - 0.22, z + 0.22);
+      a.box('home-white', x - 0.22, x + 0.22, 0.5, 0.95, s > 0 ? z + 0.16 : z - 0.22, s > 0 ? z + 0.22 : z - 0.16);
+      a.box('chrome', x - 0.2, x + 0.2, 0, 0.02, z - 0.02, z + 0.02);
+      a.box('chrome', x - 0.02, x + 0.02, 0.02, 0.44, z - 0.02, z + 0.02);
+    }
+  }
+}
+
+/** v1.1: a full-size air hockey table: lit rails, a red line down the middle, two mallets and a puck. */
+function airHockey(a: At): void {
+  const W = 1.2;
+  const L = 2.3;
+  a.box('home-white', -W / 2, W / 2, 0.1, 0.78, -L / 2, L / 2);
+  for (const x of [-W / 2 + 0.1, W / 2 - 0.1]) for (const z of [-L / 2 + 0.1, L / 2 - 0.1]) a.box('lacquer', x - 0.06, x + 0.06, 0, 0.1, z - 0.06, z + 0.06);
+  a.box('home-screen', -W / 2 + 0.06, W / 2 - 0.06, 0.78, 0.8, -L / 2 + 0.06, L / 2 - 0.06);
+  for (const x of [-W / 2, W / 2 - 0.06]) a.box('lacquer', x, x + 0.06, 0.78, 0.86, -L / 2, L / 2);
+  for (const z of [-L / 2, L / 2 - 0.06]) {
+    a.box('lacquer', -W / 2, -0.18, 0.78, 0.86, z, z + 0.06);
+    a.box('lacquer', 0.18, W / 2, 0.78, 0.86, z, z + 0.06);
+  }
+  a.glow(hdr('#4fb4ff', 1.2), -W / 2 + 0.005, -W / 2 + 0.055, 0.86, 0.87, -L / 2, L / 2);
+  a.glow(hdr('#4fb4ff', 1.2), W / 2 - 0.055, W / 2 - 0.005, 0.86, 0.87, -L / 2, L / 2);
+  a.glow(hdr('#ff3a3a', 1.1), -W / 2 + 0.06, W / 2 - 0.06, 0.8, 0.802, -0.01, 0.01);
+  for (const z of [-0.8, 0.8]) a.cyl('lacquer-red', 0, z, 0.05, 0.8, 0.84, 14);
+  a.cyl('home-screen', 0.15, 0.2, 0.035, 0.8, 0.81, 12);
+  a.solid(-W / 2, W / 2, -L / 2, L / 2, 0.86);
+}
+
+/** v1.1: a pinball machine: the playfield under glass, the lit backglass at its head, legs. */
+function pinball(a: At): void {
+  // the player stands at +z; the backglass is at the -z end
+  for (const x of [-0.3, 0.3]) for (const z of [-0.5, 0.5]) a.box('home-steel', x - 0.03, x + 0.03, 0, 0.8, z - 0.03, z + 0.03);
+  a.box('lacquer', -0.36, 0.36, 0.8, 1.0, -0.62, 0.62);
+  a.glow(hdr('#ff9a3a', 0.9), -0.3, 0.3, 1.0, 1.005, -0.55, 0.5);
+  for (const [x, z, c] of [[-0.12, -0.2, '#ff3fb4'], [0.12, -0.25, '#57ffb0'], [0, -0.38, '#ffd23a']] as const) a.glow(hdr(c, 1.3), x - 0.05, x + 0.05, 1.005, 1.03, z - 0.05, z + 0.05);
+  a.box('glass', -0.34, 0.34, 1.03, 1.035, -0.6, 0.6);
+  // the backglass: dark, a lit border, a sunburst of colour and the score window under it
+  a.box('lacquer', -0.36, 0.36, 1.0, 1.8, -0.72, -0.6);
+  // (each layer a couple of millimetres in front of the one behind it)
+  a.box('home-screen', -0.32, 0.32, 1.17, 1.73, -0.6, -0.597);
+  a.glow(hdr('#ffd23a', 1.2), -0.34, 0.34, 1.73, 1.76, -0.6, -0.595);
+  a.glow(hdr('#ffd23a', 1.2), -0.34, 0.34, 1.14, 1.17, -0.6, -0.595);
+  for (const x of [-0.34, 0.32]) a.glow(hdr('#ffd23a', 1.2), x, x + 0.02, 1.17, 1.73, -0.6, -0.595);
+  a.glow(hdr('#ff4fb4', 1.3), -0.2, 0.2, 1.42, 1.66, -0.597, -0.594);
+  a.glow(hdr('#57ffb0', 1.1), -0.12, 0.12, 1.48, 1.6, -0.593, -0.59);
+  a.glow(hdr('#ff7a2a', 1.4), -0.22, 0.22, 1.22, 1.32, -0.597, -0.594);
+  a.box('chrome', -0.06, 0.06, 0.9, 0.94, 0.62, 0.66);
+  a.solid(-0.36, 0.36, -0.72, 0.62, 1.8);
+}
+
+/** v1.1: a high-backed leather chair at a desk, pushed in to `z`. */
+function executiveChair(a: At, z: number): void {
+  a.cyl('home-steel', 0, z, 0.3, 0, 0.04, 10);
+  a.cyl('home-steel', 0, z, 0.03, 0.04, 0.45, 8);
+  a.box('home-cognac', -0.26, 0.26, 0.45, 0.55, z - 0.26, z + 0.26);
+  a.box('home-cognac', -0.26, 0.26, 0.55, 1.25, z + 0.2, z + 0.28);
+  for (const s of [-1, 1]) a.box('home-cognac', s * 0.26 - 0.04, s * 0.26 + 0.04, 0.55, 0.72, z - 0.2, z + 0.2);
+  a.solid(-0.3, 0.3, z - 0.3, z + 0.3, 1.25);
+}
 
 /**
  * The guns hung on the wall in rows, barrels pointing left, merged per material (a draw call a
@@ -847,8 +1136,13 @@ export function showPiece(kit: Kit, col: Collider, slot: HomeSlot, style: string
   BUILD[slot](new At(kit, col, place, live, lift), style, 3);
 }
 
+/** v1.1: the Poker Table is a real Hold'em table (home/poker.ts seats you at it). */
+export function isPokerTable(item: HomeItem | null | undefined): boolean {
+  return item?.slot === 'games' && item.style === 'poker';
+}
+
 /** Every slot, in the order the catalogue shows them. */
-export const SLOT_ORDER: readonly HomeSlot[] = ['sofa', 'tv', 'rug', 'art', 'plant', 'chandelier', 'dining', 'kitchen', 'bath', 'bar', 'bed', 'safe', 'games', 'arcade', 'jukebox', 'piano', 'aquarium', 'trophy', 'sculpture', 'neon', 'telescope'];
+export const SLOT_ORDER: readonly HomeSlot[] = ['sofa', 'tv', 'rug', 'lamp', 'art', 'plant', 'chandelier', 'dining', 'kitchen', 'bath', 'bar', 'bed', 'desk', 'books', 'safe', 'games', 'arcade', 'jukebox', 'piano', 'aquarium', 'trophy', 'sculpture', 'neon', 'telescope', 'grill'];
 
 /** The pieces for a slot, cheapest first. */
 export function slotItems(slot: HomeSlot): HomeItem[] {

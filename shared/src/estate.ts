@@ -6,7 +6,8 @@
 //
 // Home goods are sold at the home store across the street, and in the apartment itself at the spot
 // each one goes: every piece has its place (a slot), several pieces fit the same place, and the
-// dearest one you own stands there unless you've picked another (kept on your device).
+// dearest one you own stands there unless you've picked another or picked it up (the floor keeps
+// your picks, and since v1.1 where you've moved each piece to).
 
 import { DOLLAR, type Cents } from './money.ts';
 
@@ -45,7 +46,33 @@ export function homeTier(owned: Iterable<string>): number {
 }
 
 /** Where a piece goes in the apartment (client/src/world/home/plan.ts places each). */
-export type HomeSlot = 'sofa' | 'tv' | 'bed' | 'rug' | 'art' | 'plant' | 'dining' | 'kitchen' | 'bar' | 'aquarium' | 'piano' | 'games' | 'arcade' | 'jukebox' | 'safe' | 'trophy' | 'sculpture' | 'neon' | 'telescope' | 'chandelier' | 'bath';
+export type HomeSlot =
+  | 'sofa'
+  | 'tv'
+  | 'bed'
+  | 'rug'
+  | 'art'
+  | 'plant'
+  | 'dining'
+  | 'kitchen'
+  | 'bar'
+  | 'aquarium'
+  | 'piano'
+  | 'games'
+  | 'arcade'
+  | 'jukebox'
+  | 'safe'
+  | 'trophy'
+  | 'sculpture'
+  | 'neon'
+  | 'telescope'
+  | 'chandelier'
+  | 'bath'
+  // v1.1:
+  | 'lamp'
+  | 'books'
+  | 'desk'
+  | 'grill';
 
 export interface HomeItem {
   id: string;
@@ -109,6 +136,24 @@ export const HOME_ITEMS: readonly HomeItem[] = [
   { id: 'sculpture-gold', kind: 'home', slot: 'sculpture', name: 'Solid Gold Bull', price: 25_000_000 * DOLLAR, about: 'A charging bull cast in solid gold.', style: 'gold', tier: 3 },
   { id: 'neon-sign', kind: 'home', slot: 'neon', name: 'Neon Sign', price: 6_000 * DOLLAR, about: '"JACKPOT" in pink neon over the bar.', style: 'jackpot' },
   { id: 'telescope-brass', kind: 'home', slot: 'telescope', name: 'Brass Telescope', price: 35_000 * DOLLAR, about: 'A brass refractor on a tripod by the window.', style: 'brass' },
+  // v1.1: more for the slots there were
+  { id: 'sofa-chesterfield', kind: 'home', slot: 'sofa', name: 'Chesterfield', price: 95_000 * DOLLAR, about: 'Oxblood leather, deep-buttoned, rolled arms and brass studs.', style: 'chesterfield' },
+  { id: 'rug-silk', kind: 'home', slot: 'rug', name: 'Silk Rug', price: 30_000 * DOLLAR, about: 'Midnight-blue silk with a border of gold.', style: 'silk' },
+  { id: 'plant-palm', kind: 'home', slot: 'plant', name: 'Kentia Palm', price: 1_200 * DOLLAR, about: 'A tall palm in a white planter.', style: 'palm' },
+  { id: 'plant-bonsai', kind: 'home', slot: 'plant', name: 'Bonsai on a Plinth', price: 15_000 * DOLLAR, about: 'An eighty-year-old juniper on a walnut stand.', style: 'bonsai' },
+  { id: 'bed-platform', kind: 'home', slot: 'bed', name: 'Low Platform Bed', price: 18_000 * DOLLAR, about: 'A low oak platform with a padded headboard and grey linen.', style: 'platform' },
+  { id: 'dining-glass', kind: 'home', slot: 'dining', name: 'Glass Dining Table', price: 22_000 * DOLLAR, about: 'Smoked glass for eight on chrome legs, with white leather chairs.', style: 'glass' },
+  { id: 'games-air', kind: 'home', slot: 'games', name: 'Air Hockey Table', price: 12_000 * DOLLAR, about: 'Full size, lit rails, two mallets and a puck.', style: 'air' },
+  { id: 'arcade-pinball', kind: 'home', slot: 'arcade', name: 'Pinball Machine', price: 14_000 * DOLLAR, about: 'A Vegas-themed table with a lit backglass.', style: 'pinball' },
+  // v1.1: new places to fill
+  { id: 'lamp-arc', kind: 'home', slot: 'lamp', name: 'Arc Floor Lamp', price: 3_200 * DOLLAR, about: 'A steel arc over the sofa on a marble foot.', style: 'arc' },
+  { id: 'lamp-crystal', kind: 'home', slot: 'lamp', name: 'Crystal Floor Lamp', price: 28_000 * DOLLAR, about: 'Tiers of cut crystal on a gilt stem.', style: 'crystal' },
+  { id: 'books-oak', kind: 'home', slot: 'books', name: 'Oak Bookcase', price: 7_000 * DOLLAR, about: 'Five shelves of oak, filled.', style: 'oak' },
+  { id: 'books-library', kind: 'home', slot: 'books', name: 'Library Wall', price: 85_000 * DOLLAR, about: 'Walnut shelves to the ceiling, a rolling brass ladder and first editions.', style: 'library', tier: 2 },
+  { id: 'desk-writing', kind: 'home', slot: 'desk', name: 'Writing Desk', price: 9_000 * DOLLAR, about: 'A walnut desk by the window with a brass lamp.', style: 'writing' },
+  { id: 'desk-exec', kind: 'home', slot: 'desk', name: 'Executive Desk', price: 48_000 * DOLLAR, about: 'Black lacquer and leather, three screens and a leather chair.', style: 'exec' },
+  { id: 'grill-kettle', kind: 'home', slot: 'grill', name: 'Kettle Grill', price: 900 * DOLLAR, about: 'A black kettle barbecue for the balcony.', style: 'kettle' },
+  { id: 'grill-outdoor', kind: 'home', slot: 'grill', name: 'Outdoor Kitchen', price: 65_000 * DOLLAR, about: 'A steel grill, a stone counter and a bar fridge on the balcony.', style: 'outdoor' },
 ];
 
 const HOME_BY_ID = new Map(HOME_ITEMS.map((h) => [h.id, h]));
@@ -140,13 +185,51 @@ export const SLOT_NAMES: Record<HomeSlot, string> = {
   telescope: 'Telescope',
   chandelier: 'Chandelier',
   bath: 'Bathroom',
+  lamp: 'Floor lamp',
+  books: 'Bookcase',
+  desk: 'Desk',
+  grill: 'Grill',
 };
 
 /**
- * The piece that stands in a slot: the one picked (if still owned), else the dearest owned that
- * the apartment's step allows, else null (the slot is empty).
+ * v1.1: an owner can pick a piece up (the slot left empty until they put one back): a pick of
+ * STOWED. The kitchen and the bathroom are built in and can't be.
+ */
+export const STOWED = '';
+
+/** The slots whose piece can't be picked up (built in). */
+export const BUILT_IN: ReadonlySet<HomeSlot> = new Set(['kitchen', 'bath']);
+
+/**
+ * v1.1: the pieces an owner can move about their apartment (the ones standing on the floor; what
+ * hangs on or is set into a wall stays where it is): where each stands, in cm, and which way it
+ * faces (a yaw byte, 256 to a turn, 0 facing +z).
+ */
+export const MOVABLE: ReadonlySet<HomeSlot> = new Set(['sofa', 'bed', 'dining', 'games', 'arcade', 'jukebox', 'piano', 'plant', 'sculpture', 'telescope', 'lamp', 'books', 'desk', 'grill', 'bar']);
+
+export interface HomePlace {
+  x: number;
+  z: number;
+  r: number;
+}
+
+/** The flat and its balcony (cm; plan.ts APT and TERRACE): a moved piece's middle stays in here. */
+export const PLACE_BOUNDS = { x0: -15_400, x1: -12_140, z0: 5_800, z1: 8_400, flatX1: -13_000, terraceZ0: 6_000, terraceZ1: 8_200 } as const;
+
+/** A moved piece's place is somewhere in the flat or on its balcony (the client checks the walls and the rest). */
+export function placeOk(p: HomePlace): boolean {
+  const B = PLACE_BOUNDS;
+  if (![p.x, p.z, p.r].every(Number.isInteger) || p.r < 0 || p.r > 255) return false;
+  if (p.x < B.x0 || p.x > B.x1 || p.z < B.z0 || p.z > B.z1) return false;
+  return p.x <= B.flatX1 || (p.z >= B.terraceZ0 && p.z <= B.terraceZ1);
+}
+
+/**
+ * The piece that stands in a slot: none if it was picked up (STOWED), the one picked (if still
+ * owned), else the dearest owned that the apartment's step allows, else null (the slot is empty).
  */
 export function pieceIn(slot: HomeSlot, owned: ReadonlySet<string>, tier: number, picked: string | null): HomeItem | null {
+  if (picked === STOWED && !BUILT_IN.has(slot)) return null;
   const fits = HOME_ITEMS.filter((h) => h.slot === slot && owned.has(h.id) && (h.tier ?? 1) <= tier);
   const chosen = picked ? fits.find((h) => h.id === picked) : undefined;
   if (chosen) return chosen;

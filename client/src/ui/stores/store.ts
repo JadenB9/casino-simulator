@@ -5,7 +5,7 @@
 
 import './store.css';
 import { formatMoney, type Cents } from '../../../../shared/src/money.ts';
-import { el, toast } from '../kit.ts';
+import { button, el, toast } from '../kit.ts';
 import { openSheet, type Sheet } from '../menu/sheet.ts';
 import { problemText } from '../menu/parts.ts';
 import { applyMoney } from '../shop/bar.ts';
@@ -26,11 +26,18 @@ export interface StoreRow {
   use?: { label: string; done?: boolean; run(): void };
 }
 
+/** v1.1: something a section's heading offers (your apartment's Move, Pick up). */
+export interface StoreAction {
+  label: string;
+  run(): void;
+}
+
 export interface StoreOpts {
   root: HTMLElement;
   title: string;
   subtitle?: string;
-  sections: () => { title: string; rows: StoreRow[] }[];
+  /** v1.1: a section can carry actions of its own beside its heading (your apartment's Move, Pick up). */
+  sections: () => { title: string; rows: StoreRow[]; actions?: StoreAction[] }[];
   sfx?: Sfx;
   /** Something was bought (the world refurnishes, the floor already knows). */
   bought?: (id: string) => void;
@@ -49,7 +56,20 @@ export function openStore(o: StoreOpts): Sheet {
     body.replaceChildren(
       ...o.sections().map((sec) => {
         const s = el('section', 'store-section');
-        s.append(el('h3', 'store-head', sec.title));
+        const head = el('h3', 'store-head', sec.title);
+        if (sec.actions?.length) {
+          const acts = el('span', 'store-acts');
+          for (const a of sec.actions) {
+            acts.append(
+              button(a.label, () => {
+                a.run();
+                if (!sheet.closed) paint();
+              }, { cls: 'ghost' }),
+            );
+          }
+          head.append(acts);
+        }
+        s.append(head);
         for (const r of sec.rows) {
           const row = el('div', `store-row${r.owned ? ' owned' : ''}`);
           const text = el('div', 'store-text');

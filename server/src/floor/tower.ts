@@ -2,10 +2,11 @@
 // bought, from floor 31 up), and anyone can ride up and visit it; only its owner changes what's
 // in it. The floor keeps the tower in its own SQLite (it outlives every connection): each owner's
 // name, step, the home pieces and guns they own (as the Worker read them from D1 at their last
-// connect or purchase) and which piece stands in each slot.
+// connect or purchase), which piece stands in each slot (or none: picked up) and, since v1.1,
+// where the owner has moved each piece to.
 
 import type { AptInfo } from '../../../shared/src/protocol.ts';
-import { HOME_ITEMS, homeItem, type HomeSlot } from '../../../shared/src/estate.ts';
+import { BUILT_IN, HOME_ITEMS, MOVABLE, STOWED, homeItem, placeOk, type HomePlace, type HomeSlot } from '../../../shared/src/estate.ts';
 import { gunItem } from '../../../shared/src/arms.ts';
 
 /** The first owner's floor; each later owner's is the next one up. */
@@ -18,11 +19,15 @@ type Row = {
   floor: number;
   items: string;
   picks: string;
+  places: string;
 };
 
 export class Tower {
   constructor(private readonly sql: SqlStorage) {
     sql.exec(`CREATE TABLE IF NOT EXISTS apartments (account_id INTEGER PRIMARY KEY, name TEXT NOT NULL, tier INTEGER NOT NULL, floor INTEGER NOT NULL, items TEXT NOT NULL, picks TEXT NOT NULL)`);
+    // v1.1: where moved pieces stand (a tower from before has the column added)
+    const cols = sql.exec<{ name: string }>(`PRAGMA table_info(apartments)`).toArray();
+    if (!cols.some((c) => c.name === 'places')) sql.exec(`ALTER TABLE apartments ADD COLUMN places TEXT NOT NULL DEFAULT '{}'`);
   }
 
   /** An owner as they are now (connect, purchase): their floor kept, or the next one for a new owner. */
@@ -53,7 +58,17 @@ export class Tower {
   /** One apartment as the clients draw it. */
   info(id: number): AptInfo | null {
     const r = this.row(id);
-    return r ? { id: r.account_id, name: r.name, floor: r.floor, tier: r.tier, items: JSON.parse(r.items) as string[], picks: JSON.parse(r.picks) as Partial<Record<HomeSlot, string>> } : null;
+    return r
+      ? {
+          id: r.account_id,
+          name: r.name,
+          floor: r.floor,
+          tier: r.tier,
+          items: JSON.parse(r.items) as string[],
+          picks: JSON.parse(r.picks) as Partial<Record<HomeSlot, string>>,
+          places: JSON.parse(r.places) as Partial<Record<HomeSlot, HomePlace>>,
+        }
+      : null;
   }
 
   /** Every apartment's owner and floor, top floor first, for the elevator's list. */
@@ -61,19 +76,37 @@ export class Tower {
     return this.sql.exec<Row>(`SELECT account_id, name, floor FROM apartments ORDER BY floor DESC LIMIT 200`).toArray().map((r) => ({ id: r.account_id, name: r.name, floor: r.floor }));
   }
 
-  /** The owner puts one of their pieces in a slot (or clears the pick: null). False when it isn't theirs or doesn't go there. */
+  /**
+   * The owner puts one of their pieces in a slot, or picks the slot's piece up (null: v1.1, the
+   * slot stays empty until one is put back; not the built-in kitchen or bathroom). False when it
+   * isn't theirs or doesn't go there.
+   */
   pick(id: number, slot: string, item: string | null): boolean {
     const r = this.row(id);
     if (!r) return false;
     if (!HOME_ITEMS.some((h) => h.slot === slot)) return false;
     const picks = JSON.parse(r.picks) as Record<string, string>;
-    if (item === null) delete picks[slot];
-    else {
+    if (item === null) {
+      if (BUILT_IN.has(slot as HomeSlot)) return false;
+      picks[slot] = STOWED;
+    } else {
       const h = homeItem(item);
       if (!h || h.slot !== slot || !(JSON.parse(r.items) as string[]).includes(item)) return false;
       picks[slot] = item;
     }
     this.sql.exec(`UPDATE apartments SET picks = ?2 WHERE account_id = ?1`, id, JSON.stringify(picks));
+    return true;
+  }
+
+  /** v1.1: the owner moves a piece that stands on the floor (null: back to its own place). */
+  move(id: number, slot: string, at: HomePlace | null): boolean {
+    const r = this.row(id);
+    if (!r || !MOVABLE.has(slot as HomeSlot)) return false;
+    if (at && !placeOk(at)) return false;
+    const places = JSON.parse(r.places) as Record<string, HomePlace>;
+    if (at) places[slot] = { x: at.x, z: at.z, r: at.r };
+    else delete places[slot];
+    this.sql.exec(`UPDATE apartments SET places = ?2 WHERE account_id = ?1`, id, JSON.stringify(places));
     return true;
   }
 

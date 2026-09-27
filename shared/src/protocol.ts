@@ -14,6 +14,7 @@ import type { FxEvent, Statue } from './items.ts';
 import type { ZoneId } from './zones.ts';
 import type { CarCall } from './valet.ts'; // v6 cars6
 import { isSeatId } from './seats.ts';
+import { placeOk, type HomePlace, type HomeSlot } from './estate.ts';
 import type { TableLimits } from './limits.ts';
 // v6 law6:
 import type { Detour, StaffId } from './law/patrol.ts';
@@ -114,6 +115,8 @@ export interface AptInfo {
   tier: number;
   items: string[];
   picks: Partial<Record<string, string>>;
+  /** v1.1: where the owner moved pieces to (estate.ts HomePlace), by slot; a slot not here stands in its own place. */
+  places?: Partial<Record<HomeSlot, HomePlace>>;
 }
 
 /** v7: a car someone got out of and left: which, and where (cm, yaw byte). */
@@ -413,7 +416,10 @@ export type FloorClientMsg =
   // v7.1: a jump (everyone sees you hop)
   | { t: 'jump' }
   | { t: 'crouch'; on: boolean }
+  // (v1.1: a null item picks the piece up: the slot stays empty until one is put back)
   | { t: 'home.pick'; slot: string; item: string | null }
+  // v1.1: the owner moves a piece (null: back to its own place)
+  | { t: 'home.move'; slot: string; at: HomePlace | null }
   | InviteClientMsg // v6 invite6
   // v6 law6: throw a punch, facing `r` (yaw byte); the server finds who it lands on
   | { t: 'punch'; r: number }
@@ -518,6 +524,14 @@ export function parseFloorMsg(raw: unknown, isGame: (g: unknown) => g is GameId)
     case 'home.pick':
       if (typeof raw.slot !== 'string' || !/^[a-z]{2,16}$/.test(raw.slot) || (raw.item !== null && !isShortId(raw.item))) return null;
       return { t: 'home.pick', slot: raw.slot, item: raw.item as string | null };
+    case 'home.move': {
+      if (typeof raw.slot !== 'string' || !/^[a-z]{2,16}$/.test(raw.slot)) return null;
+      if (raw.at === null) return { t: 'home.move', slot: raw.slot, at: null };
+      if (typeof raw.at !== 'object' || raw.at === null) return null;
+      const { x, z, r } = raw.at as HomePlace;
+      const at = { x, z, r };
+      return placeOk(at) ? { t: 'home.move', slot: raw.slot, at } : null;
+    }
     // v7:
     case 'drive':
       if (raw.car !== null && !isShortId(raw.car)) return null;

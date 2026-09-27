@@ -68,6 +68,8 @@ export class Arms {
   private readonly ammo = el('div', 'arms-ammo panel');
   private readonly gunBtn = el('button', 'arms-touch arms-gun', 'Gun');
   private readonly fireBtn = el('button', 'arms-touch arms-fire', 'Fire');
+  /** v1.1: on a touch screen, Aim toggles aiming in (a thumb can't hold it and look at once). */
+  private readonly aimBtn = el('button', 'arms-touch arms-aim', 'Aim');
   private readonly offs: (() => void)[] = [];
   private readonly _v = new THREE.Vector3();
   /** Range targets knocked flat (lane index -> seconds left down). */
@@ -91,7 +93,14 @@ export class Arms {
       if (this.gun.auto) this.trigger = true;
     });
     this.fireBtn.addEventListener('contextmenu', (e) => e.preventDefault());
-    d.ui.append(this.cross, this.ammo, this.gunBtn, this.fireBtn);
+    this.aimBtn.type = 'button';
+    this.aimBtn.hidden = true;
+    this.aimBtn.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      if (this.gun) this.aiming = !this.aiming;
+    });
+    this.aimBtn.addEventListener('contextmenu', (e) => e.preventDefault());
+    d.ui.append(this.cross, this.ammo, this.gunBtn, this.fireBtn, this.aimBtn);
     this.buildTargets();
     this.offs.push(d.world.walker.onClick(() => this.click(), 10));
     this.offs.push(d.engine.onFrame((dt) => this.update(dt)));
@@ -314,7 +323,9 @@ export class Arms {
     if (!g) return;
     this.ammo.hidden = false;
     const reloading = performance.now() < this.reloadUntil;
-    this.ammo.textContent = `${g.name} · ${reloading ? 'reloading' : `${this.rounds} / ${g.mag}`} · ${keyLabel('gun')} holster · right-click aims`;
+    // (a touch screen has its own buttons for both)
+    const how = document.documentElement.classList.contains('touch-ui') ? '' : ` · ${keyLabel('gun')} holster · right-click aims`;
+    this.ammo.textContent = `${g.name} · ${reloading ? 'reloading' : `${this.rounds} / ${g.mag}`}${how}`;
   }
 
   private shake = 0;
@@ -383,6 +394,8 @@ export class Arms {
     if (this.gunBtn.hidden === touch) this.gunBtn.hidden = !touch;
     const fire = touch && !!this.gun;
     if (this.fireBtn.hidden === fire) this.fireBtn.hidden = !fire;
+    if (this.aimBtn.hidden === fire) this.aimBtn.hidden = !fire;
+    this.aimBtn.classList.toggle('on', this.aiming);
     this.gunBtn.textContent = this.gun ? 'Holster' : 'Gun';
     if (this.gun) {
       const ch = world.player.character as unknown as Person;
@@ -451,6 +464,7 @@ export class Arms {
     this.ammo.remove();
     this.gunBtn.remove();
     this.fireBtn.remove();
+    this.aimBtn.remove();
   }
 }
 

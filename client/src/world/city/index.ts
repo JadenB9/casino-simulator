@@ -615,6 +615,11 @@ export class City {
     this.onKnock?.(k);
   }
 
+  /** v1.1: the materials the zones are built from (a piece carried about your apartment is built from them). */
+  get mats(): Mats {
+    return this.deps.mats;
+  }
+
   /** v7: your apartment's interior, once its floor is built (the app furnishes it). */
   homeInterior(): HomeInterior | null {
     return (this.zones.get('home') as HomeBuild | undefined)?.home ?? null;

@@ -113,6 +113,22 @@ export function buildStations(plan: FloorPlan, parent: THREE.Object3D, quality: 
   return { stations, vpMode };
 }
 
+/**
+ * A station standing outside the floor plan (the jail's tables, v1.1 the apartment's Poker Table):
+ * the game's own model on an anchor at (x, z) under `parent`, facing +z. Its collision is the
+ * caller's (the jail's is fixed, the apartment's moves).
+ */
+export function looseStation(o: { id: string; game: GameId; variant: string; name: string; limits: string; x: number; z: number; parent: THREE.Object3D; quality: Quality }): WorldStation {
+  const mod = GAMES[o.game];
+  const anchor = new THREE.Group();
+  anchor.name = `station:${o.id}`;
+  anchor.position.set(o.x, 0, o.z);
+  const model = mod.createModel({ variant: o.variant, quality: o.quality });
+  anchor.add(model);
+  o.parent.add(anchor);
+  return { id: o.id, game: o.game, variant: o.variant, anchor, footprint: mod.footprint, zone: 'pit', name: o.name, limits: o.limits, model, yaw: 0, room: 'pit' };
+}
+
 /** The camera pose for playing at a station, in world space (same maths as TableStage.worldPose). */
 /**
  * Where the `slot`-th person sitting at a station is drawn, in world space: that game's seats in

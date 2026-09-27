@@ -9,7 +9,7 @@ import type { Quality } from '../../render/engine3d.ts';
 import type { Mats } from '../materials.ts';
 import type { Collider } from '../collision.ts';
 import { LIFTS } from '../../../../shared/src/lifts.ts';
-import type { HomeSlot } from '../../../../shared/src/estate.ts';
+import type { HomePlace, HomeSlot } from '../../../../shared/src/estate.ts';
 import { Bank, panelTexture } from '../city/bank.ts';
 import { Kit } from '../city/kit.ts';
 import { Beacons, cityBelow, rng, skyDome, skylineRing, towers, type Tower } from '../city/sky.ts';
@@ -19,8 +19,8 @@ import { defineHomeMats, furnish, type Furnished } from './furnish.ts';
 
 /** What the app does with the apartment once it's built: furnish it for its owner. */
 export interface HomeInterior {
-  /** Your step (1-3), what you own, and your picks per slot: the flat is rebuilt to match. */
-  set(tier: number, owned: ReadonlySet<string>, picks: Partial<Record<HomeSlot, string>>): void;
+  /** Your step (1-3), what you own, your picks per slot and where you moved pieces: the flat is rebuilt to match. */
+  set(tier: number, owned: ReadonlySet<string>, picks: Partial<Record<HomeSlot, string>>, places?: Partial<Record<HomeSlot, HomePlace>>): void;
   /** What stands in each slot now. */
   readonly furnished: Furnished | null;
   /** The terrace door is open (the Penthouse step). */
@@ -141,13 +141,13 @@ export function buildHome(mats: Mats, col: Collider, quality: Quality): HomeBuil
   let tier = 0;
   let key = '';
   const home: HomeInterior = {
-    set(t, owned, picks) {
-      const k = `${t}|${[...owned].sort().join(',')}|${JSON.stringify(picks)}`;
+    set(t, owned, picks, places = {}) {
+      const k = `${t}|${[...owned].sort().join(',')}|${JSON.stringify(picks)}|${JSON.stringify(places)}`;
       if (k === key) return;
       key = k;
       tier = t;
       furnished?.dispose();
-      furnished = furnish(mats, col, t, owned, picks);
+      furnished = furnish(mats, col, t, owned, picks, places);
       group.add(furnished.group);
       // (v7.4: the terrace door stands open for every owner: the balcony is theirs from the first step)
       terraceDoor.walk = false;

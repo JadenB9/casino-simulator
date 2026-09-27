@@ -18,6 +18,7 @@ import { isTyping, overlayCount } from '../ui/keyboard.ts';
 import { openOnline, type OnlineRow } from '../ui/hud/online.ts';
 import { whereIs } from '../world/where.ts';
 import { homeTier } from '../../../shared/src/estate.ts';
+import type { AptInfo, FloorClientMsg } from '../../../shared/src/protocol.ts';
 import { session } from './session.ts';
 import * as api from '../net/api.ts';
 import type { Law } from '../world/law/index.ts';
@@ -25,11 +26,16 @@ import type { Spot } from '../world/interact.ts';
 import type { Look } from '../../../shared/src/look.ts';
 import { Arms } from '../world/arms/index.ts';
 import { GUNS } from '../../../shared/src/arms.ts';
-import { APARTMENTS, SLOT_NAMES, type HomeSlot } from '../../../shared/src/estate.ts';
+import { APARTMENTS, BUILT_IN, MOVABLE, SLOT_NAMES, STOWED, type HomePlace, type HomeSlot } from '../../../shared/src/estate.ts';
 import { RESIDENCES, STORES, type StoreId } from '../../../shared/src/stores.ts';
-import { openStore, type StoreRow } from '../ui/stores/store.ts';
-import { SLOTS, TABLET } from '../world/home/plan.ts';
-import { SLOT_ORDER, slotItems } from '../world/home/furnish.ts';
+import { openStore, type StoreAction, type StoreRow } from '../ui/stores/store.ts';
+import { TABLET, placeOf } from '../world/home/plan.ts';
+import { SLOT_ORDER, isPokerTable, showPiece, slotItems, type Live } from '../world/home/furnish.ts';
+import { HOME_POKER, HomePoker } from '../world/home/poker.ts';
+import { Mover, type Carried } from '../world/home/mover.ts';
+import { Kit } from '../world/city/kit.ts';
+import { Collider } from '../world/collision.ts';
+import type { Sheet } from '../ui/menu/sheet.ts';
 import { isKey, keyLabel } from '../ui/keys.ts';
 
 const owns = (id: string) => (session.profile?.owned ?? []).includes(id);
@@ -65,6 +71,12 @@ export class V7 {
   private linkOff: (() => void) | null = null;
   private readonly clerks: Person[] = [];
   private homeAt = 0;
+  /** v1.1: the apartment's Poker Table (a Hold'em station), and moving your pieces about. */
+  private readonly poker: HomePoker;
+  private readonly mover: Mover;
+  /** The slot whose piece you're carrying (it isn't drawn in its place meanwhile). */
+  private moving: HomeSlot | null = null;
+  private homeSheet: Sheet | null = null;
 
   constructor(private readonly d: V7Deps) {
     const { world, engine } = d;
@@ -112,6 +124,17 @@ export class V7 {
     engine.onFrame((dt) => this.frame(dt));
     world.spots((p) => this.spots(p));
     this.residences();
+    // v1.1: the Poker Table is a station like any other (E sits down at it)
+    this.poker = new HomePoker(engine.scene, world.quality, world.collider);
+    world.stations.push(this.poker.station);
+    this.mover = new Mover({
+      scene: engine.scene,
+      ui: d.ui,
+      collider: world.collider,
+      player: () => ({ x: world.player.position.x, z: world.player.position.z, heading: world.walker.heading }),
+      onClick: (fn, priority) => world.walker.onClick(fn, priority),
+      onFrame: (fn) => engine.onFrame(fn),
+    });
     // v7.1: the jump (Space) and v7.4 the crouch (C), on foot on the floor
     addEventListener('keydown', (e) => {
       const jump = isKey(e, 'jump');
@@ -194,6 +217,8 @@ export class V7 {
       c.root.visible = shown;
       if (shown) c.update(dt);
     }
+    // v1.1: a piece being carried is put back when anything takes you from your apartment
+    if (this.moving && (this.d.world.zone !== 'home' || !this.mine || !this.d.free() || this.driving.driving || overlayCount() > 0)) this.mover.cancel();
     // your apartment, furnished from what you own (a cheap check, twice a second)
     this.homeAt -= dt;
     if (this.homeAt > 0) return;
@@ -201,12 +226,18 @@ export class V7 {
     // v7.1: whichever apartment you're in, as the floor described it (visitors see the owner's)
     const home = this.d.world.city.homeInterior();
     const apt = this.d.world.city.apt;
-    if (!home || !apt) return;
-    if (apt.id !== this.aptShown) {
-      this.aptShown = apt.id;
-      toast(apt.id === this.d.link()?.you?.id ? `Your apartment · floor ${apt.floor}` : `${apt.name}'s apartment · floor ${apt.floor}. Only ${apt.name} can change anything here.`);
+    if (home && apt) {
+      if (apt.id !== this.aptShown) {
+        this.aptShown = apt.id;
+        toast(apt.id === this.d.link()?.you?.id ? `Your apartment · floor ${apt.floor}` : `${apt.name}'s apartment · floor ${apt.floor}. Only ${apt.name} can change anything here.`);
+      }
+      // (a piece being carried isn't drawn in its place meanwhile)
+      const picks = { ...apt.picks } as Partial<Record<HomeSlot, string>>;
+      if (this.moving) picks[this.moving] = STOWED;
+      home.set(apt.tier, new Set(apt.items), picks, apt.places);
     }
-    home.set(apt.tier, new Set(apt.items), apt.picks as Partial<Record<HomeSlot, string>>);
+    // the Poker Table where the games piece is, if that's the Poker Table (and it stays while someone's sitting at it)
+    if (this.d.world.seated?.id !== HOME_POKER) this.poker.set(this.d.world.zone === 'home' && home && apt && isPokerTable(home.furnished?.pieces.get('games')) ? placeOf('games', apt.places) : null);
   }
 
   private aptShown = 0;
@@ -252,11 +283,12 @@ export class V7 {
         if (inHall) yield { key: 'jail:bail', x: 169, z: -21, d: Math.hypot(p.x - 169, p.z + 21), label: 'Bail someone out', any: true, use: () => this.openOnline() };
       }
     }
-    if (zone === 'home' && this.mine) {
+    if (zone === 'home' && this.mine && !this.moving) {
       const t = Math.hypot(p.x - TABLET.x, p.z - TABLET.z);
       if (t < 1.4) yield { key: 'home:tablet', x: TABLET.x, z: TABLET.z, d: t, label: 'Home · upgrades and furniture', any: true, use: () => this.openHome(null) };
+      const places = this.d.world.city.apt?.places;
       for (const slot of SLOT_ORDER) {
-        const at = SLOTS[slot];
+        const at = placeOf(slot, places);
         if (!at.reach) continue;
         const d = Math.hypot(p.x - at.x, p.z - at.z);
         if (d > at.reach) continue;
@@ -294,23 +326,26 @@ export class V7 {
   private openHome(only: HomeSlot | null, title = 'Your home', residences = false, store = false): void {
     const owned = () => session.profile?.owned ?? [];
     const tier = () => homeTier(owned());
-    openStore({
+    // v1.1: in your own apartment, a piece standing in its place can be moved or picked up
+    const here = !residences && !store && this.mine && this.d.world.zone === 'home';
+    this.homeSheet = openStore({
       root: this.d.ui,
       title: only ? SLOT_NAMES[only] : title,
       subtitle: residences ? 'Your own floor in the tower: anyone can visit, only you change it' : tier() ? `Your apartment: ${APARTMENTS[tier() - 1]!.name}` : 'Buy The Residence at the Residences desk in the hotel lobby (ground floor), then furnish it',
       sfx: this.d.sfx,
       bought: () => (this.homeAt = 0),
       sections: () => {
-        const out: { title: string; rows: StoreRow[] }[] = [];
+        const out: { title: string; rows: StoreRow[]; actions?: StoreAction[] }[] = [];
         if (!only && (residences || store))
           out.push({
             title: 'The apartment',
             rows: APARTMENTS.map((a) => ({ id: a.id, name: a.name, price: a.price, about: a.about, owned: owns(a.id), locked: a.tier > tier() + 1 ? `Needs ${APARTMENTS[a.tier - 2]!.name} first.` : null })),
           });
         for (const slot of residences ? [] : only ? [only] : SLOT_ORDER) {
-          const here = this.d.world.city.homeInterior()?.furnished?.pieces.get(slot)?.id;
+          const standing = this.d.world.city.homeInterior()?.furnished?.pieces.get(slot)?.id;
           out.push({
             title: SLOT_NAMES[slot],
+            actions: here ? this.slotActions(slot) : undefined,
             rows: slotItems(slot).map((h) => ({
               id: h.id,
               name: h.name,
@@ -318,7 +353,7 @@ export class V7 {
               about: h.about,
               owned: owns(h.id),
               locked: tier() < 1 ? 'Needs an apartment: buy The Residence first.' : (h.tier ?? 1) > tier() ? `Needs ${APARTMENTS[(h.tier ?? 1) - 1]!.name}.` : null,
-              use: { label: 'Put it here', done: here === h.id, run: () => this.pick(slot, h.id) },
+              use: { label: 'Put it here', done: standing === h.id, run: () => this.pick(slot, h.id) },
             })),
           });
         }
@@ -327,10 +362,107 @@ export class V7 {
     });
   }
 
-  /** Put one of your pieces in its place: the floor keeps it, and everyone in your apartment sees it. */
-  private pick(slot: HomeSlot, id: string): void {
-    if (!this.d.link()?.send({ t: 'home.pick', slot, item: id })) toast('The floor is reconnecting. Try again in a moment.', 'err');
+  /** To the floor, or a word that it's reconnecting (false). */
+  private send(msg: FloorClientMsg): boolean {
+    if (this.d.link()?.send(msg)) return true;
+    toast('The floor is reconnecting. Try again in a moment.', 'err');
+    return false;
+  }
+
+  /**
+   * Your apartment as it is now you've changed it: shown at once (the floor's answer says the same
+   * a moment later; without this a piece set down would flash back to where it was meanwhile).
+   */
+  private changed(fn: (apt: AptInfo) => AptInfo): void {
+    const apt = this.d.world.city.apt;
+    if (apt) this.d.world.city.apt = fn(apt);
     this.homeAt = 0;
+  }
+
+  /** Put one of your pieces in its place (null: pick it up): the floor keeps it, and everyone in your apartment sees it. */
+  private pick(slot: HomeSlot, id: string | null): void {
+    if (this.send({ t: 'home.pick', slot, item: id })) this.changed((apt) => ({ ...apt, picks: { ...apt.picks, [slot]: id ?? STOWED } }));
+  }
+
+  /** v1.1: what a slot's heading offers in your own apartment: Move, Pick up, Back to its place. */
+  private slotActions(slot: HomeSlot): StoreAction[] {
+    const piece = this.d.world.city.homeInterior()?.furnished?.pieces.get(slot);
+    const out: StoreAction[] = [];
+    if (piece && MOVABLE.has(slot)) out.push({ label: 'Move', run: () => this.startMove(slot) });
+    if (piece && !BUILT_IN.has(slot)) out.push({ label: 'Pick up', run: () => this.pick(slot, null) });
+    if (MOVABLE.has(slot) && this.d.world.city.apt?.places?.[slot]) out.push({ label: 'Back to its place', run: () => this.place(slot, null) });
+    return out;
+  }
+
+  /** v1.1: the floor keeps where a piece stands now (null: its own place), and shows it at once. */
+  private place(slot: HomeSlot, at: HomePlace | null): void {
+    if (!this.send({ t: 'home.move', slot, at })) return;
+    this.changed((apt) => {
+      const places = { ...apt.places };
+      if (at) places[slot] = at;
+      else delete places[slot];
+      return { ...apt, places };
+    });
+  }
+
+  /** v1.1: pick a piece up and carry it about (home/mover.ts): set down, it stays there for everyone. */
+  private startMove(slot: HomeSlot): void {
+    const home = this.d.world.city.homeInterior();
+    const item = home?.furnished?.pieces.get(slot);
+    const apt = this.d.world.city.apt;
+    if (!home || !item || !apt) return;
+    this.homeSheet?.close();
+    const carried = isPokerTable(item) ? this.carryPoker() : this.carryPiece(slot, item.style);
+    this.moving = slot;
+    this.homeAt = 0;
+    this.mover.start(carried, (at) => {
+      this.moving = null;
+      if (at) this.place(slot, at);
+      this.homeAt = 0;
+    });
+  }
+
+  /** A copy of the piece to carry, built like the showroom's, and its size on the floor. */
+  private carryPiece(slot: HomeSlot, style: string): Carried {
+    const col = new Collider();
+    const kit = new Kit('home', this.d.world.city.mats, col);
+    const group = new THREE.Group();
+    group.name = 'home:carried';
+    const live: Live = { group, updates: [], disposers: [] };
+    showPiece(kit, col, slot, style, { x: 0, z: 0, yaw: 0 }, live);
+    const built = kit.batch.build(group, 'home');
+    const glows = kit.glow.build(group);
+    // its size on the floor: what's solid of it (a chandelier's nothing, a rug's all of it)
+    let hx = 0.3;
+    let hz = 0.3;
+    for (const b of col.boxes) {
+      hx = Math.max(hx, Math.abs(b.cx) + b.hx);
+      hz = Math.max(hz, Math.abs(b.cz) + b.hz);
+    }
+    for (const p of col.posts) {
+      hx = Math.max(hx, Math.abs(p.cx) + p.r);
+      hz = Math.max(hz, Math.abs(p.cz) + p.r);
+    }
+    const off = this.d.engine.onFrame((dt) => live.updates.forEach((u) => u(dt)));
+    return {
+      object: group,
+      half: { x: hx, z: hz },
+      dispose() {
+        off();
+        for (const fn of live.disposers) fn();
+        for (const m of [...built.meshes, ...glows.meshes]) m.dispose();
+      },
+    };
+  }
+
+  /** The Poker Table carried: a copy of the Hold'em table's model (the station itself is put away meanwhile). */
+  private carryPoker(): Carried {
+    const s = this.poker.station;
+    const copy = new THREE.Group();
+    copy.name = 'home:carried-poker';
+    // (the copy shares the model's geometry and materials: nothing of its own to let go)
+    copy.add(s.model.clone());
+    return { object: copy, half: { x: s.footprint.width / 2, z: s.footprint.depth / 2 }, dispose() {} };
   }
 
   /** Driving now: no punches, rides or tables meanwhile. */
@@ -382,7 +514,7 @@ export class V7 {
           'Pay their bail',
           () => {
             m.close();
-            if (!this.d.link()?.send({ t: 'bail', id })) toast('The floor is reconnecting. Try again in a moment.', 'err');
+            this.send({ t: 'bail', id });
           },
           { cls: 'primary' },
         ),

@@ -20,8 +20,7 @@ import { formatMoney } from '../../../../shared/src/money.ts';
 import { JAIL, JAIL_GAMES, type JailState } from '../../../../shared/src/law/rules.ts';
 import type { Quality } from '../../render/engine3d.ts';
 import type { Collider } from '../collision.ts';
-import type { WorldStation } from '../stations.ts';
-import type { RoomId } from '../layout.ts';
+import { looseStation, type WorldStation } from '../stations.ts';
 
 // --- the plan (metres, world coordinates) ------------------------------------------------------
 
@@ -639,29 +638,12 @@ export function buildJail(opts: { quality: Quality; collider: Collider }): Jail 
     const at = TABLE_AT[g.station]!;
     const variant = variantOf(g.game, g.variant);
     const mod = GAMES[g.game];
-    const anchor = new THREE.Group();
-    anchor.name = `station:${g.station}`;
-    anchor.position.set(at.x, 0, at.z);
-    const model = mod.createModel({ variant, quality: opts.quality });
-    anchor.add(model);
-    group.add(anchor);
+    const station = looseStation({ id: g.station, game: g.game, variant, name: g.game === 'blackjack' ? 'Jail Blackjack' : 'Jail Sic Bo', limits: 'Win your bail', x: at.x, z: at.z, parent: group, quality: opts.quality });
     const fp = mod.footprint;
     col.box(at.x, at.z, fp.width, fp.depth, 0, 1.0, { cam: false });
     // blackjack's players sit; Sic Bo's stand at the rail
     if (g.game === 'blackjack') for (const seat of mod.seats(variant)) stool(s, at.x + seat.position[0], at.z + seat.position[2]);
-    stations.push({
-      id: g.station,
-      game: g.game,
-      variant,
-      anchor,
-      footprint: fp,
-      zone: 'pit',
-      name: g.game === 'blackjack' ? 'Jail Blackjack' : 'Jail Sic Bo',
-      limits: 'Win your bail',
-      model,
-      yaw: 0,
-      room: 'pit' as RoomId,
-    });
+    stations.push(station);
     posts.push({ id: `officer-${g.station}`, x: at.x, z: at.z - fp.depth / 2 - 0.42, yaw: 0 });
   }
   posts.push({ id: 'officer-booking', x: 175.1, z: -29.15, yaw: 0 });

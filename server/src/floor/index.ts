@@ -312,6 +312,11 @@ export class CasinoFloor extends DurableObject<Env> {
       const id = this.presence.accountOf(ws);
       this.presence.touch(ws, Date.now());
       if (id !== null && this.tower.pick(id, msg.slot, msg.item)) this.broadcast({ t: 'apt', apt: this.tower.info(id)! });
+    } else if (msg.t === 'home.move') {
+      // v1.1: the owner moves a piece about their apartment; everyone in it sees it go there
+      const id = this.presence.accountOf(ws);
+      this.presence.touch(ws, Date.now());
+      if (id !== null && b.emote.take() && this.tower.move(id, msg.slot, msg.at)) this.broadcast({ t: 'apt', apt: this.tower.info(id)! });
     } else if (msg.t === 'punch') {
       // v6 law6
       const id = this.presence.accountOf(ws);

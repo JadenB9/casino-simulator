@@ -1409,10 +1409,11 @@ function placePlants(plan: FloorPlan): void {
 
 // --- geometry ------------------------------------------------------------------------------------
 
-type Poly = [number, number][];
+export type Poly = [number, number][];
 type Shape = { poly: Poly } | { x: number; z: number; r: number };
 
-function corners(x: number, z: number, w: number, d: number, yaw: number): Poly {
+/** A w x d rectangle turned `yaw` about (x, z): its corners in world space. */
+export function corners(x: number, z: number, w: number, d: number, yaw: number): Poly {
   const c = Math.cos(yaw);
   const s = Math.sin(yaw);
   return [
@@ -1424,7 +1425,7 @@ function corners(x: number, z: number, w: number, d: number, yaw: number): Poly 
 }
 
 /** Separating-axis test for two convex quads. */
-function overlaps(a: Poly, b: Poly): boolean {
+export function overlaps(a: Poly, b: Poly): boolean {
   for (const poly of [a, b]) {
     for (let i = 0; i < poly.length; i++) {
       const p = poly[i]!;
@@ -1441,7 +1442,7 @@ function overlaps(a: Poly, b: Poly): boolean {
 }
 
 /** Distance from a point to a convex quad (0 inside). */
-function pointToPoly(x: number, z: number, poly: Poly): number {
+export function pointToPoly(x: number, z: number, poly: Poly): number {
   let inside = true;
   let best = Infinity;
   for (let i = 0; i < poly.length; i++) {

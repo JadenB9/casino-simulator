@@ -45,6 +45,13 @@ export class Collider {
     return p;
   }
 
+  /** Take a box or a post out again (something that stood here has gone). */
+  remove(shape: Box | Post): void {
+    const list: (Box | Post)[] = 'hx' in shape ? this.boxes : this.posts;
+    const i = list.indexOf(shape);
+    if (i >= 0) list.splice(i, 1);
+  }
+
   /** Push a walker of radius `r` at `p` out of everything it overlaps (in place). Three passes settle corners. */
   resolve(p: { x: number; z: number }, r: number): void {
     for (let pass = 0; pass < 3; pass++) {

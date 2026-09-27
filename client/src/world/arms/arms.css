@@ -21,3 +21,8 @@
 .arms-cross.aiming { width: 12px; height: 12px; margin: -6px 0 0 -6px; }
 .arms-cross.aiming::before { left: 5px; width: 2px; height: 12px; opacity: 0.55; }
 .arms-cross.aiming::after { top: 5px; width: 12px; height: 2px; opacity: 0.55; }
+/* v1.1: touch: Aim beside Fire (a tap aims in, another comes back out) */
+.arms-aim { bottom: 290px; right: 128px; width: 72px; height: 72px; }
+.arms-aim.on { background: rgba(244, 220, 166, 0.9); color: #1a140c; border-color: #f4dca6; }
+@media (max-width: 520px) { .arms-aim { bottom: 326px; } }
+@media (max-height: 480px) { .arms-aim { bottom: 180px; right: 374px; } }

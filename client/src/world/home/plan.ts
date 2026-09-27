@@ -10,8 +10,9 @@
 // Every piece of furniture has its place (SLOTS, by shared/src/estate.ts HomeSlot), where you walk
 // up to it and E offers that slot's pieces.
 
-import type { HomeSlot } from '../../../../shared/src/estate.ts';
+import type { HomePlace, HomeSlot } from '../../../../shared/src/estate.ts';
 import { LIFTS } from '../../../../shared/src/lifts.ts';
+import { byteToYaw } from '../../net/presence.ts';
 
 /** The flat inside its walls, the ceiling's height, the walls' thickness. */
 export const APT = { x0: LIFTS.home.x / 100, x1: -130, z0: 58, z1: 84, height: 3.8, wall: 0.24 } as const;
@@ -73,7 +74,34 @@ export const SLOTS: Record<HomeSlot, SlotPlace> = {
   telescope: { x: -131.3, z: 60.4, yaw: Math.PI / 2, reach: 1.4 },
   // v7.4: the bathroom (E inside it, or at its door)
   bath: { x: -145.15, z: 63.44, yaw: 0, reach: 2.2 },
+  // v1.1: a lamp by the sofa, a bookcase on the bathroom's outside wall, a desk at the bedroom's
+  // window, and a grill out on the balcony
+  lamp: { x: -144.6, z: 78.4, yaw: 0, reach: 1.4 },
+  books: { x: -147.62, z: 63.6, yaw: -Math.PI / 2, reach: 1.8 },
+  desk: { x: -148.7, z: 58.8, yaw: 0, reach: 1.8 },
+  grill: { x: -122.75, z: 61.5, yaw: -Math.PI / 2, reach: 1.6 },
 };
+
+/**
+ * v1.1: where a slot's piece stands in this apartment: where its owner moved it, or its own place.
+ * The chandelier hangs over the dining table and the rug lies in front of the sofa wherever they go.
+ */
+export function placeOf(slot: HomeSlot, places: Partial<Record<HomeSlot, HomePlace>> | undefined): SlotPlace {
+  const own = SLOTS[slot];
+  const follow: HomeSlot | null = slot === 'chandelier' ? 'dining' : slot === 'rug' ? 'sofa' : null;
+  const at = places?.[follow ?? slot];
+  if (!at) return own;
+  const x = at.x / 100;
+  const z = at.z / 100;
+  const yaw = byteToYaw(at.r);
+  if (!follow) return { ...own, x, z, yaw };
+  // the follower's offset from its leader's own place, turned with it
+  const lead = SLOTS[follow];
+  const dx = own.x - lead.x;
+  const dz = own.z - lead.z;
+  const t = yaw - lead.yaw;
+  return { ...own, x: x + dx * Math.cos(t) + dz * Math.sin(t), z: z - dx * Math.sin(t) + dz * Math.cos(t), yaw: own.yaw + t };
+}
 
 /** The fireplace (the Grand step) on the living room's wall, beside the television. */
 export const FIREPLACE = { x: -134.9, z: 83.7 } as const;

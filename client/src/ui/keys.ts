@@ -25,7 +25,8 @@ export type KeyAction =
   | 'feats'
   | 'mute'
   | 'horn'
-  | 'carView';
+  | 'carView'
+  | 'turn';
 
 /** Where an action means something: on foot, driving, or both. */
 type Where = 'foot' | 'car' | 'both';
@@ -58,6 +59,7 @@ export const KEY_SPECS: readonly KeySpec[] = [
   { action: 'mute', name: 'Mute or unmute', where: 'both', default: 'KeyM' },
   { action: 'horn', name: 'Horn', where: 'car', default: 'KeyH' },
   { action: 'carView', name: 'Car camera', where: 'car', default: 'KeyC' },
+  { action: 'turn', name: 'Turn a piece you are moving (your apartment)', where: 'foot', default: 'KeyR' },
 ];
 
 const SPEC = new Map(KEY_SPECS.map((s) => [s.action, s]));
