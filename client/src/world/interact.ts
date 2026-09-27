@@ -275,7 +275,10 @@ export class Interact {
     if (isTyping(e)) return;
     // (a key typed into an open panel, the map say, still bubbles up to here: not for us)
     if (isKey(e, 'interact') && !e.repeat && !this.seated && !this.fly && this.player.isEnabled && this.current && overlayCount() === 0) {
+      // (the press is used up here: whatever it starts mustn't hear it too, or E into a car would be
+      // E out of it in the same moment: the car's own E gets you out)
       e.preventDefault();
+      e.stopImmediatePropagation();
       const t = this.current;
       if (t.kind === 'station') this.enter(t.station);
       else if (t.kind === 'spot') t.spot.use();
