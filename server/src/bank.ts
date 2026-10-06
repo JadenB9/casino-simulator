@@ -519,6 +519,7 @@ export async function sendMoney(
 // What the bank shows
 
 const SEEN_KEY = 'bank-seen';
+const RANGE_DAYS = new Map([['1d', 1], ['7d', 7], ['30d', 30]]);
 
 export async function bankState(db: D1Database, secret: string, accountId: number, now: number): Promise<BankState> {
   await settleSavings(db, accountId, now);
@@ -687,7 +688,8 @@ export async function bankApi(request: Request, env: Env, route: string, account
     const now = await bankNow(env, a);
     if (route === 'bank') return json(await bankState(db, secret, a, now), 200, cors);
     if (route === 'bank/market') {
-      const days = { '1d': 1, '7d': 7, '30d': 30 }[new URL(request.url).searchParams.get('range') ?? '1d'] ?? 1;
+      // a Map, not an object literal: ?range=constructor would find a function on its prototype
+      const days = RANGE_DAYS.get(new URL(request.url).searchParams.get('range') ?? '1d') ?? 1;
       const { step } = await priceNow(db, secret, now);
       const points = await history(db, step - days * STEPS_PER_DAY, step, days);
       return json({ fund: FUND_ID, name: FUND_NAME, points } satisfies MarketResponse, 200, cors);

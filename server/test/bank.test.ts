@@ -319,6 +319,12 @@ describe('the Casino Index', () => {
     expect(a.fund.price).toBe(b.fund.price);
     clockAt(t0 + 2 * HOUR_MS);
     const m = await (await api('bank/market?range=1d', p.token)).json<any>();
+    // a range that names something on every object's prototype is just an unknown range
+    for (const range of ['constructor', '__proto__', 'toString']) {
+      const odd = await api(`bank/market?range=${range}`, p.token);
+      expect(odd.status).toBe(200);
+      expect((await odd.json<any>()).points.length).toBe(m.points.length);
+    }
     const now = stepOf(Date.now());
     expect(m.points.at(-1)[0]).toBe(now);
     expect(m.points.every((pt: number[]) => pt[0]! <= now)).toBe(true);
