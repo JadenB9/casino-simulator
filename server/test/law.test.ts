@@ -363,6 +363,26 @@ describe('jail', { timeout: 20_000 }, () => {
     await leave(cb);
   });
 
+  it('answers a floor message whose D1 work fails with an error, and keeps the socket', async () => {
+    const a = await player('lw_d1err');
+    const hidden = outOfSight();
+    const ca = await onFloor(a, hidden.x, hidden.z);
+    await runInDurableObject(floor(), (f: CasinoFloor) => {
+      f.law.bailOut = async () => {
+        throw new Error('D1_ERROR: simulated');
+      };
+    });
+    ca.send({ t: 'bail', id: 999_999 });
+    const err = await ca.next((m) => m.t === 'err');
+    expect(err.code).toBe('INTERNAL');
+    expect(JSON.stringify(err)).not.toContain('D1_ERROR');
+    expect(ca.closed).toBeNull();
+    await runInDurableObject(floor(), (f: CasinoFloor) => {
+      delete (f.law as any).bailOut;
+    });
+    await leave(ca);
+  });
+
   it('stands you up from your table first: the chips go home, not a cent lost', async () => {
     const a = await player('lw_evict');
     const hidden = outOfSight();

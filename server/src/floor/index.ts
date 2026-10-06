@@ -213,6 +213,17 @@ export class CasinoFloor extends DurableObject<Env> {
   }
 
   async webSocketMessage(ws: WebSocket, raw: string | ArrayBuffer): Promise<void> {
+    // Several messages wait on D1 (invites, bail, the jail); one that fails answers its sender
+    // instead of throwing out of the handler.
+    try {
+      await this.onFrame(ws, raw);
+    } catch (err) {
+      console.error('floor message failed', err);
+      this.send(ws, { t: 'err', code: 'INTERNAL', msg: 'Something went wrong on the floor.' });
+    }
+  }
+
+  private async onFrame(ws: WebSocket, raw: string | ArrayBuffer): Promise<void> {
     if (typeof raw !== 'string' || raw.length > MAX_FLOOR_FRAME) {
       ws.close(1009, 'frame too large');
       return;
