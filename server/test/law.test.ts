@@ -329,6 +329,40 @@ describe('jail', { timeout: 20_000 }, () => {
     await leave(again!);
   });
 
+  it('charges a bail paid twice at once only once, and lets out a stay already paid for', async () => {
+    const a = await player('lw_bail2');
+    const payer = await player('lw_payer');
+    const hidden = outOfSight();
+    const ca = await onFloor(a, hidden.x, hidden.z);
+    await arrest(a);
+    const owed = (await jailRow(a.id))!.bail;
+    const before = (await money(payer.id)).balance;
+    // a double click: both frames reach the floor before the first payment's batch is back
+    const answers = await runInDurableObject(floor(), (f: CasinoFloor) => Promise.all([f.law.bailOut(payer.id, a.id, Date.now()), f.law.bailOut(payer.id, a.id, Date.now() + 1)]));
+    expect(answers.filter((x) => x === null)).toHaveLength(1);
+    expect((await money(payer.id)).balance).toBe(before - owed);
+    expect((await jailRow(a.id))!.released_at).not.toBeNull();
+    await expectBalanced(payer.id);
+    await leave(ca);
+
+    // paid, but the release never landed (the object restarted between the two): the next try
+    // lets them out without taking the money again
+    const b = await player('lw_bail3');
+    const cb = await onFloor(b, hidden.x, hidden.z);
+    await arrest(b);
+    const stay = (await env.DB.prepare(`SELECT id, bail FROM casino_jail WHERE account_id = ?1 AND released_at IS NULL`).bind(b.id).first<{ id: number; bail: number }>())!;
+    await env.DB.batch([
+      env.DB.prepare(`INSERT INTO casino_orders (op_id, account_id, item, price, created_at) VALUES (?1, ?2, 'bail-out', ?3, ?4)`).bind(`bail:stay:${stay.id}`, payer.id, stay.bail, Date.now()),
+      env.DB.prepare(`UPDATE casino_accounts SET balance = balance - ?2 WHERE id = ?1`).bind(payer.id, stay.bail),
+    ]);
+    const paid = (await money(payer.id)).balance;
+    expect(await runInDurableObject(floor(), (f: CasinoFloor) => f.law.bailOut(payer.id, b.id, Date.now()))).toBeNull();
+    expect((await money(payer.id)).balance).toBe(paid);
+    expect((await jailRow(b.id))!.released_at).not.toBeNull();
+    await expectBalanced(payer.id);
+    await leave(cb);
+  });
+
   it('stands you up from your table first: the chips go home, not a cent lost', async () => {
     const a = await player('lw_evict');
     const hidden = outOfSight();

@@ -274,6 +274,9 @@ export class Law {
 
   // --- v7: bailing someone out ------------------------------------------------------------------
 
+  /** Inmates whose bail someone is paying right now (bailOut). */
+  private readonly bailing = new Set<number>();
+
   /**
    * `payer` pays what's left of `inmate`'s bail (the bail less what they've won toward it) from
    * their balance, and the inmate walks out as if they'd made it. Never from inside, never your own,
@@ -284,22 +287,39 @@ export class Law {
     if (this.isConfined(payer)) return 'Not from in here.';
     const jail = this.jailOf(inmate);
     if (!jail) return 'They aren’t in jail.';
-    const db = this.env.DB;
-    const row = await db.prepare(`SELECT id, bail, won FROM casino_jail WHERE account_id = ?1 AND released_at IS NULL`).bind(inmate).first<{ id: number; bail: number; won: number }>();
-    if (!row) return 'They aren’t in jail.';
-    const owed = Math.max(100, row.bail - row.won);
+    // one payment at a time per inmate: a double click (or two payers at once) would otherwise both
+    // pass the checks below while the first one's batch is on its way
+    if (this.bailing.has(inmate)) return 'Their bail is already being paid.';
+    this.bailing.add(inmate);
     try {
-      await db.batch([
-        db.prepare(`INSERT INTO casino_orders (op_id, account_id, item, price, created_at) VALUES (?1, ?2, 'bail-out', ?3, ?4)`).bind(`bail:${payer}:${inmate}:${now}`, payer, owed, now),
-        db.prepare(`UPDATE casino_accounts SET balance = balance - ?2, rev = rev + 1 WHERE id = ?1`).bind(payer, owed),
-      ]);
-    } catch {
-      return 'Not enough on your balance for their bail.';
+      const db = this.env.DB;
+      const row = await db.prepare(`SELECT id, bail, won FROM casino_jail WHERE account_id = ?1 AND released_at IS NULL`).bind(inmate).first<{ id: number; bail: number; won: number }>();
+      if (!row) return 'They aren’t in jail.';
+      const owed = Math.max(100, row.bail - row.won);
+      // The order is keyed on the stay, so a stay is paid for once; one already paid whose release
+      // didn't land is just let out. Nothing is taken once the stay has closed (bail won meanwhile).
+      const op = `bail:stay:${row.id}`;
+      const paid = await db.prepare(`SELECT 1 AS n FROM casino_orders WHERE op_id = ?1`).bind(op).first();
+      if (!paid) {
+        try {
+          const res = await db.batch([
+            db
+              .prepare(`INSERT INTO casino_orders (op_id, account_id, item, price, created_at) SELECT ?1, ?2, 'bail-out', ?3, ?4 WHERE EXISTS (SELECT 1 FROM casino_jail WHERE id = ?5 AND released_at IS NULL)`)
+              .bind(op, payer, owed, now, row.id),
+            db.prepare(`UPDATE casino_accounts SET balance = balance - ?2, rev = rev + 1 WHERE id = ?1 AND EXISTS (SELECT 1 FROM casino_orders WHERE op_id = ?3)`).bind(payer, owed, op),
+          ]);
+          if (!res[1]!.meta.changes) return 'They aren’t in jail.';
+        } catch {
+          return 'Not enough on your balance for their bail.';
+        }
+        const by = this.presence.whereIs(payer)?.name ?? 'Someone';
+        this.tell({ k: 'free', id: inmate, name: this.presence.whereIs(inmate)?.name ?? '', staff: null, why: null, by, amount: owed });
+      }
+      await this.release(inmate, row.id, now);
+      return null;
+    } finally {
+      this.bailing.delete(inmate);
     }
-    const by = this.presence.whereIs(payer)?.name ?? 'Someone';
-    this.tell({ k: 'free', id: inmate, name: this.presence.whereIs(inmate)?.name ?? '', staff: null, why: null, by, amount: owed });
-    await this.release(inmate, row.id, now);
-    return null;
   }
 
   // --- the pit boss --------------------------------------------------------------------------
