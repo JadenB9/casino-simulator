@@ -21,12 +21,14 @@ class FakeWS {
   send(data: string): void {
     this.sent.push(data);
   }
+  /** A dead link: closing it gets no answer, so the close event comes only when the browser gives up. */
+  dead = false;
   /** The page closing it: the close event follows a moment later, as in a browser. */
   close(code = 1000): void {
     if (this.readyState === FakeWS.CLOSED) return;
     this.readyState = FakeWS.CLOSED;
     this.closedWith = code;
-    setTimeout(() => this.onclose?.({ code }), 0);
+    setTimeout(() => this.onclose?.({ code: this.dead ? 1006 : code }), this.dead ? 60_000 : 0);
   }
   // What the network and the server do:
   accept(): void {
@@ -141,6 +143,29 @@ describe('Socket', () => {
     expect(ws.closedWith).toBe(4000);
     vi.advanceTimersByTime(1);
     expect(s.state).toBe('reconnecting');
+  });
+
+  it('a dead link reconnects as soon as the pong is late, without waiting for the browser to give up on it', () => {
+    const { s } = make();
+    const ws = FakeWS.all[0]!;
+    ws.accept();
+    ws.dead = true;
+    fire('online');
+    vi.advanceTimersByTime(10_000);
+    expect(ws.closedWith).toBe(4000);
+    expect(s.state).toBe('reconnecting');
+    vi.advanceTimersByTime(2_000); // the first backoff is at most a second
+    expect(FakeWS.all).toHaveLength(2);
+    FakeWS.all[1]!.accept();
+    expect(s.state).toBe('open');
+    // the old socket's close, a minute later, changes nothing (the new one answers its pings)
+    for (let i = 0; i < 2; i++) {
+      vi.advanceTimersByTime(26_000);
+      FakeWS.all[1]!.receive('pong');
+    }
+    vi.advanceTimersByTime(10_000);
+    expect(s.state).toBe('open');
+    expect(FakeWS.all).toHaveLength(2);
   });
 
   it('pinging again while a ping is unanswered does not push its deadline back', () => {

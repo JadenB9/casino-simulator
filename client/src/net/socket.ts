@@ -96,7 +96,13 @@ export class Socket {
     if (this.pongTimer) return;
     this.pongTimer = window.setTimeout(() => {
       this.pongTimer = 0;
+      if (this.ws !== ws) return;
+      // On a dead link the close event waits out the browser's closing handshake (most of a
+      // minute), so let this socket go now and start the next; its late close is a stale one.
+      this.ws = null;
+      this.clearTimers();
       ws.close(4000, 'no pong');
+      this.retry(4000);
     }, PONG_TIMEOUT_MS);
   }
 
