@@ -325,16 +325,19 @@ export function nextToAct(h: Hand, from: number): Player | null {
   let live = 0;
   let able = 0;
   let lone: Player | null = null;
+  // the most any all-in player has in on this street: with one player left able to bet, that's
+  // all there is to match (a big blind all-in for less than the small blind leaves nothing to call)
+  let allInTop = 0;
   for (const p of h.players) {
     if (p.folded) continue;
     live++;
     if (!p.allIn) {
       able++;
       lone = p;
-    }
+    } else allInTop = Math.max(allInTop, p.street);
   }
   if (live <= 1 || able === 0) return null;
-  if (able === 1 && lone!.street >= h.bet) return null;
+  if (able === 1 && lone!.street >= allInTop) return null;
   const n = h.players.length;
   let i = h.players.findIndex((p) => p.seat > from);
   if (i < 0) i = 0;

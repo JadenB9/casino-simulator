@@ -229,6 +229,46 @@ describe('holdem betting: TDA rule 49 worked examples (4.4)', () => {
     expect(L(h, 0).minTo).toBe(200);
   });
 
+  it('a big blind all-in for less than the small blind leaves the small blind nothing to do: the excess comes back', () => {
+    const h = newHand({
+      id: 1,
+      sb: 50,
+      bb: 100,
+      button: 0,
+      sbSeat: 0,
+      bbSeat: 1,
+      players: [
+        { seat: 0, stack: 10_000 },
+        { seat: 1, stack: 30 },
+      ],
+      deck: Array.from({ length: 52 }, (_, i) => i),
+    });
+    expect(player(h, 1)!.allIn).toBe(true);
+    // before, the small blind was asked to call 50 more, and its action clock folded it
+    expect(nextToAct(h, h.bbSeat)).toBeNull();
+    expect(endStreet(h)).toEqual({ seat: 0, amount: 20 });
+  });
+
+  it('with a player behind the short all-in, they act; once they fold the small blind has nothing to call either', () => {
+    const h = newHand({
+      id: 1,
+      sb: 50,
+      bb: 100,
+      button: 2,
+      sbSeat: 0,
+      bbSeat: 1,
+      players: [
+        { seat: 0, stack: 10_000 },
+        { seat: 1, stack: 30 },
+        { seat: 2, stack: 10_000 },
+      ],
+      deck: Array.from({ length: 52 }, (_, i) => i),
+    });
+    expect(nextToAct(h, h.bbSeat)?.seat).toBe(2);
+    act(h, 2, 'fold');
+    expect(nextToAct(h, 2)).toBeNull();
+  });
+
   it('bets must be in whole steps unless all-in', () => {
     const h = postflop([10_050, 10_000], 100);
     expect(applyMove(h, player(h, A)!, 'bet', 150, 100).ok).toBe(false);
