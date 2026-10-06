@@ -438,7 +438,12 @@ class App {
       this.hud?.setOnline(n);
       this.menu?.setOnline(n);
     });
-    link.on('state', (_s, code) => void this.endsSession(code));
+    link.on('state', (_s, code) => {
+      if (this.endsSession(code)) return;
+      // turned away at the door (the casino is full, or this network has too many players in it):
+      // the socket won't try again on its own, so say so instead of walking about unseen
+      if (code === CLOSE.FORBIDDEN && this.link === link) this.turnedAway();
+    });
     // v6 feats6: a feat of yours the floor heard of before any table said (earned as you left)
     link.subscribe((m) => m.t === 'feat' && this.feats?.floorFeat(m));
     // Kept through away and back, with whatever is paid for and on its way.
@@ -947,6 +952,32 @@ class App {
     this.disconnectFloor();
     this.world.player.setEnabled(false);
     modal(title, [text], [button('Reload', () => location.reload(), { cls: 'primary' })]);
+  }
+
+  /** The floor refused this connection: say why, and try again when asked. */
+  private turnedAway(): void {
+    if (this.stopped || this.away) return;
+    const walking = this.table === null && this.world.seated === null;
+    this.disconnectFloor(true);
+    if (walking) this.world.player.setEnabled(false);
+    const m = modal(
+      'The casino is full',
+      ['There are as many players inside as it holds right now (or as one network may bring in). Try again in a minute.'],
+      [
+        button(
+          'Try again',
+          () => {
+            m.close();
+            if (this.stopped || this.away) return;
+            this.comingBack = true;
+            this.connectFloor();
+            this.chat?.setVisible(this.hud !== null);
+            if (walking && this.hud) this.world.player.setEnabled(true);
+          },
+          { cls: 'primary' },
+        ),
+      ],
+    );
   }
 
   // --- away (netsec: idle) ---------------------------------------------------------------------
