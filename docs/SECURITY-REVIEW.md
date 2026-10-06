@@ -132,8 +132,9 @@ Nothing else turned up. The rest of this file is what was checked.
 
 ### Money paths
 
-audit6's findings stand (ODDS-AUDIT.md section 2): integer cents everywhere, each op's purchase
-row and charge in one D1 batch keyed by op id, retries answered with what landed, and races
+audit6's findings stand (ODDS-AUDIT.md section 2), except Hold'em chip dumping, which Casino 1.3
+opened again on purpose (the buy-in hold is gone; see ODDS-AUDIT.md's Known limits). Integer cents
+everywhere, each op's purchase row and charge in one D1 batch keyed by op id, retries answered with what landed, and races
 refused inside the batch. This review added the cross-account op id and forged-message tests
 above.
 

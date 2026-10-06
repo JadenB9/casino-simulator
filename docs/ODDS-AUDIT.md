@@ -120,7 +120,7 @@ with worker tests in `server/test/audit6.test.ts`.
 
 | Path | Attack | Result | Test |
 |---|---|---|---|
-| **Hold'em chip dumping** | alt takes the cashier's top-up, sits at a private Hold'em table with the main account and loses on purpose; repeat (the top-up has no end) | **Fixed.** Top-ups, bonuses, tips, gift boxes and feat cash from the last 3 days, and transfers received in the last day (the same money transfers hold back), can't be bought into a multiplayer Hold'em table. Checked atomically inside the buy-in batch (a race can't pass it) with a clear message. A new account may bring $5,000 of its starting $50,000 in its first three days (so friends who just joined can sit down together); the rest is held like other house money. Solo Hold'em against bots and every other game take the money as before | audit6 "the cashier's top-up can't be taken...", "only what is held stays off", "brings $5,000 of it..." |
+| **Hold'em chip dumping** | alt takes the cashier's top-up, sits at a private Hold'em table with the main account and loses on purpose; repeat (the top-up has no end) | **Open, by choice (1.3).** audit6 kept house money (top-ups, bonuses, tips, gift boxes, feat cash, fresh transfers and most of a new account's $50,000) off multiplayer Hold'em tables. Casino 1.3 (ed8f40e) took that rule out, and its tests with it. The path is open again; see Known limits | (none: removed with the rule in 1.3) |
 | **Amount challenges through Hold'em** | two players pass a pot back and forth: every pot won adds to `won` and `best` → won-100m ($1M cash), won-10m, round-1m and the rest at zero cost; the global boards too | **Fixed.** Hold'em rounds count only toward Hold'em's own tallies (`won:holdem`, `wins:holdem`, `lost:holdem`), never toward the everywhere tallies (`won`, `best`, `wins`, `lost`, `worst`, day and week nets, win streaks). The personal stats page sums its totals from the games' own rows, so it still shows Hold'em | audit6 "a pot won from other players counts at Hold'em only"; feats-rounds updated |
 | **Test fixture game in production** | open `ws/solo/highcard` (a 0% edge game hidden from the floor): no house edge, rounds count in stats | **Fixed.** Opens only when `CASINO_DEV=1` (dev stack and tests), like its lobbies | audit6 "High Card ... opens only on the dev stack" |
 | **Bail** | put everything in savings before getting caught: bail is a fiftieth of balance + chips only, so it drops to the $1,000 floor | **Fixed.** Bail counts the bank too (balance + in play + banked) | audit6 "bail counts the bank too" |
@@ -155,9 +155,16 @@ with worker tests in `server/test/audit6.test.ts`.
 
 ### Known limits, accepted
 
+- **Hold'em chip dumping (since 1.3).** With the buy-in hold gone, an alt can take the
+  cashier's top-up (it never runs out; 10 a minute), lose it on purpose to a main account at a
+  private Hold'em table (people-only tables take no rake) and do it again: about $50,000 of house
+  money a round, at once. It moves the richest boards, buys what the shop sells and can be sent on
+  once the transfer holds pass. Sign-ups (10 an hour per address, per /64 for IPv6) are the only
+  brake. Bringing the hold back means passing `held: true` on multiplayer Hold'em buy-ins and
+  top-ups again (see c63ce95 and 16721a0, removed in ed8f40e).
 - **Alt accounts' starting stakes.** Each new account brings $50,000. It can be sent on after
-  3 days (and $5,000 of it lost at a Hold'em table at once); sign-ups are the limit (10 an hour
-  per address, per /64 for IPv6).
+  3 days, or lost at a Hold'em table at once (above); sign-ups are the limit (10 an hour per
+  address, per /64 for IPv6).
 - **Hold'em boards between friends.** Two players can still pass pots to each other to raise
   their own Hold'em rows (won:holdem, the "Rounder" title). No cash and no everywhere board.
 - **Bank yields.** Savings at 0.5% a day on $100,000, deposits at 3.5% a week, and the Index
@@ -166,4 +173,5 @@ with worker tests in `server/test/audit6.test.ts`.
   $10M fund position.
 - **Retention cash.** Celebrity tips ($500-$10,000 a visit, a visit every 20-40 minutes while
   anyone is on the floor), the daily streak ($2,500-$50,000) and gift boxes all pay house
-  money: capped per visit, day or box, held from transfers and multiplayer Hold'em.
+  money: capped per visit, day or box, and held from transfers (no longer from multiplayer
+  Hold'em, since 1.3).
