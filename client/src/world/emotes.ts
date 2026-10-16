@@ -35,6 +35,13 @@ export const OWN_BUBBLE_Y = 2.0;
 /** A clap (or a dance's beat) is heard from about chest height. */
 const CLAP_Y = 1.25;
 
+/** Still hanging from a scene (a disposed character's root has no parent). */
+function inScene(o: THREE.Object3D): boolean {
+  let top = o;
+  while (top.parent) top = top.parent;
+  return (top as THREE.Scene).isScene === true;
+}
+
 const LABELS: Record<EmoteId, string> = {
   wave: 'waves',
   cheer: 'cheers',
@@ -119,7 +126,9 @@ export class Emotes {
   update(dt: number): void {
     for (const [ch, s] of this.showing) {
       s.left -= dt;
-      if (s.left <= 0) this.clear(ch);
+      // A player who leaves mid-emote takes their character out of the scene; the label renderer
+      // would leave the bubble hanging where it last drew it, so it goes with them.
+      if (s.left <= 0 || (s.tag && !inScene(ch.root))) this.clear(ch);
       else if (s.left < FADE_S) s.bubble.classList.add('leaving');
     }
   }

@@ -736,6 +736,9 @@ export class Player {
       return;
     }
     if (!this.enabled || e.button !== 0 || this.locked) return;
+    // with the touch controls on, the stick layer owns a finger: the canvas taking the pointer too
+    // would turn the view on the same drag
+    if (e.pointerType !== 'mouse' && document.documentElement.classList.contains('touch-ui')) return;
     this.drag = { id: e.pointerId, x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, moved: false, mouse: e.pointerType === 'mouse' };
     this.canvas.setPointerCapture?.(e.pointerId);
   };

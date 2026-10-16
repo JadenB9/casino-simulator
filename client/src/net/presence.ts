@@ -312,6 +312,10 @@ export class FloorLink {
     known.info.gun = info.gun ?? null;
     known.info.jailed = !!info.jailed;
     known.info.apt = info.apt ?? null;
+    // someone who stood up (or was renamed) while our socket was away: the hello says so, and
+    // their next move might be a while
+    known.info.crouch = !!info.crouch;
+    known.info.name = info.name;
   }
 
   private sample(p: RemotePlayer, t: number, pose: Pose): void {

@@ -40,6 +40,8 @@ export const MODEL_BASE = `${import.meta.env.BASE_URL}assets/models/`;
 
 type Slot = 'skin' | 'skinShade' | 'hair' | 'hairShade' | 'brows' | 'top' | 'bottom' | 'shoes';
 const SLOTS: Slot[] = ['skin', 'skinShade', 'hair', 'hairShade', 'brows', 'top', 'bottom', 'shoes'];
+/** The template's buffers every character of an outfit draws with; only the colours are its own. */
+const SHARED_ATTRIBUTES = ['position', 'normal', 'skinIndex', 'skinWeight'] as const;
 const FIXED = 255;
 
 interface OutfitEntry {
@@ -1204,7 +1206,7 @@ export class Person implements Character {
     this.disposed = true;
     this.mixer?.stopAllAction();
     if (this.model) this.mixer?.uncacheRoot(this.model);
-    this.mesh?.geometry.dispose();
+    this.freeGeometry();
     this.wear.dispose();
     this.dropProp();
     this.ride?.dispose();
@@ -1213,11 +1215,25 @@ export class Person implements Character {
     this.factory.forget(this);
   }
 
+  /**
+   * Give back this character's own buffer (the colours) and nothing else: the positions, normals,
+   * skin weights and index are the template's, drawn by everyone in the outfit, and disposing a
+   * geometry frees every attribute still on it. Taking the shared ones off first keeps the rest
+   * of the crowd from uploading their mesh again the next frame each time someone leaves.
+   */
+  private freeGeometry(): void {
+    const g = this.mesh?.geometry;
+    if (!g) return;
+    for (const name of SHARED_ATTRIBUTES) g.deleteAttribute(name);
+    g.setIndex(null);
+    g.dispose();
+  }
+
   private show(tpl: Template, key: string): void {
     if (this.model) {
       this.mixer?.stopAllAction();
       this.mixer?.uncacheRoot(this.model);
-      this.mesh?.geometry.dispose();
+      this.freeGeometry();
       this.model.removeFromParent();
     }
     const model = SkeletonUtils.clone(tpl.root);
@@ -1229,7 +1245,7 @@ export class Person implements Character {
     const m = mesh as THREE.SkinnedMesh;
     // share every attribute with the template except this character's own colours
     const g = new THREE.BufferGeometry();
-    for (const name of ['position', 'normal', 'skinIndex', 'skinWeight']) g.setAttribute(name, tpl.geometry.getAttribute(name));
+    for (const name of SHARED_ATTRIBUTES) g.setAttribute(name, tpl.geometry.getAttribute(name));
     g.setIndex(tpl.geometry.index);
     const n = tpl.slot.length;
     this.colors = new THREE.BufferAttribute(new Uint16Array(n * 3), 3, true);

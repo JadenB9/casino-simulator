@@ -64,8 +64,10 @@ export const answerCheck = (answer: { id: string; x?: number; y?: number; token?
 /**
  * What the dev pages and the headless scripts log in with, so the fixed names they use stay
  * theirs from one run to the next. Players never see it: the login screen sends what was typed.
+ * The server has no special case for it (it's just a password), and a production build doesn't
+ * carry the string at all.
  */
-export const DEV_PASSWORD = 'casino-dev';
+export const DEV_PASSWORD = import.meta.env.DEV ? 'casino-dev' : '';
 
 /** Log in, or take the name if it's new (or from before passwords): see shared/src/password.ts. */
 export async function login(name: string, password: string): Promise<Profile> {
