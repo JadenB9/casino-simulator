@@ -50,6 +50,21 @@ export interface FairEnv {
   CASINO_DEV?: string;
   TURNSTILE_SITEKEY?: string;
   TURNSTILE_SECRET?: string;
+  /** The site's origins (the Worker's allowlist): a Turnstile token must have been solved on one. */
+  ALLOWED_ORIGINS?: string;
+}
+
+/** The host names in ALLOWED_ORIGINS, lower case; none if it's unset or unreadable. */
+export function allowedHosts(origins: string | undefined): string[] {
+  const hosts: string[] = [];
+  for (const o of (origins ?? '').split(',')) {
+    try {
+      if (o.trim()) hosts.push(new URL(o.trim()).hostname.toLowerCase());
+    } catch {
+      // not an origin; the Worker's own check refuses it too
+    }
+  }
+  return hosts;
 }
 
 export interface FairRow {
@@ -135,8 +150,9 @@ function b64(bytes: Uint8Array): string {
 export async function issue(env: FairEnv, accountId: number, now: number, kind: 'any' | 'chip'): Promise<CheckChallenge> {
   const id = crypto.randomUUID();
   const expires = now + CHECK_TTL_MS;
-  // Old challenges go: one row a try, a few tries a day at most.
-  await env.DB.prepare(`DELETE FROM casino_checks WHERE account_id = ?1 AND expires_at < ?2`).bind(accountId, now - 86_400_000).run();
+  // Challenges that have run out go first: a paused account asking every few seconds otherwise
+  // leaves a row (and a picture drawn for it) behind each time, all day.
+  await env.DB.prepare(`DELETE FROM casino_checks WHERE account_id = ?1 AND expires_at < ?2`).bind(accountId, now).run();
   if (kind === 'any' && env.TURNSTILE_SITEKEY && env.TURNSTILE_SECRET) {
     await env.DB.prepare(`INSERT INTO casino_checks (id, account_id, kind, answer, issued_at, expires_at) VALUES (?1, ?2, 'turnstile', '', ?3, ?4)`)
       .bind(id, accountId, now, expires)
@@ -204,8 +220,11 @@ async function turnstileOk(env: FairEnv, token: string, idempotency: string, ip:
   if (ip) form.append('remoteip', ip);
   try {
     const res = await fetch(SITEVERIFY, { method: 'POST', body: form });
-    const out = (await res.json()) as { success?: boolean };
-    return out.success === true;
+    const out = (await res.json()) as { success?: boolean; hostname?: string };
+    if (out.success !== true) return false;
+    // ...and solved on one of our pages, not on the widget copied onto someone else's
+    const hosts = allowedHosts(env.ALLOWED_ORIGINS);
+    return hosts.length === 0 || (typeof out.hostname === 'string' && hosts.includes(out.hostname.toLowerCase()));
   } catch (err) {
     console.error('turnstile siteverify failed', err);
     return false;

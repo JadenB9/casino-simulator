@@ -214,15 +214,33 @@ export class CasinoTable extends DurableObject<Env> {
   /** v6 law6: hot streaks for the pit boss, and a jail table's rounds toward bail (law-table.ts). */
   private law: TableLaw | null = null;
   /** v6 feats: tallies and feats earned here, on their way to D1 (server/src/feats.ts). */
-  private feats: FeatBook;
+  private feats!: FeatBook;
   /** v6 stats6: each player's run of winning rounds here (server/src/stats.ts). */
-  private runs: RunBook;
+  private runs!: RunBook;
   /** v6 bot6: reactions and rounds for fair play, and the Quick check's pause (table-fair.ts). */
   private fairPart: TableFair | null = null;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     this.sql = ctx.storage.sql;
+    ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
+    // A probe (a ticket for a lobby id that was never made) must write nothing: the schema went
+    // in here unconditionally once, so every probe left an empty object's tables behind for good.
+    // Now the tables are made when the table is (create()); until then this object answers 4004
+    // and its storage stays empty, sqlite_master included. A read is free to ask.
+    if (this.sql.exec(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'meta'`).toArray().length > 0) {
+      this.open();
+      this.load();
+    }
+  }
+
+  /** Whether open() has run: the tables exist and the books over them are built. */
+  private opened = false;
+
+  /** The schema, and the books that keep their own tables in it. Once per object. */
+  private open(): void {
+    if (this.opened) return;
+    this.opened = true;
     this.sql.exec(`CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL) WITHOUT ROWID`);
     this.sql.exec(`CREATE TABLE IF NOT EXISTS state (id INTEGER PRIMARY KEY CHECK (id = 1), json TEXT NOT NULL)`);
     this.sql.exec(`CREATE TABLE IF NOT EXISTS members (
@@ -241,10 +259,8 @@ export class CasinoTable extends DurableObject<Env> {
     this.sql.exec(`CREATE TABLE IF NOT EXISTS deadlines (name TEXT PRIMARY KEY, at INTEGER NOT NULL) WITHOUT ROWID`);
     // Wrong PINs per account and per address, stored so an eviction doesn't reset the count.
     this.sql.exec(`CREATE TABLE IF NOT EXISTS pin_misses (who TEXT PRIMARY KEY, n INTEGER NOT NULL, until INTEGER NOT NULL) WITHOUT ROWID`);
-    ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
-    this.feats = new FeatBook(this.sql, () => `flush:${this.meta?.incarnation ?? ''}`, (fn) => ctx.storage.transactionSync(fn));
+    this.feats = new FeatBook(this.sql, () => `flush:${this.meta?.incarnation ?? ''}`, (fn) => this.ctx.storage.transactionSync(fn));
     this.runs = new RunBook(this.sql); // v6 stats6
-    this.load();
   }
 
   // ------------------------------------------------------------------------------------------
@@ -337,6 +353,7 @@ export class CasinoTable extends DurableObject<Env> {
   }
 
   private create(p: InitParams, now: number): void {
+    this.open();
     const engine = engineFor(p.game) as Engine;
     const config = configAt(engine, p);
     const meta: Meta = {

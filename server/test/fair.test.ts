@@ -143,6 +143,31 @@ describe('fair: the check', () => {
     expect((await issue({ DB: env.DB }, p.id, now, 'any')).kind).toBe('chip');
   });
 
+  it('a Turnstile token solved on another site is refused, and challenges that ran out are cleared', async () => {
+    const p = await player('fair_host');
+    await post(p, 'dev/check', { paused: true });
+    const tsEnv = { DB: env.DB, TURNSTILE_SITEKEY: '1x00000000000000000000AA', TURNSTILE_SECRET: 'test-secret', ALLOWED_ORIGINS: 'https://j4den.com,https://www.j4den.com' };
+    let hostname = 'evil.example';
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(JSON.stringify({ success: true, hostname })));
+    const now = Date.now();
+    const elsewhere = await issue(tsEnv, p.id, now, 'any');
+    expect(await answer(tsEnv, p.id, { id: elsewhere.id, token: 'good' }, now + 1000, null)).toEqual({ ok: false, why: 'wrong' });
+    await env.DB.prepare(`UPDATE casino_fair SET retry_at = 0 WHERE account_id = ?1`).bind(p.id).run();
+    hostname = 'WWW.j4den.com';
+    const ours = await issue(tsEnv, p.id, now, 'any');
+    expect(await answer(tsEnv, p.id, { id: ours.id, token: 'good' }, now + 1000, null)).toEqual({ ok: true });
+    // no allowlist (the dev stack): any host will do
+    hostname = 'localhost';
+    const dev = await issue({ ...tsEnv, ALLOWED_ORIGINS: undefined }, p.id, now, 'any');
+    expect(await answer({ ...tsEnv, ALLOWED_ORIGINS: undefined }, p.id, { id: dev.id, token: 'good' }, now + 1000, null)).toEqual({ ok: true });
+    // Every challenge of this account's that has run out goes when the next is handed out, not a
+    // day later: a paused page asking every few seconds used to leave 20 rows a minute behind.
+    await env.DB.prepare(`UPDATE casino_checks SET expires_at = ?2 WHERE account_id = ?1`).bind(p.id, now - 1).run();
+    const fresh = await issue(tsEnv, p.id, now, 'chip');
+    const left = await env.DB.prepare(`SELECT id FROM casino_checks WHERE account_id = ?1`).bind(p.id).all<{ id: string }>();
+    expect(left.results.map((r) => r.id)).toEqual([fresh.id]);
+  });
+
   it('the dev route is the dev stack\'s alone', async () => {
     const p = await player('fair_dev');
     const res = await exports_fetchDevCheckWithoutDev(p);

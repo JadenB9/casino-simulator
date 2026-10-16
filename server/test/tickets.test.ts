@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { env, exports } from 'cloudflare:workers';
-import { evictDurableObject } from 'cloudflare:test';
+import { evictDurableObject, runInDurableObject } from 'cloudflare:test';
 import { ORIGIN, api, connectRaw, ticketFor, type Client } from './helpers.ts';
 import { closedWith, makeLobby, player, table } from './party.ts';
 import { TICKET_MS, signTicket } from '../src/tickets.ts';
@@ -138,5 +138,21 @@ describe('opening a socket', () => {
     expect(await closedWith(old.client!)).toEqual({ code: CLOSE.VERSION, reason: 'please reload' });
     const none = await connectRaw('floor', '', p.ip);
     expect(await closedWith(none.client!)).toEqual({ code: CLOSE.UNAUTHORIZED, reason: 'log in again' });
+  });
+});
+
+describe('probing', () => {
+  it('a ticket for a lobby that was never made opens nothing and leaves the object empty', async () => {
+    const p = await player('tkprobe');
+    // a well-formed id nobody allocated: the Worker signs a ticket for it and forwards the upgrade
+    const id = 'bj-probe00000';
+    expect((await closedWith(await open(`table/${id}`, await newTicket(`table/${id}`, p), 'table', p.ip))).code).toBe(CLOSE.NOT_FOUND);
+    // The object was woken to say so, but it made no tables: nothing of it is written, so a
+    // sweep of made-up ids costs no storage (the schema used to go in from the constructor).
+    const tables = (state: DurableObjectState) => state.storage.sql.exec<{ name: string }>(`SELECT name FROM sqlite_master WHERE type = 'table'`).toArray().map((r) => r.name);
+    expect(await runInDurableObject(table(id), (_t, state) => tables(state))).toEqual([]);
+    // a real one has them all
+    const real = await makeLobby(p, 'highcard');
+    expect(await runInDurableObject(table(real.tableId), (_t, state) => tables(state))).toContain('meta');
   });
 });
