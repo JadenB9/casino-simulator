@@ -3,7 +3,7 @@
 
 const NS = 'http://www.w3.org/2000/svg';
 
-export type IconName = 'sound' | 'muted' | 'gear' | 'help' | 'close' | 'menu' | 'turn-left' | 'turn-right' | 'bulb';
+export type IconName = 'sound' | 'muted' | 'gear' | 'help' | 'close' | 'menu' | 'turn-left' | 'turn-right' | 'bulb' | 'sun' | 'moon';
 
 function svg(): SVGSVGElement {
   const s = document.createElementNS(NS, 'svg');
@@ -80,6 +80,20 @@ export function icon(name: IconName): SVGSVGElement {
     case 'turn-right':
       path(s, 'M18.8 13.2A7 7 0 1 1 16.6 7');
       path(s, 'M16.4 3.6l.2 3.4-3.4.3');
+      break;
+    // the theme button: the sun while it's dark (press for light), the moon while it's light
+    case 'sun': {
+      circle(s, 3.6);
+      let rays = '';
+      for (let i = 0; i < 8; i++) {
+        const a = (i * Math.PI) / 4;
+        rays += `M${(12 + Math.cos(a) * 6.2).toFixed(2)} ${(12 + Math.sin(a) * 6.2).toFixed(2)}L${(12 + Math.cos(a) * 8.6).toFixed(2)} ${(12 + Math.sin(a) * 8.6).toFixed(2)}`;
+      }
+      path(s, rays);
+      break;
+    }
+    case 'moon':
+      path(s, 'M14.2 3.6a8.4 8.4 0 1 0 6.2 11.8 7 7 0 0 1-6.2-11.8z');
       break;
   }
   return s;

@@ -3,7 +3,7 @@
 
 .profile-sheet { width: min(1080px, 100%); }
 .pf-strip { margin-bottom: 22px; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); }
-.pf-strip .stat.lead { background: rgba(226, 190, 118, 0.07); }
+.pf-strip .stat.lead { background: rgba(var(--brass-rgb), 0.07); }
 .pf-strip .stat.lead .stat-value { color: var(--brass-hi); }
 .pf-strip .stat-value { font-size: 21px; }
 
@@ -19,8 +19,8 @@
 .pf-chart-total.lose { color: var(--lose); }
 .pf-chart-facts { font-size: 14px; letter-spacing: 0.03em; color: var(--ink-3); }
 .pf-svg { display: block; width: 100%; height: auto; overflow: visible; }
-.pf-grid { stroke: rgba(214, 178, 110, 0.08); stroke-width: 1; }
-.pf-zero { stroke: rgba(214, 178, 110, 0.4); stroke-width: 1; }
+.pf-grid { stroke: rgba(var(--brass-rgb), 0.08); stroke-width: 1; }
+.pf-zero { stroke: rgba(var(--brass-rgb), 0.4); stroke-width: 1; }
 .pf-bar.up { fill: var(--win); fill-opacity: 0.78; }
 .pf-bar.down { fill: var(--lose); fill-opacity: 0.78; }
 .pf-bar.today { fill-opacity: 1; stroke: var(--brass-hi); stroke-width: 1.2; }
@@ -31,7 +31,7 @@
 
 /* The record: label left, figure right, rows ruled like the tables. */
 .pf-record { margin: 0; }
-.pf-rec { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 1px solid rgba(214, 178, 110, 0.09); }
+.pf-rec { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 1px solid rgba(var(--brass-rgb), 0.09); }
 .pf-rec dt { font-size: 15px; color: var(--ink-3); letter-spacing: 0.02em; }
 .pf-rec dd { margin: 0; font-size: 16px; color: var(--ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .pf-rec dd.win { color: var(--win); }

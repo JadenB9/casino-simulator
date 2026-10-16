@@ -49,3 +49,10 @@
 
 /* Reduce flashing & motion (app/comfort.ts) */
 body.calm .map-you .map-you-halo { animation: none; }
+
+/* Light (app/theme.ts): the plan on paper rather than on a dark board. */
+:root[data-theme='light'] .map-svg { background: #f4eee2; }
+:root[data-theme='light'] .map-labels text { fill: #2a2016; stroke: rgba(255, 250, 240, 0.85); }
+:root[data-theme='light'] .map-stations rect { fill: rgba(60, 40, 10, 0.22); }
+:root[data-theme='light'] .map-room { opacity: 0.55; }
+:root[data-theme='light'] .map-room.on { opacity: 0.85; }

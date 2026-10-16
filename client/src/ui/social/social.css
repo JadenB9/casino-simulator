@@ -11,12 +11,12 @@
 
 .lb-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
 .lb-scope-label { display: flex; align-items: center; gap: 12px; font-size: 13px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-3); }
-.lb-scope { height: 34px; min-width: 220px; padding: 0 34px 0 12px; border: 1px solid var(--line-strong); border-radius: 4px; background: #16120e; color: var(--ink); font: 600 16px/1 var(--ui); letter-spacing: 0.04em; cursor: pointer; appearance: none;
+.lb-scope { height: 34px; min-width: 220px; padding: 0 34px 0 12px; border: 1px solid var(--line-strong); border-radius: 4px; background: var(--field); color: var(--ink); font: 600 16px/1 var(--ui); letter-spacing: 0.04em; cursor: pointer; appearance: none;
   background-image: linear-gradient(45deg, transparent 50%, var(--brass) 50%), linear-gradient(135deg, var(--brass) 50%, transparent 50%);
   background-position: calc(100% - 17px) 15px, calc(100% - 12px) 15px; background-size: 5px 5px; background-repeat: no-repeat; }
 .lb-scope:hover { border-color: var(--brass-hi); }
 .lb-scope:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-.lb-scope option, .lb-scope optgroup { background: #16120e; color: var(--ink); }
+.lb-scope option, .lb-scope optgroup { background: var(--field); color: var(--ink); }
 
 .lb-cols { display: grid; grid-template-columns: 212px minmax(0, 1fr); gap: 26px; align-items: start; }
 
@@ -25,9 +25,9 @@
 .lb-group { margin: 12px 0 3px; font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-3); }
 .lb-group:first-child { margin-top: 0; }
 .lb-item { display: flex; align-items: baseline; gap: 10px; width: 100%; padding: 4px 10px 4px 12px; border: 0; border-radius: 3px; background: none; color: var(--ink-2); font: 500 16px/1.25 var(--ui); letter-spacing: 0.03em; text-align: left; cursor: pointer; transition: background 0.12s, color 0.12s; }
-.lb-item:hover { color: var(--ink); background: rgba(226, 190, 118, 0.05); }
+.lb-item:hover { color: var(--ink); background: rgba(var(--brass-rgb), 0.05); }
 .lb-item:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
-.lb-item[aria-selected='true'] { background: rgba(226, 190, 118, 0.13); color: var(--brass-hi); box-shadow: inset 2px 0 0 var(--brass-hi); }
+.lb-item[aria-selected='true'] { background: rgba(var(--brass-rgb), 0.13); color: var(--brass-hi); box-shadow: inset 2px 0 0 var(--brass-hi); }
 .lb-item-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lb-place { font-size: 14px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
 .lb-place.top { color: var(--brass); }
@@ -53,14 +53,14 @@
 .lb-table tr.p1 td.lb-rank { color: var(--brass-hi); }
 
 /* Your row: lit, with a brass edge. */
-.lb-table tr.you td { background: rgba(226, 190, 118, 0.1); color: var(--brass-hi); border-bottom-color: rgba(226, 190, 118, 0.3); }
+.lb-table tr.you td { background: rgba(var(--brass-rgb), 0.1); color: var(--brass-hi); border-bottom-color: rgba(var(--brass-rgb), 0.3); }
 .lb-table tr.you td.lb-value.win { color: var(--win); }
 .lb-table tr.you td.lb-value.lose { color: var(--lose); }
 .lb-table tr.you td.lb-rank { color: var(--brass-hi); box-shadow: inset 2px 0 0 var(--brass-hi); }
-.lb-you { display: inline-block; margin-left: 10px; padding: 0 6px; border: 1px solid rgba(241, 213, 154, 0.45); border-radius: 3px; font-size: 11px; line-height: 16px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--brass-hi); vertical-align: 2px; }
+.lb-you { display: inline-block; margin-left: 10px; padding: 0 6px; border: 1px solid rgba(var(--brass-hi-rgb), 0.45); border-radius: 3px; font-size: 11px; line-height: 16px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--brass-hi); vertical-align: 2px; }
 
 /* The break between the top ten and your own place further down. */
-.lb-table tr.lb-gap td { height: 16px; padding: 0; border-bottom: 1px dashed rgba(214, 178, 110, 0.3); }
+.lb-table tr.lb-gap td { height: 16px; padding: 0; border-bottom: 1px dashed rgba(var(--brass-rgb), 0.3); }
 
 .lb-foot { margin-top: 12px; }
 .lb-problem { color: var(--lose); }
@@ -87,10 +87,10 @@
 /* Two rings: the free six inside, the boutique's and the rewards round the outside. Scaled down
    to fit a phone (--emo-scale, set from the window's size). */
 .emo-wheel { --emo-scale: 1; position: absolute; left: 50%; top: 50%; width: 432px; height: 432px; margin: -216px 0 0 -216px; border-radius: 50%; outline: none; scale: var(--emo-scale); animation: emo-in 0.2s var(--ease); }
-.emo-ring { position: absolute; inset: 0; border-radius: 50%; background: radial-gradient(circle at 50% 50%, rgba(20, 16, 12, 0.97) 0 134px, rgba(12, 10, 8, 0.95) 134px); border: 1px solid var(--line); box-shadow: 0 18px 60px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(241, 213, 154, 0.07); }
-.emo-ring::after { content: ''; position: absolute; inset: 154px; border-radius: 50%; border: 1px solid rgba(214, 178, 110, 0.16); }
+.emo-ring { position: absolute; inset: 0; border-radius: 50%; background: radial-gradient(circle at 50% 50%, rgba(var(--glass-rgb), 0.97) 0 134px, rgba(var(--glass-rgb), 0.95) 134px); border: 1px solid var(--line); box-shadow: 0 18px 60px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(var(--brass-hi-rgb), 0.07); }
+.emo-ring::after { content: ''; position: absolute; inset: 154px; border-radius: 50%; border: 1px solid rgba(var(--brass-rgb), 0.16); }
 /* Between the rings: a fine brass line. */
-.emo-divide { position: absolute; inset: 82px; border-radius: 50%; border: 1px solid rgba(214, 178, 110, 0.22); pointer-events: none; }
+.emo-divide { position: absolute; inset: 82px; border-radius: 50%; border: 1px solid rgba(var(--brass-rgb), 0.22); pointer-events: none; }
 
 .emo-hub { position: absolute; left: 50%; top: 50%; width: 118px; transform: translate(-50%, -50%); text-align: center; pointer-events: none; }
 .emo-name { font-family: var(--serif); font-size: 14px; font-weight: 600; line-height: 1.15; letter-spacing: 0.1em; text-transform: uppercase; color: var(--brass-hi); text-wrap: balance; }
@@ -98,20 +98,20 @@
 /* A locked emote's price (or what earns it): read, not shouted. */
 .emo-hint.price { letter-spacing: 0.03em; text-transform: none; font-size: 12px; color: var(--ink-2); }
 
-.emo-btn { position: absolute; left: 50%; top: 50%; display: grid; place-items: center; width: 58px; height: 58px; margin: -29px 0 0 -29px; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: #1c1712; color: var(--ink-2); cursor: pointer; transform: translate(var(--x), var(--y)); transition: color 0.12s, border-color 0.12s, background 0.12s, transform 0.14s var(--ease), opacity 0.15s; }
-.emo-btn.outer { width: 54px; height: 54px; margin: -27px 0 0 -27px; background: #19140f; }
-.emo-btn:hover, .emo-btn:focus-visible { color: var(--brass-hi); border-color: var(--brass-hi); background: #2a2016; outline: none; transform: translate(var(--x), var(--y)) scale(1.08); }
+.emo-btn { position: absolute; left: 50%; top: 50%; display: grid; place-items: center; width: 58px; height: 58px; margin: -29px 0 0 -29px; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: var(--btn-flat); color: var(--ink-2); cursor: pointer; transform: translate(var(--x), var(--y)); transition: color 0.12s, border-color 0.12s, background 0.12s, transform 0.14s var(--ease), opacity 0.15s; }
+.emo-btn.outer { width: 54px; height: 54px; margin: -27px 0 0 -27px; background: var(--btn-flat); }
+.emo-btn:hover, .emo-btn:focus-visible { color: var(--brass-hi); border-color: var(--brass-hi); background: var(--btn-flat-hi); outline: none; transform: translate(var(--x), var(--y)) scale(1.08); }
 .emo-btn:active { transform: translate(var(--x), var(--y)) scale(0.96); }
 .emo-glyph { width: 30px; height: 30px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; }
 .emo-btn.outer .emo-glyph { width: 28px; height: 28px; }
 .emo-glyph .fill { fill: currentColor; stroke: none; }
-.emo-key { position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px; padding: 0 4px; border: 1px solid rgba(241, 213, 154, 0.34); border-bottom-width: 2px; border-radius: 4px; background: #15110d; color: var(--ink-2); font: 600 11px/15px var(--ui); text-align: center; }
+.emo-key { position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px; padding: 0 4px; border: 1px solid rgba(var(--brass-hi-rgb), 0.34); border-bottom-width: 2px; border-radius: 4px; background: var(--field); color: var(--ink-2); font: 600 11px/15px var(--ui); text-align: center; }
 
 /* Not yours yet: the drawing dimmed, a dashed edge, and the price on a tab under it. */
-.emo-btn.locked { border-style: dashed; border-color: rgba(214, 178, 110, 0.28); background: #120f0c; color: rgba(222, 208, 180, 0.34); }
+.emo-btn.locked { border-style: dashed; border-color: rgba(var(--brass-rgb), 0.28); background: var(--field); color: rgba(var(--ink-rgb), 0.34); }
 .emo-btn.locked .emo-key { opacity: 0.5; }
-.emo-btn.locked:hover, .emo-btn.locked:focus-visible { color: rgba(241, 213, 154, 0.7); border-color: rgba(241, 213, 154, 0.6); background: #1d1711; }
-.emo-tag { position: absolute; left: 50%; bottom: -9px; display: inline-flex; align-items: center; gap: 3px; transform: translateX(-50%); padding: 0 5px 0 4px; height: 16px; border: 1px solid rgba(214, 178, 110, 0.3); border-radius: 8px; background: #15110d; color: var(--brass); font: 600 10px/14px var(--ui); letter-spacing: 0.02em; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.emo-btn.locked:hover, .emo-btn.locked:focus-visible { color: rgba(var(--brass-hi-rgb), 0.7); border-color: rgba(var(--brass-hi-rgb), 0.6); background: var(--btn-flat-hi); }
+.emo-tag { position: absolute; left: 50%; bottom: -9px; display: inline-flex; align-items: center; gap: 3px; transform: translateX(-50%); padding: 0 5px 0 4px; height: 16px; border: 1px solid rgba(var(--brass-rgb), 0.3); border-radius: 8px; background: var(--field); color: var(--brass); font: 600 10px/14px var(--ui); letter-spacing: 0.02em; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .emo-lock { width: 9px; height: 9px; fill: none; stroke: currentColor; stroke-linecap: round; }
 .emo-lock .fill { fill: currentColor; stroke: none; }
 

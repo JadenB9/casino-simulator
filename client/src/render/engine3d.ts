@@ -114,6 +114,7 @@ export class Engine3D {
     this.timer.connect(document);
     addEventListener('resize', this.resize);
     this.resize();
+    this.watchDpr();
     this.renderer.setAnimationLoop((t) => this.tick(t));
   }
 
@@ -121,6 +122,35 @@ export class Engine3D {
     this.frames.add(fn);
     return () => this.frames.delete(fn);
   }
+
+  /**
+   * Hear the device pixel ratio change: the window dragged to a screen of another density, or
+   * the browser zoomed (no resize event comes for either, and the canvas would keep its old
+   * ratio, blurred or four times the pixels). The floor's adaptive ratio (world/bloom.ts) listens
+   * to start over from the new ceiling.
+   */
+  onDpr(fn: (dpr: number) => void): () => void {
+    this.dprs.add(fn);
+    return () => this.dprs.delete(fn);
+  }
+
+  private readonly dprs = new Set<(dpr: number) => void>();
+  private dprQuery: MediaQueryList | null = null;
+
+  /** A media query that matches only the current ratio: it fires once, when the ratio changes. */
+  private watchDpr(): void {
+    if (typeof matchMedia !== 'function') return;
+    this.dprQuery?.removeEventListener('change', this.dprChanged);
+    this.dprQuery = matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+    this.dprQuery.addEventListener('change', this.dprChanged);
+  }
+
+  private dprChanged = (): void => {
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.quality === 'high' ? 2 : 1));
+    this.resize();
+    for (const fn of this.dprs) fn(window.devicePixelRatio);
+    this.watchDpr();
+  };
 
   /** Recent average frame time in ms (for the quality probe and the stats overlay). */
   frameMs(): number {

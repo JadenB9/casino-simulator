@@ -27,7 +27,7 @@
 #ui .fx-what { font-family: var(--serif); font-size: 13px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--brass-hi); }
 #ui .fx-who { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 15px; color: var(--ink); }
 #ui .fx-time { font-size: 14px; font-variant-numeric: tabular-nums; color: var(--ink-3); }
-#ui .fx-next { border-left-color: var(--line-strong); background: rgba(14, 12, 10, 0.62); }
+#ui .fx-next { border-left-color: var(--line-strong); background: rgba(var(--glass-rgb), 0.62); }
 #ui .fx-next .fx-what { color: var(--ink-2); }
 #ui .fx-tag { font-size: 11px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-3); }
 @keyframes fx-caption-in { from { opacity: 0; transform: translateY(-4px); } }

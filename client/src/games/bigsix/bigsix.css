@@ -7,7 +7,7 @@
 .bs-history-row { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
 .bs-history-empty { font-size: 14px; color: var(--ink-3); }
 .bs-badge { display: block; flex: none; border-radius: 50%; }
-.bs-history .bs-badge.latest { margin-right: 4px; box-shadow: 0 0 0 2px var(--brass-hi), 0 0 12px rgba(241, 213, 154, 0.35); }
+.bs-history .bs-badge.latest { margin-right: 4px; box-shadow: 0 0 0 2px var(--brass-hi), 0 0 12px rgba(var(--brass-hi-rgb), 0.35); }
 
 .bs-meters { position: fixed; top: var(--below-party); right: 16px; display: flex; gap: 18px; padding: 9px 16px; }
 .bs-meter { display: grid; gap: 2px; min-width: 78px; }
@@ -34,7 +34,7 @@
 .bs-clock { position: absolute; display: grid; justify-items: center; gap: 3px; pointer-events: none; }
 .bs-clock-ring { position: relative; width: 58px; height: 58px; }
 .bs-clock-ring svg { width: 100%; height: 100%; display: block; }
-.bs-clock circle { fill: rgba(14, 12, 10, 0.72); stroke-width: 3.5; }
+.bs-clock circle { fill: rgba(var(--glass-rgb), 0.72); stroke-width: 3.5; }
 .bs-clock .track { stroke: rgba(255, 255, 255, 0.14); }
 .bs-clock .left { fill: none; stroke: var(--brass-hi); stroke-linecap: round; transform: rotate(-90deg); transform-origin: 50% 50%; transition: stroke-dashoffset 0.25s linear; }
 .bs-clock.late .left { stroke: #e8a33a; }
@@ -54,7 +54,7 @@
 .bs-color-note { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: var(--ink-2); white-space: nowrap; }
 
 /* Tips: a tag pinned over the spot with the lowest house edge */
-.bs-best { padding: 3px 9px; border-radius: 3px; font-size: 13px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--brass-hi); background: rgba(14, 12, 10, 0.78); pointer-events: none; white-space: nowrap; }
+.bs-best { padding: 3px 9px; border-radius: 3px; font-size: 13px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--brass-hi); background: rgba(var(--glass-rgb), 0.78); pointer-events: none; white-space: nowrap; }
 
 @media (max-width: 900px) {
   .bs-history { max-width: calc(100vw - 32px); }

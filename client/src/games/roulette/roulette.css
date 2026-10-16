@@ -41,7 +41,7 @@
 .rl-clock { position: absolute; display: grid; justify-items: center; gap: 3px; pointer-events: none; }
 .rl-clock-ring { position: relative; width: 58px; height: 58px; }
 .rl-clock-ring svg { width: 100%; height: 100%; display: block; }
-.rl-clock circle { fill: rgba(14, 12, 10, 0.72); stroke-width: 3.5; }
+.rl-clock circle { fill: rgba(var(--glass-rgb), 0.72); stroke-width: 3.5; }
 .rl-clock .track { stroke: rgba(255, 255, 255, 0.14); }
 .rl-clock .left { fill: none; stroke: var(--brass-hi); stroke-linecap: round; transform: rotate(-90deg); transform-origin: 50% 50%; transition: stroke-dashoffset 0.25s linear; }
 .rl-clock.late .left { stroke: #e8a33a; }

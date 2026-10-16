@@ -1,7 +1,13 @@
 /* Casino Simulator — base theme.
    Dark glass panels with a brass hairline over the 3D scene; numbers in a condensed face, felt
    and signage in Cinzel. Games add their own stylesheet next to their view. The site's back chip
-   sits in the bottom-left corner, so nothing here is anchored there. */
+   sits in the bottom-left corner, so nothing here is anchored there.
+
+   Light and dark (app/theme.ts): every colour the 2D layer uses is a token here, in two sets, and
+   the sheets write `rgba(var(--brass-rgb), 0.16)` for a tint so each alpha keeps its meaning in
+   both. The light set is ivory glass with the brass gone dark so it still reads on cream; the 3D
+   casino behind it keeps its own lights either way. Anything that is a thing in the world (a
+   machine's screen, the elevator's panel, a photo) keeps its own colours and isn't tokenised. */
 
 @font-face { font-family: 'Barlow Condensed'; src: url('/casino/fonts/barlowcondensed/BarlowCondensed-SemiBold.latin.woff2') format('woff2'); font-weight: 600; font-display: swap; }
 @font-face { font-family: 'Cinzel'; src: url('/casino/fonts/cinzel/Cinzelwght.latin.woff2') format('woff2'); font-weight: 400 900; font-display: swap; }
@@ -14,19 +20,53 @@
      lobby, sits under the HUD's right-hand buttons). */
   --below-hud: 82px;
   --below-party: var(--below-hud);
+  /* the page behind everything, and the loading screen's glow */
+  --bg: #0b0908;
+  --boot-glow: #2a1c12;
+  /* text: three weights, a brighter one for a hovered name, and the triplet for tints of it */
   --ink: #f4efe4;
   --ink-2: #c9c0ad;
   --ink-3: #8f8676;
+  --ink-hi: #fff6e6;
+  --ink-rgb: 244, 239, 228;
+  /* glass: the panels over the scene (--glass-rgb for other alphas), the sheets over the game */
   --glass: rgba(14, 12, 10, 0.78);
   --glass-2: rgba(28, 24, 20, 0.86);
+  --glass-rgb: 14, 12, 10;
+  --sheet-rgb: 17, 14, 11;
+  --sheet-solid: #110e0b;
+  /* fields and buttons */
+  --field: #120f0c;
+  --btn: linear-gradient(#2b241c, #1c1712);
+  --btn-flat: #1c1712;
+  --btn-flat-hi: #2a2016;
+  /* brass: the hairlines, the titles, and the two triplets every tint of it is mixed from */
   --line: rgba(214, 178, 110, 0.28);
   --line-strong: rgba(226, 190, 118, 0.62);
   --brass: #d8b06a;
   --brass-hi: #f1d59a;
+  --brass-rgb: 226, 190, 118;
+  --brass-hi-rgb: 241, 213, 154;
+  /* the gold button: its edge, and the ink on it (the same in both themes: gold is gold) */
+  --gold-line: #f1d59a;
+  --on-gold: #1d140a;
+  /* a lift (white on dark) for raised surfaces and tracks; a well (dark on dark) for lists */
+  --lift-rgb: 255, 255, 255;
+  --well: rgba(0, 0, 0, 0.18);
+  /* the dimming behind a modal, the shade under the front's title, a halo behind text over the scene */
+  --scrim-rgb: 6, 5, 4;
+  --shade-rgb: 8, 6, 5;
+  --halo: rgba(0, 0, 0, 0.85);
+  /* seven-segment readouts (PINs, LED captions): the amber, and the triplet for its glow */
+  --led: #ffb347;
+  --led-hi: #ffd28a;
+  --led-rgb: 255, 150, 40;
   --felt: #1f6b43;
   --win: #7fd18b;
   --lose: #e0766b;
   --push: #c9c0ad;
+  --win-rgb: 127, 209, 139;
+  --lose-rgb: 224, 118, 107;
   --focus: #f1d59a;
   --radius: 6px;
   --ui: 'Barlow Condensed', 'Arial Narrow', system-ui, sans-serif;
@@ -36,12 +76,54 @@
   color-scheme: dark;
 }
 
+/* Light: ivory glass, dark brass (AA on cream for every text weight), the same gold button. */
+:root[data-theme='light'] {
+  --bg: #ece4d4;
+  --boot-glow: #f9f4ea;
+  --ink: #221c15;
+  --ink-2: #514639;
+  --ink-3: #75695a;
+  --ink-hi: #000;
+  --ink-rgb: 34, 28, 21;
+  --glass: rgba(250, 246, 238, 0.86);
+  --glass-2: rgba(255, 252, 246, 0.94);
+  --glass-rgb: 250, 246, 238;
+  --sheet-rgb: 253, 250, 244;
+  --sheet-solid: #fdfaf4;
+  --field: #fffdf8;
+  --btn: linear-gradient(#fffdf8, #ede4d3);
+  --btn-flat: #f3ecde;
+  --btn-flat-hi: #e9dfcc;
+  --line: rgba(122, 88, 34, 0.3);
+  --line-strong: rgba(122, 88, 34, 0.62);
+  --brass: #a8792a;
+  --brass-hi: #7d5a1f;
+  --brass-rgb: 166, 124, 46;
+  --brass-hi-rgb: 125, 90, 31;
+  --gold-line: #a8792a;
+  --lift-rgb: 60, 40, 10;
+  --well: rgba(90, 65, 25, 0.07);
+  --scrim-rgb: 50, 38, 22;
+  --shade-rgb: 244, 238, 226;
+  --halo: rgba(255, 250, 240, 0.9);
+  --led: #b85c0a;
+  --led-hi: #8f4505;
+  --led-rgb: 184, 92, 10;
+  --win: #1e7a3a;
+  --lose: #b23a2b;
+  --push: #514639;
+  --win-rgb: 30, 122, 58;
+  --lose-rgb: 178, 58, 43;
+  --focus: #7d5a1f;
+  color-scheme: light;
+}
+
 * { box-sizing: border-box; }
 /* Classes like .btn set display, which would otherwise beat the hidden attribute. */
 [hidden] { display: none !important; }
 /* A lobby's party panel sits under the HUD's right-hand buttons; the game's right panels go below it. */
 :root:has(.party:not([hidden])) { --below-party: 116px; }
-html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0908; color: var(--ink); font-family: var(--ui); letter-spacing: 0.01em; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--ink); font-family: var(--ui); letter-spacing: 0.01em; }
 button { font: inherit; color: inherit; }
 #scene { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
 #labels { position: fixed; inset: 0; pointer-events: none; }
@@ -51,37 +133,47 @@ button { font: inherit; color: inherit; }
 #ui .pass { pointer-events: none; }
 :where(#ui .pass) > * { pointer-events: auto; }
 
-.boot { position: fixed; inset: 0; display: grid; place-content: center; justify-items: center; gap: 14px; background: radial-gradient(120% 90% at 50% 40%, #2a1c12 0%, #0b0908 70%); z-index: 50; transition: opacity 0.5s var(--ease); }
+.boot { position: fixed; inset: 0; display: grid; place-content: center; justify-items: center; gap: 14px; background: radial-gradient(120% 90% at 50% 40%, var(--boot-glow) 0%, var(--bg) 70%); z-index: 50; transition: opacity 0.5s var(--ease); }
 .boot.done { opacity: 0; pointer-events: none; }
 .boot-mark { font-family: var(--serif); font-size: 30px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--brass-hi); text-align: center; margin-right: -0.18em; /* the last letter's spacing: the bar lines up with the letters themselves */ }
-.boot-bar { justify-self: stretch; height: 2px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+.boot-bar { justify-self: stretch; height: 2px; background: rgba(var(--lift-rgb), 0.08); overflow: hidden; }
 .boot-fill { height: 100%; width: 0; background: var(--brass); transition: width 0.3s var(--ease); }
 .boot-note { font-size: 13px; color: var(--ink-3); text-align: center; letter-spacing: 0.12em; text-transform: uppercase; margin-right: -0.12em; }
 
 /* panels and controls */
 .panel { background: var(--glass); border: 1px solid var(--line); border-radius: var(--radius); backdrop-filter: blur(10px) saturate(1.2); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45); }
-.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 36px; padding: 0 14px; border-radius: 4px; border: 1px solid var(--line-strong); background: linear-gradient(#2b241c, #1c1712); color: var(--ink); font-size: 16px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; transition: border-color 0.15s, background 0.15s, transform 0.08s; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 36px; padding: 0 14px; border-radius: 4px; border: 1px solid var(--line-strong); background: var(--btn); color: var(--ink); font-size: 16px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; transition: border-color 0.15s, background 0.15s, transform 0.08s; }
 .btn:hover:not(:disabled) { border-color: var(--brass-hi); }
 .btn:active:not(:disabled) { transform: translateY(1px); }
 .btn:disabled { opacity: 0.4; cursor: default; }
 .btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-.btn.primary { background: linear-gradient(#e2bf7c, #b98d45); color: #1d140a; border-color: #f1d59a; }
+.btn.primary { background: linear-gradient(#e2bf7c, #b98d45); color: var(--on-gold); border-color: var(--gold-line); }
 .btn.ghost { background: transparent; }
 .btn .key { font-size: 11px; opacity: 0.6; border: 1px solid currentColor; border-radius: 3px; padding: 0 3px; }
-.meter { font-family: var(--meter); color: #ffb347; text-shadow: 0 0 6px rgba(255, 150, 40, 0.5); }
+.meter { font-family: var(--meter); color: var(--led); text-shadow: 0 0 6px rgba(var(--led-rgb), 0.5); }
 .label { font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-3); }
 .money { font-variant-numeric: tabular-nums; }
+
+/* The sun and moon button (app/theme.ts): in the HUD's right-hand bar and the corner of the
+   login and menu screens. Looks like the HUD's other buttons wherever it sits. */
+.theme-btn { display: grid; place-items: center; width: 36px; height: 36px; padding: 0; background: rgba(var(--glass-rgb), 0.84); border: 1px solid var(--line); border-radius: 6px; color: var(--ink-2); cursor: pointer; transition: color 0.15s, border-color 0.15s; }
+.theme-btn:hover { color: var(--ink); border-color: var(--line-strong); }
+.theme-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.front-theme { position: absolute; top: 16px; right: 16px; z-index: 1; }
+@media (pointer: coarse) {
+  .theme-btn { width: 48px; height: 48px; }
+}
 
 /* toasts */
 /* Below the dealer's line, which takes the first row under the HUD. */
 .toasts { position: fixed; top: calc(var(--below-hud) + 52px); left: 50%; transform: translateX(-50%); display: grid; gap: 8px; z-index: 40; }
 .toast { padding: 9px 14px; font-size: 16px; animation: toast-in 0.25s var(--ease); }
-.toast.err { border-color: rgba(224, 118, 107, 0.6); }
+.toast.err { border-color: rgba(var(--lose-rgb), 0.6); }
 @keyframes toast-in { from { opacity: 0; transform: translateY(-6px); } }
 
 /* result pills attach to a hand or spot on the table */
 .pill { position: absolute; transform: translate(-50%, -50%); padding: 3px 10px; border-radius: 999px; font-size: 15px; font-weight: 600; letter-spacing: 0.06em; white-space: nowrap; background: var(--glass-2); border: 1px solid var(--line-strong); animation: pill-in 0.35s var(--ease); }
-.pill.win { color: var(--win); border-color: rgba(127, 209, 139, 0.6); }
+.pill.win { color: var(--win); border-color: rgba(var(--win-rgb), 0.6); }
 .pill.lose { color: var(--lose); }
 .pill.push { color: var(--push); }
 /* translate/scale, not transform: the label renderer positions pills with transform. */
@@ -101,34 +193,34 @@ button { font: inherit; color: inherit; }
 /* Max: gold, beside the chips; picked (at a layout of many spots) it rises like a chip */
 .max-btn { color: var(--brass-hi); border-color: var(--brass); letter-spacing: 0.1em; }
 .tray .chips .max-btn { align-self: center; height: 40px; margin-left: 4px; padding: 0 12px; transition: transform 0.15s var(--ease), border-color 0.15s, background 0.15s; }
-.max-btn[aria-pressed='true'] { transform: translateY(-6px); background: linear-gradient(#e2bf7c, #b98d45); color: #1d140a; border-color: #f1d59a; box-shadow: 0 6px 14px rgba(0, 0, 0, 0.5); }
+.max-btn[aria-pressed='true'] { transform: translateY(-6px); background: linear-gradient(#e2bf7c, #b98d45); color: var(--on-gold); border-color: var(--gold-line); box-shadow: 0 6px 14px rgba(0, 0, 0, 0.5); }
 .tray .sep { width: 1px; align-self: stretch; background: var(--line); }
 
 /* modal */
-.scrim { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.45); display: grid; place-items: center; z-index: 30; }
+.scrim { position: fixed; inset: 0; background: rgba(var(--scrim-rgb), 0.45); display: grid; place-items: center; z-index: 30; }
 .modal { min-width: 320px; max-width: 460px; padding: 18px 20px; }
 .modal h2 { margin: 0 0 6px; font-family: var(--serif); font-size: 20px; font-weight: 600; letter-spacing: 0.06em; color: var(--brass-hi); }
 .modal p { margin: 6px 0; color: var(--ink-2); font-size: 16px; }
 .modal .row { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
-.modal input[type='number'], .modal input[type='text'] { height: 36px; padding: 0 10px; border-radius: 4px; border: 1px solid var(--line-strong); background: #120f0c; color: var(--ink); font: inherit; font-size: 17px; width: 100%; }
+.modal input[type='number'], .modal input[type='text'] { height: 36px; padding: 0 10px; border-radius: 4px; border: 1px solid var(--line-strong); background: var(--field); color: var(--ink); font: inherit; font-size: 17px; width: 100%; }
 
 /* timer ring */
 .timer { position: absolute; width: 44px; height: 44px; transform: translate(-50%, -50%); }
 .timer circle { fill: none; stroke-width: 3; }
-.timer .track { stroke: rgba(255, 255, 255, 0.12); }
+.timer .track { stroke: rgba(var(--lift-rgb), 0.12); }
 .timer .left { stroke: var(--brass-hi); stroke-linecap: round; transform: rotate(-90deg); transform-origin: 50% 50%; }
 
 /* Tips: one line above the table's controls, and a ring on the control it recommends. */
 .tip-line { position: fixed; left: 50%; bottom: var(--tip-bottom, 104px); transform: translateX(-50%); max-width: min(560px, calc(100vw - 32px)); display: flex; gap: 10px; align-items: baseline; padding: 7px 14px; font-size: 15px; color: var(--ink); text-wrap: balance; pointer-events: none; }
 .tip-label { font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--brass-hi); }
-.tip-pick { box-shadow: 0 0 0 2px var(--brass-hi), 0 0 16px rgba(241, 213, 154, 0.45) !important; }
+.tip-pick { box-shadow: 0 0 0 2px var(--brass-hi), 0 0 16px rgba(var(--brass-hi-rgb), 0.45) !important; }
 
 /* Celebrations: the hand's name over the table, sized to the win. */
 .celebrate { position: fixed; left: 50%; top: max(22%, 180px); transform: translate(-50%, -50%); display: grid; justify-items: center; gap: 4px; padding: 14px 34px; pointer-events: none; z-index: 25; animation: celebrate-in 0.45s var(--ease) both; text-align: center; }
 .celebrate.out { opacity: 0; transform: translate(-50%, -58%); transition: opacity 0.35s var(--ease), transform 0.35s var(--ease); }
-.celebrate-title { font-family: var(--serif); font-size: 30px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--brass-hi); text-shadow: 0 0 18px rgba(241, 213, 154, 0.45); }
+.celebrate-title { font-family: var(--serif); font-size: 30px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--brass-hi); text-shadow: 0 0 18px rgba(var(--brass-hi-rgb), 0.45); }
 .celebrate-sub { font-size: 17px; color: var(--ink); }
 .celebrate.tier-nice .celebrate-title { font-size: 24px; }
-.celebrate.tier-huge { padding: 20px 48px; border-color: var(--brass-hi); box-shadow: 0 0 40px rgba(241, 213, 154, 0.35); }
+.celebrate.tier-huge { padding: 20px 48px; border-color: var(--brass-hi); box-shadow: 0 0 40px rgba(var(--brass-hi-rgb), 0.35); }
 .celebrate.tier-huge .celebrate-title { font-size: 40px; }
 @keyframes celebrate-in { from { opacity: 0; transform: translate(-50%, -40%) scale(0.92); } }

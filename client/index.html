@@ -6,7 +6,10 @@
          which ignores user-scalable), and the on-screen keyboard shrinks the layout so a text
          field at the bottom stays above it. -->
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
-    <meta name="theme-color" content="#0b0908" />
+    <!-- The browser's own bar matches the 2D layer's theme (app/theme.ts keeps both current). -->
+    <meta name="color-scheme" content="dark light" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0b0908" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ece4d4" />
     <meta name="format-detection" content="telephone=no" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -18,6 +21,8 @@
     <link rel="icon" type="image/png" href="./icon.png" sizes="64x64" />
     <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
     <link rel="manifest" href="./manifest.webmanifest" />
+    <!-- Light or dark before the first paint, from its own file: the CSP has no inline scripts. -->
+    <script src="./theme.js"></script>
     <link rel="stylesheet" href="./src/styles/theme.css" />
     <link rel="stylesheet" href="./src/ui/mobile.css" />
   </head>

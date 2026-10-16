@@ -6,7 +6,7 @@
 .idle-title { display: block; font-family: var(--serif); font-size: 20px; font-weight: 600; letter-spacing: 0.06em; color: var(--brass-hi); }
 .idle-line { margin: 4px 0 10px; font-size: 16px; color: var(--ink-2); text-wrap: pretty; }
 .idle-secs { color: var(--ink); font-variant-numeric: tabular-nums; }
-.idle-bar { height: 2px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+.idle-bar { height: 2px; background: rgba(var(--lift-rgb), 0.08); overflow: hidden; }
 .idle-fill { height: 100%; background: var(--brass); transform-origin: left center; transition: transform 0.25s linear; }
 @keyframes idle-in { from { opacity: 0; translate: 0 -6px; } }
 
@@ -21,3 +21,6 @@
 /* Reduce flashing & motion (app/comfort.ts) */
 body.calm .idle-warn, body.calm .away { animation: none; }
 body.calm .idle-fill { transition: none; }
+
+/* Light (app/theme.ts): the away screen's dim is ivory. */
+:root[data-theme='light'] .away { background: radial-gradient(120% 90% at 50% 40%, rgba(249, 244, 234, 0.9) 0%, rgba(236, 228, 212, 0.96) 70%); }

@@ -2,6 +2,12 @@
 // game's table, ?dev=floor for the floor on its own); otherwise, and always in a production build
 // (the table harness logs in with a throwaway name and the dev password, which is no way to make
 // accounts on the real site), the game proper boots (menu, floor, tables), in app/boot.ts.
+//
+// The game is imported here, not on demand: that puts it in the entry chunk, so index.html names
+// it and three's chunk outright and the browser fetches both as it reads the page, instead of a
+// tiny entry first and the real downloads one round trip later. The dev pages stay on demand.
+
+import { boot } from './app/boot.ts';
 
 const params = new URLSearchParams(location.search);
 const done = () => document.getElementById('boot')?.classList.add('done');
@@ -13,7 +19,6 @@ async function start(): Promise<void> {
   } else if (dev === 'floor') {
     await (await import('./world/dev-floor.ts')).runDevFloor(params);
   } else {
-    const { boot } = await import('./app/boot.ts');
     await boot();
   }
   done();

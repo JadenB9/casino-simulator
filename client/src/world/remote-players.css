@@ -4,7 +4,7 @@
   padding: 1px 8px 2px;
   border: 1px solid var(--line);
   border-radius: 3px;
-  background: rgba(14, 12, 10, 0.66);
+  background: rgba(var(--glass-rgb), 0.66);
   color: var(--ink);
   font-family: var(--ui);
   font-size: 14px;

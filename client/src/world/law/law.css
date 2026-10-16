@@ -12,7 +12,7 @@
   z-index: 30;
 }
 .law-hud.jailed { border-color: rgba(201, 162, 39, 0.55); }
-.law-hud.warned { width: auto; min-width: 150px; border-color: rgba(224, 118, 107, 0.6); }
+.law-hud.warned { width: auto; min-width: 150px; border-color: rgba(var(--lose-rgb), 0.6); }
 .law-title {
   font-size: 12px;
   letter-spacing: 0.22em;
@@ -62,7 +62,7 @@
   border: 1px solid var(--line-strong);
   border-radius: 50%;
   background: var(--glass-2);
-  box-shadow: 0 0 0 4px rgba(14, 12, 10, 0.45), 0 8px 22px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 0 0 4px rgba(var(--glass-rgb), 0.45), 0 8px 22px rgba(0, 0, 0, 0.45);
   color: var(--brass-hi);
   font: 600 13px var(--ui);
   letter-spacing: 0.08em;

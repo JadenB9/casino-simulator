@@ -5,11 +5,11 @@
 
 /* what's in your hand, your balance and the switch */
 .dine-top { display: flex; align-items: stretch; gap: 18px; margin-bottom: 12px; }
-.dine-hand { flex: 1; display: flex; align-items: center; gap: 12px; min-width: 0; padding: 5px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: rgba(241, 213, 154, 0.035); }
+.dine-hand { flex: 1; display: flex; align-items: center; gap: 12px; min-width: 0; padding: 5px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: rgba(var(--brass-hi-rgb), 0.035); }
 .dine-hand.empty .dine-glyph { opacity: 0.25; }
 .dine-hand-text { flex: 1; display: grid; gap: 6px; min-width: 0; }
 .dine-hand .bar-status { min-width: 0; font-size: 15px; }
-.dine-meter { height: 3px; max-width: 280px; background: rgba(241, 213, 154, 0.12); border-radius: 2px; overflow: hidden; }
+.dine-meter { height: 3px; max-width: 280px; background: rgba(var(--brass-hi-rgb), 0.12); border-radius: 2px; overflow: hidden; }
 .dine-meter-fill { height: 100%; background: var(--brass); transform-origin: left center; transition: transform 0.6s var(--ease); }
 .dine-down { height: 30px; padding: 0 11px; font-size: 13px; }
 .dine-side { display: grid; align-content: space-between; justify-items: end; gap: 8px; }
@@ -19,7 +19,7 @@
 .dine-switch-knob { position: relative; width: 28px; height: 16px; border: 1px solid var(--line-strong); border-radius: 9px; transition: background 0.15s; }
 .dine-switch-knob::after { content: ''; position: absolute; top: 2px; left: 2px; width: 10px; height: 10px; border-radius: 50%; background: var(--ink-3); transition: transform 0.18s var(--ease), background 0.15s; }
 .dine-switch[aria-pressed='true'] { color: var(--ink-2); }
-.dine-switch[aria-pressed='true'] .dine-switch-knob { background: rgba(216, 176, 106, 0.22); }
+.dine-switch[aria-pressed='true'] .dine-switch-knob { background: rgba(var(--brass-rgb), 0.22); }
 .dine-switch[aria-pressed='true'] .dine-switch-knob::after { transform: translateX(12px); background: var(--brass-hi); }
 .dine-switch:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
 
@@ -31,11 +31,11 @@
 .dine-item .bar-text { gap: 0; }
 .dine-line { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
 .dine-line .bar-name { flex: none; font-size: 16.5px; }
-.dine-dots { flex: 1; min-width: 12px; border-bottom: 1px dotted rgba(214, 178, 110, 0.32); transform: translateY(-4px); }
+.dine-dots { flex: 1; min-width: 12px; border-bottom: 1px dotted rgba(var(--brass-rgb), 0.32); transform: translateY(-4px); }
 .dine-line .bar-price { flex: none; min-width: 0; font-size: 15.5px; color: var(--brass-hi); }
 .dine-item .bar-about { font-size: 13px; }
 .dine-under { display: flex; align-items: baseline; justify-content: space-between; gap: 4px 12px; flex-wrap: wrap; }
-.dine-does { margin-left: auto; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; white-space: nowrap; color: rgba(216, 176, 106, 0.8); }
+.dine-does { margin-left: auto; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; white-space: nowrap; color: rgba(var(--brass-rgb), 0.8); }
 .dine-glyph { display: block; }
 .dine-item:hover .dine-glyph { filter: brightness(1.25); }
 

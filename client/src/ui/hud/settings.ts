@@ -5,6 +5,7 @@
 import './hud.css';
 import { tips } from '../../app/tips.ts';
 import { calm, setCalm } from '../../app/comfort.ts';
+import { setTheme, theme, type Theme } from '../../app/theme.ts';
 import { savedQuality, saveQuality, type Quality } from '../../render/engine3d.ts';
 import { el } from '../kit.ts';
 import type { Closable, SfxLike } from '../menu/deps.ts';
@@ -77,6 +78,9 @@ export function openSettings(deps: SettingsDeps): Closable {
   const qBox = el('div');
   qBox.append(qNote, pending);
 
+  // light or dark for the 2D layer (app/theme.ts): applies at once, and on every page of the site
+  const themeCtl = segmented<Theme>('Theme', [{ id: 'dark', label: 'Dark' }, { id: 'light', label: 'Light' }], theme(), (t) => setTheme(t));
+
   // flashing and motion (app/comfort.ts): applies at once, everywhere
   const calmCtl = segmented<'full' | 'reduced'>('Reduce flashing & motion', [{ id: 'full', label: 'Full' }, { id: 'reduced', label: 'Reduced' }], calm() ? 'reduced' : 'full', (v) => setCalm(v === 'reduced'));
 
@@ -118,6 +122,7 @@ export function openSettings(deps: SettingsDeps): Closable {
     ...inviteSettings(row), // v6 invite6: do not disturb
     ...reminderSettings(row), // v6.1 casino61: the play reminder and loss limit
     el('h3', 'section-label', 'Graphics'),
+    row('Theme', themeCtl.root, el('p', 'set-note', 'The menus, panels and HUD. The casino keeps its own lights. Shared with the rest of j4den.com.')),
     row('Quality', quality.root, qBox),
     row('Flashing & motion', calmCtl.root, el('p', 'set-note', 'Reduced: steady lights instead of flashing and chasing, fewer particles, no camera shake.')),
     el('h3', 'section-label', 'Audio'),

@@ -3,6 +3,7 @@
 
 import { el } from '../kit.ts';
 import { paintedBackdrop } from './backdrop.ts';
+import { themeButton } from '../hud/theme-button.ts';
 
 export interface FrontShell {
   root: HTMLElement;
@@ -23,6 +24,9 @@ export function frontShell(parent: HTMLElement, cls: string, backdrop?: () => ((
     painted = paintedBackdrop();
     root.append(painted.root);
   }
+  // light or dark, in the corner, before anyone has logged in (app/theme.ts)
+  const theme = themeButton('front-theme');
+  root.append(theme.root);
   const col = el('div', 'front-col');
   const brand = el('div', 'front-brand');
   const title = el('h1', 'front-title', 'Casino Simulator');
@@ -41,6 +45,7 @@ export function frontShell(parent: HTMLElement, cls: string, backdrop?: () => ((
       if (closed) return;
       closed = true;
       root.classList.add('closing');
+      theme.dispose();
       painted?.dispose();
       if (typeof stop === 'function') stop();
       setTimeout(() => root.remove(), 240);

@@ -354,11 +354,15 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
   const pr = new PixelRatio(renderer);
   // bloom's extra passes would otherwise reset the counters mid-frame; world.update() resets them
   renderer.info.autoReset = false;
+  let high = quality === 'high';
   const applyQuality = (q: Quality) => {
-    bloom.setEnabled(q === 'high');
-    pr.set(q === 'high');
+    high = q === 'high';
+    bloom.setEnabled(high);
+    pr.set(high);
   };
   applyQuality(quality);
+  // the window on another screen, or the browser zoomed: the ceiling moved, so start over from it
+  const offDpr = engine.onDpr(() => pr.set(high));
 
   // compile every shader now, behind the loading screen, so the first frames and "Press E" don't
   // stall: what's hidden too (far stand-ins, the staff's still copies, characters out of view),
@@ -618,6 +622,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
       interact.dispose();
       player.dispose();
       character.dispose();
+      offDpr();
       bloom.dispose();
       reflections?.dispose();
       renderer.info.autoReset = true;

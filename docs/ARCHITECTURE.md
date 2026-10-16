@@ -364,6 +364,15 @@ statistical test checks the crypto source itself.
   probe and changeable in Settings.
 - **Reconnect** with full-jitter backoff (0.5 s doubling to 30 s). A reconnect to a table
   gets the whole table state, so nothing is replayed.
+- **Theme** (`app/theme.ts`, `styles/theme.css`): the 2D layer (login and menu, HUD, sheets, panels,
+  chat, the chip tray and every control over a table) comes in dark and light; the 3D casino keeps its
+  own lighting either way. It is the site's choice: `localStorage.theme` is `light` or `dark`, light
+  is `data-theme="light"` on `<html>` and dark carries no attribute, and with nothing saved the page
+  follows the device. `public/theme.js` sets the attribute before the first paint (an external file:
+  the CSP allows no inline script); the module keeps it current, hears the device and other tabs,
+  and tells the bank's chart to repaint. Every colour is a token in two sets, and tints are written
+  `rgba(var(--brass-rgb), 0.16)` so each alpha keeps its meaning in both. Things that are objects in
+  the world (a machine's screen, the elevator's panel, a bingo card) keep their own colours.
 - **Idle** (`app/idle.ts`, `ui/away/`): with no key, mouse, touch or wheel input for 15 minutes,
   the page shows "Still there?" for the last minute (any input clears it), then leaves any table
   the normal way, closes its sockets and shows "You were away for 15 minutes." with Come back,

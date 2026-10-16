@@ -16,7 +16,7 @@
   padding: 5px 11px 7px;
   border: 1px solid var(--brass);
   border-radius: 8px;
-  background: rgba(14, 12, 10, 0.9);
+  background: rgba(var(--glass-rgb), 0.9);
   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.45);
   color: var(--ink);
   font-size: 15px;
@@ -39,7 +39,7 @@
   width: 8px;
   height: 8px;
   margin-left: -4px;
-  background: rgba(14, 12, 10, 0.9);
+  background: rgba(var(--glass-rgb), 0.9);
   border-right: 1px solid var(--brass);
   border-bottom: 1px solid var(--brass);
   transform: rotate(45deg);
@@ -57,5 +57,5 @@ body.calm .staff-say-bubble.leaving { animation: staff-say-gone 0.4s forwards; }
 /* At a teller window the bank's sheet stands to the right of the banker instead of over them,
    and the floor behind stays lit: you watch the banker count your money out. Wide screens only. */
 @media (min-width: 900px) and (min-aspect-ratio: 5/4) {
-  .sheet-scrim.at-window { place-items: center end; padding-right: max(28px, 5vw); background: rgba(6, 5, 4, 0.14); }
+  .sheet-scrim.at-window { place-items: center end; padding-right: max(28px, 5vw); background: rgba(var(--scrim-rgb), 0.14); }
 }

@@ -3,11 +3,15 @@
 
 import { el } from '../kit.ts';
 import { FUND_STEP_MS, formatPrice } from '../../../../shared/src/bank.ts';
+import { onTheme } from '../../app/theme.ts';
 
-const LINE = '#e2be76';
-const RULE = 'rgba(214, 178, 110, 0.35)';
-const GRID = 'rgba(214, 178, 110, 0.09)';
-const INK = 'rgba(244, 239, 228, 0.55)';
+/** The chart's colours come from the theme's tokens (styles/theme.css), read when it draws. */
+function palette(root: HTMLElement): { line: string; rule: string; grid: string; ink: string } {
+  const css = getComputedStyle(root);
+  const brass = css.getPropertyValue('--brass-rgb').trim() || '226, 190, 118';
+  const ink = css.getPropertyValue('--ink-rgb').trim() || '244, 239, 228';
+  return { line: css.getPropertyValue('--brass').trim() || '#e2be76', rule: `rgba(${brass}, 0.35)`, grid: `rgba(${brass}, 0.09)`, ink: `rgba(${ink}, 0.55)` };
+}
 const FONT = '12px "Barlow Condensed", "Arial Narrow", sans-serif';
 /** Room on the right for the price labels. */
 const LABELS = 64;
@@ -21,6 +25,7 @@ export class PriceChart {
   private points: [number, number][] = [];
   private hover: number | null = null;
   private readonly ro: ResizeObserver;
+  private readonly offTheme: () => void;
 
   constructor() {
     this.root = el('div', 'bank-chart');
@@ -42,6 +47,7 @@ export class PriceChart {
     });
     this.ro = new ResizeObserver(() => this.draw());
     this.ro.observe(this.root);
+    this.offTheme = onTheme(() => this.draw());
   }
 
   set(points: [number, number][]): void {
@@ -54,6 +60,7 @@ export class PriceChart {
 
   destroy(): void {
     this.ro.disconnect();
+    this.offTheme();
   }
 
   private draw(): void {
@@ -71,6 +78,7 @@ export class PriceChart {
     if (!g) return;
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.clearRect(0, 0, w, h);
+    const { line: LINE, rule: RULE, grid: GRID, ink: INK } = palette(this.root);
     const pts = this.points;
     if (pts.length < 2) {
       g.fillStyle = INK;

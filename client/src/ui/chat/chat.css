@@ -30,7 +30,7 @@
   padding: 0 5px;
   border-radius: 999px;
   background: var(--brass);
-  color: #1d140a;
+  color: var(--on-gold);
   font: 600 12px/19px var(--ui);
   letter-spacing: 0.02em;
   text-align: center;
@@ -43,7 +43,7 @@
   min-width: 20px;
   height: 20px;
   padding: 0 5px;
-  border: 1px solid rgba(241, 213, 154, 0.34);
+  border: 1px solid rgba(var(--brass-hi-rgb), 0.34);
   border-bottom-width: 2px;
   border-radius: 4px;
   color: var(--ink-3);
@@ -61,7 +61,7 @@
   padding: 0 9px 0 11px;
   border: 1px solid var(--line);
   border-radius: 6px;
-  background: rgba(14, 12, 10, 0.86);
+  background: rgba(var(--glass-rgb), 0.86);
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
   color: var(--ink-2);
   font: 600 14px var(--ui);
@@ -82,7 +82,7 @@
   padding: 6px 11px 7px;
   border: 1px solid var(--line);
   border-radius: 6px;
-  background: rgba(14, 12, 10, 0.86);
+  background: rgba(var(--glass-rgb), 0.86);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.32);
   font-size: 15px;
   line-height: 1.3;
@@ -107,10 +107,10 @@
   display: flex;
   flex-direction: column;
   width: min(360px, calc(100vw - 32px));
-  background: rgba(14, 12, 10, 0.9);
+  background: rgba(var(--glass-rgb), 0.9);
   border: 1px solid var(--line);
   border-radius: 8px;
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(241, 213, 154, 0.06);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(var(--brass-hi-rgb), 0.06);
   animation: chat-in 0.2s var(--ease);
 }
 /* The brass hairline the sheets wear along their top edge. */
@@ -121,9 +121,9 @@
   right: 24px;
   top: -1px;
   height: 1px;
-  background: linear-gradient(90deg, rgba(241, 213, 154, 0), rgba(241, 213, 154, 0.7), rgba(241, 213, 154, 0));
+  background: linear-gradient(90deg, rgba(var(--brass-hi-rgb), 0), rgba(var(--brass-hi-rgb), 0.7), rgba(var(--brass-hi-rgb), 0));
 }
-.chat.typing .chat-box { border-color: rgba(226, 190, 118, 0.45); }
+.chat.typing .chat-box { border-color: rgba(var(--brass-rgb), 0.45); }
 @keyframes chat-in { from { opacity: 0; translate: 0 8px; } }
 
 .chat-head { display: flex; align-items: center; gap: 2px; height: 42px; padding: 0 6px 0 6px; border-bottom: 1px solid var(--line); }
@@ -145,7 +145,7 @@
   transition: color 0.15s, background 0.15s;
 }
 .chat-tab:hover { color: var(--ink); }
-.chat-tab[aria-selected='true'] { color: var(--brass-hi); background: rgba(226, 190, 118, 0.1); }
+.chat-tab[aria-selected='true'] { color: var(--brass-hi); background: rgba(var(--brass-rgb), 0.1); }
 .chat-tab:focus-visible, .chat-icon:focus-visible, .chat-send:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 
 .chat-icon {
@@ -161,7 +161,7 @@
   cursor: pointer;
   transition: color 0.15s, background 0.15s;
 }
-.chat-icon:hover { color: var(--ink); background: rgba(255, 255, 255, 0.04); }
+.chat-icon:hover { color: var(--ink); background: rgba(var(--lift-rgb), 0.04); }
 .chat-mute[aria-pressed='true'] { color: var(--brass-hi); }
 
 .chat-log {
@@ -172,7 +172,7 @@
   overscroll-behavior: contain;
   padding: 8px 12px 8px;
   scrollbar-width: thin;
-  scrollbar-color: rgba(214, 178, 110, 0.35) transparent;
+  scrollbar-color: rgba(var(--brass-rgb), 0.35) transparent;
 }
 .chat-list { display: grid; align-content: start; gap: 4px; }
 .chat-note { margin: 0 0 4px; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); }
@@ -198,14 +198,14 @@
   padding: 0 10px;
   border: 1px solid var(--line);
   border-radius: 4px;
-  background: #120f0c;
+  background: var(--field);
   color: var(--ink);
   font: 16px var(--ui);
   letter-spacing: 0.02em;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 .chat-input::placeholder { color: var(--ink-3); }
-.chat-input:focus { outline: none; border-color: var(--line-strong); box-shadow: 0 0 0 1px rgba(241, 213, 154, 0.22); }
+.chat-input:focus { outline: none; border-color: var(--line-strong); box-shadow: 0 0 0 1px rgba(var(--brass-hi-rgb), 0.22); }
 .chat-input:disabled { opacity: 0.7; cursor: not-allowed; }
 .chat.silenced .chat-input::placeholder { color: var(--lose); }
 .chat-status { flex: none; font-size: 12px; letter-spacing: 0.04em; color: var(--ink-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -220,7 +220,7 @@
   padding: 0;
   border: 1px solid var(--line-strong);
   border-radius: 4px;
-  background: linear-gradient(#2b241c, #1c1712);
+  background: var(--btn);
   color: var(--brass-hi);
   cursor: pointer;
   transition: border-color 0.15s;
@@ -229,24 +229,24 @@
 .chat.silenced .chat-send { opacity: 0.4; cursor: default; }
 
 /* The pin: filled brass while the chat is kept up, an outline when it isn't. */
-.chat-pin[aria-pressed='true'] { background: var(--brass-hi); border-color: var(--brass-hi); color: #1d140a; }
+.chat-pin[aria-pressed='true'] { background: var(--brass-hi); border-color: var(--brass-hi); color: var(--on-gold); }
 .chat-pin[aria-pressed='true'] svg, .chat-pin[aria-pressed='true'] svg * { fill: currentColor; }
-.chat-pin[aria-pressed='true']:hover { background: #f6dfa9; }
+.chat-pin[aria-pressed='true']:hover { background: var(--gold-line); }
 
 /* Pinned and not typing (panel.ts `idle`): the log stays up while you walk, look round, sit and
    play, lighter, and lets clicks and drags through to the game underneath; the head's buttons and
    the line still take theirs. T or Enter makes it whole again. */
 .chat.idle .chat-box {
   pointer-events: none;
-  background: rgba(14, 12, 10, 0.52);
-  border-color: rgba(241, 213, 154, 0.1);
+  background: rgba(var(--glass-rgb), 0.52);
+  border-color: rgba(var(--brass-hi-rgb), 0.1);
   box-shadow: none;
   animation: none;
 }
 .chat.idle .chat-box::before { opacity: 0.35; }
 .chat.idle .chat-head, .chat.idle .chat-line-in { pointer-events: auto; }
-.chat.idle .chat-head { border-bottom-color: rgba(241, 213, 154, 0.08); }
-.chat.idle .chat-line-in { border-top-color: rgba(241, 213, 154, 0.08); opacity: 0.75; }
+.chat.idle .chat-head { border-bottom-color: rgba(var(--brass-hi-rgb), 0.08); }
+.chat.idle .chat-line-in { border-top-color: rgba(var(--brass-hi-rgb), 0.08); opacity: 0.75; }
 .chat.idle .chat-log { scrollbar-width: none; }
 .chat.idle .chat-log::-webkit-scrollbar { display: none; }
 .chat.idle .chat-line { text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85); }
@@ -260,7 +260,7 @@ html.touch-ui .chat.idle .chat-box {
   right: 96px;
   bottom: 0;
   width: min(300px, calc(100vw - 290px));
-  background: rgba(14, 12, 10, 0.42);
+  background: rgba(var(--glass-rgb), 0.42);
 }
 html.touch-ui .chat.idle .chat-head, html.touch-ui .chat.idle .chat-line-in, html.touch-ui .chat.idle .chat-box::before, html.touch-ui .chat.idle .chat-note { display: none; }
 html.touch-ui .chat.idle .chat-log {
@@ -299,7 +299,7 @@ html.touch-ui .chat.idle .chat-line { font-size: 15px; }
   padding: 5px 10px 6px;
   border: 1px solid var(--line-strong);
   border-radius: 8px;
-  background: rgba(14, 12, 10, 0.88);
+  background: rgba(var(--glass-rgb), 0.88);
   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.45);
   color: var(--ink);
   font: 15px/1.28 var(--ui);
@@ -317,7 +317,7 @@ html.touch-ui .chat.idle .chat-line { font-size: 15px; }
   width: 8px;
   height: 8px;
   margin-left: -4px;
-  background: rgba(14, 12, 10, 0.88);
+  background: rgba(var(--glass-rgb), 0.88);
   border-right: 1px solid var(--line-strong);
   border-bottom: 1px solid var(--line-strong);
   transform: rotate(45deg);
@@ -347,5 +347,13 @@ html.touch-ui .chat.idle .chat-line { font-size: 15px; }
 
 /* v7.1: on a touch screen the close is big and plain to see */
 @media (pointer: coarse) {
-  .chat-close { min-width: 44px; min-height: 44px; border-radius: 8px; background: rgba(255, 255, 255, 0.1); color: var(--ink); }
+  .chat-close { min-width: 44px; min-height: 44px; border-radius: 8px; background: rgba(var(--lift-rgb), 0.1); color: var(--ink); }
 }
+
+/* Light (app/theme.ts): the six name colours, dark enough to read on ivory. */
+:root[data-theme='light'] .chat-name.hue0 { color: #9a5a1c; }
+:root[data-theme='light'] .chat-name.hue1 { color: #2f7a40; }
+:root[data-theme='light'] .chat-name.hue2 { color: #a53e4b; }
+:root[data-theme='light'] .chat-name.hue3 { color: #2c62a0; }
+:root[data-theme='light'] .chat-name.hue4 { color: #6b4fa8; }
+:root[data-theme='light'] .chat-name.hue5 { color: #1f7a78; }

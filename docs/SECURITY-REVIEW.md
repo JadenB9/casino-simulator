@@ -150,7 +150,9 @@ real defence against a distributed flood.
 ### CORS, CSP and headers
 
 - The API returns CORS headers only for `ALLOWED_ORIGINS`. A request with a foreign `Origin` is
-  refused with 403, and so is a socket upgrade with a foreign or missing `Origin`. Live: the
+  refused with 403 (one with no `Origin`, a script's, is served: tokens travel in a header, so
+  there is nothing for a cross-site form to ride on), and so is a socket upgrade with a foreign
+  or missing `Origin`. Live: the
   preflight from `https://evil.example` gets no `Access-Control-Allow-*`, a POST gets 403, and an
   upgrade gets 403 with either a foreign or no Origin (`security.test` "CORS", "socket upgrades").
 - Tokens travel in `Authorization`, not cookies, so there is no CSRF surface.
@@ -175,8 +177,7 @@ script even if some got in.
 A challenge is spent by a guarded `UPDATE` before it's judged, so a replay or two racing answers
 get `used`. The chip picture's answer stays on the server. A Turnstile token is checked with
 `siteverify` using the challenge id as the idempotency key, plus the client's address. Misses back
-off exponentially (`fair.test`). `siteverify`'s `hostname` isn't compared with the site. That's
-worth adding if the widget is ever shared with other hostnames.
+off exponentially (`fair.test`). `siteverify`'s `hostname` must be one of `ALLOWED_ORIGINS` (finding 14).
 
 ## 3. Attacks run against the dev stack
 
@@ -188,6 +189,21 @@ reconnect a few steps on; an invite jump with the inviter gone, from the casino 
 roof; 21 floor sockets from one address; and 70 signed-in reads in a burst. The dev stack also ran
 these e2e scripts: `smoke.mjs` (the dev harness still works on the dev server), `invite6.mjs`
 (GPU=1: every step ok), `city6.mjs` (all passed) and `law6.mjs` (all ok).
+
+## Follow-up (Casino 1.4, 2026-10-15)
+
+A second read of the Worker and both objects, with the money paths, validators, tickets and
+limits above re-checked against the code as it stands. Nothing High or Medium. What changed:
+
+| # | Severity | Finding | Status |
+|---|---|---|---|
+| 13 | Low | A ticket for a lobby id that was never made (`bj-` plus ten characters) woke a table object whose constructor ran the schema before `fetch()` answered 4004, so every probe left an empty object's tables in storage for good. The Architecture page said probing writes nothing; it didn't. | **Fixed.** The schema and the books over it go in from `create()` (and from the constructor only when `meta` already exists); a probe reads `sqlite_master` and writes nothing (`tickets.test` "a ticket for a lobby that was never made...") |
+| 14 | Low | `siteverify`'s `hostname` was never compared with the site, so a Turnstile token solved on a copy of the widget elsewhere would have passed. | **Fixed.** The host must be one of `ALLOWED_ORIGINS` (`fair.test` "a Turnstile token solved on another site is refused...") |
+| 15 | Low | `GET /check` kept a paused account's expired challenges (and the picture drawn for each) for a day: 20 rows a minute, 28,800 a day, per account. | **Fixed.** Expired rows of the account go when the next is issued (same test) |
+| 16 | Low | A client-chosen `?station=` on a table socket marks the player at that station on the floor from connect, not from buy-in, and the floor never checks they are near it: a walking player can look seated across the room, be immune to punches, and skip the inmate theft. No money moves. | Owner decision: tie `at` to a landed buy-in, or have the floor check the station against the position |
+| 17 | Info | `?kind=chip` lets any client refuse Turnstile for the built-in picture, which is a 5x7 bitmap font and solid rings: a determined bot solves it. | Owner decision: offer the chip only after a Turnstile miss |
+| 18 | Info | `PASSWORD_MIN` is checked on every login, so raising it would lock out existing 4-7 character passwords; a minimum of 8 can only go on the create branch in `auth.ts`. | Owner decision (finding 12) |
+| 19 | Info | API requests with no `Origin` are accepted (only a foreign one is refused); upgrades still refuse a missing one. Fine with Bearer tokens and needed for scripts. | Noted; section 2 above now says so |
 
 ## For the owner
 

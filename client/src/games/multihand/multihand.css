@@ -12,7 +12,7 @@
   height: 27px;
   border: 0;
   border-left: 1px solid var(--line);
-  background: linear-gradient(#2b241c, #1c1712);
+  background: var(--btn);
   color: var(--ink-2);
   font-size: 17px;
   font-weight: 600;
@@ -22,7 +22,7 @@
 }
 .mh-n:first-child { border-left: 0; }
 .mh-n:hover { color: var(--ink); background: linear-gradient(#3a3025, #241d16); }
-.mh-n[aria-checked='true'] { background: linear-gradient(#e2bf7c, #b98d45); color: #1d140a; cursor: default; }
+.mh-n[aria-checked='true'] { background: linear-gradient(#e2bf7c, #b98d45); color: var(--on-gold); cursor: default; }
 .mh-n:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 
 @media (pointer: coarse) {

@@ -2,11 +2,11 @@
    these sit over the 3D canvas all the time. Plus the settings and keyboard sheets. */
 
 .hud { position: fixed; top: 0; left: 0; right: 0; z-index: 10; display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 14px 16px; }
-.hud-bar { background: rgba(14, 12, 10, 0.84); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35); }
+.hud-bar { background: rgba(var(--glass-rgb), 0.84); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35); }
 .hud-left { display: flex; align-items: stretch; min-width: 0; }
 .hud-who { display: flex; align-items: center; max-width: 16ch; padding: 0 16px; border: 0; border-right: 1px solid var(--line); background: none; color: var(--brass-hi); font-family: var(--serif); font-size: 15px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 button.hud-who { cursor: pointer; border-radius: 6px 0 0 6px; }
-button.hud-who:hover { color: #fff6e6; }
+button.hud-who:hover { color: var(--ink-hi); }
 button.hud-who:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .hud-stat { padding: 7px 16px 8px; border-right: 1px solid var(--line); }
 .hud-stat:last-child { border-right: 0; }
@@ -21,7 +21,7 @@ button.hud-who:focus-visible { outline: 2px solid var(--focus); outline-offset: 
 
 .hud-right { display: flex; align-items: center; gap: 6px; }
 .hud-online { display: flex; align-items: center; gap: 7px; height: 36px; padding: 0 12px; font-size: 14px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-2); }
-.hud-online .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--win); box-shadow: 0 0 8px rgba(127, 209, 139, 0.55); }
+.hud-online .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--win); box-shadow: 0 0 8px rgba(var(--win-rgb), 0.55); }
 .hud-online .money { color: var(--ink); }
 button.hud-online { font: inherit; font-size: 14px; letter-spacing: 0.1em; cursor: pointer; transition: border-color 0.15s, color 0.15s; }
 button.hud-online:hover { border-color: var(--line-strong); color: var(--ink); }
@@ -31,13 +31,13 @@ button.hud-online:focus-visible { outline: 2px solid var(--focus); outline-offse
 .online-list { list-style: none; margin: 0; padding: 0; max-height: min(60vh, 520px); overflow: auto; }
 .online-row { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 9px 4px; border-bottom: 1px solid var(--line); }
 .online-row:last-child { border-bottom: 0; }
-.online-row .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--win); box-shadow: 0 0 8px rgba(127, 209, 139, 0.55); }
+.online-row .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--win); box-shadow: 0 0 8px rgba(var(--win-rgb), 0.55); }
 .online-name { font-size: 16px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .online-row.you .online-name { color: var(--brass-hi); }
 .online-where { font-size: 14px; color: var(--ink-3); white-space: nowrap; }
 .online-row.has-act { grid-template-columns: 10px minmax(0, 1fr) auto auto; }
 .online-act { height: 30px; padding: 0 12px; font-size: 13px; }
-.hud-btn { display: grid; place-items: center; width: 36px; height: 36px; padding: 0; background: rgba(14, 12, 10, 0.84); border: 1px solid var(--line); border-radius: 6px; color: var(--ink-2); cursor: pointer; transition: color 0.15s, border-color 0.15s; }
+.hud-btn { display: grid; place-items: center; width: 36px; height: 36px; padding: 0; background: rgba(var(--glass-rgb), 0.84); border: 1px solid var(--line); border-radius: 6px; color: var(--ink-2); cursor: pointer; transition: color 0.15s, border-color 0.15s; }
 .hud-btn:hover { color: var(--ink); border-color: var(--line-strong); }
 .hud-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .hud-btn[aria-pressed='true'] { color: var(--ink-3); }
@@ -108,10 +108,10 @@ button.hud-online:focus-visible { outline: 2px solid var(--focus); outline-offse
 .range { flex: 1; max-width: 300px; height: 20px; margin: 0; background: transparent; appearance: none; -webkit-appearance: none; cursor: pointer; }
 .range:disabled { opacity: 0.4; cursor: default; }
 .range:focus-visible { outline: 2px solid var(--focus); outline-offset: 4px; }
-.range::-webkit-slider-runnable-track { height: 2px; background: linear-gradient(90deg, var(--brass), rgba(214, 178, 110, 0.25)); border-radius: 1px; }
-.range::-moz-range-track { height: 2px; background: rgba(214, 178, 110, 0.3); border-radius: 1px; }
+.range::-webkit-slider-runnable-track { height: 2px; background: linear-gradient(90deg, var(--brass), rgba(var(--brass-rgb), 0.25)); border-radius: 1px; }
+.range::-moz-range-track { height: 2px; background: rgba(var(--brass-rgb), 0.3); border-radius: 1px; }
 .range::-moz-range-progress { height: 2px; background: var(--brass); }
-.range::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; margin-top: -6px; border: 0; border-radius: 50%; background: var(--brass-hi); box-shadow: 0 0 0 4px rgba(241, 213, 154, 0.14); }
+.range::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; margin-top: -6px; border: 0; border-radius: 50%; background: var(--brass-hi); box-shadow: 0 0 0 4px rgba(var(--brass-hi-rgb), 0.14); }
 .range::-moz-range-thumb { width: 14px; height: 14px; border: 0; border-radius: 50%; background: var(--brass-hi); }
 
 /* keyboard shortcuts */
@@ -150,3 +150,9 @@ button.hud-online:focus-visible { outline: 2px solid var(--focus); outline-offse
 .reminder-acts { display: flex; flex-wrap: wrap; gap: 8px; }
 @keyframes reminder-in { from { opacity: 0; } }
 body.calm .reminder { animation: none; }
+
+/* The theme button (theme.css .theme-btn, app/theme.ts) sits with the others; a phone's bar is
+   full at two rows of six, so there it lives in Settings alone. */
+@media (max-width: 560px) {
+  html.touch-ui .hud-theme { display: none; }
+}

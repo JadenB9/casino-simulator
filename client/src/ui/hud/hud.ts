@@ -18,6 +18,7 @@ import { netStart, sessionNet } from './net.ts';
 import { calm } from '../../app/comfort.ts';
 import { isKey, keyLabel, modified } from '../keys.ts';
 import { mountReminder } from './reminder.ts'; // v6.1 casino61: the play reminder
+import { themeButton } from './theme-button.ts';
 
 export interface HudDeps {
   root: HTMLElement;
@@ -132,7 +133,10 @@ export function mountHud(deps: HudDeps): Hud {
   };
   paintTips();
   const offTips = tips.subscribe(paintTips);
-  right.append(online, bulb, mute, settings, help);
+  // light or dark for the menus and panels (app/theme.ts); Settings has it too, and on a phone
+  // only Settings does (the bar is full at two rows of six)
+  const theme = themeButton('hud-btn hud-theme');
+  right.append(online, bulb, mute, theme.root, settings, help);
   if (deps.onMenu) right.append(iconButton('menu', 'Menu', () => deps.onMenu?.()));
   root.append(left, right);
   deps.root.append(root);
@@ -252,6 +256,7 @@ export function mountHud(deps: HudDeps): Hud {
     toggleShortcuts,
     close() {
       off();
+      theme.dispose();
       removeEventListener('keydown', onKey);
       clearInterval(clock);
       clearTimeout(netTimer);

@@ -91,9 +91,11 @@ money is play money.
   banker tops you back up to $50,000 and the profile counts the loans.
 - **Comfort.** Reduce flashing & motion (on the login screen and in Settings, on by default when
   the system asks for less motion) holds every blinking and chasing light steady, softens the
-  particles and the bloom, and drops camera shake and the tipsy sway. Phones and tablets
-  get a thumb stick, drag to look, and layouts that fit either way up; every game's board fits on
-  a small window.
+  particles and the bloom, and drops camera shake and the tipsy sway. Light and dark for the
+  menus, panels, HUD and chat (the sun and moon button on the login screen and in the HUD, or
+  Settings): the same choice as the rest of j4den.com, following the device until one is made,
+  while the casino itself keeps its own lights. Phones and tablets get a thumb stick, drag to look,
+  and layouts that fit either way up; every game's board fits on a small window.
 
 ## Rules and odds
 

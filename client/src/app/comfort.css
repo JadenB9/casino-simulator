@@ -46,7 +46,7 @@ body.calm .inv-fade { transition-duration: 0.6s; }
 .calm-switch[aria-checked='true'] .calm-box { border-color: var(--brass-hi); background: var(--brass); }
 .calm-switch[aria-checked='true'] .calm-box::after {
   content: ''; position: absolute; left: 4px; top: 1px; width: 5px; height: 9px;
-  border: solid #1d140a; border-width: 0 2px 2px 0; rotate: 45deg;
+  border: solid var(--on-gold); border-width: 0 2px 2px 0; rotate: 45deg;
 }
 @media (pointer: coarse) {
   .calm-switch { min-height: 44px; }
