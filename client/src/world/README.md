@@ -385,9 +385,12 @@ dark under it and fading out past its edge (grounding.ts), and a strip of soft d
 foot of every wall where it meets a room's floor (not across doorways). No shadow maps: each is a
 flat decal (black at the alpha of a small falloff texture, pulled toward the eye by polygonOffset
 over the floor it lies on), all of a room's in one geometry of one batch, so the whole floor's
-grounding is one draw call, drawn and hidden with each room. Black at an alpha multiplies what's
-under it, so overlapping shadows darken together in any order and need no sorting; they draw
-before the light pools, which still warm the carpet round a table.
+grounding is one draw call (one per room drawn on a card without multi-draw, as with every batch),
+drawn and hidden with each room. Black at an alpha multiplies what's under it, so overlapping
+shadows darken together in any order and need no sorting; they draw before the light pools, which
+still warm the carpet round a table. The decals lie at `SHADOW_Y` (11 mm, over the runners, inlays
+and rugs) and dim whatever is drawn under that height behind them, so anything lit at the floor
+stands clear of it: the slot islands' foot reveal starts at 12 mm.
 
 - The plan's solids standing on the floor cast by their footprint (a box's reach, a round thing's
   radius): chairs and stools, slot and pachinko islands, counters, cabinets, planters, benches,
