@@ -43,6 +43,7 @@ export interface Tint {
 }
 
 const _c = new THREE.Color();
+const NO_SPOTS: SpotItem[] = [];
 const _sky = new THREE.Color();
 const _ground = new THREE.Color();
 
@@ -214,8 +215,8 @@ export class Lighting {
     } else {
       this.fade = Math.min(1, this.fade + dt / 0.35);
     }
-    const list = this.roomSpots.get(this.room) ?? [];
-    this.spots.slice(0, SPOTS).forEach((s, i) => (s.intensity = (list[i]?.k ?? 0) * this.fade * now.dim));
+    const list = this.roomSpots.get(this.room) ?? NO_SPOTS;
+    for (let i = 0; i < SPOTS; i++) this.spots[i]!.intensity = (list[i]?.k ?? 0) * this.fade * now.dim;
     // the ambient drifts to the room's colour (and whatever an effect has tinted it)
     const a = this.ambient.get(this.pending ?? this.room);
     if (a) {
