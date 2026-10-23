@@ -17,11 +17,12 @@ import { BATCH, POCKET_PAYS, JACKPOT_BALLS, ROUNDS, ROUND_BALLS, MAX_CHAIN, PUBL
 import type { BallView, LaunchEvent, PachinkoView, MachineData } from '../../../../shared/src/games/pachinko/engine.ts';
 import { el, button, maxButton } from '../../ui/kit.ts';
 import { celebrate } from '../../table/celebrate.ts';
-import { FlightPools, bucketOf, flightAt, flightSeconds, type Catch, type Flight, ATTACKER, OUT_V, BOARD_W, BOARD_H } from './board.ts';
+import { FlightPools, bucketOf, flightAt, flightSeconds, type Catch, type Flight, ATTACKER, OUT_V, BOARD_W, BOARD_H, HESO, TULIPS } from './board.ts';
 import { paintScreen, paintData, paintLeds, LED_COUNT, type ScreenState, type LedPattern } from './art.ts';
-import { machineModel, sharedLit, ballGeometry, ballMaterial, boardPoint, MACHINE, GLASS_Z, type MachineHandle } from './model.ts';
+import { machineModel, sharedLit, ballGeometry, ballMaterial, boardPoint, MACHINE, GLASS_Z, BOARD_Y, BALL_Z, type MachineHandle } from './model.ts';
 import { PachinkoSound } from './sound.ts';
 import { calm as reduceFlashing } from '../../app/comfort.ts';
+import { isTyping } from '../../ui/keyboard.ts';
 
 /** How often the launcher fires. */
 const FIRE_MS = 300;
@@ -43,7 +44,8 @@ const LINES = {
   idle: ['Aim for the START pocket under the screen', 'Odd numbers chain: 1, 3, 5, 7, 9', 'Three of a kind opens the attacker', 'Ten rounds of fifteen balls a jackpot'],
   spin: ['', '', 'Chance…', 'Here we go'],
   reach: ['REACH! Come on…', 'リーチ! One more…', 'Hot! 熱い!'],
-  miss: ['So close', 'Next time', 'Keep going'],
+  // what the screen says when a reach doesn't come in: the result, never a near miss to chase
+  miss: ['No jackpot this spin', 'No jackpot', 'Spin over · no jackpot'],
 };
 const pickLine = (list: readonly string[]) => list[Math.floor(Math.random() * list.length)]!;
 
@@ -152,6 +154,7 @@ export function mountPachinko(ctx: TableViewCtx): TableView {
   const scl = new THREE.Vector3();
   const pos = new THREE.Vector3();
   const pt = { u: 0, v: 0 };
+  const prevPt = { u: 0, v: 0 };
 
   // --- state
   let stack: Cents = 0;
@@ -195,6 +198,7 @@ export function mountPachinko(ctx: TableViewCtx): TableView {
   dial.max = '100';
   dial.step = '1';
   dial.title = 'The handle: how hard the balls are shot (← →). It changes where they fly, not what they win.';
+  dial.setAttribute('aria-label', 'Power');
   const powerValue = el('div', 'pa-power-value');
   dial.addEventListener('input', () => setPower(Number(dial.value)));
   powerGroup.append(powerLabel, dial, powerValue);
@@ -206,7 +210,10 @@ export function mountPachinko(ctx: TableViewCtx): TableView {
   const wonMeter = meter('Won');
   const creditMeter = meter('Credit');
   meters.append(trayMeter.root, wonMeter.root, creditMeter.root);
-  deck.append(betGroup, el('div', 'sep'), powerGroup, el('div', 'sep'), launchBtn, el('div', 'sep'), meters);
+  // on a narrow screen the pay card isn't beside the machine: this shows it over the deck
+  const paysBtn = button('Pays', () => togglePays(), { cls: 'ghost pa-pays-btn', key: 'I', title: 'The pay card and the data lamp (I)' });
+  paysBtn.setAttribute('aria-expanded', 'false');
+  deck.append(betGroup, el('div', 'sep'), powerGroup, el('div', 'sep'), launchBtn, el('div', 'sep'), meters, paysBtn);
 
   const side = el('div', 'pa-side panel');
   const sideTitle = el('div', 'pa-side-title', 'Sakura Storm');
@@ -226,7 +233,36 @@ export function mountPachinko(ctx: TableViewCtx): TableView {
   );
   const dataRows = el('div', 'pa-data');
   side.append(sideTitle, pays, dataRows);
+  side.setAttribute('role', 'region');
+  side.setAttribute('aria-label', 'Sakura Storm pays and data');
   ctx.ui.append(deck, side);
+
+  /** Narrow screens: the pay card over the deck, from Pays (I); a tap elsewhere or Esc puts it away. */
+  let outside: ((e: PointerEvent) => void) | null = null;
+  function togglePays(): void {
+    if (side.classList.contains('open')) {
+      closePays();
+      return;
+    }
+    const d = deck.getBoundingClientRect();
+    side.style.bottom = `${Math.round(innerHeight - d.top + 10)}px`;
+    side.classList.add('open');
+    paysBtn.setAttribute('aria-expanded', 'true');
+    outside = (e) => {
+      const t = e.target as Node;
+      if (!side.contains(t) && !paysBtn.contains(t)) closePays();
+    };
+    addEventListener('pointerdown', outside, true);
+  }
+  function closePays(): void {
+    side.classList.remove('open');
+    side.style.bottom = '';
+    paysBtn.setAttribute('aria-expanded', 'false');
+    if (outside) removeEventListener('pointerdown', outside, true);
+    outside = null;
+  }
+  /** Whether the pay card is beside the machine (a wide screen) rather than behind Pays. */
+  const besideMachine = () => getComputedStyle(paysBtn).display === 'none';
 
   function meter(label: string): { root: HTMLElement; set(v: string): void } {
     const r = el('div', 'pa-meter');
@@ -299,6 +335,7 @@ export function mountPachinko(ctx: TableViewCtx): TableView {
     sync();
   }
 
+  let dataKey = '';
   function sync(): void {
     const credit = stack - unpaid();
     betValue.textContent = formatMoney(bet);
@@ -315,14 +352,20 @@ export function mountPachinko(ctx: TableViewCtx): TableView {
     more.disabled = !limits || bet >= limits.max;
     maxBtn.disabled = !limits;
     handle.knob.rotation.z = -(power / 100) * 2.6;
-    dataRows.replaceChildren(
-      row('大当り Jackpots', String(data.jackpots)),
-      row('回転 Spins since', String(data.spins)),
-      row('最高 Best chain', data.best ? `${data.best}` : '–'),
-      row('Last chains', data.chains.length ? data.chains.join(' · ') : '–'),
-    );
-    paintData(dataCanvas, { jackpots: data.jackpots, spins: data.spins, best: data.best, fever: inFever() });
-    dataTex.needsUpdate = true;
+    // the data lamp and its rows only when what they show changes (sync runs for every ball)
+    const fever = inFever();
+    const key = `${data.jackpots}|${data.spins}|${data.best}|${data.chains.join(',')}|${fever}`;
+    if (key !== dataKey) {
+      dataKey = key;
+      dataRows.replaceChildren(
+        row('大当り Jackpots', String(data.jackpots)),
+        row('回転 Spins since', String(data.spins)),
+        row('最高 Best chain', data.best ? `${data.best}` : '–'),
+        row('Last chains', data.chains.length ? data.chains.join(' · ') : '–'),
+      );
+      paintData(dataCanvas, { jackpots: data.jackpots, spins: data.spins, best: data.best, fever });
+      dataTex.needsUpdate = true;
+    }
     tips();
   }
 
@@ -353,6 +396,27 @@ export function mountPachinko(ctx: TableViewCtx): TableView {
     sound.launch();
   }
 
+  // --- "+3" over a pocket as a ball pays into it: every pay seen where it happened
+  const POCKET_AT: Record<'left' | 'right' | 'start', { u: number; v: number }> = { left: TULIPS[0], right: TULIPS[1], start: HESO };
+  const tags: { obj: THREE.Object3D; el: HTMLElement; until: number }[] = [];
+  function payTag(pocket: 'left' | 'right' | 'start', balls: number, now: number): void {
+    // a handful at once at most; the oldest goes first
+    if (tags.length >= 6) dropTag(0);
+    const p = POCKET_AT[pocket];
+    const e = el('div', `pa-paytag${pocket === 'start' ? ' start' : ''}`, `+${balls}`);
+    e.setAttribute('aria-hidden', 'true');
+    tags.push({ obj: ctx.stage.label(e, boardPoint(p.u, p.v + 0.012, GLASS_Z + 0.004)), el: e, until: now + 900 });
+  }
+  function dropTag(i: number): void {
+    const t = tags.splice(i, 1)[0];
+    if (!t) return;
+    t.obj.removeFromParent();
+    t.el.remove();
+  }
+  function stepTags(now: number): void {
+    for (let i = tags.length - 1; i >= 0; i--) if (now >= tags[i]!.until) dropTag(i);
+  }
+
   function landed(ball: Ball): void {
     ball.landed = true;
     const b = ball.batch;
@@ -361,6 +425,8 @@ export function mountPachinko(ctx: TableViewCtx): TableView {
       if (ball.pays > 0) {
         b.paid += ball.pays;
         sound.payout(ball.pays);
+        const pocket = ball.shot.pocket;
+        if (pocket === 'left' || pocket === 'right' || pocket === 'start') payTag(pocket, ball.pays, performance.now());
       }
       if (ball.shot.pocket === 'start') {
         sound.start();
@@ -396,16 +462,16 @@ export function mountPachinko(ctx: TableViewCtx): TableView {
         if (ball.flight.end === 'out') pt.v = Math.min(pt.v, OUT_V) - after * 0.2;
       } else {
         // a tick off the nails when a ball changes direction sharply
-        const prev = { u: 0, v: 0 };
-        flightAt(ball.flight, Math.max(0, t - 1 / 60), prev);
-        const vu = (pt.u - prev.u) * 60;
-        const vv = (pt.v - prev.v) * 60;
+        flightAt(ball.flight, Math.max(0, t - 1 / 60), prevPt);
+        const vu = (pt.u - prevPt.u) * 60;
+        const vv = (pt.v - prevPt.v) * 60;
         const dv = Math.hypot(vu - ball.lastVu, vv - ball.lastVv);
         if (dv > 0.35 && t > 0.1) sound.tick(Math.min(1, dv / 1.2));
         ball.lastVu = vu;
         ball.lastVv = vv;
       }
-      pos.copy(boardPoint(pt.u, pt.v));
+      // (boardPoint() without the new vector: this runs for every ball every frame)
+      pos.set(pt.u, BOARD_Y + pt.v, BALL_Z);
       scl.setScalar(s);
       if (n < MAX_BALLS) balls.setMatrixAt(n++, m4.compose(pos, q, scl));
     }
@@ -436,12 +502,14 @@ export function mountPachinko(ctx: TableViewCtx): TableView {
     }
     const t = (now - s.t0) / 1000;
     if (s.kind === 'spin') {
-      const prev = reels.map((x) => Math.floor(x));
+      let ticked = false;
       for (let i = 0; i < 3; i++) {
+        const before = Math.floor(reels[i]!);
         const speed = s.reach && i === 1 && t > STOP_R ? Math.max(3, SPIN_SPEED - (t - STOP_R) * 5) : SPIN_SPEED;
         reels[i] = reelPos(t, s.stops[i]!, s.target[i]!, s.reach && i === 1 ? speed : SPIN_SPEED);
+        if (Math.floor(reels[i]!) !== before) ticked = true;
       }
-      if (reels.some((x, i) => Math.floor(x) !== prev[i])) sound.reelTick();
+      if (ticked) sound.reelTick();
       for (let i = 0; i < 3; i++) {
         const ts = s.stops[i]!;
         if (t >= ts && t - (now - lastFrame) / 1000 < ts) sound.reelStop();
@@ -578,9 +646,14 @@ export function mountPachinko(ctx: TableViewCtx): TableView {
     lcdTex.needsUpdate = true;
     paintLeds(ledData, ledPattern(), now, reduceFlashing());
     ledTex.needsUpdate = true;
-    // the attacker's lid swings open for a fever
-    const open = show.kind === 'fever' ? 1 : 0;
-    handle.lid.rotation.x += (open * 1.05 - handle.lid.rotation.x) * 0.25;
+  }
+
+  /** The attacker's lid swings open for a fever, eased by the frame's time (not the screen's repaint rate). */
+  function swingLid(dt: number): void {
+    const to = show.kind === 'fever' ? 1.05 : 0;
+    const x = handle.lid.rotation.x;
+    if (Math.abs(to - x) < 1e-4) return;
+    handle.lid.rotation.x = to + (x - to) * Math.exp(-dt / 0.07);
   }
 
   // --- the frame loop's work
@@ -684,12 +757,21 @@ export function mountPachinko(ctx: TableViewCtx): TableView {
         setMax();
         return true;
       }
+      if ((e.key === 'i' || e.key === 'I') && !besideMachine() && !isTyping(e)) {
+        togglePays();
+        return true;
+      }
+      if (e.key === 'Escape' && side.classList.contains('open')) {
+        closePays();
+        return true;
+      }
       return false;
     },
 
-    update() {
+    update(dt) {
       if (disposed) return;
       const now = performance.now();
+      swingLid(dt);
       if (waiting && now - sentAt > 5000) {
         waiting = false;
         sync();
@@ -699,6 +781,7 @@ export function mountPachinko(ctx: TableViewCtx): TableView {
       pools.fill(bucketOf(95), 1, true);
       stepFiring(now);
       stepBalls(now);
+      stepTags(now);
       stepShow(now);
       retire();
       paint(now);
@@ -715,6 +798,8 @@ export function mountPachinko(ctx: TableViewCtx): TableView {
       offTips();
       if (tipShown) ctx.kit.tip(null);
       sound.dispose();
+      closePays();
+      while (tags.length) dropTag(0);
       deck.remove();
       side.remove();
       balls.removeFromParent();

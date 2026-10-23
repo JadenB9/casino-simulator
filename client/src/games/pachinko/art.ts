@@ -477,9 +477,13 @@ export interface DataLamp {
 }
 
 export function paintData(canvas: HTMLCanvasElement, d: DataLamp): void {
-  canvas.width = DATA_W;
-  canvas.height = DATA_H;
+  // sized once: setting a canvas's size reallocates it
+  if (canvas.width !== DATA_W || canvas.height !== DATA_H) {
+    canvas.width = DATA_W;
+    canvas.height = DATA_H;
+  }
   const g = canvas.getContext('2d')!;
+  g.shadowBlur = 0;
   g.fillStyle = '#0b0710';
   g.fillRect(0, 0, DATA_W, DATA_H);
   g.textBaseline = 'middle';

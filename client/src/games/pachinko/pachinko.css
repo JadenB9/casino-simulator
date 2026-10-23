@@ -1,41 +1,62 @@
 /* Sakura Storm's controls: the batch, the handle's power and Launch along the bottom, the meters
-   beside them; the machine's pay card and data lamp readout on the right. */
+   beside them; the machine's pay card and data lamp readout on the right (on a narrow screen,
+   behind the deck's Pays, over the deck); "+3" over a pocket as a ball pays into it. */
 
 .pa-deck { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; padding: 10px 14px; }
 .pa-deck .sep { width: 1px; align-self: stretch; background: var(--line); }
 .pa-group { display: grid; gap: 4px; }
 .pa-bet { display: flex; align-items: center; gap: 6px; }
 .pa-bet .pa-step { width: 34px; padding: 0; font-size: 20px; }
-.pa-bet-value { min-width: 84px; text-align: center; font-size: 22px; font-weight: 600; color: var(--brass-hi); }
+.pa-bet-value { min-width: 84px; text-align: center; font-size: 22px; font-weight: 600; color: var(--brass-hi); font-variant-numeric: tabular-nums; }
 .pa-bet .max-btn { height: 36px; }
 .pa-note { font-size: 12px; color: var(--ink-3); letter-spacing: 0.04em; }
 .pa-power { grid-template-columns: auto 40px; align-items: center; column-gap: 8px; }
 .pa-power .label { grid-column: 1 / -1; }
 .pa-dial { width: 150px; accent-color: #ff5d98; cursor: pointer; }
-.pa-power-value { font-family: var(--meter); font-size: 18px; color: #ff8fb8; text-shadow: 0 0 6px rgba(255, 93, 152, 0.55); text-align: right; }
+.pa-dial:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; border-radius: 2px; }
+.pa-power-value { font-family: var(--meter); font-size: 18px; color: var(--led); text-shadow: 0 0 6px rgba(var(--led-rgb), 0.45); text-align: right; }
 .pa-launch { min-width: 128px; height: 44px; font-size: 18px; }
 .pa-meters { display: flex; gap: 14px; }
 .pa-meter { display: grid; gap: 2px; min-width: 64px; }
-.pa-meter-value { font-family: var(--meter); font-size: 17px; color: #ffb347; text-shadow: 0 0 6px rgba(255, 150, 40, 0.45); }
+.pa-meter-value { font-family: var(--meter); font-size: 17px; color: var(--led); text-shadow: 0 0 6px rgba(var(--led-rgb), 0.4); }
+.pa-deck .pa-pays-btn { display: none; }
 
 .pa-side { position: fixed; top: var(--below-party); right: 16px; width: 228px; padding: 12px 14px; display: grid; gap: 10px; }
-.pa-side-title { font-family: var(--serif); font-size: 17px; letter-spacing: 0.1em; color: #ff8fb8; text-transform: uppercase; }
+.pa-side-title { font-family: var(--serif); font-size: 17px; letter-spacing: 0.1em; color: var(--brass-hi); text-transform: uppercase; }
 .pa-pays, .pa-data { display: grid; gap: 3px; }
 .pa-data { border-top: 1px solid var(--line); padding-top: 8px; }
 .pa-pay { display: flex; justify-content: space-between; gap: 10px; font-size: 14px; color: var(--ink-2); }
 .pa-pay .money { color: var(--ink); }
 .pa-deck ~ .tip-line { bottom: 104px; }
 
+/* a pay, over its pocket: the machine's own light, rising a little and gone (calm: it fades in place) */
+.pa-paytag { position: absolute; transform: translate(-50%, -100%); padding: 1px 7px; border-radius: 999px; background: rgba(36, 8, 26, 0.86); border: 1px solid rgba(255, 143, 184, 0.75); color: #ffe3ef; font: 700 15px var(--ui); letter-spacing: 0.04em; white-space: nowrap; pointer-events: none; animation: pa-paytag 0.9s var(--ease) both; }
+.pa-paytag.start { border-color: rgba(255, 215, 90, 0.85); color: #fff3c4; }
+@keyframes pa-paytag { 0% { opacity: 0; translate: 0 6px; } 18% { opacity: 1; translate: 0 0; } 70% { opacity: 1; } 100% { opacity: 0; translate: 0 -14px; } }
+@keyframes pa-paytag-calm { 0%, 100% { opacity: 0; } 20%, 70% { opacity: 1; } }
+body.calm .pa-paytag { animation-name: pa-paytag-calm; }
+
 @media (max-width: 980px) {
-  .pa-side { display: none; }
   .pa-deck { gap: 8px; padding: 8px 10px; }
   .pa-dial { width: 104px; }
   .pa-meters { gap: 8px; }
   .pa-meter { min-width: 52px; }
   .pa-launch { min-width: 104px; }
+  /* the pay card goes behind Pays, and comes up over the deck when it's pressed (view.ts places it) */
+  .pa-deck .pa-pays-btn { display: inline-flex; }
+  .pa-side:not(.open) { display: none; }
+  .pa-side.open { top: auto; right: 50%; translate: 50% 0; z-index: 26; width: min(300px, calc(100vw - 20px)); background: rgba(var(--sheet-rgb), 0.97); animation: pa-pop-in 0.18s var(--ease); }
 }
+@keyframes pa-pop-in { from { opacity: 0; transform: translateY(6px); } }
 @media (max-width: 720px) {
   .pa-deck { flex-wrap: wrap; justify-content: center; width: calc(100vw - 20px); max-width: 460px; bottom: 54px; gap: 8px 10px; }
   .pa-deck .sep { display: none; }
   .pa-dial { width: 120px; }
+}
+/* On its side: one slim row right of the back chip. */
+@media (max-height: 480px) {
+  .pa-deck { left: auto; right: 10px; bottom: max(8px, env(safe-area-inset-bottom, 0px)); transform: none; max-width: calc(100vw - 150px); flex-wrap: nowrap; width: auto; gap: 8px; padding: 6px 10px; }
+  .pa-note { display: none; }
+  .pa-dial { width: 96px; }
+  .pa-launch { height: 40px; }
 }
