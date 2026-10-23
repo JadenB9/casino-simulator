@@ -2,9 +2,9 @@
 // snare or a clap on the two and the four (noise through a band-pass, with a little tone under the
 // snare), closed hi-hats (high-passed noise, a few milliseconds long) and, for some dances, a bass
 // note or a square-wave blip. Each dance has its own bar of eighth notes, played round for as
-// long as the dance lasts, at its tempo, starting on its first beat. Quiet, through the game's
-// master gain (Sfx.out) so mute and the volume apply; someone else's comes from where they stand,
-// behind a panner, and only within earshot, like their claps (audio/claps.ts).
+// long as the dance lasts, at its tempo, starting on its first beat. Quiet, through the music's
+// own level (Sfx.music) and the master, so mute and the volume apply; someone else's comes from
+// where they stand, behind a panner, and only within earshot, like their claps (audio/claps.ts).
 
 import type { EmoteId } from '../../../shared/src/protocol.ts';
 import type { Sfx } from './sfx.ts';
@@ -89,9 +89,9 @@ export class Beats {
       pan.rolloffFactor = 1.3;
       pan.maxDistance = BEAT_RANGE * 2;
       setPosition(pan, at.x, at.y, at.z);
-      out.connect(pan).connect(sfx.out);
+      out.connect(pan).connect(sfx.music);
     } else {
-      out.connect(sfx.out);
+      out.connect(sfx.music);
     }
     const t0 = ctx.currentTime + 0.02;
     const times = beatTimes(e, beat, secs);

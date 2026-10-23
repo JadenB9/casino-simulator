@@ -70,8 +70,10 @@ export function keySettings(): { nodes: HTMLElement[]; dispose(): void } {
     note.textContent = 'Every key is back where it started.';
   });
   const off = keyed(paint);
+  const foot = el('div', 'keys-foot');
+  foot.append(note, reset);
   return {
-    nodes: [el('h3', 'section-label', 'Keys'), list, note, reset],
+    nodes: [el('h4', 'set-subhead', 'Keys'), list, foot],
     dispose() {
       waiting?.stop();
       off();

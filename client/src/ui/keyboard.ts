@@ -1,11 +1,34 @@
 // Who has the keyboard. Sheets (profile, cashier, settings), the character editor and the kit's
 // dialogs each hold it while they're up: Esc goes to the top one, Tab stays inside it, and other
 // keys don't reach the floor or the table behind it, so W doesn't walk you away while you read
-// and Space doesn't deal behind a buy-in prompt. M, ? and J stay global so mute, the shortcut
-// list and the achievements work from anywhere.
+// and Space doesn't deal behind a buy-in prompt. Mute, the achievements and ? stay global so the
+// sound, the achievements and the shortcut list work from anywhere: whichever keys mute and the
+// achievements are bound to now (ui/keys.ts; N and J to begin with), not the letters they had
+// before 1.3 (mute was M, which is now the map's).
 
-/** Keys that keep working while something holds the keyboard. */
-export const GLOBAL_KEYS: ReadonlySet<string> = new Set(['m', 'M', '?', 'j', 'J']);
+import { keyFor, keyName } from './keys.ts';
+
+/** The characters (KeyboardEvent.key) a bound code types: "n" and "N" for KeyN, "]" for BracketRight. */
+function typed(code: string): string[] {
+  const n = keyName(code);
+  return n.length === 1 ? [n.toLowerCase(), n.toUpperCase()] : [];
+}
+
+/**
+ * Keys that keep working while something holds the keyboard, asked with `has(e.key)`: "?", and
+ * the keys mute and the achievements are bound to at the moment of asking.
+ */
+class GlobalKeys extends Set<string> {
+  override has(key: string): boolean {
+    return key === '?' || typed(keyFor('mute')).includes(key) || typed(keyFor('feats')).includes(key);
+  }
+}
+export const GLOBAL_KEYS: ReadonlySet<string> = new GlobalKeys();
+
+/** The same as GLOBAL_KEYS, by the key's place on the keyboard (what ui/keys.ts binds). */
+export function isGlobalKey(e: { key: string; code: string }): boolean {
+  return e.key === '?' || e.code === keyFor('mute') || e.code === keyFor('feats') || GLOBAL_KEYS.has(e.key);
+}
 
 interface Layer {
   readonly panel: HTMLElement;
@@ -93,7 +116,7 @@ function install(): void {
         trapTab(top.panel, e);
         return;
       }
-      if (GLOBAL_KEYS.has(e.key)) return;
+      if (isGlobalKey(e)) return;
       if (!top.panel.contains(e.target as Node)) {
         // A key aimed at the page behind: swallow it and bring focus back.
         e.stopPropagation();

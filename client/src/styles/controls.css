@@ -1,0 +1,40 @@
+/* The shared pieces every area builds on, beyond theme.css's buttons and panels: the sheet's layer
+   and lift, the sliders, and the page's one tooltip (ui/hud/tooltip.ts). The sheet's own shape,
+   the segmented choices and the keycaps are ui/menu/menu.css; these follow it in the cascade. */
+
+/* ---------------------------------------------------------------- sheets */
+
+.sheet-scrim { z-index: var(--z-sheet); }
+.sheet { border-radius: var(--radius-lg); box-shadow: var(--shadow-3), inset 0 1px 0 rgba(var(--brass-hi-rgb), 0.07); }
+.sheet-scrim.closing .sheet { transform: translateY(4px) scale(0.99); transition: transform 0.16s var(--ease); }
+body.calm .sheet { animation-name: calm-fade-in; }
+body.calm .sheet-scrim.closing .sheet { transform: none; }
+
+/* ---------------------------------------------------------------- sliders */
+
+.range { flex: 1; min-width: 0; max-width: 300px; height: 20px; margin: 0; background: transparent; appearance: none; -webkit-appearance: none; cursor: pointer; }
+.range:disabled { opacity: 0.4; cursor: default; }
+.range:focus-visible { outline: 2px solid var(--focus); outline-offset: 4px; }
+.range::-webkit-slider-runnable-track { height: 2px; background: linear-gradient(90deg, var(--brass), rgba(var(--brass-rgb), 0.25)); border-radius: 1px; }
+.range::-moz-range-track { height: 2px; background: rgba(var(--brass-rgb), 0.3); border-radius: 1px; }
+.range::-moz-range-progress { height: 2px; background: var(--brass); }
+.range::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; margin-top: -6px; border: 0; border-radius: 50%; background: var(--brass-hi); box-shadow: 0 0 0 4px rgba(var(--brass-hi-rgb), 0.14); transition: box-shadow var(--dur-fast); }
+.range:hover::-webkit-slider-thumb { box-shadow: 0 0 0 6px rgba(var(--brass-hi-rgb), 0.18); }
+.range::-moz-range-thumb { width: 14px; height: 14px; border: 0; border-radius: 50%; background: var(--brass-hi); }
+@media (pointer: coarse) {
+  .range { height: 44px; }
+  .range::-webkit-slider-thumb { width: 24px; height: 24px; margin-top: -11px; }
+  .range::-moz-range-thumb { width: 24px; height: 24px; }
+}
+
+/* ---------------------------------------------------------------- the tooltip */
+
+/* Placed by transform from tooltip.ts, outside #ui (so the safe-area inset isn't counted twice). */
+.tooltip { position: fixed; left: 0; top: 0; z-index: var(--z-tooltip); pointer-events: none; opacity: 0; visibility: hidden; transition: opacity 0.12s var(--ease), visibility 0s linear 0.12s; }
+.tooltip.on { opacity: 1; visibility: visible; transition: opacity 0.12s var(--ease), visibility 0s; }
+.tooltip-in { display: flex; align-items: center; gap: 8px; max-width: 280px; padding: 5px 9px 6px 10px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--sheet-solid); box-shadow: var(--shadow-1); color: var(--ink); font: 600 14px/1.25 var(--ui); letter-spacing: 0.04em; zoom: var(--ui-zoom); translate: 0 -3px; transition: translate 0.14s var(--ease); }
+.tooltip.above .tooltip-in { translate: 0 3px; }
+.tooltip.on .tooltip-in { translate: 0 0; }
+.tooltip.still .tooltip-in { translate: none; transition: none; }
+.tooltip-text { min-width: 0; text-wrap: pretty; }
+.tooltip-key { flex: none; height: 19px; min-width: 20px; padding: 0 5px; font-size: 11px; color: var(--ink-2); }

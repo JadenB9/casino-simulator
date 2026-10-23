@@ -1,16 +1,17 @@
 // Sheets: the panels that open over the game (profile, cashier, settings, shortcuts). One at a
 // time owns the keyboard: Esc closes the top one, Tab stays inside it, and other keys don't
 // reach the floor or the table behind it, so W doesn't walk you away while you read your stats.
-// M and ? stay global so mute and the shortcut list work from anywhere.
+// Mute, the achievements and ? stay global (ui/keyboard.ts) so they work from anywhere.
 
 import './menu.css';
+import '../../styles/controls.css';
 import { el } from '../kit.ts';
 import { icon } from './icons.ts';
-import { GLOBAL_KEYS, focusFirst, holdKeyboard, topPanel } from '../keyboard.ts';
+import { focusFirst, holdKeyboard, isGlobalKey, topPanel } from '../keyboard.ts';
 
 // The keyboard stack itself lives in ui/keyboard.ts (kit dialogs hold it too); these stay
 // exported from here for the screens that already import them.
-export { GLOBAL_KEYS, focusFirst, focusables, holdKeyboard, onOverlayChange, overlayCount } from '../keyboard.ts';
+export { GLOBAL_KEYS, focusFirst, focusables, holdKeyboard, isGlobalKey, onOverlayChange, overlayCount } from '../keyboard.ts';
 
 export interface SheetOpts {
   title: string;
@@ -94,7 +95,7 @@ export function openSheet(root: HTMLElement, opts: SheetOpts): Sheet {
   });
   // Keys typed inside the sheet stop here instead of bubbling to the floor or table handlers.
   scrim.addEventListener('keydown', (e) => {
-    if (!GLOBAL_KEYS.has(e.key)) e.stopPropagation();
+    if (!isGlobalKey(e)) e.stopPropagation();
   });
   root.append(scrim);
   const release = holdKeyboard(panel, () => sheet.close());

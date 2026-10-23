@@ -30,10 +30,12 @@
     <canvas id="scene" aria-hidden="true"></canvas>
     <div id="labels" aria-hidden="true"></div>
     <main id="ui"></main>
+    <!-- The loading screen: boot.ts fills the bar and the note; it fades once the floor is drawn. -->
     <div id="boot" class="boot">
       <div class="boot-mark">Casino Simulator</div>
-      <div class="boot-bar"><div class="boot-fill" id="boot-fill"></div></div>
+      <div class="boot-bar" id="boot-bar" role="progressbar" aria-label="Loading the casino" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="boot-fill" id="boot-fill"></div></div>
       <div class="boot-note" id="boot-note">Loading the floor</div>
+      <noscript><p class="boot-note">The casino needs JavaScript to run.</p></noscript>
     </div>
     <script type="module" src="./src/main.ts"></script>
   </body>

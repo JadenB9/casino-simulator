@@ -7,7 +7,40 @@
    the sheets write `rgba(var(--brass-rgb), 0.16)` for a tint so each alpha keeps its meaning in
    both. The light set is ivory glass with the brass gone dark so it still reads on cream; the 3D
    casino behind it keeps its own lights either way. Anything that is a thing in the world (a
-   machine's screen, the elevator's panel, a photo) keeps its own colours and isn't tokenised. */
+   machine's screen, the elevator's panel, a photo) keeps its own colours and isn't tokenised.
+
+   The contract for everything placed over the scene (#ui):
+
+   Layers. One z-index scale, as tokens below; anything that sits in #ui takes its layer from it
+   (small local numbers, 1 to 5, are fine inside a component). From the bottom:
+     --z-hud      10  the HUD along the top
+     --z-float    12  what floats over the floor: the chat dock, the touch controls, hints
+     --z-panel    20  a table's or a game's own panels, the lobby, the login and menu screens
+     --z-notice   24  passing notices: big wins, achievements, celebrities (never over a sheet)
+     --z-banner   25  the win banner; full-screen views (the boutique, the look editor)
+     --z-popover  28  the HUD's More panel, a picker anchored to its control
+     --z-modal    30  kit dialogs (modal(), the buy-in)
+     --z-sheet    35  sheets (openSheet) and the command palette
+     --z-toast    40  confirmations and errors (kit toast): over a sheet, so an error is seen
+     --z-alert    42  "Still there?"
+     --z-away     45  the away screen
+     --z-boot     50  the loading screen
+     --z-tooltip  70  tooltips (they take no clicks)
+
+   Space. The HUD owns the top of the screen and keeps --below-hud at its real bottom plus a gap
+   (ui/hud/hud.ts measures it), so a panel under the HUD starts at `top: var(--below-hud)`;
+   --below-party is the same under a lobby's party panel. The chat dock owns the bottom-right
+   corner and the site's back chip the bottom-left (14 px in, 30 px tall). #ui is already inset by
+   the safe area (ui/mobile.css): what sits in #ui never adds it again, and something placed
+   outside #ui adds --safe-top, --safe-right, --safe-bottom, --safe-left itself. --tap is the least
+   size of anything a finger presses (44 px on a touch screen).
+
+   Motion. --ease for every transition, --dur-fast / --dur / --dur-slow for their lengths, and
+   body.calm (app/comfort.ts) takes the movement out and leaves the fade.
+
+   Size. --ui-zoom (1, or larger from Settings, Accessibility) scales the HUD and the shell's own
+   overlays: it goes on an inner box, never on the fixed one, because zoom scales viewport units
+   and every length on the element it sits on. */
 
 @font-face { font-family: 'Barlow Condensed'; src: url('/casino/fonts/barlowcondensed/BarlowCondensed-SemiBold.latin.woff2') format('woff2'); font-weight: 600; font-display: swap; }
 @font-face { font-family: 'Cinzel'; src: url('/casino/fonts/cinzel/Cinzelwght.latin.woff2') format('woff2'); font-weight: 400 900; font-display: swap; }
@@ -68,12 +101,49 @@
   --win-rgb: 127, 209, 139;
   --lose-rgb: 224, 118, 107;
   --focus: #f1d59a;
+  /* shadows: under the HUD's bars, under a panel, under something lifted over everything */
+  --shadow-1: 0 8px 28px rgba(0, 0, 0, 0.35);
+  --shadow-2: 0 10px 40px rgba(0, 0, 0, 0.45);
+  --shadow-3: 0 22px 70px rgba(0, 0, 0, 0.6);
   --radius: 6px;
+  --radius-sm: 4px;
+  --radius-lg: 8px;
   --ui: 'Barlow Condensed', 'Arial Narrow', system-ui, sans-serif;
   --serif: 'Cinzel', Georgia, serif;
   --meter: 'DSEG7', ui-monospace, monospace;
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-fast: 0.15s;
+  --dur: 0.22s;
+  --dur-slow: 0.4s;
+  /* layers (see the contract above) */
+  --z-hud: 10;
+  --z-float: 12;
+  --z-panel: 20;
+  --z-notice: 24;
+  --z-banner: 25;
+  --z-popover: 28;
+  --z-modal: 30;
+  --z-sheet: 35;
+  --z-toast: 40;
+  --z-alert: 42;
+  --z-away: 45;
+  --z-boot: 50;
+  --z-tooltip: 70;
+  /* the safe area, for anything placed outside #ui (#ui itself is inset by it) */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  /* the HUD: its distance from the screen's edges, its buttons, and the gap under it */
+  --hud-pad: 14px;
+  --hud-btn: 40px;
+  --hud-gap: 6px;
+  --tap: 32px;
+  --ui-zoom: 1;
   color-scheme: dark;
+}
+@media (pointer: coarse) {
+  :root { --tap: 44px; --hud-btn: 48px; }
 }
 
 /* Light: ivory glass, dark brass (AA on cream for every text weight), the same gold button. */
@@ -115,6 +185,10 @@
   --win-rgb: 30, 122, 58;
   --lose-rgb: 178, 58, 43;
   --focus: #7d5a1f;
+  /* softer, warmer shadows: black at the dark set's strength is a smudge on ivory */
+  --shadow-1: 0 6px 22px rgba(60, 42, 15, 0.16);
+  --shadow-2: 0 10px 36px rgba(60, 42, 15, 0.22);
+  --shadow-3: 0 22px 64px rgba(60, 42, 15, 0.3);
   color-scheme: light;
 }
 
@@ -133,16 +207,24 @@ button { font: inherit; color: inherit; }
 #ui .pass { pointer-events: none; }
 :where(#ui .pass) > * { pointer-events: auto; }
 
-.boot { position: fixed; inset: 0; display: grid; place-content: center; justify-items: center; gap: 14px; background: radial-gradient(120% 90% at 50% 40%, var(--boot-glow) 0%, var(--bg) 70%); z-index: 50; transition: opacity 0.5s var(--ease); }
-.boot.done { opacity: 0; pointer-events: none; }
-.boot-mark { font-family: var(--serif); font-size: 30px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--brass-hi); text-align: center; margin-right: -0.18em; /* the last letter's spacing: the bar lines up with the letters themselves */ }
-.boot-bar { justify-self: stretch; height: 2px; background: rgba(var(--lift-rgb), 0.08); overflow: hidden; }
-.boot-fill { height: 100%; width: 0; background: var(--brass); transition: width 0.3s var(--ease); }
-.boot-note { font-size: 13px; color: var(--ink-3); text-align: center; letter-spacing: 0.12em; text-transform: uppercase; margin-right: -0.12em; }
+/* The loading screen (index.html): the name, a brass rule, the bar and what it's doing. It fades
+   out once the floor is drawn and then leaves the compositor (visibility), so nothing is painted
+   under the game for the rest of the visit. */
+.boot { position: fixed; inset: 0; z-index: var(--z-boot); display: grid; place-content: center; justify-items: center; gap: 16px; padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left); background: radial-gradient(120% 90% at 50% 40%, var(--boot-glow) 0%, var(--bg) 70%); transition: opacity 0.6s var(--ease), visibility 0s linear 0.6s; }
+.boot.done { opacity: 0; visibility: hidden; pointer-events: none; }
+.boot-mark { font-family: var(--serif); font-size: 30px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--brass-hi); text-align: center; margin-right: -0.18em; /* the last letter's spacing: the bar lines up with the letters themselves */ text-shadow: 0 2px 24px rgba(var(--brass-rgb), 0.25); animation: boot-rise 0.7s var(--ease) both; }
+.boot-bar { position: relative; justify-self: stretch; height: 2px; border-radius: 1px; background: rgba(var(--lift-rgb), 0.08); overflow: hidden; animation: boot-rise 0.7s var(--ease) 0.08s both; }
+.boot-fill { height: 100%; width: 0; border-radius: inherit; background: linear-gradient(90deg, var(--brass), var(--brass-hi)); box-shadow: 0 0 10px rgba(var(--brass-hi-rgb), 0.55); transition: width 0.35s var(--ease); }
+.boot-note { min-height: 1.3em; font-size: 13px; color: var(--ink-3); text-align: center; letter-spacing: 0.12em; text-transform: uppercase; margin-right: -0.12em; font-variant-numeric: tabular-nums; animation: boot-rise 0.7s var(--ease) 0.16s both; }
+@keyframes boot-rise { from { opacity: 0; transform: translateY(6px); } }
+body.calm .boot-mark, body.calm .boot-bar, body.calm .boot-note { animation-name: calm-fade-in; }
 
 /* panels and controls */
-.panel { background: var(--glass); border: 1px solid var(--line); border-radius: var(--radius); backdrop-filter: blur(10px) saturate(1.2); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45); }
-.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 36px; padding: 0 14px; border-radius: 4px; border: 1px solid var(--line-strong); background: var(--btn); color: var(--ink); font-size: 16px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; transition: border-color 0.15s, background 0.15s, transform 0.08s; }
+.panel { background: var(--glass); border: 1px solid var(--line); border-radius: var(--radius); backdrop-filter: blur(10px) saturate(1.2); box-shadow: var(--shadow-2); }
+/* A blur over the running 3D canvas is a full-screen pass every frame: on Low quality (and so on
+   most phones, which start on Low) the glass is a denser fill instead (boot.ts marks <html>). */
+html.gfx-low .panel { backdrop-filter: none; background: rgba(var(--glass-rgb), 0.9); }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 36px; padding: 0 14px; border-radius: var(--radius-sm); border: 1px solid var(--line-strong); background: var(--btn); color: var(--ink); font-size: 16px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; transition: border-color var(--dur-fast), background var(--dur-fast), transform 0.08s; }
 .btn:hover:not(:disabled) { border-color: var(--brass-hi); }
 .btn:active:not(:disabled) { transform: translateY(1px); }
 .btn:disabled { opacity: 0.4; cursor: default; }
@@ -156,20 +238,27 @@ button { font: inherit; color: inherit; }
 
 /* The sun and moon button (app/theme.ts): in the HUD's right-hand bar and the corner of the
    login and menu screens. Looks like the HUD's other buttons wherever it sits. */
-.theme-btn { display: grid; place-items: center; width: 36px; height: 36px; padding: 0; background: rgba(var(--glass-rgb), 0.84); border: 1px solid var(--line); border-radius: 6px; color: var(--ink-2); cursor: pointer; transition: color 0.15s, border-color 0.15s; }
+.theme-btn { display: grid; place-items: center; width: var(--hud-btn); height: var(--hud-btn); padding: 0; background: rgba(var(--glass-rgb), 0.84); border: 1px solid var(--line); border-radius: var(--radius); color: var(--ink-2); cursor: pointer; transition: color var(--dur-fast), border-color var(--dur-fast); }
 .theme-btn:hover { color: var(--ink); border-color: var(--line-strong); }
 .theme-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .front-theme { position: absolute; top: 16px; right: 16px; z-index: 1; }
-@media (pointer: coarse) {
-  .theme-btn { width: 48px; height: 48px; }
-}
 
-/* toasts */
-/* Below the dealer's line, which takes the first row under the HUD. */
-.toasts { position: fixed; top: calc(var(--below-hud) + 52px); left: 50%; transform: translateX(-50%); display: grid; gap: 8px; z-index: 40; }
-.toast { padding: 9px 14px; font-size: 16px; animation: toast-in 0.25s var(--ease); }
+/* Toasts (kit toast(), the floor's big wins): one column under the HUD, ui/feed/stack.ts. A
+   toast is a glass pill with a brass edge on its left (red for an error), newest at the bottom,
+   at most a few at a time; it never reaches the HUD, the chat dock or a table's bottom bar. At a
+   table the column starts a row lower, below the dealer's line. */
+.notice-stack { position: fixed; top: calc(var(--below-hud) + 2px); left: 50%; z-index: var(--z-toast); display: flex; flex-direction: column; align-items: center; gap: 8px; width: max-content; max-width: min(560px, calc(100vw - 32px)); transform: translateX(-50%); pointer-events: none; }
+:root:has(.dealer-line:not([hidden])) .notice-stack { top: calc(var(--below-hud) + 52px); }
+.notice-stack > * { pointer-events: none; }
+.notice-zoom { display: contents; }
+.toast { position: relative; max-width: 100%; padding: 9px 16px 10px 18px; overflow: hidden; border-color: var(--line-strong); font-size: 16px; line-height: 1.3; text-align: center; text-wrap: balance; zoom: var(--ui-zoom); animation: toast-in var(--dur) var(--ease); }
+.toast::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: linear-gradient(var(--brass-hi), var(--brass)); }
 .toast.err { border-color: rgba(var(--lose-rgb), 0.6); }
+.toast.err::before { background: var(--lose); }
+.toast.out { opacity: 0; transform: translateY(-4px); transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease); }
 @keyframes toast-in { from { opacity: 0; transform: translateY(-6px); } }
+body.calm .toast { animation-name: calm-fade-in; }
+body.calm .toast.out { transform: none; }
 
 /* result pills attach to a hand or spot on the table */
 .pill { position: absolute; transform: translate(-50%, -50%); padding: 3px 10px; border-radius: 999px; font-size: 15px; font-weight: 600; letter-spacing: 0.06em; white-space: nowrap; background: var(--glass-2); border: 1px solid var(--line-strong); animation: pill-in 0.35s var(--ease); }
@@ -196,10 +285,14 @@ button { font: inherit; color: inherit; }
 .max-btn[aria-pressed='true'] { transform: translateY(-6px); background: linear-gradient(#e2bf7c, #b98d45); color: var(--on-gold); border-color: var(--gold-line); box-shadow: 0 6px 14px rgba(0, 0, 0, 0.5); }
 .tray .sep { width: 1px; align-self: stretch; background: var(--line); }
 
-/* modal */
-.scrim { position: fixed; inset: 0; background: rgba(var(--scrim-rgb), 0.45); display: grid; place-items: center; z-index: 30; }
-.modal { min-width: 320px; max-width: 460px; padding: 18px 20px; }
+/* modal (kit modal(), the buy-in): a short fade and rise in; calm, the fade alone */
+.scrim { position: fixed; inset: 0; background: rgba(var(--scrim-rgb), 0.45); display: grid; place-items: center; padding: 16px; z-index: var(--z-modal); animation: scrim-fade var(--dur) var(--ease); }
+.modal { min-width: 320px; max-width: 460px; padding: 18px 20px; animation: modal-in 0.26s var(--ease); }
+.modal:focus { outline: none; }
 .modal h2 { margin: 0 0 6px; font-family: var(--serif); font-size: 20px; font-weight: 600; letter-spacing: 0.06em; color: var(--brass-hi); }
+@keyframes scrim-fade { from { opacity: 0; } }
+@keyframes modal-in { from { opacity: 0; transform: translateY(8px) scale(0.985); } }
+body.calm .modal { animation-name: calm-fade-in; }
 .modal p { margin: 6px 0; color: var(--ink-2); font-size: 16px; }
 .modal .row { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
 .modal input[type='number'], .modal input[type='text'] { height: 36px; padding: 0 10px; border-radius: 4px; border: 1px solid var(--line-strong); background: var(--field); color: var(--ink); font: inherit; font-size: 17px; width: 100%; }

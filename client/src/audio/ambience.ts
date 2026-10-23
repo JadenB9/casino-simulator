@@ -9,8 +9,9 @@
 // bells on a pentatonic scale. Every source stands somewhere on the floor behind a PannerNode and
 // the listener follows the camera, so the slots get louder as you walk into them and the pit falls
 // away behind you. Seated at a table the whole bed ducks, so the table's own sounds lead. It all
-// runs through the game's master gain (Sfx.out): mute and the volume setting apply as they do to
-// every other sound.
+// runs through the room's own level (Sfx.room, Settings: Sound, Room) and the master under it, so
+// mute and the volume apply as they do to every other sound; while the room can't be heard at all
+// the bed is taken out of the mix, and its noise and reverb cost nothing.
 
 import type * as THREE from 'three';
 import type { Sfx } from './sfx.ts';
@@ -46,6 +47,8 @@ export class Ambience {
   private seated = false;
   private started = false;
   private disposed = false;
+  /** Whether the bed is in the mix (it isn't while muted or turned right down). */
+  private heard = true;
 
   constructor(
     private readonly sfx: Sfx,
@@ -64,7 +67,7 @@ export class Ambience {
     this.wet.gain.value = 0.35;
     this.bus.connect(this.duck);
     this.bus.connect(this.reverb).connect(this.wet).connect(this.duck);
-    this.duck.connect(sfx.out);
+    this.duck.connect(sfx.room);
     this.nextChime = spots.slots.map(() => 1 + Math.random() * 6);
     void this.loadChips();
   }
@@ -81,24 +84,34 @@ export class Ambience {
       this.seated = seated;
       this.duck.gain.setTargetAtTime(seated ? SEATED : 1, this.ctx.currentTime, 0.6);
     }
-    if (this.sfx.muted) return;
+    // out of the mix while it can't be heard (the listener above still follows the camera: the
+    // effects' and the claps' panners hear by it too)
+    const hear = this.sfx.audible('room');
+    if (hear !== this.heard) {
+      this.heard = hear;
+      if (hear) this.duck.connect(this.sfx.room);
+      else this.duck.disconnect();
+    }
+    if (!hear) return;
     this.nextChip -= dt;
     if (this.nextChip <= 0) {
       this.nextChip = 0.9 + Math.random() * 3.2;
       const t = pick(this.spots.tables);
       if (t) this.chipsAt(t.x + (Math.random() - 0.5) * 2, t.z + (Math.random() - 0.5) * 2);
     }
-    this.spots.slots.forEach((s, i) => {
+    const slots = this.spots.slots;
+    for (let i = 0; i < slots.length; i++) {
       this.nextChime[i]! -= dt;
-      if (this.nextChime[i]! > 0) return;
+      if (this.nextChime[i]! > 0) continue;
       this.nextChime[i] = 3 + Math.random() * 7;
+      const s = slots[i]!;
       this.chime(s.x + (Math.random() - 0.5) * 2.4, s.z + (Math.random() - 0.5) * 2, 2 + Math.floor(Math.random() * 4), 0.16);
-    });
+    }
   }
 
   /** A big win somewhere: a rising run of bells from that spot (or from the room, with no spot). */
   bell(at: { x: number; z: number } | null): void {
-    if (this.disposed || this.ctx.state !== 'running' || this.sfx.muted) return;
+    if (this.disposed || this.ctx.state !== 'running' || !this.sfx.audible('room')) return;
     const x = at?.x ?? 0;
     const z = at?.z ?? 0;
     // a win is news: louder than the machines' chatter, and it carries across the room

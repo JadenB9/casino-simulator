@@ -6,6 +6,8 @@ import * as THREE from 'three';
 import { BETTING_CHIPS, formatMoney, type Cents, type ChipSpec } from '../../../shared/src/money.ts';
 import { REFILL_BELOW, REFILL_TO } from '../../../shared/src/bank.ts';
 import { holdKeyboard } from './keyboard.ts';
+import { pushNotice } from './feed/stack.ts';
+import { remember } from './feed/history.ts';
 import { chipTrayCanvases } from '../table/chips.ts';
 import type { TableStage } from '../table/stage.ts';
 
@@ -26,18 +28,19 @@ export function button(label: string, onClick: () => void, opts: { cls?: string;
   return b;
 }
 
-let toastBox: HTMLElement | null = null;
-
+/**
+ * A short note under the HUD ("Your chips are back in your balance", an error in red). Notes share
+ * one column with the floor's big wins (ui/feed/stack.ts), at most a few at a time, and each is
+ * kept in the page's notification history (the HUD's More, Notifications).
+ */
 export function toast(msg: string, kind: 'info' | 'err' = 'info', ms = 3200): void {
-  if (!toastBox) {
-    toastBox = el('div', 'toasts pass');
-    document.getElementById('ui')!.append(toastBox);
-  }
-  const t = el('div', `toast panel ${kind === 'err' ? 'err' : ''}`, msg);
+  const t = el('div', `toast panel ${kind === 'err' ? 'err' : ''}`.trim(), msg);
   t.setAttribute('role', kind === 'err' ? 'alert' : 'status');
-  toastBox.append(t);
-  setTimeout(() => t.remove(), ms);
+  pushNotice(t, ms);
+  remember({ kind, text: msg });
 }
+
+let modalSeq = 0;
 
 /**
  * A dialog over the game. It holds the keyboard while it's up (ui/keyboard.ts): Esc calls
@@ -47,7 +50,12 @@ export function modal(title: string, body: (HTMLElement | string)[], actions: HT
   const scrim = el('div', 'scrim');
   const box = el('div', 'modal panel');
   box.setAttribute('role', 'dialog');
-  box.append(el('h2', '', title));
+  box.setAttribute('aria-modal', 'true');
+  box.tabIndex = -1;
+  const heading = el('h2', '', title);
+  heading.id = `modal-title-${++modalSeq}`;
+  box.setAttribute('aria-labelledby', heading.id);
+  box.append(heading);
   for (const b of body) box.append(typeof b === 'string' ? el('p', '', b) : b);
   const row = el('div', 'row');
   row.append(...actions);

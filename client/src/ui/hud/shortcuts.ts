@@ -1,10 +1,13 @@
-// The "?" overlay: every key the game listens to, grouped by where it works.
+// The "?" overlay: every key the game listens to, grouped by where it works, in cards; a filter
+// finds a key by what it does or by the key itself, and Change keys opens Settings at Controls.
 
 import './hud.css';
+import './settings.css';
 import { el } from '../kit.ts';
 import type { Closable } from '../menu/deps.ts';
 import { openSheet } from '../menu/sheet.ts';
 import { keycap } from '../menu/parts.ts';
+import { icon } from '../menu/icons.ts';
 import { keyLabel, type KeyAction } from '../keys.ts';
 
 /** Keys as keycaps; "/" between keys means "or", "-" joins a range (1-6, Q-P). */
@@ -14,6 +17,8 @@ type Row = [keys: string | (() => string), action: string];
 /** The four walking (and driving) keys as they're bound now. */
 const WALK: readonly KeyAction[] = ['forward', 'left', 'back', 'right'];
 const walkKeys = () => WALK.map(keyLabel).join(' ');
+/** The palette's key (ui/hud/hud.ts): Cmd on a Mac. */
+const paletteKey = () => (typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘ K' : 'Ctrl K');
 
 export const SHORTCUTS: readonly { title: string; rows: readonly Row[] }[] = [
   {
@@ -55,6 +60,7 @@ export const SHORTCUTS: readonly { title: string; rows: readonly Row[] }[] = [
       ['Esc', 'Free the mouse, close a panel, stand up, leave'],
       [() => keyLabel('feats'), 'Achievements and challenges'],
       [() => keyLabel('mute'), 'Mute or unmute'],
+      [paletteKey, 'Search every action, setting, room and game'],
       ['?', 'This list'],
     ],
   },
@@ -112,26 +118,76 @@ function keys(spec: string): HTMLElement {
       box.append(keycap(range[1]!), el('span', 'sc-or', 'to'), keycap(range[2]!));
       return;
     }
-    for (const k of alt.split(' ')) box.append(keycap(k));
+    // ("T or Enter": the word between two keys is said, not a keycap)
+    for (const k of alt.split(' ')) box.append(k === 'or' ? el('span', 'sc-or', 'or') : keycap(k));
   });
   return box;
 }
 
-export function openShortcuts(deps: { root: HTMLElement; onClose?(): void }): Closable {
-  const sheet = openSheet(deps.root, { title: 'Keyboard', subtitle: 'Change any floor key in Settings (the gear, top right), under Keys. Keys work when no text field has focus.', cls: 'shortcuts-sheet', onClose: deps.onClose });
+export interface ShortcutsOpts {
+  root: HTMLElement;
+  /** Settings at Controls, where the floor's keys change (Change keys). */
+  onKeys?(): void;
+  /** The palette's keycap, if the caller knows it better ("⌘ K"). */
+  paletteKey?: string;
+  onClose?(): void;
+}
+
+export function openShortcuts(deps: ShortcutsOpts): Closable {
+  const sheet = openSheet(deps.root, { title: 'Keyboard', subtitle: 'Keys work whenever no text field has focus.', cls: 'shortcuts-sheet', onClose: deps.onClose });
+  // a filter, by what a key does or by the key itself
+  const tools = el('div', 'sc-tools');
+  const filter = el('label', 'sc-filter');
+  const input = el('input');
+  input.type = 'search';
+  input.placeholder = 'Find a key or what it does';
+  input.setAttribute('aria-label', 'Find a key or what it does');
+  input.autocomplete = 'off';
+  input.spellcheck = false;
+  filter.append(icon('search'), input);
+  tools.append(filter);
   const grid = el('div', 'sc-grid');
+  const none = el('p', 'sc-none', 'No key does that. Try a word like “walk”, “deal” or “map”.');
+  none.hidden = true;
+  const rows: { group: HTMLElement; dt: HTMLElement; dd: HTMLElement; text: string }[] = [];
   for (const group of SHORTCUTS) {
     const g = el('section', 'sc-group');
     g.append(el('h3', 'section-label', group.title));
     const list = el('dl', 'sc-list');
     for (const [k, action] of group.rows) {
+      const spec = typeof k === 'function' ? (k === paletteKey && deps.paletteKey ? deps.paletteKey : k()) : k;
       const dt = el('dt');
-      dt.append(keys(typeof k === 'function' ? k() : k));
-      list.append(dt, el('dd', '', action));
+      dt.append(keys(spec));
+      const dd = el('dd', '', action);
+      list.append(dt, dd);
+      rows.push({ group: g, dt, dd, text: `${group.title} ${action} ${spec}`.toLowerCase() });
     }
     g.append(list);
     grid.append(g);
   }
-  sheet.body.append(grid);
+  const foot = el('div', 'sc-foot');
+  foot.append(el('span', '', 'The floor’s keys are yours to change, each one in Settings, Controls.'));
+  if (deps.onKeys) {
+    const change = el('button', 'btn ghost', 'Change keys');
+    change.type = 'button';
+    change.addEventListener('click', () => {
+      sheet.close();
+      deps.onKeys?.();
+    });
+    foot.append(change);
+  }
+  input.addEventListener('input', () => {
+    const q = input.value.trim().toLowerCase();
+    const words = q.split(/\s+/).filter(Boolean);
+    const shown = new Set<HTMLElement>();
+    for (const r of rows) {
+      const on = words.every((w) => r.text.includes(w));
+      r.dt.hidden = r.dd.hidden = !on;
+      if (on) shown.add(r.group);
+    }
+    for (const g of grid.children) (g as HTMLElement).hidden = !shown.has(g as HTMLElement);
+    none.hidden = shown.size > 0;
+  });
+  sheet.body.append(tools, grid, none, foot);
   return { root: sheet.root, close: () => sheet.close() };
 }

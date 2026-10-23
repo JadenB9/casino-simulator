@@ -1,7 +1,8 @@
 // The shop's effects, heard: every sound made here from oscillators and noise, like the claps
-// (claps.ts), through the game's master gain so mute and the volume setting apply. Each effect's
-// sound comes from where it happens (a panner; the floor's ambience keeps the listener on the
-// camera), or from everywhere for the casino-wide ones.
+// (claps.ts), through the game's sounds (the disco through the music's level) and the master, so
+// mute and the volume settings apply. Each effect's sound comes from where it happens (a panner;
+// the floor's ambience keeps the listener on the camera), or from everywhere for the casino-wide
+// ones.
 //
 //   confetti   two cannon pops, then paper settling
 //   spotlight  the follow spot's shutter opening with a heavy clunk
@@ -36,8 +37,9 @@ export class FxSounds {
     return (this.noiseBuf ??= whiteNoise(ctx, 2));
   }
 
-  /** An output for one sound: at a point, or everywhere; `level` relative to the master. */
-  private out(ctx: AudioContext, at: At, level: number, ref = 2): { node: GainNode; done: () => void } {
+  /** An output for one sound: at a point, or everywhere; `level` relative to the master. Music (the disco) goes to the music's own level. */
+  private out(ctx: AudioContext, at: At, level: number, ref = 2, music = false): { node: GainNode; done: () => void } {
+    const sink = music ? this.sfx.music : this.sfx.out;
     const g = ctx.createGain();
     g.gain.value = level;
     let pan: PannerNode | null = null;
@@ -49,9 +51,9 @@ export class FxSounds {
       pan.rolloffFactor = 1.3;
       pan.maxDistance = 40;
       place(pan, at);
-      g.connect(pan).connect(this.sfx.out);
+      g.connect(pan).connect(sink);
     } else {
-      g.connect(this.sfx.out);
+      g.connect(sink);
     }
     return {
       node: g,
@@ -167,7 +169,7 @@ export class FxSounds {
   disco(at: At, secs: number, inside: () => boolean): Stop {
     const ctx = this.ready;
     if (!ctx) return NONE;
-    const o = this.out(ctx, at, 0.42, 5);
+    const o = this.out(ctx, at, 0.42, 5, true);
     const wall = ctx.createBiquadFilter();
     wall.type = 'lowpass';
     wall.frequency.value = 18000;

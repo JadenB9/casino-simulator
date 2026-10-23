@@ -69,7 +69,6 @@ export function reminderSettings(row: Row): HTMLElement[] {
     (v) => setReminderPrefs({ lossLimit: Number(v) }),
   );
   return [
-    el('h3', 'section-label', 'Play'),
     row('Play reminder', every.root, el('p', 'set-note', 'A card with how long you have played this session and how much you are up or down, with a way to take a break.')),
     row('Loss limit', limit.root, el('p', 'set-note', 'The same card when you are down this much this session. It only reminds: you can keep playing.')),
   ];

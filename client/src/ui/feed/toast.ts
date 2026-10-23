@@ -1,13 +1,16 @@
-// A big win as a toast: one at a time, under the HUD in the row the dealer's line uses at a table
-// (toasts only show on the floor, so the two never meet). The name and amount on one line, what
-// paid under it. Someone else's achievement takes a turn in the same row: the name and the feat,
-// the game under it. Screen readers hear it politely.
+// A big win as a toast: one at a time, in the column of notes under the HUD (stack.ts) that the
+// kit's toasts share, so the two never sit on each other (big wins only show on the floor, never
+// at a table). The name and amount on one line, what paid under it. Someone else's achievement
+// takes a turn the same way: the name and the feat, the game under it. Screen readers hear it
+// politely, and each goes into the page's notification history (history.ts).
 
 import './feed.css';
 import { el } from '../kit.ts';
 import { detail, wholeDollars } from './lines.ts';
 import type { BigWin } from '../../../../shared/src/protocol.ts';
 import { feedLines } from '../feats/lines.ts';
+import { pushNotice } from './stack.ts';
+import { remember } from './history.ts';
 
 /** Someone's feat, as the floor tells it. */
 interface FeatNews {
@@ -16,15 +19,17 @@ interface FeatNews {
 }
 
 const SHOW_MS = 4200;
+/** The fade out (theme.css `.toast.out`), and a breath before the next. */
 const OUT_MS = 380;
 /** A burst of wins shows the latest few, not a backlog. */
 const QUEUE_MAX = 3;
 
 export class WinToasts {
-  private box: HTMLElement | null = null;
   private queue: (BigWin | FeatNews)[] = [];
   private busy = false;
   private timer = 0;
+  /** Takes the toast on screen away early. */
+  private current: (() => void) | null = null;
 
   constructor(private readonly root: HTMLElement) {}
 
@@ -37,8 +42,9 @@ export class WinToasts {
   dispose(): void {
     clearTimeout(this.timer);
     this.queue = [];
-    this.box?.remove();
-    this.box = null;
+    this.busy = false;
+    this.current?.();
+    this.current = null;
   }
 
   private next(): void {
@@ -48,13 +54,8 @@ export class WinToasts {
       return;
     }
     this.busy = true;
-    if (!this.box) {
-      this.box = el('div', 'bigwin-toasts pass');
-      this.box.setAttribute('role', 'status');
-      this.box.setAttribute('aria-live', 'polite');
-      this.root.append(this.box);
-    }
     const t = el('div', 'bigwin-toast panel');
+    t.setAttribute('role', 'status');
     const line = el('div', 'bigwin-line');
     if ('feat' in w) {
       // "name earned Royal Flush", the game under it
@@ -66,18 +67,17 @@ export class WinToasts {
       t.classList.add('feat');
       line.append(el('span', 'bigwin-name', f.name), el('span', 'bigwin-won', ' earned '), el('span', 'bigwin-feat', f.what));
       t.append(line, el('div', 'bigwin-sub', f.sub));
+      remember({ kind: 'feat', text: `${f.name} earned ${f.what}`, sub: f.sub });
     } else {
       // "name won $12,500": the name and the amount carry the weight
       line.append(el('span', 'bigwin-name', w.name), el('span', 'bigwin-won', ' won '), el('span', 'bigwin-amount money', wholeDollars(w.amount)));
       t.append(line, el('div', 'bigwin-sub', detail(w)));
+      remember({ kind: 'win', text: `${w.name} won ${wholeDollars(w.amount)}`, sub: detail(w) });
     }
-    this.box.replaceChildren(t);
+    this.current = pushNotice(t, SHOW_MS, this.root);
     this.timer = window.setTimeout(() => {
-      t.classList.add('out');
-      this.timer = window.setTimeout(() => {
-        t.remove();
-        this.next();
-      }, OUT_MS);
-    }, SHOW_MS);
+      this.current = null;
+      this.next();
+    }, SHOW_MS + OUT_MS);
   }
 }

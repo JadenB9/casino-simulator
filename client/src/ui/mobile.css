@@ -21,7 +21,7 @@
 
   /* Keyboard hints mean nothing without a keyboard (the Leave button in the HUD walks away). */
   .btn .key, .kc, .lb-key, .emo-key, .menu-hints, .lobby-foot { display: none !important; }
-  .hud-btn[aria-label^='Keyboard'] { display: none; }
+  /* (the HUD's keyboard-only actions, the shortcut list, leave More by themselves: hud.css) */
 
   /* Finger-sized targets: 44 px at the least (panels size their own controls). */
   .btn { min-height: 44px; }
@@ -53,11 +53,12 @@
 
   .modal { min-width: 0; width: calc(100vw - 24px); max-width: 460px; padding: 16px; }
   .modal .row .btn { flex: 1 1 auto; }
-  .toasts { max-width: calc(100vw - 32px); }
-  .toast { text-align: center; }
-  /* The dealer's call takes the HUD's second row (who's online and the buttons) for the moment
-     it's up, so the game's own panels under the HUD stay in view. It lets taps through. */
-  .dealer-line { top: 64px; left: 10px; right: 10px; transform: none; max-width: none; min-height: 44px; display: grid; place-items: center; z-index: 11; pointer-events: none; font-size: 16px; padding: 6px 12px; }
+  .notice-stack { max-width: calc(100vw - 20px); }
+  /* The dealer's call sits just under the HUD's row (over a second row, if the HUD has one, for the
+     moment it's up, so the game's own panels under the HUD stay in view). It lets taps through. */
+  .dealer-line { top: 64px; left: 10px; right: 10px; transform: none; max-width: none; min-height: 44px; display: grid; place-items: center; z-index: calc(var(--z-hud) + 1); pointer-events: none; font-size: 16px; padding: 6px 12px; }
+  /* the notes go under the dealer's line while it's up (under the HUD, or over its second row) */
+  :root:has(.dealer-line:not([hidden])) .notice-stack { top: max(calc(var(--below-hud) + 2px), 114px); }
   /* left of the chat dock's column (the dock rises to just above the tray on the right) */
   .tip-line { left: 10px; right: 112px; transform: none; max-width: none; font-size: 14px; padding: 6px 12px; }
   .celebrate { max-width: calc(100vw - 24px); padding: 12px 22px; }
@@ -72,8 +73,8 @@
 /* 390 px of height: everything slims down and the tray moves right, out of the back chip's way. */
 @media (max-height: 480px) {
   :root { --tip-bottom: 76px; }
-  /* above the home indicator on a phone that has one */
-  .tray { left: auto; right: 10px; bottom: max(8px, env(safe-area-inset-bottom, 0px)); transform: none; gap: 8px; padding: 6px 10px; }
+  /* (above the home indicator on a phone that has one: #ui is already inset by the safe area) */
+  .tray { left: auto; right: 10px; bottom: 8px; transform: none; gap: 8px; padding: 6px 10px; }
   .tray .chips { gap: 4px; }
   .tray .chip-btn { width: 44px; height: 44px; }
   .tray .acts { gap: 5px; }
@@ -84,7 +85,8 @@
   .modal h2 { font-size: 18px; margin-bottom: 2px; }
   .modal p { margin: 4px 0; font-size: 15px; }
   .modal .row { margin-top: 10px; }
-  .toasts { top: calc(var(--below-hud) + 44px); }
+  /* under the dealer's line, which is slimmer here */
+  :root:has(.dealer-line:not([hidden])) .notice-stack { top: calc(var(--below-hud) + 44px); }
   .dealer-line { font-size: 15px; padding: 5px 14px; }
   .tip-line { font-size: 14px; padding: 5px 12px; }
   .celebrate { top: 38%; padding: 10px 26px; }

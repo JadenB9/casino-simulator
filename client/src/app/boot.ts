@@ -49,12 +49,20 @@ import { carItem } from '../../../shared/src/items.ts';
 import { keyLabel } from '../ui/keys.ts';
 import { installCheck } from '../ui/check/check.ts'; // v6 bot6: the Quick check
 import { V7 } from './v7.ts'; // v7
+import { floorCommands } from './commands.ts'; // the palette's rooms and games
+import { installTooltips } from '../ui/hud/tooltip.ts';
 
 export async function boot(): Promise<void> {
   const ui = document.getElementById('ui')!;
   const fill = document.getElementById('boot-fill');
+  const bar = document.getElementById('boot-bar');
+  const note = document.getElementById('boot-note');
   // the floor's bloom multisamples the scene itself on High (see Engine3D)
   const engine = new Engine3D(document.getElementById('scene') as HTMLCanvasElement, document.getElementById('labels')!, savedQuality(), { antialias: false });
+  // Low quality has no glass blur over the canvas either (theme.css), and the one tooltip is up
+  // from the login on
+  document.documentElement.classList.toggle('gfx-low', engine.quality === 'low');
+  installTooltips();
   engine.onFrame((dt) => updateTweens(dt));
   const sfx = new Sfx();
   // A saved login is checked while the floor loads, not after it.
@@ -66,7 +74,10 @@ export async function boot(): Promise<void> {
     ui,
     sfx,
     onProgress: (k) => {
-      if (fill) fill.style.width = `${Math.round(k * 100)}%`;
+      const pct = Math.round(k * 100);
+      if (fill) fill.style.width = `${pct}%`;
+      bar?.setAttribute('aria-valuenow', String(pct));
+      if (note) note.textContent = `Loading the floor · ${pct}%`;
     },
     onEscape: () => app?.escape(),
   });
@@ -542,25 +553,30 @@ class App {
       onOnline: () => this.v7?.openOnline(), // v7
     });
     this.hud.setOnline(this.link?.onlineCount ?? null);
-    // Emotes (G) and the leaderboards, in the HUD's right-hand bar ahead of the tips bulb.
+    const hud = this.hud;
+    // Every action goes through the HUD's tool list (ui/hud/tools.ts): the few most used in the
+    // bar, all of them in More and the palette. (The map's button comes from the world itself.)
     // v6 emotes6: the wheel shows what you own; a locked one opens the boutique at it
     this.emotes = mountEmotes({ root: this.ui, send: (e) => void this.link?.emote(e), owned: () => session.profile?.owned, shop: (e) => this.openShop(e) });
-    const bar = this.hud.root.querySelector('.hud-right')!;
-    const first = bar.querySelector('.hud-btn');
-    bar.insertBefore(socialButton('emotes', `Emotes (${keyLabel('emotes')})`, () => this.emotes?.toggle()), first);
+    hud.addTool({ id: 'emotes', button: socialButton('emotes', `Emotes (${keyLabel('emotes')})`, () => this.emotes?.toggle()), label: 'Emotes', group: 'play', order: 20, key: 'emotes', primary: true, rank: 1, keywords: 'wave dance cheer clap griddy' });
     // v6 stats6: at a table, the leaderboards open on its game's boards
     const boards = () => openLeaderboard({ root: this.ui, api: socialApi, ...(this.table ? { game: this.table.station.game } : {}) });
-    bar.insertBefore(socialButton('leaderboard', 'Leaderboards', boards), first);
-    bar.insertBefore(shopButton('boutique', 'Boutique', () => this.openShop()), first);
-    bar.insertBefore(shopButton('effects', 'Effects', () => this.openEffects()), first); // v6 shop6
-    bar.insertBefore(shopButton('bar', 'Bar', () => this.openBarMenu()), first);
+    hud.addTool({ id: 'boards', button: socialButton('leaderboard', 'Leaderboards', boards), label: 'Leaderboards', group: 'social', order: 20, keywords: 'ranks richest top stats best' });
+    hud.addTool({ id: 'boutique', button: shopButton('boutique', 'Boutique', () => this.openShop()), label: 'Boutique', group: 'shop', order: 10, keywords: 'shop buy chains watches clothes rides emotes cars' });
+    hud.addTool({ id: 'effects', button: shopButton('effects', 'Effects', () => this.openEffects()), label: 'Effects', group: 'shop', order: 20, keywords: 'confetti fireworks spotlight champagne' }); // v6 shop6
+    hud.addTool({ id: 'bar', button: shopButton('bar', 'Bar', () => this.openBarMenu()), label: 'Bar', group: 'shop', order: 30, keywords: 'drinks food order cocktails waiter' });
     // v6 celebs6: the daily bonus (its button, and its sheet on arrival while today's is waiting)
-    this.daily = mountDaily({ root: this.ui, bar, before: first, api: dailyApi, money: (m) => session.balance(m.balance, m.inPlay, m.rev), sfx: this.sfx });
-    // v6 feats6: the achievements, their cup in the bar and your title under your name
+    const slot = document.createElement('div');
+    this.daily = mountDaily({ root: this.ui, bar: slot, api: dailyApi, money: (m) => session.balance(m.balance, m.inPlay, m.rev), sfx: this.sfx });
+    const gift = slot.querySelector<HTMLButtonElement>('.daily-btn');
+    if (gift) hud.addTool({ id: 'daily', button: gift, label: 'Daily bonus', group: 'shop', order: 40, keywords: 'gift streak claim reward' });
+    // v6 feats6: the achievements, their cup in More and your title under your name
     this.feats?.dispose();
     this.feats = mountFeats({ root: this.ui, session, sfx: this.sfx, game: () => this.table?.station.game ?? null });
-    bar.insertBefore(this.feats.button, first);
+    hud.addTool({ id: 'feats', button: this.feats.button, label: 'Achievements', group: 'play', order: 30, key: 'feats', keywords: 'challenges titles rewards trophy' });
     this.feats.useHud(this.hud.root);
+    // the palette finds the rooms and the games as well: each opens the Floor Directory at its room
+    hud.addCommands(() => floorCommands(this.world));
     installCheck(); // v6 bot6: the Quick check, when a table or the API says one is waiting
     this.chat?.setVisible(true);
   }

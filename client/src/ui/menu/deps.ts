@@ -33,6 +33,9 @@ export interface EngineLike {
   onFrame(fn: (dt: number, time: number) => void): () => void;
 }
 
+/** The kinds of sound with a level of their own under the volume (audio/sfx.ts). */
+export type SoundKind = 'game' | 'room' | 'music';
+
 /** Enough of Sfx for menu clicks, the mute toggle and the volume setting. */
 export interface SfxLike {
   muted: boolean;
@@ -41,6 +44,9 @@ export interface SfxLike {
   setVolume(v: number): void;
   play(name: string, opts?: { volume?: number; rate?: number; delay?: number }): void;
   readonly out: GainNode;
+  /** A kind's own level, 0 to 1, where the sound manager has them (Settings, Sound). */
+  level?(kind: SoundKind): number;
+  setLevel?(kind: SoundKind, v: number): void;
 }
 
 /** Something that can be closed; every mount and open returns at least this. */

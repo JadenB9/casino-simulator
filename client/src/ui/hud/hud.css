@@ -1,33 +1,190 @@
-/* HUD: two dense bars along the top edge, in fixed places. Solid glass rather than blurred glass:
-   these sit over the 3D canvas all the time. Plus the settings and keyboard sheets. */
+/* HUD: the status card on the left and the tools on the right, along the top edge in fixed places.
+   Solid glass rather than blurred glass: these sit over the 3D canvas all the time. Plus the More
+   panel and the palette that open from it, the list of who's online and the play reminder. The
+   space under the HUD starts at --below-hud, which hud.ts keeps at the HUD's real bottom; the
+   values here are only what it starts from. */
 
-.hud { position: fixed; top: 0; left: 0; right: 0; z-index: 10; display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 14px 16px; }
-.hud-bar { background: rgba(var(--glass-rgb), 0.84); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35); }
-.hud-left { display: flex; align-items: stretch; min-width: 0; }
-.hud-who { display: flex; align-items: center; max-width: 16ch; padding: 0 16px; border: 0; border-right: 1px solid var(--line); background: none; color: var(--brass-hi); font-family: var(--serif); font-size: 15px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-button.hud-who { cursor: pointer; border-radius: 6px 0 0 6px; }
-button.hud-who:hover { color: var(--ink-hi); }
+.hud { position: fixed; top: 0; left: 0; right: 0; z-index: var(--z-hud); display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 12px; padding: var(--hud-pad) 16px; }
+.hud-bar { background: rgba(var(--glass-rgb), 0.86); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-1); }
+
+/* ---------------------------------------------------------------- the status card */
+
+.hud-left { display: flex; align-items: stretch; min-width: 0; max-width: 100%; zoom: var(--ui-zoom); }
+.hud-who { display: flex; align-items: center; max-width: 16ch; padding: 0 16px 0 15px; border: 0; border-right: 1px solid var(--line); background: none; color: var(--brass-hi); font-family: var(--serif); font-size: 15px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+button.hud-who { cursor: pointer; border-radius: var(--radius) 0 0 var(--radius); transition: color var(--dur-fast), background var(--dur-fast); }
+button.hud-who:hover { color: var(--ink-hi); background: rgba(var(--brass-rgb), 0.08); }
 button.hud-who:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
-.hud-stat { padding: 7px 16px 8px; border-right: 1px solid var(--line); }
+.hud-stat { display: flex; flex-direction: column; justify-content: center; min-width: 0; padding: 7px 14px 8px; border-right: 1px solid var(--line); }
 .hud-stat:last-child { border-right: 0; }
-.hud-stat .stat-label { font-size: 11px; }
-.hud-stat .stat-value { margin-top: 1px; font-size: 20px; }
+.hud-stat .stat-label { font-size: 10.5px; font-weight: 600; letter-spacing: 0.17em; color: var(--ink-3); }
+.hud-stat .stat-value { margin-top: 2px; font-size: 19px; line-height: 1.1; letter-spacing: 0.01em; }
 .hud-stat .stat-value.tick { animation: hud-tick 0.9s var(--ease); }
-.hud-session .stat-value { font-size: 17px; padding-top: 2px; }
+.hud-balance .stat-value { color: var(--ink-hi); }
+.hud-session .stat-value { font-size: 16px; padding-top: 2px; }
 .hud-session .win { color: var(--win); }
 .hud-session .lose { color: var(--lose); }
 .hud-time { color: var(--ink-3); }
+.hud-fps .stat-value { font-size: 15px; padding-top: 3px; color: var(--ink-2); }
 @keyframes hud-tick { from { color: var(--brass-hi); } }
 
-.hud-right { display: flex; align-items: center; gap: 6px; }
-.hud-online { display: flex; align-items: center; gap: 7px; height: 36px; padding: 0 12px; font-size: 14px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-2); }
+/* ---------------------------------------------------------------- the tools */
+
+.hud-right { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: var(--hud-gap); margin-left: auto; zoom: var(--ui-zoom); }
+.hud-online { display: flex; align-items: center; gap: 7px; height: var(--hud-btn); padding: 0 12px; font-size: 14px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-2); }
 .hud-online .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--win); box-shadow: 0 0 8px rgba(var(--win-rgb), 0.55); }
 .hud-online .money { color: var(--ink); }
-button.hud-online { font: inherit; font-size: 14px; letter-spacing: 0.1em; cursor: pointer; transition: border-color 0.15s, color 0.15s; }
+button.hud-online { font: inherit; font-size: 14px; letter-spacing: 0.1em; cursor: pointer; transition: border-color var(--dur-fast), color var(--dur-fast); }
 button.hud-online:hover { border-color: var(--line-strong); color: var(--ink); }
 button.hud-online:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-/* v7: the list of who's online */
-.online-sheet { width: min(460px, calc(100vw - 24px)); }
+
+.hud-btn { position: relative; display: grid; place-items: center; width: var(--hud-btn); height: var(--hud-btn); padding: 0; background: rgba(var(--glass-rgb), 0.86); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-1); color: var(--ink-2); cursor: pointer; transition: color var(--dur-fast), border-color var(--dur-fast), background var(--dur-fast); }
+.hud-btn .ico { width: 19px; height: 19px; }
+.hud-btn:hover { color: var(--ink); border-color: var(--line-strong); }
+.hud-btn:active { transform: translateY(1px); }
+.hud-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+/* on (tips on, the map or the emotes open): lit brass */
+.hud-btn[aria-pressed='true'], .hud-btn.on { color: var(--brass-hi); border-color: rgba(var(--brass-rgb), 0.6); background: linear-gradient(rgba(var(--brass-rgb), 0.16), rgba(var(--brass-rgb), 0.16)), rgba(var(--glass-rgb), 0.86); }
+/* muted: the sound's button goes quiet instead (its icon has the cross) */
+.hud-btn.hud-mute[aria-pressed='true'] { color: var(--ink-3); border-color: var(--line); background: rgba(var(--glass-rgb), 0.86); }
+
+/* More: the tools that aren't in the bar, and every one that is (more.ts) */
+.hud-btn.hud-more-btn { display: inline-flex; align-items: center; gap: 7px; width: auto; padding: 0 13px 0 11px; font-size: 14px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; }
+.hud-more-btn.open { color: var(--brass-hi); border-color: rgba(var(--brass-rgb), 0.6); }
+.hud-more-badge { position: absolute; top: 5px; right: 5px; width: 8px; height: 8px; border-radius: 50%; background: var(--brass-hi); box-shadow: 0 0 0 2px rgba(var(--glass-rgb), 0.9); opacity: 0; transform: scale(0.4); transition: opacity 0.2s, transform 0.2s var(--ease); }
+.hud-more-btn.badged .hud-more-badge { opacity: 1; transform: none; }
+.hud-store { display: none !important; }
+
+/* Below the widest screens, the status card drops what it can spare (worth, session, then your
+   name) before the bar ever wraps. */
+@media (max-width: 1060px) {
+  .hud-session { display: none; }
+}
+@media (max-width: 900px) {
+  .hud-who { display: none; }
+  .hud-worth { display: none; }
+  .hud-online-label { display: none; }
+  .hud-more-label { display: none; }
+  .hud-btn.hud-more-btn { width: var(--hud-btn); padding: 0; justify-content: center; }
+}
+@media (max-width: 720px) {
+  .hud-stat { padding: 6px 12px 7px; }
+  .hud-stat .stat-value { font-size: 17px; }
+}
+
+/* A phone on its side: one slim row, so the table keeps the height; your money never gives way and
+   the tools share what's left. */
+@media (max-height: 480px) {
+  :root { --below-hud: 62px; }
+  .hud { padding: 8px 12px; gap: 6px 8px; }
+  .hud-stat { padding: 4px 12px 5px; }
+  .hud-stat .stat-value { font-size: 17px; }
+  .hud-left { flex-shrink: 0; }
+  .hud-right { gap: 5px; }
+}
+
+/* A phone upright: your money, who's online, the map, the emotes and More on one row (the rest
+   are in More). */
+@media (max-width: 560px) {
+  :root { --below-hud: 70px; }
+  .hud { padding: 10px; gap: 8px 6px; }
+  .hud-right > .hud-btn[data-rank='2'] { display: none; }
+  .hud-stat { padding: 5px 11px 6px; }
+  /* at a table (your chips beside your money, Leave on a touch screen) the map and the emotes are
+     in More as well, so the HUD stays one row and the table keeps the height */
+  .hud:has(.hud-table:not([hidden])) :is(.hud-online, .hud-right > .hud-btn[data-rank='1']) { display: none; }
+}
+
+/* ---------------------------------------------------------------- the More panel */
+
+.hud-more-scrim { position: fixed; inset: 0; z-index: var(--z-popover); }
+.hud-more-scrim.closing { pointer-events: none; }
+.hud-more { position: absolute; top: var(--below-hud); right: 16px; display: flex; flex-direction: column; width: max-content; max-width: calc(100% - 16px); overflow: hidden; background: rgba(var(--sheet-rgb), 0.985); border: 1px solid var(--line-strong); border-radius: var(--radius-lg); box-shadow: var(--shadow-3); transform-origin: top right; animation: more-in 0.18s var(--ease); }
+.hud-more:focus { outline: none; }
+.hud-more::before { content: ''; position: absolute; left: 22px; right: 22px; top: -1px; height: 1px; background: linear-gradient(90deg, rgba(var(--brass-hi-rgb), 0), rgba(var(--brass-hi-rgb), 0.7), rgba(var(--brass-hi-rgb), 0)); }
+.hud-more-scrim.closing .hud-more { opacity: 0; transform: translateY(-4px); transition: opacity 0.15s var(--ease), transform 0.15s var(--ease); }
+.hud-more-in { display: flex; flex-direction: column; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 10px; zoom: var(--ui-zoom); }
+.hud-more-search { display: flex; align-items: center; gap: 10px; width: 100%; height: 40px; padding: 0 10px 0 11px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--field); color: var(--ink-3); font: 600 15px/1 var(--ui); letter-spacing: 0.03em; text-align: left; cursor: text; transition: border-color var(--dur-fast), color var(--dur-fast); }
+.hud-more-search:hover { border-color: var(--line-strong); color: var(--ink-2); }
+.hud-more-search:focus-visible { outline: none; border-color: var(--brass-hi); color: var(--ink-2); box-shadow: 0 0 0 1px var(--brass-hi); }
+.hud-more-search-text { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hud-more-groups { display: grid; grid-template-columns: repeat(2, minmax(236px, 1fr)); gap: 2px 12px; margin-top: 6px; }
+.hud-more-group { min-width: 0; }
+.hud-more-head { margin: 10px 8px 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.2em; text-transform: uppercase; color: var(--ink-3); }
+.hud-more-list { list-style: none; margin: 0; padding: 0; }
+.hud-more-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 38px; padding: 0 8px 0 6px; border: 0; border-radius: var(--radius-sm); background: none; color: var(--ink); font: 600 15px/1.2 var(--ui); letter-spacing: 0.04em; text-align: left; cursor: pointer; transition: background var(--dur-fast); }
+.hud-more-row:hover { background: rgba(var(--brass-rgb), 0.1); }
+.hud-more-row:focus-visible { outline: none; background: rgba(var(--brass-rgb), 0.12); box-shadow: inset 0 0 0 2px var(--focus); }
+.hud-more-row:disabled { opacity: 0.45; cursor: default; }
+.hud-more-ico { display: grid; place-items: center; flex: none; width: 28px; height: 28px; border-radius: var(--radius-sm); color: var(--ink-2); background: rgba(var(--lift-rgb), 0.04); }
+.hud-more-ico .ico { width: 17px; height: 17px; }
+.hud-more-row[aria-pressed='true'] .hud-more-ico { color: var(--brass-hi); background: rgba(var(--brass-rgb), 0.16); }
+.hud-more-name { flex: 1 0 auto; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hud-more-state { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 13px; letter-spacing: 0.06em; color: var(--ink-3); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.hud-more-state.lit { color: var(--brass-hi); }
+.hud-more-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--brass-hi); }
+.hud-more-row .kc { flex: none; }
+@keyframes more-in { from { opacity: 0; transform: translateY(-4px) scale(0.985); } }
+body.calm .hud-more { animation-name: calm-fade-in; }
+body.calm .hud-more-scrim.closing .hud-more { transform: none; }
+@media (pointer: coarse) {
+  .hud-more-row { min-height: 46px; }
+  .hud-more-row.keyboard-only, .hud-more-search .kc { display: none; }
+}
+@media (max-width: 560px) {
+  .hud-more { left: 8px; right: 8px !important; width: auto; max-width: none; }
+  .hud-more-groups { grid-template-columns: 1fr; }
+}
+/* a phone on its side: the groups side by side, so they fit in the height */
+@media (max-height: 480px) {
+  .hud-more-groups { grid-template-columns: repeat(4, minmax(160px, 1fr)); }
+  .hud-more-head { margin-top: 4px; }
+  .hud-more-row { min-height: 38px; }
+  .hud-more-in { padding: 8px; }
+}
+
+/* ---------------------------------------------------------------- the palette (palette.ts) */
+
+.palette-scrim { position: fixed; inset: 0; z-index: var(--z-sheet); display: flex; justify-content: center; align-items: flex-start; padding: max(11vh, calc(var(--below-hud) + 6px)) 12px 12px; background: rgba(var(--scrim-rgb), 0.42); animation: scrim-fade var(--dur) var(--ease); }
+.palette-scrim.closing { opacity: 0; pointer-events: none; transition: opacity 0.15s var(--ease); }
+.palette { position: relative; display: flex; flex-direction: column; width: min(640px, 100%); max-height: min(100%, 620px); overflow: hidden; background: rgba(var(--sheet-rgb), 0.985); border: 1px solid var(--line-strong); border-radius: var(--radius-lg); box-shadow: var(--shadow-3); animation: modal-in 0.22s var(--ease); }
+.palette::before { content: ''; position: absolute; left: 28px; right: 28px; top: -1px; height: 1px; background: linear-gradient(90deg, rgba(var(--brass-hi-rgb), 0), rgba(var(--brass-hi-rgb), 0.75), rgba(var(--brass-hi-rgb), 0)); }
+.palette-in { display: flex; flex-direction: column; min-height: 0; max-height: 100%; zoom: var(--ui-zoom); }
+.palette-field { display: flex; align-items: center; gap: 12px; flex: none; height: 56px; padding: 0 16px; border-bottom: 1px solid var(--line); color: var(--ink-3); }
+.palette-field .ico { width: 20px; height: 20px; }
+.palette-input { flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; outline: 0; background: none; color: var(--ink); font: 600 19px/1 var(--ui); letter-spacing: 0.02em; caret-color: var(--brass-hi); }
+.palette-input::placeholder { color: var(--ink-3); }
+.palette-list { list-style: none; margin: 0; padding: 6px; min-height: 0; overflow: auto; overscroll-behavior: contain; }
+.palette-head { padding: 9px 10px 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.2em; text-transform: uppercase; color: var(--ink-3); }
+.palette-item { display: flex; align-items: center; gap: 12px; min-height: 46px; padding: 6px 10px; border-radius: var(--radius-sm); cursor: pointer; }
+.palette-item[aria-selected='true'] { background: rgba(var(--brass-rgb), 0.14); box-shadow: inset 2px 0 0 var(--brass-hi); }
+.palette-ico { display: grid; place-items: center; flex: none; width: 30px; height: 30px; border-radius: var(--radius-sm); background: rgba(var(--lift-rgb), 0.05); color: var(--ink-2); }
+.palette-item[aria-selected='true'] .palette-ico { color: var(--brass-hi); }
+.palette-ico .ico { width: 17px; height: 17px; }
+.palette-text { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
+.palette-label { font-size: 16px; line-height: 1.2; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.palette-hint { font-size: 13.5px; line-height: 1.2; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.palette-group { flex: none; font-size: 11px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-3); }
+.palette-item .kc { flex: none; }
+.palette-empty { margin: 0; padding: 20px 18px; font-size: 15px; color: var(--ink-3); }
+.palette-foot { display: flex; align-items: center; gap: 5px; flex: none; padding: 9px 16px; border-top: 1px solid var(--line); font-size: 13px; letter-spacing: 0.04em; color: var(--ink-3); }
+.palette-foot span { margin-right: 12px; }
+body.calm .palette { animation-name: calm-fade-in; }
+@media (pointer: coarse) {
+  .palette-foot, .palette-esc { display: none; }
+}
+@media (max-width: 560px) {
+  .palette-scrim { padding: calc(var(--below-hud) + 4px) 8px 8px; }
+  .palette-group { display: none; }
+}
+@media (max-height: 480px) {
+  .palette-scrim { padding-top: 8px; }
+  .palette-field { height: 48px; }
+  .palette-foot { display: none; }
+}
+
+/* ---------------------------------------------------------------- the list of who's online (v7) */
+
+.sheet.online-sheet { width: min(460px, 100%); }
 .online-list { list-style: none; margin: 0; padding: 0; max-height: min(60vh, 520px); overflow: auto; }
 .online-row { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 9px 4px; border-bottom: 1px solid var(--line); }
 .online-row:last-child { border-bottom: 0; }
@@ -37,109 +194,13 @@ button.hud-online:focus-visible { outline: 2px solid var(--focus); outline-offse
 .online-where { font-size: 14px; color: var(--ink-3); white-space: nowrap; }
 .online-row.has-act { grid-template-columns: 10px minmax(0, 1fr) auto auto; }
 .online-act { height: 30px; padding: 0 12px; font-size: 13px; }
-.hud-btn { display: grid; place-items: center; width: 36px; height: 36px; padding: 0; background: rgba(var(--glass-rgb), 0.84); border: 1px solid var(--line); border-radius: 6px; color: var(--ink-2); cursor: pointer; transition: color 0.15s, border-color 0.15s; }
-.hud-btn:hover { color: var(--ink); border-color: var(--line-strong); }
-.hud-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-.hud-btn[aria-pressed='true'] { color: var(--ink-3); }
 
-@media (max-width: 1060px) {
-  .hud-session { display: none; }
-}
-@media (max-width: 900px) {
-  .hud-who { display: none; }
-  .hud-worth { display: none; }
-  .hud-online-label { display: none; }
-}
-@media (max-width: 720px) {
-  .hud { padding: 10px; }
-  .hud-stat { padding: 6px 12px 7px; }
-  .hud-stat .stat-value { font-size: 17px; }
-}
-
-/* Touch screens: every control a thumb's width. */
-@media (pointer: coarse) {
-  .hud-btn { width: 48px; height: 48px; }
-  .hud-online { height: 48px; }
-}
-
-/* A phone on its side: one slim row, so the table keeps the height. v7.2: your money never gives
-   way (the online count used to slide over it); the buttons share what's left, as narrow as 34 px
-   (still a thumb's height). */
-@media (max-height: 480px) {
-  :root { --below-hud: 64px; }
-  .hud { padding: 8px 12px; }
-  .hud-stat { padding: 4px 12px 5px; }
-  .hud-stat .stat-value { font-size: 17px; }
-  .hud-left { flex-shrink: 0; }
-  .hud-right { min-width: 0; flex-shrink: 1; gap: 4px; }
-  .hud-right > .hud-btn { flex: 0 1 44px; width: auto; min-width: 34px; }
-}
-
-/* A phone upright: two rows. You, your money, who's online and (at a table) Leave on top; every
-   button underneath, sharing the row's width (nine of them don't fit at 44 px, and a third row
-   would sit on the table). The right-hand bar's pieces join the HUD's own rows. */
-@media (max-width: 560px) {
-  :root { --below-hud: 118px; }
-  .hud { flex-wrap: wrap; align-items: center; gap: 8px 4px; }
-  .hud-right { display: contents; }
-  .hud-left { order: -4; }
-  .hud-online { order: -3; margin-right: auto; }
-  .hud .touch-leave { order: -2; }
-  .hud::after { content: ''; order: -1; flex-basis: 100%; }
-  .hud-btn { flex: 1 1 0; width: auto; min-width: 0; max-width: 48px; }
-  /* v7.2: on a touch screen the buttons in two rows of six, each wide enough for a thumb (twelve
-     in one row came to 31 px) */
-  html.touch-ui { --below-hud: 176px; }
-  html.touch-ui .hud-btn { flex: 1 1 calc((100% - 5 * 4px) / 6); max-width: none; height: 48px; }
-  .hud-stat { padding: 5px 12px 6px; }
-}
-
-/* settings */
-.settings-sheet { width: min(560px, 100%); }
-.set-row { display: grid; grid-template-columns: 110px 1fr; gap: 16px; align-items: start; padding: 10px 0; }
-.set-label { padding-top: 8px; font-size: 16px; color: var(--ink); }
-.set-control { display: grid; gap: 8px; justify-items: start; }
-.set-note { margin: 0; font-size: 15px; line-height: 1.4; color: var(--ink-3); }
-.set-pending { display: flex; align-items: center; gap: 12px; font-size: 15px; color: var(--brass-hi); }
-.set-pending[hidden] { display: none; }
-.set-volume { display: flex; align-items: center; gap: 14px; width: 100%; padding-top: 6px; }
-.set-value { min-width: 4ch; font-size: 16px; color: var(--ink-2); }
-
-.range { flex: 1; max-width: 300px; height: 20px; margin: 0; background: transparent; appearance: none; -webkit-appearance: none; cursor: pointer; }
-.range:disabled { opacity: 0.4; cursor: default; }
-.range:focus-visible { outline: 2px solid var(--focus); outline-offset: 4px; }
-.range::-webkit-slider-runnable-track { height: 2px; background: linear-gradient(90deg, var(--brass), rgba(var(--brass-rgb), 0.25)); border-radius: 1px; }
-.range::-moz-range-track { height: 2px; background: rgba(var(--brass-rgb), 0.3); border-radius: 1px; }
-.range::-moz-range-progress { height: 2px; background: var(--brass); }
-.range::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; margin-top: -6px; border: 0; border-radius: 50%; background: var(--brass-hi); box-shadow: 0 0 0 4px rgba(var(--brass-hi-rgb), 0.14); }
-.range::-moz-range-thumb { width: 14px; height: 14px; border: 0; border-radius: 50%; background: var(--brass-hi); }
-
-/* keyboard shortcuts */
-.shortcuts-sheet { width: min(1040px, 100%); }
-.sc-grid { columns: 3 290px; column-gap: 36px; }
-.sc-group { break-inside: avoid; margin-bottom: 20px; }
-.sc-group .section-label { margin: 0 0 8px; }
-.sc-list { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; align-items: center; margin: 0; }
-.sc-list dt { display: flex; }
-.sc-list dd { margin: 0; font-size: 15px; color: var(--ink-2); }
-.sc-keys { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; }
-.sc-or { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); padding: 0 2px; }
-
-/* Settings on a touch screen: the sliders' thumbs and tracks sized for a finger. */
-@media (pointer: coarse) {
-  .range { height: 44px; }
-  .range::-webkit-slider-thumb { width: 24px; height: 24px; margin-top: -11px; }
-  .range::-moz-range-thumb { width: 24px; height: 24px; }
-}
-@media (max-width: 560px) {
-  .set-row { grid-template-columns: 1fr; gap: 6px; }
-  .set-label { padding-top: 0; }
-}
+/* ---------------------------------------------------------------- the play reminder */
 
 /* The play reminder (reminder.ts): a card under the HUD's left bar, never over the whole screen
    and never past its edges; the board fit (table/fit.ts) keeps the table clear of it. It fades in
    once (calm: it just appears). */
-.reminder { position: fixed; top: var(--below-hud); left: 16px; z-index: 20; display: grid; gap: 10px; width: 300px; max-width: calc(100vw - 32px); max-height: calc(100vh - var(--below-hud) - 16px); overflow: auto; padding: 14px 16px 16px; animation: reminder-in 0.4s var(--ease); }
+.reminder { position: fixed; top: var(--below-hud); left: 16px; z-index: var(--z-panel); display: grid; gap: 10px; width: 300px; max-width: calc(100vw - 32px); max-height: calc(100vh - var(--below-hud) - 16px); overflow: auto; padding: 14px 16px 16px; animation: reminder-in 0.4s var(--ease); }
 .reminder-title { font-family: var(--serif); font-size: 17px; letter-spacing: 0.06em; color: var(--brass-hi); }
 .reminder-figs { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .reminder-fig { display: grid; gap: 2px; }
@@ -150,9 +211,3 @@ button.hud-online:focus-visible { outline: 2px solid var(--focus); outline-offse
 .reminder-acts { display: flex; flex-wrap: wrap; gap: 8px; }
 @keyframes reminder-in { from { opacity: 0; } }
 body.calm .reminder { animation: none; }
-
-/* The theme button (theme.css .theme-btn, app/theme.ts) sits with the others; a phone's bar is
-   full at two rows of six, so there it lives in Settings alone. */
-@media (max-width: 560px) {
-  html.touch-ui .hud-theme { display: none; }
-}

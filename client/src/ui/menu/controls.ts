@@ -40,7 +40,7 @@ export function controlSettings(row: Row): HTMLElement[] {
     (v) => setDrinkFx(v === 'on'),
   );
   const drinks = row('Drinks sway the view', sway.root, el('p', 'set-note', 'A few drinks sway the camera a little and warm the edges of the view. Reduce flashing & motion turns the sway off too.'));
-  if (!fine) return [el('h3', 'section-label', 'Controls'), camera, drinks];
+  if (!fine) return [camera, drinks];
   const look = segmented<'lock' | 'drag'>(
     'Mouse look',
     [
@@ -66,7 +66,6 @@ export function controlSettings(row: Row): HTMLElement[] {
   });
   wrap.append(input, value);
   return [
-    el('h3', 'section-label', 'Controls'),
     camera,
     row('Mouse look', look.root, el('p', 'set-note', 'Locked: on the floor, moving the mouse looks around. Esc frees the cursor and a click on the floor takes it back. Drag: hold the button and drag to look.')),
     row('Sensitivity', wrap),

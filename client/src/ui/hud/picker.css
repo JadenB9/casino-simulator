@@ -1,5 +1,5 @@
 /* v7.4: the gun and ride pickers (picker.ts) */
-.pick-sheet { width: min(360px, calc(100vw - 32px)); }
+.sheet.pick-sheet { width: min(360px, 100%); }
 .pick-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .pick-row { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 48px; padding: 8px 12px; border: 1px solid var(--line, rgba(var(--brass-rgb), 0.28)); border-radius: 8px; background: rgba(var(--lift-rgb), 0.03); color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .pick-row:hover, .pick-row:focus-visible { border-color: var(--brass); background: rgba(var(--brass-rgb), 0.08); outline: none; }
