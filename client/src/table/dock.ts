@@ -119,8 +119,12 @@ const box = (e: HTMLElement): string => {
   const r = e.getBoundingClientRect();
   return `${Math.round(r.left)},${Math.round(r.top)},${Math.round(r.width)},${Math.round(r.height)}`;
 };
-/** What the board fit doesn't count either: boards drawn in the DOM, overlays that come and go (More, the command palette). */
-const ignored = (e: HTMLElement): boolean => e.dataset.fit === 'ignore';
+/**
+ * What the board fit doesn't count either: boards drawn in the DOM, overlays that come and go
+ * (More, the command palette), and the hover tips that follow the pointer over a layout (bc-tip,
+ * rl-tip...), which the bar's panels would otherwise shy away from as the mouse moves.
+ */
+const ignored = (e: HTMLElement): boolean => e.dataset.fit === 'ignore' || [...e.classList].some((c) => /^[a-z]+-tip$/.test(c));
 
 export class Dock {
   private readonly resized: ResizeObserver | null;
@@ -155,6 +159,7 @@ export class Dock {
   }
 
   private matters(e: HTMLElement): boolean {
+    if (ignored(e)) return false;
     return e.matches(BAR) || e.matches(TOP) || DOCKED.some((d) => e.matches(d.sel)) || e.classList.contains('panel') || e.classList.contains('btn');
   }
 
