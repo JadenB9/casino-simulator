@@ -3,7 +3,7 @@
 // the table's Standard ones without). Every game agent develops against this.
 
 import { Engine3D, savedQuality } from '../render/engine3d.ts';
-import { GAMES } from '../games/index.ts';
+import { GAMES, loadView } from '../games/index.ts';
 import { isGameId, variantOf } from '../../../shared/src/games/catalog.ts';
 import { devRoom } from '../world/dev-room.ts';
 import { TableStage } from '../table/stage.ts';
@@ -25,7 +25,7 @@ export async function runHarness(params: URLSearchParams): Promise<void> {
   const engine = new Engine3D(document.getElementById('scene') as HTMLCanvasElement, document.getElementById('labels')!, savedQuality());
   engine.onFrame((dt) => updateTweens(dt));
   const sfx = new Sfx();
-  await Promise.all([loadCards(), sfx.load().catch(() => {}), module.preload?.()]);
+  await Promise.all([loadCards(), sfx.load().catch(() => {}), module.preload?.(), loadView(game)]);
   const name = params.get('name') ?? `dev_${Math.random().toString(36).slice(2, 8)}`;
   session.set(await login(name, DEV_PASSWORD));
 

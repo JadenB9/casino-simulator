@@ -1,5 +1,11 @@
 // What each game's client module provides. The floor builds every station's model from
 // createModel(); walking up and pressing E mounts the view on that station.
+//
+// A game's folder can hand over its view as code to fetch (GameClientDef's `view`) instead of a
+// `mount`: the floor needs every table's model from the first frame but no table's view until
+// someone sits down, so views kept out of the page's first download let the casino open sooner.
+// games/index.ts turns either kind into a GameClientModule, so everything that mounts a view
+// sees only that.
 
 import type * as THREE from 'three';
 import type { GameId } from '../../../shared/src/engine.ts';
@@ -78,3 +84,18 @@ export interface GameClientModule {
   /** Loaded once behind the loading screen (textures, sounds). */
   preload?(): Promise<void>;
 }
+
+/** Puts a game's view on its table. */
+export type MountView = (ctx: TableViewCtx) => TableView;
+
+/**
+ * What a game's folder exports: a GameClientModule, or the same with `view` where `mount` would
+ * be. `view` fetches the view's code with a dynamic import of the game's view file and gives back
+ * its mount, for example
+ *
+ *   view: () => import('./view.ts').then((m) => (ctx) => new m.BlackjackTable(ctx)),
+ *
+ * Anything the floor needs (the model, seats, poses, preload) must not come from that file, or
+ * the whole view comes along with it again.
+ */
+export type GameClientDef = Omit<GameClientModule, 'mount'> & ({ mount: MountView; view?: undefined } | { view(): Promise<MountView>; mount?: undefined });

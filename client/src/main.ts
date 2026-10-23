@@ -5,9 +5,12 @@
 //
 // The game is imported here, not on demand: that puts it in the entry chunk, so index.html names
 // it and three's chunk outright and the browser fetches both as it reads the page, instead of a
-// tiny entry first and the real downloads one round trip later. The dev pages stay on demand.
+// tiny entry first and the real downloads one round trip later. The dev pages stay on demand, and
+// so do the tables' views (games/index.ts): the floor needs none of them to open, so they come
+// once it has, in idle moments.
 
 import { boot } from './app/boot.ts';
+import { warmViews } from './games/index.ts';
 
 const params = new URLSearchParams(location.search);
 const done = () => document.getElementById('boot')?.classList.add('done');
@@ -20,6 +23,7 @@ async function start(): Promise<void> {
     await (await import('./world/dev-floor.ts')).runDevFloor(params);
   } else {
     await boot();
+    warmViews();
   }
   done();
 }

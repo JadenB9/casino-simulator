@@ -1,13 +1,12 @@
 // Blackjack's client: the table on the floor, where players sit, where the camera goes, and the
 // table view you play at.
 
-import type { GameClientModule } from '../contract.ts';
+import type { GameClientDef } from '../contract.ts';
 import { tableModel } from './model.ts';
-import { BlackjackTable } from './view.ts';
 import { SEATS, seatPosition, seatPose, spotsPose } from './layout.ts';
 import { spotsInPlay } from '../multihand/frame.ts';
 
-export const blackjack: GameClientModule = {
+export const blackjack: GameClientDef = {
   game: 'blackjack',
   footprint: { width: 2.3, depth: 1.15 },
   createModel: () => tableModel(),
@@ -17,7 +16,7 @@ export const blackjack: GameClientModule = {
     const n = seat === null ? 1 : spotsInPlay('blackjack');
     return n > 1 ? spotsPose(Array.from({ length: n }, (_, i) => i)) : seatPose(seat ?? 3);
   },
-  mount: (ctx) => new BlackjackTable(ctx),
+  view: () => import('./view.ts').then((m) => (ctx) => new m.BlackjackTable(ctx)),
   async preload() {
     // The felt is painted onto a canvas, which only uses a web font once it has loaded.
     await Promise.all([document.fonts.load('600 40px Cinzel'), document.fonts.load('600 40px "Barlow Condensed"')]).catch(() => {});

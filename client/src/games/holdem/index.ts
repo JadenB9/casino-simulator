@@ -1,12 +1,11 @@
 // Texas Hold'em: the table on the floor, where people sit around it, where the camera goes to
 // play, and the table view (view.ts).
 
-import type { GameClientModule } from '../contract.ts';
+import type { GameClientDef } from '../contract.ts';
 import { chairSpots, SL, RR, TOP_Y, FOOTPRINT_R } from './table.ts';
 import { tableModel } from './model.ts';
-import { mountHoldem } from './view.ts';
 
-export const holdem: GameClientModule = {
+export const holdem: GameClientDef = {
   game: 'holdem',
   // (unchanged since v1: the poker room is laid out on it; the chairs stay inside it)
   footprint: { width: 2 * (SL + FOOTPRINT_R), depth: 2 * FOOTPRINT_R },
@@ -21,7 +20,7 @@ export const holdem: GameClientModule = {
   // nameplates below the dealer's line and yours above the tips line and the action bar.
   playPose: () => ({ position: [0, TOP_Y + 1.54, RR + 0.7], target: [0, TOP_Y - 0.24, 0] }),
 
-  mount: (ctx) => mountHoldem(ctx),
+  view: () => import('./view.ts').then((m) => m.mountHoldem),
 
   async preload() {
     // The felt is painted once, so make sure its lettering has the right face first.

@@ -1,13 +1,12 @@
 // Casino War's client: the table on the floor, where its six players sit, the camera pose to play
 // from, and the table view.
 
-import type { GameClientModule } from '../contract.ts';
+import type { GameClientDef } from '../contract.ts';
 import { tableModel } from './model.ts';
 import { SEAT_COUNT, TOP_Y, cameraPose, seatPose, spotsPose } from './layout.ts';
-import { mountWar } from './view.ts';
 import { spotsInPlay } from '../multihand/frame.ts';
 
-export const war: GameClientModule = {
+export const war: GameClientDef = {
   game: 'war',
   footprint: { width: 2.5, depth: 1.25 },
   createModel: ({ quality }) => tableModel(quality),
@@ -19,7 +18,7 @@ export const war: GameClientModule = {
     const n = spotsInPlay('war');
     return n > 1 ? spotsPose(Array.from({ length: n }, (_, i) => i)) : cameraPose(seat);
   },
-  mount: (ctx) => mountWar(ctx),
+  view: () => import('./view.ts').then((m) => m.mountWar),
   async preload() {
     // the felt and the limits sign are painted on canvases: their fonts must be ready first
     await Promise.all(['600 40px Cinzel', '700 40px Cinzel', '600 40px "Barlow Condensed"'].map((f) => document.fonts.load(f).catch(() => [])));

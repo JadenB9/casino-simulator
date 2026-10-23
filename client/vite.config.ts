@@ -87,7 +87,16 @@ export default defineConfig({
     chunkSizeWarningLimit: 700,
     rolldownOptions: {
       output: {
-        codeSplitting: { groups: [{ name: 'three', test: /node_modules[\\/]three[\\/]/ }] },
+        // three.js in a chunk of its own, and everything else the page needs to open in the entry.
+        // Without the second group, a module that both the entry and a table's lazy view import
+        // (games/index.ts) went into a little shared chunk of its own: ten more requests before the
+        // loading screen, and the stylesheet split three ways in a different order.
+        codeSplitting: {
+          groups: [
+            { name: 'three', test: /node_modules[\\/]three[\\/]/, priority: 2 },
+            { name: 'index', tags: ['$initial'], priority: 1 },
+          ],
+        },
       },
     },
   },

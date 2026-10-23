@@ -15,7 +15,7 @@ import { createWorld, type FloorWorld, type WorldStation } from '../world/index.
 import { HIGH_TIER, seatWorld } from '../world/stations.ts';
 import { RemotePlayers, type SeatPose } from '../world/remote-players.ts';
 import { FloorLink, byteToYaw } from '../net/presence.ts';
-import { GAMES } from '../games/index.ts';
+import { GAMES, loadView } from '../games/index.ts';
 import { openTableFlow, PartyPanel, withParty, type TableChoice } from '../ui/lobby/index.ts';
 import { closeTableFlows, InviteHub } from '../ui/lobby/index.ts'; // v6 invite6
 import { ensureOwnLook, isNewPlayer, mountHud, mountLogin, mountMenu, openBank, openEditor, openOnboarding, openProfile, openSettings, overlayCount, type Hud, type MenuHandle } from '../ui/menu/index.ts';
@@ -721,6 +721,8 @@ class App {
   // --- tables ---------------------------------------------------------------------------------
 
   private async sitDown(station: WorldStation): Promise<void> {
+    // the table's view, when it isn't here yet, comes while the limits are picked (games/index.ts)
+    const view = loadView(station.game).catch(() => {});
     // v6 law6: the jail's tables go straight to a solo table, and only for inmates
     const jailed = this.law.tableChoice(station);
     if (jailed === 'refuse') {
@@ -743,7 +745,7 @@ class App {
       return;
     }
     // loaded behind the login long before anyone gets here; a failure still opens the table
-    await loadCards().catch(() => {});
+    await Promise.all([loadCards().catch(() => {}), view]);
     this.openTable(station, choice);
   }
 
