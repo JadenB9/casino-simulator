@@ -28,8 +28,8 @@ const TRAVEL = 46;
 const DEAD = 0.14;
 /** Pulled this far past the rim (share of the travel), the walk becomes a run. */
 const RUN_AT = 1.35;
-/** Half the stick's ring, px (touch.css draws it 132 px across). */
-const RING = 66;
+/** Half the stick's ring, px (touch.css draws it 148 px across since v7.2: it comes to the thumb centred on it). */
+const RING = 74;
 /** The site's back chip: 30 px tall, 14 px off the bottom-left corner. The stick stays above it. */
 const CHIP_TOP = 14 + 30 + 12;
 /** A touch this far across from the left (share of the width), and below the top share, drives the stick. */
