@@ -365,8 +365,8 @@ against a speed allowance and stops short on its line if it jumps further than a
 Positions (stops too) go out in snapshots at most every 100 ms; a row that arrives sooner goes
 out when the 100 ms are up. Each row carries its age, the ms since its position reached the floor,
 so a client places it at `ts - age` whatever the flush added, and draws other players 300 ms in
-the past (`client/src/net/interp.ts`): a steady straight line is drawn between positions the
-sender didn't need to send.
+the past (`client/src/net/interp.ts`), on a smooth curve through the positions: a steady straight
+line is drawn between positions the sender didn't need to send.
 A second tab for the same account takes the first one's place quietly: the old socket closes
 with 4001, and nobody else sees a leave and a join.
 
