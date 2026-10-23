@@ -184,7 +184,7 @@ export function openEditor(deps: EditorDeps): Closable {
     zoomTo(0);
   };
   const view = el('div', 'ed-view');
-  view.setAttribute('role', 'toolbar');
+  view.setAttribute('role', 'group');
   view.setAttribute('aria-label', 'View');
   const viewButton = (label: string, ico: SVGSVGElement, run: () => void) => {
     const b = el('button', 'ed-view-btn');

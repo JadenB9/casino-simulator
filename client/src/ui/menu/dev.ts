@@ -30,6 +30,12 @@ const sfx = new Sfx();
 void sfx.load().catch(() => {});
 devRoom(engine, GAMES.highcard, '');
 if (q.get('still') === '1') setTimeout(() => (engine.paused = true), 1000);
+// The login and menu over their painted backdrop hide the room entirely: no drawing it meanwhile
+// (in software rendering a frame of it holds up everything else on the page).
+const hidden = () => !!document.querySelector('.front:not(.over-scene):not(.closing)');
+new MutationObserver(() => {
+  if (q.get('still') !== '1') engine.paused = hidden();
+}).observe(ui, { childList: true, subtree: false, attributes: true, attributeFilter: ['class'] });
 const cam = engine.camera;
 const rest = () => {
   cam.position.set(1.95, 1.5, 2.35);
