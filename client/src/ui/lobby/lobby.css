@@ -210,10 +210,10 @@
 .lim-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-top: 7px; }
 .lim-grid.blinds { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .lim-opt { position: relative; display: grid; align-content: center; justify-items: center; gap: 1px; height: 48px; padding: 0 4px; border: 1px solid var(--line); border-radius: 4px; background: var(--well); cursor: pointer; transition: border-color 0.15s, background-color 0.15s; }
-/* the picked one's tick, in its corner */
-.lim-opt .lb-tick { position: absolute; top: 3px; right: 3px; width: 10px; height: 10px; color: var(--brass-hi); opacity: 0; transition: opacity 0.15s; }
-.lim-opt .lb-tick .lb-s { stroke-width: 2.4; }
-.lim-opt[aria-checked='true'] .lb-tick { opacity: 1; }
+/* the picked one's tick, a small brass badge on its corner (clear of the words, however narrow) */
+.lim-opt .lb-tick { position: absolute; top: -5px; right: -5px; width: 15px; height: 15px; padding: 2px; border-radius: 50%; background: var(--brass-hi); color: var(--on-gold); opacity: 0; transform: scale(0.6); transition: opacity 0.15s, transform 0.15s var(--ease); }
+.lim-opt .lb-tick .lb-s { stroke-width: 2.6; }
+.lim-opt[aria-checked='true'] .lb-tick { opacity: 1; transform: none; }
 .lim-grid.blinds .lim-opt { height: 40px; }
 .lim-opt:hover { border-color: var(--line-strong); }
 .lim-opt:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
@@ -260,4 +260,26 @@
 }
 
 /* Reduce flashing & motion (app/comfort.ts): the panels appear where they stand. */
-body.calm .lobby, body.calm .party .lb-chev { animation: none; transition: none; }
+body.calm .lobby, body.calm .party .lb-chev, body.calm .lim-opt .lb-tick { animation: none; transition: none; }
+
+/* A phone on its side: the station panel wider and in two columns, so a step fits its height
+   without scrolling: the limits beside the two ways to play; the list and the PIN box beside
+   Start a table. */
+@media (max-height: 480px) and (min-width: 700px) {
+  .lobby { width: min(680px, calc(100vw - 24px)); }
+  .lobby-body[data-step='choose'] { display: grid; grid-template-columns: minmax(0, 1fr) 250px; align-items: start; }
+  .lobby-body[data-step='choose'] .lobby-limits { border-bottom: 0; border-right: 1px solid var(--line); }
+  .lobby-body[data-step='choose'] .lobby-choices { padding: 8px 10px; }
+  .lobby-body[data-step='choose'] .lobby-choice-note { display: none; }
+  /* the limits or the open count under the title, not beside it, in the narrow column */
+  .lobby-body[data-step='choose'] .lobby-choice { grid-template-columns: 40px minmax(0, 1fr); row-gap: 1px; padding: 9px 10px; }
+  .lobby-body[data-step='choose'] .lobby-choice-icon { grid-row: 1 / 3; }
+  .lobby-body[data-step='choose'] .lobby-choice-title { font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .lobby-body[data-step='choose'] .lobby-choice-end { grid-column: 2; justify-content: flex-start; }
+  .lobby-body[data-step='browse'] { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: 'bar make' 'filter make' 'list make' 'join make'; grid-template-rows: auto auto auto 1fr; align-items: start; }
+  .lobby-body[data-step='browse'] > .lobby-bar { grid-area: bar; }
+  .lobby-body[data-step='browse'] > .lobby-filter { grid-area: filter; }
+  .lobby-body[data-step='browse'] > .lobby-list { grid-area: list; }
+  .lobby-body[data-step='browse'] > .lobby-section:not(.lobby-join) { grid-area: make; padding-bottom: 12px; border-left: 1px solid var(--line); }
+  .lobby-body[data-step='browse'] > .lobby-join { grid-area: join; margin-top: 10px; }
+}

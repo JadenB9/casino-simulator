@@ -141,6 +141,8 @@ class TableFlow {
   private swap(step: Step, parts: HTMLElement[]): void {
     const from = this.step;
     this.step = step;
+    // (a phone on its side lays each step out in two columns, by this)
+    this.body.dataset.step = step;
     this.body.replaceChildren(...parts);
     this.body.scrollTop = 0;
     if (from === step || calm() || typeof this.body.animate !== 'function') return;
