@@ -695,7 +695,6 @@ export class CasinoFloor extends DurableObject<Env> {
 
 export { PROTOCOL_VERSION };
 
-/** Emote ids from a comma list (the Worker's header): known, not free, each once. */
 /** v7: `guns=a,b;cars=c,d;home=2` as the Worker writes it: only known ids, the step 0-3. */
 export function kitOf(raw: string | null): { guns: string[]; cars: string[]; home: number; homes: string[] } {
   const out = { guns: [] as string[], cars: [] as string[], home: 0, homes: [] as string[] };
@@ -709,6 +708,7 @@ export function kitOf(raw: string | null): { guns: string[]; cars: string[]; hom
   return out;
 }
 
+/** Emote ids from a comma list (the Worker's header): known, not free, each once. */
 function ownedEmotes(raw: string | null): string[] {
   if (!raw) return [];
   const known = new Set<string>(EMOTES);

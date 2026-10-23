@@ -157,7 +157,7 @@ export class Law {
 
   /** A punch thrown by this player facing `r` (yaw byte). */
   punch(accountId: number, r: number, now: number): void {
-    const me = this.presence.standing().find((p) => p.accountId === accountId);
+    const me = this.presence.standingOf(accountId);
     // not from a chair, a table or a car, and not faster than a fist can go
     if (!me || me.at || me.seat || me.car) return;
     if (now - (this.lastPunch.get(accountId) ?? -Infinity) < PUNCH_GAP_MS) return;
@@ -239,7 +239,7 @@ export class Law {
    * hears it as a `law` event and the clients play it out.
    */
   async jailTick(accountId: number, now: number): Promise<void> {
-    const me = this.presence.standing().find((p) => p.accountId === accountId);
+    const me = this.presence.standingOf(accountId);
     if (!me || !inRect(JAIL_RECT, me.x, me.z)) {
       this.nextTheft.delete(accountId);
       return;

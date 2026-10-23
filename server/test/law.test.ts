@@ -124,6 +124,17 @@ async function arrest(p: Player): Promise<void> {
 }
 
 describe('punches', { timeout: 20_000 }, () => {
+  it("find the puncher by account, as standing() lists them (the jail's check after every move does the same)", async () => {
+    const spot = outOfSight();
+    const a = await player('lw_one');
+    const ca = await onFloor(a, spot.x, spot.z, 0);
+    const [one, all, gone] = await runInDurableObject(floor(), (f: CasinoFloor) => [f.presence.standingOf(a.id), f.presence.standing().find((p) => p.accountId === a.id), f.presence.standingOf(-1)]);
+    expect(one).toEqual(all);
+    expect(one).toMatchObject({ accountId: a.id, x: Math.round(spot.x * 100), z: Math.round(spot.z * 100), at: false, seat: false });
+    expect(gone).toBeNull();
+    await leave(ca);
+  });
+
   it('land on the player in front for everyone to see, and hurt nobody', async () => {
     const spot = outOfSight();
     const a = await player('lw_pa');

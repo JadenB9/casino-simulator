@@ -415,16 +415,26 @@ export class Presence {
   }
 
   /** v6 law6: everyone on the floor, once each: where they are (cm) and whether they sit (at a table, or on a seat). */
-  standing(): { accountId: number; name: string; x: number; z: number; at: boolean; seat: boolean; car: boolean; apt: number | null }[] {
+  standing(): Standing[] {
     const seen = new Set<number>();
-    const out: { accountId: number; name: string; x: number; z: number; at: boolean; seat: boolean; car: boolean; apt: number | null }[] = [];
+    const out: Standing[] = [];
     for (const [ws, w] of this.live) {
       const a = w.att;
       if (seen.has(a.accountId) || ws.readyState !== WebSocket.OPEN) continue;
       seen.add(a.accountId);
-      out.push({ accountId: a.accountId, name: a.name, x: a.x, z: a.z, at: a.at !== null, seat: !!a.seat, car: !!a.car, apt: a.apt ?? null });
+      out.push(standingRow(a));
     }
     return out;
+  }
+
+  /**
+   * One player's row of standing(), or null if they aren't on the floor. The law asks after every
+   * move whether the mover is in the jail, and building everyone's rows to find one was most of
+   * the floor's work per move on a busy night.
+   */
+  standingOf(accountId: number): Standing | null {
+    const w = this.walkerOf(accountId);
+    return w ? standingRow(w.att) : null;
   }
 
   /** Something this player did besides moving (see FloorAtt.active); kept through hibernation. */
@@ -530,6 +540,22 @@ export class Presence {
       /* closing */
     }
   }
+}
+
+/** v6 law6: where a player is (cm) and whether they sit (at a table, or on a seat), for the law. */
+export interface Standing {
+  accountId: number;
+  name: string;
+  x: number;
+  z: number;
+  at: boolean;
+  seat: boolean;
+  car: boolean;
+  apt: number | null;
+}
+
+function standingRow(a: FloorAtt): Standing {
+  return { accountId: a.accountId, name: a.name, x: a.x, z: a.z, at: a.at !== null, seat: !!a.seat, car: !!a.car, apt: a.apt ?? null };
 }
 
 function info(a: FloorAtt): PlayerInfo {
