@@ -35,23 +35,28 @@
 .bj-meter .money.up { color: var(--win); }
 .bj-meter .money.down { color: var(--lose); }
 
-/* Hand totals sit on the felt between the cards and the bet. */
+/* Hand totals sit on the felt between the cards and the bet: a badge like the other tables' hand
+   labels (the theme's glass, an edge, a shadow off the cloth), as wide for a 7 as for a 21. */
 .bj-total {
-  padding: 1px 7px 0;
-  border-radius: 4px;
-  border: 1px solid var(--line);
-  background: rgba(var(--glass-rgb), 0.74);
+  min-width: 34px;
+  padding: 2px 8px 1px;
+  border-radius: 5px;
+  border: 1px solid var(--line-strong);
+  background: rgba(var(--glass-rgb), 0.86);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
   color: var(--ink);
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
+  line-height: 1.25;
   letter-spacing: 0.04em;
+  text-align: center;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 .bj-total.bj { color: var(--on-gold); background: var(--brass); border-color: var(--brass-hi); letter-spacing: 0.1em; }
-.bj-total.bust { color: var(--lose); }
+.bj-total.bust { color: var(--lose); border-color: rgba(var(--lose-rgb), 0.55); }
 .bj-total.settled { opacity: 0.7; }
-.bj-total.active { border-color: var(--brass-hi); box-shadow: 0 0 0 1px rgba(var(--brass-hi-rgb), 0.35), 0 0 12px rgba(var(--brass-hi-rgb), 0.25); }
+.bj-total.active { border-color: var(--brass-hi); box-shadow: 0 0 0 1px rgba(var(--brass-hi-rgb), 0.35), 0 0 12px rgba(var(--brass-hi-rgb), 0.25), 0 2px 8px rgba(0, 0, 0, 0.28); }
 
 /* The dealer's total, level with the cards on the up card's left. The anchor is a point at the
    label's right edge, so however long the label gets it grows away from the cards. */
