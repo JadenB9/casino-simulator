@@ -380,12 +380,14 @@ const STRAY_M = 1.8;
 const THERE_S = 3;
 /**
  * What else hangs under the HUD (the party, what you're eating or drinking, the cards down the
- * right, the law's warning): the chip steps down past whichever of them is where it would be. It
- * looks every CLEAR_S seconds and keeps CLEAR_GAP px from them.
+ * right, the law's warning), and the HUD itself where it runs taller than --below-hud says (two
+ * rows of thumb-sized buttons on a phone): the chip steps down past whichever of them is where it
+ * would be. It looks every CLEAR_S seconds and keeps CLEAR_GAP px from them (HUD_GAP from the HUD).
  */
-const UNDER_HUD = '.party, .dine-hud, .celeb-stack, .law-hud';
+const UNDER_HUD = '.hud, .party, .dine-hud, .celeb-stack, .law-hud';
 const CLEAR_S = 0.5;
 const CLEAR_GAP = 8;
+const HUD_GAP = 4;
 /** The trail's brass (added onto the floor: darker is fainter). */
 const TRAIL_COLOR = new THREE.Color('#ffcf7a').multiplyScalar(0.9);
 
@@ -826,15 +828,16 @@ export class MapOverlay {
     const box = c.root.getBoundingClientRect();
     if (!box.width) return;
     const base = box.top - c.down;
-    const near: DOMRect[] = [];
+    // each one's top, and how far down the chip has to be to clear it
+    const near: { top: number; clear: number }[] = [];
     for (const n of document.querySelectorAll<HTMLElement>(UNDER_HUD)) {
       if (n.hidden) continue;
       const b = n.getBoundingClientRect();
-      if (b.height > 0 && b.right > box.left - CLEAR_GAP && b.left < box.right + CLEAR_GAP) near.push(b);
+      if (b.height > 0 && b.right > box.left - CLEAR_GAP && b.left < box.right + CLEAR_GAP) near.push({ top: b.top, clear: b.bottom + (n.classList.contains('hud') ? HUD_GAP : CLEAR_GAP) });
     }
     near.sort((a, b) => a.top - b.top);
     let at = base;
-    for (const b of near) if (b.top < at + box.height + CLEAR_GAP && b.bottom + CLEAR_GAP > at) at = b.bottom + CLEAR_GAP;
+    for (const b of near) if (b.top < at + box.height + CLEAR_GAP && b.clear > at) at = b.clear;
     const down = Math.round(at - base);
     if (down !== c.down) {
       c.down = down;
