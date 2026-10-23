@@ -2,7 +2,8 @@
 // where the eyes are over the head bone as the look nods, and the choice kept for next time.
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { HEAD_Y, clampPitch, eyeOffset, headHeight, jabPull, showsFromFront, stepToward } from '../src/world/player.ts';
+import { HEAD_Y, clampPitch, eyeOffset, headHeight, jabPull, showsFromFront, spring, stepToward } from '../src/world/player.ts';
+import { Collider } from '../src/world/collision.ts';
 import { EMOTES } from '../../shared/src/protocol.ts';
 
 /** The walker's circle (player.ts RADIUS) and the near plane's reach from the camera (0.05 m out, under 0.09 m across). */
@@ -178,5 +179,54 @@ describe('the camera setting', () => {
     expect(m.loadMouse().view).toBe('third');
     m.setMouseSettings({ view: 'first' });
     expect(m.loadMouse().view).toBe('first');
+  });
+});
+
+describe('the follow camera (v8)', () => {
+  it('springs to where it is going without overshooting, from rest or on the move', () => {
+    for (const v of [0, 5, -5]) {
+      const s = { x: 0, v };
+      let past = false;
+      for (let i = 0; i < 240; i++) {
+        spring(s, 1, 16, 1 / 60);
+        // (a start moving away comes back, but never beyond the target)
+        if (s.x > 1 + 1e-9) past = true;
+      }
+      expect(past).toBe(false);
+      expect(s.x).toBeCloseTo(1, 6);
+      expect(Math.abs(s.v)).toBeLessThan(1e-4);
+    }
+  });
+
+  it('starts and stops smoothly: no jolt in the first frame, half way in under a fifth of a second', () => {
+    const s = { x: 0, v: 0 };
+    spring(s, 1, 16, 1 / 60);
+    // the first frame moves a little (a first-order ease would jump 23% of the way at once)
+    expect(s.x).toBeLessThan(0.05);
+    for (let i = 1; i < 10; i++) spring(s, 1, 16, 1 / 60);
+    expect(s.x).toBeGreaterThan(0.5);
+  });
+
+  it('comes to the same place whatever the frame rate', () => {
+    const a = { x: 0, v: 0 };
+    const b = { x: 0, v: 0 };
+    for (let i = 0; i < 30; i++) spring(a, 2, 10, 1 / 30);
+    for (let i = 0; i < 120; i++) spring(b, 2, 10, 1 / 120);
+    expect(a.x).toBeCloseTo(b.x, 4);
+  });
+
+  it('tells walls from columns: the probe asks the boxes or the posts alone', () => {
+    const col = new Collider();
+    col.box(0, 2, 4, 0.2, 0, 3);
+    col.post(0, 1, 0.2, 3);
+    const o = { x: 0, y: 1.5, z: 0 };
+    const dir = { x: 0, y: 0, z: 1 };
+    expect(col.raycast(o, dir, 5)).toBeCloseTo(0.8, 6);
+    expect(col.raycast(o, dir, 5, 'boxes')).toBeCloseTo(1.9, 6);
+    expect(col.raycast(o, dir, 5, 'posts')).toBeCloseTo(0.8, 6);
+    // nothing in the way, and a ray over a low box
+    expect(col.raycast(o, { x: 0, y: 0, z: -1 }, 5)).toBe(5);
+    col.box(0, -2, 2, 0.2, 0, 1);
+    expect(col.raycast(o, { x: 0, y: 0, z: -1 }, 5)).toBe(5);
   });
 });

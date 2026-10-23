@@ -117,10 +117,11 @@ export class Collider {
   /**
    * How far a ray from `o` along unit `dir` travels before it enters a camera-blocking shape,
    * capped at `max`. Shapes stand on the floor, so a ray above a shape's top passes over it.
+   * `only` asks about the boxes alone (walls, counters, machines) or the posts alone (columns).
    */
-  raycast(o: { x: number; y: number; z: number }, dir: { x: number; y: number; z: number }, max: number): number {
+  raycast(o: { x: number; y: number; z: number }, dir: { x: number; y: number; z: number }, max: number, only?: 'boxes' | 'posts'): number {
     let best = max;
-    for (const b of this.boxes) {
+    for (const b of only === 'posts' ? NO_BOXES : this.boxes) {
       if (!b.cam) continue;
       const c = Math.cos(b.yaw);
       const s = Math.sin(b.yaw);
@@ -133,7 +134,7 @@ export class Collider {
       const t = slab3(lox, o.y, loz, ldx, dir.y, ldz, -b.hx, b.bottom, -b.hz, b.hx, b.top, b.hz);
       if (t !== null && t < best) best = t;
     }
-    for (const q of this.posts) {
+    for (const q of only === 'boxes' ? NO_POSTS : this.posts) {
       if (!q.cam) continue;
       const t = rayCylinder(o, dir, q);
       if (t !== null && t < best) best = t;
@@ -142,29 +143,29 @@ export class Collider {
   }
 }
 
+const NO_BOXES: readonly Box[] = [];
+const NO_POSTS: readonly Post[] = [];
+
 /** Entry distance of a ray into an axis-aligned box, or null when it misses (or starts inside). */
 function slab3(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, x0: number, y0: number, z0: number, x1: number, y1: number, z1: number): number | null {
-  let tmin = 0;
-  let tmax = Infinity;
-  const axes: [number, number, number, number][] = [
-    [ox, dx, x0, x1],
-    [oy, dy, y0, y1],
-    [oz, dz, z0, z1],
-  ];
-  for (const [o, d, lo, hi] of axes) {
-    if (Math.abs(d) < 1e-9) {
-      if (o < lo || o > hi) return null;
-      continue;
-    }
-    let t0 = (lo - o) / d;
-    let t1 = (hi - o) / d;
-    if (t0 > t1) [t0, t1] = [t1, t0];
-    tmin = Math.max(tmin, t0);
-    tmax = Math.min(tmax, t1);
-    if (tmin > tmax) return null;
-  }
+  // (the three slabs one after another, no arrays: the camera asks this of every box every frame)
+  slab.min = 0;
+  slab.max = Infinity;
+  if (!cut(ox, dx, x0, x1) || !cut(oy, dy, y0, y1) || !cut(oz, dz, z0, z1)) return null;
   // a ray that starts inside a shape (the player brushing a wall) shouldn't collapse the camera
-  return tmin > 0 ? tmin : null;
+  return slab.min > 0 ? slab.min : null;
+}
+
+const slab = { min: 0, max: Infinity };
+
+/** Narrow slab3's span to where the ray is between `lo` and `hi` on one axis; false when it never is. */
+function cut(o: number, d: number, lo: number, hi: number): boolean {
+  if (Math.abs(d) < 1e-9) return o >= lo && o <= hi;
+  const a = (lo - o) / d;
+  const b = (hi - o) / d;
+  slab.min = Math.max(slab.min, Math.min(a, b));
+  slab.max = Math.min(slab.max, Math.max(a, b));
+  return slab.min <= slab.max;
 }
 
 function rayCylinder(o: { x: number; y: number; z: number }, d: { x: number; y: number; z: number }, q: Post): number | null {

@@ -61,6 +61,8 @@ interface Drawn {
   ch: Character;
   x: number;
   z: number;
+  /** v8: the heading drawn (eased toward the snapshots', the short way round). */
+  yaw: number;
   speed: number;
   /** x/z hold last frame's drawn position (false after a seat or a hide). */
   onFloor: boolean;
@@ -85,6 +87,13 @@ export const MAX_DRAWN = 40;
 const KEEP_M = 1;
 /** How quickly a rider's drawn position catches up with their snapshots (1/s). */
 const RIDE_EASE = 10;
+/**
+ * v8: the same for someone on foot, quicker: the line between snapshots turns a corner at each one
+ * (they come every 200 to 320 ms), and the drawn walk rounds it instead of jerking onto the next.
+ */
+const WALK_EASE = 14;
+/** v8: how quickly a drawn heading turns to the snapshots' (1/s). */
+const TURN_EASE = 12;
 
 export class RemotePlayers {
   readonly group = new THREE.Group();
@@ -206,12 +215,15 @@ export class RemotePlayers {
     }
     let x = pose.x / 100;
     let z = pose.z / 100;
-    // Someone on a ride glides: the drawn line eases through the corners the snapshots cut (a
-    // position every 200 ms is a metre and more apart at a ride's speed).
-    if (d.onFloor && (d.ch as { riding?: string | null }).riding && Math.hypot(x - d.x, z - d.z) < SNAP_M) {
-      const k = 1 - Math.exp(-dt * RIDE_EASE);
+    let yaw = byteToYaw(pose.r);
+    // The drawn line eases through the corners the snapshots cut: on a ride a position every 200 ms
+    // is a metre and more apart, and on foot each one still turns the line a little.
+    const eased = d.onFloor && Math.hypot(x - d.x, z - d.z) < SNAP_M;
+    if (eased) {
+      const k = 1 - Math.exp(-dt * ((d.ch as { riding?: string | null }).riding ? RIDE_EASE : WALK_EASE));
       x = d.x + (x - d.x) * k;
       z = d.z + (z - d.z) * k;
+      yaw = d.yaw + Math.atan2(Math.sin(yaw - d.yaw), Math.cos(yaw - d.yaw)) * (1 - Math.exp(-dt * TURN_EASE));
     }
     // Speed from the drawn motion itself, eased so one late snapshot doesn't stutter the walk.
     const step = d.onFloor ? Math.hypot(x - d.x, z - d.z) : 0;
@@ -219,9 +231,10 @@ export class RemotePlayers {
     d.speed += (v - d.speed) * Math.min(1, dt * 8);
     d.x = x;
     d.z = z;
+    d.yaw = yaw;
     d.onFloor = true;
     root.position.set(x, 0, z);
-    root.rotation.y = byteToYaw(pose.r);
+    root.rotation.y = yaw;
     // Past a walking pace the blend leans toward the run cycle, as it does for your own character.
     d.ch.setMotion(motionOf(d.speed * (WALK_CYCLE / this.walkSpeed)));
     return true;
@@ -265,7 +278,7 @@ export class RemotePlayers {
     showTitle(ch, p.info.look); // v6 feats6
     ch.root.visible = false; // until its first update places it
     this.group.add(ch.root);
-    this.drawn.set(p.info.id, { ch, x: 0, z: 0, speed: 0, onFloor: false, placed: false, shown: false, rank: 0 });
+    this.drawn.set(p.info.id, { ch, x: 0, z: 0, yaw: 0, speed: 0, onFloor: false, placed: false, shown: false, rank: 0 });
     this.order = [...this.drawn.keys()].sort((a, b) => a - b);
   }
 

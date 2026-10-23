@@ -108,6 +108,23 @@ const CLICK_SLOP = 5;
 const MAX_STEP = 250;
 /** The camera never goes lower than this over the floor. */
 const CAM_FLOOR = 0.3;
+/**
+ * v8: the follow camera's springs (critically damped, rad/s): the point it looks at follows the
+ * walker (a little slower up and down: onto a seat, a ride), its distance comes in quickly when
+ * something is in the way and goes back out slowly. Further than SNAP_M in a frame is a jump (a
+ * teleport, the elevator): the camera snaps there.
+ */
+const LOOK_SPRING = 16;
+const LOOK_SPRING_Y = 10;
+const PULL_IN = 20;
+const EASE_OUT = 4;
+const SNAP_M = 2.5;
+/** The probe: the ray from the head and one either side of it (m), each stopping this short of what it meets. */
+const PROBE = [0, -0.2, 0.2] as const;
+const PROBE_PAD = 0.3;
+/** The camera's closest to the head, and how far into the probe's margin it may lag at a wall (m). */
+const NEAREST = 0.45;
+const WALL_GIVE = 0.12;
 
 export class Player {
   readonly position = new THREE.Vector3();
@@ -122,7 +139,6 @@ export class Player {
   private keys = new Set<string>();
   private manualAt = -10;
   private clock = 0;
-  private dist = 3.3;
   private drag: { id: number; x: number; y: number; x0: number; y0: number; moved: boolean; mouse: boolean } | null = null;
   private locked = false;
   /** The mouse was let go for an overlay or typing, and is taken back when that's done. */
@@ -280,7 +296,8 @@ export class Player {
     this.heading = heading;
     this.camYaw = heading + Math.PI;
     this.vel.set(0, 0);
-    this.dist = this.camDist;
+    // (the follow camera snaps behind: no spring from wherever it was)
+    this.sprung = false;
     this.headY = Number.NaN;
     this.showing = null;
     this.syncCharacter();
@@ -539,6 +556,67 @@ export class Player {
 
   private lastAllowed = 3.3;
 
+  /**
+   * v8: the follow camera, sprung. The point it looks at follows the walker on a critically damped
+   * spring (no overshoot, no jolt as you start, stop or slide along a wall), and so does how far
+   * back it stands: in quickly when something comes between, back out slowly. A thick probe (the
+   * ray and one either side of it) sees an edge coming before it fills the view. Behind a wall the
+   * camera never goes, whatever the spring: past a column it may lag a moment rather than jump.
+   */
+  private follow(dt: number, yaw: number, pitch: number, far: number, at: number): void {
+    const p = this.position;
+    const snap = !(dt > 0) || !this.sprung || Math.hypot(p.x - this.lookX.x, p.z - this.lookZ.x) > SNAP_M;
+    if (snap) {
+      for (const [s, to] of [[this.lookX, p.x], [this.lookY, p.y + at], [this.lookZ, p.z]] as const) {
+        s.x = to;
+        s.v = 0;
+      }
+    } else {
+      spring(this.lookX, p.x, LOOK_SPRING, dt);
+      spring(this.lookY, p.y + at, LOOK_SPRING_Y, dt);
+      spring(this.lookZ, p.z, LOOK_SPRING, dt);
+    }
+    this.target.set(this.lookX.x, this.lookY.x, this.lookZ.x);
+    const cp = Math.cos(pitch);
+    this.dir.set(Math.sin(yaw) * cp, Math.sin(pitch), Math.cos(yaw) * cp);
+    // how far back it may stand: the nearest thing the probe meets, and the nearest wall
+    this.side.set(Math.cos(yaw), 0, -Math.sin(yaw));
+    let hit = far;
+    let wall = far;
+    for (const off of PROBE) {
+      this.probe.copy(this.target).addScaledVector(this.side, off);
+      hit = Math.min(hit, this.col.raycast(this.probe, this.dir, far + PROBE_PAD) - PROBE_PAD);
+      wall = Math.min(wall, this.col.raycast(this.probe, this.dir, far + PROBE_PAD, 'boxes') - PROBE_PAD);
+    }
+    const allowed = Math.max(NEAREST, Math.min(far, hit));
+    if (snap) {
+      this.distS.x = allowed;
+      this.distS.v = 0;
+    } else {
+      spring(this.distS, allowed, allowed < this.distS.x ? PULL_IN : EASE_OUT, dt);
+    }
+    // (in front of the wall's face, a hand's width clear of it)
+    const limit = Math.max(NEAREST, wall + WALL_GIVE);
+    if (this.distS.x > limit) {
+      this.distS.x = limit;
+      this.distS.v = Math.min(0, this.distS.v);
+    }
+    this.want.copy(this.target).addScaledVector(this.dir, this.distS.x);
+    const ceiling = Math.min(this.ceilingAt(this.want.x, this.want.z), this.ceilingAt(this.target.x, this.target.z));
+    this.want.y = Math.max(CAM_FLOOR, Math.min(this.want.y, ceiling - 0.2));
+    this.lastAllowed = allowed;
+    this.sprung = true;
+  }
+
+  /** v8: the follow camera's springs (the point it looks at, and its distance), and the probe's room. */
+  private readonly lookX = { x: 0, v: 0 };
+  private readonly lookY = { x: 0, v: 0 };
+  private readonly lookZ = { x: 0, v: 0 };
+  private readonly distS = { x: 3.3, v: 0 };
+  private sprung = false;
+  private readonly side = new THREE.Vector3();
+  private readonly probe = new THREE.Vector3();
+
   private placeCamera(dt: number): void {
     const cam = this.camera;
     const first = this.mouse.view === 'first';
@@ -551,14 +629,13 @@ export class Player {
     if (k < 1) {
       // behind you, or out in front while an emote is shown
       const s = this.showing;
-      if (s) this.computeCamera(s.yaw, SHOW_PITCH, SHOW_DIST, this.showAt());
-      else this.computeCamera(this.camYaw, clampPitch(this.camPitch, 'third'), this.camDist);
-      // pull in fast when blocked, ease back out when clear
-      const d = this.lastAllowed;
-      this.dist += (d - this.dist) * (1 - Math.exp(-dt * (d < this.dist ? 22 : 3)));
-      cam.position.copy(this.target).addScaledVector(this.dir, this.dist);
-      cam.position.y = Math.max(CAM_FLOOR, Math.min(cam.position.y, this.want.y));
+      if (s) this.follow(dt, s.yaw, SHOW_PITCH, SHOW_DIST, this.showAt());
+      else this.follow(dt, this.camYaw, clampPitch(this.camPitch, 'third'), this.camDist, EYE);
+      cam.position.copy(this.want);
       cam.lookAt(this.target.x, this.target.y - 0.12, this.target.z);
+    } else {
+      // through the eyes: the follow camera starts again from where you are when it's next wanted
+      this.sprung = false;
     }
     if (first || k > 0) this.computeEyes(dt);
     if (k > 0) {
@@ -884,6 +961,19 @@ export function jabPull(t: number): number {
 export function stepToward(a: number, b: number, step: number): number {
   if (!(step > 0)) return a;
   return a < b ? Math.min(b, a + step) : Math.max(b, a - step);
+}
+
+/**
+ * One step of a critically damped spring: `s.x` moving at `s.v` heads for `to` with no overshoot
+ * and no jolt, settling in about 4/omega seconds (exact for a target that holds still over dt).
+ */
+export function spring(s: { x: number; v: number }, to: number, omega: number, dt: number): number {
+  const e = Math.exp(-omega * dt);
+  const d = s.x - to;
+  const t = (s.v + omega * d) * dt;
+  s.v = (s.v - omega * t) * e;
+  s.x = to + (d + t) * e;
+  return s.x;
 }
 
 /** Ease in and out over 0..1. */
