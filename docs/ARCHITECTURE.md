@@ -379,7 +379,7 @@ statistical test checks the crypto source itself.
   change smoothly through every sample (`net/interp.ts`). When a new sample moves the path under
   where someone is drawn (an extrapolation that turned out wrong, or the newest sample's slope
   revised), the drawn pose carries on from where it was and the difference eases out over a few
-  frames; one over 1.5 m is a real jump and is drawn at once.
+  frames; one over 8 m is a real jump and is drawn at once.
 - **Quality**: High (bloom on emissive surfaces, MSAA, pixel ratio up to 2 with an adaptive
   step-down) and Low (no bloom, pixel ratio 1, cheaper materials), suggested from a frame-time
   probe and changeable in Settings.

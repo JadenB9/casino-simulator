@@ -17,8 +17,12 @@ const EXTRAPOLATE_MS = 200;
 const KEEP = 24;
 /** After a gap this long (ms) a hold sample pins the walker where they stood until the new one. */
 const PAUSE_MS = 500;
-/** A correction this large (cm) is drawn at once: the walker really is somewhere else. */
-const SNAP_CM = 150;
+/**
+ * A correction this large (cm) is drawn at once: the walker really is somewhere else. (A car
+ * braking hard can be a few metres off what 200 ms of extrapolation said; that still eases. A
+ * jump of more than the floor's snap is a new track anyway: presence.ts.)
+ */
+const SNAP_CM = 800;
 /** Corrections ease away with this time constant, ms (about three frames). */
 const SETTLE_MS = 50;
 /**
