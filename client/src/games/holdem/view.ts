@@ -145,6 +145,8 @@ export function mountHoldem(ctx: TableViewCtx): TableView {
   const histBody = el('div', 'he-history-body');
   hist.append(histHead, histBody);
   histHead.addEventListener('click', () => hist.classList.toggle('he-open'));
+  // at the top right under the party panel: the dock moves it below one that opens over it (table/dock.ts)
+  hist.dataset.dock = 'top';
   ctx.ui.append(hist);
 
   // Out of chips, or not seated yet.
