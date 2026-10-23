@@ -12,7 +12,7 @@ import { formatMoney } from '../../../../shared/src/money.ts';
 import { Felt } from '../../table/felt.ts';
 import { CardMesh, dealCard, CARD_W } from '../../table/cards.ts';
 import { ChipStack } from '../../table/chips.ts';
-import { ChipTray } from '../../ui/kit.ts';
+import { BetBar } from '../../table/betbar.ts';
 import { wait } from '../../table/tween.ts';
 
 const TOP_Y = 0.76;
@@ -75,7 +75,7 @@ export const highcard: GameClientModule = {
     let lastBet = 0;
     let stack = 0;
 
-    const tray = new ChipTray({
+    const tray = new BetBar({
       clear: () => ctx.link.act({ type: 'clear' }),
       rebet: () => lastBet && ctx.link.act({ type: 'bet', amount: lastBet }),
       primary: { label: 'Deal', run: () => ctx.link.act({ type: 'deal' }) },

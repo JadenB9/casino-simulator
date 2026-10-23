@@ -25,7 +25,10 @@ import { Felt } from '../../table/felt.ts';
 import { CardMesh, CARD_H, dealCard, flipCard } from '../../table/cards.ts';
 import { ChipStack, slideStack } from '../../table/chips.ts';
 import { ease, tween, wait } from '../../table/tween.ts';
-import { ChipTray, button, el } from '../../ui/kit.ts';
+import { button, el } from '../../ui/kit.ts';
+import { BetBar } from '../../table/betbar.ts';
+import { RoundHistory, type Round } from '../../table/history.ts';
+import { riseWin } from '../../table/rise.ts';
 import { baccaratMax, chipOn, maxRefusal } from '../../table/max.ts';
 import { serverNow } from '../../net/clock.ts';
 import { feltSpec, kidneyGeometry } from './felt.ts';
@@ -68,6 +71,13 @@ function saveSqueeze(on: boolean): void {
   }
 }
 
+/** A coup for the history (table/history.ts): who won and by what, and what your bets did. */
+function coupRound(r: ResultEvent, coup: Coup | null): Round {
+  const what = coup ? (coup.winner === 'tie' ? `Tie ${coup.playerTotal}-${coup.bankerTotal}` : coup.winner === 'banker' ? `Banker ${coup.bankerTotal} over ${coup.playerTotal}` : `Player ${coup.playerTotal} over ${coup.bankerTotal}`) : 'Coup';
+  const on = SPOTS.filter((s) => r.spots[s]).map((s) => `${SPOT_NAMES[s]} ${r.spots[s]!.outcome}`);
+  return { what, staked: r.wagered, returned: r.returned, detail: on.join(', ') || undefined };
+}
+
 /** The dealer's call for a finished coup. */
 function outcomeLine(winner: Coup['winner'], p: number, b: number): string {
   if (winner === 'tie') return `Tie hand, ${p}-${b}`;
@@ -84,7 +94,9 @@ export class BaccaratTable implements TableView {
   private readonly felt: Felt;
   private readonly staticFelt: THREE.Object3D | undefined;
   private readonly board = new Scoreboard();
-  private readonly tray: ChipTray;
+  private readonly tray: BetBar;
+  /** The last coups this sitting and what they paid (table/history.ts). */
+  private readonly history: RoundHistory;
   private readonly metersBox = el('div', 'bc-meters panel');
   private readonly meters = { stack: el('b', 'money'), bet: el('b', 'money'), last: el('b', 'money') };
   private readonly squeezeBtn: HTMLButtonElement;
@@ -159,7 +171,7 @@ export class BaccaratTable implements TableView {
     this.timer = this.makeTimer();
 
     // DOM: scoreboard, meters, chip tray, hover tip
-    this.tray = new ChipTray({
+    this.tray = new BetBar({
       undo: () => this.act({ type: 'undo' }),
       clear: () => this.act({ type: 'clear' }),
       rebet: () => this.rebet(),
@@ -175,6 +187,7 @@ export class BaccaratTable implements TableView {
     this.tip.hidden = true;
     this.tip.setAttribute('role', 'tooltip');
     ctx.ui.append(this.board.root, this.metersBox, this.tray.root, this.tip);
+    this.history = new RoundHistory(ctx.ui);
 
     addEventListener('pointerdown', this.onPointerDown);
     addEventListener('pointermove', this.onPointerMove);
@@ -380,6 +393,7 @@ export class BaccaratTable implements TableView {
     this.board.dispose();
     this.metersBox.remove();
     this.tray.root.remove();
+    this.history.dispose();
     this.tip.remove();
     if (this.staticFelt) this.staticFelt.visible = true;
     for (const m of [...this.cards.player, ...this.cards.banker]) m.removeFromParent();
@@ -865,11 +879,14 @@ export class BaccaratTable implements TableView {
         this.ctx.sfx.play(r.seat === this.mySeat && r.returned > r.wagered ? 'chips-stack' : 'chips-handle', { volume: r.seat === this.mySeat ? 1 : 0.5 });
         this.ctx.stage.gesture('pay');
         await this.play(440, (ms) => Promise.all(paying.map(({ pay, to }) => slideStack(pay, to, ms))));
+        // what each spot paid, rising off the payout
+        if (!this.rush) for (const { pay, to } of paying) riseWin(this.ctx.stage, to.clone().setY(TOP_Y + 0.03), pay.amount);
       }
       if (r.commission > 0) this.commission(seatNumber(r.seat), r.commission);
       this.pills(r);
       if (r.seat === this.mySeat) {
         this.lastNet = r.returned - r.wagered;
+        this.history.add(coupRound(r, coup));
         this.lastBets = Object.fromEntries(SPOTS.filter((s) => r.spots[s]).map((s) => [s, r.spots[s]!.bet])) as Bets;
         if (coup && !this.rush) this.celebrateCoup(r, coup);
       }
@@ -977,11 +994,16 @@ export class BaccaratTable implements TableView {
     this.meters.last.textContent = this.lastNet === null ? '–' : formatMoney(this.lastNet, { sign: true });
     this.meters.last.className = `money ${this.lastNet === null ? '' : this.lastNet > 0 ? 'up' : this.lastNet < 0 ? 'down' : ''}`;
     const betting = v?.phase === 'betting';
+    const down = betTotal(this.myBets);
+    const again = this.lastBets ? betTotal(this.lastBets) : 0;
+    const fits = again > 0 && again <= this.stack;
     if (this.mode === 'solo') {
-      this.tray.setPrimary('Deal', !!betting && betTotal(this.myBets) > 0);
+      // the bet on the button; with nothing down, the last coup's bets again in one press
+      this.tray.setDeal('Deal', down, fits ? again : 0, !!betting && (down > 0 || fits));
     } else {
       this.tray.setPrimary(this.ready ? 'Waiting' : 'Ready', !!betting && !this.ready && this.mySeat !== null);
     }
+    this.tray.setActs({ undo: down > 0, clear: down > 0, rebet: down === 0 && fits, double: down > 0 ? down <= this.stack : fits && 2 * again <= this.stack });
   }
 
   private drawSeats(): void {

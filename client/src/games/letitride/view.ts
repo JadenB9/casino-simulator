@@ -39,7 +39,10 @@ import { celebrate } from '../../table/celebrate.ts';
 import type { Felt } from '../../table/felt.ts';
 import { ease, tween, wait } from '../../table/tween.ts';
 import { handMoment } from './moments.ts';
-import { ChipTray, button, el } from '../../ui/kit.ts';
+import { button, el } from '../../ui/kit.ts';
+import { BetBar } from '../../table/betbar.ts';
+import { RoundHistory, RoundLog } from '../../table/history.ts';
+import { riseWin } from '../../table/rise.ts';
 import { serverNow } from '../../net/clock.ts';
 import { wave } from '../../app/comfort.ts';
 import {
@@ -227,7 +230,7 @@ export function mountLetItRide(ctx: TableViewCtx): TableView {
 
   // ---- DOM: tray, decision bar, meters, clock, rules ---------------------------------------
 
-  const tray = new ChipTray({
+  const tray = new BetBar({
     undo: () => undo(),
     clear: () => clear(),
     rebet: () => rebet(1),
@@ -239,6 +242,9 @@ export function mountLetItRide(ctx: TableViewCtx): TableView {
   ctx.ui.append(tray.root);
   const picker = new SpotPicker(MAX_SPOTS, (n) => pickSpots(n));
   ctx.ui.append(picker.root);
+  // the last rounds this sitting and what they paid (table/history.ts), this round's hands as they settle
+  const rounds = new RoundHistory(ctx.ui);
+  const roundLog = new RoundLog(rounds);
 
   const rideBtn = button('Let it ride', () => decide('ride'), { cls: 'primary', key: 'L' });
   const pullBtn = button('Pull back', () => decide('pull'), { key: 'P' });
@@ -360,8 +366,13 @@ export function mountLetItRide(ctx: TableViewCtx): TableView {
     picker.show(mode === 'solo' && canBet());
     picker.set(Math.max(1, spots.length));
     renderTip();
-    if (mode === 'solo') tray.setPrimary('Deal', !!view && view.phase === 'betting' && total(wanted) > 0);
+    const down = total(wanted);
+    const again = last ? total(last) : 0;
+    const fits = again > 0 && again <= stack;
+    // the bet on the button; with nothing down, last round's hands again in one press
+    if (mode === 'solo') tray.setDeal('Deal', down, fits ? again : 0, !!view && view.phase === 'betting' && (down > 0 || fits));
     else tray.setPrimary(readyOn ? 'Waiting' : 'Ready', !!view && view.phase === 'betting' && me !== null);
+    tray.setActs({ undo: history.length > 0, clear: down > 0, rebet: down === 0 && fits, double: down > 0 || fits });
     renderRings();
     renderMeters();
   };
@@ -838,6 +849,7 @@ export function mountLetItRide(ctx: TableViewCtx): TableView {
     root.add(chips);
     payouts.push({ seat, stack: chips });
     await slideStack(chips, to, 420);
+    riseWin(ctx.stage, to.clone().setY(TOP_Y + 0.03), amount);
   };
 
   const pill = (at: THREE.Vector3, text: string, kind: 'win' | 'lose' | 'push'): void => {
@@ -931,6 +943,7 @@ export function mountLetItRide(ctx: TableViewCtx): TableView {
           if (dealtMine.length) {
             last = Object.fromEntries(dealtMine.map((spot) => [spot, betsOf(spot)]));
             roundNet = 0;
+            roundLog.start(dealtMine.length);
           }
           await sweepCards();
           board.length = 0;
@@ -982,6 +995,8 @@ export function mountLetItRide(ctx: TableViewCtx): TableView {
           if (owns(e.seat)) {
             roundNet += e.result.returned - e.result.wagered;
             lastNet = roundNet;
+            const hand = sv ? [...sv.cards, ...next.board] : [];
+            roundLog.settle(hand.length === 5 && hand.every((c) => c !== null) ? handName(hand as Card[]) : 'Hand', e.result.wagered, e.result.returned);
           }
           if (!sv) break;
           settled = true;
@@ -1142,6 +1157,7 @@ export function mountLetItRide(ctx: TableViewCtx): TableView {
       tipObj.removeFromParent();
       tip.remove();
       tray.root.remove();
+      rounds.dispose();
       decideBar.remove();
       meters.remove();
       clock.remove();

@@ -35,7 +35,10 @@ import { ChipStack, slideStack } from '../../table/chips.ts';
 import { celebrate } from '../../table/celebrate.ts';
 import type { Felt } from '../../table/felt.ts';
 import { ease, tween, wait } from '../../table/tween.ts';
-import { ChipTray, button, el } from '../../ui/kit.ts';
+import { button, el } from '../../ui/kit.ts';
+import { BetBar } from '../../table/betbar.ts';
+import { RoundHistory, RoundLog } from '../../table/history.ts';
+import { riseWin } from '../../table/rise.ts';
 import { serverNow } from '../../net/clock.ts';
 import { wave } from '../../app/comfort.ts';
 import { handMoment } from './moments.ts';
@@ -220,7 +223,7 @@ export function mountPaiGow(ctx: TableViewCtx): TableView {
 
   // ---- DOM ---------------------------------------------------------------------------------
 
-  const tray = new ChipTray({
+  const tray = new BetBar({
     undo: () => undo(),
     clear: () => clear(),
     rebet: () => rebet(1),
@@ -232,6 +235,9 @@ export function mountPaiGow(ctx: TableViewCtx): TableView {
   ctx.ui.append(tray.root);
   const picker = new SpotPicker(MAX_SPOTS, (n) => pickSpots(n));
   ctx.ui.append(picker.root);
+  // the last rounds this sitting and what they paid (table/history.ts), this round's hands as they settle
+  const rounds = new RoundHistory(ctx.ui);
+  const roundLog = new RoundLog(rounds);
 
   const setter = new HandSetter((low) => setHand(low));
   ctx.ui.append(setter.root);
@@ -329,8 +335,13 @@ export function mountPaiGow(ctx: TableViewCtx): TableView {
     picker.show(mode === 'solo' && canBet());
     picker.set(Math.max(1, spots.length));
     renderTip();
-    if (mode === 'solo') tray.setPrimary('Deal', !!view && view.phase === 'betting' && total(wanted) > 0);
+    const down = total(wanted);
+    const again = last ? total(last) : 0;
+    const fits = again > 0 && again <= stack;
+    // the bet on the button; with nothing down, last round's hands again in one press
+    if (mode === 'solo') tray.setDeal('Deal', down, fits ? again : 0, !!view && view.phase === 'betting' && (down > 0 || fits));
     else tray.setPrimary(readyOn ? 'Waiting' : 'Ready', !!view && view.phase === 'betting' && me !== null);
+    tray.setActs({ undo: history.length > 0, clear: down > 0, rebet: down === 0 && fits, double: down > 0 || fits });
     renderRings();
     renderMeters();
   };
@@ -799,6 +810,7 @@ export function mountPaiGow(ctx: TableViewCtx): TableView {
     root.add(chips);
     payouts.push({ seat, stack: chips });
     await slideStack(chips, to, 420);
+    riseWin(ctx.stage, to.clone().setY(TOP_Y + 0.03), amount);
   };
 
   const pill = (at: THREE.Vector3, text: string, kind: 'win' | 'lose' | 'push'): void => {
@@ -884,6 +896,7 @@ export function mountPaiGow(ctx: TableViewCtx): TableView {
           if (dealtMine.length) {
             last = Object.fromEntries(dealtMine.map((spot) => [spot, betsOf(spot)]));
             roundNet = 0;
+            roundLog.start(dealtMine.length);
           }
           await sweepCards();
           await dealAround(e.seats);
@@ -935,6 +948,9 @@ export function mountPaiGow(ctx: TableViewCtx): TableView {
           if (owns(e.seat)) {
             roundNet += e.result.returned - e.result.wagered;
             lastNet = roundNet;
+            const r = e.result;
+            const verdict = r.highWins && r.lowWins ? 'Won both' : !r.highWins && !r.lowWins ? 'Lost both' : 'Push';
+            roundLog.settle(sv?.setting ? `${verdict} · ${highName(highScore(sv.setting.high))}` : verdict, r.wagered, r.returned);
           }
           if (!sv) break;
           settled = true;
@@ -1086,7 +1102,8 @@ export function mountPaiGow(ctx: TableViewCtx): TableView {
       tipObj.removeFromParent();
       tip.remove();
       tray.root.remove();
-      setter.root.remove();
+      rounds.dispose();
+      setter.dispose();
       meters.remove();
       clock.remove();
       rules.remove();

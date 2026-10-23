@@ -1,0 +1,19 @@
+/* The bet bar (betbar.ts): every table's chip tray. A chip's number key under it; buttons with
+   nothing to do plainly off (flat, no gold, no hover), not just faded; the bet on the gold button. */
+
+/* each chip's key, a small cap at its foot (touch screens have no keys) */
+.tray .chip-btn { position: relative; }
+.chip-key { position: absolute; left: 50%; bottom: -7px; translate: -50% 0; min-width: 15px; padding: 0 3px; border-radius: 3px; border: 1px solid var(--line-strong); background: var(--glass-2); color: var(--ink-2); font-size: 10px; font-weight: 600; line-height: 13px; letter-spacing: 0; text-align: center; pointer-events: none; }
+.chip-key:empty { display: none; }
+.chip-btn[aria-pressed='true'] .chip-key { color: var(--ink); border-color: var(--brass-hi); }
+@media (pointer: coarse) {
+  .chip-key { display: none; }
+}
+
+/* off means off: no gradient, a quiet edge, the words dimmed (in both themes) */
+.tray .btn:disabled { opacity: 1; background: transparent; border-color: var(--line); color: var(--ink-3); box-shadow: none; }
+.tray .btn:disabled .key { opacity: 0.45; }
+.tray .btn.primary:disabled { background: rgba(var(--brass-rgb), 0.1); border-color: rgba(var(--brass-rgb), 0.35); color: var(--ink-3); }
+/* the gold button with a bet on it */
+.tray .btn.primary { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.tray .btn.primary:not(:disabled) { box-shadow: 0 0 0 1px rgba(var(--brass-hi-rgb), 0.25), 0 4px 14px rgba(var(--brass-rgb), 0.22); }

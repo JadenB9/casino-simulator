@@ -25,7 +25,10 @@ import { ChipStack, slideStack } from '../../table/chips.ts';
 import { celebrate } from '../../table/celebrate.ts';
 import type { Felt } from '../../table/felt.ts';
 import { wait } from '../../table/tween.ts';
-import { ChipTray, button, el } from '../../ui/kit.ts';
+import { button, el } from '../../ui/kit.ts';
+import { BetBar } from '../../table/betbar.ts';
+import { RoundHistory, RoundLog } from '../../table/history.ts';
+import { riseWin } from '../../table/rise.ts';
 import { chipOn, maxRefusal, warMax } from '../../table/max.ts';
 import { serverNow } from '../../net/clock.ts';
 import {
@@ -209,7 +212,7 @@ export function mountWar(ctx: TableViewCtx): TableView {
 
   // ---- DOM: tray, decision bar, meters, clock, rules ---------------------------------------
 
-  const tray = new ChipTray({
+  const tray = new BetBar({
     undo: () => undo(),
     clear: () => clear(),
     rebet: () => rebet(1),
@@ -221,6 +224,9 @@ export function mountWar(ctx: TableViewCtx): TableView {
   ctx.ui.append(tray.root);
   const picker = new SpotPicker(MAX_SPOTS, (n) => pickSpots(n));
   ctx.ui.append(picker.root);
+  // the last rounds this sitting and what they paid (table/history.ts), this round's hands as they settle
+  const rounds = new RoundHistory(ctx.ui);
+  const roundLog = new RoundLog(rounds);
 
   const warBtn = button('Go to war', () => decide('war'), { cls: 'primary', key: 'W' });
   const surrenderBtn = button('Surrender', () => decide('surrender'), { key: 'S' });
@@ -363,11 +369,16 @@ export function mountWar(ctx: TableViewCtx): TableView {
     }
     picker.show(mode === 'solo' && canBet());
     picker.set(Math.max(1, spots.length));
+    const down = total(wanted);
+    const again = last ? total(last) : 0;
+    const fits = again > 0 && again <= stack;
     if (mode === 'solo') {
-      tray.setPrimary('Deal', !!view && view.phase === 'betting' && spots.some((s) => betsOf(s).bet > 0));
+      // the bet on the button; with nothing down, last round's hands again in one press
+      tray.setDeal('Deal', down, fits ? again : 0, !!view && view.phase === 'betting' && (spots.some((s) => betsOf(s).bet > 0) || fits));
     } else {
       tray.setPrimary(readyOn ? 'Waiting' : 'Ready', !!view && view.phase === 'betting' && me !== null);
     }
+    tray.setActs({ undo: history.length > 0, clear: down > 0, rebet: down === 0 && fits, double: down > 0 || fits });
     renderRings();
     renderMeters();
     renderTip();
@@ -852,6 +863,7 @@ export function mountWar(ctx: TableViewCtx): TableView {
     root.add(chips);
     payouts.push({ seat, stack: chips });
     await slideStack(chips, payoutPoint(seat, kind), 420);
+    riseWin(ctx.stage, payoutPoint(seat, kind).setY(TOP_Y + 0.03), amount);
     return chips;
   };
 
@@ -1038,6 +1050,7 @@ export function mountWar(ctx: TableViewCtx): TableView {
           if (dealtMine.length) {
             last = Object.fromEntries(dealtMine.map((spot) => [spot, betsOf(spot)]));
             roundNet = 0;
+            roundLog.start(dealtMine.length);
           }
           if (mode === 'multi') ctx.kit.say('No more bets', 1400);
           await sweepCards();
@@ -1093,6 +1106,10 @@ export function mountWar(ctx: TableViewCtx): TableView {
             if (owns(x.seat)) {
               roundNet += x.result.returned - x.result.wagered;
               lastNet = roundNet;
+              const war = sv.warCard && next.dealerWar;
+              const mine = war ? sv.warCard : sv.card;
+              const theirs = war ? next.dealerWar : next.dealer;
+              roundLog.settle(mine && theirs ? `${war ? 'War: ' : ''}${cardName(mine)} vs ${cardName(theirs)}` : 'Hand', x.result.wagered, x.result.returned);
             }
             await settleSeat(x.seat, x.result, sv);
             handLabel(x.seat, sv);
@@ -1251,6 +1268,7 @@ export function mountWar(ctx: TableViewCtx): TableView {
       tipObj.removeFromParent();
       tip.remove();
       tray.root.remove();
+      rounds.dispose();
       decideBar.remove();
       meters.remove();
       clock.remove();

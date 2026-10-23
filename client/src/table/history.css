@@ -1,0 +1,41 @@
+/* The last rounds at a table (history.ts): a line at the top right under the HUD (and a lobby's
+   party panel), opening to a list under it. Colours are the theme's. */
+
+.th-history { position: fixed; right: 16px; top: var(--below-party); padding: 0; display: grid; }
+.th-history-head { display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 10px 0 12px; border: 0; background: transparent; color: var(--ink-2); cursor: pointer; font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; }
+.th-history-head:hover { color: var(--ink); }
+.th-history-head:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; border-radius: var(--radius); }
+.th-history-last { font-size: 16px; letter-spacing: 0.02em; text-transform: none; color: var(--ink); }
+.th-history-last.win, .th-round-net.win { color: var(--win); }
+.th-history-last.lose, .th-round-net.lose { color: var(--lose); }
+.th-history-last.push, .th-round-net.push { color: var(--push); }
+.th-history-head .key { font-size: 11px; opacity: 0.6; border: 1px solid currentColor; border-radius: 3px; padding: 0 3px; letter-spacing: 0; }
+
+/* The list hangs under the line (outside the line's own box, which is all the board fit measures). */
+.th-history-body { position: absolute; right: 0; top: calc(100% + 6px); width: 300px; max-height: min(46vh, 420px); overflow-y: auto; padding: 8px 12px 10px; }
+.th-history-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 2px; }
+.th-round { padding: 5px 0 6px; border-bottom: 1px solid var(--line); }
+.th-round:last-child { border-bottom: 0; }
+.th-round-top { display: flex; align-items: baseline; gap: 8px; }
+.th-round-n { font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums; min-width: 26px; }
+.th-round-what { flex: 1; font-size: 15px; color: var(--ink); }
+.th-round-net { font-size: 15px; font-weight: 600; white-space: nowrap; }
+.th-round-sub { margin-left: 34px; font-size: 13px; color: var(--ink-3); }
+.th-history-total { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-top: 8px; padding-top: 7px; border-top: 1px solid var(--line-strong); }
+.th-history-total b { font-size: 16px; color: var(--ink); }
+.th-history-total b.up { color: var(--win); }
+.th-history-total b.down { color: var(--lose); }
+
+@media (pointer: coarse) {
+  .th-history-head { height: 44px; }
+  .th-history-head .key { display: none; }
+}
+/* A phone upright: under the dealer's line, which takes the HUD's second row while it's up. */
+@media (max-width: 560px) {
+  .th-history { right: 10px; top: calc(var(--below-party) + 36px); }
+  .th-history-body { width: min(300px, calc(100vw - 20px)); }
+}
+@media (max-height: 480px) {
+  .th-history { right: 10px; }
+  .th-history-body { max-height: calc(100dvh - var(--below-party) - 110px); }
+}

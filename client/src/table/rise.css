@@ -1,0 +1,23 @@
+/* A win's amount rising off its spot (rise.ts). Over the felt in either theme: the win colour on a
+   halo of the theme's own (dark behind light green, light behind dark green). The label renderer
+   positions it with `transform`, so the motion is `translate`, and the fade is opacity. */
+.win-rise { font-family: var(--ui); font-size: 22px; font-weight: 600; letter-spacing: 0.02em; color: var(--win); white-space: nowrap; pointer-events: none; text-shadow: 0 0 3px var(--halo), 0 0 10px var(--halo), 0 1px 1px var(--halo); font-variant-numeric: tabular-nums; animation: win-rise 1.9s var(--ease) both; }
+.win-rise.big { font-size: 28px; }
+@keyframes win-rise {
+  0% { opacity: 0; translate: 0 8px; scale: 0.9; }
+  12% { opacity: 1; translate: 0 0; scale: 1; }
+  70% { opacity: 1; }
+  100% { opacity: 0; translate: 0 -54px; }
+}
+/* calm: no lift, it shows and fades where it is */
+.win-rise.still, body.calm .win-rise { animation-name: win-fade; }
+@keyframes win-fade {
+  0% { opacity: 0; }
+  15% { opacity: 1; }
+  75% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@media (max-width: 560px), (max-height: 480px) {
+  .win-rise { font-size: 19px; }
+  .win-rise.big { font-size: 23px; }
+}

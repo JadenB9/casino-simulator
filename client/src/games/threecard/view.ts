@@ -39,7 +39,10 @@ import { celebrate } from '../../table/celebrate.ts';
 import type { Felt } from '../../table/felt.ts';
 import { ease, tween, wait } from '../../table/tween.ts';
 import { handMoment } from './moments.ts';
-import { ChipTray, button, el } from '../../ui/kit.ts';
+import { button, el } from '../../ui/kit.ts';
+import { BetBar } from '../../table/betbar.ts';
+import { RoundHistory, RoundLog } from '../../table/history.ts';
+import { riseWin } from '../../table/rise.ts';
 import { chipOn, maxRefusal, threeCardMax } from '../../table/max.ts';
 import { serverNow } from '../../net/clock.ts';
 import {
@@ -256,7 +259,7 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
 
   // ---- DOM: tray, decision bar, meters, clock, rules ---------------------------------------
 
-  const tray = new ChipTray({
+  const tray = new BetBar({
     undo: () => undo(),
     clear: () => clear(),
     rebet: () => rebet(1),
@@ -268,6 +271,9 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
   ctx.ui.append(tray.root);
   const picker = new SpotPicker(MAX_SPOTS, (n) => pickSpots(n));
   ctx.ui.append(picker.root);
+  // the last rounds this sitting and what they paid (table/history.ts), this round's hands as they settle
+  const rounds = new RoundHistory(ctx.ui);
+  const roundLog = new RoundLog(rounds);
 
   const playBtn = button('Play', () => decide('play'), { cls: 'primary', key: 'P' });
   const foldBtn = button('Fold', () => decide('fold'), { key: 'F' });
@@ -385,11 +391,16 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
     picker.show(mode === 'solo' && canBet());
     picker.set(Math.max(1, spots.length));
     renderTip();
+    const down = total(wanted);
+    const again = last ? total(last) : 0;
+    const fits = again > 0 && again <= stack;
     if (mode === 'solo') {
-      tray.setPrimary('Deal', !!view && view.phase === 'betting' && total(wanted) > 0);
+      // the bet on the button; with nothing down, last round's hands again in one press
+      tray.setDeal('Deal', down, fits ? again : 0, !!view && view.phase === 'betting' && (down > 0 || fits));
     } else {
       tray.setPrimary(readyOn ? 'Waiting' : 'Ready', !!view && view.phase === 'betting' && me !== null);
     }
+    tray.setActs({ undo: history.length > 0, clear: down > 0, rebet: down === 0 && fits, double: down > 0 || fits });
     renderRings();
     renderMeters();
   };
@@ -862,6 +873,7 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
     payouts.push({ seat, stack: chips });
     const to = side > 0 ? payoutPoint(seat, kind) : besideSpot(seat, kind, -SPOT_RADIUS * 1.25).setY(TOP_Y);
     await slideStack(chips, to, 420);
+    riseWin(ctx.stage, to.clone().setY(TOP_Y + 0.03), amount);
   };
 
   const pill = (seat: number, kind: SpotKind, text: string, kindOf: 'win' | 'lose' | 'push', offset = -0.11): void => {
@@ -965,6 +977,7 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
           if (dealtMine.length) {
             last = Object.fromEntries(dealtMine.map((spot) => [spot, betsOf(spot)]));
             roundNet = 0;
+            roundLog.start(dealtMine.length);
           }
           await sweepCards();
           await dealAround(e.seats);
@@ -996,6 +1009,7 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
           break;
         case 'reveal': {
           dealer = e.dealer;
+          roundLog.vs = handName(score(e.dealer));
           if (dealerCards.length === 3) await turnOver(dealerCards, e.dealer, 0);
           dealerLabel(e.dealer);
           const played = anyPlayed || Object.values(next.seats).some((s) => s.decision === 'play');
@@ -1021,6 +1035,8 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
           if (owns(e.seat)) {
             roundNet += e.result.returned - e.result.wagered;
             lastNet = roundNet;
+            const known = sv?.cards.every((c) => c !== null) ? (sv.cards as Card[]) : null;
+            roundLog.settle(e.result.outcome === 'fold' ? 'Fold' : known ? handName(score(known)) : 'Hand', e.result.wagered, e.result.returned);
           }
           if (e.result.outcome === 'fold' || !sv) break;
           settled = true;
@@ -1181,6 +1197,7 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
       tipObj.removeFromParent();
       tip.remove();
       tray.root.remove();
+      rounds.dispose();
       decideBar.remove();
       meters.remove();
       clock.remove();

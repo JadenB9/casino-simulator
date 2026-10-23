@@ -25,7 +25,10 @@ import { ChipStack, slideStack } from '../../table/chips.ts';
 import { celebrate } from '../../table/celebrate.ts';
 import { roundMoment } from './moments.ts';
 import { tween, wait, ease } from '../../table/tween.ts';
-import { ChipTray, button, el } from '../../ui/kit.ts';
+import { button, el } from '../../ui/kit.ts';
+import { BetBar } from '../../table/betbar.ts';
+import { RoundHistory, type Round } from '../../table/history.ts';
+import { riseWin } from '../../table/rise.ts';
 import { blackjackMax, chipOn, maxRefusal } from '../../table/max.ts';
 import { serverNow } from '../../net/clock.ts';
 import { playFelt } from './felt.ts';
@@ -74,6 +77,28 @@ function pillFor(outcome: Outcome, bet: Cents, payout: Cents): { text: string; k
     default:
       return { text: `LOSE ${formatMoney(net)}`, kind: 'lose' };
   }
+}
+
+/** A hand's total in a few words: "Blackjack", "Bust", "20". */
+function handWord(cards: readonly (Card | null)[], natural: boolean): string {
+  const known = cards.filter((c): c is Card => c !== null);
+  if (natural) return 'Blackjack';
+  const t = handTotal(known).total;
+  return t > 21 ? 'Bust' : String(t);
+}
+
+/**
+ * A round for the history (table/history.ts): "20 vs 19" for one hand, "3 hands vs 19" for more,
+ * each hand and what it did on the second line; what went down (doubles, splits and insurance
+ * included) and what came back.
+ */
+function roundOf(spots: readonly SpotView[], dealer: readonly (Card | null)[]): Round {
+  const known = dealer.filter((c): c is Card => c !== null);
+  const dealt = known.length === 2 && handTotal(known).total === 21 ? 'blackjack' : handTotal(known).total > 21 ? 'a bust' : String(handTotal(known).total);
+  const hands = spots.flatMap((sp) => sp.hands);
+  const what = hands.length === 1 ? `${handWord(hands[0]!.cards, isNatural(hands[0]!))} vs ${dealt}` : `${hands.length} hands vs ${dealt}`;
+  const detail = hands.length > 1 ? hands.map((h) => `${handWord(h.cards, isNatural(h))} ${pillFor(h.outcome ?? 'lose', h.bet, h.payout).kind}`).join(', ') : undefined;
+  return { what, detail, staked: spots.reduce((a, s) => a + s.wagered, 0), returned: spots.reduce((a, s) => a + s.returned, 0) };
 }
 
 /** Chips a hand shows on the layout: the bet (split into bet and double), plus winnings once paid. */
@@ -150,7 +175,9 @@ export class BlackjackTable implements TableView {
   /** Several spots' celebrations take turns. */
   private readonly inTurn = oneAtATime();
 
-  private readonly tray: ChipTray;
+  private readonly tray: BetBar;
+  /** The last rounds this sitting and what they paid (table/history.ts). */
+  private readonly history: RoundHistory;
   private readonly picker: SpotPicker;
   private readonly actions = el('div', 'bj-actions panel');
   private readonly moveButtons = new Map<Move, HTMLButtonElement>();
@@ -179,7 +206,7 @@ export class BlackjackTable implements TableView {
     this.marker.visible = false;
     this.root.add(this.marker);
 
-    this.tray = new ChipTray({
+    this.tray = new BetBar({
       undo: () => this.act({ type: 'undo' }),
       clear: () => this.act({ type: 'clear' }),
       rebet: () => this.rebet(1),
@@ -192,6 +219,7 @@ export class BlackjackTable implements TableView {
     this.tray.select(BETTING_CHIPS[2]!);
     this.tray.root.classList.add('bj-tray');
     this.picker = new SpotPicker(MAX_SPOTS, (n) => this.act({ type: 'spots', n }));
+    this.history = new RoundHistory(ctx.ui);
 
     for (const m of ['hit', 'stand', 'double', 'split', 'surrender'] as Move[]) {
       const b = button(MOVE_LABEL[m], () => this.decide({ type: m }), { key: MOVE_KEYS[m], cls: m === 'stand' ? 'primary' : '' });
@@ -664,8 +692,10 @@ export class BlackjackTable implements TableView {
       const again = this.lastTotal();
       // Ready works without a bet too: sitting a round out still lets the others' hand go.
       if (this.mode === 'multi') this.tray.setPrimary(this.ready ? 'Ready ✓' : 'Ready', true);
-      else if (bet === 0 && again > 0) this.tray.setPrimary(`Deal ${formatMoney(again)}`, again <= this.stack);
-      else this.tray.setPrimary('Deal', bets.length > 0 && bets.every((b) => b >= this.limits.min));
+      // the bet on the button; with nothing down, last round's again in one press
+      else if (bet === 0 && again > 0) this.tray.setDeal('Deal', 0, again, again <= this.stack);
+      else this.tray.setDeal('Deal', bet, 0, bets.length > 0 && bets.every((b) => b >= this.limits.min));
+      this.tray.setActs({ undo: bet > 0, clear: bet > 0, rebet: bet === 0 && again > 0 && again <= this.stack, double: bet > 0 ? bet <= this.stack : again > 0 && 2 * again <= this.stack });
     }
 
     const turn = v && v.phase === 'play' && v.turn && this.owns(v.turn.seat) ? v.turn : null;
@@ -1056,6 +1086,7 @@ export class BlackjackTable implements TableView {
           this.ctx.sfx.play('chips-stack');
           this.ctx.stage.gesture('pay');
           await this.slideIn(`iw:${e.seat}`, e.payout - e.bet, L.RACK, this.insuranceWinPos(e.seat));
+          riseWin(this.ctx.stage, this.insuranceWinPos(e.seat).setY(L.TOP_Y + 0.03), e.payout - e.bet);
         } else await this.slideAway(`i:${e.seat}`, L.RACK);
         if (sp) sp.insured = e.bet;
         break;
@@ -1069,6 +1100,7 @@ export class BlackjackTable implements TableView {
         const mine = next.spots.filter((s) => this.owns(s.seat));
         if (mine.length) {
           this.lastNet = mine.reduce((a, s) => a + s.returned - s.wagered, 0);
+          this.history.add(roundOf(mine, next.dealer));
           this.celebrateRound(mine);
         }
         break;
@@ -1096,6 +1128,8 @@ export class BlackjackTable implements TableView {
       this.ctx.sfx.play('chips-stack');
       this.ctx.stage.gesture('pay');
       await this.slideIn(`w:${e.seat}:${e.hand}`, e.payout - e.bet, L.RACK, L.winChips(e.seat, e.hand, n));
+      // what it paid, rising off the winnings
+      riseWin(this.ctx.stage, L.winChips(e.seat, e.hand, n).setY(L.TOP_Y + 0.03), e.payout - e.bet, { big: e.outcome === 'blackjack' && this.owns(e.seat) });
     }
     const p = pillFor(e.outcome, e.bet, e.payout);
     // on the bet, clear of the cards (on the first card it hid the indices fanned over it)
@@ -1152,6 +1186,7 @@ export class BlackjackTable implements TableView {
     this.ctx.kit.tip(null);
     this.tray.root.remove();
     this.picker.root.remove();
+    this.history.dispose();
     this.actions.remove();
     this.insure.remove();
     this.meters.remove();

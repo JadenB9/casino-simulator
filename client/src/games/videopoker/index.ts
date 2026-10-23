@@ -11,11 +11,12 @@ import type { GameClientModule, TableView } from '../contract.ts';
 import type { GameEvent } from '../../../../shared/src/engine.ts';
 import type { Card } from '../../../../shared/src/cards.ts';
 import { DENOMS, type VideoPokerView } from '../../../../shared/src/games/videopoker/engine.ts';
-import { MAX_COINS, JACKS_OR_BETTER, FULL_HOUSE, FOUR_OF_A_KIND, STRAIGHT_FLUSH, ROYAL_FLUSH } from '../../../../shared/src/games/videopoker/hands.ts';
+import { MAX_COINS, JACKS_OR_BETTER, FULL_HOUSE, FOUR_OF_A_KIND, STRAIGHT_FLUSH, ROYAL_FLUSH, HAND_NAMES } from '../../../../shared/src/games/videopoker/hands.ts';
 import { formatCompact, formatMoney, type Cents } from '../../../../shared/src/money.ts';
 import { tween, wait, ease, finishAll } from '../../table/tween.ts';
 import { celebrate } from '../../table/celebrate.ts';
 import { el } from '../../ui/kit.ts';
+import { RoundHistory } from '../../table/history.ts';
 import { cabinetModel, machinePose, screenCorners, BUTTONS, FOOTPRINT, SEAT, DECK_POINT, type ButtonId } from './cabinet.ts';
 import { MachineScreen, GLASS_NAMES, toScreen } from './screen.ts';
 import { MachineSounds } from './sounds.ts';
@@ -57,6 +58,8 @@ export const videopoker: GameClientModule = {
     );
     layer.append(screen.root);
     ctx.ui.append(layer);
+    // the last hands this sitting and what they paid (table/history.ts)
+    const hands = new RoundHistory(ctx.ui, 'Hands');
     const corners = screenCorners();
     const canvas = ctx.stage.engine.renderer.domElement;
 
@@ -298,6 +301,7 @@ export const videopoker: GameClientModule = {
       const bet = Number(e.coins) * Number(e.denom);
       phase = 'over';
       for (let i = 0; i < 5; i++) screen.setHeld(i, false);
+      hands.add({ what: credits === 0 ? 'No win' : (HAND_NAMES[rank] ?? 'Win'), staked: bet, returned: payout, detail: `${Number(e.coins)} coin${Number(e.coins) === 1 ? '' : 's'} at ${formatMoney(Number(e.denom))}` });
       if (credits === 0) {
         screen.setRow(null);
         screen.setStatus('GAME OVER', 'over');
@@ -457,7 +461,9 @@ export const videopoker: GameClientModule = {
         canvas.style.cursor = '';
         offTips();
         clearTip();
+        screen.dispose();
         layer.remove();
+        hands.dispose();
         if (glassMat) {
           glassMat.map = attract;
           glassMat.color.set('#ffffff');
