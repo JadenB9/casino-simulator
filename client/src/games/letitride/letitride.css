@@ -1,7 +1,7 @@
 /* Let It Ride: labels pinned to hands, the Ride/Pull bar, the meters, the betting clock and
    the rules card. Everything sits over the table; the bottom-left corner stays free. */
 
-.lr-hand { display: flex; align-items: baseline; gap: 8px; padding: 3px 10px; border-radius: 4px; font-family: var(--serif); font-size: 14px; font-weight: 600; letter-spacing: 0.04em; white-space: nowrap; color: var(--ink); background: rgba(9, 17, 29, 0.8); border: 1px solid rgba(239, 217, 162, 0.28); pointer-events: none; }
+.lr-hand { display: flex; align-items: baseline; gap: 8px; padding: 3px 10px; border-radius: 4px; font-family: var(--serif); font-size: 14px; font-weight: 600; letter-spacing: 0.04em; white-space: nowrap; color: var(--ink); background: rgba(var(--glass-rgb), 0.86); border: 1px solid var(--line-strong); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28); pointer-events: none; }
 .lr-hand.mine { font-size: 16px; border-color: var(--line-strong); }
 .lr-hand .muted { color: var(--ink-3); font-size: 0.86em; font-weight: 400; }
 .lr-hand .net { font-family: var(--ui); font-size: 1.05em; letter-spacing: 0.02em; color: var(--ink-2); }
@@ -11,7 +11,7 @@
 .lr-hand.stack { flex-direction: column; align-items: center; gap: 0; max-width: 92px; padding: 2px 7px 3px; font-size: 13px; line-height: 1.15; white-space: normal; text-align: center; }
 .lr-hand.stack.mine { font-size: 13px; }
 
-.lr-name { padding: 1px 8px; border-radius: 3px; font-size: 13px; letter-spacing: 0.05em; color: var(--ink-2); background: rgba(12, 10, 8, 0.66); white-space: nowrap; pointer-events: none; }
+.lr-name { padding: 1px 8px; border-radius: 3px; font-size: 13px; letter-spacing: 0.05em; color: var(--ink-2); background: rgba(var(--glass-rgb), 0.74); white-space: nowrap; pointer-events: none; }
 .lr-name.mine { color: var(--brass-hi); }
 .lr-name.away { opacity: 0.5; }
 
@@ -41,14 +41,14 @@
 .lr-clock { position: fixed; top: var(--below-hud); left: 50%; width: 48px; height: 48px; transform: translateX(-50%); display: grid; place-items: center; }
 .lr-clock[hidden] { display: none; }
 .lr-ring { position: absolute; inset: 0; width: 100%; height: 100%; }
-.lr-ring circle { fill: rgba(12, 10, 8, 0.7); stroke-width: 3; }
-.lr-ring .track { stroke: rgba(255, 255, 255, 0.14); }
+.lr-ring circle { fill: rgba(var(--glass-rgb), 0.86); stroke-width: 3; }
+.lr-ring .track { stroke: rgba(var(--lift-rgb), 0.16); }
 .lr-ring .left { fill: none; stroke: var(--brass-hi); stroke-linecap: round; transform: rotate(-90deg); transform-origin: 50% 50%; }
 .lr-clock.low .left { stroke: var(--lose); }
 .lr-clock-text { position: relative; font-size: 19px; font-weight: 600; font-variant-numeric: tabular-nums; }
 
 /* The dealer's hand, in front of the dealer's cards: "Dealer · Jack high". */
-.lr-hand.lr-dealer { gap: 9px; padding: 4px 12px 5px; background: rgba(9, 17, 29, 0.88); border-color: var(--line-strong); }
+.lr-hand.lr-dealer { gap: 9px; padding: 4px 12px 5px; background: rgba(var(--glass-rgb), 0.92); border-color: var(--line-strong); }
 .lr-dealer-word { font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-2); }
 .lr-dealer-hand { font-size: 20px; color: var(--ink); }
 

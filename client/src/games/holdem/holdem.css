@@ -13,7 +13,7 @@
   min-width: 138px;
   padding: 4px 12px 4px 4px;
   border-radius: 999px;
-  background: rgba(14, 11, 9, 0.84);
+  background: rgba(var(--glass-rgb), 0.88);
   border: 1px solid var(--line);
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
   color: var(--ink);
@@ -38,11 +38,11 @@
   border-radius: 50%;
   background: radial-gradient(circle at 35% 30%, #3b3026, #1a1410 70%);
 }
-.he-initial { font-family: var(--serif); font-size: 17px; font-weight: 600; color: var(--brass-hi); }
+.he-initial { font-family: var(--serif); font-size: 17px; font-weight: 600; color: #f1d59a; }
 .he-ring { position: absolute; inset: -4px; width: 48px; height: 48px; transform: rotate(-90deg); }
 .he-ring circle { fill: none; stroke-width: 3; }
 .he-ring-track { stroke: transparent; }
-.he-turn .he-ring-track { stroke: rgba(255, 255, 255, 0.1); }
+.he-turn .he-ring-track { stroke: rgba(var(--lift-rgb), 0.14); }
 .he-ring-left { stroke: var(--brass-hi); stroke-linecap: round; }
 .he-bank .he-ring-left { stroke: var(--lose); }
 
@@ -53,7 +53,7 @@
   font-size: 10px;
   letter-spacing: 0.12em;
   color: var(--ink-3);
-  border: 1px solid rgba(201, 192, 173, 0.35);
+  border: 1px solid var(--line);
   border-radius: 3px;
   padding: 0 3px;
 }
@@ -66,7 +66,7 @@
   translate: -50% 0;
   padding: 1px 8px;
   border-radius: 3px;
-  background: rgba(14, 11, 9, 0.88);
+  background: rgba(var(--glass-rgb), 0.92);
   border: 1px solid var(--line);
   font-size: 12px;
   font-weight: 600;
@@ -76,7 +76,7 @@
 }
 .he-status[data-kind='bet'],
 .he-status[data-kind='raise'] { color: var(--brass-hi); border-color: var(--line-strong); }
-.he-status[data-kind='allin'] { color: #f3b2a2; border-color: rgba(var(--lose-rgb), 0.6); }
+.he-status[data-kind='allin'] { color: var(--lose); border-color: rgba(var(--lose-rgb), 0.6); }
 .he-status[data-kind='fold'] { color: var(--ink-3); }
 .he-status[data-kind='win'] { color: var(--win); border-color: rgba(var(--win-rgb), 0.6); }
 .he-status[data-kind='show'] { color: var(--ink); text-transform: none; letter-spacing: 0.02em; font-size: 13px; }
@@ -85,7 +85,7 @@
   position: absolute;
   padding: 0 6px;
   border-radius: 3px;
-  background: rgba(10, 8, 6, 0.7);
+  background: rgba(var(--glass-rgb), 0.8);
   font-size: 13px;
   font-weight: 600;
   color: var(--ink);
@@ -94,8 +94,8 @@
   position: absolute;
   padding: 3px 12px;
   border-radius: 999px;
-  background: rgba(10, 8, 6, 0.72);
-  border: 1px solid var(--line);
+  background: rgba(var(--glass-rgb), 0.86);
+  border: 1px solid var(--line-strong);
   font-size: 16px;
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -108,7 +108,7 @@
   font-size: 12px;
   letter-spacing: 0.06em;
   color: var(--ink-2);
-  background: rgba(10, 8, 6, 0.6);
+  background: rgba(var(--glass-rgb), 0.76);
   padding: 0 6px;
   border-radius: 3px;
 }

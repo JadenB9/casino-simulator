@@ -1,7 +1,7 @@
 /* Casino War: labels pinned to hands, the War/Surrender bar, the meters, the betting clock and the
    rules card. Everything sits over the table; the bottom-left corner stays free. */
 
-.wr-hand { display: flex; align-items: baseline; gap: 8px; padding: 3px 10px; border-radius: 4px; font-family: var(--serif); font-size: 14px; font-weight: 600; letter-spacing: 0.04em; white-space: nowrap; color: var(--ink); background: rgba(6, 22, 24, 0.82); border: 1px solid rgba(239, 217, 162, 0.28); pointer-events: none; }
+.wr-hand { display: flex; align-items: baseline; gap: 8px; padding: 3px 10px; border-radius: 4px; font-family: var(--serif); font-size: 14px; font-weight: 600; letter-spacing: 0.04em; white-space: nowrap; color: var(--ink); background: rgba(var(--glass-rgb), 0.86); border: 1px solid var(--line-strong); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28); pointer-events: none; }
 .wr-hand.mine { font-size: 16px; border-color: var(--line-strong); }
 .wr-hand.dealer { font-size: 15px; }
 .wr-hand .muted { color: var(--ink-3); font-size: 0.86em; font-weight: 400; }
@@ -10,7 +10,7 @@
 .wr-hand .net.up { color: var(--win); }
 .wr-hand .net.down { color: var(--lose); }
 
-.wr-name { padding: 1px 8px; border-radius: 3px; font-size: 13px; letter-spacing: 0.05em; color: var(--ink-2); background: rgba(12, 10, 8, 0.66); white-space: nowrap; pointer-events: none; }
+.wr-name { padding: 1px 8px; border-radius: 3px; font-size: 13px; letter-spacing: 0.05em; color: var(--ink-2); background: rgba(var(--glass-rgb), 0.74); white-space: nowrap; pointer-events: none; }
 .wr-name.mine { color: var(--brass-hi); }
 .wr-name.away { opacity: 0.5; }
 
@@ -41,8 +41,8 @@
 .wr-clock { position: fixed; top: var(--below-hud); left: 50%; width: 48px; height: 48px; transform: translateX(-50%); display: grid; place-items: center; }
 .wr-clock[hidden] { display: none; }
 .wr-ring { position: absolute; inset: 0; width: 100%; height: 100%; }
-.wr-ring circle { fill: rgba(12, 10, 8, 0.7); stroke-width: 3; }
-.wr-ring .track { stroke: rgba(255, 255, 255, 0.14); }
+.wr-ring circle { fill: rgba(var(--glass-rgb), 0.86); stroke-width: 3; }
+.wr-ring .track { stroke: rgba(var(--lift-rgb), 0.16); }
 .wr-ring .left { fill: none; stroke: var(--brass-hi); stroke-linecap: round; transform: rotate(-90deg); transform-origin: 50% 50%; }
 .wr-clock.low .left { stroke: var(--lose); }
 .wr-clock-text { position: relative; font-size: 19px; font-weight: 600; font-variant-numeric: tabular-nums; }

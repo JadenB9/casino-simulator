@@ -72,7 +72,7 @@
 .bc-total.tie { border-color: var(--bc-tie); }
 .bc-total.lose { color: var(--ink-3); }
 .bc-total.lose .bc-total-num { color: var(--ink-3); }
-.bc-comm { padding: 1px 5px; border-radius: 3px; border: 1px solid var(--brass); background: rgba(14, 11, 9, 0.9); color: var(--brass-hi); font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; animation: pill-in 0.3s var(--ease); }
+.bc-comm { padding: 1px 5px; border-radius: 3px; border: 1px solid var(--brass); background: rgba(var(--glass-rgb), 0.92); color: var(--brass-hi); font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; animation: pill-in 0.3s var(--ease); }
 .pill.bc-other { font-size: 13px; padding: 1px 8px; }
 .bc-timer { position: relative; }
 .bc-timer svg { width: 44px; height: 44px; display: block; }
