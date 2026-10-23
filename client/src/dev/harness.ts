@@ -14,6 +14,7 @@ import { updateTweens } from '../table/tween.ts';
 import { loadCards } from '../table/cards.ts';
 import { Sfx } from '../audio/sfx.ts';
 import { el, toast } from '../ui/kit.ts';
+import '../ui/lobby/buyin.ts'; // the buy-in with its slider and quick amounts, as the app has it
 import { formatMoney } from '../../../shared/src/money.ts';
 import { parseLimitsParam } from '../../../shared/src/limits.ts';
 

@@ -5,7 +5,7 @@
 
 import type { GameId } from '../../../../shared/src/engine.ts';
 import type { LobbySummary } from '../../../../shared/src/protocol.ts';
-import { clampLimits, limitSpec, limitsLabel, limitsProblem, maxRange, sameLimits, type LimitSpec, type TableLimits } from '../../../../shared/src/limits.ts';
+import { clampLimits, limitSpec, limitsLabel, limitsProblem, sameLimits, type LimitSpec, type TableLimits } from '../../../../shared/src/limits.ts';
 import { formatMoney, type Cents } from '../../../../shared/src/money.ts';
 
 // --- the list's stakes -------------------------------------------------------------------------
@@ -33,21 +33,12 @@ export function stakesOf(game: GameId, list: readonly Pick<LobbySummary, 'limits
 // --- custom limits -------------------------------------------------------------------------------
 
 /**
- * Why these limits can't open a table here, in words, or null. limitsProblem knows the floor's
- * rules; the High Limit Salon's games take the same rules up to a far higher ceiling
- * (limitSpec(game, true)), and there the salon's spec decides, worded the way limitsProblem
- * words a game of bets (the salon's games all are). The server clamps with the same spec.
+ * Why these limits can't open a table here, in words, or null: limitsProblem, told when the table
+ * is in the High Limit Salon (its games take the same rules up to a far higher ceiling,
+ * limitSpec(game, true)). The server clamps with the same spec.
  */
 export function problemHere(game: GameId, spec: LimitSpec, l: TableLimits): string | null {
-  if (spec === limitSpec(game)) return limitsProblem(game, l);
-  const fixed = clampLimits(game, l, true);
-  if (fixed && fixed.min === l.min && fixed.max === l.max) return null;
-  const { low, high } = spec.min;
-  if (!fixed || fixed.min !== l.min) return `The minimum is ${formatMoney(low)} to ${formatMoney(high)}, in whole dollars.`;
-  const r = maxRange(spec, l.min);
-  if (!Number.isSafeInteger(l.max) || l.max % spec.max.step !== 0) return 'The maximum is a whole number of dollars.';
-  if (l.max < r.low) return `The maximum is at least ${spec.max.ratio} times the minimum (${formatMoney(r.low)}).`;
-  return `The maximum here is at most ${formatMoney(r.high)}.`;
+  return limitsProblem(game, l, spec !== limitSpec(game));
 }
 
 /** Which of the two custom fields a problem is in: an amount that isn't one, else the minimum if the rules move it, else the maximum. */
