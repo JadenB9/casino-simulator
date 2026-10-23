@@ -12,19 +12,21 @@
 @keyframes idle-in { from { opacity: 0; translate: 0 -6px; } }
 
 /* The away screen covers the floor (still drawn, dimmed, behind it) until Come back: the house's
-   mark, what happened and the one way on, on a veil of the page's own colours in either theme. */
-.away { position: fixed; inset: 0; z-index: var(--z-away); display: grid; place-items: center; padding: 24px 16px; background: radial-gradient(120% 90% at 50% 40%, rgba(var(--glow-rgb), 0.9) 0%, rgba(var(--bg-rgb), 0.95) 70%); backdrop-filter: blur(6px); animation: away-in 0.4s var(--ease); }
-.away.closing { opacity: 0; pointer-events: none; transition: opacity 0.26s var(--ease); }
+   mark, what happened and the one way on, on a veil of the page's own colours in either theme.
+   (A class of its own: `away` alone is the state other areas give a player who dropped, a name
+   tag at a table or a party member, and must never become a full-screen layer.) */
+.away-screen { position: fixed; inset: 0; z-index: var(--z-away); display: grid; place-items: center; padding: 24px 16px; background: radial-gradient(120% 90% at 50% 40%, rgba(var(--glow-rgb), 0.9) 0%, rgba(var(--bg-rgb), 0.95) 70%); backdrop-filter: blur(6px); animation: away-in 0.4s var(--ease); }
+.away-screen.closing { opacity: 0; pointer-events: none; transition: opacity 0.26s var(--ease); }
 .away-card { display: grid; justify-items: center; gap: 14px; max-width: 460px; text-align: center; animation: away-rise 0.5s var(--ease) 0.05s both; }
 .away-mark { font-family: var(--serif); font-size: 14px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--brass); margin-right: -0.24em; }
 .away-title { margin: 0; font-family: var(--serif); font-size: clamp(24px, 4.2vw, 32px); font-weight: 600; letter-spacing: 0.05em; line-height: 1.25; color: var(--brass-hi); text-wrap: balance; }
 .away-rule { width: 120px; height: 1px; background: linear-gradient(90deg, rgba(var(--brass-hi-rgb), 0), rgba(var(--brass-hi-rgb), 0.8), rgba(var(--brass-hi-rgb), 0)); }
 .away-line { margin: 0; font-size: 17px; line-height: 1.4; color: var(--ink-2); text-wrap: pretty; }
 .btn.away-back { margin-top: 8px; height: 52px; min-width: 220px; padding: 0 32px; font-size: 20px; letter-spacing: 0.1em; }
-html.gfx-low .away { backdrop-filter: none; }
+html.gfx-low .away-screen { backdrop-filter: none; }
 @keyframes away-in { from { opacity: 0; } }
 @keyframes away-rise { from { opacity: 0; transform: translateY(8px); } }
 
 /* Reduce flashing & motion (app/comfort.ts) */
-body.calm .idle-warn, body.calm .away, body.calm .away-card { animation: none; }
+body.calm .idle-warn, body.calm .away-screen, body.calm .away-card { animation: none; }
 body.calm .idle-fill { transition: none; }

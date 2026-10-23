@@ -327,7 +327,7 @@ if (checks.includes('away')) {
     }, ms);
   const awayAndBack = async () => {
     await idle(6_000);
-    await a.p.waitForSelector('.away', { timeout: 30_000 });
+    await a.p.waitForSelector('.away-screen', { timeout: 30_000 });
     await a.p.waitForTimeout(1_500);
     await a.p.click('.away-back');
     await a.p.waitForFunction(() => window.casino.app.link?.you, null, { timeout: 20_000 });

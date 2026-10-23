@@ -59,7 +59,7 @@ export interface AwayHandle {
 
 /** The screen an idle player comes back to. `onBack` runs inside the click (a user gesture). */
 export function showAway(opts: { root: HTMLElement; atTable: boolean; onBack: () => void }): AwayHandle {
-  const screen = el('div', 'away');
+  const screen = el('div', 'away-screen');
   const card = el('div', 'away-card');
   card.setAttribute('role', 'dialog');
   card.setAttribute('aria-modal', 'true');

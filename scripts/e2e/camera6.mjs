@@ -632,7 +632,7 @@ if (checks.includes('flows')) {
     app.idle = new IdleWatch(app.idle.hooks, { idleMs: 6_000, warnMs: 3_000, hereMs: 3_000 });
     app.idle.start();
   });
-  await p.waitForSelector('.away', { timeout: 30_000 });
+  await p.waitForSelector('.away-screen', { timeout: 30_000 });
   await p.waitForTimeout(1_000);
   await p.click('.away-back');
   await p.waitForFunction(() => window.casino.app.link?.you, null, { timeout: 20_000 });

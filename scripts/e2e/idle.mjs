@@ -103,13 +103,13 @@ r.stillOnFloor = await page.evaluate(() => window.casino.app.link?.you != null);
 await quiet(IDLE - WARN + 1_000);
 r.warnedAgain = await shown('.idle-warn');
 await quiet(WARN);
-r.away = await shown('.away');
-r.awayText = r.away ? (await page.textContent('.away')).replace(/\s+/g, ' ').trim() : null;
+r.away = await shown('.away-screen');
+r.awayText = r.away ? (await page.textContent('.away-screen')).replace(/\s+/g, ' ').trim() : null;
 r.warningGone = await gone('.idle-warn');
 r.floorClosed = await page.evaluate(() => window.casino.app.link === null);
 // Nothing reconnects by itself while the screen is up; the others saw us go.
 await page.waitForTimeout(3_000);
-r.stillAway = await page.evaluate(() => window.casino.app.link === null && !!document.querySelector('.away'));
+r.stillAway = await page.evaluate(() => window.casino.app.link === null && !!document.querySelector('.away-screen'));
 r.seenLeave = seen.left;
 seen.at = null;
 await shot('away');
@@ -148,8 +148,8 @@ r.tableWarned = await shown('.idle-warn');
 r.tableWarning = r.tableWarned ? (await page.textContent('.idle-warn')).replace(/\s+/g, ' ').trim() : null;
 await shot('table-warning');
 await quiet(WARN);
-r.tableAway = await shown('.away');
-r.tableAwayText = r.tableAway ? (await page.textContent('.away')).replace(/\s+/g, ' ').trim() : null;
+r.tableAway = await shown('.away-screen');
+r.tableAwayText = r.tableAway ? (await page.textContent('.away-screen')).replace(/\s+/g, ' ').trim() : null;
 r.tableLeft = await page.evaluate(() => window.casino.app.table === null);
 // Stood up the normal way: the unspun bet came back and the chips went home.
 let inPlay = r.inPlaySeated;
