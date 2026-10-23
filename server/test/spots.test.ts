@@ -14,6 +14,16 @@ async function money(id: number) {
   return env.DB.prepare(`SELECT balance, in_play FROM casino_accounts WHERE id = ?1`).bind(id).first<{ balance: number; in_play: number }>();
 }
 
+/**
+ * What the house paid into the balance meanwhile: a feat or a daily challenge earned at the table
+ * is a grant straight to the balance, not chips (on a day whose "Five at Blackjack" these rounds
+ * complete, it lands mid-test). Everything else at the table stays on the table until cash-out.
+ */
+async function granted(id: number): Promise<number> {
+  const row = await env.DB.prepare(`SELECT COALESCE(SUM(amount), 0) AS n FROM casino_ledger WHERE account_id = ?1 AND kind = 'grant' AND op_id LIKE 'feat:%'`).bind(id).first<{ n: number }>();
+  return row?.n ?? 0;
+}
+
 async function stats(id: number, game: string) {
   return env.DB.prepare(`SELECT rounds, wagered, net FROM casino_stats WHERE account_id = ?1 AND game = ?2`).bind(id, game).first<{ rounds: number; wagered: number; net: number }>();
 }
@@ -114,11 +124,11 @@ describe('several spots at a solo table', () => {
       expect(await stackNow(c)).toBe(stack);
     }
     // The rounds never touched D1: the chips stay on the table until they're cashed out.
-    expect(await money(id)).toEqual({ balance: BALANCE - BUY_IN, in_play: BUY_IN });
+    expect(await money(id)).toEqual({ balance: BALANCE - BUY_IN + (await granted(id)), in_play: BUY_IN });
     c.send({ t: 'cashout', aid: 'c1' });
     const bal = await c.next((m) => m.t === 'balance' && m.inPlay === 0);
-    expect(bal.balance).toBe(BALANCE - BUY_IN + stack);
-    expect(await money(id)).toEqual({ balance: BALANCE - BUY_IN + stack, in_play: 0 });
+    expect(bal.balance).toBe(BALANCE - BUY_IN + stack + (await granted(id)));
+    expect(await money(id)).toEqual({ balance: BALANCE - BUY_IN + stack + (await granted(id)), in_play: 0 });
     // Every spot of every round is a round in the stats.
     expect(await stats(id, 'blackjack')).toMatchObject({ rounds: 18, wagered, net: stack - BUY_IN });
   });
@@ -156,7 +166,7 @@ describe('several spots at a solo table', () => {
     const done = await standOut(third, restored.view);
     expect(done.phase).toBe('results');
     expect(await stackNow(third)).toBe(stack + netOf(done.spots));
-    expect(await money(id)).toEqual({ balance: BALANCE - BUY_IN, in_play: BUY_IN });
+    expect(await money(id)).toEqual({ balance: BALANCE - BUY_IN + (await granted(id)), in_play: BUY_IN });
   });
 
   it('three card poker: three hands, a reconnect while deciding shows all three again, and the money is exact', async () => {
@@ -189,7 +199,7 @@ describe('several spots at a solo table', () => {
 
     again.send({ t: 'cashout', aid: 'c1' });
     const bal = await again.next((m) => m.t === 'balance' && m.inPlay === 0);
-    expect(bal.balance).toBe(BALANCE - BUY_IN + end.you.stack);
+    expect(bal.balance).toBe(BALANCE - BUY_IN + end.you.stack + (await granted(id)));
     expect(await stats(id, 'threecard')).toMatchObject({ rounds: 3, wagered: results.reduce((a: number, r: any) => a + r.wagered, 0), net: netOf(results) });
   });
 
@@ -216,7 +226,7 @@ describe('several spots at a solo table', () => {
 
     c.send({ t: 'cashout', aid: 'c1' });
     const bal = await c.next((m) => m.t === 'balance' && m.inPlay === 0);
-    expect(bal.balance).toBe(BALANCE - BUY_IN + stack);
+    expect(bal.balance).toBe(BALANCE - BUY_IN + stack + (await granted(id)));
     expect(await stats(id, 'war')).toMatchObject({ rounds: 36, net: stack - BUY_IN });
   });
 });
