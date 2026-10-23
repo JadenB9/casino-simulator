@@ -4,7 +4,7 @@
 // its bytes on the wire, and anything fetched twice. Point it at a production build (`vite preview`
 // of dist/casino with the worker behind it) for real sizes; the dev server's are unbundled.
 //
-// Usage: node scripts/e2e/loadtime.mjs [port] [--net none|4g|3g] [--runs N] [--name perf_load] [--list] [--sw]
+// Usage: node scripts/e2e/loadtime.mjs [port] [--net none|4g|3g] [--runs N] [--name perf_load] [--list] [--sw] [--dpr 2]
 //   --list: every request too, biggest first (kB on the wire, whether before the login screen).
 //   4g: 9 Mbps down, 1.5 up, 150 ms round trips; 3g: 1.6 Mbps, 0.75 up, 300 ms.
 //   --sw: headless on the software renderer, for a machine with no screen or GPU (the bytes are
@@ -19,6 +19,8 @@ const port = argv.find((a, i) => !a.startsWith('--') && !argv[i - 1]?.startsWith
 const net = opt('net', 'none');
 const runs = Number(opt('runs', 1));
 const name = opt('name', 'perf_load');
+// (a 1440x900 window at twice the pixels, as a laptop's; --dpr 1 for a machine short of memory)
+const dpr = Number(opt('dpr', 2));
 const PROFILES = {
   none: null,
   '4g': { latency: 150, downloadThroughput: (9e6 / 8) | 0, uploadThroughput: (1.5e6 / 8) | 0 },
@@ -30,7 +32,7 @@ const browser = await chromium.launch(
 );
 const all = [];
 for (let run = 0; run < runs; run++) {
-  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 });
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: dpr });
   const page = await ctx.newPage();
   const cdp = await ctx.newCDPSession(page);
   await cdp.send('Network.enable');
