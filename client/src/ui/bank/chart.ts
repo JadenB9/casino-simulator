@@ -124,10 +124,13 @@ export class PriceChart {
     const brass = (a: number) => `rgba(${c.brass}, ${a})`;
     const pts = this.points;
     if (pts.length < 2) {
+      g.save();
       g.fillStyle = ink(0.55);
       g.font = FONT;
+      g.textAlign = 'center';
       g.textBaseline = 'middle';
-      g.fillText('The first prices appear in a few minutes.', 12, h / 2);
+      g.fillText('The first prices appear in a few minutes.', w / 2, h / 2);
+      g.restore();
       this.tip.hidden = true;
       return;
     }
