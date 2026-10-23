@@ -16,8 +16,8 @@
 /* One see-through row under the HUD: the last results on the left, the meters and the players
    stacked on the right, so nothing has to guess another panel's height (table/fit.ts reads
    through .pass to the panels). */
-.sb-hud { position: fixed; top: var(--below-hud); left: 16px; right: 16px; display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
-.sb-side { flex: none; display: grid; justify-items: end; gap: 8px; margin-top: calc(var(--below-party) - var(--below-hud)); margin-left: auto; }
+.sb-hud { position: fixed; top: var(--below-hud, 82px); left: 16px; right: 16px; display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.sb-side { flex: none; display: grid; justify-items: end; gap: 8px; margin-top: calc(var(--below-party, var(--below-hud, 82px)) - var(--below-hud, 82px)); margin-left: auto; }
 .sb-history { flex: 0 1 auto; min-width: 0; padding: 8px 12px 10px; max-width: min(620px, calc(100vw - 420px)); }
 .sb-history-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
 .sb-history-count { font-size: 12px; letter-spacing: 0.08em; color: var(--ink-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -70,7 +70,7 @@ body.calm .sb-board { animation: sb-rise-calm 0.35s both; }
 
 .sb-board[hidden], .sb-clock[hidden], .sb-players[hidden], .sb-tip[hidden], .sb-color-note[hidden] { display: none; }
 #ui .sb-tip { pointer-events: none; }
-.sb-tip { position: fixed; z-index: 20; padding: 7px 11px; font-size: 15px; line-height: 1.35; max-width: 300px; }
+.sb-tip { position: fixed; z-index: var(--z-tooltip, 20); padding: 7px 11px; font-size: 15px; line-height: 1.35; max-width: 300px; }
 .sb-tip .sb-tip-name { font-weight: 600; color: var(--ink); letter-spacing: 0.03em; }
 .sb-tip .sb-tip-pays { color: var(--brass-hi); }
 .sb-tip .sb-tip-rule { color: var(--ink-2); font-size: 14px; }
@@ -108,7 +108,7 @@ body.calm .sb-board { animation: sb-rise-calm 0.35s both; }
 /* A phone upright: the meters across the top under the HUD, the history under them, the players
    under both. */
 @media (max-width: 560px) {
-  .sb-hud { top: var(--below-party); left: 10px; right: 10px; flex-direction: column; align-items: stretch; gap: 8px; }
+  .sb-hud { top: var(--below-party, var(--below-hud, 82px)); left: 10px; right: 10px; flex-direction: column; align-items: stretch; gap: 8px; }
   .sb-side { display: contents; }
   .sb-meters { order: 1; justify-content: space-between; gap: 8px; padding: 7px 12px; }
   .sb-meter { min-width: 0; }

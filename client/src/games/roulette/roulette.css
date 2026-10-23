@@ -8,8 +8,8 @@
 /* One see-through row under the HUD: the board on the left, the meters (with the racetrack's
    button) and the players stacked on the right, so nothing has to guess another panel's height.
    Only the panels take the pointer and count as controls (table/fit.ts reads through .pass). */
-.rl-hud { position: fixed; top: var(--below-hud); left: 16px; right: 16px; display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
-.rl-side { flex: none; display: grid; justify-items: end; gap: 8px; margin-top: calc(var(--below-party) - var(--below-hud)); margin-left: auto; }
+.rl-hud { position: fixed; top: var(--below-hud, 82px); left: 16px; right: 16px; display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.rl-side { flex: none; display: grid; justify-items: end; gap: 8px; margin-top: calc(var(--below-party, var(--below-hud, 82px)) - var(--below-hud, 82px)); margin-left: auto; }
 .rl-history { flex: 0 1 auto; min-width: 0; padding: 8px 12px 10px; max-width: min(640px, calc(100vw - 420px)); }
 .rl-history-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
 .rl-history-count { font-size: 12px; letter-spacing: 0.08em; color: var(--ink-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -62,7 +62,7 @@ body.calm .rl-result { animation: rl-rise-calm 0.35s both; }
 
 #ui .rl-tip { pointer-events: none; }
 .rl-result[hidden], .rl-clock[hidden], .rl-players[hidden], .rl-tip[hidden], .rl-color-note[hidden] { display: none; }
-.rl-tip { position: fixed; z-index: 20; padding: 7px 11px; font-size: 15px; line-height: 1.35; pointer-events: none; max-width: 280px; }
+.rl-tip { position: fixed; z-index: var(--z-tooltip, 20); padding: 7px 11px; font-size: 15px; line-height: 1.35; pointer-events: none; max-width: 280px; }
 .rl-tip .rl-tip-name { font-weight: 600; color: var(--ink); letter-spacing: 0.03em; }
 .rl-tip .rl-tip-pays { color: var(--brass-hi); }
 .rl-tip .rl-tip-edge { color: var(--ink-3); font-size: 13px; }
@@ -148,7 +148,7 @@ body.calm .rl-result { animation: rl-rise-calm 0.35s both; }
 /* A phone upright: one column under the HUD, the meters (with the racetrack's button beside them)
    across the top, the last numbers under them, the players' list under both. */
 @media (max-width: 560px) {
-  .rl-hud { top: var(--below-party); left: 10px; right: 10px; flex-direction: column; align-items: stretch; gap: 8px; }
+  .rl-hud { top: var(--below-party, var(--below-hud, 82px)); left: 10px; right: 10px; flex-direction: column; align-items: stretch; gap: 8px; }
   .rl-side { display: contents; }
   .rl-meters { order: 1; grid-template-columns: 1fr auto; align-items: center; gap: 8px; padding: 7px 12px; }
   .rl-meter-row { justify-content: space-between; gap: 8px; }

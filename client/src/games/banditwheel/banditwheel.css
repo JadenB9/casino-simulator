@@ -77,7 +77,7 @@
 .bw-meter-value { font-size: 19px; font-weight: 600; }
 
 /* the results strip top left, the players under it (one see-through column, so neither guesses the other's height) */
-.bw-left { position: fixed; top: var(--below-hud); left: 16px; display: grid; justify-items: start; gap: 8px; }
+.bw-left { position: fixed; top: var(--below-hud, 82px); left: 16px; display: grid; justify-items: start; gap: 8px; }
 .bw-history { padding: 8px 10px 10px; background: rgba(36, 34, 31, 0.92); border-radius: 2px; color: #ebe6dc; }
 .bw-history-label, .bw-players-label { margin-bottom: 6px; font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: #857d70; }
 /* the latest spin large on the left, the eleven before it on top and eleven more under them */
@@ -165,7 +165,7 @@
    and over the HUD), only what betting needs, and the strip slimmed as on an upright phone, so
    the wheel keeps the left of the screen. */
 @media (max-height: 480px) {
-  .bw-panel { top: var(--below-hud); left: auto; right: 10px; bottom: 8px; width: 380px; gap: 3px; align-content: end; }
+  .bw-panel { top: var(--below-hud, 82px); left: auto; right: 10px; bottom: 8px; width: 380px; gap: 3px; align-content: end; }
   .bw-head, .bw-info, .bw-win-note, .bw-hint { display: none; }
   .bw-box { padding: 5px 9px; }
   .bw-row { grid-template-columns: 1fr 64px; gap: 3px; }
