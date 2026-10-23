@@ -1,4 +1,37 @@
-/* The valet's panel: the boutique's layout (shop.css), with a second button for sending a car back. */
+/* The valet's panel: the boutique's layout and cards (shop.css), each car drawn side on, a line
+   for your car at the curb (and its Send it back), and how the picked one drives as bars. */
+
+.vl-art { display: block; width: 100%; height: auto; }
+.valet .bq-pic { padding: 8px 8px 2px; background: radial-gradient(110% 80% at 50% 70%, rgba(var(--lift-rgb), 0.05), rgba(var(--lift-rgb), 0) 70%); }
+
+/* your car out front, and the time it waits */
+.vl-curb { display: flex; align-items: center; gap: 10px; margin: 10px 24px 0; padding: 7px 8px 7px 12px; border: 1px solid rgba(var(--brass-rgb), 0.45); border-radius: 6px; background: rgba(var(--brass-rgb), 0.08); }
+.vl-curb-text { flex: 1; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; min-width: 0; }
+.vl-curb-label { font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--brass); }
+.vl-curb-name { font-family: var(--serif); font-size: 15px; font-weight: 600; color: var(--ink); }
+.vl-curb-left { font-size: 14px; color: var(--ink-2); }
+.vl-curb-back { flex: none; height: 30px; padding: 0 11px; font-size: 13px; }
+
+/* how it drives: three bars against the line-up */
+.vl-specs { display: grid; gap: 3px; margin: 2px 0; }
+.vl-specs:empty { display: none; }
+.vl-spec { display: grid; grid-template-columns: 76px minmax(0, 1fr) 88px; align-items: center; gap: 10px; font-size: 13px; }
+.vl-spec-label { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-3); }
+.vl-spec-bar { height: 4px; border-radius: 2px; background: rgba(var(--brass-rgb), 0.14); overflow: hidden; }
+.vl-spec-bar i { display: block; height: 100%; background: var(--brass); transform-origin: left center; transition: transform 0.45s var(--ease); }
+.vl-spec-value { color: var(--ink-2); text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+
 .valet .vl-buttons { display: grid; grid-template-columns: 1fr; gap: 8px; }
-.valet .vl-buttons:has(.vl-back:not([hidden])) { grid-template-columns: 1fr auto; }
-.valet .vl-back { height: 42px; padding: 0 16px; font-size: 15px; white-space: nowrap; }
+
+body.calm .vl-spec-bar i { transition: none; }
+
+@media (max-width: 760px) {
+  .vl-curb { margin: 8px 16px 0; }
+  .vl-specs { display: none; }
+}
+
+@media (max-height: 560px) {
+  .vl-curb { margin: 6px 16px 0; padding: 4px 6px 4px 10px; }
+  .vl-specs { display: none; }
+  .valet .vl-buttons { grid-column: 2; grid-row: 1 / span 2; }
+}

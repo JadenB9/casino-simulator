@@ -1,22 +1,28 @@
 // The valet's panel, opened with E at the podium out front: every car there is, on the turntable
-// on the left as you go down the list, and on the right the list with prices, what you own, a buy
-// that says what your balance will be after, and for a car you own, the valet bringing it round.
-// A car you buy goes to your garage across the street at once. It holds the keyboard like the
-// other sheets: Esc closes it, the arrows move down the list, Enter does the button, Q and E turn.
+// on the left as you go through them, and on the right the cars as cards (each drawn side on from
+// its own shape, cars/art.ts) with prices and what you own; under them the one that's picked with
+// how it drives, a buy that says what your balance will be after, and for a car you own, the valet
+// bringing it round. A car you buy goes to your garage across the street at once. A car of yours
+// at the curb shows at the top with the time it waits, and a button that sends it back. It holds the keyboard like the other
+// sheets: Esc closes it, the arrows move through the cards, Enter does the button, Q and E turn.
 
 import '../shop/shop.css';
 import './cars.css';
 import { CARS, carItem, type BuyResponse, type CarItem, type ShopResponse } from '../../../../shared/src/items.ts';
 import { formatMoney, type Cents } from '../../../../shared/src/money.ts';
 import type { CarCall, CarCallResponse } from '../../../../shared/src/valet.ts';
+import { serverNow } from '../../net/clock.ts';
 import { el, button, modal, toast } from '../kit.ts';
 import type { Closable, EngineLike, SessionLike, SfxLike } from '../menu/deps.ts';
 import { icon } from '../menu/icons.ts';
 import { keycap, problemText, segmented } from '../menu/parts.ts';
 import { GLOBAL_KEYS, closeButton, focusFirst, holdKeyboard } from '../menu/sheet.ts';
 import { applyMoney } from '../shop/bar.ts';
+import { clockText } from '../shop/catalog.ts';
 import { CarStudio } from '../../world/cars/studio.ts';
 import type { CarMaterials } from '../../world/cars/materials.ts';
+import { carPicture } from './art.ts';
+import { carSpecs } from './specs.ts';
 
 export interface ValetApi {
   shop(): Promise<ShopResponse>;
@@ -41,7 +47,7 @@ export interface ValetDeps {
   onClose?(): void;
 }
 
-type Tab = 'all' | 'mine';
+type Tab = 'all' | 'mine' | 'afford';
 
 const dateFmt = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
@@ -80,26 +86,33 @@ export function openValet(deps: ValetDeps): Closable {
   turn.append(turnBtn('turn-left', 'Turn left (Q)', -Math.PI / 4), hint, turnBtn('turn-right', 'Turn right (E)', Math.PI / 4));
   stage.append(caption, turn);
 
-  // ---- the list
+  // ---- the cards
   const panel = el('aside', 'bq-panel');
   panel.setAttribute('role', 'dialog');
   panel.setAttribute('aria-modal', 'true');
   panel.setAttribute('aria-labelledby', 'vl-title');
-  const head = el('header', 'sheet-head');
+  const head = el('header', 'sheet-head bq-head');
   const titles = el('div', 'sheet-titles');
   const title = el('h2', 'sheet-title', 'Valet');
   title.id = 'vl-title';
   const sub = el('p', 'sheet-sub', 'Paid from your balance. Kept in your garage across the street.');
   titles.append(title, sub);
-  head.append(titles, closeButton(() => close()));
-
   const money = el('div', 'bq-money');
   const balVal = el('span', 'bq-money-val money');
   const ownVal = el('span', 'bq-money-own');
   money.append(el('span', 'bq-money-label', 'Balance'), balVal, ownVal);
+  head.append(titles, money, closeButton(() => close()));
+
+  // your car out front, while one is
+  const curb = el('div', 'vl-curb');
+  curb.setAttribute('aria-live', 'polite');
+  const curbText = el('span', 'vl-curb-text');
+  const curbBack = el('button', 'btn ghost vl-curb-back', 'Send it back');
+  curbBack.type = 'button';
+  curb.append(curbText, curbBack);
 
   const tabBox = el('div', 'bq-tabs');
-  const tabs = segmented<Tab>('Show', [{ id: 'all', label: 'Every car' }, { id: 'mine', label: 'Your garage' }], tab, (t) => {
+  const tabs = segmented<Tab>('Show', [{ id: 'all', label: 'Every car' }, { id: 'mine', label: 'Your garage' }, { id: 'afford', label: 'Can buy' }], tab, (t) => {
     tab = t;
     const list = listed();
     renderList();
@@ -117,17 +130,17 @@ export function openValet(deps: ValetDeps): Closable {
   const selPrice = el('div', 'bq-sel-price money');
   const sel = el('div', 'bq-sel');
   sel.append(selName, selPrice);
+  const selAbout = el('p', 'bq-sel-about');
+  const specs = el('div', 'vl-specs');
   const status = el('p', 'bq-status');
   status.setAttribute('aria-live', 'polite');
   const buttons = el('div', 'vl-buttons');
   const primary = el('button', 'btn primary bq-primary', 'Buy');
   primary.type = 'button';
-  const back = el('button', 'btn ghost vl-back', 'Send it back');
-  back.type = 'button';
-  buttons.append(primary, back);
-  foot.append(sel, status, buttons);
+  buttons.append(primary);
+  foot.append(sel, selAbout, specs, status, buttons);
 
-  panel.append(head, money, tabBox, list, foot);
+  panel.append(head, curb, tabBox, list, foot);
   root.append(stage, panel);
   deps.root.append(root);
 
@@ -147,28 +160,52 @@ export function openValet(deps: ValetDeps): Closable {
   addEventListener('resize', onResize);
 
   // ---- painting
-  const rows = new Map<string, HTMLButtonElement>();
-  const listed = () => (tab === 'mine' ? CARS.filter(isOwned) : [...CARS]);
+  const cards = new Map<string, { row: HTMLButtonElement; chip: HTMLElement; cover: HTMLElement; fill: HTMLElement; label: string }>();
+  const listed = () => (tab === 'mine' ? CARS.filter(isOwned) : tab === 'afford' ? CARS.filter((c) => !isOwned(c) && c.price <= balance()) : [...CARS]);
+
+  const cardFor = (c: CarItem) => {
+    let k = cards.get(c.id);
+    if (k) return k;
+    const row = el('button', 'bq-item vl-item');
+    row.type = 'button';
+    row.setAttribute('role', 'option');
+    row.dataset.id = c.id;
+    const pic = el('span', 'bq-pic');
+    pic.append(carPicture(c.id, 200, 90));
+    const text = el('span', 'bq-text');
+    const line = el('span', 'bq-line');
+    const chip = el('span', 'bq-chip');
+    line.append(el('span', 'bq-price money', formatMoney(c.price)), chip);
+    text.append(el('span', 'bq-name', c.name), line);
+    const cover = el('span', 'bq-cover');
+    const fill = el('span', 'bq-cover-fill');
+    cover.append(fill);
+    row.append(pic, text, cover);
+    row.addEventListener('click', () => pick(c));
+    row.addEventListener('dblclick', () => primary.click());
+    k = { row, chip, cover, fill, label: '' };
+    cards.set(c.id, k);
+    return k;
+  };
 
   const renderList = () => {
-    list.replaceChildren();
-    rows.clear();
     const here = listed();
+    const out: HTMLElement[] = [];
     if (here.length === 0) {
-      list.append(el('p', 'bq-empty', 'Nothing in your garage yet. Every car here is kept there once it is yours.'));
-      return;
+      const box = el('div', 'bq-empty-box');
+      box.append(el('p', 'bq-empty', tab === 'mine' ? 'Nothing in your garage yet. Every car here is kept there once it is yours.' : `None of the cars you don't own yet is within your balance of ${formatMoney(balance())}.`));
+      out.push(box);
     }
-    for (const c of here) {
-      const row = el('button', 'bq-item');
-      row.type = 'button';
-      row.setAttribute('role', 'option');
-      row.dataset.id = c.id;
-      row.append(el('span', 'bq-name', c.name), el('span', 'bq-price money', formatMoney(c.price)), el('span', 'bq-about', c.about), el('span', 'bq-chip'));
-      row.addEventListener('click', () => pick(c));
-      row.addEventListener('dblclick', () => primary.click());
-      list.append(row);
-      rows.set(c.id, row);
-    }
+    here.forEach((c, i) => {
+      const k = cardFor(c);
+      k.row.style.setProperty('--i', String(Math.min(i, 10)));
+      k.row.classList.remove('bq-in');
+      out.push(k.row);
+    });
+    list.replaceChildren(...out);
+    void list.offsetWidth;
+    for (const c of here) cards.get(c.id)!.row.classList.add('bq-in');
+    list.scrollTop = 0;
     paintRows();
   };
 
@@ -179,16 +216,24 @@ export function openValet(deps: ValetDeps): Closable {
   };
 
   const paintRows = () => {
-    for (const [id, row] of rows) {
-      const c = carItem(id)!;
-      const on = id === picked.id;
-      row.setAttribute('aria-selected', String(on));
-      row.tabIndex = on ? 0 : -1;
-      const chip = row.querySelector('.bq-chip')!;
+    const bal = balance();
+    for (const c of listed()) {
+      const k = cards.get(c.id);
+      if (!k) continue;
+      const on = c.id === picked.id;
+      k.row.setAttribute('aria-selected', String(on));
+      k.row.tabIndex = on ? 0 : -1;
       const state = chipOf(c);
-      chip.textContent = state;
-      chip.className = `bq-chip ${state === 'Owned' ? 'owned' : state ? 'wearing' : ''}`.trim();
-      row.classList.toggle('short', !isOwned(c) && c.price > balance());
+      if (k.chip.textContent !== state) {
+        k.chip.textContent = state;
+        k.chip.className = `bq-chip ${state === 'Owned' ? 'owned' : state ? 'wearing' : ''}`.trim();
+      }
+      const label = `${c.name}, ${formatMoney(c.price)}${state ? `, ${state.toLowerCase()}` : ''}`;
+      if (label !== k.label) k.row.setAttribute('aria-label', (k.label = label));
+      const short = !isOwned(c) && c.price > bal;
+      k.row.classList.toggle('short', short);
+      k.cover.hidden = !short;
+      if (short) k.fill.style.transform = `scaleX(${Math.max(0.004, Math.min(1, bal / c.price)).toFixed(4)})`;
     }
   };
 
@@ -207,6 +252,34 @@ export function openValet(deps: ValetDeps): Closable {
     return { line: { text: `Balance after: ${formatMoney(balance() - c.price)}. It goes straight to your garage.`, kind: '' }, label: `Buy · ${formatMoney(c.price)}`, enabled: true };
   };
 
+  /** How the picked car drives, as bars against the rest of the line-up, and its length. */
+  const paintSpecs = (c: CarItem) => {
+    const s = carSpecs(c.id);
+    specs.replaceChildren();
+    if (!s) return;
+    const bar = (label: string, k: number, value: string) => {
+      const row = el('div', 'vl-spec');
+      const track = el('span', 'vl-spec-bar');
+      const fillBar = el('i');
+      fillBar.style.transform = `scaleX(${Math.max(0.06, Math.min(1, k)).toFixed(3)})`;
+      track.append(fillBar);
+      row.append(el('span', 'vl-spec-label', label), track, el('span', 'vl-spec-value', value));
+      return row;
+    };
+    specs.append(bar('Top speed', s.speed, s.speedWord), bar('Pull', s.pull, s.pullWord), bar('Size', s.size, `${s.length.toFixed(1)} m`));
+    specs.setAttribute('aria-label', `${c.name}: top speed ${s.speedWord}, pull ${s.pullWord}, ${s.length.toFixed(1)} metres long${s.seats ? `, ${s.seats} seats` : ''}.`);
+  };
+
+  const paintCurb = () => {
+    const out = deps.atCurb();
+    curb.hidden = !out;
+    if (!out) return;
+    const left = out.until - serverNow();
+    const car = carItem(out.car)?.name ?? 'Your car';
+    curbText.replaceChildren(el('span', 'vl-curb-label', 'At the curb'), el('span', 'vl-curb-name', car), el('span', 'vl-curb-left money', out.at > serverNow() ? `on its way, ${clockText(out.at - serverNow())}` : `${clockText(left)} left`));
+    curbBack.disabled = busy;
+  };
+
   const paint = () => {
     const c = picked;
     balVal.textContent = formatMoney(balance());
@@ -216,29 +289,30 @@ export function openValet(deps: ValetDeps): Closable {
     capLine.textContent = isOwned(c) ? `In your garage · ${formatMoney(c.price)}` : `Car · ${formatMoney(c.price)}`;
     selName.textContent = c.name;
     selPrice.textContent = formatMoney(c.price);
+    selAbout.textContent = c.about;
     const d = decide(c);
     if (!busy) primary.textContent = d.label;
     primary.disabled = busy || !d.enabled;
-    const out = deps.atCurb();
-    back.hidden = !out;
-    back.disabled = busy;
-    back.textContent = out ? `Send the ${carItem(out.car)?.name ?? 'car'} back` : 'Send it back';
     const line = note ?? d.line;
     status.textContent = line.text;
     status.className = `bq-status ${line.kind}`.trim();
+    paintCurb();
     paintRows();
   };
 
   const pick = (c: CarItem, focus = false) => {
     picked = c;
     note = null;
-    if (!rows.has(c.id)) renderList();
+    if (!cards.get(c.id)?.row.isConnected) renderList();
     studio.show(c.id);
+    paintSpecs(c);
     deps.sfx?.play('ui-switch', { volume: 0.18 });
     paint();
-    const row = rows.get(c.id);
-    row?.scrollIntoView({ block: 'nearest' });
-    if (focus) row?.focus();
+    const row = cards.get(c.id)?.row;
+    if (row?.isConnected) {
+      row.scrollIntoView({ block: 'nearest' });
+      if (focus) row.focus();
+    }
   };
 
   // ---- buying and calling
@@ -250,6 +324,7 @@ export function openValet(deps: ValetDeps): Closable {
 
   const buy = (c: CarItem) => {
     const op = deps.api.newOp();
+    const now = balance();
     const go = button('Buy', async () => {
       m.close();
       busy = true;
@@ -274,12 +349,21 @@ export function openValet(deps: ValetDeps): Closable {
         paint();
       }
     }, { cls: 'primary' });
+    const rows = el('div', 'bq-confirm-rows');
+    const row = (label: string, value: string, cls = '') => {
+      const r = el('div', `bq-confirm-row ${cls}`.trim());
+      r.append(el('span', '', label), el('span', 'money', value));
+      return r;
+    };
+    rows.append(row('Your balance', formatMoney(now)), row(`The ${c.name}`, `−${formatMoney(c.price)}`), row('Balance after: ', formatMoney(now - c.price), 'after'));
+    const pic = carPicture(c.id, 260, 117, 'bq-confirm-art');
     const m = modal(
       `Buy the ${c.name}?`,
-      [el('p', 'bq-confirm-price money', formatMoney(c.price)), `Balance after: ${formatMoney(balance() - c.price)}. It comes out of your balance; chips on tables stay where they are.`],
+      [pic, el('p', 'bq-confirm-price money', formatMoney(c.price)), rows, el('p', 'bq-confirm-note', 'It comes out of your balance; chips on tables stay where they are. It goes straight to your garage across the street, and the valet can bring it round.')],
       [go, button('Cancel', () => m.close(), { cls: 'ghost' })],
       () => m.close(),
     );
+    m.root.classList.add('bq-confirm');
     go.focus();
   };
 
@@ -311,20 +395,31 @@ export function openValet(deps: ValetDeps): Closable {
     if (!isOwned(picked)) buy(picked);
     else void call(picked.id);
   });
-  back.addEventListener('click', () => !busy && void call(null));
+  curbBack.addEventListener('click', () => !busy && void call(null));
 
   // ---- keys
+  const columns = (rows: HTMLElement[]): number => {
+    const top = rows[0]?.offsetTop;
+    const n = rows.findIndex((r) => r.offsetTop !== top);
+    return n < 0 ? rows.length : n;
+  };
   root.addEventListener('keydown', (ev) => {
     if (GLOBAL_KEYS.has(ev.key)) return;
     ev.stopPropagation();
     if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
     const inTabs = (ev.target as HTMLElement).closest('[role="radiogroup"]');
+    const inList = (ev.target as HTMLElement).closest('.bq-list');
     const here = listed();
     const at = here.findIndex((c) => c.id === picked.id);
-    if (!inTabs && here.length && (ev.key === 'ArrowDown' || ev.key === 'ArrowUp')) pick(here[(at + (ev.key === 'ArrowDown' ? 1 : -1) + here.length) % here.length]!, true);
+    const step = (by: number) => here.length && pick(here[Math.max(0, Math.min(here.length - 1, (at < 0 ? 0 : at) + by))]!, true);
+    if (!inTabs && here.length && (ev.key === 'ArrowDown' || ev.key === 'ArrowUp')) {
+      const cols = inList ? columns(here.map((c) => cards.get(c.id)!.row)) : 1;
+      step(ev.key === 'ArrowDown' ? cols : -cols);
+    } else if (inList && (ev.key === 'ArrowRight' || ev.key === 'ArrowLeft')) step(ev.key === 'ArrowRight' ? 1 : -1);
+    else if (inList && (ev.key === 'Home' || ev.key === 'End')) step(ev.key === 'Home' ? -here.length : here.length);
     else if (ev.code === 'KeyQ') studio.turn(-0.3);
     else if (ev.code === 'KeyE') studio.turn(0.3);
-    else if (ev.key === 'Enter' && (ev.target as HTMLElement).closest('.bq-list')) primary.click();
+    else if (ev.key === 'Enter' && inList) primary.click();
     else return;
     ev.preventDefault();
   });
@@ -352,7 +447,7 @@ export function openValet(deps: ValetDeps): Closable {
 
   // ---- open and close
   let closed = false;
-  // a car at the curb comes and goes while it's open
+  // a car at the curb comes and goes while it's open, and its minutes count down
   const ticker = window.setInterval(() => !closed && !busy && paint(), 1000);
   const close = () => {
     if (closed) return;
@@ -390,8 +485,8 @@ export function openValet(deps: ValetDeps): Closable {
       paint();
     });
   queueMicrotask(() => {
-    const row = rows.get(picked.id);
-    if (row) row.focus();
+    const row = cards.get(picked.id)?.row;
+    if (row?.isConnected) row.focus();
     else focusFirst(panel);
   });
   return { root, close };
