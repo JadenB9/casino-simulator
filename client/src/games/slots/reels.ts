@@ -113,7 +113,8 @@ export function stripTexture(canvas: HTMLCanvasElement): THREE.CanvasTexture {
   t.colorSpace = THREE.SRGBColorSpace;
   t.wrapT = THREE.RepeatWrapping;
   t.wrapS = THREE.ClampToEdgeWrapping;
-  t.anisotropy = 4;
+  // the band curves away top and bottom: more anisotropy keeps those rows' symbols crisp
+  t.anisotropy = 8;
   return t;
 }
 

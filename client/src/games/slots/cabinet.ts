@@ -20,7 +20,8 @@ interface Layout {
   width: number;
   profile: ZY[];
   bevel: number;
-  body: { color: string; metalness: number; roughness: number };
+  /** `coat`: how much clear lacquer the paint has (High quality only), 0 to 1. */
+  body: { color: string; metalness: number; roughness: number; coat?: number };
   trim: { color: string; metalness: number; roughness: number };
   /** The bezel plate that frames the reels and meters; the window is cut through it. */
   plate: { w: number; h: number; cy: number; zBack: number; depth: number };
@@ -50,7 +51,7 @@ const LAYOUTS: Record<MachineId, Layout> = {
     width: 0.66,
     profile: STEPPER_PROFILE,
     bevel: 0.008,
-    body: { color: '#6e0d14', metalness: 0.35, roughness: 0.32 },
+    body: { color: '#6e0d14', metalness: 0.35, roughness: 0.32, coat: 0.8 },
     trim: { color: '#d7dbe0', metalness: 1, roughness: 0.2 },
     plate: { w: 0.6, h: 0.45, cy: 1.15, zBack: 0.25, depth: 0.07 },
     window: { w: 0.51, h: 0.215, cy: 1.17 },
@@ -68,7 +69,7 @@ const LAYOUTS: Record<MachineId, Layout> = {
     width: 0.66,
     profile: STEPPER_PROFILE,
     bevel: 0.008,
-    body: { color: '#141216', metalness: 0.3, roughness: 0.28 },
+    body: { color: '#141216', metalness: 0.3, roughness: 0.28, coat: 0.7 },
     trim: { color: '#c9a24b', metalness: 1, roughness: 0.28 },
     plate: { w: 0.6, h: 0.45, cy: 1.15, zBack: 0.25, depth: 0.07 },
     window: { w: 0.51, h: 0.215, cy: 1.17 },
@@ -89,7 +90,7 @@ const LAYOUTS: Record<MachineId, Layout> = {
       [0.43, 0.785], [0.28, 0.845], [0.27, 0.87], [0.27, 1.47], [0.285, 1.495], [0.285, 1.52], [0.22, 1.9], [0.19, 1.925], [-0.32, 1.925],
     ],
     bevel: 0.01,
-    body: { color: '#1a1b22', metalness: 0.55, roughness: 0.38 },
+    body: { color: '#1a1b22', metalness: 0.55, roughness: 0.38, coat: 0.45 },
     trim: { color: '#0b0b0f', metalness: 0.2, roughness: 0.14 },
     plate: { w: 0.7, h: 0.54, cy: 1.17, zBack: 0.27, depth: 0.062 },
     window: { w: 0.66, h: 0.258, cy: 1.2 },
@@ -105,6 +106,17 @@ const LAYOUTS: Record<MachineId, Layout> = {
     lever: false,
   },
 };
+
+/**
+ * A cabinet's painted body. On High it's lacquered: a clear coat over the paint that catches the
+ * room, the way a real cabinet's does (same draw calls, a little more work per pixel); Low keeps
+ * the plain paint.
+ */
+export function bodyMaterial(body: { color: string; metalness: number; roughness: number; coat?: number }, quality: Quality): THREE.MeshStandardMaterial {
+  const { coat = 0, ...paint } = body;
+  if (quality !== 'high' || coat <= 0) return new THREE.MeshStandardMaterial(paint);
+  return new THREE.MeshPhysicalMaterial({ ...paint, clearcoat: coat, clearcoatRoughness: 0.14 });
+}
 
 /** Candle colours by coin value (this casino's scheme; white above is the service light). */
 const CANDLE: Record<number, string> = {
@@ -469,9 +481,11 @@ function parts(machine: MachineId, quality: Quality): Parts {
     trim: merge(trimParts(l)),
     printed: merge(printedParts(l)),
     leds: ledParts(l),
-    bodyMat: new THREE.MeshStandardMaterial(l.body),
+    bodyMat: bodyMaterial(l.body, quality),
     trimMat: new THREE.MeshStandardMaterial(l.trim),
-    printedMat: new THREE.MeshStandardMaterial({ map: atlas, emissiveMap: atlas, emissive: '#ffffff', emissiveIntensity: 0.4, roughness: 0.6, metalness: 0, envMapIntensity: 0.3 }),
+    // backlit glass, as on the later cabinets (build.ts): most of its light is its own, so the
+    // room's warm light doesn't wash the pay glass's navy and reds out to a pale haze
+    printedMat: new THREE.MeshStandardMaterial({ map: atlas, color: '#707070', emissiveMap: atlas, emissive: '#ffffff', emissiveIntensity: 0.55, roughness: 0.6, metalness: 0, envMapIntensity: 0.3 }),
     ledMat: new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false }),
     reelGeo: reelGeometry(l.reels.look),
     reelMats,

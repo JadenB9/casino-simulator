@@ -515,7 +515,17 @@ function cellCentre(reel: number, row: number): [number, number] {
   return [MARK_W + (reel + 0.5) * (inner / 5), (row + 0.5) * (OVERLAY_H / 3)];
 }
 
-export function paintOverlay(canvas: HTMLCanvasElement, show: { line: number; count: number }[] | null, scale = 1, scatters: [reel: number, row: number][] = []): void {
+/** The cells (reel * 3 + row) a line's win took: its first `count` reels along its path. */
+export function lineCells(line: number, count: number): number[] {
+  return NEON.lineRows[line]!.slice(0, count).map((row, reel) => reel * 3 + row);
+}
+
+/**
+ * Paint the overlay: the line markers, the lines in `show` with their winning symbols framed, and
+ * the scatters ringed. With `keep`, every cell not in it is veiled, so the symbols that won stand
+ * out from the rest of the window.
+ */
+export function paintOverlay(canvas: HTMLCanvasElement, show: { line: number; count: number }[] | null, scale = 1, scatters: [reel: number, row: number][] = [], keep: readonly number[] | null = null): void {
   if (canvas.width !== Math.round(OVERLAY_W * scale)) {
     canvas.width = Math.round(OVERLAY_W * scale);
     canvas.height = Math.round(OVERLAY_H * scale);
@@ -523,6 +533,16 @@ export function paintOverlay(canvas: HTMLCanvasElement, show: { line: number; co
   const g = canvas.getContext('2d')!;
   g.setTransform(scale, 0, 0, scale, 0, 0);
   g.clearRect(0, 0, OVERLAY_W, OVERLAY_H);
+  if (keep) {
+    const cw = (OVERLAY_W - MARK_W * 2) / 5;
+    const ch = OVERLAY_H / 3;
+    g.fillStyle = 'rgba(4, 3, 14, 0.58)';
+    for (let c = 0; c < 15; c++) {
+      if (keep.includes(c)) continue;
+      const [x, y] = cellCentre(Math.floor(c / 3), c % 3);
+      g.fillRect(x - cw / 2, y - ch / 2, cw, ch);
+    }
+  }
   // marker columns
   g.fillStyle = '#07061a';
   g.fillRect(0, 0, MARK_W, OVERLAY_H);
@@ -552,6 +572,10 @@ export function paintOverlay(canvas: HTMLCanvasElement, show: { line: number; co
     g.moveTo(MARK_W - 6, SLOTS.left[s.line]!);
     for (const [x, y] of pts) g.lineTo(x, y);
     g.lineTo(OVERLAY_W - MARK_W + 6, SLOTS.right[s.line]!);
+    // a dark edge under the line, so it reads over a bright symbol as well as the night screen
+    g.strokeStyle = 'rgba(0, 0, 0, 0.55)';
+    g.lineWidth = 12;
+    g.stroke();
     g.shadowColor = color;
     g.shadowBlur = 16;
     g.strokeStyle = color;

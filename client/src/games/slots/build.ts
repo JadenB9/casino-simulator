@@ -7,7 +7,7 @@
 import * as THREE from 'three';
 import type { Quality } from '../../render/engine3d.ts';
 import { LINEUP } from '../../../../shared/src/games/slots/lineup.ts';
-import { at, box, bulbMaterial, candleColor, cyl, extrudeProfile, frame, merge, panel, roundedRect, slab, solid } from './cabinet.ts';
+import { at, bodyMaterial, box, bulbMaterial, candleColor, cyl, extrudeProfile, frame, merge, panel, roundedRect, slab, solid } from './cabinet.ts';
 import { REGIONS } from './glass.ts';
 import { bankGeometry, bankMaterial, bankTexture, type BankMaterial } from './bank.ts';
 import { blurStrips, EMPTY_OVERLAY, paintLineOverlay, paintSkinAtlas, paintSkinMeters, paintStrips, type Skin, type SkinId, type SkinLayout, type OverlaySpec, type StripSource } from './skin.ts';
@@ -203,7 +203,7 @@ function parts(entry: SkinEntry, quality: Quality): Parts {
     trim: merge([...trimParts(skin), ...top.trim]),
     printed: merge([...printedParts(skin), ...top.printed]),
     leds: top.leds ?? null,
-    bodyMat: new THREE.MeshStandardMaterial(l.body),
+    bodyMat: bodyMaterial(l.body, quality),
     trimMat: new THREE.MeshStandardMaterial(l.trim),
     // backlit glass: most of its light is its own, so the room's warm light doesn't wash it out
     printedMat: new THREE.MeshStandardMaterial({ map: atlas, color: '#707070', emissiveMap: atlas, emissive: '#ffffff', emissiveIntensity: 0.55, roughness: 0.6, metalness: 0, envMapIntensity: 0.3 }),

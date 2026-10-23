@@ -17,7 +17,8 @@ export interface SkinLayout {
   /** Side profile as (z, y), extruded across the width. */
   profile: ZY[];
   bevel: number;
-  body: { color: string; metalness: number; roughness: number };
+  /** `coat`: how much clear lacquer the paint has (High quality only), 0 to 1. */
+  body: { color: string; metalness: number; roughness: number; coat?: number };
   trim: { color: string; metalness: number; roughness: number };
   /** The bezel plate that frames the reels and meters; the window is cut through it. */
   plate: { w: number; h: number; cy: number; zBack: number; depth: number };
@@ -314,12 +315,19 @@ export interface OverlayState {
   held: number[];
   /** Cells to flash (a wild that just stuck). */
   flash: number[];
+  /** While a win is shown: the cells that made it (reel * rows + row); every other cell is veiled. */
+  keep?: number[] | null;
 }
 
 export const EMPTY_OVERLAY: OverlayState = { lines: [], rings: [], held: [], flash: [] };
 
 export function lineColorOf(spec: OverlaySpec, line: number): string {
   return spec.colors[line % spec.colors.length]!;
+}
+
+/** The cells (reel * rows + row) a line's win took: its first `count` reels along its path. */
+export function winCells(spec: OverlaySpec, line: number, count: number): number[] {
+  return spec.lineRows[line]!.slice(0, count).map((row, reel) => reel * spec.rows + row);
 }
 
 function markerSlots(spec: OverlaySpec): { left: number[]; right: number[] } {
@@ -374,6 +382,15 @@ export function paintLineOverlay(canvas: HTMLCanvasElement, spec: OverlaySpec, s
       g.restore();
     }
   }
+  // a win on show: every cell that didn't take part is veiled, so the winning symbols stand out
+  if (s.keep) {
+    g.fillStyle = 'rgba(4, 3, 10, 0.58)';
+    for (let c = 0; c < 5 * spec.rows; c++) {
+      if (s.keep.includes(c)) continue;
+      const [x, y] = cellCentre(spec, Math.floor(c / spec.rows), c % spec.rows);
+      g.fillRect(x - cw / 2, y - ch / 2, cw, ch);
+    }
+  }
   // held wilds sit in front of the spinning reel
   for (const c of s.held) {
     const [x, y] = cellCentre(spec, Math.floor(c / spec.rows), c % spec.rows);
@@ -393,6 +410,10 @@ export function paintLineOverlay(canvas: HTMLCanvasElement, spec: OverlaySpec, s
     g.moveTo(spec.side - 6, slots ? slots.left[w.line]! : pts[0]![1]);
     for (const [x, y] of pts) g.lineTo(x, y);
     g.lineTo(OVERLAY_W - spec.side + 6, slots ? slots.right[w.line]! : pts[4]![1]);
+    // a dark edge under the line, so it reads over a cream screen and bright symbols alike
+    g.strokeStyle = 'rgba(0, 0, 0, 0.55)';
+    g.lineWidth = 12;
+    g.stroke();
     g.shadowColor = color;
     g.shadowBlur = 16;
     g.strokeStyle = color;

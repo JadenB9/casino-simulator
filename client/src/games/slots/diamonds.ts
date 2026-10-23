@@ -301,7 +301,7 @@ const LAYOUT: SkinLayout = {
     [0.395, 0.81], [0.255, 0.875], [0.25, 0.9], [0.25, 1.4], [0.268, 1.425], [0.268, 1.445], [0.215, 1.86], [0.19, 1.885], [-0.3, 1.885],
   ],
   bevel: 0.008,
-  body: { color: '#173a86', metalness: 0.6, roughness: 0.26 },
+  body: { color: '#173a86', metalness: 0.6, roughness: 0.26, coat: 0.75 },
   trim: { color: '#e3e9f1', metalness: 1, roughness: 0.14 },
   plate: { w: 0.6, h: 0.45, cy: 1.15, zBack: 0.25, depth: 0.07 },
   window: { w: 0.51, h: 0.215, cy: 1.17 },
