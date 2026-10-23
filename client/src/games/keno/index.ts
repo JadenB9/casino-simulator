@@ -408,6 +408,10 @@ export const keno: GameClientModule = {
         }
       },
 
+      onConnection(open) {
+        site.connection(open);
+      },
+
       onSeat(msg) {
         site.seat(msg);
         stack = msg.stack;

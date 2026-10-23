@@ -114,6 +114,8 @@ export const mines: GameClientModule = {
       },
     });
     const screen = site.screen;
+    // on a phone the page keeps the grid (548 px) and a margin, so the tiles come up big enough to tap
+    screen.flatWidth(600);
 
     const board = new MinesBoard(
       (tile) => act({ type: 'reveal', tile }),
@@ -370,6 +372,10 @@ export const mines: GameClientModule = {
           sync();
           autoStep();
         }
+      },
+
+      onConnection(open) {
+        site.connection(open);
       },
 
       onSeat(msg) {

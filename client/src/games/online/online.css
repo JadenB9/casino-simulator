@@ -358,6 +358,7 @@
 .os-screen.flat .os-body { display: flex; flex-direction: column; min-height: 0; }
 .os-screen.flat.sideways .os-body { flex-direction: row; }
 .os-screen.flat .os-stage { flex: none; display: flex; flex-direction: column; align-items: center; background: var(--os-bg); }
+.os-screen.flat.upright .os-stage { order: -1; }
 .os-screen.flat.sideways .os-stage { flex: 1; min-width: 0; }
 .os-screen.flat .os-head { position: relative; left: auto; right: auto; top: auto; align-self: stretch; height: 42px; padding: 0 10px; gap: 10px; }
 .os-screen.flat .os-round { height: 30px; padding: 0 10px 0 8px; }
@@ -365,7 +366,9 @@
 .os-screen.flat .os-strip { height: 30px; gap: 4px; }
 .os-screen.flat .os-strip-item { min-width: 0; padding: 0 9px; border-radius: 15px; font-size: 15px; }
 .os-screen.flat .os-view { position: relative; inset: auto; flex: none; width: var(--os-bw); height: var(--os-bh); }
-.os-screen.flat .os-main { position: absolute; left: 0; top: 0; transform-origin: 0 0; transform: scale(var(--os-k)) translateY(-64px); }
+/* the board's own top row is cut off (the head row sits above it), and its sides where a game keeps
+   only its middle (OnlineScreen.flatWidth) */
+.os-screen.flat .os-main { position: absolute; left: 0; top: 0; transform-origin: 0 0; transform: scale(var(--os-k)) translate(calc(-1 * var(--os-x0, 0px)), -64px); }
 .os-screen.flat .os-side { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 12px; gap: 12px; border-right: 0; border-top: 1px solid var(--os-line); }
 .os-screen.flat.sideways .os-side { flex: none; width: var(--os-sw); order: -1; border-top: 0; border-right: 1px solid var(--os-line); }
 .os-screen.flat .os-side > .os-bet-slot { order: 1; }

@@ -145,14 +145,14 @@ export class AutoBet {
 
   /** The table started over from a snapshot (a reconnect): whatever was out won't settle here. */
   reset(): void {
-    this.stop(this.run && (this.out > 0 || this.run.placed > 0) ? 'Reconnected: auto stopped' : null);
+    this.stop(this.run && (this.out > 0 || this.run.placed > 0) ? 'The table reconnected' : null);
   }
 
   /** Each frame: the beat between bets, and an answer that never came. */
   update(dt: number, now = performance.now()): void {
     if (!this.run) return;
     if (this.askedAt !== null && now - this.askedAt > (this.opts.answerMs ?? 6_000)) {
-      this.stop("The table didn't answer: auto stopped");
+      this.stop("The table didn't answer");
       return;
     }
     if (this.out > 0) return;

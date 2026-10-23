@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
 import { pcModel, pcScreenCorners } from '../src/games/online/pc.ts';
+import { flatScreen } from '../src/games/online/screen.ts';
 
 // The monitor's glass stands clear of its shell (zfight.ts calls anything under 2 mm a fight), and
 // the corners the DOM screen is fitted to are the glass's own.
@@ -23,5 +24,12 @@ describe('the online PC', () => {
 
   it('fits the DOM screen to the glass', () => {
     for (const c of pcScreenCorners()) expect(c.z).toBeCloseTo(glass.position.z, 6);
+  });
+});
+
+describe('where the page shows', () => {
+  it('on the monitor on a laptop or a desktop; flat on a phone either way up and on a tablet upright', () => {
+    for (const [w, h] of [[1280, 800], [1440, 900], [1920, 1080], [1180, 820]] as const) expect(flatScreen(w, h)).toBe(false);
+    for (const [w, h] of [[390, 844], [844, 390], [820, 1180], [1024, 1366]] as const) expect(flatScreen(w, h)).toBe(true);
   });
 });

@@ -123,6 +123,8 @@ export const tower: GameClientModule = {
       },
     });
     const screen = site.screen;
+    // on a phone the page keeps the tower (610 px) and a margin, so the tiles come up big enough to tap
+    screen.flatWidth(650);
 
     const board = new TowerBoard(
       (_row, tile) => act({ type: 'pick', tile }),
@@ -384,6 +386,10 @@ export const tower: GameClientModule = {
           sync();
           autoStep();
         }
+      },
+
+      onConnection(open) {
+        site.connection(open);
       },
 
       onSeat(msg) {

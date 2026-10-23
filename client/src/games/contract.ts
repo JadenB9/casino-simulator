@@ -57,6 +57,8 @@ export interface TableView {
   onSeat(msg: SeatMsg): void;
   onMembers?(msg: MembersMsg): void;
   onError?(code: string, msg: string): void;
+  /** The table's socket dropped (false) or is open again (true); a reconnect's onTable follows. */
+  onConnection?(open: boolean): void;
   /** Keyboard shortcuts at the table; return true when handled. */
   keydown?(e: KeyboardEvent): boolean;
   /**

@@ -79,6 +79,8 @@ export class TableSession {
       url: () => socketUrl(path, this.pin ? { ...params, pin: this.pin } : params),
       onMessage: (m) => this.onMessage(m),
       onState: (s, code) => {
+        // the view hears the link go and come back (an online game's auto-bet stops at once)
+        this.view?.onConnection?.(s === 'open');
         if (s === 'reconnecting') {
           this.kit.say('Reconnecting…', 4000);
           this.lost = true;

@@ -462,6 +462,10 @@ export const crash: GameClientModule = {
         sync();
       },
 
+      onConnection(open) {
+        site.connection(open);
+      },
+
       onSeat(msg) {
         site.seat(msg);
         stack = msg.stack;

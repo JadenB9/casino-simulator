@@ -67,6 +67,8 @@ export class OnlineScreen {
   private measuredAt = -Infinity;
   private seen = new Map<Element, { rect: Rect; at: number }>();
   private size = { w: 0, h: 0 };
+  /** The middle of the board a flat page keeps, design px wide (see flatWidth). */
+  private cropW: number = BOARD_PX.w;
 
   constructor(title: string) {
     const top = el('div', 'os-top');
@@ -100,6 +102,17 @@ export class OnlineScreen {
   /** Whether the page lies flat over the scene now (a phone, a tablet upright). */
   get isFlat(): boolean {
     return this.flat === true;
+  }
+
+  /**
+   * How much of the board's width a flat page keeps, design px from its middle: a board of taps
+   * narrower than the page (Mines' grid, Tower) then comes up bigger on a phone.
+   */
+  flatWidth(w: number): void {
+    const c = Math.max(240, Math.min(BOARD_PX.w, Math.round(w)));
+    if (c === this.cropW) return;
+    this.cropW = c;
+    this.flatKey = '';
   }
 
   /**
@@ -183,7 +196,7 @@ export class OnlineScreen {
       // the result and the history read at the screen's own size, over the board
       this.stage.prepend(this.head);
     } else {
-      for (const p of ['left', 'top', 'width', 'height', '--os-k', '--os-bw', '--os-bh', '--os-sw']) this.root.style.removeProperty(p);
+      for (const p of ['left', 'top', 'width', 'height', '--os-k', '--os-bw', '--os-bh', '--os-sw', '--os-x0']) this.root.style.removeProperty(p);
       this.root.classList.remove('upright', 'sideways');
       this.main.prepend(this.head);
     }
@@ -224,17 +237,18 @@ export class OnlineScreen {
     // The board's top row moves above the board when flat (FLAT_TOP, FLAT_HEAD in online.css), so
     // the board's own top is cropped off.
     const bh = BOARD_PX.h - HEAD_PX;
+    const bw = this.cropW;
     const rows = FLAT_TOP + FLAT_HEAD;
     let k: number;
     let panelW = 0;
     if (upright) {
       // the panel keeps room under the board for at least the bet and the main button
-      k = Math.min(sw / BOARD_PX.w, (sh - rows - FLAT_PANEL_MIN) / bh);
+      k = Math.min(sw / bw, (sh - rows - FLAT_PANEL_MIN) / bh);
     } else {
       // on its side the height decides the board; the panel takes what's left beside it
       k = (sh - rows) / bh;
-      panelW = Math.round(Math.min(400, Math.max(250, sw - BOARD_PX.w * k)));
-      k = Math.min(k, (sw - panelW) / BOARD_PX.w);
+      panelW = Math.round(Math.min(400, Math.max(250, sw - bw * k)));
+      k = Math.min(k, (sw - panelW) / bw);
     }
     k = Math.max(0.2, k);
     const s = this.root.style;
@@ -243,7 +257,8 @@ export class OnlineScreen {
     s.width = `${Math.round(sw)}px`;
     s.height = `${Math.round(sh)}px`;
     s.setProperty('--os-k', k.toFixed(4));
-    s.setProperty('--os-bw', `${Math.floor(BOARD_PX.w * k)}px`);
+    s.setProperty('--os-bw', `${Math.floor(bw * k)}px`);
+    s.setProperty('--os-x0', `${(BOARD_PX.w - bw) / 2}px`);
     s.setProperty('--os-bh', `${Math.floor(bh * k)}px`);
     s.setProperty('--os-sw', `${panelW}px`);
     this.root.classList.toggle('upright', upright);

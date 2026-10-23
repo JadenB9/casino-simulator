@@ -91,7 +91,8 @@ export class AutoControl {
         play: o.play,
         changed: () => this.changed(),
         stopped: (why) => {
-          this.why = why ? `Auto stopped · ${why}` : 'Auto stopped';
+          // the games' reasons read on from the dot ("not enough chips here..."): one sentence case
+          this.why = why ? `Auto stopped · ${why[0]!.toUpperCase()}${why.slice(1)}` : 'Auto stopped';
           this.paint();
           if (why) o.say(this.why);
         },
@@ -191,6 +192,11 @@ export class AutoControl {
 
   update(dt: number): void {
     this.driver.update(dt);
+  }
+
+  /** The table's link dropped (a run stops at once: nothing more goes out into a dead socket). */
+  connection(open: boolean): void {
+    if (!open) this.driver.stop('The connection dropped');
   }
 
   dispose(): void {

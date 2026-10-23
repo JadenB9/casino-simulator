@@ -192,6 +192,11 @@ export class OnlineSite {
     this.cashier.seat(msg);
   }
 
+  /** From the view's onConnection: the table's link dropped or is back (a reconnect's onTable follows). */
+  connection(open: boolean): void {
+    this.auto?.connection(open);
+  }
+
   /** The table turned something down: the cashier forgets a top-up, a run stops. */
   error(msg = ''): void {
     this.cashier.refused();
