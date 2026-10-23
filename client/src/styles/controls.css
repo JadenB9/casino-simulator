@@ -1,6 +1,7 @@
 /* The shared pieces every area builds on, beyond theme.css's buttons and panels: the sheet's layer
-   and lift, the sliders, and the page's one tooltip (ui/hud/tooltip.ts). The sheet's own shape,
-   the segmented choices and the keycaps are ui/menu/menu.css; these follow it in the cascade. */
+   and lift, the segmented choices' pill, the sliders, and the page's one tooltip
+   (ui/hud/tooltip.ts). The sheet's own shape, the choices' base and the keycaps are
+   ui/menu/menu.css; these follow it in the cascade (ui/menu/sheet.ts imports both, in order). */
 
 /* ---------------------------------------------------------------- sheets */
 
@@ -9,6 +10,17 @@
 .sheet-scrim.closing .sheet { transform: translateY(4px) scale(0.99); transition: transform 0.16s var(--ease); }
 body.calm .sheet { animation-name: calm-fade-in; }
 body.calm .sheet-scrim.closing .sheet { transform: none; }
+
+/* ---------------------------------------------------------------- segmented choices */
+
+/* (menu/parts.ts segmented()): the choice a lit pill inside a track, the same size as before */
+.seg { gap: 2px; padding: 2px; border-radius: var(--radius); background: rgba(var(--lift-rgb), 0.03); }
+.seg-btn { height: 30px; padding: 0 12px; border-left: 0; border-radius: var(--radius-sm); transition: background var(--dur-fast), color var(--dur-fast), box-shadow var(--dur-fast); }
+.seg-btn:hover { background: rgba(var(--lift-rgb), 0.05); }
+.seg-btn[aria-checked='true'] { background: rgba(var(--brass-rgb), 0.18); color: var(--brass-hi); box-shadow: inset 0 0 0 1px rgba(var(--brass-rgb), 0.42); }
+@media (pointer: coarse) {
+  .seg-btn { height: 40px; }
+}
 
 /* ---------------------------------------------------------------- sliders */
 

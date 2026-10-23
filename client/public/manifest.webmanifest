@@ -1,6 +1,10 @@
 {
+  "id": "./",
   "name": "Casino Simulator",
   "short_name": "Casino",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": ["games", "entertainment"],
   "description": "A 3D casino with real odds, other players, cars, apartments and more.",
   "start_url": "./",
   "scope": "./",

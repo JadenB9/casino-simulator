@@ -64,6 +64,8 @@ export function segmented<T extends string>(
     let next = -1;
     if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = (i + 1) % choices.length;
     if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = (i - 1 + choices.length) % choices.length;
+    if (e.key === 'Home') next = 0;
+    if (e.key === 'End') next = choices.length - 1;
     if (next >= 0) {
       e.preventDefault();
       pick(choices[next]!.id, true);
