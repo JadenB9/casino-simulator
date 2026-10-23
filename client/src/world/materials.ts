@@ -121,6 +121,9 @@ export class Mats {
     const hi = (q: Quality) => q === 'high';
     const lambert = (p: THREE.MeshLambertMaterialParameters) => new THREE.MeshLambertMaterial(p);
     const std = (p: THREE.MeshStandardMaterialParameters) => new THREE.MeshStandardMaterial(p);
+    // v8: High's finishes that a plain standard material can't show: a lacquered clear coat over
+    // the wood, the sheen velvet catches along its folds and edges
+    const phys = (p: THREE.MeshPhysicalMaterialParameters) => new THREE.MeshPhysicalMaterial(p);
     const size = this.quality === 'high' ? 2048 : 1024;
 
     // carpets: canvases drawn once, shared by both qualities
@@ -215,8 +218,12 @@ export class Mats {
         ? std({ color: '#b8c8c8', metalness: 0.1, roughness: 0.04, transparent: true, opacity: 0.16, depthWrite: false })
         : new THREE.MeshBasicMaterial({ color: '#8a9a9a', transparent: true, opacity: 0.12, depthWrite: false }),
     );
-    this.makers.set('upholstery', (q) => (hi(q) ? std({ map: t.velvet ?? null, color: t.velvet ? '#8a4048' : '#4a1018', roughness: 0.7 }) : lambert({ map: t.velvet ?? null, color: t.velvet ? '#8a4048' : '#4a1018' })));
-    this.makers.set('velvet-green', () => lambert({ color: '#1f5a3d' }));
+    this.makers.set('upholstery', (q) =>
+      hi(q)
+        ? phys({ map: t.velvet ?? null, color: t.velvet ? '#8a4048' : '#4a1018', roughness: 0.72, sheen: 1, sheenRoughness: 0.42, sheenColor: '#d0646e' })
+        : lambert({ map: t.velvet ?? null, color: t.velvet ? '#8a4048' : '#4a1018' }),
+    );
+    this.makers.set('velvet-green', (q) => (hi(q) ? phys({ color: '#1f5a3d', roughness: 0.8, sheen: 1, sheenRoughness: 0.4, sheenColor: '#5fae86' }) : lambert({ color: '#1f5a3d' })));
     this.makers.set('fabric', () => lambert({ color: '#2a2622' }));
     this.makers.set('case-light', () => new THREE.MeshBasicMaterial({ color: hdr('#fff2dc', 2.0) }));
     this.makers.set('fire', () => new THREE.MeshBasicMaterial({ color: hdr('#ff8a2a', 3.0) }));
@@ -231,7 +238,9 @@ export class Mats {
     this.makers.set('ceiling-pit', () => new THREE.MeshBasicMaterial({ map: cofferTex }));
     this.makers.set('fascia', () => new THREE.MeshBasicMaterial({ map: washTex }));
     this.makers.set('wood', (q) =>
-      hi(q) ? std({ map: t.woodDark ?? null, color: t.woodDark ? '#c9a58f' : '#4a2616', roughness: 0.42 }) : lambert({ map: t.woodDark ?? null, color: t.woodDark ? '#c9a58f' : '#4a2616' }),
+      hi(q)
+        ? phys({ map: t.woodDark ?? null, color: t.woodDark ? '#c9a58f' : '#4a2616', roughness: 0.5, clearcoat: 0.55, clearcoatRoughness: 0.16 })
+        : lambert({ map: t.woodDark ?? null, color: t.woodDark ? '#c9a58f' : '#4a2616' }),
     );
     this.makers.set('beam', (q) => (hi(q) ? std({ map: t.woodDark ?? null, color: '#8a6a5a', roughness: 0.5 }) : lambert({ map: t.woodDark ?? null, color: '#8a6a5a' })));
     // brass set flush into a floor (the runners' edging, the lobby's compass rose): rough and dull,
@@ -244,8 +253,13 @@ export class Mats {
     );
     this.makers.set('lacquer', (q) => (hi(q) ? std({ color: '#0d0b0b', roughness: 0.14 }) : lambert({ color: '#100d0c' })));
     this.makers.set('lacquer-red', (q) => (hi(q) ? std({ color: '#5a0d16', roughness: 0.2 }) : lambert({ color: '#4a0c13' })));
-    this.makers.set('leather', (q) => (hi(q) ? std({ color: '#2c1410', roughness: 0.62 }) : lambert({ color: '#2c1410' })));
-    this.makers.set('velvet', () => lambert({ map: t.velvet ?? null, color: t.velvet ? '#d04050' : '#7a1020' }));
+    // leather: a soft waxed gloss over its grain
+    this.makers.set('leather', (q) => (hi(q) ? phys({ color: '#2c1410', roughness: 0.56, clearcoat: 0.3, clearcoatRoughness: 0.42 }) : lambert({ color: '#2c1410' })));
+    this.makers.set('velvet', (q) =>
+      hi(q)
+        ? phys({ map: t.velvet ?? null, color: t.velvet ? '#d04050' : '#7a1020', roughness: 0.78, sheen: 1, sheenRoughness: 0.4, sheenColor: '#ff7a86' })
+        : lambert({ map: t.velvet ?? null, color: t.velvet ? '#d04050' : '#7a1020' }),
+    );
     this.makers.set('mirror', (q) => (hi(q) ? std({ color: '#40383a', metalness: 1, roughness: 0.06 }) : new THREE.MeshBasicMaterial({ color: '#2a2224' })));
     this.makers.set('cage', (q) => (hi(q) ? std({ color: '#b38b3c', metalness: 1, roughness: 0.35 }) : lambert({ color: '#8c6a2c', emissive: '#1e1405' })));
     this.makers.set('shade', () => lambert({ color: '#e8d2a8', emissive: '#6a4a22', side: THREE.DoubleSide }));
