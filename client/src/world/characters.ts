@@ -123,6 +123,11 @@ interface Gait {
 const NAME_Y = 2.08;
 const LABEL_RANGE = 20;
 const LABEL_MAX = 24;
+/** v8: a name tag is at full strength within TAG_NEAR (m); at LABEL_RANGE it's this faint and this small, in TAG_STEPS steps. */
+const TAG_NEAR = 6;
+const TAG_FAR_OPACITY = 0.55;
+const TAG_FAR_SCALE = 0.84;
+const TAG_STEPS = 12;
 
 /**
  * v8 gait: cadences in cycles a second (a cycle is two steps). Up to EASY_HZ's pace the walk comes
@@ -201,18 +206,34 @@ export class Characters implements CharacterFactory {
     for (const p of this.live) p.useMaterial(this.material());
   }
 
-  /** Show only the nearest name tags within range (the rest cost DOM work for nothing). */
+  /**
+   * Show only the nearest name tags within range (the rest cost DOM work for nothing), each a
+   * little smaller and fainter the further off it is, so the people near you read first.
+   */
   updateLabels(camera: THREE.Camera): void {
     const cam = camera.getWorldPosition(_v);
-    const near: [number, Person][] = [];
+    const near = this.near;
+    let n = 0;
     for (const p of this.live) {
-      if (!p.tag.element.textContent) continue;
+      if (!p.named) continue;
       const d = p.root.getWorldPosition(_w).distanceToSquared(cam);
-      near.push([d, p]);
+      const slot = near[n] ?? (near[n] = { d: 0, p });
+      slot.d = d;
+      slot.p = p;
+      n++;
     }
-    near.sort((a, b) => a[0] - b[0]);
-    near.forEach(([d, p], i) => p.showTag(i < LABEL_MAX && d < LABEL_RANGE * LABEL_RANGE));
+    near.length = n;
+    near.sort((a, b) => a.d - b.d);
+    for (let i = 0; i < n; i++) {
+      const { d, p } = near[i]!;
+      const on = i < LABEL_MAX && d < LABEL_RANGE * LABEL_RANGE;
+      p.showTag(on);
+      if (on) p.tagDistance(Math.sqrt(d));
+    }
   }
+
+  /** Room for updateLabels' sort, kept from frame to frame. */
+  private readonly near: { d: number; p: Person }[] = [];
 
   forget(p: Person): void {
     this.live.delete(p);
@@ -421,8 +442,14 @@ export class Person implements Character {
     this.root.name = 'character';
     // a hidden character's seventy-odd bones aren't worth a matrix update every frame
     skipWhileHidden(this.root);
+    // v8: the label renderer places the tag; the plate inside it is what's seen (faded and sized
+    // with distance), the name in it and a worn title under that (remote-players.ts)
     const el = document.createElement('div');
     el.className = 'world-tag';
+    this.plate.className = 'world-tag-plate';
+    this.nameEl.className = 'world-tag-name';
+    this.plate.append(this.nameEl);
+    el.append(this.plate);
     this.tag = new CSS2DObject(el);
     this.tag.position.set(0, NAME_Y, 0);
     this.root.add(this.tag);
@@ -467,8 +494,35 @@ export class Person implements Character {
   }
 
   setName(name: string): void {
-    this.tag.element.textContent = name;
-    this.tag.visible = this.tagOn && name !== '';
+    this.nameEl.textContent = name;
+    this.named = name !== '';
+    this.tag.visible = this.tagOn && this.named;
+  }
+
+  /** v8: whether this character has a name to show over its head (staff and you don't). */
+  named = false;
+  private readonly plate = document.createElement('span');
+  private readonly nameEl = document.createElement('span');
+  /** The tag's fade and size step last written (only a change is written). */
+  private tagStep = -1;
+
+  /**
+   * v8: how far the camera is (m), for the tag's look: full size and strength near, a little
+   * smaller and fainter toward the edge of the tags' range. Written in steps, so a tag moving
+   * through the crowd touches its style only now and then.
+   */
+  tagDistance(d: number): void {
+    const step = Math.round(THREE.MathUtils.clamp((d - TAG_NEAR) / (LABEL_RANGE - TAG_NEAR), 0, 1) * TAG_STEPS);
+    if (step === this.tagStep) return;
+    this.tagStep = step;
+    const k = step / TAG_STEPS;
+    this.plate.style.opacity = (1 - (1 - TAG_FAR_OPACITY) * k).toFixed(2);
+    this.plate.style.scale = (1 - (1 - TAG_FAR_SCALE) * k).toFixed(3);
+  }
+
+  /** v8: where a worn title goes (under the name, in the plate). */
+  get tagPlate(): HTMLElement {
+    return this.plate;
   }
 
   /**
@@ -482,7 +536,7 @@ export class Person implements Character {
   /** Called by the factory's label culling. */
   showTag(on: boolean): void {
     this.tagOn = on;
-    this.tag.visible = on && this.tag.element.textContent !== '';
+    this.tag.visible = on && this.named;
   }
 
   useMaterial(m: THREE.Material): void {

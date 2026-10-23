@@ -410,6 +410,8 @@ function cloth(): THREE.MeshStandardMaterial {
 function showTitle(ch: Character, look: Look): void {
   const tag = (ch as { tag?: { element?: HTMLElement } }).tag?.element ?? (ch as unknown as { label?: HTMLElement }).label;
   if (!tag) return;
+  // (v8: a character's tag has a plate inside it, where the name is: the title goes under it there)
+  const plate = (ch as { tagPlate?: HTMLElement }).tagPlate ?? tag;
   const title = titleOf(look.title)?.reward.title ?? null;
   let line = tag.querySelector<HTMLElement>('.tag-title');
   tag.classList.toggle('titled', title !== null);
@@ -420,7 +422,7 @@ function showTitle(ch: Character, look: Look): void {
   if (!line) {
     line = document.createElement('span');
     line.className = 'tag-title';
-    tag.append(line);
+    plate.append(line);
   }
   line.textContent = title;
 }

@@ -6,21 +6,31 @@
   left: 50%;
   bottom: 88px;
   transform: translateX(-50%);
-  display: flex;
+  display: grid;
+  grid-template-columns: auto auto;
   align-items: center;
-  gap: 2px;
-  padding: 9px 18px 9px 14px;
+  column-gap: 12px;
+  max-width: calc(100vw - 32px);
+  padding: 9px 18px 9px 12px;
   background: var(--glass);
   border: 1px solid var(--line-strong);
   border-radius: var(--radius);
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 10px 40px rgba(var(--scrim-rgb), 0.45);
   font-size: 18px;
+  line-height: 1.2;
   letter-spacing: 0.04em;
   color: var(--ink);
   white-space: nowrap;
   pointer-events: none;
   animation: world-prompt-in 0.18s var(--ease);
 }
+/* v8: the key, what it does, and (on a second line, quieter) what that's about */
+.world-prompt .world-key { grid-row: 1 / span 2; min-width: 30px; height: 30px; margin: 0; font-size: 16px; }
+.world-prompt-act { grid-column: 2; overflow: hidden; text-overflow: ellipsis; }
+.world-prompt-what { grid-column: 2; overflow: hidden; text-overflow: ellipsis; font-size: 14px; letter-spacing: 0.05em; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.world-prompt:not(.two) .world-key { grid-row: auto; }
+/* (the words a screen reader and the checks hear, "Press E · ...", that the eye doesn't need) */
+.world-prompt-vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .world-prompt[hidden] { display: none; }
 /* "Click to look around": the mouse is free on the floor. Below the prompt, quieter than it. */
 #ui .world-hint {
@@ -59,18 +69,31 @@
 }
 @keyframes world-prompt-in { from { opacity: 0; transform: translate(-50%, 6px); } }
 
-.world-tag {
-  padding: 2px 9px;
+/* Name tags over characters (characters.ts). The label renderer places .world-tag with `transform`;
+   the plate inside it is what shows: a little smaller and fainter the further off (opacity and
+   scale, written in steps), the name, and a worn title under it in brass. */
+.world-tag { pointer-events: none; }
+.world-tag-plate {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2px 10px 3px;
   border-radius: 999px;
-  background: rgba(var(--glass-rgb), 0.62);
+  background: rgba(var(--glass-rgb), 0.76);
   border: 1px solid var(--line);
+  box-shadow: 0 2px 10px rgba(var(--scrim-rgb), 0.28);
   color: var(--ink);
   font-family: var(--ui);
-  font-size: 14px;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.15;
   letter-spacing: 0.04em;
   white-space: nowrap;
-  pointer-events: none;
+  text-shadow: 0 0 3px var(--halo);
+  transform-origin: 50% 100%;
 }
+.world-tag.titled .world-tag-plate { padding: 3px 12px 4px; border-radius: 10px; }
+.world-tag .tag-title { margin-top: 1px; font-size: 10.5px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--brass-hi); text-shadow: none; }
 
 .world-stats {
   position: fixed;
@@ -177,3 +200,5 @@ body.calm .emote-bubble.leaving { animation: emote-out-still 0.4s ease-in forwar
 #ui .ride-hint:disabled { opacity: 0.6; cursor: default; }
 #ui .ride-hint[hidden], html.touch-ui #ui .ride-hint { display: none; }
 #ui .ride-hint .world-key { min-width: 0; padding: 0 7px; height: 22px; font-size: 13px; }
+/* Reduce flashing & motion (app/comfort.ts): the prompt fades in where it is */
+body.calm .world-prompt { animation-name: world-hint-in; }

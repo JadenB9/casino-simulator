@@ -54,6 +54,18 @@ export type SpotProvider = (player: THREE.Vector3, heading: number) => Iterable<
 
 type Target = { kind: 'station'; station: WorldStation; d: number } | { kind: 'cashier'; d: number } | { kind: 'spot'; spot: Spot; d: number };
 
+/**
+ * v8: what the prompt says for something in reach: what E does (a verb first) and what that's
+ * about, or '' for nothing more. A spot's label carries its own second part after a ' · '
+ * ("Browse · Fur Coat").
+ */
+export function promptText(t: { kind: 'station'; station: { name: string; limits: string } } | { kind: 'cashier' } | { kind: 'spot'; spot: { label: string } }): [string, string] {
+  if (t.kind === 'station') return [`Play ${t.station.name}`, t.station.limits];
+  if (t.kind === 'cashier') return ['Visit the cashier', ''];
+  const cut = t.spot.label.indexOf(' · ');
+  return cut < 0 ? [t.spot.label, ''] : [t.spot.label.slice(0, cut), t.spot.label.slice(cut + 3)];
+}
+
 export class Interact {
   private prompt = el('div', 'world-prompt');
   private enterCbs = new Set<(s: WorldStation) => void>();
@@ -266,8 +278,13 @@ export class Interact {
       this.prompt.hidden = true;
       return;
     }
-    const parts = t.kind === 'cashier' ? ['Cashier'] : t.kind === 'spot' ? [t.spot.label] : [t.station.name, t.station.limits].filter(Boolean);
-    this.prompt.append('Press ', el('span', 'world-key', keyLabel('interact')), ...parts.map((x) => ` · ${x}`));
+    // v8: the key, what it does there ("Play Blackjack", "Sit", "Order a drink") and, quieter on a
+    // line of its own, what that's about ("$5–$5,000"); read out (and seen by the checks) as the
+    // one line it always was: "Press E · Play Blackjack · $5–$5,000"
+    const [act, what] = promptText(t);
+    this.prompt.append(el('span', 'world-prompt-vh', 'Press '), el('span', 'world-key', keyLabel('interact')), el('span', 'world-prompt-vh', ' · '), el('span', 'world-prompt-act', act));
+    if (what) this.prompt.append(el('span', 'world-prompt-vh', ' · '), el('span', 'world-prompt-what', what));
+    this.prompt.classList.toggle('two', !!what);
     this.prompt.hidden = false;
   }
 
