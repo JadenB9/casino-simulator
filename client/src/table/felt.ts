@@ -5,9 +5,12 @@
 // The cloth itself is the painter's: under the print, the dye's slow unevenness and a soft pool of
 // light toward the middle (the rail's edge falls away a little darker), and over all of it a fine
 // fibre that catches the light (a small normal map tiled across, the same for every felt), so a
-// large felt reads as baize under the lamps instead of flat green paint.
+// large felt reads as baize under the lamps instead of flat green paint. The fibre is High
+// quality's: on Low (a weak GPU, a software renderer) the felt that fills the screen skips the
+// per-pixel work and keeps the painted dye and light.
 
 import * as THREE from 'three';
+import { savedQuality } from '../render/engine3d.ts';
 
 export interface Region {
   id: string;
@@ -53,7 +56,7 @@ export class Felt {
     // the fibre, a tile every FIBRE_TILE metres (a copy of the one shared picture, uploaded once),
     // on the felt you sit at: the floor's tables, painted coarser and seen from across the room,
     // would only pay for it
-    if (ppm >= FIBRE_FROM) {
+    if (ppm >= FIBRE_FROM && savedQuality() === 'high') {
       const fibre = fibreTexture().clone();
       fibre.repeat.set(spec.width / FIBRE_TILE, spec.depth / FIBRE_TILE);
       mat.normalMap = fibre;
