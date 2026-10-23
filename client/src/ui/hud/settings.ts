@@ -17,6 +17,7 @@ import type { Closable, SfxLike, SoundKind } from '../menu/deps.ts';
 import { openSheet } from '../menu/sheet.ts';
 import { segmented } from '../menu/parts.ts';
 import { bigWinSettings } from '../feed/settings.ts'; // features: big-win toasts
+import { cardSettings } from '../../table/settings.ts'; // the card tables' deck
 import { controlSettings } from '../menu/controls.ts'; // world: the camera and mouse look
 import { keySettings } from '../menu/keybinds.ts';
 import { keyLabel } from '../keys.ts';
@@ -195,9 +196,10 @@ export function openSettings(deps: SettingsDeps): Closable {
       row('Interface size', sizeCtl.root, note('The HUD, its panels and the notes under it. For everything else larger as well, use the browser’s own zoom (Ctrl and +).')),
     ],
     social: [...bigWinSettings(row), ...inviteSettings(row)],
-    // (the card tables' own rows, the table kit's settings fragment, join Play here)
     play: [
       row('Tips', tipsCtl.root, note('Shows the best play where a game has one (basic strategy, the video poker holds, Q-6-4) and which bets are better elsewhere.')),
+      // the card tables' own rows (table/settings.ts): two colours or four
+      ...cardSettings(row),
       ...reminderSettings(row),
     ],
   };
