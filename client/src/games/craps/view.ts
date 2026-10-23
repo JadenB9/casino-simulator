@@ -1,9 +1,12 @@
-// The craps table view: chips on the layout for every seat, the puck, the dice thrown down the
-// table onto the faces the server rolled, the stickman's call, then losing bets collected and
-// winners paid, the way the dealers work it. Clicks on the felt become bets; right-click takes a
-// bet down; shift-click calls a bet on or off.
+// The craps table view: chips on the layout for every seat, the puck (and the point's box lit),
+// the dice thrown down the table onto the faces the server rolled, the stickman's call and the
+// roll's plaque, then losing bets collected and winners paid, the way the dealers work it. Clicks
+// on the felt become bets; right-click takes a bet down; shift-click calls a bet on or off. Odds
+// (O) goes behind every line and come bet at once, and the quick calls put down Across, Inside or
+// the Hardways in one go.
 
 import * as THREE from 'three';
+import type { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import type { TableView, TableViewCtx } from '../contract.ts';
 import type { GameEvent, TableConfig } from '../../../../shared/src/engine.ts';
 import type { CrapsView as View } from '../../../../shared/src/games/craps/protocol.ts';
@@ -19,24 +22,27 @@ import { around, regionPoints } from '../../table/fit.ts';
 import { ChipStack, slideStack, CHIP_H } from '../../table/chips.ts';
 import { Die, throwDie } from '../../table/dice.ts';
 import { tween, wait, ease } from '../../table/tween.ts';
-import { ChipTray } from '../../ui/kit.ts';
+import { ChipTray, button } from '../../ui/kit.ts';
 import { crapsMax, crapsOddsMax, maxRefusal, type MaxBet } from '../../table/max.ts';
 import { serverNow } from '../../net/clock.ts';
-import { feltSpec, parseRegion, chipSpot, puckSpot, spotRect, DICE_REST, FELT_W } from './layout.ts';
+import { feltSpec, parseRegion, chipSpot, puckSpot, spotRect, DICE_REST, FELT_W, ROW } from './layout.ts';
 import { BED_Y } from './model.ts';
 import { seatEnd, slotOffset, railSpot, handSpot } from './seats.ts';
-import { CrapsHud } from './hud.ts';
-import { SpotRing } from './ring.ts';
+import { CrapsHud, RollPlaque } from './hud.ts';
+import { SpotRing, PointMark } from './ring.ts';
+import { QUICKS, quickBets, quickNumbers, type QuickId } from './quick.ts';
 import { crapsAdvice, crapsMoment, edgeLine, spotEdge, type Decided } from './advice.ts';
 import { celebrate } from '../../table/celebrate.ts';
 import './craps.css';
 
 const SURFACE = BED_Y + 0.0006;
 const DIE = 0.019;
+/** The dice are drawn a little larger than life so their faces read from the rail (as roulette's chips are). */
+const DIE_SCALE = 1.3;
 
 type Part = 'flat' | 'odds';
 
-function discTexture(bg: string, fg: string, label: string, size = 128): THREE.CanvasTexture {
+function discTexture(bg: string, fg: string, label: string, size = 256): THREE.CanvasTexture {
   const c = document.createElement('canvas');
   c.width = c.height = size;
   const g = c.getContext('2d')!;
@@ -59,13 +65,20 @@ function discTexture(bg: string, fg: string, label: string, size = 128): THREE.C
   return t;
 }
 
-/** A two-sided disc: the puck (OFF black / ON white) or a small ON/OFF lammer button. */
-function disc(r: number, h: number): { mesh: THREE.Mesh; on: THREE.Material; off: THREE.Material } {
-  const off = new THREE.MeshStandardMaterial({ map: discTexture('#111111', '#f4efe4', 'OFF'), roughness: 0.4 });
-  const on = new THREE.MeshStandardMaterial({ map: discTexture('#f4efe4', '#111111', 'ON'), roughness: 0.4 });
-  const side = new THREE.MeshStandardMaterial({ color: '#8c8579', roughness: 0.5 });
-  const mesh = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 40), [side, off, on]);
-  return { mesh, on, off };
+/** A two-sided disc: the puck (OFF black / ON white) or a small ON/OFF lammer button. Discs of one size share their geometry and materials. */
+const discs = new Map<string, { geo: THREE.BufferGeometry; mats: THREE.Material[] }>();
+function disc(r: number, h: number): { mesh: THREE.Mesh } {
+  const key = `${r}:${h}`;
+  let d = discs.get(key);
+  if (!d) {
+    const size = r > 0.02 ? 256 : 96;
+    const off = new THREE.MeshStandardMaterial({ map: discTexture('#111111', '#f4efe4', 'OFF', size), roughness: 0.4 });
+    const on = new THREE.MeshStandardMaterial({ map: discTexture('#f4efe4', '#111111', 'ON', size), roughness: 0.4 });
+    const side = new THREE.MeshStandardMaterial({ color: '#8c8579', roughness: 0.5 });
+    d = { geo: new THREE.CylinderGeometry(r, r, h, 40), mats: [side, off, on] };
+    discs.set(key, d);
+  }
+  return { mesh: new THREE.Mesh(d.geo, d.mats) };
 }
 
 const RATIO = (r: readonly [number, number]) => `${r[0]} to ${r[1]}`;
@@ -118,7 +131,7 @@ export class CrapsTable implements TableView {
   private readonly felt = new Felt(feltSpec());
   private readonly stacks = new Map<string, ChipStack>();
   private readonly lammers = new Map<string, THREE.Mesh>();
-  private readonly puck = disc(0.032, 0.012);
+  private readonly puck = disc(0.038, 0.013);
   private readonly dice: [Die, Die] = [new Die(), new Die()];
   private readonly hud: CrapsHud;
   private readonly tray: ChipTray;
@@ -132,8 +145,8 @@ export class CrapsTable implements TableView {
   private puckPoint: number | null | undefined = undefined;
   private rolling = false;
   private readySent = false;
-  /** Chips put down since the last roll, for Undo and Clear. */
-  private placed: { id: string; part: Part; amount: Cents }[] = [];
+  /** Chips put down since the last roll, for Undo and Clear: each action's chips together, so Undo takes back a whole call. */
+  private placed: { id: string; part: Part; amount: Cents }[][] = [];
   /** Bets lost on the last roll, for Rebet. */
   private lost: { kind: BetKind; number?: number; amount: Cents }[] = [];
   private floorFelt: THREE.Object3D | null = null;
@@ -141,6 +154,15 @@ export class CrapsTable implements TableView {
   /** Tips: the ring on the recommended spot, and the unsubscribe from the setting. */
   private readonly ring = new SpotRing(SURFACE + 0.0003);
   private readonly unTips: () => void;
+  /** The point's number box, lit while the puck is ON. */
+  private readonly pointMark = new PointMark(SURFACE + 0.0002);
+  /** The roll's plaque, and when it goes. */
+  private readonly plaque = new RollPlaque();
+  private readonly plaqueObj: CSS2DObject;
+  private plaqueUntil = 0;
+  private readonly oddsBtn: HTMLButtonElement;
+  /** A touch on the felt shows that spot's card for a moment (there is no hover on a touch screen). */
+  private touchTip: { x: number; y: number; until: number } | null = null;
 
   constructor(private readonly ctx: TableViewCtx) {
     ctx.stage.addFelt(this.felt, SURFACE - 0.0004);
@@ -150,10 +172,11 @@ export class CrapsTable implements TableView {
     this.puck.mesh.position.set(...this.at(puckSpot(null, 1), 0.006));
     ctx.stage.root.add(this.puck.mesh);
     this.dice.forEach((d, i) => {
-      d.position.set(-0.012 + i * 0.026, SURFACE + DIE / 2, 0.47);
+      d.scale.setScalar(DIE_SCALE);
+      d.position.set(-0.012 + i * 0.03, SURFACE + (DIE * DIE_SCALE) / 2, 0.47);
       ctx.stage.root.add(d);
     });
-    this.hud = new CrapsHud(ctx.ui);
+    this.hud = new CrapsHud(ctx.ui, { quick: (id) => this.quick(id), title: (id) => this.quickTitle(id) });
     this.tray = new ChipTray({
       undo: () => this.undo(),
       clear: () => this.clear(),
@@ -161,8 +184,14 @@ export class CrapsTable implements TableView {
       max: { mode: 'pick' },
       primary: { label: 'Roll', run: () => this.primary() },
     });
+    // Odds sits with the tray's other actions, before Roll
+    this.oddsBtn = button('Odds', () => this.allOdds(), { key: 'O', title: 'Odds behind every line and come bet with room for them: the chip you picked on each, or full odds with Max (O)' });
+    const acts = this.tray.root.querySelector('.acts');
+    if (acts) acts.append(this.oddsBtn);
+    else this.tray.root.append(this.oddsBtn);
     ctx.ui.append(this.tray.root);
-    ctx.stage.root.add(this.ring.root);
+    ctx.stage.root.add(this.ring.root, this.pointMark.root);
+    this.plaqueObj = ctx.stage.label(this.plaque.root, new THREE.Vector3(0.62, SURFACE + 0.02, ROW.top - 0.02));
     this.unTips = ctx.tips.subscribe(() => this.refreshAdvice());
     addEventListener('pointerdown', this.onPointerDown);
     addEventListener('pointermove', this.onPointerMove);
@@ -178,6 +207,8 @@ export class CrapsTable implements TableView {
    * middle, and where the dice come to rest at your end.
    */
   private fitBoard(): void {
+    // the roll's plaque stands over the far side of this player's end
+    this.plaqueObj.position.x = 0.62 * this.myEnd;
     const end = this.myEnd === 1 ? 'R|' : 'L|';
     const y = SURFACE;
     this.ctx.stage.board(regionPoints(this.felt, (id) => id.startsWith(end) || id.startsWith('C|'), y), around([DICE_REST[0] * this.myEnd, y, DICE_REST[1]], 0.08));
@@ -297,14 +328,19 @@ export class CrapsTable implements TableView {
     if (!v || !seated) this.tray.setPrimary('Roll', false);
     else if (shooter) this.tray.setPrimary(v.rollRequested ? 'Rolling' : 'Roll', !this.rolling && !v.rollRequested && (this.solo ? live : v.point !== null || !!(this.mine().pass || this.mine().dontpass)));
     else this.tray.setPrimary('Ready', v.phase === 'open' && !v.pauseOver && !this.readySent);
+    const leaving = !!v && this.mySeat !== null && v.leaving.includes(this.mySeat);
     if (v) {
       this.hud.update(v, {
         shooterName: v.shooter === null ? null : (this.names.get(v.shooter) ?? null),
         mine: v.shooter === this.mySeat,
         solo: this.solo,
-        leaving: this.mySeat !== null && v.leaving.includes(this.mySeat),
+        leaving,
       });
     }
+    const canAdd = !!v && seated && !this.rolling && !leaving;
+    this.oddsBtn.disabled = !canAdd || this.oddsTargets().length === 0;
+    this.hud.setQuick(canAdd);
+    this.pointMark.set(v?.point ?? null, this.myEnd);
     this.refreshAdvice();
   }
 
@@ -344,25 +380,99 @@ export class CrapsTable implements TableView {
     this.ctx.sfx.play('chip-lay');
   }
 
-  private odds(on: string): void {
+  /**
+   * Odds behind `on`: the chip picked, or full odds with Max, from `stack` (Odds on every bet
+   * spends what is left after the ones before). `quiet` leaves the toasts and the chip sound to
+   * the caller. Returns what went down.
+   */
+  private odds(on: string, quiet = false, stack = this.stack): Cents {
     const v = this.v;
     const flat = this.mine()[on];
-    if (!v || !flat) return;
+    if (!v || !flat) return 0;
     const p = parseId(on);
     const n = (on === 'pass' || on === 'dontpass' ? v.point : p.n) as PointNumber | null;
-    if (n === null) return;
+    if (n === null) return 0;
     const lay = p.kind === 'dontpass' || p.kind === 'dontcome';
     const step = this.limits(oddsLimitKey(lay, n)).step;
     const room = maxOdds(p.kind as 'pass', flat.amount, n) - (flat.odds ?? 0);
     let amount = Math.min(Math.max(step, Math.round(this.tray.selected.value / step) * step), Math.floor(room / step) * step);
-    const most = this.tray.maxPicked ? this.maxOdds(on) : null;
-    if (most && 'none' in most && most.none === 'SHORT') return this.ctx.kit.toast(maxRefusal(most, this.limits(oddsLimitKey(lay, n))));
+    const most = this.tray.maxPicked ? this.maxOdds(on, stack) : null;
+    if (most && 'none' in most && most.none === 'SHORT') {
+      if (!quiet) this.ctx.kit.toast(maxRefusal(most, this.limits(oddsLimitKey(lay, n))));
+      return 0;
+    }
     if (most && 'amount' in most) amount = most.amount;
     if (amount <= 0 || (most && 'none' in most)) {
-      this.ctx.kit.toast('Full odds are already behind that bet.');
-      return;
+      if (!quiet) this.ctx.kit.toast('Full odds are already behind that bet.');
+      return 0;
+    }
+    if (amount > stack) {
+      if (!quiet) this.ctx.kit.toast(`Odds of ${formatMoney(amount)} are more than your stack.`);
+      return 0;
     }
     this.ctx.link.act({ type: 'odds', on, amount });
+    if (!quiet) this.ctx.sfx.play('chip-lay');
+    return amount;
+  }
+
+  /** This player's line and come bets that have a number and room for more odds. */
+  private oddsTargets(): string[] {
+    const v = this.v;
+    if (!v) return [];
+    const out: string[] = [];
+    for (const [id, bet] of Object.entries(this.mine())) {
+      const p = parseId(id);
+      const line = id === 'pass' || id === 'dontpass';
+      const n = line ? v.point : (p.kind === 'come' || p.kind === 'dontcome') && p.n !== undefined ? p.n : null;
+      if (n === null) continue;
+      const lay = p.kind === 'dontpass' || p.kind === 'dontcome';
+      const step = this.limits(oddsLimitKey(lay, n)).step;
+      const room = maxOdds(p.kind as 'pass', bet.amount, n) - (bet.odds ?? 0);
+      if (Math.floor(room / step) * step > 0) out.push(id);
+    }
+    return out;
+  }
+
+  /** Odds (O): behind every line and come bet with room for more, the line first. */
+  private allOdds(): void {
+    const v = this.v;
+    if (!v || this.mySeat === null || this.rolling) return;
+    const targets = this.oddsTargets().sort((a, b) => Number(!/pass/.test(a)) - Number(!/pass/.test(b)));
+    if (targets.length === 0) {
+      const any = Object.keys(this.mine()).some((id) => id === 'pass' || id === 'dontpass' || /^(come|dontcome)\d+$/.test(id));
+      this.ctx.kit.toast(!any || v.point === null ? 'Odds go behind a pass, don\'t pass, come or don\'t come bet once it has a number.' : 'Full odds are already behind your bets.');
+      return;
+    }
+    let left = this.stack;
+    let short = false;
+    for (const on of targets) {
+      const sent = this.odds(on, true, left);
+      if (sent === 0) short = true;
+      left -= sent;
+    }
+    if (left < this.stack) this.ctx.sfx.play('chip-lay');
+    if (short && left === this.stack) this.ctx.kit.toast('Not enough chips for odds there.');
+  }
+
+  /** What a quick call would put down with the chip picked now, for its button's title. */
+  private quickTitle(id: QuickId): string {
+    const q = QUICKS.find((x) => x.id === id)!;
+    const v = this.v;
+    if (!v || !this.cfg) return q.what;
+    const r = quickBets(id, this.cfg, this.tray.selected.value, v.point, this.mine(), this.stack);
+    if ('refusal' in r) return `${q.what}. ${r.refusal}`;
+    const each = r.bets.map((b) => `${formatMoney(b.amount)} on ${id === 'hardways' ? 'hard ' : ''}${b.number}`).join(', ');
+    return `${q.what}: ${each} (${formatMoney(r.total)})`;
+  }
+
+  /** Across, Inside or the Hardways, sized from the chip picked, in one batch. */
+  private quick(id: QuickId): void {
+    const v = this.v;
+    if (!v || !this.cfg || this.mySeat === null || this.rolling) return;
+    if (quickNumbers(id, v.point).length === 0) return;
+    const r = quickBets(id, this.cfg, this.tray.selected.value, v.point, this.mine(), this.stack);
+    if ('refusal' in r) return this.ctx.kit.toast(r.refusal);
+    this.ctx.link.act({ type: 'bet', bets: r.bets });
     this.ctx.sfx.play('chip-lay');
   }
 
@@ -391,7 +501,10 @@ export class CrapsTable implements TableView {
     const r = this.route(spot);
     if (!r) return;
     if ('none' in r) return this.ctx.kit.toast(r.none);
-    if ('odds' in r) return this.odds(r.odds);
+    if ('odds' in r) {
+      this.odds(r.odds);
+      return;
+    }
     this.bet(r.flat, r.n);
   }
 
@@ -401,13 +514,13 @@ export class CrapsTable implements TableView {
   }
 
   /** What Max puts behind a bet: full odds (3-4-5x, 6x laid) or your chips. */
-  private maxOdds(on: string): MaxBet | null {
+  private maxOdds(on: string, stack = this.stack): MaxBet | null {
     const v = this.v;
     const flat = this.mine()[on];
     const p = parseId(on);
     const n = (on === 'pass' || on === 'dontpass' ? v?.point : p.n) as PointNumber | null | undefined;
     if (!this.cfg || !flat || n == null) return null;
-    return crapsOddsMax(this.cfg, p.kind as 'pass' | 'dontpass' | 'come' | 'dontcome', flat, n, this.stack);
+    return crapsOddsMax(this.cfg, p.kind as 'pass' | 'dontpass' | 'come' | 'dontcome', flat, n, stack);
   }
 
   private takeDown(spot: string): void {
@@ -431,7 +544,8 @@ export class CrapsTable implements TableView {
   private undo(): void {
     const last = this.placed.pop();
     if (!last) return;
-    this.ctx.link.act(last.part === 'odds' ? { type: 'down', id: last.id, part: 'odds', amount: last.amount } : { type: 'down', id: last.id, amount: last.amount });
+    // the newest chips first, as a dealer hands them back
+    for (const p of [...last].reverse()) this.ctx.link.act(p.part === 'odds' ? { type: 'down', id: p.id, part: 'odds', amount: p.amount } : { type: 'down', id: p.id, amount: p.amount });
   }
 
   private clear(): void {
@@ -462,7 +576,7 @@ export class CrapsTable implements TableView {
   }
 
   /** Remember chips this player just put down (for Undo), by comparing a bet event with what was there. */
-  private track(e: GameEvent, before: Record<string, Bet>): void {
+  private track(e: GameEvent, before: Record<string, Bet>, into: { id: string; part: Part; amount: Cents }[]): void {
     if (e.seat !== this.mySeat || e.back !== undefined) return;
     const id = String(e.id);
     const now = e.bet as Bet | null;
@@ -470,8 +584,8 @@ export class CrapsTable implements TableView {
     if (!now) return;
     const dFlat = now.amount - (old?.amount ?? 0);
     const dOdds = (now.odds ?? 0) - (old?.odds ?? 0);
-    if (dFlat > 0) this.placed.push({ id, part: 'flat', amount: dFlat });
-    if (dOdds > 0) this.placed.push({ id, part: 'odds', amount: dOdds });
+    if (dFlat > 0) into.push({ id, part: 'flat', amount: dFlat });
+    if (dOdds > 0) into.push({ id, part: 'odds', amount: dOdds });
     before[id] = now;
   }
 
@@ -486,8 +600,9 @@ export class CrapsTable implements TableView {
     const jitter = (s: number) => (Math.sin(s * 12.9898 + faces[0] * 78.233 + faces[1] * 37.719) * 43758.5453) % 1;
     this.ctx.sfx.play('dice-throw');
     await Promise.all(this.dice.map(async (die, i) => {
-      const hit = new THREE.Vector3(wallX, SURFACE + DIE / 2, -0.12 + i * 0.1 + jitter(i) * 0.08);
-      const rest = new THREE.Vector3(end * (rx + i * 0.05 + jitter(i + 2) * 0.05), SURFACE, rz + (i - 0.5) * 0.07 + jitter(i + 4) * 0.04);
+      const hit = new THREE.Vector3(wallX, SURFACE + (DIE * DIE_SCALE) / 2, -0.12 + i * 0.1 + jitter(i) * 0.08);
+      // throwDie sets a die down half a life-size die above `rest`: lift it by what the scale adds
+      const rest = new THREE.Vector3(end * (rx + i * 0.06 + jitter(i + 2) * 0.05), SURFACE + (DIE * (DIE_SCALE - 1)) / 2, rz + (i - 0.5) * 0.08 + jitter(i + 4) * 0.04);
       const from = hand.clone().add(new THREE.Vector3(0, 0, i * 0.02));
       const spin = new THREE.Quaternion().setFromEuler(new THREE.Euler(0.31 + i * 0.1, 0.17, 0.23 - i * 0.07));
       await tween(620 + i * 40, (k) => {
@@ -503,6 +618,8 @@ export class CrapsTable implements TableView {
   private async playRoll(roll: GameEvent, events: GameEvent[], next: View): Promise<void> {
     const v = this.v;
     this.rolling = true;
+    this.plaque.hide();
+    this.plaqueUntil = 0;
     this.refreshControls();
     const faces = roll.dice as [number, number];
     const before = (roll.point ?? null) as PointNumber | null;
@@ -510,6 +627,8 @@ export class CrapsTable implements TableView {
     const moves = events.filter((e) => e.type === 'move');
     await this.throwDice((roll.shooter ?? null) as number | null, faces);
     this.ctx.kit.say(stickCall(before, faces[0], faces[1]), 3200);
+    this.plaque.show(faces[0], faces[1], before, next.point);
+    this.plaqueUntil = performance.now() + 5200;
 
     // Work out this player's result before the chips move.
     let net = 0;
@@ -531,6 +650,7 @@ export class CrapsTable implements TableView {
     if (decided) {
       this.lost = lost;
       this.hud.showNet(net);
+      this.plaque.setNet(net > 0 ? `You won ${formatMoney(net)}` : net < 0 ? `${formatMoney(net)} this roll` : 'Even this roll', net > 0 ? 'win' : net < 0 ? 'lose' : 'quiet');
     }
 
     // Collect the losers first...
@@ -654,6 +774,8 @@ export class CrapsTable implements TableView {
     const hit = this.ctx.stage.pick(e);
     if (!hit?.region) return;
     const { spot } = parseRegion(hit.region);
+    // a touch has no hover: the spot's card shows for a moment, over the finger
+    if (e.pointerType === 'touch' || e.pointerType === 'pen') this.touchTip = { x: e.clientX, y: e.clientY, until: performance.now() + 2400 };
     if (e.button === 2) this.takeDown(spot);
     else if (e.button === 0 && e.shiftKey) this.toggle(spot);
     else if (e.button === 0) this.place(spot);
@@ -664,12 +786,23 @@ export class CrapsTable implements TableView {
   };
 
   private onPointerMove = (e: PointerEvent): void => {
+    if (e.pointerType === 'touch') return;
     this.hoverAt = e.target instanceof HTMLCanvasElement ? { x: e.clientX, y: e.clientY } : null;
   };
 
   private updateTip(): void {
-    const at = this.hoverAt;
+    let at = this.hoverAt;
     this.hoverAt = null;
+    const touch = this.touchTip;
+    if (touch) {
+      // read again every frame while it shows, so the chips that just went down are in it
+      if (performance.now() > touch.until) {
+        this.touchTip = null;
+        this.hud.showTip(null, 0, 0);
+        return;
+      }
+      at = { x: touch.x, y: touch.y };
+    }
     if (at === null) return;
     const hit = this.ctx.stage.pick({ clientX: at.x, clientY: at.y });
     const spot = hit?.region ? parseRegion(hit.region).spot : null;
@@ -684,16 +817,17 @@ export class CrapsTable implements TableView {
       const most = r && 'flat' in r ? this.maxFlat(r.flat, r.n) : r && 'odds' in r ? this.maxOdds(r.odds) : null;
       if (most) lines.push('amount' in most ? `Max ${r && 'odds' in r ? 'odds ' : ''}adds ${formatMoney(most.amount)}` : most.none === 'AT_MAX' ? 'At the maximum' : 'Not enough chips for its minimum');
     }
-    const edge = this.ctx.tips.on ? spotEdge(spot, this.mine(), this.v.point, !!this.v.lay) : null;
+    // every spot says what it costs, Tips or not
+    const edge = spotEdge(spot, this.mine(), this.v.point, !!this.v.lay);
     const b = spotBet(spot, this.mine(), this.v.point);
     const bet = b && this.mine()[b.id];
     if (b && bet) {
       const amount = b.part === 'odds' ? (bet.odds ?? 0) : bet.amount;
       const off = canToggle(b.id) && !isWorking(b.id, bet, this.v.point);
       if (amount > 0) lines.push(`Your ${b.part === 'odds' ? 'odds' : 'bet'}: ${formatMoney(amount)}${off ? ' (off)' : ''}`);
-      lines.push(canToggle(b.id) ? 'Right-click takes it down. Shift-click calls it on or off.' : 'Right-click takes it down.');
+      if (!touch) lines.push(canToggle(b.id) ? 'Right-click takes it down. Shift-click calls it on or off.' : 'Right-click takes it down.');
     }
-    this.hud.showTip(lines, at.x, at.y, edge ? edgeLine(edge) : null);
+    this.hud.showTip(lines, at.x, at.y, edge ? edgeLine(edge) : null, !!touch);
   }
 
   // -------------------------------------------------------------------------------------------
@@ -718,13 +852,16 @@ export class CrapsTable implements TableView {
     const next = view as View;
     const before: Record<string, Bet> = { ...this.mine() };
     const roll = events.find((e) => e.type === 'roll');
+    // the chips of one action (a quick call, a rebet) come in one message: one Undo takes them all
+    const put: { id: string; part: Part; amount: Cents }[] = [];
     for (const e of events) {
-      if (e.type === 'bet') this.track(e, before);
+      if (e.type === 'bet') this.track(e, before, put);
       if (e.type === 'open' && this.readySent) {
         this.readySent = false;
         this.ctx.link.ready(false);
       }
     }
+    if (put.length) this.placed.push(put);
     if (roll) {
       this.placed = [];
       await this.playRoll(roll, events, next);
@@ -770,12 +907,21 @@ export class CrapsTable implements TableView {
       this.undo();
       return true;
     }
+    if ((e.key === 'o' || e.key === 'O') && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      this.allOdds();
+      return true;
+    }
     return false;
   }
 
   update(dt: number): void {
     this.updateTip();
     this.ring.update(dt);
+    this.pointMark.update(dt);
+    if (this.plaqueUntil && performance.now() > this.plaqueUntil) {
+      this.plaqueUntil = 0;
+      this.plaque.hide();
+    }
     this.hud.tick(this.v, serverNow(), this.v?.shooter === this.mySeat);
   }
 
@@ -794,6 +940,9 @@ export class CrapsTable implements TableView {
     this.unTips();
     this.ctx.kit.tip(null);
     this.ring.dispose();
+    this.pointMark.dispose();
+    this.plaqueObj.removeFromParent();
+    this.plaque.root.remove();
     this.hud.dispose();
     this.tray.root.remove();
   }

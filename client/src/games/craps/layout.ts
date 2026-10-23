@@ -141,6 +141,16 @@ export function spotRect(id: string, end: 1 | -1): [number, number, number, numb
   return s?.kind === 'rect' ? [s.x - s.w / 2, s.z - s.d / 2, s.x + s.w / 2, s.z + s.d / 2] : null;
 }
 
+/**
+ * A point number's box on an end, under the don't come strip down to its foot (the buy strip
+ * included on 4 and 10), as [x0, z0, x1, z1]: what the point's mark outlines.
+ */
+export function numberBox(n: number, end: 1 | -1): [number, number, number, number] {
+  const x0 = boxX(n, end);
+  const [a, b] = end === 1 ? [x0, x0 + BOX_W] : [-(x0 + BOX_W), -x0];
+  return [a, ROW.strip, b, ROW.bottom];
+}
+
 /** A region id -> which end it's on and which spot it is ('R|box6' -> { end: 1, spot: 'box6' }). */
 export function parseRegion(id: string): { end: 1 | -1 | 0; spot: string } {
   const [e, rest] = id.split('|') as [string, string];

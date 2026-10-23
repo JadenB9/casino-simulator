@@ -21,17 +21,43 @@
 .craps-net.lose { color: var(--lose); }
 .craps-note { font-size: 14px; color: var(--brass-hi); }
 
+/* The quick calls: three small buttons along the foot of the panel. */
+.craps-quick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; border-top: 1px solid var(--line); padding-top: 8px; }
+.craps-quick .btn { height: 30px; padding: 0 6px; font-size: 14px; letter-spacing: 0.04em; }
+
 .craps-tip { position: fixed; pointer-events: none; padding: 7px 10px; max-width: 250px; z-index: 20; }
 #ui .craps-tip { pointer-events: none; }
 .craps-tip-head { font-family: var(--serif); font-size: 15px; color: var(--brass-hi); letter-spacing: 0.03em; }
 .craps-tip-line { font-size: 14px; color: var(--ink-2); }
 .craps-tip-edge { font-size: 14px; color: var(--brass-hi); font-variant-numeric: tabular-nums; }
 
+/* The roll's plaque, as roulette's and the wheels': the dice and their total, the call, the puck, your net. */
+.craps-result { position: absolute; display: flex; align-items: center; gap: 12px; padding: 9px 16px 9px 10px; pointer-events: none; animation: craps-rise 0.4s var(--ease); white-space: nowrap; }
+.craps-result-badge { display: grid; justify-items: center; gap: 3px; }
+.craps-result-dice { display: flex; gap: 4px; }
+.craps-result-dice .craps-die { width: 26px; height: 26px; }
+.craps-result-total { font-family: var(--serif); font-size: 22px; font-weight: 700; line-height: 1; color: var(--brass-hi); font-variant-numeric: tabular-nums; }
+.craps-result.seven .craps-result-total { color: var(--lose); }
+.craps-result-words { display: grid; gap: 1px; }
+.craps-result-call { font-family: var(--serif); font-size: 21px; font-weight: 700; letter-spacing: 0.05em; color: var(--brass-hi); }
+.craps-result-detail { font-size: 15px; letter-spacing: 0.08em; color: var(--ink-2); }
+.craps-result-net { font-size: 16px; font-weight: 600; letter-spacing: 0.04em; }
+.craps-result-net.win { color: var(--win); }
+.craps-result-net.lose { color: var(--lose); }
+.craps-result-net.quiet { color: var(--ink-3); }
+@keyframes craps-rise { from { opacity: 0; translate: 0 8px; } }
+body.calm .craps-result { animation: craps-fade 0.35s both; }
+@keyframes craps-fade { from { opacity: 0; } }
+
 /* A phone upright: the status panel across the top under the HUD. */
 @media (max-width: 560px) {
   .craps-hud { left: 10px; right: 10px; width: auto; padding: 8px 12px; gap: 6px; }
   .craps-history { grid-template-columns: repeat(3, 1fr); }
   .craps-tip { max-width: calc(100vw - 24px); }
+  /* over the table just above the tray, as the other games' plaques (the label renderer places it with an inline transform; this pins it) */
+  .craps-result { position: fixed !important; left: 50%; bottom: 232px; transform: translateX(-50%) !important; gap: 10px; padding: 8px 12px 8px 8px; }
+  .craps-result-call { font-size: 17px; }
+  .craps-result-detail { font-size: 13px; }
 }
 /* On its side: a small panel in the corner so the layout under it stays in reach. */
 @media (max-height: 480px) {
@@ -41,4 +67,10 @@
   .craps-who, .craps-net, .craps-clock { font-size: 14px; }
   .craps-history { grid-template-columns: repeat(3, auto); gap: 2px 8px; padding-top: 5px; }
   .craps-die { width: 16px; height: 16px; }
+  .craps-quick { padding-top: 5px; gap: 4px; }
+  .craps-quick .btn { height: 26px; min-height: 26px; font-size: 13px; }
+  .craps-result { position: fixed !important; left: auto; right: 10px; top: calc(var(--below-hud) + 6px); bottom: auto; transform: none !important; gap: 10px; padding: 6px 12px 6px 8px; }
+  .craps-result-dice .craps-die { width: 20px; height: 20px; }
+  .craps-result-call { font-size: 16px; }
+  .craps-result-detail { font-size: 13px; }
 }
