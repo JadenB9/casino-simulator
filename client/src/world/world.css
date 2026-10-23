@@ -130,7 +130,7 @@
   background: var(--glass);
   border: 1px solid var(--line-strong);
   color: var(--brass-hi);
-  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 8px 22px rgba(var(--scrim-rgb), 0.5);
   animation: emote-in 0.32s var(--ease) both;
 }
 .emote-bubble.leaving { animation: emote-out 0.4s ease-in forwards; }

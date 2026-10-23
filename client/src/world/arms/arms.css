@@ -6,9 +6,10 @@
 .arms-ammo { position: fixed; right: 16px; bottom: 70px; padding: 8px 14px; font-size: 14px; letter-spacing: 0.06em; color: var(--ink-2); font-variant-numeric: tabular-nums; z-index: 11; pointer-events: none; }
 
 /* v7.1: touch: the Gun and Fire buttons, stacked over the Punch button on the right */
-.arms-touch { position: fixed; right: 18px; width: 72px; height: 72px; border-radius: 50%; border: 1px solid var(--line-strong); background: rgba(14, 12, 10, 0.78); color: var(--ink); font: 600 14px var(--ui); letter-spacing: 0.08em; text-transform: uppercase; z-index: 12; touch-action: none; user-select: none; -webkit-user-select: none; }
+.arms-touch { position: fixed; right: 18px; width: 72px; height: 72px; border-radius: 50%; border: 1px solid var(--line-strong); background: var(--glass); color: var(--ink); font: 600 14px var(--ui); letter-spacing: 0.08em; text-transform: uppercase; z-index: 12; touch-action: none; user-select: none; -webkit-user-select: none; }
 .arms-gun { bottom: 250px; }
-.arms-fire { bottom: 330px; width: 84px; height: 84px; background: rgba(120, 24, 16, 0.85); border-color: #ff7a5a; }
+/* (red in either theme, so its words stay light on it) */
+.arms-fire { bottom: 330px; width: 84px; height: 84px; background: rgba(120, 24, 16, 0.88); border-color: #ff7a5a; color: #fff4ec; }
 .arms-touch:active { transform: scale(0.95); }
 @media (max-height: 480px) { .arms-gun { bottom: 150px; right: 104px; } .arms-fire { bottom: 150px; right: 190px; } }
 /* v7.2: a size up, above the action button, clear of the caption (world/touch.css) */
@@ -23,6 +24,6 @@
 .arms-cross.aiming::after { top: 5px; width: 12px; height: 2px; opacity: 0.55; }
 /* v1.1: touch: Aim beside Fire (a tap aims in, another comes back out) */
 .arms-aim { bottom: 290px; right: 128px; width: 72px; height: 72px; }
-.arms-aim.on { background: rgba(244, 220, 166, 0.9); color: #1a140c; border-color: #f4dca6; }
+.arms-aim.on { background: linear-gradient(#e2bf7c, #b98d45); color: var(--on-gold); border-color: var(--gold-line); }
 @media (max-width: 520px) { .arms-aim { bottom: 326px; } }
 @media (max-height: 480px) { .arms-aim { bottom: 180px; right: 374px; } }

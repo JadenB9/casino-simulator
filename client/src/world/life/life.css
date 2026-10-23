@@ -17,7 +17,7 @@
   border: 1px solid var(--brass);
   border-radius: 8px;
   background: rgba(var(--glass-rgb), 0.9);
-  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 8px 22px rgba(var(--scrim-rgb), 0.45);
   color: var(--ink);
   font-size: 15px;
   line-height: 1.3;
