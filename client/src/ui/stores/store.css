@@ -1,17 +1,34 @@
-/* v7: a store's catalogue: sections of rows, each the thing, a line about it, its price and a button. */
-.store-sheet { width: min(640px, calc(100vw - 24px)); }
-.store-body { display: grid; gap: 18px; max-height: min(66vh, 640px); overflow: auto; padding-right: 4px; }
+/* v7: a store's catalogue: your balance, then sections of rows, each the thing, a line about it,
+   its price (and how far short you are) and a button. */
+.store-sheet { width: min(660px, calc(100vw - 24px)); }
+.store-money { display: flex; align-items: baseline; gap: 10px; margin: -4px 0 12px; }
+.store-money-label { font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-3); }
+.store-money-val { font-size: 21px; color: var(--ink); }
+.store-body { display: grid; gap: 18px; max-height: min(64vh, 620px); overflow: auto; overscroll-behavior: contain; padding-right: 4px; }
 .store-section { display: grid; gap: 2px; }
-.store-head { margin: 0 0 6px; font-family: var(--serif); font-size: 15px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--brass-hi); }
-.store-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 14px; padding: 10px 4px; border-bottom: 1px solid var(--line); }
+.store-head { display: flex; align-items: center; justify-content: space-between; gap: 6px 12px; flex-wrap: wrap; margin: 0 0 4px; padding-bottom: 6px; border-bottom: 1px solid var(--line); font-family: var(--serif); font-size: 15px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--brass-hi); }
+.store-head-title { flex: 1; }
+.store-head-count { font-family: var(--ui); font-size: 12.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: none; color: var(--ink-3); }
+.store-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 14px; padding: 10px 6px; border-bottom: 1px solid rgba(var(--brass-rgb), 0.12); border-radius: 4px; transition: background 0.15s; }
+.store-row:hover { background: rgba(var(--lift-rgb), 0.025); }
 .store-row:last-child { border-bottom: 0; }
 .store-name { font-size: 16px; font-weight: 600; color: var(--ink); }
 .store-about { margin-top: 2px; font-size: 14px; line-height: 1.35; color: var(--ink-3); }
-.store-right { display: flex; align-items: center; gap: 10px; }
-.store-price { min-width: 9ch; text-align: right; font-size: 16px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.store-row.locked .store-name { color: var(--ink-2); }
+.store-row.locked .store-about { color: var(--ink-3); font-style: italic; }
+.store-right { display: flex; align-items: center; gap: 12px; }
+.store-price { display: grid; justify-items: end; min-width: 10ch; font-size: 16px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.store-short { font-size: 12.5px; color: var(--lose); white-space: nowrap; }
+.store-row.short .store-price > .money:first-child { color: var(--ink-3); }
 .store-row.owned .store-price { color: var(--win); }
 .store-right .btn { min-width: 96px; }
 /* v1.1: a section's own actions beside its heading (your apartment's Move, Pick up) */
-.store-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .store-acts { display: flex; gap: 6px; font-family: var(--ui); letter-spacing: 0; text-transform: none; }
 .store-acts .btn { height: 30px; min-width: 0; padding: 0 12px; font-size: 13px; }
+.modal.store-confirm .bq-confirm-price { margin-top: 4px !important; }
+
+@media (max-width: 520px) {
+  .store-row { grid-template-columns: 1fr; gap: 8px; }
+  .store-right { justify-content: space-between; }
+  .store-price { justify-items: start; }
+}
