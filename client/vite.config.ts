@@ -97,6 +97,8 @@ export default defineConfig({
             { name: 'index', tags: ['$initial'], priority: 1 },
           ],
         },
+        // a table's view by its game ("blackjack-view-<hash>.js"), not ten files called "view"
+        chunkFileNames: (chunk) => `assets/${chunk.facadeModuleId?.match(/games[\\/]([a-z]+)[\\/]view\.ts$/)?.[1]?.concat('-view') ?? '[name]'}-[hash].js`,
       },
     },
   },
