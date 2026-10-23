@@ -205,6 +205,17 @@ limits above re-checked against the code as it stands. Nothing High or Medium. W
 | 18 | Info | `PASSWORD_MIN` is checked on every login, so raising it would lock out existing 4-7 character passwords; a minimum of 8 can only go on the create branch in `auth.ts`. | Owner decision (finding 12) |
 | 19 | Info | API requests with no `Origin` are accepted (only a foreign one is refused); upgrades still refuse a missing one. Fine with Bearer tokens and needed for scripts. | Noted; section 2 above now says so |
 
+## Follow-up (the overhaul, 2026-10)
+
+The open items above were read against the code again; none has changed, and 11, 12 and 16 to 19
+are still the owner's. What the overhaul changed that touches this review:
+
+| # | Severity | Finding | Status |
+|---|---|---|---|
+| 20 | Info | The page shipped every game's engine (the deals, the Hold'em bots' play) only to read each table's default limits from `config()`. Engines are pure and hold no secrets (the server deals with `crypto.getRandomValues`), so this was weight, not a leak. | **Changed.** The page reads `shared/src/table-configs.ts` (the engines' `config()` as data, kept equal to them by `shared/test/table-configs.test.ts`); the engines are no longer in the bundle |
+| 21 | Info | The tables' views now load as separate chunks (`client/src/games/lazy.ts`). They come from the page's own origin like the entry (`script-src 'self'` covers dynamic imports and their module preloads), the CSP is unchanged, and the production bundle still has no dev pages, dev password or source maps (checked in `dist/`). A page open across a deploy whose view chunk is gone (every view is fetched within seconds of the casino opening, so it takes a deploy in that window) says to reload to play there, and the table still leaves cleanly | Checked |
+| 22 | Info | The floor's jail check after every move built every player's row to find one (`law.ts`); it was CPU on the one object everyone shares, not a vulnerability, but a busy floor's moves are what it has least room for | **Fixed** (`law.test.ts` "find the puncher by account...") |
+
 ## For the owner
 
 1. **Cloudflare rate limiting (WAF).** Add a rule on `api.j4den.com/casino/api/login`, for example

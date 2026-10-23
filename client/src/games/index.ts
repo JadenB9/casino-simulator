@@ -66,9 +66,6 @@ const views = new GameViews(DEFS, { failed: () => toast('This table could not lo
 /** Every game's client module, the view included however its folder hands it over. */
 export const GAMES = views.modules;
 
-/** Whether a game's view can be mounted right now, with nothing left to fetch. */
-export const viewReady = (game: GameId): boolean => views.ready(game);
-
 /** Fetch a game's view unless it is here already (see GameViews.load). */
 export const loadView = (game: GameId): Promise<void> => views.load(game);
 
