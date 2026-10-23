@@ -11,7 +11,8 @@ import './settings.css';
 import { tips } from '../../app/tips.ts';
 import { calm, setCalm } from '../../app/comfort.ts';
 import { setTheme, theme, type Theme } from '../../app/theme.ts';
-import { savedQuality, saveQuality, type Quality } from '../../render/engine3d.ts';
+import { type Quality } from '../../render/engine3d.ts';
+import { graphicsRows } from '../../render/graphics-settings.ts';
 import { el } from '../kit.ts';
 import type { Closable, SfxLike, SoundKind } from '../menu/deps.ts';
 import { openSheet } from '../menu/sheet.ts';
@@ -31,7 +32,7 @@ export type SettingsSection = 'general' | 'controls' | 'graphics' | 'sound' | 'a
 export const SETTINGS_SECTIONS: readonly { id: SettingsSection; title: string; about: string; keywords: string }[] = [
   { id: 'general', title: 'General', about: 'Theme, frame rate', keywords: 'light dark mode theme fps frame rate' },
   { id: 'controls', title: 'Controls', about: 'Camera, mouse, keys', keywords: 'camera first person third mouse look sensitivity keys rebind bindings drinks sway' },
-  { id: 'graphics', title: 'Graphics', about: 'Quality', keywords: 'quality high low bloom antialiasing performance' },
+  { id: 'graphics', title: 'Graphics', about: 'Quality, resolution, glow, film look', keywords: 'quality high low bloom glow antialiasing smooth edges fxaa resolution sharp film look vignette colour grade frame rate saver battery 30 fps performance' },
   { id: 'sound', title: 'Sound', about: 'Volume, each kind of sound', keywords: 'volume mute audio music room ambience game sounds' },
   { id: 'access', title: 'Accessibility', about: 'Flashing and motion, interface size', keywords: 'reduce flashing motion calm size larger zoom text' },
   { id: 'social', title: 'Social', about: 'Big wins, invites', keywords: 'big win toasts notes invites do not disturb' },
@@ -50,13 +51,7 @@ export interface SettingsDeps {
   onClose?(): void;
 }
 
-// Read once at startup, which is when the renderer was built from it.
-const LOADED_QUALITY = savedQuality();
 
-const QUALITY_NOTE: Record<Quality, string> = {
-  high: 'Bloom on lit signs and machines, antialiasing, up to twice the pixel density.',
-  low: 'No bloom, one pixel per screen pixel, simpler materials. For older machines.',
-};
 
 type Row = (label: string, control: HTMLElement, note?: HTMLElement) => HTMLElement;
 
@@ -94,32 +89,6 @@ function slider(label: string, value: number, set: (v: number) => void, sample?:
   return { root: wrap, input };
 }
 
-// graphics ----------------------------------------------------------------------------------------
-// The Graphics section's rows, on their own so the renderer's own block can take their place
-// (render/graphics-settings.ts, graphicsSettings(): the quality row and its new options).
-
-function graphicsBlock(deps: SettingsDeps): HTMLElement[] {
-  const running = deps.quality ?? LOADED_QUALITY;
-  const qNote = note('');
-  const pending = el('div', 'set-pending');
-  const reload = el('button', 'btn ghost', 'Reload now');
-  reload.type = 'button';
-  reload.addEventListener('click', () => (deps.reload ?? (() => location.reload()))());
-  pending.append(el('span', '', 'Applies after a reload.'), reload);
-  const paintQuality = (q: Quality) => {
-    qNote.textContent = QUALITY_NOTE[q];
-    pending.hidden = q === running;
-  };
-  const quality = segmented<Quality>('Graphics quality', [{ id: 'high', label: 'High' }, { id: 'low', label: 'Low' }], savedQuality(), (q) => {
-    saveQuality(q);
-    paintQuality(q);
-  });
-  paintQuality(savedQuality());
-  const qBox = el('div');
-  qBox.append(qNote, pending);
-  return [row('Quality', quality.root, qBox)];
-}
-// end of graphics ---------------------------------------------------------------------------------
 
 /** The Sound section: on or off, the volume, and each kind of sound's own level where the manager has them. */
 function soundBlock(sfx: SfxLike): { nodes: HTMLElement[]; dispose(): void } {
@@ -185,11 +154,12 @@ export function openSettings(deps: SettingsDeps): Closable {
   const content: Record<SettingsSection, HTMLElement[]> = {
     general: [
       row('Theme', themeCtl.root, note('The menus, panels and HUD. The casino keeps its own lights. Shared with the rest of j4den.com.')),
-      row('Frame rate', fpsCtl.root, note('A tile in the HUD beside your money: frames a second, and how long each one takes.')),
+      row('Show frame rate', fpsCtl.root, note('A tile in the HUD beside your money: frames a second, and how long each one takes.')),
     ],
     // v7.4: the controls and the keys near the top, where they're found
     controls: [...controlSettings(row), ...(keys?.nodes ?? [])],
-    graphics: graphicsBlock(deps),
+    // the renderer's own rows (render/graphics-settings.ts): Quality, then what applies at once
+    graphics: graphicsRows({ quality: deps.quality, reload: deps.reload, row }),
     sound: sound.nodes,
     access: [
       row('Flashing & motion', calmCtl.root, note('Reduced: steady lights instead of flashing and chasing, fewer particles, no camera shake.')),

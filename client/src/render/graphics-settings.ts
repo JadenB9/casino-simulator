@@ -35,9 +35,11 @@ export interface GraphicsSettingsOptions {
   quality?: Quality;
   /** Reloads the page to apply a new quality; defaults to location.reload(). */
   reload?: () => void;
+  /** How a row is laid out: the Settings sheet passes its own, so these line up with the rest. */
+  row?: (label: string, control: HTMLElement, note?: HTMLElement) => HTMLElement;
 }
 
-function row(label: string, control: HTMLElement, note?: HTMLElement): HTMLElement {
+function plainRow(label: string, control: HTMLElement, note?: HTMLElement): HTMLElement {
   const r = el('div', 'set-row');
   const l = el('div', 'set-label', label);
   const c = el('div', 'set-control');
@@ -49,10 +51,18 @@ function row(label: string, control: HTMLElement, note?: HTMLElement): HTMLEleme
 
 const onOff = (label: string, value: boolean, set: (on: boolean) => void) => segmented<'on' | 'off'>(label, [{ id: 'on', label: 'On' }, { id: 'off', label: 'Off' }], value ? 'on' : 'off', (v) => set(v === 'on'));
 
-/** The graphics rows, for the Settings sheet's Graphics section. */
+/** The graphics rows in a box of their own (the graphics dev page). */
 export function graphicsSettings(opts: GraphicsSettingsOptions = {}): HTMLElement {
-  const running = opts.quality ?? LOADED_QUALITY;
   const root = el('div', 'set-graphics');
+  root.append(...graphicsRows(opts));
+  return root;
+}
+
+/** The graphics rows, for the Settings sheet's Graphics section. */
+export function graphicsRows(opts: GraphicsSettingsOptions = {}): HTMLElement[] {
+  const running = opts.quality ?? LOADED_QUALITY;
+  const row = opts.row ?? plainRow;
+  const rows: HTMLElement[] = [];
   const prefs = graphicsPrefs();
 
   // quality: saved now, used from the next load
@@ -73,7 +83,7 @@ export function graphicsSettings(opts: GraphicsSettingsOptions = {}): HTMLElemen
   paintQuality(savedQuality());
   const qBox = el('div');
   qBox.append(qNote, pending);
-  root.append(row('Quality', quality.root, qBox));
+  rows.push(row('Quality', quality.root, qBox));
 
   // the rest apply at once
   const resText = (r: Resolution) => (r === 'auto' && running === 'low' ? LOW_AUTO_NOTE : RESOLUTION_NOTE[r]);
@@ -91,18 +101,18 @@ export function graphicsSettings(opts: GraphicsSettingsOptions = {}): HTMLElemen
       resNote.textContent = resText(v);
     },
   );
-  root.append(row('Resolution', resolution.root, resNote));
+  rows.push(row('Resolution', resolution.root, resNote));
 
   if (running === 'high') {
     const glow = onOff('Glow', prefs.glow, (on) => setGraphicsPref('glow', on));
-    root.append(row('Glow', glow.root, el('p', 'set-note', 'The halo round neon, bulbs and lamps. Off is a little faster.')));
+    rows.push(row('Glow', glow.root, el('p', 'set-note', 'The halo round neon, bulbs and lamps. Off is a little faster.')));
   } else {
     const smooth = onOff('Smooth edges', prefs.smooth, (on) => setGraphicsPref('smooth', on));
-    root.append(row('Smooth edges', smooth.root, el('p', 'set-note', 'Softens the jagged edges of tables and walls, at a small cost.')));
+    rows.push(row('Smooth edges', smooth.root, el('p', 'set-note', 'Softens the jagged edges of tables and walls, at a small cost.')));
   }
 
   const film = onOff('Film look', prefs.film, (on) => setGraphicsPref('film', on));
-  root.append(row('Film look', film.root, el('p', 'set-note', "Each room's own colour, and softly darkened corners.")));
+  rows.push(row('Film look', film.root, el('p', 'set-note', "Each room's own colour, and softly darkened corners.")));
 
   const fpsNote = el('p', 'set-note', FPS_NOTE[prefs.fps]);
   const fps = segmented<FrameRate>(
@@ -117,6 +127,6 @@ export function graphicsSettings(opts: GraphicsSettingsOptions = {}): HTMLElemen
       fpsNote.textContent = FPS_NOTE[v];
     },
   );
-  root.append(row('Frame rate', fps.root, fpsNote));
-  return root;
+  rows.push(row('Frame rate', fps.root, fpsNote));
+  return rows;
 }
