@@ -64,8 +64,10 @@ export class History {
     };
     this.hotcold.replaceChildren(el('span', 'label', 'Hot'));
     if (s.hot.length) this.hotcold.append(...s.hot.map((h) => tag(h.n, h.count)));
-    else this.hotcold.append(el('span', 'rl-hotcold-none', 'none twice'));
-    this.hotcold.append(el('span', 'label', 'Cold'), ...s.cold.map((c) => tag(c.n, null)));
+    else this.hotcold.append(el('span', 'rl-hotcold-none', 'no repeats yet'));
+    // cold says something once every number has had a spin's chance; until then, how many are still to show
+    if (s.spins >= s.pockets) this.hotcold.append(el('span', 'label', 'Cold'), ...s.cold.map((c) => tag(c.n, null)));
+    else this.hotcold.append(el('span', 'label', 'Not seen'), el('span', 'rl-hotcold-none', `${s.unseen} of ${s.pockets}`));
   }
 }
 

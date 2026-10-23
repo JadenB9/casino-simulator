@@ -268,7 +268,8 @@ function mountRoulette(ctx: TableViewCtx): TableView {
   tray.root.append(colorNote);
   colorNote.hidden = true;
 
-  // The racetrack and the favourites: a panel over the tray, opened from the meters (L).
+  // The racetrack and the favourites: a panel opened from the meters (L), in the row under the HUD
+  // (the stylesheet docks it over the tray on a big screen).
   const track = new Racetrack(variant, {
     pick: (p) => pickTrack(p),
     hover: (p, x, y) => hoverTrack(p, x, y),
@@ -283,7 +284,7 @@ function mountRoulette(ctx: TableViewCtx): TableView {
     saveSlot: (i) => saveSlot(i),
     close: () => toggleTrack(false),
   }, savedNeighbours());
-  ctx.ui.append(track.root);
+  hud.append(track.root);
   const trackBtn = button('Racetrack', () => toggleTrack(), { cls: 'rl-tool', key: 'L', title: 'The racetrack: neighbours, the called bets and your favourite layouts (L)' });
   trackBtn.setAttribute('aria-pressed', 'false');
   meters.tools.append(trackBtn);

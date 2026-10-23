@@ -14,6 +14,9 @@ export interface WheelStats {
   hot: { n: number; count: number }[];
   /** Up to `take` numbers seen least often, the longest gone first. */
   cold: { n: number; count: number }[];
+  /** How many of the wheel's `pockets` numbers haven't come up at all. */
+  unseen: number;
+  pockets: number;
 }
 
 /** Stats over `log` (newest first). */
@@ -44,7 +47,8 @@ export function wheelStats(v: Variant, log: readonly number[], take = 4): WheelS
     .sort((a, b) => seen(a) - seen(b) || since(b) - since(a) || a - b)
     .slice(0, take)
     .map((n) => ({ n, count: seen(n) }));
-  return { spins: log.length, red, black, green, hot, cold };
+  const unseen = pockets.filter((n) => seen(n) === 0).length;
+  return { spins: log.length, red, black, green, hot, cold, unseen, pockets: pockets.length };
 }
 
 /** Each colour's share in whole percent, adding up to 100 (the points left by rounding down go to the largest remainders). */

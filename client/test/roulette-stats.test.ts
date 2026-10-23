@@ -17,6 +17,12 @@ describe('the roulette board: colours, hot and cold', () => {
     expect(wheelStats('european', log, 3).cold.map((c) => c.n)).toEqual([36, 35, 34]);
     expect(wheelStats('european', []).cold).toEqual([]);
   });
+  it('counts the numbers that have not come up yet, of the wheel\'s', () => {
+    const s = wheelStats('european', [5, 17, 5]);
+    expect([s.unseen, s.pockets]).toEqual([35, 37]);
+    expect([wheelStats('american', []).unseen, wheelStats('american', []).pockets]).toEqual([38, 38]);
+    expect(wheelStats('american', [0, 37, 0]).unseen).toBe(36);
+  });
   it('shares add up to 100', () => {
     expect(shares({ red: 1, black: 1, green: 1 })).toEqual({ red: 34, black: 33, green: 33 });
     expect(shares({ red: 101, black: 0, green: 99 })).toEqual({ red: 51, black: 0, green: 49 });
