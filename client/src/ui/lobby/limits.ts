@@ -12,7 +12,6 @@ import {
   limitSpec,
   limitsDetail,
   limitsLabel,
-  limitsProblem,
   maxRange,
   sameLimits,
   standardLimits,
@@ -21,14 +20,19 @@ import {
 } from '../../../../shared/src/limits.ts';
 import { el } from '../kit.ts';
 import { session } from '../../app/session.ts';
+import { tick } from './icons.ts';
+import { faultIn, problemHere } from './table-model.ts';
 
 const KEY = (game: GameId) => `casino.limits.${game}`;
+/** Numbers each picker's rule line, for its fields' aria-describedby. */
+let pickers = 0;
 
-function remembered(game: GameId): TableLimits | null {
+/** The last pick at this game, if the table in front of you can take it (a salon pick is too high elsewhere). */
+function remembered(game: GameId, spec: LimitSpec): TableLimits | null {
   try {
     const raw = localStorage.getItem(KEY(game));
     const v = raw ? (JSON.parse(raw) as TableLimits) : null;
-    return v && typeof v.min === 'number' && typeof v.max === 'number' && !limitsProblem(game, v) ? { min: v.min, max: v.max } : null;
+    return v && typeof v.min === 'number' && typeof v.max === 'number' && !problemHere(game, spec, v) ? { min: v.min, max: v.max } : null;
   } catch {
     return null;
   }
@@ -42,10 +46,13 @@ function remember(game: GameId, l: TableLimits): void {
   }
 }
 
-/** Dollars typed into a field, as cents ("25", "1,000", "0.50"); NaN when it isn't an amount. */
+/**
+ * Dollars typed into a field, as cents ("25", "1,000", "0.50"); NaN when it isn't an amount. Up to
+ * thirteen digits: the High Limit Salon's tables go to $1,000,000,000,000 a bet.
+ */
 function dollarsIn(input: HTMLInputElement): Cents {
   const text = input.value.replace(/[\s,$]/g, '');
-  return /^\d{0,9}(\.\d{1,2})?$/.test(text) && text !== '' && text !== '.' ? Math.round(Number(text) * 100) : NaN;
+  return /^\d{0,13}(\.\d{1,2})?$/.test(text) && text !== '' && text !== '.' ? Math.round(Number(text) * 100) : NaN;
 }
 
 /** Cents as the fields show them: "25", "0.50". */
@@ -78,7 +85,7 @@ export class LimitsPicker {
   ) {
     this.spec = limitSpec(game, opts.salon)!;
     const blinds = this.spec.kind === 'blinds';
-    const saved = remembered(game);
+    const saved = remembered(game, this.spec);
     const tiers = this.spec.tiers;
     let at = saved ? tiers.findIndex((t) => sameLimits(t, saved)) : this.spec.standard;
     // (v7.4: Hold'em's tiers are its blinds, unnamed: in the salon it opens at the second highest)
@@ -97,7 +104,9 @@ export class LimitsPicker {
     tiers.forEach((t, i) => this.grid.append(this.option(i, t.name || limitsLabel(game, t, true), t.name ? limitsLabel(game, t, true) : '')));
     this.grid.append(this.option(tiers.length, 'Custom', blinds ? 'Any blinds' : 'Your own'));
 
-    // Custom: two amounts in whole dollars, and the rule they have to meet.
+    // Custom: two amounts in whole dollars, and the rule they have to meet, checked as you type:
+    // the field at fault is marked, and the line under them says why.
+    this.rule.id = `lim-rule-${++pickers}`;
     for (const [input, label] of [
       [this.minInput, blinds ? 'Small blind' : 'Minimum'],
       [this.maxInput, blinds ? 'Big blind' : 'Maximum'],
@@ -107,6 +116,7 @@ export class LimitsPicker {
       input.autocomplete = 'off';
       input.spellcheck = false;
       input.setAttribute('aria-label', `${label} in dollars`);
+      input.setAttribute('aria-describedby', this.rule.id);
       input.addEventListener('input', () => this.typed());
       const field = el('label', 'lim-field');
       field.append(el('span', 'lim-field-name', label), el('span', 'lim-sign', '$'), input);
@@ -127,7 +137,7 @@ export class LimitsPicker {
       const t = this.spec.tiers[this.pick]!;
       return { min: t.min, max: t.max };
     }
-    return limitsProblem(this.game, this.customLimits) ? null : { ...this.customLimits };
+    return problemHere(this.game, this.spec, this.customLimits) ? null : { ...this.customLimits };
   }
 
   /** "$25–$5,000", or why Custom can't be used yet. */
@@ -165,7 +175,8 @@ export class LimitsPicker {
     const b = el('button', 'lim-opt');
     b.type = 'button';
     b.setAttribute('role', 'radio');
-    b.append(el('span', 'lim-opt-name', name));
+    // the tick shows on the picked one (CSS); it has no text, so the option still reads "Standard$25–$5K"
+    b.append(tick(), el('span', 'lim-opt-name', name));
     if (range) b.append(el('span', 'lim-opt-range', range));
     b.addEventListener('click', () => this.select(i, 'click'));
     this.buttons.push(b);
@@ -205,9 +216,17 @@ export class LimitsPicker {
     this.custom.hidden = !custom;
     const v = this.value;
     if (custom) {
-      const problem = Number.isNaN(this.customLimits.min) || Number.isNaN(this.customLimits.max) ? 'Amounts in dollars, like 25 or 0.50.' : limitsProblem(this.game, this.customLimits);
+      const { min, max } = this.customLimits;
+      const problem = Number.isNaN(min) || Number.isNaN(max) ? 'Amounts in dollars, like 25 or 0.50.' : problemHere(this.game, this.spec, this.customLimits);
       this.rule.textContent = problem ?? this.ruleText();
       this.rule.classList.toggle('bad', !!problem);
+      // the field the problem is in, marked
+      const fault = problem ? faultIn(this.game, this.spec, this.customLimits) : null;
+      for (const [input, bad] of [[this.minInput, fault === 'min'], [this.maxInput, fault === 'max']] as const) {
+        input.toggleAttribute('aria-invalid', bad);
+        if (bad) input.setAttribute('aria-invalid', 'true');
+        input.closest('.lim-field')?.classList.toggle('bad', bad);
+      }
       const opt = this.buttons[this.spec.tiers.length]!;
       const optRange = opt.querySelector('.lim-opt-range');
       if (optRange) optRange.textContent = v ? limitsLabel(this.game, v, true) : this.spec.kind === 'blinds' ? 'Any blinds' : 'Your own';

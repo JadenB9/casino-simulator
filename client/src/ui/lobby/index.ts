@@ -18,3 +18,5 @@ export { PartyPanel, withParty, type PartyPanelOpts } from './party.ts';
 // v6 invite6: invites to a lobby table (the cards, the picker, joining)
 export { InviteHub, type InviteApp, type InviteFloor } from './invites.ts';
 export { LobbyWatch, sortLobbies, type LobbyFloor } from './watch.ts';
+// the buy-in prompt with a slider and quick amounts (it takes over the kit's from here on)
+export { buyInPanel } from './buyin.ts';

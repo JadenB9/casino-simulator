@@ -1,0 +1,46 @@
+/* The buy-in prompt (buyin.ts), inside the kit's .modal: the amount as one big tabular figure on a
+   field, the slider along the range with its two ends, the quick amounts as chips, and why an
+   amount won't do, in words, under them. */
+
+.modal.buyin { width: min(420px, calc(100vw - 24px)); }
+.buyin .buyin-note { margin: 4px 0 12px; font-size: 15px; }
+
+.buyin-amount { display: flex; align-items: baseline; gap: 4px; height: 58px; padding: 0 14px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--field); cursor: text; transition: border-color 0.15s, box-shadow 0.15s; }
+.buyin-amount:focus-within { border-color: var(--brass-hi); box-shadow: 0 0 0 2px rgba(var(--brass-hi-rgb), 0.22); }
+.buyin-amount.bad { border-color: rgba(var(--lose-rgb), 0.8); }
+.buyin-sign { align-self: center; font-size: 24px; color: var(--ink-3); }
+/* (the kit's .modal input rules are for a plain field: these win by being more specific) */
+.modal .buyin-amount .buyin-input { flex: 1; min-width: 0; height: 56px; padding: 0; border: 0; background: transparent; color: var(--brass-hi); font: 600 34px/56px var(--ui); letter-spacing: 0.02em; font-variant-numeric: tabular-nums; outline: none; -moz-appearance: textfield; appearance: textfield; }
+.modal .buyin-amount .buyin-input::-webkit-outer-spin-button, .modal .buyin-amount .buyin-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.buyin-amount.bad .buyin-input { color: var(--lose); }
+.modal .buyin-amount .buyin-input::selection { background: rgba(var(--brass-rgb), 0.28); color: var(--ink); }
+
+/* the slider: a hairline track lit brass up to the thumb (--fill, set as it moves) */
+.buyin-slider { display: block; width: 100%; height: 26px; margin: 12px 0 0; padding: 0; background: transparent; appearance: none; -webkit-appearance: none; cursor: pointer; }
+.buyin-slider:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; border-radius: 3px; }
+.buyin-slider::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(90deg, var(--brass) var(--fill, 0%), rgba(var(--brass-rgb), 0.2) var(--fill, 0%)); }
+.buyin-slider::-moz-range-track { height: 4px; border-radius: 2px; background: rgba(var(--brass-rgb), 0.2); }
+.buyin-slider::-moz-range-progress { height: 4px; border-radius: 2px; background: var(--brass); }
+.buyin-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; margin-top: -8px; border: 2px solid var(--on-gold); border-radius: 50%; background: var(--brass-hi); box-shadow: 0 0 0 4px rgba(var(--brass-hi-rgb), 0.16), 0 2px 6px rgba(0, 0, 0, 0.35); }
+.buyin-slider::-moz-range-thumb { width: 18px; height: 18px; border: 2px solid var(--on-gold); border-radius: 50%; background: var(--brass-hi); }
+.buyin-ends { display: flex; justify-content: space-between; margin-top: 2px; font-size: 13px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+
+.modal .buyin-quick { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 0; }
+.modal .buyin-quick .btn.buyin-pick { flex: 1 1 auto; height: 32px; padding: 0 10px; font-size: 15px; letter-spacing: 0.02em; text-transform: none; font-variant-numeric: tabular-nums; }
+.buyin-pick[aria-pressed='true'] { border-color: var(--brass-hi); background: rgba(var(--brass-rgb), 0.16); color: var(--brass-hi); }
+
+.modal p.buyin-why { margin: 8px 0 0; font-size: 14px; color: var(--lose); }
+
+@media (pointer: coarse) {
+  .buyin-slider { height: 40px; }
+  .buyin-slider::-webkit-slider-thumb { width: 28px; height: 28px; margin-top: -12px; }
+  .buyin-slider::-moz-range-thumb { width: 26px; height: 26px; }
+  .modal .buyin-quick .btn.buyin-pick { height: 44px; }
+}
+@media (max-height: 480px) {
+  .buyin .buyin-note { margin-bottom: 8px; }
+  .buyin-amount { height: 46px; }
+  .modal .buyin-amount .buyin-input { height: 44px; font-size: 28px; line-height: 44px; }
+  .buyin-slider { margin-top: 6px; }
+  .modal .buyin-quick { margin-top: 8px; }
+}

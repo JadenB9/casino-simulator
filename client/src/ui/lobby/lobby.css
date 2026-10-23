@@ -10,26 +10,40 @@
 
 /* ---- the station panel ---- */
 
+/* The header, the step's body (it scrolls when a short window can't fit it), and the keys that
+   work on the step along the bottom. */
 .lobby { position: fixed; top: 50%; right: max(24px, 6vw); transform: translateY(-50%); width: min(420px, calc(100vw - 32px)); max-height: calc(100vh - 40px); display: flex; flex-direction: column; overflow: hidden; z-index: 20; animation: lobby-in 0.3s var(--ease); }
+.lobby:focus { outline: none; }
 @keyframes lobby-in { from { opacity: 0; transform: translate(14px, -50%); } }
-.lobby-body { display: flex; flex-direction: column; min-height: 0; }
+.lobby-body { display: flex; flex-direction: column; flex: 0 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: rgba(var(--brass-rgb), 0.35) transparent; }
 
-.lobby-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 14px 16px 12px; border-bottom: 1px solid var(--line); }
+.lobby-head { flex: none; display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 14px 16px 12px; border-bottom: 1px solid var(--line); }
 .lobby-game { font-family: var(--serif); font-size: 19px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--brass-hi); }
 .lobby-variant { margin-left: 10px; font-size: 13px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-2); }
 .lobby-meta { font-size: 14px; color: var(--ink-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
-.lobby-choices { display: grid; gap: 2px; padding: 6px; }
-.lobby-choice { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; padding: 12px 10px; border: 1px solid transparent; border-radius: 4px; background: none; text-align: left; cursor: pointer; transition: border-color 0.15s, background-color 0.15s; }
-.lobby-choice:hover, .lobby-choice:focus-visible { border-color: var(--line-strong); background: rgba(var(--brass-rgb), 0.07); outline: none; }
+/* Alone or with others: two cards, the first (and Enter's) edged in brass. */
+.lobby-choices { display: grid; gap: 8px; padding: 12px; }
+.lobby-choice { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 11px 12px; border: 1px solid var(--line); border-radius: 6px; background: rgba(var(--lift-rgb), 0.025); text-align: left; cursor: pointer; transition: border-color 0.15s, background-color 0.15s, transform 0.12s var(--ease); }
+.lobby-choice.main { border-color: rgba(var(--brass-rgb), 0.55); background: linear-gradient(rgba(var(--brass-rgb), 0.1), rgba(var(--brass-rgb), 0.035)); }
+.lobby-choice:hover:not(:disabled) { border-color: var(--brass-hi); background: rgba(var(--brass-rgb), 0.12); }
+.lobby-choice:active:not(:disabled) { transform: translateY(1px); }
+.lobby-choice:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.lobby-choice-icon { display: grid; place-items: center; width: 40px; height: 40px; border: 1px solid var(--line-strong); border-radius: 50%; background: rgba(var(--brass-rgb), 0.08); color: var(--brass-hi); }
+.lobby-choice-icon .lb-icon { width: 20px; height: 20px; }
 .lobby-choice-title { display: block; font-size: 17px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; }
 .lobby-choice-note { display: block; margin-top: 2px; font-size: 14px; letter-spacing: 0.01em; color: var(--ink-2); }
+.lobby-choice-end { display: flex; align-items: center; gap: 10px; }
+.lobby-choice-end .lb-fwd { width: 14px; height: 14px; color: var(--ink-3); }
+.lobby-choice:hover .lb-fwd { color: var(--brass-hi); }
 .lobby-choice-aside { font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap; color: var(--ink-3); font-variant-numeric: tabular-nums; }
-.lobby-choice-aside.live { color: var(--brass-hi); }
+.lobby-choice-aside.live { color: var(--win); }
 .lobby-choice-aside.lobby-choice-limits { font-size: 15px; letter-spacing: 0.02em; color: var(--brass-hi); }
 .lobby-choice:disabled { cursor: default; opacity: 0.45; }
-.lobby-foot-gap { flex: 1; }
-.lobby-foot { display: flex; align-items: center; gap: 8px; padding: 9px 16px; border-top: 1px solid var(--line); font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-3); }
+
+.lobby-foot { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; padding: 9px 16px; border-top: 1px solid var(--line); font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-3); }
+.lobby-foot-key { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+.lobby-foot .lb-key { min-width: 22px; height: 20px; font-size: 11px; }
 
 .lobby-bar { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px 8px 8px; }
 .lobby-back { display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 8px 0 4px; border: 0; border-radius: 3px; background: none; font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-2); cursor: pointer; }
@@ -59,10 +73,24 @@
 .lobby-row:disabled .lobby-go { color: var(--ink-3); }
 .lobby-empty { padding: 14px 12px; font-size: 15px; color: var(--ink-2); }
 .lobby-empty span { display: block; margin-top: 2px; font-size: 13px; color: var(--ink-3); }
+.lobby-link { display: block; margin-top: 4px; padding: 0; border: 0; background: none; font-size: 13px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--brass-hi); cursor: pointer; }
+.lobby-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+.lobby-link:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+/* Over the list once there's a choice: All, each stake a table is at, and Hide full. */
+.lobby-filter { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 12px 8px; }
+.lobby-chip { height: 26px; padding: 0 10px; border: 1px solid var(--line); border-radius: 13px; background: none; font-size: 12px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-2); white-space: nowrap; cursor: pointer; transition: border-color 0.15s, background-color 0.15s, color 0.15s; }
+.lobby-chip:hover { border-color: var(--line-strong); color: var(--ink); }
+.lobby-chip[aria-pressed='true'] { border-color: var(--brass-hi); background: rgba(var(--brass-rgb), 0.16); color: var(--brass-hi); }
+.lobby-chip.toggle { margin-left: auto; }
+.lobby-chip:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 
 .lobby-section { padding: 14px 16px 0; }
 .lobby-section:last-child { padding-bottom: 16px; }
 .lobby-section > .label { margin-bottom: 7px; }
+/* the PIN box on a brass hairline of its own, under Start a table */
+.lobby-join { margin-top: 14px; border-top: 1px solid var(--line); }
+.lobby-join.bad .lobby-pin-field { border-color: rgba(var(--lose-rgb), 0.75); }
 .lobby-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .lobby-actions .btn .lb-icon { color: var(--brass); }
 .lobby-note { margin: 7px 0 0; font-size: 13px; color: var(--ink-3); }
@@ -100,13 +128,18 @@
 .party-pin { display: grid; grid-template-columns: auto 1fr auto; align-items: center; column-gap: 12px; padding: 10px 12px 9px; border-bottom: 1px solid var(--line); }
 .party-pin-digits { font-size: 26px; line-height: 1; letter-spacing: 0.28em; }
 .party-pin .btn { height: 28px; padding: 0 10px; font-size: 13px; }
+.party-copy .lb-icon { width: 13px; height: 13px; color: var(--brass); }
 .party-pin-note { grid-column: 1 / -1; margin: 7px 0 0; font-size: 13px; color: var(--ink-3); }
 
 .party-members { list-style: none; margin: 0; padding: 4px 0; }
-.party-member { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto auto; align-items: center; gap: 8px; height: 34px; padding: 0 12px; font-size: 16px; }
+.party-member { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto auto; align-items: center; gap: 8px; height: 36px; padding: 0 12px; font-size: 16px; }
+.party-member + .party-member { border-top: 1px solid rgba(var(--brass-rgb), 0.1); }
 .party-member.away { opacity: 0.45; }
-.party-mark { display: grid; place-items: center; font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
-.party-mark .lb-crown { width: 15px; height: 15px; color: var(--brass-hi); }
+/* a round badge: the leader's crown, or the seat number */
+.party-mark { display: grid; place-items: center; width: 22px; height: 22px; border: 1px solid var(--line); border-radius: 50%; font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.party-mark:empty { border-style: dashed; }
+.party-mark .lb-crown { width: 13px; height: 13px; color: var(--brass-hi); }
+.party-mark:has(.lb-crown) { border-color: rgba(var(--brass-rgb), 0.55); background: rgba(var(--brass-rgb), 0.1); }
 .party-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .party-member.me .party-name { color: var(--brass-hi); }
 .party-you { margin-left: 7px; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-3); }
@@ -123,6 +156,7 @@
 .party-seg button:disabled { cursor: default; opacity: 0.6; }
 .party-seg button:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .party-row { display: flex; gap: 8px; }
+.party-sit .btn { flex: 1; }
 .party-row .btn { flex: 1; }
 .party-row .btn.ghost { flex: 0 0 auto; }
 .party-wait { margin: 0; font-size: 14px; color: var(--ink-2); }
@@ -175,7 +209,11 @@
 .lim-buyin.short { color: var(--lose); }
 .lim-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-top: 7px; }
 .lim-grid.blinds { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-.lim-opt { display: grid; align-content: center; justify-items: center; gap: 1px; height: 48px; padding: 0 4px; border: 1px solid var(--line); border-radius: 4px; background: rgba(0, 0, 0, 0.2); cursor: pointer; transition: border-color 0.15s, background-color 0.15s; }
+.lim-opt { position: relative; display: grid; align-content: center; justify-items: center; gap: 1px; height: 48px; padding: 0 4px; border: 1px solid var(--line); border-radius: 4px; background: var(--well); cursor: pointer; transition: border-color 0.15s, background-color 0.15s; }
+/* the picked one's tick, in its corner */
+.lim-opt .lb-tick { position: absolute; top: 3px; right: 3px; width: 10px; height: 10px; color: var(--brass-hi); opacity: 0; transition: opacity 0.15s; }
+.lim-opt .lb-tick .lb-s { stroke-width: 2.4; }
+.lim-opt[aria-checked='true'] .lb-tick { opacity: 1; }
 .lim-grid.blinds .lim-opt { height: 40px; }
 .lim-opt:hover { border-color: var(--line-strong); }
 .lim-opt:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
@@ -195,6 +233,9 @@
 .lim-input { width: 0; flex: 1 1 60px; min-width: 0; border: 0; background: transparent; color: var(--ink); font: inherit; font-size: 17px; font-variant-numeric: tabular-nums; outline: none; }
 .lim-rule { grid-column: 1 / -1; margin: 0; font-size: 13px; color: var(--ink-3); }
 .lim-rule.bad { color: var(--lose); }
+/* the field the rule is about */
+.lim-field.bad { border-color: rgba(var(--lose-rgb), 0.8); }
+.lim-field.bad .lim-field-name, .lim-field.bad .lim-sign { color: var(--lose); }
 .lim-detail { margin: 7px 0 0; font-size: 13px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
 .lobby-section .lim { margin-bottom: 10px; }
 
@@ -217,3 +258,6 @@
   .lim-opt { height: 40px; }
   .lim-grid.blinds .lim-opt { height: 34px; }
 }
+
+/* Reduce flashing & motion (app/comfort.ts): the panels appear where they stand. */
+body.calm .lobby, body.calm .party .lb-chev { animation: none; transition: none; }

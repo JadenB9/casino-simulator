@@ -2,10 +2,11 @@
 // The limits picker is part of the first screen (for a table of your own) and of Start a table
 // (for a new lobby), with your last pick for this game already chosen, so one key still sits you
 // down. Multiplayer shows the open tables for this game as the floor reports them, each with its
-// limits, a way to start one (public, or private with a PIN), and a box for a friend's PIN, which
-// shows the table it opens before you join it. It resolves with where to sit, and the caller
-// opens the table socket. Machines are one player each and keep their coin values, so they skip
-// straight to their seat; the online games are one player each but have limits to pick.
+// limits (and, once there are a few, chips to narrow them to a stake or leave out the full ones),
+// a way to start one (public, or private with a PIN), and a box for a friend's PIN, which shows
+// the table it opens before you join it. It resolves with where to sit, and the caller opens the
+// table socket. Machines are one player each and keep their coin values, so they skip straight to
+// their seat; the online games are one player each but have limits to pick.
 
 import type { GameId } from '../../../../shared/src/engine.ts';
 import type { LobbySummary } from '../../../../shared/src/protocol.ts';
@@ -14,11 +15,13 @@ import { ENGINES } from '../../../../shared/src/games/index.ts';
 import { applyLimits, hasLimitChoice, limitSpec, limitsDetail, limitsLabel } from '../../../../shared/src/limits.ts';
 import { ApiError, createTable as apiCreateTable, joinByPin as apiJoinByPin } from '../../net/api.ts';
 import type { TableTarget } from '../../app/table-session.ts';
+import { calm } from '../../app/comfort.ts';
 import { el } from '../kit.ts';
 import { LobbyWatch, isFull, type LobbyFloor } from './watch.ts';
-import { back, crown, lock, unlock } from './icons.ts';
+import { back, crown, forward, lock, party, seat, unlock } from './icons.ts';
 import { LimitsPicker } from './limits.ts';
 import { soloNote } from './notes.ts';
+import { stakeOf, stakesOf } from './table-model.ts';
 import './lobby.css';
 
 export interface TableFlowOpts {
@@ -61,26 +64,38 @@ const ERRORS: Record<string, string> = {
   UNAUTHORIZED: 'Your session ended. Log in again.',
 };
 
+type Step = 'choose' | 'browse' | 'confirm';
+/** Steps in the order they go: a step further on slides in from the right, one back from the left. */
+const DEPTH: Record<Step, number> = { choose: 0, browse: 1, confirm: 2 };
+
+/** A touch screen: no keyboard hints, and no field focused on its own (that raises the keyboard). */
+const touch = (): boolean => typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+
 class TableFlow {
   private readonly box = el('section', 'lobby panel');
   private readonly body = el('div', 'lobby-body');
+  /** The keys that work on this step (hidden on a touch screen). */
+  private readonly foot = el('footer', 'lobby-foot');
   private readonly info: GameInfo;
   private readonly api: NonNullable<TableFlowOpts['api']>;
   private readonly watch: LobbyWatch | null = null;
   /** The limits for a table you start (null for a game without a choice of limits). */
   private readonly picker: LimitsPicker | null;
-  private step: 'choose' | 'browse' | 'confirm' = 'choose';
+  private step: Step = 'choose';
   private busy = false;
   // parts that live updates touch
   private liveCount: HTMLElement | null = null;
   private soloBtn: HTMLButtonElement | null = null;
   private soloAside: HTMLElement | null = null;
   private listEl: HTMLElement | null = null;
+  private filterEl: HTMLElement | null = null;
   private countEl: HTMLElement | null = null;
   private pinInput: HTMLInputElement | null = null;
   private errorEl: HTMLElement | null = null;
   /** A PIN's table, waiting for the player to say yes. */
   private found: { lobby: LobbySummary; pin: string } | null = null;
+  /** The list narrowed to one stake (a tier's name, or Custom), and whether full tables show. */
+  private filter: { stake: string | null; hideFull: boolean } = { stake: null, hideFull: false };
 
   constructor(
     private readonly opts: TableFlowOpts,
@@ -92,7 +107,9 @@ class TableFlow {
     this.picker?.onChange(() => this.limitsChanged());
     this.box.setAttribute('role', 'dialog');
     this.box.setAttribute('aria-label', `${this.info.name}: how do you want to play?`);
-    this.box.append(this.header(), this.body);
+    // focus can rest on the panel itself (a touch screen's list step), without a ring
+    this.box.tabIndex = -1;
+    this.box.append(this.header(), this.body, this.foot);
     (opts.root ?? document.getElementById('ui')!).append(this.box);
     // Listen from the start, so the Multiplayer row can already say how many tables are open.
     if (opts.floor && this.info.multiplayer) {
@@ -120,6 +137,28 @@ class TableFlow {
     return head;
   }
 
+  /** Show a step's parts, sliding in from the side it comes from (just swapped while calm). */
+  private swap(step: Step, parts: HTMLElement[]): void {
+    const from = this.step;
+    this.step = step;
+    this.body.replaceChildren(...parts);
+    this.body.scrollTop = 0;
+    if (from === step || calm() || typeof this.body.animate !== 'function') return;
+    const dx = DEPTH[step] > DEPTH[from] ? 18 : -18;
+    this.body.animate([{ opacity: 0, transform: `translateX(${dx}px)` }, { opacity: 1, transform: 'none' }], { duration: 240, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' });
+  }
+
+  /** The keys that work here: each as its cap and what it does. */
+  private keys(...pairs: [cap: string, does: string][]): void {
+    const parts: HTMLElement[] = [];
+    for (const [cap, does] of pairs) {
+      const item = el('span', 'lobby-foot-key');
+      item.append(el('span', 'lb-key', cap), el('span', '', does));
+      parts.push(item);
+    }
+    this.foot.replaceChildren(...parts);
+  }
+
   /** The picked limits changed: what they open at, and whether they can be used yet. */
   private limitsChanged(): void {
     const ok = !this.picker || this.picker.value !== null;
@@ -139,28 +178,29 @@ class TableFlow {
   // --- step 1: alone or with others -----------------------------------------------------------
 
   private showChoose(): void {
-    this.step = 'choose';
-    this.listEl = this.countEl = this.pinInput = this.errorEl = null;
+    this.listEl = this.filterEl = this.countEl = this.pinInput = this.errorEl = null;
     this.found = null;
     const online = !this.info.multiplayer;
-    const solo = online
-      ? this.choice('S', 'Play', 'At this computer, on your own.', () => this.sitSolo())
-      : this.choice('S', 'Single player', soloNote(this.opts.game), () => this.sitSolo());
-    this.soloBtn = solo;
     this.soloAside = this.picker ? el('span', 'lobby-choice-aside lobby-choice-limits') : null;
-    if (this.soloAside) solo.append(this.soloAside);
+    const solo = online
+      ? this.choice('S', 'Play', 'At this computer, on your own.', seat(), () => this.sitSolo(), this.soloAside)
+      : this.choice('S', 'Single player', soloNote(this.opts.game), seat(), () => this.sitSolo(), this.soloAside);
+    // the way most people sit down, and what Enter does from here
+    solo.classList.add('main');
+    this.soloBtn = solo;
     const choices = el('div', 'lobby-choices');
     choices.append(solo);
     this.liveCount = null;
     if (!online) {
       this.liveCount = el('span', 'lobby-choice-aside');
-      const multi = this.choice('M', 'Multiplayer', 'Sit down with other players at a shared table.', () => this.showBrowse());
-      multi.append(this.liveCount);
+      const multi = this.choice('M', 'Multiplayer', 'Sit down with other players at a shared table.', party(), () => this.showBrowse(), this.liveCount, forward());
       choices.append(multi);
     }
-    const foot = el('footer', 'lobby-foot');
-    foot.append(el('span', 'lb-key', 'Esc'), el('span', '', 'Walk away'));
-    if (this.picker) foot.append(el('span', 'lobby-foot-gap'), el('span', 'lb-key', '← →'), el('span', '', 'Limits'));
+    const keys: [string, string][] = [['Esc', 'Walk away']];
+    if (this.picker) keys.push(['← →', 'Limits']);
+    keys.push(['S', online ? 'Play' : 'Alone']);
+    if (!online) keys.push(['M', 'With others']);
+    this.keys(...keys);
     const parts: HTMLElement[] = [];
     if (this.picker) {
       this.picker.setTitle(limitSpec(this.opts.game)?.kind === 'blinds' ? 'Blinds' : 'Table limits');
@@ -168,18 +208,24 @@ class TableFlow {
       block.append(this.picker.root);
       parts.push(block);
     }
-    this.body.replaceChildren(...parts, choices, foot);
+    this.swap('choose', [...parts, choices]);
     this.renderCount();
     this.limitsChanged();
-    solo.focus();
+    solo.focus({ preventScroll: true });
   }
 
-  private choice(key: string, title: string, note: string, run: () => void): HTMLButtonElement {
+  private choice(key: string, title: string, note: string, icon: SVGSVGElement, run: () => void, aside: HTMLElement | null, end?: SVGSVGElement): HTMLButtonElement {
     const b = el('button', 'lobby-choice');
     b.type = 'button';
+    const mark = el('span', 'lobby-choice-icon');
+    mark.append(icon);
     const text = el('span', 'lobby-choice-text');
     text.append(el('span', 'lobby-choice-title', title), el('span', 'lobby-choice-note', note));
-    b.append(el('span', 'lb-key', key), text);
+    const side = el('span', 'lobby-choice-end');
+    if (aside) side.append(aside);
+    side.append(el('span', 'lb-key', key));
+    if (end) side.append(end);
+    b.append(mark, text, side);
     b.addEventListener('click', run);
     return b;
   }
@@ -200,7 +246,6 @@ class TableFlow {
   // --- step 2: the open tables, create, join by PIN --------------------------------------------
 
   private showBrowse(): void {
-    this.step = 'browse';
     this.liveCount = null;
 
     const bar = el('div', 'lobby-bar');
@@ -211,6 +256,10 @@ class TableFlow {
     this.countEl = el('span', 'lobby-count');
     bar.append(backBtn, this.countEl);
 
+    this.filterEl = el('div', 'lobby-filter');
+    this.filterEl.setAttribute('role', 'group');
+    this.filterEl.setAttribute('aria-label', 'Show tables');
+    this.filterEl.hidden = true;
     this.listEl = el('div', 'lobby-list');
     this.listEl.setAttribute('aria-label', `Open ${this.info.name} tables`);
 
@@ -223,10 +272,10 @@ class TableFlow {
     if (this.picker) {
       this.picker.setTitle('Start a table');
       create.append(this.picker.root);
-    } else create.append(el('div', 'label', 'Start a table'));
+    } else create.append(el('div', 'label lobby-section-head', 'Start a table'));
     create.append(actions, el('p', 'lobby-note', 'Public tables appear in this list. Private ones get a PIN to share.'));
 
-    const join = el('div', 'lobby-section');
+    const join = el('div', 'lobby-section lobby-join');
     const form = el('form', 'lobby-pin');
     // The display's unlit segments sit behind the digits, like the machines' meters.
     const field = el('span', 'lobby-pin-field');
@@ -255,20 +304,25 @@ class TableFlow {
     this.errorEl = el('p', 'lobby-error');
     this.errorEl.setAttribute('role', 'alert');
     this.errorEl.hidden = true;
-    join.append(el('div', 'label', 'Join with a PIN'), form, this.errorEl);
+    join.append(el('div', 'label lobby-section-head', 'Join with a PIN'), form, this.errorEl);
 
-    this.body.replaceChildren(bar, this.listEl, create, join);
+    this.keys(['Esc', 'Back'], ['↑ ↓', 'Tables'], ['0–9', 'PIN']);
+    this.swap('browse', [bar, this.filterEl, this.listEl, create, join]);
     this.renderList(this.sameVariant(this.watch?.list ?? []));
     this.limitsChanged();
-    (this.listEl.querySelector<HTMLButtonElement>('.lobby-row:not(:disabled)') ?? input).focus();
+    // The first open table; failing that the PIN box, except on a touch screen, where focusing a
+    // field throws the keyboard up over the list (there the panel holds focus instead).
+    const row = this.listEl.querySelector<HTMLButtonElement>('.lobby-row:not(:disabled)');
+    if (row) row.focus({ preventScroll: true });
+    else if (touch()) this.box.focus({ preventScroll: true });
+    else input.focus({ preventScroll: true });
   }
 
   // --- a PIN's table, before joining it ---------------------------------------------------------
 
   private showConfirm(lobby: LobbySummary, pin: string): void {
-    this.step = 'confirm';
     this.found = { lobby, pin };
-    this.listEl = this.countEl = this.pinInput = this.errorEl = null;
+    this.listEl = this.filterEl = this.countEl = this.pinInput = this.errorEl = null;
     const bar = el('div', 'lobby-bar');
     const backBtn = el('button', 'lobby-back');
     backBtn.type = 'button';
@@ -302,10 +356,9 @@ class TableFlow {
     go.append(el('span', 'key', 'Enter'));
     go.addEventListener('click', () => this.joinFound());
     card.append(go);
-    const foot = el('footer', 'lobby-foot');
-    foot.append(el('span', 'lb-key', 'Esc'), el('span', '', 'Back'));
-    this.body.replaceChildren(bar, card, foot);
-    go.focus();
+    this.keys(['Esc', 'Back'], ['Enter', 'Join']);
+    this.swap('confirm', [bar, card]);
+    go.focus({ preventScroll: true });
   }
 
   private joinFound(): void {
@@ -329,9 +382,52 @@ class TableFlow {
     return v ? list.filter((l) => !l.variant || l.variant === v) : list;
   }
 
-  private renderList(list: LobbySummary[]): void {
+  /**
+   * The chips over the list, once there's a choice to make: All and each stake the tables are at,
+   * and Hide full when any are. A stake no table is at any more lets go of the filter. Returns the
+   * tables the chips let through.
+   */
+  private renderFilter(list: LobbySummary[]): LobbySummary[] {
+    const f = this.filter;
+    const stakes = stakesOf(this.opts.game, list);
+    if (f.stake !== null && !stakes.includes(f.stake)) f.stake = null;
+    const anyFull = list.some(isFull);
+    if (!anyFull) f.hideFull = false;
+    const show = stakes.length > 1 || anyFull;
+    if (this.filterEl) {
+      this.filterEl.hidden = !show;
+      if (show) {
+        const chip = (label: string, on: boolean, run: () => void, cls = '') => {
+          const b = el('button', `lobby-chip${cls}`, label);
+          b.type = 'button';
+          b.setAttribute('aria-pressed', String(on));
+          b.addEventListener('click', run);
+          return b;
+        };
+        const parts: HTMLElement[] = [];
+        if (stakes.length > 1) {
+          parts.push(chip('All', f.stake === null, () => this.setFilter({ stake: null })));
+          for (const s of stakes) parts.push(chip(s, f.stake === s, () => this.setFilter({ stake: f.stake === s ? null : s })));
+        }
+        if (anyFull) parts.push(chip('Hide full', f.hideFull, () => this.setFilter({ hideFull: !f.hideFull }), ' toggle'));
+        this.filterEl.replaceChildren(...parts);
+      }
+    }
+    return list.filter((l) => (f.stake === null || stakeOf(this.opts.game, l) === f.stake) && !(f.hideFull && isFull(l)));
+  }
+
+  private setFilter(next: Partial<TableFlow['filter']>): void {
+    this.filter = { ...this.filter, ...next };
+    this.renderList(this.sameVariant(this.watch?.list ?? []));
+  }
+
+  private renderList(all: LobbySummary[]): void {
     if (!this.listEl || !this.countEl) return;
     const focused = this.listEl.contains(document.activeElement) ? (document.activeElement as HTMLElement).dataset.table : undefined;
+    // a chip keeps focus across the redraw it causes (found again by its words)
+    const chipFocus = this.filterEl?.contains(document.activeElement) ? (document.activeElement as HTMLElement).textContent : null;
+    const list = this.renderFilter(all);
+    if (chipFocus !== null) [...(this.filterEl?.querySelectorAll<HTMLButtonElement>('.lobby-chip') ?? [])].find((b) => b.textContent === chipFocus)?.focus();
     const rows: HTMLElement[] = list.map((l) => this.row(l));
     if (list.length > 0) {
       const head = el('div', 'lobby-cols');
@@ -341,13 +437,18 @@ class TableFlow {
       const empty = el('div', 'lobby-empty');
       if (!this.watch) empty.append('The list of open tables is unavailable.', el('span', '', 'You can still start one, or join with a PIN.'));
       else if (!this.watch.loaded) empty.append('Looking for open tables…');
-      else empty.append('No open tables right now.', el('span', '', 'Start one below and it shows up here for everyone.'));
+      else if (all.length > 0) {
+        const clear = el('button', 'lobby-link', 'Show every table');
+        clear.type = 'button';
+        clear.addEventListener('click', () => this.setFilter({ stake: null, hideFull: false }));
+        empty.append('No tables like that right now.', clear);
+      } else empty.append('No open tables right now.', el('span', '', 'Start one below and it shows up here for everyone.'));
       rows.push(empty);
     }
     this.listEl.replaceChildren(...rows);
     if (focused) this.listEl.querySelector<HTMLElement>(`[data-table="${focused}"]`)?.focus();
     const open = list.filter((l) => !isFull(l)).length;
-    this.countEl.textContent = this.watch?.loaded && list.length > 0 ? `${open} open ${open === 1 ? 'table' : 'tables'}` : '';
+    this.countEl.textContent = this.watch?.loaded && all.length > 0 ? `${open} open ${open === 1 ? 'table' : 'tables'}` : '';
   }
 
   private row(l: LobbySummary): HTMLButtonElement {
@@ -397,7 +498,7 @@ class TableFlow {
     if (this.busy) return;
     if (!/^\d{4}$/.test(pin)) {
       this.setError('PINs are four digits.');
-      this.pinInput?.focus();
+      if (!touch()) this.pinInput?.focus();
       return;
     }
     this.setBusy(btn, 'Joining…');
@@ -436,6 +537,7 @@ class TableFlow {
     if (!this.errorEl) return;
     this.errorEl.textContent = msg;
     this.errorEl.hidden = !msg;
+    this.errorEl.closest('.lobby-join')?.classList.toggle('bad', !!msg);
   }
 
   // --- keys and closing ------------------------------------------------------------------------

@@ -57,3 +57,35 @@ export const search = () =>
   ]);
 
 export const cross = () => icon('cross', [['path', { class: 'lb-s', d: 'm4.2 4.2 7.6 7.6m0-7.6-7.6 7.6' }]]);
+
+// The station panel's two ways to play: a seat of your own, and a table of people
+export const seat = () =>
+  icon('seat', [
+    ['circle', { class: 'lb-f', cx: '8', cy: '4.6', r: '2.6' }],
+    ['path', { class: 'lb-f', d: 'M3.2 14c.2-3.5 2.2-5.6 4.8-5.6s4.6 2.1 4.8 5.6z' }],
+  ]);
+
+export const party = () =>
+  icon('party', [
+    ['circle', { class: 'lb-f', cx: '8', cy: '5.4', r: '2.3' }],
+    ['path', { class: 'lb-f', d: 'M4 14c.2-3 1.8-4.8 4-4.8s3.8 1.8 4 4.8z' }],
+    ['circle', { class: 'lb-s', cx: '3.4', cy: '5.2', r: '1.6' }],
+    ['circle', { class: 'lb-s', cx: '12.6', cy: '5.2', r: '1.6' }],
+    ['path', { class: 'lb-s', d: 'M.9 12.2c.2-2 1.2-3.3 2.6-3.6M15.1 12.2c-.2-2-1.2-3.3-2.6-3.6' }],
+  ]);
+
+export const forward = () => icon('fwd', [['path', { class: 'lb-s', d: 'M6.2 3.5 10.7 8l-4.5 4.5' }]]);
+
+/** Copy (the PIN): two sheets. */
+export const copy = () =>
+  icon('copy', [
+    ['rect', { class: 'lb-s', x: '5.5', y: '5.5', width: '8', height: '8.5', rx: '1.4' }],
+    ['path', { class: 'lb-s', d: 'M10.5 3.4V3a1.4 1.4 0 0 0-1.4-1.4H3.4A1.4 1.4 0 0 0 2 3v6.2a1.4 1.4 0 0 0 1.4 1.4h.6' }],
+  ]);
+
+/** Do not disturb: a bell struck through. */
+export const quiet = () =>
+  icon('quiet', [
+    ['path', { class: 'lb-s', d: 'M4 11.5h8l-1.2-1.6V7a2.8 2.8 0 0 0-5.6 0v2.9z' }],
+    ['path', { class: 'lb-s', d: 'M6.8 13.4a1.3 1.3 0 0 0 2.4 0M2.5 2.5l11 11' }],
+  ]);

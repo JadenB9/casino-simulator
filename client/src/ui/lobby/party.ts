@@ -10,7 +10,7 @@ import { formatMoney } from '../../../../shared/src/money.ts';
 import { hasLimitChoice, limitsLabel, limitsOf } from '../../../../shared/src/limits.ts';
 import type { GameClientModule, MembersMsg, TableSnapshot, TableView } from '../../games/contract.ts';
 import { el, toast } from '../kit.ts';
-import { chevron, crown, invite, lock, unlock } from './icons.ts';
+import { chevron, copy, crown, invite, lock, unlock } from './icons.ts';
 import type { InviteTable } from './invite-picker.ts';
 import './lobby.css';
 import './invites.css'; // v6 invite6
@@ -182,10 +182,12 @@ export class PartyPanel {
       const digits = el('span', 'party-pin-digits lb-seg');
       digits.append(el('span', 'lb-seg-ghost', '8'.repeat(p.pin.length)), el('span', 'lb-seg-lit', p.pin));
       digits.setAttribute('aria-label', `PIN ${p.pin.split('').join(' ')}`);
-      const copy = el('button', 'btn ghost', 'Copy');
-      copy.type = 'button';
-      copy.addEventListener('click', () => void copyPin(p.pin!));
-      pin.append(el('span', 'label', 'PIN'), digits, copy, el('p', 'party-pin-note', `Friends enter it at any ${CATALOG[this.opts.game].name} table.`));
+      const copyBtn = el('button', 'btn ghost party-copy');
+      copyBtn.type = 'button';
+      copyBtn.setAttribute('aria-label', `Copy the PIN ${p.pin}`);
+      copyBtn.append(copy(), el('span', '', 'Copy'));
+      copyBtn.addEventListener('click', () => void copyPin(p.pin!));
+      pin.append(el('span', 'label', 'PIN'), digits, copyBtn, el('p', 'party-pin-note', `Friends enter it at any ${CATALOG[this.opts.game].name} table.`));
       parts.push(pin);
     }
 
@@ -227,11 +229,13 @@ export class PartyPanel {
 
     const row = el('div', 'party-row');
     if (this.opts.sit && mine?.status === 'watching') {
-      // (1.3: the way in for anyone who joined, so it's the button that stands out)
+      // (1.3: the way in for anyone who joined, so it's the button that stands out, on a row of its own)
+      const sitRow = el('div', 'party-row party-sit');
       const sit = el('button', 'btn primary', 'Buy in and sit down');
       sit.type = 'button';
       sit.addEventListener('click', () => this.opts.sit?.());
-      row.append(sit);
+      sitRow.append(sit);
+      controls.append(sitRow);
     }
     if (!p.started && isLeader) {
       const need = CATALOG[this.opts.game].seats.min;

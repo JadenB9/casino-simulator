@@ -71,8 +71,15 @@ function roundDown(x: Cents): Cents {
   return (d / p >= 5 ? 5 : d / p >= 2 ? 2 : 1) * p * 100;
 }
 
+/** The buy-in panel with a slider and quick amounts (ui/lobby/buyin.ts) takes this prompt over once loaded. */
+let buyInPanel: typeof askBuyIn | null = null;
+export function setBuyInPanel(fn: typeof askBuyIn): void {
+  buyInPanel = fn;
+}
+
 /** Ask how much to bring to the table. Resolves with cents, or null if cancelled. */
 export function askBuyIn(opts: { min: Cents; max: Cents; balance: Cents; suggested?: Cents; verb?: string; note?: string; title?: string }, signal?: AbortSignal): Promise<Cents | null> {
+  if (buyInPanel) return buyInPanel(opts, signal);
   return new Promise((resolve) => {
     if (signal?.aborted) return resolve(null);
     const max = Math.min(opts.max, Math.floor(opts.balance / 100) * 100);
