@@ -220,7 +220,7 @@ export class OnlineScreen {
     const ui = this.root.parentElement;
     const back = document.querySelector('.j4-back');
     const els = [...(ui ? [...ui.children] : []), ...(back ? [back] : [])];
-    for (const { el: e, rect } of measureChrome(els, w, h)) this.seen.set(e, { rect, at: now });
+    for (const { el: e, rect } of measureChrome([...els, ...unboxed(els)], w, h)) this.seen.set(e, { rect, at: now });
     for (const [e, s] of this.seen) if (now - s.at > REMEMBER_MS || !e.isConnected) this.seen.delete(e);
     const obstacles = [...this.seen.values()].map((s) => s.rect);
     // the clear-space search only when the screen or what's on it changed
@@ -268,6 +268,23 @@ export class OnlineScreen {
   dispose(): void {
     this.root.remove();
   }
+}
+
+/**
+ * The children of the boxless (`display: contents`) elements among these controls. On a phone
+ * upright the HUD's right-hand bar dissolves into the HUD's rows that way (hud.css), and
+ * measureChrome, which measures boxes, would see none of the buttons in it.
+ */
+function unboxed(roots: Element[]): Element[] {
+  const out: Element[] = [];
+  const visit = (e: Element, depth: number) => {
+    if (!(e instanceof HTMLElement) || e.hidden || depth > 3) return;
+    const d = getComputedStyle(e).display;
+    if (d === 'contents') out.push(...e.children);
+    if (d === 'contents' || e.classList.contains('pass') || e.dataset.fit === 'pass') for (const c of e.children) visit(c, depth + 1);
+  };
+  for (const e of roots) visit(e, 0);
+  return out;
 }
 
 const v = new THREE.Vector3();
