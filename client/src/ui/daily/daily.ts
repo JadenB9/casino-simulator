@@ -7,7 +7,8 @@
 import './daily.css';
 import { el, button } from '../kit.ts';
 import { openSheet, overlayCount, type Sheet } from '../menu/sheet.ts';
-import { formatMoney } from '../../../../shared/src/money.ts';
+import { formatCompact, formatMoney } from '../../../../shared/src/money.ts';
+import { glyph } from '../menu/glyphs.ts';
 import { CELEBS, type DailyStatus } from '../../../../shared/src/celebs.ts';
 import type { DailyApi } from './api.ts';
 import type { Sfx } from '../../audio/sfx.ts';
@@ -82,6 +83,8 @@ export function mountDaily(deps: DailyDeps): DailyHandle {
   let busy = false;
   let disposed = false;
   let render: (() => void) | null = null;
+  /** The day just claimed, stamped once on the next render. */
+  let stamp = -1;
 
   const btn = el('button', 'hud-btn daily-btn');
   btn.type = 'button';
@@ -147,13 +150,22 @@ export function mountDaily(deps: DailyDeps): DailyHandle {
           if (i < taken) li.classList.add('taken');
           if (i === today) li.classList.add('today');
           if (s.claimed && i === s.next - 1 && i >= taken) li.classList.add('tomorrow');
+          if (i === stamp && !calm()) li.classList.add('stamp');
           const label = i === today ? 'Today' : s.claimed && i === s.next - 1 && i >= taken ? 'Tomorrow' : `Day ${i + 1}`;
-          li.append(el('span', 'daily-day-label', label), el('span', 'daily-day-amount', whole(amount)));
-          if (i < taken) li.append(el('span', 'daily-day-check', 'Taken'));
+          // the whole amount, and a short one for a phone's narrow cards (only one is shown)
+          const short = el('span', 'daily-day-short', formatCompact(Math.floor(amount / 100) * 100));
+          short.setAttribute('aria-hidden', 'true');
+          li.append(el('span', 'daily-day-label', label), el('span', 'daily-day-amount', whole(amount)), short);
+          if (i < taken) {
+            const check = el('span', 'daily-day-check');
+            check.append(glyph('check'), el('span', 'daily-day-taken', 'Taken'));
+            li.append(check);
+          }
           if (i === 6) li.classList.add('best');
           return li;
         }),
       );
+      stamp = -1;
       const left = Math.max(0, s.resetAt - Date.now());
       if (s.claimed) {
         action.replaceChildren(el('div', 'daily-done', `Taken for today. Tomorrow's is ${whole(s.amount)}, in ${untilText(left)}.`));
@@ -183,9 +195,11 @@ export function mountDaily(deps: DailyDeps): DailyHandle {
     busy = true;
     b.disabled = true;
     try {
+      const day = status && !status.claimed ? status.next - 1 : -1;
       const r = await deps.api.claim();
       deps.money(r);
       status = r.status;
+      stamp = day;
       if (!deps.sfx?.muted) deps.sfx?.play('chips-stack', { volume: 0.8 });
     } catch {
       // already taken in another tab, or the casino didn't answer: ask again where things stand

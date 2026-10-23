@@ -2,6 +2,10 @@
    record; every game in one table; best places, chips on tables and loans along the bottom. */
 
 .profile-sheet { width: min(1080px, 100%); }
+/* the head: your initial, your name, the title you wear */
+.profile-sheet .sheet-head { align-items: center; }
+.pf-mono .monogram { width: 46px; height: 46px; font-size: 21px; }
+.pf-worn { margin: 3px 0 0; font-size: 13px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--brass); }
 .pf-strip { margin-bottom: 22px; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); }
 .pf-strip .stat.lead { background: rgba(var(--brass-rgb), 0.07); }
 .pf-strip .stat.lead .stat-value { color: var(--brass-hi); }
@@ -26,6 +30,7 @@
 .pf-bar.today { fill-opacity: 1; stroke: var(--brass-hi); stroke-width: 1.2; }
 .pf-bar:hover { fill-opacity: 1; }
 .pf-tick { fill: var(--ink-3); font: 500 11px var(--ui); letter-spacing: 0.08em; }
+.pf-scale { fill: var(--ink-3); font: 500 11px var(--ui); letter-spacing: 0.02em; font-variant-numeric: tabular-nums; }
 .pf-tick.date { fill: var(--ink-2); font-size: 12px; }
 .pf-tick.today { fill: var(--brass-hi); }
 
@@ -41,11 +46,14 @@
 .pf-scroll { overflow-x: auto; }
 .pf-games td { font-size: 15px; padding-top: 7px; padding-bottom: 7px; }
 .pf-games th { padding-left: 6px; padding-right: 6px; }
-.pf-sort { padding: 0; border: 0; background: none; color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; cursor: pointer; }
+/* the arrow's room is kept on every heading, so sorting never shifts the columns */
+.pf-sort { padding: 2px 0; border: 0; border-radius: 3px; background: none; color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; white-space: nowrap; cursor: pointer; transition: color 0.15s; }
+.pf-sort::after { content: ' \25BE'; visibility: hidden; }
 .pf-sort:hover { color: var(--ink); }
+.pf-sort:hover::after { visibility: visible; opacity: 0.45; }
 .pf-sort:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .pf-sort.asc, .pf-sort.desc { color: var(--brass-hi); }
-.pf-sort.desc::after { content: ' \25BE'; }
+.pf-sort.desc::after, .pf-sort.asc::after { visibility: visible; opacity: 1; }
 .pf-sort.asc::after { content: ' \25B4'; }
 .pf-foot { margin: 10px 0 0; font-size: 14px; line-height: 1.4; color: var(--ink-3); }
 
@@ -60,6 +68,9 @@
 }
 @media (max-width: 600px) {
   .pf-lower { grid-template-columns: 1fr; }
+  /* the game's name stays put while the figures scroll under it */
+  .pf-games th:first-child, .pf-games td:first-child { position: sticky; left: 0; z-index: 1; background: var(--sheet-solid); }
+  .pf-mono .monogram { width: 40px; height: 40px; font-size: 18px; }
   .pf-chart-head { flex-wrap: wrap; gap: 4px 12px; }
   .pf-games th:nth-child(4), .pf-games td:nth-child(4), .pf-games th:nth-child(6), .pf-games td:nth-child(6), .pf-games th:nth-child(7), .pf-games td:nth-child(7) { display: none; }
 }

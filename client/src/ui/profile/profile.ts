@@ -11,13 +11,15 @@
 import './profile.css';
 import type { Profile, LeaderboardResponse, StatsResponse } from '../../../../shared/src/protocol.ts';
 import { CATALOG } from '../../../../shared/src/games/catalog.ts';
-import { formatMoney } from '../../../../shared/src/money.ts';
+import { formatCompact, formatMoney } from '../../../../shared/src/money.ts';
+import { titleOf } from '../../../../shared/src/feats.ts';
 import { favouriteGame, formatRate, winRateBp } from '../../../../shared/src/stats.ts';
 import type { GameId } from '../../../../shared/src/engine.ts';
 import { el } from '../kit.ts';
 import type { AccountApi, Closable, SessionLike } from '../menu/deps.ts';
 import { openSheet } from '../menu/sheet.ts';
 import { formatDate, formatDateTime, gameName, problemText, statTile } from '../menu/parts.ts';
+import { monogram } from '../menu/front.ts';
 import * as socialApi from '../social/api.ts';
 import { placeOn } from '../social/leaderboard.ts';
 import { boardText, boardsOf, ordinal } from '../stats/boards.ts';
@@ -75,7 +77,10 @@ function svg<K extends keyof SVGElementTagNameMap>(tag: K, attrs: Record<string,
   return e;
 }
 
-/** Fourteen bars around a zero line, today's outlined; each says its day and net on hover. */
+/**
+ * Fourteen bars around a zero line, today's outlined; each says its day and net on hover. The
+ * scale is written up the left edge (the biggest day either way, and zero).
+ */
 function renderChart(days: StatsResponse['days']): HTMLElement {
   const f = fortnight(days);
   const wrap = el('div', 'pf-chart');
@@ -83,14 +88,22 @@ function renderChart(days: StatsResponse['days']): HTMLElement {
   const H = 196;
   const top = 8;
   const bottom = 30;
+  const gutter = 46;
   const mid = top + (H - top - bottom) / 2;
   const half = (H - top - bottom) / 2;
-  const slot = W / days.length;
+  const slot = (W - gutter) / days.length;
   const chart = svg('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': `Net per day, last ${days.length} days` }, 'pf-svg');
-  for (const frac of [-1, -0.5, 0.5, 1]) chart.append(svg('line', { x1: 0, x2: W, y1: mid - frac * half, y2: mid - frac * half }, 'pf-grid'));
+  for (const frac of [-1, -0.5, 0.5, 1]) chart.append(svg('line', { x1: gutter, x2: W, y1: mid - frac * half, y2: mid - frac * half }, 'pf-grid'));
+  if (f.up + f.down > 0) {
+    for (const [frac, label] of [[1, `+${formatCompact(f.scale)}`], [0, '$0'], [-1, formatCompact(-f.scale)]] as const) {
+      const t = svg('text', { x: gutter - 8, y: mid - frac * half + 4, 'text-anchor': 'end' }, 'pf-scale');
+      t.textContent = label;
+      chart.append(t);
+    }
+  }
   days.forEach((d, i) => {
     const h = (Math.abs(d.net) / f.scale) * half;
-    const x = i * slot + slot * 0.18;
+    const x = gutter + i * slot + slot * 0.18;
     const w = slot * 0.64;
     const today = i === days.length - 1;
     const bar = svg('rect', { x, y: d.net >= 0 ? mid - h : mid, width: w, height: Math.max(d.net === 0 ? 0 : 1.5, h), rx: 1.5 }, `pf-bar ${d.net > 0 ? 'up' : d.net < 0 ? 'down' : 'flat'}${today ? ' today' : ''}`);
@@ -99,14 +112,14 @@ function renderChart(days: StatsResponse['days']): HTMLElement {
     bar.append(tip);
     chart.append(bar);
     const [wd, date] = dayTick(d.day);
-    const cx = i * slot + slot / 2;
+    const cx = gutter + i * slot + slot / 2;
     const t1 = svg('text', { x: cx, y: H - 16, 'text-anchor': 'middle' }, `pf-tick${today ? ' today' : ''}`);
     t1.textContent = wd;
     const t2 = svg('text', { x: cx, y: H - 3, 'text-anchor': 'middle' }, `pf-tick date${today ? ' today' : ''}`);
     t2.textContent = date;
     chart.append(t1, t2);
   });
-  chart.append(svg('line', { x1: 0, x2: W, y1: mid, y2: mid }, 'pf-zero'));
+  chart.append(svg('line', { x1: gutter, x2: W, y1: mid, y2: mid }, 'pf-zero'));
 
   const head = el('div', 'pf-chart-head');
   const total = signed(f.total);
@@ -132,8 +145,8 @@ function recordList(s: StatsResponse): HTMLElement {
     dl.append(row);
   };
   const t = s.total;
-  add('Won, winning rounds', money0(t.won), t.won > 0 ? 'win' : '');
-  add('Lost, losing rounds', t.lost > 0 ? formatMoney(-t.lost) : DASH, t.lost > 0 ? 'lose' : '');
+  add('Won in winning rounds', money0(t.won), t.won > 0 ? 'win' : '');
+  add('Lost in losing rounds', t.lost > 0 ? formatMoney(-t.lost) : DASH, t.lost > 0 ? 'lose' : '');
   add('Biggest win', money0(t.biggestWin));
   add('Biggest loss', t.biggestLoss > 0 ? formatMoney(-t.biggestLoss) : DASH);
   add('Rounds won', t.counted > 0 ? `${t.wins.toLocaleString('en-US')} of ${t.counted.toLocaleString('en-US')}` : DASH);
@@ -167,6 +180,9 @@ function renderGames(s: StatsResponse): HTMLElement {
       const [by] = SORTS[i]!;
       const b = el('button', 'pf-sort', th.textContent ?? '');
       b.type = 'button';
+      // (a re-render keeps the focus on the heading that had it)
+      b.dataset.key = `sort-${by}`;
+      b.title = `Sort by ${b.textContent.toLowerCase()}`;
       th.textContent = '';
       th.append(b);
       if (gameSort.by === by) {
@@ -294,6 +310,12 @@ export function openProfile(deps: ProfileDeps): Closable {
   });
   const title = sheet.panel.querySelector('.sheet-title')!;
   title.classList.add('name');
+  // your initial beside your name, and the title you wear (an achievement's) under it
+  const mono = el('span', 'pf-mono');
+  sheet.panel.querySelector('.sheet-head')!.prepend(mono);
+  const worn = el('p', 'pf-worn');
+  worn.hidden = true;
+  title.after(worn);
   let status = '';
   let stats: StatsResponse | null = null;
   let statsProblem = '';
@@ -302,12 +324,18 @@ export function openProfile(deps: ProfileDeps): Closable {
 
   const render = (p: Profile | null) => {
     const scroll = sheet.body.scrollTop;
+    const focused = (document.activeElement as HTMLElement | null)?.dataset?.key;
+    const hadFocus = !!focused && sheet.body.contains(document.activeElement);
     sheet.body.replaceChildren();
     if (!p) {
       sheet.body.append(el('p', 'quiet', status && status !== 'Updating' ? status : 'Loading your profile.'));
       return;
     }
     title.textContent = p.name;
+    mono.replaceChildren(monogram(p.name));
+    const wears = titleOf(p.look.title)?.reward.title ?? '';
+    worn.textContent = wears;
+    worn.hidden = !wears;
     sheet.sub.hidden = false;
     // The record, once it's here, is the fresher copy of the lifetime figures the session holds.
     const games = stats?.games ?? p.stats.games;
@@ -366,6 +394,7 @@ export function openProfile(deps: ProfileDeps): Closable {
     lower.append(places, chips, loans);
     sheet.body.append(lower);
     sheet.body.scrollTop = scroll;
+    if (hadFocus) sheet.body.querySelector<HTMLElement>(`[data-key="${focused}"]`)?.focus({ preventScroll: true });
   };
 
   off = deps.session.on((p) => render(p));

@@ -1,12 +1,13 @@
 /* The daily bonus: the HUD button's brass dot, and the sheet with the week laid out like a row of
-   plaques on the cage wall (the seventh in brass), today's lit, the ones taken stamped. */
+   plaques on the cage wall (the seventh in brass), today's lit and standing a little proud, the
+   ones taken checked off. Every surface is a tint of the theme's tokens, so both themes match. */
 
 .daily-btn { position: relative; }
 .daily-dot { position: absolute; top: 5px; right: 5px; width: 8px; height: 8px; border-radius: 50%; background: var(--brass-hi); box-shadow: 0 0 0 2px rgba(var(--glass-rgb), 0.9); opacity: 0; transform: scale(0.4); transition: opacity 0.2s, transform 0.2s var(--ease); }
 .daily-btn.waiting { color: var(--brass-hi); border-color: var(--line-strong); }
 .daily-btn.waiting .daily-dot { opacity: 1; transform: none; animation: daily-dot 2.4s ease-in-out infinite; }
 
-.daily-sheet { width: min(620px, 100%); }
+.daily-sheet { width: min(640px, 100%); }
 .daily-sheet .sheet-body { display: grid; gap: 16px; padding: 18px 24px 22px; overflow-y: auto; }
 .daily-loading { color: var(--ink-3); }
 .daily-streak { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
@@ -14,22 +15,27 @@
 .daily-streak-n { font-family: var(--serif); font-size: 40px; font-weight: 600; line-height: 1; color: var(--brass-hi); }
 .daily-streak-label { font-size: 16px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-2); }
 
-.daily-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; margin: 0; padding: 0; list-style: none; }
-.daily-day { position: relative; display: grid; align-content: start; justify-items: center; gap: 4px; min-height: 84px; padding: 10px 4px 8px; border: 1px solid var(--line); border-radius: 5px; background: linear-gradient(#1d1813, #14110d); text-align: center; }
-.daily-day-label { font-size: 12px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-3); white-space: nowrap; }
-.daily-day-amount { font-size: 16px; font-weight: 600; letter-spacing: 0.02em; color: var(--ink-2); font-variant-numeric: tabular-nums; }
-.daily-day-check { margin-top: auto; padding: 1px 6px; border: 1px solid rgba(var(--win-rgb), 0.45); border-radius: 3px; font-size: 11px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--win); transform: rotate(-4deg); }
-.daily-day.best { background: linear-gradient(#2c2316, #1a140c); border-color: rgba(var(--brass-rgb), 0.5); }
-.daily-day.best .daily-day-amount { color: var(--brass-hi); }
-.daily-day.taken { opacity: 0.72; }
-.daily-day.today { border-color: var(--brass-hi); background: linear-gradient(#3a2d19, #1f180f); box-shadow: 0 0 0 1px rgba(var(--brass-hi-rgb), 0.35), 0 0 22px rgba(var(--brass-hi-rgb), 0.18); }
+.daily-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; margin: 4px 0 0; padding: 0; list-style: none; }
+.daily-day { position: relative; display: grid; align-content: start; justify-items: center; gap: 5px; min-height: 94px; padding: 12px 4px 10px; border: 1px solid var(--line); border-radius: 8px; background: rgba(var(--lift-rgb), 0.025); text-align: center; }
+.daily-day-label { font-size: 12px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-3); white-space: nowrap; }
+.daily-day-amount, .daily-day-short { font-size: 16px; font-weight: 600; letter-spacing: 0.02em; color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.daily-day-short { display: none; }
+.daily-day-check { display: inline-flex; align-items: center; gap: 3px; margin-top: auto; padding: 2px 7px 2px 5px; border-radius: 999px; background: rgba(var(--win-rgb), 0.14); color: var(--win); font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; }
+.daily-day-check .ico { width: 12px; height: 12px; stroke-width: 2.8; }
+.daily-day.taken .daily-day-amount, .daily-day.taken .daily-day-short { color: var(--ink-3); }
+.daily-day.best { border-color: rgba(var(--brass-rgb), 0.5); background: rgba(var(--brass-rgb), 0.1); }
+.daily-day.best .daily-day-amount, .daily-day.best .daily-day-short { color: var(--brass-hi); }
+.daily-day.today { border-color: var(--brass-hi); background: rgba(var(--brass-hi-rgb), 0.15); box-shadow: 0 0 0 1px rgba(var(--brass-hi-rgb), 0.35), 0 8px 24px rgba(var(--brass-hi-rgb), 0.16); transform: translateY(-3px); }
 .daily-day.today .daily-day-label { color: var(--brass-hi); }
-.daily-day.today .daily-day-amount { color: var(--ink); }
+.daily-day.today .daily-day-amount, .daily-day.today .daily-day-short { color: var(--ink); font-size: 18px; }
 .daily-day.tomorrow { border-style: dashed; border-color: var(--line-strong); }
 .daily-day.tomorrow .daily-day-label { color: var(--brass); }
+/* the day just claimed: pressed into place once (not while motion is reduced) */
+.daily-day.stamp { animation: daily-stamp 0.5s var(--ease); }
+@keyframes daily-stamp { from { transform: scale(1.1); } }
 
 .daily-action { display: flex; align-items: center; gap: 14px; min-height: 44px; }
-.daily-claim { height: 42px; padding: 0 22px; font-size: 18px; }
+.daily-claim { height: 44px; padding: 0 24px; font-size: 18px; }
 .daily-left { font-size: 15px; letter-spacing: 0.04em; color: var(--ink-3); }
 .daily-done { font-size: 16px; letter-spacing: 0.03em; color: var(--ink-2); }
 .daily-note { margin: -6px 0 0; font-size: 14px; letter-spacing: 0.03em; color: var(--ink-3); }
@@ -38,7 +44,7 @@
 .daily-met-title { font-size: 13px; font-weight: 600; letter-spacing: 0.2em; text-transform: uppercase; color: var(--brass); }
 .daily-met-count { font-size: 15px; font-weight: 600; letter-spacing: 0.04em; color: var(--ink-2); }
 .daily-met { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 0; padding: 0; list-style: none; }
-.daily-celeb { display: grid; gap: 1px; padding: 7px 10px 8px; border: 1px solid rgba(var(--brass-rgb), 0.14); border-radius: 4px; background: rgba(var(--lift-rgb), 0.015); }
+.daily-celeb { display: grid; gap: 1px; padding: 7px 10px 8px; border: 1px solid rgba(var(--brass-rgb), 0.14); border-radius: 6px; background: rgba(var(--lift-rgb), 0.015); }
 .daily-celeb-name { font-family: var(--serif); font-size: 14px; font-weight: 600; line-height: 1.2; letter-spacing: 0.03em; color: var(--ink-3); text-wrap: balance; }
 .daily-celeb-known { overflow: hidden; font-size: 12px; letter-spacing: 0.03em; color: var(--ink-3); text-overflow: ellipsis; white-space: nowrap; }
 .daily-celeb.met { border-color: var(--line); background: rgba(var(--brass-hi-rgb), 0.05); }
@@ -47,8 +53,18 @@
 
 @keyframes daily-dot { 50% { box-shadow: 0 0 0 2px rgba(var(--glass-rgb), 0.9), 0 0 0 5px rgba(var(--brass-hi-rgb), 0.18); } }
 
+/* A phone upright: the seven days still one week across, with short amounts ("$2.5K") and the
+   whole one kept for a screen reader. */
 @media (max-width: 560px) {
-  .daily-week { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .daily-sheet .sheet-body { gap: 14px; padding: 14px 14px 18px; }
+  .daily-week { gap: 4px; }
+  .daily-day { min-height: 76px; padding: 9px 1px 7px; gap: 4px; border-radius: 6px; }
+  .daily-day-label { font-size: 10px; letter-spacing: 0.04em; }
+  .daily-day-amount { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .daily-day-short { display: block; font-size: 14px; }
+  .daily-day.today .daily-day-short { font-size: 15px; }
+  .daily-day-check { padding: 2px; }
+  .daily-day-taken { display: none; }
   .daily-met { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .daily-streak-n { font-size: 32px; }
   .daily-action { flex-wrap: wrap; }
@@ -57,8 +73,3 @@
 /* Reduce flashing & motion (app/comfort.ts), or the system's reduced motion: the dot holds still */
 .daily-btn.calm.waiting .daily-dot { animation: none; }
 body.calm .daily-btn.waiting .daily-dot { animation: none; }
-
-/* Light (app/theme.ts): the week's cards on ivory. */
-:root[data-theme='light'] .daily-day { background: linear-gradient(#fbf7ef, #f1e9da); }
-:root[data-theme='light'] .daily-day.best { background: linear-gradient(#f6ebd3, #ecdfc4); }
-:root[data-theme='light'] .daily-day.today { background: linear-gradient(#f3e3c0, #e9d6ad); }
