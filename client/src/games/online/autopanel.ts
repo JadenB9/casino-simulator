@@ -139,7 +139,7 @@ export class AutoControl {
     document.addEventListener('visibilitychange', hidden);
     this.offs.push(() => document.removeEventListener('visibilitychange', hidden));
     this.offs.push(onOverlayChange((open) => open > 0 && this.driver.stop('')));
-    const offline = () => this.driver.stop('The connection dropped');
+    const offline = () => this.driver.stop('This device went offline');
     addEventListener('offline', offline);
     this.offs.push(() => removeEventListener('offline', offline));
     this.paint();
