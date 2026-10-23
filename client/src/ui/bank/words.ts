@@ -1,5 +1,6 @@
-// What the bank's screens say: a statement line in words, amounts typed as dollars, rates as
-// percentages. Pure, so the tests can read them.
+// What the bank's screens say: a statement line in words (and which of the statement's filters it
+// falls under, and the day it's headed by), amounts typed as dollars, rates as percentages. Pure,
+// so the tests can read them.
 
 import { formatMoney, type Cents } from '../../../../shared/src/money.ts';
 import { FUND_NAME, formatPrice, formatUnits, termOf, type StatementLine } from '../../../../shared/src/bank.ts';
@@ -109,6 +110,26 @@ export function describe(l: StatementLine): { text: string; account: Account } {
       return { text: `From ${l.peer ?? 'a player'}`, account: 'Checking' };
   }
   return { text: l.kind, account: 'Checking' };
+}
+
+/** The statement's filters: what you bought, the bank's own accounts, the tables, transfers; the rest (the house's credits, the cashier's top-ups, jail) only under All. */
+export type LineGroup = 'purchases' | 'bank' | 'tables' | 'transfers' | 'other';
+
+export function lineGroup(l: StatementLine): LineGroup {
+  if (l.src === 'item') return 'purchases';
+  if (l.src === 'order') return l.kind === 'bar' || l.kind === 'fx' ? 'purchases' : 'other';
+  if (l.src === 'ledger') return l.kind === 'buyin' || l.kind === 'cashout' || l.kind === 'refund' ? 'tables' : 'other';
+  return l.kind === 'send' || l.kind === 'receive' ? 'transfers' : 'bank';
+}
+
+/** A statement day's heading, in this device's own days: "Today", "Yesterday", "Mon, Oct 20" (and the year when it isn't this one). */
+export function dayHeading(at: number, today: Date): string {
+  const d = new Date(at);
+  const same = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  if (same(d, today)) return 'Today';
+  const y = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+  if (same(d, y)) return 'Yesterday';
+  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', ...(d.getFullYear() !== today.getFullYear() ? { year: 'numeric' } : {}) });
 }
 
 /** The line's amount as the statement shows it: the change to checking, or else to the bank account. */

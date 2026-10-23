@@ -1,5 +1,5 @@
 import { describe as group, it, expect } from 'vitest';
-import { describe, lineAmount, parseDollars, percent, until } from '../src/ui/bank/words.ts';
+import { dayHeading, describe, lineAmount, lineGroup, parseDollars, percent, until } from '../src/ui/bank/words.ts';
 import { bankNotices, transferLine } from '../src/ui/bank/notices.ts';
 import type { StatementLine } from '../../shared/src/bank.ts';
 import type { FloorServerMsg } from '../../shared/src/protocol.ts';
@@ -45,6 +45,30 @@ group('the bank in words', () => {
   it('shows interest on savings and everything else as checking moves', () => {
     expect(lineAmount(line({ kind: 'interest', banked: 1234 }))).toBe(1234);
     expect(lineAmount(line({ kind: 'save', cash: -500, banked: 500 }))).toBe(-500);
+  });
+
+  it("sorts the statement's lines into its filters", () => {
+    expect(lineGroup(line({ src: 'item', kind: 'item', ref: 'rope-chain' }))).toBe('purchases');
+    expect(lineGroup(line({ src: 'item', kind: 'item', ref: 'halden-roadster' }))).toBe('purchases');
+    expect(lineGroup(line({ src: 'order', kind: 'bar', ref: 'beer' }))).toBe('purchases');
+    expect(lineGroup(line({ src: 'order', kind: 'fx', ref: 'fx-disco' }))).toBe('purchases');
+    // what was taken from you or paid for someone else isn't something you bought
+    expect(lineGroup(line({ src: 'order', kind: 'theft' }))).toBe('other');
+    expect(lineGroup(line({ src: 'order', kind: 'bail' }))).toBe('other');
+    for (const kind of ['buyin', 'cashout', 'refund']) expect(lineGroup(line({ src: 'ledger', kind }))).toBe('tables');
+    for (const kind of ['grant', 'loan']) expect(lineGroup(line({ src: 'ledger', kind }))).toBe('other');
+    for (const kind of ['send', 'receive']) expect(lineGroup(line({ kind }))).toBe('transfers');
+    for (const kind of ['save', 'unsave', 'interest', 'lock', 'unlock', 'buy', 'sell']) expect(lineGroup(line({ kind }))).toBe('bank');
+  });
+
+  it("heads the statement's days the way people say them", () => {
+    const today = new Date(2026, 9, 23, 15, 30);
+    expect(dayHeading(new Date(2026, 9, 23, 0, 5).getTime(), today)).toBe('Today');
+    expect(dayHeading(new Date(2026, 9, 22, 23, 59).getTime(), today)).toBe('Yesterday');
+    expect(dayHeading(new Date(2026, 9, 20, 12).getTime(), today)).toBe('Tue, Oct 20');
+    expect(dayHeading(new Date(2025, 11, 31, 12).getTime(), today)).toBe('Wed, Dec 31, 2025');
+    // the first of a month: yesterday is the last of the one before
+    expect(dayHeading(new Date(2026, 9, 31, 22).getTime(), new Date(2026, 10, 1, 9))).toBe('Yesterday');
   });
 
   it('counts down in plain units', () => {

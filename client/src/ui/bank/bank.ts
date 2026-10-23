@@ -1,16 +1,19 @@
 // The bank at the cage: a private bank's app in the teller's window. Accounts down the left
 // (checking, savings, term deposits, the Casino Index) with what's in each, then Transfer and
-// Statement; the chosen one fills the right. Checking keeps the cashier's one rule: under $10,000
-// in all, the bank tops you up to $50,000, as often as that happens, and not before. No
-// countdowns, no offers, no "claim now": numbers, rates and what each thing does.
+// Statement; the chosen one fills the right: its figure, a line saying where it stands, and its
+// form. Every amount is checked as it's typed (the reason under the field when it can't go
+// through, the button off until it can) and previewed before you press: where the money ends up.
+// Checking keeps the cashier's one rule: under $10,000 in all, the bank tops you up to $50,000, as
+// often as that happens, and not before. No countdowns, no offers, no "claim now": numbers, rates
+// and what each thing does.
 
 import './bank.css';
 import type { Profile, ProfileBank } from '../../../../shared/src/protocol.ts';
 import { formatMoney, type Cents } from '../../../../shared/src/money.ts';
 import {
-  DEPOSIT_CAP, DEPOSIT_MAX_OPEN, DEPOSIT_MIN, EARLY_FEE_PPM, FUND_DAY_DRIFT, FUND_DAY_VOL, FUND_MIN, FUND_NAME, INTEREST_DEN, REFILL_BELOW, REFILL_TO, SAVINGS_TIERS,
-  SEND, TERMS, accrue, depositInterest, earlyFee, formatPrice, formatUnits, nextPayday, notYet, refillFor, type BankState, type DepositView, type MarketResponse,
-  type Received, type StatementLine, type TermId,
+  DEPOSIT_CAP, DEPOSIT_MAX_OPEN, DEPOSIT_MIN, EARLY_FEE_PPM, FUND_CAP, FUND_DAY_DRIFT, FUND_DAY_VOL, FUND_MIN, FUND_NAME, INTEREST_DEN, REFILL_BELOW, REFILL_TO, SAVINGS_TIERS,
+  SEND, TERMS, accrue, depositInterest, earlyFee, formatPrice, formatUnits, interestWeight, nextPayday, notYet, refillFor, unitsFor, valueOf, type BankState, type DepositView,
+  type MarketResponse, type Received, type StatementLine, type TermId,
 } from '../../../../shared/src/bank.ts';
 import { el, modal } from '../kit.ts';
 import type { AccountApi, Closable, SessionLike, SfxLike } from '../menu/deps.ts';
@@ -19,7 +22,7 @@ import { gameName, problemText, segmented, statTile } from '../menu/parts.ts';
 import * as realBank from './api.ts';
 import type { BankApi } from './api.ts';
 import { PriceChart } from './chart.ts';
-import { describe, lineAmount, parseDollars, percent, termLabel, until } from './words.ts';
+import { dayHeading, describe, lineAmount, lineGroup, parseDollars, percent, termLabel, until, type LineGroup } from './words.ts';
 
 export type BankPane = 'checking' | 'savings' | 'deposits' | 'fund' | 'send' | 'statement';
 
@@ -84,19 +87,30 @@ function accruedText(s: BankState, now: number): string {
   return `$${(cents / 100).toFixed(4)}`;
 }
 
+/** What a savings balance earns in a day, to the cent: each tier's slice at its rate. */
+function perDay(balance: Cents): Cents {
+  return Math.floor(interestWeight(balance) / 10_000);
+}
+
 /** The bank's figures on the profile, so the HUD and the profile agree with the bank at once. */
 function profileBank(s: BankState): ProfileBank {
   const deposits = s.deposits.filter((d) => d.closedAt === undefined).reduce((t, d) => t + d.principal, 0);
   return { savings: s.savings.balance, deposits, fundCost: s.fund.cost, fundValue: s.fund.value, gain: s.gain, worth: s.worth };
 }
 
+let fieldSeq = 0;
+
 interface Field {
   root: HTMLElement;
   input: HTMLInputElement;
   value(): Cents | null;
   set(c: Cents): void;
+  clear(): void;
+  /** Say what's wrong under the field, or nothing (null). */
+  problem(text: string | null): void;
 }
 
+/** A field for dollars: "$" in front, tabular figures, and a line under it for what's wrong. */
 function amountField(label: string, id: string): Field {
   const root = el('label', 'bank-field');
   root.htmlFor = id;
@@ -108,7 +122,11 @@ function amountField(label: string, id: string): Field {
   input.placeholder = '0.00';
   const box = el('span', 'bank-input-box');
   box.append(el('span', 'bank-dollar', '$'), input);
-  root.append(el('span', 'field-label', label), box);
+  const hint = el('span', 'bank-hint');
+  hint.id = `bank-hint-${++fieldSeq}`;
+  hint.setAttribute('aria-live', 'polite');
+  input.setAttribute('aria-describedby', hint.id);
+  root.append(el('span', 'field-label', label), box, hint);
   return {
     root,
     input,
@@ -117,10 +135,19 @@ function amountField(label: string, id: string): Field {
       input.value = (c / 100).toFixed(2);
       input.dispatchEvent(new Event('input'));
     },
+    clear() {
+      input.value = '';
+      input.dispatchEvent(new Event('input'));
+    },
+    problem(text) {
+      hint.textContent = text ?? '';
+      box.classList.toggle('bad', !!text);
+      input.setAttribute('aria-invalid', String(!!text));
+    },
   };
 }
 
-function textField(label: string, id: string, max: number, placeholder = ''): { root: HTMLElement; input: HTMLInputElement } {
+function textField(label: string, id: string, max: number, placeholder = ''): { root: HTMLElement; input: HTMLInputElement; hint: HTMLElement; count: HTMLElement } {
   const root = el('label', 'bank-field');
   root.htmlFor = id;
   const input = el('input', 'bank-input');
@@ -131,9 +158,14 @@ function textField(label: string, id: string, max: number, placeholder = ''): { 
   input.spellcheck = false;
   input.placeholder = placeholder;
   const box = el('span', 'bank-input-box');
-  box.append(input);
-  root.append(el('span', 'field-label', label), box);
-  return { root, input };
+  const count = el('span', 'bank-count');
+  box.append(input, count);
+  const hint = el('span', 'bank-hint');
+  hint.id = `bank-hint-${++fieldSeq}`;
+  hint.setAttribute('aria-live', 'polite');
+  input.setAttribute('aria-describedby', hint.id);
+  root.append(el('span', 'field-label', label), box, hint);
+  return { root, input, hint, count };
 }
 
 function btn(label: string, cls = ''): HTMLButtonElement {
@@ -147,7 +179,10 @@ function fill(label: string, field: Field, amount: () => Cents): { b: HTMLButton
   const b = el('button', 'bank-fill');
   b.type = 'button';
   b.addEventListener('click', () => field.set(amount()));
-  const paint = () => b.replaceChildren(el('span', '', label), el('span', 'money', formatMoney(amount())));
+  const paint = () => {
+    b.replaceChildren(el('span', '', label), el('span', 'money', formatMoney(amount())));
+    b.disabled = amount() <= 0;
+  };
   paint();
   return { b, paint };
 }
@@ -165,6 +200,25 @@ function status(): { root: HTMLElement; show(n: Note | null): void } {
     },
   };
 }
+
+/** A preview line: what pressing would do, or why it can't (a reason in place of the numbers). */
+function previewRow(label: string): { root: HTMLElement; show(text: string | null, bad?: boolean): void } {
+  const root = el('div', 'bank-row');
+  const what = el('span', 'bank-row-label', label);
+  const text = el('span', 'bank-row-text');
+  root.append(what, text);
+  return {
+    root,
+    show(t, bad = false) {
+      root.hidden = t === null;
+      text.textContent = t ?? '';
+      root.classList.toggle('bad', bad);
+    },
+  };
+}
+
+/** "$1,200 → $950" */
+const move = (from: Cents, to: Cents) => `${formatMoney(from)} → ${formatMoney(to)}`;
 
 interface Pane {
   root: HTMLElement;
@@ -218,6 +272,17 @@ export function openBank(deps: BankDeps): Closable {
     railItem('send', 'Send money', false),
     railItem('statement', 'Statement', false),
   );
+  // the arrows move down the rail, the way they move through a list
+  rail.addEventListener('keydown', (e) => {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    const items = [...railItems.values()].map((r) => r.b);
+    const at = items.indexOf(document.activeElement as HTMLButtonElement);
+    if (at < 0) return;
+    e.preventDefault();
+    const next = items[(at + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length]!;
+    next.focus();
+    next.click();
+  });
   const main = el('div', 'bank-main');
   const wrap = el('div', 'bank-wrap');
   wrap.append(rail, main);
@@ -243,6 +308,8 @@ export function openBank(deps: BankDeps): Closable {
     railItems.get('fund')!.amount.textContent = formatMoney(s.fund.value);
     const inbox = railItems.get('send')!.b;
     inbox.classList.toggle('has-news', s.inbox.length > 0);
+    // a deposit that has come due says so on the rail
+    railItems.get('deposits')!.b.classList.toggle('has-news', s.deposits.some((d) => d.closedAt === undefined && d.maturesAt <= s.now));
     for (const pane of panes.values()) pane.paint(s);
   };
 
@@ -256,24 +323,55 @@ export function openBank(deps: BankDeps): Closable {
         loading.classList.add('err');
       });
 
+  /**
+   * One operation id per request until the bank has answered it: a press again after a dropped
+   * answer (or a server error) is a retry of the same operation, which the bank does once; a
+   * refusal or a success lets it go, so the next press is a new one.
+   */
+  const ops = new Map<string, string>();
+  const opFor = (key: string): string => {
+    let op = ops.get(key);
+    if (!op) {
+      op = realBank.newOp();
+      ops.set(key, op);
+    }
+    return op;
+  };
+
   /** Run a bank operation from a button: the button waits, the pane's line says how it went. */
-  const act = async (button: HTMLButtonElement, line: ReturnType<typeof status>, run: () => Promise<BankState>, done: (s: BankState) => string) => {
-    if (button.disabled) return;
+  const act = async (button: HTMLButtonElement, line: ReturnType<typeof status>, key: string, run: (op: string) => Promise<BankState>, done: (s: BankState) => string): Promise<boolean> => {
+    if (button.disabled) return false;
     const label = button.textContent;
     button.disabled = true;
+    button.classList.add('busy');
     line.show(null);
     try {
-      const s = await run();
+      const s = await run(opFor(key));
+      ops.delete(key);
       setState(s);
       line.show({ text: done(s), kind: 'ok' });
       deps.sfx?.play('chips-stack', { volume: 0.5 });
+      return true;
     } catch (err) {
+      const st = (err as { status?: number }).status;
+      if (st && st < 500) ops.delete(key);
       line.show({ text: problemText(err), kind: 'err' });
       void refresh();
+      return false;
     } finally {
       button.disabled = false;
+      button.classList.remove('busy');
       button.textContent = label;
     }
+  };
+
+  /** A pane's heading: what the account is called, its figure, and a line on where it stands. */
+  const header = (label: string) => {
+    const root = el('div', 'bank-head');
+    const big = el('div', 'bank-big money');
+    const line = el('p', 'bank-headline');
+    root.append(el('div', 'bank-sub', label), big, line);
+    return { root, big, line };
   };
 
   // --- checking ------------------------------------------------------------------------------
@@ -284,6 +382,13 @@ export function openBank(deps: BankDeps): Closable {
     const tables = statTile('Chips on tables', '');
     const loans = statTile('Loans taken', '');
     stats.append(bal.tile, tables.tile, loans.tile);
+    // the next things you might do with what's in checking
+    const jumps = el('div', 'bank-jumps');
+    for (const [label, pane] of [['To savings', 'savings'], ['Term deposit', 'deposits'], [`Buy the ${FUND_NAME}`, 'fund'], ['Send money', 'send']] as const) {
+      const b = btn(label, 'ghost bank-jump');
+      b.addEventListener('click', () => show(pane));
+      jumps.append(b);
+    }
     const inbox = el('div', 'bank-inbox');
     // Two lines, like the sign over a cage window: the question, then the answer.
     const rule = el('p', 'bank-rule');
@@ -299,7 +404,9 @@ export function openBank(deps: BankDeps): Closable {
     const take = btn(TAKE, 'primary bank-take');
     const foot = el('div', 'sheet-foot');
     foot.append(take);
-    root.append(stats, inbox, rule, terms, where, line, foot);
+    const cage = el('div', 'bank-cage');
+    cage.append(rule, terms, where, line, foot);
+    root.append(stats, jumps, inbox, cage);
 
     let busy = false;
     let note: Note | null = null;
@@ -320,6 +427,12 @@ export function openBank(deps: BankDeps): Closable {
       line.className = `bank-status ${shown.kind}`.trim();
       take.disabled = busy || !s.canAsk;
       take.hidden = note?.kind === 'ok';
+      // gold only while it's offered: a gold button that can't be pressed reads as broken
+      take.classList.toggle('primary', s.canAsk);
+      take.classList.toggle('ghost', !s.canAsk);
+      // the top-up is the cage's one action when it's offered; otherwise money moves on from here
+      cage.classList.toggle('offered', s.canAsk);
+      jumps.hidden = p.balance <= 0;
     };
     take.addEventListener('click', async () => {
       if (busy) return;
@@ -376,25 +489,32 @@ export function openBank(deps: BankDeps): Closable {
   // --- savings -------------------------------------------------------------------------------
   const savingsPane = (): Pane => {
     const root = el('section', 'bank-pane');
-    const big = el('div', 'bank-big money');
+    const head = header('Savings balance');
     const earning = el('p', 'bank-earning');
     const earningNow = el('span', 'money bank-ticking');
     const tiers = el('div', 'bank-tiers');
+    const tierRows: { row: HTMLElement; from: Cents; upTo: Cents }[] = [];
     let from = 0;
     for (const t of SAVINGS_TIERS) {
       const row = el('div', 'bank-tier');
       row.append(el('span', '', from === 0 ? `First ${formatMoney(t.upTo)}` : `${formatMoney(from)} to ${formatMoney(t.upTo)}`), el('span', 'money', `${percent(t.bp, 10_000)} a day`));
       tiers.append(row);
+      tierRows.push({ row, from, upTo: t.upTo });
       from = t.upTo;
     }
     const above = el('div', 'bank-tier');
     above.append(el('span', '', `Above ${formatMoney(from)}`), el('span', 'money', 'nothing'));
     tiers.append(above);
+    tierRows.push({ row: above, from, upTo: Infinity });
     const field = amountField('Amount', 'bank-sav-amt');
     const fills = el('div', 'bank-fills');
     const fromChecking = fill('Checking', field, () => state?.balance ?? 0);
     const fromSavings = fill('Savings', field, () => state?.savings.balance ?? 0);
     fills.append(fromChecking.b, fromSavings.b);
+    const preview = el('div', 'bank-preview bank-rows');
+    const pin = previewRow('Deposit');
+    const pout = previewRow('Withdraw');
+    preview.append(pin.root, pout.root);
     const line = status();
     const put = btn('Deposit', 'primary');
     const takeOut = btn('Withdraw');
@@ -402,11 +522,11 @@ export function openBank(deps: BankDeps): Closable {
     row.append(put, takeOut);
     const earned = el('p', 'quiet bank-terms');
     root.append(
-      el('div', 'bank-sub', 'Savings balance'),
-      big,
+      head.root,
       earning,
       field.root,
       fills,
+      preview,
       row,
       line.root,
       el('div', 'bank-sub', 'Rates'),
@@ -414,11 +534,41 @@ export function openBank(deps: BankDeps): Closable {
       el('p', 'quiet bank-terms', 'Simple interest by the millisecond on what the account holds, paid in at midnight UTC each day. Paid interest earns from then on. Moving money in and out earns only for the time it stays.'),
       earned,
     );
+    /** Check the amount against both accounts; say what each button would do. */
+    const check = () => {
+      const s = state;
+      const raw = field.input.value.trim();
+      const amount = field.value();
+      if (!s) return;
+      if (raw === '') {
+        field.problem(null);
+        pin.show(null);
+        pout.show(null);
+        put.disabled = takeOut.disabled = true;
+        return;
+      }
+      if (!amount) {
+        field.problem('Type an amount in dollars, like 2,500 or 99.50.');
+        pin.show(null);
+        pout.show(null);
+        put.disabled = takeOut.disabled = true;
+        return;
+      }
+      field.problem(null);
+      const canIn = amount <= s.balance;
+      const canOut = amount <= s.savings.balance;
+      pin.show(canIn ? `checking ${move(s.balance, s.balance - amount)} · savings ${move(s.savings.balance, s.savings.balance + amount)}, earning ${formatMoney(perDay(s.savings.balance + amount))} a day` : `more than your checking holds (${formatMoney(s.balance)})`, !canIn);
+      pout.show(canOut ? `savings ${move(s.savings.balance, s.savings.balance - amount)} · checking ${move(s.balance, s.balance + amount)}` : `more than your savings hold (${formatMoney(s.savings.balance)})`, !canOut);
+      put.disabled = !canIn;
+      takeOut.disabled = !canOut;
+    };
+    field.input.addEventListener('input', check);
     const run = (dir: 'in' | 'out', b: HTMLButtonElement) => {
       const amount = field.value();
       if (!amount) return line.show({ text: 'Type an amount in dollars.', kind: 'err' });
-      void act(b, line, () => bank.savings(dir, amount), () => `${formatMoney(amount)} ${dir === 'in' ? 'moved to savings' : 'moved to checking'}.`).then(() => {
-        field.input.value = '';
+      void act(b, line, `savings:${dir}:${amount}`, (op) => bank.savings(dir, amount, op), () => `${formatMoney(amount)} ${dir === 'in' ? 'moved to savings' : 'moved to checking'}.`).then((ok) => {
+        if (ok) field.clear();
+        else check();
       });
     };
     put.addEventListener('click', () => run('in', put));
@@ -426,10 +576,17 @@ export function openBank(deps: BankDeps): Closable {
     return {
       root,
       paint(s) {
-        big.textContent = formatMoney(s.savings.balance);
+        head.big.textContent = formatMoney(s.savings.balance);
+        head.line.textContent =
+          s.savings.balance > 0
+            ? `Earning ${formatMoney(perDay(s.savings.balance))} a day at this balance${s.savings.balance >= SAVINGS_TIERS.at(-1)!.upTo ? ': the most it pays on' : ''}.`
+            : `Nothing in savings yet. Move money in from checking to earn ${percent(SAVINGS_TIERS[0]!.bp, 10_000)} a day on the first ${formatMoney(SAVINGS_TIERS[0]!.upTo)}.`;
+        head.root.classList.toggle('empty', s.savings.balance === 0);
+        for (const t of tierRows) t.row.classList.toggle('here', s.savings.balance > t.from && s.savings.balance <= t.upTo);
         fromChecking.paint();
         fromSavings.paint();
         earned.textContent = `Interest paid in all: ${formatMoney(s.savings.earned)}.`;
+        check();
         this.tick!(now());
       },
       tick(t) {
@@ -452,8 +609,14 @@ export function openBank(deps: BankDeps): Closable {
         term = v;
         preview();
       },
-      'bank-seg',
+      'bank-seg bank-terms-seg',
     );
+    // each term as a card: how long, then its rate
+    for (const b of seg.root.querySelectorAll<HTMLButtonElement>('.seg-btn')) {
+      const t = TERMS.find((x) => x.id === b.dataset.id)!;
+      b.replaceChildren(el('span', 'bank-term-len', t.label), el('span', 'bank-term-rate money', `${percent(t.ppm, 1_000_000)}`));
+      b.setAttribute('aria-label', `${t.label} at ${percent(t.ppm, 1_000_000)} for the term`);
+    }
     const field = amountField('Amount', 'bank-dep-amt');
     const fills = el('div', 'bank-fills');
     const fromChecking = fill('Checking', field, () => state?.balance ?? 0);
@@ -463,6 +626,9 @@ export function openBank(deps: BankDeps): Closable {
     const open = btn('Open deposit', 'primary');
     const row = el('div', 'bank-actions');
     row.append(open);
+    const count = el('span', 'bank-count-line');
+    const listHead = el('div', 'bank-sub bank-sub-row');
+    listHead.append(el('span', '', 'Your deposits'), count);
     const list = el('div', 'bank-deposits');
     root.append(
       el('div', 'bank-sub', 'Open a deposit'),
@@ -473,32 +639,47 @@ export function openBank(deps: BankDeps): Closable {
       row,
       line.root,
       el('p', 'quiet bank-terms', `The rate is fixed when you open it and paid with the principal when the term ends. Breaking a deposit early pays the principal less ${percent(EARLY_FEE_PPM, 1_000_000)} and no interest. Up to ${DEPOSIT_MAX_OPEN} open, ${formatMoney(DEPOSIT_CAP)} in all, ${formatMoney(DEPOSIT_MIN)} at least.`),
-      el('div', 'bank-sub', 'Your deposits'),
+      listHead,
       list,
     );
+    /** The amount checked against the term's rules and your checking; the preview says what it pays. */
     const preview = () => {
       const amount = field.value();
+      const raw = field.input.value.trim();
       const t = TERMS.find((x) => x.id === term)!;
-      if (!amount) {
+      const s = state;
+      const openNow = s?.deposits.filter((d) => d.closedAt === undefined) ?? [];
+      const locked = openNow.reduce((a, d) => a + d.principal, 0);
+      let bad: string | null = null;
+      if (raw !== '' && !amount) bad = 'Type an amount in dollars, like 2,500 or 99.50.';
+      else if (amount && amount < DEPOSIT_MIN) bad = `Deposits start at ${formatMoney(DEPOSIT_MIN)}.`;
+      else if (amount && s && amount > s.balance) bad = `More than your checking holds (${formatMoney(s.balance)}).`;
+      else if (amount && openNow.length >= DEPOSIT_MAX_OPEN) bad = `You have ${DEPOSIT_MAX_OPEN} open, the most at once: collect or break one first.`;
+      else if (amount && locked + amount > DEPOSIT_CAP) bad = `Deposits hold up to ${formatMoney(DEPOSIT_CAP)} in all; ${formatMoney(Math.max(0, DEPOSIT_CAP - locked))} more fits.`;
+      field.problem(bad);
+      open.disabled = !amount || !!bad;
+      if (!amount || bad) {
         pre.textContent = `${t.label}: ${percent(t.ppm, 1_000_000)} for the term.`;
         return;
       }
-      pre.textContent = `Pays ${formatMoney(amount + depositInterest(amount, t))} (${formatMoney(depositInterest(amount, t))} interest) on ${shortFmt.format(now() + t.ms)}.`;
+      const interest = depositInterest(amount, t);
+      pre.textContent = `Pays ${formatMoney(amount + interest)} (${formatMoney(interest)} interest) on ${shortFmt.format(now() + t.ms)}. Checking after: ${formatMoney((s?.balance ?? 0) - amount)}.`;
     };
     field.input.addEventListener('input', preview);
     preview();
     open.addEventListener('click', () => {
       const amount = field.value();
       if (!amount) return line.show({ text: 'Type an amount in dollars.', kind: 'err' });
-      void act(open, line, () => bank.deposit(term, amount), () => `Deposit opened: ${formatMoney(amount)} for ${termLabel(term)}.`).then(() => {
-        field.input.value = '';
+      const t = term;
+      void act(open, line, `deposit:${t}:${amount}`, (op) => bank.deposit(t, amount, op), () => `Deposit opened: ${formatMoney(amount)} for ${termLabel(t)}.`).then((ok) => {
+        if (ok) field.clear();
         preview();
       });
     });
-    const rows = new Map<string, { bar: HTMLElement; left: HTMLElement; action: HTMLButtonElement; d: DepositView }>();
+    const rows = new Map<string, { bar: HTMLElement; left: HTMLElement; action: HTMLButtonElement; d: DepositView; card: HTMLElement }>();
     const close = (d: DepositView, b: HTMLButtonElement) => {
       const matured = now() >= d.maturesAt;
-      const go = () => void act(b, line, () => bank.closeDeposit(d.id), (s) => (matured ? `Repaid ${formatMoney(d.principal + d.interest)}.` : `Broken early: ${formatMoney(d.principal - earlyFee(d.principal))} back.`) + ` Checking: ${formatMoney(s.balance)}.`);
+      const go = () => void act(b, line, `close:${d.id}`, (op) => bank.closeDeposit(d.id, op), (s) => (matured ? `Repaid ${formatMoney(d.principal + d.interest)}.` : `Broken early: ${formatMoney(d.principal - earlyFee(d.principal))} back.`) + ` Checking: ${formatMoney(s.balance)}.`);
       if (matured) return go();
       const yes = btn('Break it', 'primary');
       const no = btn('Keep it', 'ghost');
@@ -521,11 +702,18 @@ export function openBank(deps: BankDeps): Closable {
         fromChecking.paint();
         list.replaceChildren();
         rows.clear();
-        if (s.deposits.length === 0) list.append(el('p', 'quiet', 'None yet.'));
+        const openNow = s.deposits.filter((d) => d.closedAt === undefined);
+        const locked = openNow.reduce((a, d) => a + d.principal, 0);
+        count.textContent = openNow.length ? `${openNow.length} of ${DEPOSIT_MAX_OPEN} open · ${formatMoney(locked)} locked` : '';
+        if (s.deposits.length === 0) {
+          const empty = el('div', 'bank-empty');
+          empty.append(el('p', '', 'No deposits yet.'), el('p', 'quiet', 'Lock money away for an hour, a day or a week: the rate is fixed when you open it, and it comes back with the interest when the term ends.'));
+          list.append(empty);
+        }
         for (const d of s.deposits) {
-          const row = el('div', `bank-deposit ${d.closedAt !== undefined ? 'closed' : ''}`.trim());
-          const head = el('div', 'bank-deposit-head');
-          head.append(el('span', 'bank-deposit-term', termLabel(d.term)), el('span', 'money', formatMoney(d.principal)), el('span', 'money win', `+${formatMoney(d.interest)}`));
+          const card = el('div', `bank-deposit ${d.closedAt !== undefined ? 'closed' : ''}`.trim());
+          const top = el('div', 'bank-deposit-head');
+          top.append(el('span', 'bank-deposit-term', termLabel(d.term)), el('span', 'money', formatMoney(d.principal)), el('span', 'money win', `+${formatMoney(d.interest)}`));
           const bar = el('div', 'bank-bar');
           const fillBar = el('i');
           bar.append(fillBar);
@@ -533,28 +721,30 @@ export function openBank(deps: BankDeps): Closable {
           const action = btn('', 'bank-small');
           const foot = el('div', 'bank-deposit-foot');
           foot.append(left, action);
-          row.append(head, bar, foot);
+          card.append(top, bar, foot);
           if (d.closedAt !== undefined) {
             action.hidden = true;
             bar.hidden = true;
             left.textContent = `Closed ${shortFmt.format(d.closedAt)}: ${formatMoney(d.paid ?? 0)} paid back.`;
           } else {
             action.addEventListener('click', () => close(d, action));
-            rows.set(d.id, { bar: fillBar, left, action, d });
+            rows.set(d.id, { bar: fillBar, left, action, d, card });
           }
-          list.append(row);
+          list.append(card);
         }
+        preview();
         this.tick!(now());
       },
       tick(t) {
-        for (const { bar, left, action, d } of rows.values()) {
+        for (const { bar, left, action, d, card } of rows.values()) {
           const done = Math.min(1, (t - d.openedAt) / (d.maturesAt - d.openedAt));
-          bar.style.width = `${(done * 100).toFixed(2)}%`;
+          bar.style.transform = `scaleX(${done.toFixed(4)})`;
           const matured = t >= d.maturesAt;
-          left.textContent = matured ? `Matured ${shortFmt.format(d.maturesAt)}` : `Matures ${until(d.maturesAt - t)}, ${shortFmt.format(d.maturesAt)}`;
-          const label = matured ? 'Collect' : 'Break early';
+          left.textContent = matured ? `Matured ${shortFmt.format(d.maturesAt)}: collect it` : `Matures ${until(d.maturesAt - t)}, ${shortFmt.format(d.maturesAt)}`;
+          const label = matured ? `Collect ${formatMoney(d.principal + d.interest)}` : 'Break early';
           if (action.textContent !== label && !action.disabled) action.textContent = label;
           action.classList.toggle('primary', matured);
+          card.classList.toggle('due', matured);
         }
       },
     };
@@ -574,7 +764,7 @@ export function openBank(deps: BankDeps): Closable {
       const n = ++asked;
       bank
         .market(range)
-        .then((m: MarketResponse) => n === asked && chart.set(m.points))
+        .then((m: MarketResponse) => n === asked && chart.set(m.points, range))
         .catch(() => {});
     };
     const seg = segmented(
@@ -596,12 +786,18 @@ export function openBank(deps: BankDeps): Closable {
     const value = statTile('Value', '');
     const cost = statTile('Cost', '');
     const gain = statTile('Gain', '');
+    const gainPct = el('div', 'bank-stat-sub money');
+    gain.tile.append(gainPct);
     stats.append(units.tile, value.tile, cost.tile, gain.tile);
     const field = amountField('Amount', 'bank-fund-amt');
     const fills = el('div', 'bank-fills');
     const fromChecking = fill('Checking', field, () => state?.balance ?? 0);
     const holding = fill('Holding', field, () => state?.fund.value ?? 0);
     fills.append(fromChecking.b, holding.b);
+    const preview = el('div', 'bank-preview bank-rows');
+    const pbuy = previewRow('Buy');
+    const psell = previewRow('Sell');
+    preview.append(pbuy.root, psell.root);
     const line = status();
     const buyB = btn('Buy', 'primary');
     const sellB = btn('Sell');
@@ -615,6 +811,7 @@ export function openBank(deps: BankDeps): Closable {
       stats,
       field.root,
       fills,
+      preview,
       row,
       line.root,
       el(
@@ -623,17 +820,45 @@ export function openBank(deps: BankDeps): Closable {
         `One price for everyone, a new one every five minutes. Over time it drifts up about ${percent(FUND_DAY_DRIFT, 1)} a day, but it swings about ${percent(FUND_DAY_VOL, 1)} a day either way: it can lose, and nobody knows the next price before it happens. Bought and sold at the price now, no fees, rounded down to the cent.`,
       ),
     );
+    /** The amount against your checking and your holding: what a buy gets, what a sale leaves. */
+    const check = () => {
+      const s = state;
+      if (!s) return;
+      const raw = field.input.value.trim();
+      const amount = field.value();
+      sellAll.disabled = s.fund.units === 0;
+      if (raw === '' || !amount) {
+        field.problem(raw === '' ? null : 'Type an amount in dollars, like 2,500 or 99.50.');
+        pbuy.show(null);
+        psell.show(s.fund.units === 0 && raw === '' ? `you don't hold any yet; buys start at ${formatMoney(FUND_MIN)}` : null);
+        buyB.disabled = sellB.disabled = true;
+        return;
+      }
+      field.problem(null);
+      const p = s.fund.price;
+      let buyWhy: string | null = null;
+      if (amount < FUND_MIN) buyWhy = `buys start at ${formatMoney(FUND_MIN)}`;
+      else if (amount > s.balance) buyWhy = `more than your checking holds (${formatMoney(s.balance)})`;
+      else if (s.fund.cost + amount > FUND_CAP) buyWhy = `the ${FUND_NAME} takes ${formatMoney(FUND_CAP)} per player at cost; ${formatMoney(Math.max(0, FUND_CAP - s.fund.cost))} more fits`;
+      pbuy.show(buyWhy ?? `about ${formatUnits(unitsFor(amount, p))} units at ${formatPrice(p)} · checking ${move(s.balance, s.balance - amount)}`, !!buyWhy);
+      if (s.fund.units === 0) psell.show("you don't hold any to sell", true);
+      else if (amount >= s.fund.value) psell.show(`all of it, ${formatMoney(valueOf(s.fund.units, p))} · checking ${move(s.balance, s.balance + valueOf(s.fund.units, p))}`);
+      else psell.show(`${formatMoney(amount)} of your ${formatMoney(s.fund.value)} · checking ${move(s.balance, s.balance + amount)}`);
+      buyB.disabled = !!buyWhy;
+      sellB.disabled = s.fund.units === 0;
+    };
+    field.input.addEventListener('input', check);
     buyB.addEventListener('click', () => {
       const amount = field.value();
       if (!amount || amount < FUND_MIN) return line.show({ text: `Buys start at ${formatMoney(FUND_MIN)}.`, kind: 'err' });
-      void act(buyB, line, () => bank.buy(amount), (s) => `Bought ${formatMoney(amount)} at ${formatPrice(s.fund.price)}.`).then(() => (field.input.value = ''));
+      void act(buyB, line, `buy:${amount}`, (op) => bank.buy(amount, op), (s) => `Bought ${formatMoney(amount)} at ${formatPrice(s.fund.price)}.`).then((ok) => ok && field.clear());
     });
     sellB.addEventListener('click', () => {
       const amount = field.value();
       if (!amount) return line.show({ text: 'Type an amount in dollars.', kind: 'err' });
-      void act(sellB, line, () => bank.sell(amount), (s) => `Sold at ${formatPrice(s.fund.price)}. Checking: ${formatMoney(s.balance)}.`).then(() => (field.input.value = ''));
+      void act(sellB, line, `sell:${amount}`, (op) => bank.sell(amount, op), (s) => `Sold at ${formatPrice(s.fund.price)}. Checking: ${formatMoney(s.balance)}.`).then((ok) => ok && field.clear());
     });
-    sellAll.addEventListener('click', () => void act(sellAll, line, () => bank.sell('all'), (s) => `Sold everything at ${formatPrice(s.fund.price)}. Checking: ${formatMoney(s.balance)}.`));
+    sellAll.addEventListener('click', () => void act(sellAll, line, 'sell:all', (op) => bank.sell('all', op), (s) => `Sold everything at ${formatPrice(s.fund.price)}. Checking: ${formatMoney(s.balance)}.`));
     let lastStep = -1;
     return {
       root,
@@ -648,8 +873,10 @@ export function openBank(deps: BankDeps): Closable {
         const g = s.fund.value - s.fund.cost;
         gain.value.textContent = formatMoney(g, { sign: true });
         gain.value.className = `stat-value money ${g > 0 ? 'win' : g < 0 ? 'lose' : ''}`.trim();
+        gainPct.textContent = s.fund.cost > 0 ? `${g >= 0 ? '+' : '−'}${Math.abs((g / s.fund.cost) * 100).toFixed(2)}% on cost` : '';
         fromChecking.paint();
         holding.paint();
+        check();
         if (s.fund.step !== lastStep) {
           lastStep = s.fund.step;
           loadChart();
@@ -667,6 +894,7 @@ export function openBank(deps: BankDeps): Closable {
     const field = amountField('Amount', 'bank-send-amt');
     const note = textField('Note', 'bank-send-note', SEND.noteMax, 'Optional');
     const can = el('p', 'bank-preview');
+    const after = el('p', 'bank-preview bank-after');
     const line = status();
     const go = btn('Send', 'primary');
     const row = el('div', 'bank-actions');
@@ -680,17 +908,37 @@ export function openBank(deps: BankDeps): Closable {
     ]) {
       rules.append(el('li', '', r));
     }
-    root.append(inbox, el('div', 'bank-sub', 'Send money'), to.root, field.root, note.root, can, row, line.root, el('div', 'bank-sub', 'Limits'), rules);
+    root.append(inbox, el('div', 'bank-sub', 'Send money'), to.root, field.root, note.root, can, after, row, line.root, el('div', 'bank-sub', 'Limits'), rules);
+    /** The form checked as it's typed: who it's to, the amount against what can go now. */
+    const check = () => {
+      const s = state;
+      const name = to.input.value.trim();
+      const me = deps.session.profile?.name ?? '';
+      to.hint.textContent = name && name.toLowerCase() === me.toLowerCase() ? "That's you: send it to another player." : '';
+      note.count.textContent = note.input.value ? `${[...note.input.value].length}/${SEND.noteMax}` : '';
+      const raw = field.input.value.trim();
+      const amount = field.value();
+      let bad: string | null = null;
+      if (raw !== '' && !amount) bad = 'Type an amount in dollars, like 2,500 or 99.50.';
+      else if (amount && amount < SEND.min) bad = `Transfers start at ${formatMoney(SEND.min)}.`;
+      else if (amount && s && amount > s.send.sendable) bad = s.send.sendable > 0 ? `You can send up to ${formatMoney(s.send.sendable)} now.` : "You can't send money now.";
+      field.problem(bad);
+      after.textContent = amount && !bad && s ? `After this: checking ${move(s.balance, s.balance - amount)}${name ? `, and ${name} gets ${formatMoney(amount)}` : ''}.` : '';
+      go.disabled = !s || s.send.sendable <= 0 || !!bad || !!to.hint.textContent;
+    };
+    for (const i of [to.input, field.input, note.input]) i.addEventListener('input', check);
     const send = (confirm: boolean) => {
       const amount = field.value();
       const name = to.input.value.trim();
       if (!name) return line.show({ text: 'Who to? Type their player name.', kind: 'err' });
       if (!amount) return line.show({ text: 'Type an amount in dollars.', kind: 'err' });
-      void act(go, line, () => bank.send(name, amount, note.input.value, confirm), () => `Sent ${formatMoney(amount)} to ${name}.`).then(() => {
-        if (!line.root.classList.contains('err')) {
-          field.input.value = '';
+      const text = note.input.value;
+      void act(go, line, `send:${name.toLowerCase()}:${amount}:${text}`, (op) => bank.send(name, amount, text, confirm, op), () => `Sent ${formatMoney(amount)} to ${name}.`).then((ok) => {
+        if (ok) {
+          field.clear();
           note.input.value = '';
         }
+        check();
       });
     };
     go.addEventListener('click', () => {
@@ -699,7 +947,13 @@ export function openBank(deps: BankDeps): Closable {
       const yes = btn(`Send ${formatMoney(amount)}`, 'primary');
       const no = btn('Cancel', 'ghost');
       const who = to.input.value.trim();
-      const m = modal('Confirm the transfer', [`${formatMoney(amount)} to ${who}${note.input.value.trim() ? `, "${note.input.value.trim()}"` : ''}. Transfers can't be taken back.`], [no, yes], () => m.close());
+      const bal = state?.balance ?? 0;
+      const m = modal(
+        'Confirm the transfer',
+        [`${formatMoney(amount)} to ${who}${note.input.value.trim() ? `, "${note.input.value.trim()}"` : ''}. Transfers can't be taken back.`, `Checking after: ${formatMoney(bal - amount)}.`],
+        [no, yes],
+        () => m.close(),
+      );
       m.root.parentElement?.classList.add('bank-over');
       no.addEventListener('click', () => m.close());
       yes.addEventListener('click', () => {
@@ -720,7 +974,7 @@ export function openBank(deps: BankDeps): Closable {
           if (r.sentToday > 0) parts.push(`Sent in the last 24 hours: ${formatMoney(r.sentToday)}.`);
           can.textContent = parts.join(' ');
         }
-        go.disabled = r.sendable <= 0;
+        check();
       },
     };
   };
@@ -728,25 +982,54 @@ export function openBank(deps: BankDeps): Closable {
   // --- statement -----------------------------------------------------------------------------
   const statementPane = (): Pane => {
     const root = el('section', 'bank-pane');
+    let group: LineGroup | 'all' = 'all';
+    const filter = segmented<LineGroup | 'all'>(
+      'Show',
+      [
+        { id: 'all', label: 'All' },
+        { id: 'purchases', label: 'Purchases' },
+        { id: 'bank', label: 'Bank' },
+        { id: 'tables', label: 'Tables' },
+        { id: 'transfers', label: 'Transfers' },
+      ],
+      group,
+      (g) => {
+        group = g;
+        render();
+      },
+      'bank-filter',
+    );
     const table = el('div', 'bank-statement');
     const head = el('div', 'bank-line bank-line-head');
-    for (const h of ['Date', 'Description', 'Account', 'Amount', 'Balance']) head.append(el('span', '', h));
+    for (const h of ['Time', 'Description', 'Account', 'Amount', 'Balance']) head.append(el('span', '', h));
     const body = el('div', 'bank-lines');
     table.append(head, body);
-    const more = btn('Load more', 'ghost');
+    const summary = el('p', 'quiet bank-summary');
+    const more = btn('Load more', 'ghost bank-more');
     more.hidden = true;
     const line = status();
-    root.append(table, line.root, more);
+    root.append(filter.root, table, summary, line.root, more);
     let next: string | null = null;
-    const add = (lines: StatementLine[]) => {
-      for (const l of lines) {
+    let loaded: StatementLine[] = [];
+    let fetched = false;
+    const render = () => {
+      body.replaceChildren();
+      const shown = group === 'all' ? loaded : loaded.filter((l) => lineGroup(l) === group);
+      let day = '';
+      const today = new Date(now());
+      for (const l of shown) {
+        const h = dayHeading(l.at, today);
+        if (h !== day) {
+          body.append(el('div', 'bank-day', h));
+          day = h;
+        }
         const d = describe(l);
         const amount = lineAmount(l);
         const row = el('div', 'bank-line');
         const text = el('span', 'bank-line-text', d.text);
         if (l.note) text.append(el('span', 'bank-note', l.note));
         row.append(
-          el('span', 'bank-line-date', shortFmt.format(l.at)),
+          el('span', 'bank-line-date', timeFmt.format(l.at)),
           text,
           el('span', 'bank-line-acct', d.account),
           el('span', `money bank-line-amt ${amount > 0 ? 'win' : ''}`.trim(), amount === 0 ? '' : formatMoney(amount, { sign: true })),
@@ -754,17 +1037,26 @@ export function openBank(deps: BankDeps): Closable {
         );
         body.append(row);
       }
+      if (fetched && shown.length === 0) {
+        const empty = el('div', 'bank-empty');
+        empty.append(el('p', '', loaded.length === 0 ? 'Nothing yet.' : 'None in what has loaded so far.'), el('p', 'quiet', next ? 'Load more to look further back.' : loaded.length === 0 ? 'Every movement of your money shows here as it happens.' : 'That is everything.'));
+        body.append(empty);
+      }
+      // a purchases filter adds them up: the history of what you've bought
+      const spent = shown.reduce((t, l) => t + (lineAmount(l) < 0 ? -lineAmount(l) : 0), 0);
+      summary.textContent = group === 'purchases' && shown.length ? `${shown.length} ${shown.length === 1 ? 'purchase' : 'purchases'} loaded, ${formatMoney(spent)} in all.` : '';
     };
     const load = () => {
       more.disabled = true;
       bank
         .statement(next)
         .then((r) => {
-          add(r.lines);
+          fetched = true;
+          loaded = [...loaded, ...r.lines];
           next = r.next;
           more.hidden = !next;
           more.disabled = false;
-          if (body.childElementCount === 0) body.append(el('p', 'quiet', 'Nothing yet.'));
+          render();
         })
         .catch((err) => {
           more.disabled = false;
@@ -777,8 +1069,10 @@ export function openBank(deps: BankDeps): Closable {
       paint() {},
       shown() {
         // from the top each time it's opened, so it includes what just happened
-        body.replaceChildren();
+        loaded = [];
         next = null;
+        fetched = false;
+        body.replaceChildren();
         load();
       },
     };
@@ -806,6 +1100,7 @@ export function openBank(deps: BankDeps): Closable {
       if (state) pane.paint(state);
     }
     main.replaceChildren(pane.root);
+    main.scrollTop = 0;
     if (!state) main.prepend(loading);
     pane.shown?.();
   };
