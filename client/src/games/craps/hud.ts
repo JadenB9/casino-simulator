@@ -131,6 +131,9 @@ export class CrapsHud {
       return;
     }
     const key = `${lines.join('|')}|${edge ?? ''}`;
+    const at = `${x},${y},${above}`;
+    if (key === this.tipKey && at === this.tipAt && !this.tip.hidden) return;
+    this.tipAt = at;
     if (key !== this.tipKey) {
       this.tipKey = key;
       this.tip.replaceChildren(...lines.map((l, i) => el('div', i === 0 ? 'craps-tip-head' : 'craps-tip-line', l)));
@@ -146,6 +149,7 @@ export class CrapsHud {
   }
 
   private tipKey = '';
+  private tipAt = '';
 
   dispose(): void {
     this.root.remove();

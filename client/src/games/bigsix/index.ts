@@ -232,7 +232,12 @@ function mountBigSix(ctx: TableViewCtx): TableView {
   const tip = new Tooltip();
   const clock = new Clock();
   const players = new Players();
-  ctx.ui.append(history.root, meters.root, tip.root, players.root);
+  // the last spins on the left, the meters and the players on the right, in one see-through row
+  const side = el('div', 'bs-side pass');
+  side.append(meters.root, players.root);
+  const hud = el('div', 'bs-hud pass');
+  hud.append(history.root, side);
+  ctx.ui.append(hud, tip.root);
   const plaqueObj = stage.label(plaque.root, new THREE.Vector3(FRAME_OUT + 0.36, WHEEL_Y + 0.3, WHEEL_Z));
   const clockObj = stage.label(clock.root, new THREE.Vector3(TABLE_W / 2 - 0.2, TOP_Y + 0.12, TABLE_Z - TABLE_D / 2 + 0.1));
   const best = el('div', 'bs-best tip-pick', 'Lowest edge');
@@ -746,7 +751,8 @@ function mountBigSix(ctx: TableViewCtx): TableView {
       }
       cfg = snap.meta.config;
       tray.setChipMax(cfg.limits.spot?.max ?? TRAY_MAX, cfg.limits.spot?.min ?? 0);
-      mySeat = snap.you.seat;
+      // watching (joined, not yet bought in) is no seat at the layout
+      mySeat = snap.you.status === 'watching' ? null : snap.you.seat;
       stack = snap.you.stack;
       members = snap.members;
       const v = snap.view as BigSixView;
@@ -807,7 +813,7 @@ function mountBigSix(ctx: TableViewCtx): TableView {
     },
 
     onSeat(msg) {
-      if (msg.seat !== null) mySeat = msg.seat;
+      mySeat = msg.status === 'watching' ? null : msg.seat;
       if (animating) pendingStack = msg.stack;
       else stack = msg.stack;
       meters.set({ stack: animating ? undefined : stack });
@@ -874,7 +880,7 @@ function mountBigSix(ctx: TableViewCtx): TableView {
       removeEventListener('pointermove', onMove);
       removeEventListener('pointerdown', onDown);
       canvas.removeEventListener('pointerleave', onLeave);
-      for (const node of [history.root, meters.root, tip.root, players.root, tray.root]) node.remove();
+      for (const node of [hud, tip.root, tray.root]) node.remove();
       for (const o of [plaqueObj, clockObj, bestObj]) o.removeFromParent();
       plaque.root.remove();
       clock.root.remove();

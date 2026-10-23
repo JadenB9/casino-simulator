@@ -81,7 +81,6 @@ const CALL_AT: Record<CallId, [number, number]> = { tiers: [44, 176], orphelins:
 export class Racetrack {
   readonly root = el('section', 'rl-track panel');
   private readonly cells = new Map<number, SVGGElement>();
-  private readonly calls = new Map<CallId, SVGGElement>();
   private readonly count = el('span', 'rl-track-count money');
   private readonly slots: HTMLButtonElement[] = [];
   private readonly saveBtn: HTMLButtonElement;
@@ -89,6 +88,10 @@ export class Racetrack {
   private readonly more: HTMLButtonElement;
   private saving = false;
   private k: number;
+  /** Open as the player left it, and stepped aside while the ball is in play. */
+  private wanted = false;
+  private away = false;
+  private touchTimer = 0;
 
   constructor(private readonly variant: Variant, private readonly h: TrackHandlers, k: number) {
     this.k = k;
@@ -156,7 +159,6 @@ export class Racetrack {
       chips.textContent = `${c.pieces.reduce((a, p) => a + p.units, 0)} chips`;
       g.append(name, chips);
       this.hookup(g, { kind: 'call', id: c.id });
-      this.calls.set(c.id, g);
       inner.append(g);
     }
     track.append(inner);
@@ -174,9 +176,17 @@ export class Racetrack {
       e.stopPropagation();
       this.h.pick(p);
     });
-    g.addEventListener('pointerenter', (e) => this.h.hover(p, e.clientX, e.clientY));
+    g.addEventListener('pointerenter', (e) => {
+      clearTimeout(this.touchTimer);
+      this.h.hover(p, e.clientX, e.clientY);
+    });
     g.addEventListener('pointermove', (e) => this.h.hover(p, e.clientX, e.clientY));
-    g.addEventListener('pointerleave', () => this.h.hover(null, 0, 0));
+    g.addEventListener('pointerleave', (e) => {
+      // a finger lifts as it taps: its card stays a moment, as a tap on the layout's does
+      clearTimeout(this.touchTimer);
+      if (e.pointerType === 'touch') this.touchTimer = window.setTimeout(() => this.h.hover(null, 0, 0), 2400);
+      else this.h.hover(null, 0, 0);
+    });
     g.addEventListener('focus', () => {
       const r = g.getBoundingClientRect();
       this.h.hover(p, r.left + r.width / 2, r.top);
@@ -184,13 +194,27 @@ export class Racetrack {
     g.addEventListener('blur', () => this.h.hover(null, 0, 0));
   }
 
+  /** Whether the player has it open (it may be stepped aside for a spin). */
   get open(): boolean {
-    return !this.root.hidden;
+    return this.wanted;
   }
 
   show(on: boolean): void {
-    this.root.hidden = !on;
+    this.wanted = on;
     if (!on) this.setSaving(false);
+    this.root.hidden = !this.wanted || this.away;
+  }
+
+  /** Step aside while the ball is in play, and come back after. */
+  stepAside(on: boolean): void {
+    this.away = on;
+    if (on) clearTimeout(this.touchTimer);
+    this.root.hidden = !this.wanted || this.away;
+  }
+
+  dispose(): void {
+    clearTimeout(this.touchTimer);
+    this.root.remove();
   }
 
   /** Light these numbers on the track (the ones the hovered bet covers). */

@@ -69,7 +69,7 @@ body.calm .craps-result { animation: craps-fade 0.35s both; }
   .craps-die { width: 16px; height: 16px; }
   .craps-quick { padding-top: 5px; gap: 4px; }
   .craps-quick .btn { height: 26px; min-height: 26px; font-size: 13px; }
-  .craps-result { position: fixed !important; left: auto; right: 10px; top: calc(var(--below-hud) + 6px); bottom: auto; transform: none !important; gap: 10px; padding: 6px 12px 6px 8px; }
+  .craps-result { position: fixed !important; left: 10px; bottom: 72px; transform: none !important; gap: 10px; padding: 6px 12px 6px 8px; }
   .craps-result-dice .craps-die { width: 20px; height: 20px; }
   .craps-result-call { font-size: 16px; }
   .craps-result-detail { font-size: 13px; }

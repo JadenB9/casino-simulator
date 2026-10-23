@@ -147,3 +147,28 @@ describe('the longer log of results', () => {
     expect(logKey('roulette', 'rl-k3x9', 'multi')).toBeNull();
   });
 });
+
+describe('a solo table keeps its log between visits', () => {
+  it('writes the merged log and reads it back, ignoring junk', () => {
+    const store = new Map<string, string>();
+    const shim = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v), removeItem: (k: string) => void store.delete(k) };
+    const g = globalThis as unknown as { localStorage?: unknown };
+    const had = g.localStorage;
+    g.localStorage = shim;
+    try {
+      const isN = (x: unknown): x is number => typeof x === 'number';
+      const key = logKey('roulette', 'solo:roulette:european:7', 'solo', 'european')!;
+      const a = new SpinLog<number>(key, isN);
+      a.merge([5, 9, 12, 30]);
+      a.merge([17, 5, 9, 12, 30]);
+      expect(JSON.parse(store.get(key)!)).toEqual([17, 5, 9, 12, 30]);
+      expect(new SpinLog<number>(key, isN).results).toEqual([17, 5, 9, 12, 30]);
+      store.set(key, '["x"]');
+      expect(new SpinLog<number>(key, isN).results).toEqual([]);
+      store.set(key, '{not json');
+      expect(new SpinLog<number>(key, isN).results).toEqual([]);
+    } finally {
+      g.localStorage = had;
+    }
+  });
+});

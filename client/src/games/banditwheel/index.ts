@@ -20,6 +20,7 @@ import { chipOn } from '../../table/max.ts';
 import { tween, ease } from '../../table/tween.ts';
 import { celebrate } from '../../table/celebrate.ts';
 import { serverNow } from '../../net/clock.ts';
+import { el } from '../../ui/kit.ts';
 import {
   FOOTPRINT, OVERVIEW_POSE, FLAPPER_POSE, TERMINALS, TERM_R, STOOL_R, TOP_Y, CUP_W, HUB_Y, WHEEL_Z, FACE_R, PIVOT_R,
   seatPositions, seatPose, wheelPose, terminalOfSeat, terminalYaw, cupPlace, onArc,
@@ -257,7 +258,10 @@ function mountBanditWheel(ctx: TableViewCtx): TableView {
   let log = new SpinLog<number>(null, isSlot);
   let logAt: string | null = null;
   const players = new Players();
-  ctx.ui.append(history.root, players.root, panel.root);
+  // the results strip and the players under it, in one see-through column top left
+  const left = el('div', 'bw-left pass');
+  left.append(history.root, players.root);
+  ctx.ui.append(left, panel.root);
   panel.setHints(
     Object.fromEntries(
       SPOTS.map((s) => [s.key, `${s.key} pays ${paysLabel(s)} · ${s.slots} of ${SLOTS} slots · house edge ${edgePercent(s)}%`]),
@@ -731,7 +735,8 @@ function mountBanditWheel(ctx: TableViewCtx): TableView {
         logAt = kept;
         log = new SpinLog<number>(kept, isSlot);
       }
-      mySeat = snap.you.seat;
+      // watching (joined, not yet bought in) is no seat at the layout
+      mySeat = snap.you.status === 'watching' ? null : snap.you.seat;
       fitBoard();
       stack = snap.you.stack;
       pendingStack = null;
@@ -812,7 +817,7 @@ function mountBanditWheel(ctx: TableViewCtx): TableView {
     },
 
     onSeat(msg) {
-      if (msg.seat !== null) mySeat = msg.seat;
+      mySeat = msg.status === 'watching' ? null : msg.seat;
       fitBoard();
       if (animating) pendingStack = msg.stack;
       else stack = msg.stack;
@@ -872,7 +877,7 @@ function mountBanditWheel(ctx: TableViewCtx): TableView {
       removeEventListener('pointerdown', onDown);
       removeEventListener('pointermove', onMove);
       canvas.style.cursor = '';
-      for (const node of [history.root, players.root, panel.root]) node.remove();
+      for (const node of [left, panel.root]) node.remove();
       for (const { obj, tag } of tags.values()) {
         obj.removeFromParent();
         tag.root.remove();

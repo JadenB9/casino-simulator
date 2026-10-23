@@ -76,8 +76,9 @@
 .bw-meter-label { font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--bw-ink-3); }
 .bw-meter-value { font-size: 19px; font-weight: 600; }
 
-/* the results strip, top left */
-.bw-history { position: fixed; top: var(--below-hud); left: 16px; padding: 8px 10px 10px; background: rgba(36, 34, 31, 0.92); border-radius: 2px; color: #ebe6dc; }
+/* the results strip top left, the players under it (one see-through column, so neither guesses the other's height) */
+.bw-left { position: fixed; top: var(--below-hud); left: 16px; display: grid; justify-items: start; gap: 8px; }
+.bw-history { padding: 8px 10px 10px; background: rgba(36, 34, 31, 0.92); border-radius: 2px; color: #ebe6dc; }
 .bw-history-label, .bw-players-label { margin-bottom: 6px; font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: #857d70; }
 /* the latest spin large on the left, the eleven before it on top and eleven more under them */
 .bw-history-row { display: grid; grid-template-columns: 52px repeat(11, 24px); grid-auto-rows: 24px; gap: 4px; align-items: center; }
@@ -93,7 +94,7 @@
 .bw-tally-of { font-size: 12px; letter-spacing: 0.08em; color: #857d70; }
 
 /* the players at the wheel, under the strip */
-.bw-players { position: fixed; top: calc(var(--below-hud) + 96px); left: 16px; width: 330px; display: grid; gap: 5px; padding: 8px 10px; background: rgba(38, 36, 33, 0.88); border-radius: 2px; color: #ebe6dc; }
+.bw-players { width: 330px; display: grid; gap: 5px; padding: 8px 10px; background: rgba(38, 36, 33, 0.88); border-radius: 2px; color: #ebe6dc; }
 .bw-player { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; grid-template-areas: 'name status stack' 'bets bets bets'; column-gap: 8px; align-items: baseline; padding: 3px 0; border-top: 1px solid rgba(255, 255, 255, 0.06); font-size: 16px; }
 .bw-player.you .bw-player-name { color: #f1e3b0; }
 .bw-player.away { opacity: 0.55; }
@@ -146,7 +147,8 @@
   .bw-win-value { font-size: 19px; }
   .bw-meters { gap: 2px; }
   .bw-meter-value { font-size: 15px; }
-  .bw-history { left: 8px; padding: 6px 8px; }
+  .bw-left { left: 8px; }
+  .bw-history { padding: 6px 8px; }
   .bw-history-label { display: none; }
   .bw-history-row { grid-template-columns: 36px repeat(8, 18px); grid-auto-rows: 18px; }
   .bw-hist { width: 18px; height: 18px; }

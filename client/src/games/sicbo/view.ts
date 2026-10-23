@@ -16,7 +16,7 @@ import type { GameEvent, TableConfig } from '../../../../shared/src/engine.ts';
 import type { Member } from '../../../../shared/src/protocol.ts';
 import type { SicBoView, SicBoAction, SeatSettle, RollInfo } from '../../../../shared/src/games/sicbo/protocol.ts';
 import { BETTING_MS } from '../../../../shared/src/games/sicbo/engine.ts';
-import { spots, spotByKey, spotName, paysLabel, spotRule, houseEdge, winPays, callRoll, facePlural, type Dice } from '../../../../shared/src/games/sicbo/rules.ts';
+import { spots, spotByKey, spotName, paysLabel, spotRule, houseEdge, winPays, callRoll, facePlural, allRolls, type Dice, type Spot } from '../../../../shared/src/games/sicbo/rules.ts';
 import { formatMoney, type Cents } from '../../../../shared/src/money.ts';
 import { ChipTray, el } from '../../ui/kit.ts';
 import { chipOn, maxRefusal, sicBoMax, type MaxBet } from '../../table/max.ts';
@@ -56,6 +56,17 @@ export const SEATS: { position: [number, number, number]; yaw: number }[] = [
 ];
 
 const pct = (x: number) => `${(x * 100).toFixed(2)}%`;
+
+/** How many of the 216 equally likely rolls win a box (counted once per box). */
+const winsOf = new Map<string, number>();
+function wins(spot: Spot): number {
+  let w = winsOf.get(spot.key);
+  if (w === undefined) {
+    w = allRolls().filter((d) => winPays(spot, d) !== null).length;
+    winsOf.set(spot.key, w);
+  }
+  return w;
+}
 const EVEN_MONEY = ['small', 'big', 'odd', 'even'];
 
 /** One line of advice for the chips this player has down (tips on). */
@@ -189,7 +200,12 @@ export function mountSicBo(ctx: TableViewCtx): TableView {
   const tip = new Tip();
   const clock = new Clock();
   const players = new Players();
-  ctx.ui.append(history.root, meters.root, tip.root, players.root);
+  // the last rolls on the left, the meters and the players on the right, in one see-through row
+  const side = el('div', 'sb-side pass');
+  side.append(meters.root, players.root);
+  const hud = el('div', 'sb-hud pass');
+  hud.append(history.root, side);
+  ctx.ui.append(hud, tip.root);
   // the result board stands over the game's name, left of the dome, clear of the dealer's line and the banners
   const boardObj = stage.label(board.root, new THREE.Vector3(-0.66, TOP_Y + 0.1, SHAKER_Z + 0.03));
   const clockObj = stage.label(clock.root, new THREE.Vector3(0.34, TOP_Y + 0.12, SHAKER_Z + 0.03));
@@ -294,7 +310,7 @@ export function mountSicBo(ctx: TableViewCtx): TableView {
     const lines: { text: string; cls?: string }[] = [
       { text: `${spotName(spot)} · ${paysLabel(spot)}`, cls: 'sb-tip-name' },
       { text: spotRule(spot), cls: 'sb-tip-rule' },
-      { text: `House edge ${pct(houseEdge(spot))}`, cls: 'sb-tip-edge' },
+      { text: `Wins ${wins(spot)} of 216 rolls · house edge ${pct(houseEdge(spot))}`, cls: 'sb-tip-edge' },
     ];
     const most = canBet() ? maxOn(key) : null;
     if (most) lines.push({ text: 'amount' in most ? `Max adds ${formatMoney(most.amount)}` : most.none === 'AT_MAX' ? 'At the maximum' : 'Not enough chips for its minimum', cls: 'sb-tip-mine' });
@@ -733,7 +749,7 @@ export function mountSicBo(ctx: TableViewCtx): TableView {
       removeEventListener('pointermove', onMove);
       removeEventListener('pointerdown', onDown);
       canvas.removeEventListener('pointerleave', onLeave);
-      for (const node of [history.root, meters.root, tip.root, players.root, tray.root]) node.remove();
+      for (const node of [hud, tip.root, tray.root]) node.remove();
       boardObj.removeFromParent();
       clockObj.removeFromParent();
       board.root.remove();

@@ -672,6 +672,9 @@ function mountRoulette(ctx: TableViewCtx): TableView {
   async function playSpin(e: SpinEvent, settle: SettleEvent | undefined, next: RouletteView): Promise<void> {
     animating = true;
     endTouch();
+    // the racetrack steps aside while the ball is in play: the wheel's shot and the plaque have the screen
+    track.stepAside(true);
+    hoverTrack(null, 0, 0);
     onLeave();
     refreshControls();
     plaque.hide();
@@ -705,6 +708,7 @@ function mountRoulette(ctx: TableViewCtx): TableView {
     if (disposed) return;
     await settleTable(e.pocket, settle, next);
     animating = false;
+    track.stepAside(false);
   }
 
   function lift(p: THREE.Object3D, to: THREE.Vector3, ms: number, fade = true): Promise<void> {
@@ -862,7 +866,8 @@ function mountRoulette(ctx: TableViewCtx): TableView {
         log = new SpinLog<number>(kept, isNumber);
       }
       tray.setChipMax(cfg.limits.outside?.max ?? TRAY_MAX, cfg.limits.inside?.min ?? 0);
-      mySeat = snap.you.seat;
+      // watching (joined, not yet bought in) is no seat at the layout
+      mySeat = snap.you.status === 'watching' ? null : snap.you.seat;
       stack = snap.you.stack;
       members = snap.members;
       const v = snap.view as RouletteView;
@@ -870,6 +875,7 @@ function mountRoulette(ctx: TableViewCtx): TableView {
       driving = false;
       open = null;
       flight = null;
+      track.stepAside(false);
       void glideHome(0);
       sound.stopRoll();
       loose.clear();
@@ -930,7 +936,7 @@ function mountRoulette(ctx: TableViewCtx): TableView {
     },
 
     onSeat(msg) {
-      if (msg.seat !== null) mySeat = msg.seat;
+      mySeat = msg.status === 'watching' ? null : msg.seat;
       if (animating) pendingStack = msg.stack;
       else stack = msg.stack;
       meters.set({ stack: animating ? undefined : stack });
@@ -1003,7 +1009,8 @@ function mountRoulette(ctx: TableViewCtx): TableView {
       removeEventListener('pointerdown', onDown);
       canvas.removeEventListener('pointerleave', onLeave);
       sound.dispose();
-      for (const node of [hud, tip.root, track.root, tray.root]) node.remove();
+      track.dispose();
+      for (const node of [hud, tip.root, tray.root]) node.remove();
       plaqueObj.removeFromParent();
       clockObj.removeFromParent();
       plaque.root.remove();

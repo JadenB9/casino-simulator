@@ -148,6 +148,8 @@ body.calm .rl-result { animation: rl-rise-calm 0.35s both; }
   .rl-result-call { font-size: 21px; }
   .rl-tip { max-width: calc(100vw - 24px); }
   .rl-track { bottom: 226px; padding: 6px 8px 8px; }
+  /* the racetrack takes the strip's room while it's open, so the layout keeps some */
+  :root:has(.rl-track:not([hidden])) .rl-history { display: none; }
   :root:has(.rl-track:not([hidden])) { --tip-bottom: calc(226px + (100vw - 40px) / 4 + 104px); }
   .rl-track-title { display: none; }
 }
@@ -165,6 +167,7 @@ body.calm .rl-result { animation: rl-rise-calm 0.35s both; }
   .rl-num { min-width: 24px; height: 24px; font-size: 14px; }
   .rl-num.latest { min-width: 30px; height: 30px; font-size: 17px; }
   .rl-track { left: 10px; bottom: 50px; transform: none; width: min(440px, calc(100vw - 20px)); padding: 6px 8px 8px; }
+  :root:has(.rl-track:not([hidden])) .rl-history { display: none; }
   :root:has(.rl-track:not([hidden])) { --tip-bottom: calc(50px + (min(440px, 100vw - 20px) - 16px) / 4 + 60px); }
   .rl-track-title { display: none; }
 }
