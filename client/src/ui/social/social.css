@@ -51,6 +51,11 @@
 .lb-table td.lb-value.lose { color: var(--lose); }
 .lb-table tr.podium td.lb-rank { color: var(--brass); }
 .lb-table tr.p1 td.lb-rank { color: var(--brass-hi); }
+/* the podium: gold, silver and bronze medals (things in the world: their own metals) */
+.lb-medal { display: inline-grid; place-items: center; width: 24px; height: 24px; margin-left: -4px; border-radius: 50%; font-size: 14px; font-weight: 600; color: #1d140a; box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.22), 0 1px 3px rgba(0, 0, 0, 0.3); }
+.lb-medal.m1 { background: linear-gradient(#f6dd97, #c9a04c); }
+.lb-medal.m2 { background: linear-gradient(#eef0f2, #a9aeb4); }
+.lb-medal.m3 { background: linear-gradient(#e7b98c, #b27845); }
 
 /* Your row: lit, with a brass edge. */
 .lb-table tr.you td { background: rgba(var(--brass-rgb), 0.1); color: var(--brass-hi); border-bottom-color: rgba(var(--brass-rgb), 0.3); }
@@ -58,6 +63,9 @@
 .lb-table tr.you td.lb-value.lose { color: var(--lose); }
 .lb-table tr.you td.lb-rank { color: var(--brass-hi); box-shadow: inset 2px 0 0 var(--brass-hi); }
 .lb-you { display: inline-block; margin-left: 10px; padding: 0 6px; border: 1px solid rgba(var(--brass-hi-rgb), 0.45); border-radius: 3px; font-size: 11px; line-height: 16px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--brass-hi); vertical-align: 2px; }
+
+/* Your place below the ten stays in view at the bottom of the sheet while the board scrolls. */
+.lb-table tr.you.below td { position: sticky; bottom: -22px; z-index: 1; background: linear-gradient(rgba(var(--brass-rgb), 0.1), rgba(var(--brass-rgb), 0.1)), rgb(var(--sheet-rgb)); box-shadow: 0 -1px 0 rgba(var(--brass-rgb), 0.3); }
 
 /* The break between the top ten and your own place further down. */
 .lb-table tr.lb-gap td { height: 16px; padding: 0; border-bottom: 1px dashed rgba(var(--brass-rgb), 0.3); }
@@ -93,6 +101,10 @@
 .emo-divide { position: absolute; inset: 82px; border-radius: 50%; border: 1px solid rgba(var(--brass-rgb), 0.22); pointer-events: none; }
 
 .emo-hub { position: absolute; left: 50%; top: 50%; width: 118px; transform: translate(-50%, -50%); text-align: center; pointer-events: none; }
+/* the emote under the pointer or in focus, drawn large over its name */
+.emo-hub-glyph { display: grid; place-items: center; height: 0; color: var(--brass-hi); }
+.emo-hub-glyph:not(:empty) { height: 38px; margin-bottom: 3px; }
+.emo-hub-glyph .emo-glyph { width: 34px; height: 34px; }
 .emo-name { font-family: var(--serif); font-size: 14px; font-weight: 600; line-height: 1.15; letter-spacing: 0.1em; text-transform: uppercase; color: var(--brass-hi); text-wrap: balance; }
 .emo-hint { margin-top: 5px; font-size: 11px; line-height: 1.3; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); transition: color 0.15s; }
 /* A locked emote's price (or what earns it): read, not shouted. */
@@ -114,6 +126,11 @@
 .emo-tag { position: absolute; left: 50%; bottom: -9px; display: inline-flex; align-items: center; gap: 3px; transform: translateX(-50%); padding: 0 5px 0 4px; height: 16px; border: 1px solid rgba(var(--brass-rgb), 0.3); border-radius: 8px; background: var(--field); color: var(--brass); font: 600 10px/14px var(--ui); letter-spacing: 0.02em; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .emo-lock { width: 9px; height: 9px; fill: none; stroke: currentColor; stroke-linecap: round; }
 .emo-lock .fill { fill: currentColor; stroke: none; }
+
+/* Starred (the chat's quick picks): a small brass star on the button's foot. The last one made:
+   a brass ring (Space makes it again). */
+.emo-btn.fav::after { content: '★'; position: absolute; left: -3px; bottom: -3px; display: grid; place-items: center; width: 17px; height: 17px; border: 1px solid rgba(var(--brass-hi-rgb), 0.5); border-radius: 50%; background: var(--field); color: var(--brass-hi); font-size: 10px; line-height: 1; }
+.emo-btn.last { box-shadow: 0 0 0 2px rgba(var(--brass-hi-rgb), 0.55); }
 
 /* Too soon after the last few: the server would drop it, so the wheel waits. */
 .emo-wheel.cooling .emo-btn { opacity: 0.45; }

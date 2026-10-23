@@ -12,11 +12,14 @@
 //
 // While it's open it holds the keyboard like any panel, so a number picks a gesture rather than
 // a chip and W doesn't walk; it lets go the moment it closes. Esc, G again or a click or tap
-// outside put it away.
+// outside put it away. Space makes the last emote again (it's marked on the wheel), and F, or a
+// right-click, stars the one in focus: your starred ones are the chat box's quick picks
+// (favourites.ts keeps both).
 //
 // The floor lets three gestures through in a burst, then one every two seconds
-// (server/src/floor/index.ts). The wheel keeps the same count, a little slower, so it never
-// sends one the server would drop, and says so instead.
+// (server/src/floor/index.ts). The wheel keeps the same count, a little slower (favourites.ts's
+// gate, which the chat's picks share), so it never sends one the server would drop, and says so
+// instead.
 
 import './social.css';
 import { EMOTES, FREE_EMOTES, type EmoteId } from '../../../../shared/src/protocol.ts';
@@ -26,6 +29,7 @@ import { formatCompact, formatMoney } from '../../../../shared/src/money.ts';
 import { el } from '../kit.ts';
 import { GLOBAL_KEYS, holdKeyboard, isTyping, overlayCount } from '../keyboard.ts';
 import { EMOTE_LABELS, emoteGlyph, lockGlyph } from './icons.ts';
+import { emoteGate, favourites, lastEmote, noteEmote, toggleFavourite } from './favourites.ts';
 import { isKey, keyName, modified } from '../keys.ts';
 
 export interface EmoteDeps {
@@ -59,9 +63,6 @@ export const WHEEL_EMOTES: readonly EmoteId[] = [...INNER, ...OUTER];
 /** The outer ring's keys, clockwise from the top: the keyboard's top row. */
 const OUTER_KEYS = 'QWERTYUIOP[';
 
-const BURST = 3;
-/** The server refills at 0.5 a second; a tenth slower here absorbs network jitter. */
-const REFILL_PER_S = 0.45;
 /** Distance from the hub to each ring's button centres, px, and the wheel's own size. */
 const RADIUS = 92;
 const RADIUS_OUT = 170;
@@ -119,16 +120,7 @@ export function lockedLabel(e: EmoteId): { tag: string; line: string; reward: bo
 }
 
 export function mountEmotes(deps: EmoteDeps): EmoteWheel {
-  let tokens = BURST;
-  let tokensAt = performance.now();
-  const take = (): boolean => {
-    const now = performance.now();
-    tokens = Math.min(BURST, tokens + ((now - tokensAt) / 1000) * REFILL_PER_S);
-    tokensAt = now;
-    if (tokens < 1) return false;
-    tokens -= 1;
-    return true;
-  };
+  const take = (): boolean => emoteGate.take();
   /** Emotes the floor says you've got since the profile was read. */
   const granted = new Set<string>();
   const owned = (): Set<string> => new Set([...(deps.owned?.() ?? []), ...granted]);
@@ -136,6 +128,7 @@ export function mountEmotes(deps: EmoteDeps): EmoteWheel {
   interface Ui {
     scrim: HTMLElement;
     wheel: HTMLElement;
+    glyph: HTMLElement;
     name: HTMLElement;
     hint: HTMLElement;
     buttons: HTMLButtonElement[];
@@ -148,9 +141,12 @@ export function mountEmotes(deps: EmoteDeps): EmoteWheel {
 
   const label = (e: EmoteId | null) => {
     if (!ui || ui.wheel.classList.contains('cooling')) return;
+    // the one under the pointer or in focus, drawn large over its name
+    ui.glyph.replaceChildren(...(e ? [emoteGlyph(e)] : []));
     ui.name.textContent = e ? (EMOTE_LABELS[e] ?? e) : 'Emotes';
-    ui.hint.textContent = e && !hasEmote(e, ui.have) ? lockedLabel(e).line : HINT;
-    ui.hint.classList.toggle('price', !!e && !hasEmote(e, ui.have));
+    const locked = !!e && !hasEmote(e, ui.have);
+    ui.hint.textContent = locked ? lockedLabel(e).line : e ? (favourites().includes(e) ? 'Starred · F' : 'F to star') : HINT;
+    ui.hint.classList.toggle('price', locked);
   };
 
   const pick = (e: EmoteId) => {
@@ -179,6 +175,7 @@ export function mountEmotes(deps: EmoteDeps): EmoteWheel {
       return;
     }
     deps.send(e);
+    noteEmote(e);
     close();
   };
 
@@ -189,14 +186,26 @@ export function mountEmotes(deps: EmoteDeps): EmoteWheel {
     label(e);
   };
 
-  /** Mark each button owned or locked (on opening, and when the floor grants one). */
+  /** Star or unstar one you have (F, a right-click): the chat's quick picks follow. */
+  const star = (e: EmoteId) => {
+    if (!ui || !hasEmote(e, ui.have)) return;
+    toggleFavourite(e);
+    paint();
+    label(e);
+  };
+
+  /** Mark each button owned or locked (on opening, and when the floor grants one), starred, and the last one made. */
   const paint = () => {
     if (!ui) return;
     ui.have = owned();
+    const favs = new Set(favourites());
+    const last = lastEmote();
     for (const b of ui.buttons) {
       const e = b.dataset.emote as EmoteId;
       const locked = !hasEmote(e, ui.have);
       b.classList.toggle('locked', locked);
+      b.classList.toggle('fav', !locked && favs.has(e));
+      b.classList.toggle('last', !locked && e === last);
       b.querySelector('.emo-tag')?.remove();
       const name = EMOTE_LABELS[e] ?? e;
       if (locked) {
@@ -227,9 +236,10 @@ export function mountEmotes(deps: EmoteDeps): EmoteWheel {
     wheel.setAttribute('aria-label', 'Emotes');
     wheel.tabIndex = -1;
     const hub = el('div', 'emo-hub');
+    const glyph = el('div', 'emo-hub-glyph');
     const name = el('div', 'emo-name', 'Emotes');
     const hint = el('div', 'emo-hint', HINT);
-    hub.append(name, hint);
+    hub.append(glyph, name, hint);
     wheel.append(el('div', 'emo-ring'), el('div', 'emo-divide'), hub);
 
     const buttons = wheelLayout().map(({ e, ring, key, x, y }) => {
@@ -240,6 +250,10 @@ export function mountEmotes(deps: EmoteDeps): EmoteWheel {
       b.style.setProperty('--y', `${y.toFixed(1)}px`);
       b.append(emoteGlyph(e), el('span', 'emo-key', key));
       b.addEventListener('click', () => pick(e));
+      b.addEventListener('contextmenu', (ev) => {
+        ev.preventDefault();
+        star(e);
+      });
       b.addEventListener('pointerenter', () => label(e));
       b.addEventListener('pointerleave', () => label(null));
       b.addEventListener('focus', () => label(e));
@@ -257,6 +271,14 @@ export function mountEmotes(deps: EmoteDeps): EmoteWheel {
       } else if (isKey(e, 'emotes') && !modified(e)) {
         e.preventDefault();
         close();
+      } else if (e.key === ' ' && !(document.activeElement instanceof HTMLButtonElement)) {
+        // Space with no button in focus: the last one again (on a button, Space presses it)
+        e.preventDefault();
+        const last = lastEmote();
+        if (last && ui && hasEmote(last, ui.have)) pick(last);
+      } else if ((e.key === 'f' || e.key === 'F') && !modified(e) && !e.repeat && document.activeElement instanceof HTMLButtonElement && document.activeElement.dataset.emote) {
+        e.preventDefault();
+        star(document.activeElement.dataset.emote as EmoteId);
       } else if (e.key.startsWith('Arrow')) {
         e.preventDefault();
         const at = buttons.indexOf(document.activeElement as HTMLButtonElement);
@@ -276,7 +298,7 @@ export function mountEmotes(deps: EmoteDeps): EmoteWheel {
     scrim.append(wheel);
     deps.root.append(scrim);
     const release = holdKeyboard(wheel, () => close());
-    ui = { scrim, wheel, name, hint, buttons, have: new Set(), release, before };
+    ui = { scrim, wheel, glyph, name, hint, buttons, have: new Set(), release, before };
     paint();
     fit();
     addEventListener('resize', fit);

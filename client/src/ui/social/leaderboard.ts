@@ -1,8 +1,9 @@
 // The leaderboards: every board in a list down the left (money, play, today and this week), with
 // your own place beside each name, and the chosen board on the right: the top ten with your row
-// lit, and your place underneath when you're further down. A picker above switches to one game's
-// boards. The server reads the boards at most once a minute; the sheet says how long ago, and
-// asks again once they're older than that.
+// lit, and your place underneath when you're further down, held at the bottom of the sheet while
+// the board scrolls (a phone), so it's always in view. The top three wear gold, silver and bronze.
+// A picker above switches to one game's boards. The server reads the boards at most once a minute;
+// the sheet says how long ago, and asks again once they're older than that.
 
 import './social.css';
 import type { GameId } from '../../../../shared/src/engine.ts';
@@ -49,7 +50,11 @@ function row(rank: number | null, name: string, value: string, tone: string, of:
   const tr = el('tr', cls);
   const who = el('td', 'lb-name', name);
   if (you) who.append(el('span', 'lb-you', 'You'));
-  tr.append(el('td', 'lb-rank', rank === null ? DASH : String(rank)), who);
+  const r = el('td', 'lb-rank');
+  // the podium's places in a medal of their own colour (the cell still reads "1")
+  if (rank !== null && rank <= 3) r.append(el('span', `lb-medal m${rank}`, String(rank)));
+  else r.textContent = rank === null ? DASH : String(rank);
+  tr.append(r, who);
   if (of !== null) tr.append(el('td', 'lb-of', of));
   tr.append(el('td', `lb-value ${tone}`.trim(), value));
   return tr;
@@ -91,7 +96,8 @@ function renderBoard(id: LeaderboardId, game: GameId | null, board: Leaderboard)
       body.append(gap);
     }
     const [v, tone, of] = you.rank === null ? [DASH, '', rate ? DASH : null] : cells(you.value, you.of);
-    body.append(row(you.rank, you.name, v, tone, of, 'you', true));
+    // (`below`: held at the bottom of the scrolling sheet, CSS)
+    body.append(row(you.rank, you.name, v, tone, of, board.top.length > 0 ? 'you below' : 'you', true));
   }
   table.append(thead, body);
   wrap.append(table);
@@ -209,7 +215,9 @@ export function openLeaderboard(deps: LeaderboardDeps): Closable {
 
   const paintAge = () => {
     const s = scopes.get(lastGame);
-    if (s) sheet.sub.textContent = refreshedText(s.data.age + (Date.now() - s.readAt));
+    const text = s ? refreshedText(s.data.age + (Date.now() - s.readAt)) : null;
+    // once a second, but written only when the words change
+    if (text !== null && sheet.sub.textContent !== text) sheet.sub.textContent = text;
   };
 
   /** Your place beside each board's name. */
