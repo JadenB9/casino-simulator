@@ -73,7 +73,7 @@ export function mountDeck(o: DeckOpts): Deck {
   bet.setAttribute('aria-live', 'polite');
   const maxBtn = button('Max bet', () => o.max(), { key: 'A', title: o.stepper ? 'Bet three coins (A)' : 'Bet the most on every line (A)' });
   const insertBtn = button('Insert', () => o.insert(), { cls: 'ghost', title: 'Add money to this machine' });
-  const netBtn = button('', () => o.session(), { cls: 'ghost slots-net', title: 'This session: spins, time, bet, paid and the best win' });
+  const netBtn = button('', () => o.session(), { cls: 'ghost slots-net', title: 'At this machine: time, spins, bet, paid and the best win' });
   netBtn.setAttribute('aria-haspopup', 'dialog');
   netBtn.setAttribute('aria-expanded', 'false');
   // Spin (tap for one, hold to keep going) and Auto: each next spin only once the last has settled
@@ -83,6 +83,8 @@ export function mountDeck(o: DeckOpts): Deck {
   o.ui.append(root);
   // a video machine plays every line: the deck says how many (a narrow screen keeps it short)
   const lines = o.stepper ? null : el('span', 'slots-bet-lines', ` · ${o.lines} lines`);
+  // what the bet shows, so it's written (and read out) only when it changes, not on every spin
+  let shown = '';
   return {
     root,
     insertBtn,
@@ -95,6 +97,9 @@ export function mountDeck(o: DeckOpts): Deck {
     auto,
     spinBtn: auto.spinBtn,
     showBet(coins, coin, total) {
+      const key = `${coins}|${coin}|${total}`;
+      if (key === shown) return;
+      shown = key;
       coinBtn.firstChild!.textContent = `Coin ${coin}`;
       if (lines) betWhat.replaceChildren(`${coins} per line`, lines);
       else betWhat.textContent = `${coins} coin${coins > 1 ? 's' : ''}`;
@@ -258,7 +263,7 @@ export class SessionPanel {
   readonly root = el('div', 'slots-session panel');
   private readonly rows: Record<'spins' | 'bet' | 'paid' | 'net' | 'best', HTMLElement>;
   private readonly time = el('span', 'money');
-  private shownTime = '';
+  private shownSecond = -1;
   private outside: ((e: PointerEvent) => void) | null = null;
 
   constructor(
@@ -267,8 +272,8 @@ export class SessionPanel {
     private readonly deck: Deck,
   ) {
     this.root.setAttribute('role', 'region');
-    this.root.setAttribute('aria-label', 'This session at the machine');
-    this.root.append(el('div', 'slots-session-head', 'This session'));
+    this.root.setAttribute('aria-label', 'At this machine since you sat down');
+    this.root.append(el('div', 'slots-session-head', 'At this machine'));
     const row = (label: string, value: HTMLElement, cls = '') => {
       const r = el('div', `slots-session-row ${cls}`.trim());
       r.append(el('span', '', label), value);
@@ -300,15 +305,16 @@ export class SessionPanel {
     this.rows.best.textContent = s.best > 0 ? `${formatMoney(s.best)}${s.best > s.bestBet ? ` · ${Math.floor(s.best / s.bestBet)}x` : ''}` : '–';
     const btn = this.deck.netBtn;
     btn.replaceChildren(el('span', 'slots-net-label', 'Net'), el('span', 'slots-net-value', netText(s.net)));
-    btn.setAttribute('aria-label', `Session: net ${netText(s.net)} after ${s.spins} spin${s.spins === 1 ? '' : 's'}`);
+    btn.setAttribute('aria-label', `At this machine: net ${netText(s.net)} after ${s.spins} spin${s.spins === 1 ? '' : 's'}`);
   }
 
-  /** Once a frame: the clock, written only when its second changes. */
+  /** Once a frame: the clock, worked out and written only when its second changes. */
   tick(): void {
-    const t = clock(performance.now() - this.log.since);
-    if (t === this.shownTime) return;
-    this.shownTime = t;
-    this.time.textContent = t;
+    const ms = performance.now() - this.log.since;
+    const second = Math.floor(ms / 1000);
+    if (second === this.shownSecond) return;
+    this.shownSecond = second;
+    this.time.textContent = clock(ms);
   }
 
   get open(): boolean {
