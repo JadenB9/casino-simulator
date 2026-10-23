@@ -2,8 +2,12 @@
 // is ready from the start, a view that comes as code is fetched once and again after a failure,
 // and a table mounted before its view is here gets a stand-in that plays everything the table
 // said, in order, to the real view when it lands, without the table's queue moving on early.
+// And a folder that hands over its view as code never also imports that file for the floor,
+// which would put the whole view back in the page's first download without anything failing.
 
 import { describe, expect, it, vi } from 'vitest';
+import { readFileSync, readdirSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import type { GameId } from '../../shared/src/engine.ts';
 import type { GameClientDef, MountView, TableSnapshot, TableView, TableViewCtx } from '../src/games/contract.ts';
 import { GameViews } from '../src/games/lazy.ts';
@@ -196,5 +200,27 @@ describe('game views', () => {
     expect(gv.ready('craps')).toBe(false);
     idle.shift()?.();
     expect(a.view).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('views kept out of the first download', () => {
+  const games = fileURLToPath(new URL('../src/games', import.meta.url));
+  it('no folder that fetches its view also imports the view file for the floor', () => {
+    const lazy: string[] = [];
+    for (const dir of readdirSync(games, { withFileTypes: true })) {
+      if (!dir.isDirectory()) continue;
+      let index: string;
+      try {
+        index = readFileSync(`${games}/${dir.name}/index.ts`, 'utf8');
+      } catch {
+        continue;
+      }
+      const fetched = [...index.matchAll(/import\(\s*'(\.\/[\w-]+\.ts)'\s*\)/g)].map((m) => m[1]!);
+      if (fetched.length === 0) continue;
+      lazy.push(dir.name);
+      for (const file of fetched) expect(index, `${dir.name}/index.ts imports ${file} statically too`).not.toContain(`from '${file}'`);
+    }
+    // the ten that did when this was written (one that stopped would quietly be back in the entry chunk)
+    expect(lazy).toEqual(expect.arrayContaining(['baccarat', 'bingo', 'blackjack', 'craps', 'holdem', 'letitride', 'pachinko', 'paigow', 'threecard', 'war']));
   });
 });
