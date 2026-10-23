@@ -65,17 +65,24 @@ function shade(hex: string, k: number): string {
 
 /** A called ball's face for the ball in the display cradle (256 px square). */
 export function paintBallFace(canvas: HTMLCanvasElement, n: number | null): void {
-  canvas.width = 256;
-  canvas.height = 256;
+  if (canvas.width !== 256 || canvas.height !== 256) {
+    canvas.width = 256;
+    canvas.height = 256;
+  }
   const g = canvas.getContext('2d')!;
   g.clearRect(0, 0, 256, 256);
   if (n !== null) ball(g, 128, 128, 124, n);
 }
 
 export function paintBoard(canvas: HTMLCanvasElement, st: BoardState): void {
-  canvas.width = BOARD_W;
-  canvas.height = BOARD_H;
+  // sized once: setting a canvas's size reallocates it, and the board repaints with every ball
+  if (canvas.width !== BOARD_W || canvas.height !== BOARD_H) {
+    canvas.width = BOARD_W;
+    canvas.height = BOARD_H;
+  }
   const g = canvas.getContext('2d')!;
+  g.shadowBlur = 0;
+  g.globalAlpha = 1;
   g.fillStyle = '#0d0b10';
   g.fillRect(0, 0, BOARD_W, BOARD_H);
   const lit = new Set(st.called);

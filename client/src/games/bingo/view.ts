@@ -10,7 +10,7 @@ import type { TableView, TableViewCtx, TableSnapshot, MembersMsg } from '../cont
 import type { GameEvent } from '../../../../shared/src/engine.ts';
 import type { Member } from '../../../../shared/src/protocol.ts';
 import { formatMoney, type BetLimits, type Cents } from '../../../../shared/src/money.ts';
-import { LETTERS, PATTERNS, PATTERN_NAMES, LAST_PRIZE, MAX_CALLS, PUBLISHED_RTP, callLine, columnOf, type Pattern } from '../../../../shared/src/games/bingo/rules.ts';
+import { LETTERS, PATTERNS, PATTERN_NAMES, LAST_PRIZE, MAX_CALLS, PUBLISHED_RTP, CORNERS, CELLS, callLine, columnOf, type Pattern } from '../../../../shared/src/games/bingo/rules.ts';
 import { maxStake } from '../../../../shared/src/games/bingo/engine.ts';
 import { MAX_CARDS, type BingoView, type CardView, type SeatResult } from '../../../../shared/src/games/bingo/protocol.ts';
 import { el, button, maxButton } from '../../ui/kit.ts';
@@ -42,6 +42,25 @@ function keep(key: string, on: boolean): void {
   } catch {
     /* private mode */
   }
+}
+
+/** What each prize asks for, in a sentence and as a little card: a row stands for every line. */
+const PATTERN_HELP: Record<Pattern, string> = {
+  line: 'Any row, column or diagonal',
+  corners: 'The four corner numbers',
+  blackout: 'Every number on the card',
+};
+const PATTERN_CELLS: Record<Pattern, readonly number[]> = {
+  line: [5, 6, 7, 8, 9],
+  corners: CORNERS,
+  blackout: Array.from({ length: CELLS }, (_, c) => c),
+};
+
+function patternPic(p: Pattern): HTMLElement {
+  const pic = el('span', 'bg-pat');
+  pic.setAttribute('aria-hidden', 'true');
+  for (let c = 0; c < CELLS; c++) pic.append(el('i', PATTERN_CELLS[p].includes(c) ? 'on' : ''));
+  return pic;
 }
 
 function ballChip(n: number, big = false): HTMLElement {
@@ -111,6 +130,15 @@ export function mountBingo(ctx: TableViewCtx): TableView {
   callsHead.append(current, count$);
   const recent = el('div', 'bg-recent');
   const paysNow = el('div', 'bg-paysnow');
+  // one row a prize: its pattern, its name, and what it pays on the next ball (drawCalls() keeps it)
+  const payRows = PATTERNS.map((p) => {
+    const r = el('div', 'bg-pays-row');
+    r.title = PATTERN_HELP[p];
+    const value = el('span', 'money');
+    r.append(patternPic(p), el('span', 'bg-pays-name', PATTERN_NAMES[p]), value);
+    paysNow.append(r);
+    return { p, r, value };
+  });
   const autoBtn = button('', () => setAuto(!auto), { cls: 'bg-toggle', title: 'Auto daub: your cards mark themselves (D daubs everything called)' });
   const voiceBtn = button('', () => setVoice(!voice.on), { cls: 'bg-toggle', title: "The caller's voice" });
   const toggles = el('div', 'bg-toggles');
@@ -299,14 +327,11 @@ export function mountBingo(ctx: TableViewCtx): TableView {
     );
     recent.replaceChildren(...called.slice(-9, -1).reverse().map((n) => ballChip(n)));
     const call = phase === 'calling' ? called.length + 1 : 1;
-    paysNow.replaceChildren(
-      ...PATTERNS.map((p) => {
-        const at = phase === 'results' ? null : nowPays(p, call);
-        const r = el('div', `bg-pays-row${at ? '' : ' closed'}`);
-        r.append(el('span', '', PATTERN_NAMES[p]), el('span', 'money', at ? `${multText(at.mult)} to ball ${at.upTo}` : 'closed'));
-        return r;
-      }),
-    );
+    for (const { p, r, value } of payRows) {
+      const at = phase === 'results' ? null : nowPays(p, call);
+      r.classList.toggle('closed', !at);
+      value.textContent = at ? `${multText(at.mult)} to ball ${at.upTo}` : 'closed';
+    }
   }
 
   function drawHall(): void {
