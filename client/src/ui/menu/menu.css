@@ -35,6 +35,9 @@
 
 .quiet { color: var(--ink-3); font-size: 15px; margin: 6px 0; }
 
+/* a field's name over it (the bank's amounts, the achievements' title picker; the login's own are login.css) */
+.field-label { font-size: 13px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-3); }
+
 /* data tables (profile stats, tables, loans) */
 .data { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
 .data th { padding: 0 10px 7px; font-size: 12px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-3); text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line); }
@@ -72,7 +75,9 @@
 
 /* ---------------------------------------------------------------- front: login and menu */
 
-.front { position: fixed; inset: 0; z-index: 20; overflow: hidden; background: var(--bg); animation: front-in 0.45s var(--ease); }
+/* The screen is a grid with the card in it: centred on the height, on the left third of a wide
+   screen, and kept out of the bottom 56 px, which is the site's back chip's corner. */
+.front { position: fixed; inset: 0; z-index: 20; display: grid; align-items: center; justify-items: start; padding: 24px clamp(16px, 6vw, 112px) 56px; overflow: hidden; background: var(--bg); animation: front-in 0.45s var(--ease); }
 .front.over-scene { background: transparent; }
 .front.closing { opacity: 0; transition: opacity 0.22s var(--ease); pointer-events: none; }
 .front.busy { cursor: progress; }
@@ -80,70 +85,72 @@
 
 .backdrop-canvas { position: absolute; inset: -2%; width: 104%; height: 104%; display: block; animation: backdrop-drift 50s ease-in-out infinite alternate; }
 @keyframes backdrop-drift { to { transform: scale(1.045) translate3d(-1.2%, -0.6%, 0); } }
-.front-shade { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(var(--shade-rgb), 0.92) 0%, rgba(var(--shade-rgb), 0.62) 34%, rgba(var(--shade-rgb), 0) 64%), radial-gradient(130% 100% at 65% 45%, rgba(0, 0, 0, 0) 45%, rgba(0, 0, 0, 0.6) 100%); }
+/* Over the floor the room keeps its colours: only its edges and the card's side dim a little. */
+.front-shade { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(125% 100% at 64% 46%, rgba(0, 0, 0, 0) 50%, rgba(0, 0, 0, 0.46) 100%), linear-gradient(90deg, rgba(0, 0, 0, 0.34) 0%, rgba(0, 0, 0, 0.1) 38%, rgba(0, 0, 0, 0) 58%); }
 
-.front-col { position: absolute; left: clamp(24px, 7.5vw, 132px); top: clamp(40px, 13vh, 150px); width: min(470px, calc(100vw - 48px)); display: flex; flex-direction: column; gap: 26px; }
-.front-title { margin: 0; font-family: var(--serif); font-weight: 600; font-size: clamp(34px, 4.4vw, 58px); line-height: 1.04; letter-spacing: 0.1em; text-transform: uppercase; color: var(--brass-hi); text-shadow: 0 2px 30px rgba(0, 0, 0, 0.7); }
-.front-rule { position: relative; height: 8px; margin-top: 16px; }
+/* The card: the sheets' surface and hairline, a little more air. It scrolls itself if a screen is
+   ever too short for it, never the page. */
+.front-col {
+  position: relative; z-index: 1; display: flex; flex-direction: column; gap: 22px; width: min(448px, 100%); max-height: 100%; overflow-y: auto; overscroll-behavior: contain;
+  padding: 30px 32px 26px; border: 1px solid var(--line); border-radius: 14px;
+  background: linear-gradient(90deg, rgba(var(--brass-hi-rgb), 0), rgba(var(--brass-hi-rgb), 0.7), rgba(var(--brass-hi-rgb), 0)) top / calc(100% - 64px) 1px no-repeat, rgba(var(--sheet-rgb), 0.96);
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.5), 0 2px 10px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(var(--brass-hi-rgb), 0.06);
+  scrollbar-width: thin;
+}
+.front-title { margin: 0; font-family: var(--serif); font-weight: 600; font-size: clamp(31px, 2.8vw, 40px); line-height: 1.06; letter-spacing: 0.1em; text-transform: uppercase; color: var(--brass-hi); }
+.front-rule { position: relative; height: 8px; margin-top: 14px; }
 .front-rule::after { content: ''; position: absolute; left: 16px; right: 0; top: 50%; height: 1px; background: linear-gradient(90deg, var(--brass) 0%, rgba(var(--brass-rgb), 0.3) 60%, rgba(var(--brass-rgb), 0) 100%); }
 .front-diamond { position: absolute; left: 1px; top: 0.5px; width: 7px; height: 7px; transform: rotate(45deg); background: var(--brass-hi); box-shadow: 0 0 12px rgba(var(--brass-hi-rgb), 0.45); }
 .front-rise { animation: front-rise 0.5s var(--ease) both; }
 .front-rise + .front-rise { animation-delay: 0.06s; }
+.front-rise + .front-rise + .front-rise { animation-delay: 0.1s; }
 @keyframes front-rise { from { opacity: 0; transform: translateY(8px); } }
+/* Reduce flashing & motion: the parts fade in where they stand. */
+body.calm .front-rise { animation-name: front-fade; }
+@keyframes front-fade { from { opacity: 0; } }
 
-/* login */
-.login-form { display: grid; gap: 10px; }
-.continue-btn { display: flex; align-items: center; gap: 12px; min-height: 54px; margin-bottom: 16px; padding: 0 16px; border: 1px solid var(--line-strong); border-radius: 4px; background: rgba(var(--glass-rgb), 0.55); color: var(--ink); text-align: left; cursor: pointer; transition: background 0.15s, border-color 0.15s, color 0.15s; }
-.continue-btn:hover:not(:disabled) { border-color: var(--brass-hi); }
-.continue-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-.continue-btn.primary { background: linear-gradient(#e2bf7c, #b98d45); border-color: var(--gold-line); color: var(--on-gold); }
-.continue-btn.primary .kc { color: var(--on-gold); border-color: rgba(29, 20, 10, 0.4); background: rgba(255, 255, 255, 0.18); }
-.continue-btn:disabled { opacity: 0.55; cursor: progress; }
-.continue-label { font-size: 15px; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.8; }
-.continue-name { font-family: var(--serif); font-size: 22px; font-weight: 700; letter-spacing: 0.05em; overflow: hidden; text-overflow: ellipsis; }
-.continue-btn .kc { margin-left: auto; }
-.field-label { font-size: 13px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-3); }
-.name-row { display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--line-strong); transition: border-color 0.15s; }
-.name-row:focus-within { border-color: var(--brass-hi); }
-.name-row.shake { animation: shake 0.32s; }
-.name-input { flex: 1; min-width: 0; height: 52px; padding: 0; border: 0; outline: 0; background: transparent; color: var(--ink); font: 600 30px/1 var(--ui); letter-spacing: 0.04em; caret-color: var(--brass-hi); }
-.name-input:disabled { opacity: 0.6; }
-.name-count { font-size: 14px; color: var(--ink-3); }
-.name-rule { min-height: 20px; margin: 1px 0 8px; font-size: 15px; color: var(--ink-3); }
-.name-rule.ok { color: var(--ink-2); }
-.name-rule.bad, .name-rule.err { color: var(--lose); }
-.enter-btn { justify-self: start; min-width: 150px; height: 44px; font-size: 18px; }
-.login-note { max-width: 42ch; margin: 18px 0 0; font-size: 15px; line-height: 1.4; color: var(--ink-3); }
-@keyframes shake { 20%, 60% { transform: translateX(-5px); } 40%, 80% { transform: translateX(5px); } }
+/* A player's initial on a brass disc (the remembered name, the menu's "who"). */
+.monogram { display: inline-grid; place-items: center; flex: none; width: 40px; height: 40px; border: 1px solid var(--line-strong); border-radius: 50%; background: rgba(var(--brass-rgb), 0.14); color: var(--brass-hi); font: 700 19px/1 var(--serif); letter-spacing: 0; }
 
-/* menu */
-.menu-who { display: flex; flex-wrap: wrap; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
-.menu-who .stat { margin-right: 18px; padding: 10px 18px 11px 0; border-right: 1px solid var(--line); }
-.menu-who .stat:last-child, .menu-who .stat:has(+ .stat[hidden]) { border-right: 0; margin-right: 0; }
-.menu-who .stat-value { font-size: 20px; }
-.menu-list { display: flex; flex-direction: column; margin-top: -4px; }
-.menu-item { position: relative; display: flex; align-items: baseline; gap: 14px; width: 100%; padding: 13px 0 13px 26px; border: 0; border-bottom: 1px solid rgba(var(--brass-rgb), 0.11); background: none; color: var(--ink-2); text-align: left; cursor: pointer; }
+/* menu: you, then the choices */
+.menu-who { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.menu-who .monogram { width: 48px; height: 48px; font-size: 22px; }
+.menu-who-text { display: grid; gap: 4px; min-width: 0; }
+.menu-who-name { overflow: hidden; font: 700 21px/1.1 var(--serif); letter-spacing: 0.04em; color: var(--ink); text-overflow: ellipsis; white-space: nowrap; }
+.menu-who-money { display: flex; flex-wrap: wrap; gap: 2px 16px; }
+.menu-who-tile { display: inline-flex; align-items: baseline; gap: 7px; white-space: nowrap; }
+.menu-who-label { font-size: 12px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-3); }
+.menu-who-figure { font-size: 17px; font-weight: 600; color: var(--ink); }
+
+.menu-list { display: flex; flex-direction: column; gap: 3px; }
+.menu-item { position: relative; display: flex; align-items: center; gap: 14px; width: 100%; min-height: 50px; padding: 8px 14px 8px 13px; border: 1px solid transparent; border-radius: 10px; background: none; color: var(--ink-2); text-align: left; cursor: pointer; transition: background-color 0.18s, border-color 0.18s, color 0.18s, box-shadow 0.18s; }
+.menu-item .ico { width: 22px; height: 22px; color: var(--brass); transition: color 0.18s; }
 .menu-item:focus-visible { outline: none; }
-.menu-item::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 1px; background: linear-gradient(90deg, var(--brass-hi), rgba(var(--brass-hi-rgb), 0.25) 70%, rgba(var(--brass-hi-rgb), 0)); transform: scaleX(0); transform-origin: left; transition: transform 0.35s var(--ease); }
-.menu-label { font-family: var(--serif); font-size: 25px; font-weight: 600; line-height: 1.1; letter-spacing: 0.09em; text-transform: uppercase; transition: color 0.15s, transform 0.25s var(--ease); }
-.menu-fact { margin-left: auto; font-size: 15px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); opacity: 0.7; text-shadow: 0 1px 10px rgba(0, 0, 0, 0.9); transition: opacity 0.2s, color 0.2s; white-space: nowrap; }
-.menu-mark { position: absolute; left: 3px; top: 50%; width: 8px; height: 8px; margin-top: -4px; background: var(--brass-hi); transform: rotate(45deg) scale(0); transition: transform 0.25s var(--ease); }
-.menu-item.sel { color: var(--ink); }
-.menu-item.sel::after { transform: scaleX(1); }
-.menu-item.sel .menu-mark { transform: rotate(45deg) scale(1); }
-.menu-item.sel .menu-label { transform: translateX(4px); color: var(--ink-hi); }
-.menu-item.sel .menu-fact { opacity: 1; color: var(--ink-2); }
-.menu-hints { position: absolute; right: clamp(20px, 3vw, 36px); bottom: 26px; display: flex; align-items: center; gap: 7px; font-size: 14px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-3); }
+.menu-label { font-family: var(--serif); font-size: 20px; font-weight: 600; line-height: 1.1; letter-spacing: 0.08em; text-transform: uppercase; }
+.menu-fact { margin-left: auto; font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); white-space: nowrap; transition: color 0.18s; }
+.menu-item.sel { border-color: var(--line); background: rgba(var(--brass-rgb), 0.11); color: var(--ink-hi); }
+.menu-item.sel .ico { color: var(--brass-hi); }
+.menu-item.sel .menu-fact { color: var(--ink-2); }
+/* Enter Casino: the gold choice. Selected, it wears a brass ring outside its own edge. */
+.menu-item.primary { min-height: 62px; margin-bottom: 9px; padding: 10px 16px 10px 20px; border-color: var(--gold-line); background: linear-gradient(#e2bf7c, #b98d45); color: var(--on-gold); box-shadow: 0 10px 26px rgba(0, 0, 0, 0.26), inset 0 1px 0 rgba(255, 255, 255, 0.35); }
+.menu-item.primary .menu-label { font-size: 23px; }
+.menu-item.primary .menu-fact { color: var(--on-gold); opacity: 0.78; }
+.menu-item.primary .ico { width: 20px; height: 20px; color: var(--on-gold); transition: transform 0.25s var(--ease); }
+.menu-item.primary.sel { background: linear-gradient(#e8c787, #be9249); color: var(--on-gold); box-shadow: 0 0 0 2px rgba(var(--sheet-rgb), 0.94), 0 0 0 4px var(--brass-hi), 0 12px 30px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.4); }
+.menu-item.primary.sel .ico { transform: translateX(3px); }
+.menu-item.primary:active { transform: translateY(1px); }
+.menu-hints { display: flex; align-items: center; justify-content: center; gap: 7px; padding-top: 14px; border-top: 1px solid rgba(var(--brass-rgb), 0.14); font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-3); }
 .menu-hints span + .kc { margin-left: 10px; }
 
-@media (max-height: 740px) {
-  .front-col { top: 32px; gap: 18px; }
-  .menu-item { padding-block: 9px; }
-  .login-note { margin-top: 10px; }
+/* A laptop's height: the card a little tighter, so it never needs its own scroll at 768 px. */
+@media (max-height: 820px) {
+  .front-col { gap: 16px; padding: 24px 30px 20px; }
+  .front-title { font-size: clamp(30px, 2.6vw, 34px); }
+  .front-rule { margin-top: 11px; }
+  .menu-item { min-height: 46px; }
+  .menu-item.primary { min-height: 56px; margin-bottom: 7px; }
 }
 @media (max-width: 640px) {
-  .front-col { gap: 20px; }
-  .menu-label { font-size: 21px; }
   .menu-hints { display: none; }
   .backdrop-canvas { animation: none; }
 }
@@ -157,23 +164,30 @@
   .x-btn { height: 44px; min-width: 44px; justify-content: center; }
   .sheet { max-height: calc(100dvh - 48px); }
 }
-/* A phone on its side: 390 px of height for the title, you and five menu rows (each still 44 px
-   to the thumb), and sheets that use the whole height. */
-@media (max-height: 480px) {
-  /* the fields run further across a short, wide screen: so does the shade under them */
-  .front-shade { background: linear-gradient(90deg, rgba(var(--shade-rgb), 0.92) 0%, rgba(var(--shade-rgb), 0.8) 56%, rgba(var(--shade-rgb), 0) 84%); }
-  .front-col { top: 14px; gap: 10px; }
-  .front-title { font-size: 30px; }
+/* A phone on its side: 390 px of height. The card turns into two columns (the title and the
+   notes on the left, the form or the choices on the right), right of the back chip and left of
+   the theme button; sheets use the whole height. */
+@media (max-height: 480px) and (min-width: 600px) {
+  .front { justify-items: start; padding: 10px 76px 10px 112px; }
+  .front-col { display: grid; grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr); grid-template-areas: 'brand main' 'aside main'; align-content: start; gap: 12px 26px; width: min(720px, 100%); padding: 18px 22px 16px; border-radius: 12px; }
+  .front-brand { grid-area: brand; }
+  .front-main { grid-area: main; }
+  .front-aside { grid-area: aside; align-self: end; }
+  .front-menu .front-col { grid-template-areas: 'brand main' 'who main' 'hints main'; grid-template-rows: auto auto 1fr; }
+  .front-menu .menu-who { grid-area: who; align-self: start; }
+  .front-menu .menu-hints { grid-area: hints; align-self: end; justify-content: flex-start; padding-top: 10px; }
+  .front-title { font-size: 26px; }
   .front-rule { margin-top: 8px; }
-  .menu-who .stat { margin-right: 14px; padding: 5px 14px 6px 0; }
-  .menu-who .stat-value { font-size: 17px; }
-  .menu-item { padding-block: 11px; }
-  .menu-label { font-size: 20px; }
-  .menu-fact { font-size: 14px; }
-  .name-input { height: 44px; font-size: 26px; }
-  .name-rule { margin-bottom: 4px; }
-  .continue-btn { min-height: 48px; margin-bottom: 8px; }
-  .login-note { margin-top: 6px; }
+  .menu-who .monogram { width: 40px; height: 40px; font-size: 19px; }
+  .menu-who-name { font-size: 18px; }
+  .menu-list { gap: 2px; }
+  .menu-item { min-height: 44px; padding-block: 5px; }
+  .menu-item.primary { min-height: 52px; margin-bottom: 6px; }
+  .menu-label { font-size: 18px; }
+  .menu-item.primary .menu-label { font-size: 20px; }
+  .menu-fact { font-size: 12px; }
+}
+@media (max-height: 480px) {
   .sheet-scrim { padding: 8px 12px; }
   .sheet { max-height: calc(100vh - 16px); max-height: calc(100dvh - 16px); }
   .sheet-head { padding: 12px 18px 10px; }
@@ -181,10 +195,15 @@
   .sheet-body { padding: 12px 18px 14px; }
   .sheet-foot { margin-top: 12px; }
 }
-/* A phone upright: the column spans the screen, so the room behind it is shaded top to bottom,
-   not only on the left; sheets edge to edge, stat tiles two across. */
+/* A phone upright: the card spans the screen under the theme button, clear of the back chip;
+   sheets edge to edge, stat tiles two across. */
 @media (max-width: 560px) {
-  .front-shade { background: linear-gradient(180deg, rgba(var(--shade-rgb), 0.9) 0%, rgba(var(--shade-rgb), 0.8) 62%, rgba(var(--shade-rgb), 0.45) 100%); }
+  .front { padding: 76px 16px 56px; }
+  .front-col { gap: 18px; width: 100%; padding: 24px 20px 20px; border-radius: 12px; }
+  .front-title { font-size: 30px; }
+  .menu-item.primary { padding-inline: 16px 14px; }
+  .menu-item.primary .menu-label { font-size: 20px; white-space: nowrap; }
+  .menu-label { font-size: 18px; }
   .sheet-scrim { padding: 12px 10px; }
   .sheet { max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px); }
   .sheet-head { padding: 16px 16px 12px; }
