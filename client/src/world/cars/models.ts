@@ -14,6 +14,7 @@
 import * as THREE from 'three';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { CAR_SPECS, type CarSpec } from './specs.ts';
+import { boxReach, shadowGeometry } from '../grounding.ts';
 
 /** The materials a car is drawn with (materials.ts makes them); `glow` is a lamp switched on. */
 export type CarMat = 'paint' | 'trim' | 'metal' | 'glass' | 'lamp' | 'glow' | 'gold';
@@ -861,6 +862,32 @@ export function wheelMatrix(kit: CarKit, i: number, spin = 0): THREE.Matrix4 {
   return m;
 }
 
+const shadows = new Map<string, THREE.BufferGeometry>();
+
+/**
+ * v8: a car's contact shadow on the ground under it, in its own frame: dark between the wheels,
+ * soft out past the body (world/grounding.ts draws the floor's the same way). Built once per car
+ * and shared; unindexed, like every other piece of a car.
+ */
+export function carShadow(id: string): THREE.BufferGeometry {
+  let g = shadows.get(id);
+  if (!g) {
+    // centred on the body as built (its nose and tail needn't be equal), the size of its body less
+    // the mirrors
+    const kit = carKit(id);
+    const box = new THREE.Box3();
+    for (const geo of kit.body.values()) {
+      if (!geo.boundingBox) geo.computeBoundingBox();
+      box.union(geo.boundingBox!);
+    }
+    const indexed = shadowGeometry({ x: (box.min.x + box.max.x) / 2, z: (box.min.z + box.max.z) / 2, yaw: 0, reach: boxReach(kit.width * 0.94, kit.length * 0.95, 16), k: 0.62, spread: 0.34, core: 0.82, room: '' });
+    g = indexed.toNonIndexed();
+    indexed.dispose();
+    shadows.set(id, g);
+  }
+  return g;
+}
+
 /** One placed car in a merged set: which car, its paint, and where it stands. */
 export interface Placed {
   id: string;
@@ -877,6 +904,8 @@ export interface Placed {
  */
 export class MatBatch {
   private readonly lists = new Map<CarMat, THREE.BufferGeometry[]>();
+  /** Each car's shadow on the ground, placed (shadows() merges them). */
+  private readonly shadowList: THREE.BufferGeometry[] = [];
 
   /** A piece in a material, its colour in the vertices (white for glass). */
   add(mat: CarMat, geo: THREE.BufferGeometry, color = '#ffffff', matrix?: THREE.Matrix4): this {
@@ -895,7 +924,18 @@ export class MatBatch {
       for (const [m, gs] of wheel) for (const g of gs) this.put(m, g.clone().applyMatrix4(wm));
     }
     for (const gs of wheel.values()) for (const g of gs) g.dispose();
+    this.shadowList.push(carShadow(c.id).clone().applyMatrix4(c.matrix));
     return this;
+  }
+
+  /** The cars' shadows so far as one geometry (draw it in CarMaterials.shadow), or null for none. */
+  shadows(): THREE.BufferGeometry | null {
+    if (this.shadowList.length === 0) return null;
+    const g = mergeGeometries(this.shadowList, false);
+    for (const x of this.shadowList) x.dispose();
+    this.shadowList.length = 0;
+    g?.computeBoundingSphere();
+    return g;
   }
 
   build(): Map<CarMat, THREE.BufferGeometry> {

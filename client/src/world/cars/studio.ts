@@ -6,6 +6,7 @@
 
 import * as THREE from 'three';
 import { MatBatch, carKit } from './models.ts';
+import { shadowMesh } from './lot.ts';
 import type { CarMaterials } from './materials.ts';
 
 export interface StudioOpts {
@@ -130,6 +131,9 @@ export class CarStudio {
     this.car.clear();
     const b = new MatBatch().car({ id, matrix: new THREE.Matrix4().makeTranslation(0, 0.1, 0) });
     for (const [m, g] of b.build()) this.car.add(new THREE.Mesh(g, this.opts.mats.get(m)));
+    // v8: its shadow on the turntable
+    const shadow = b.shadows();
+    if (shadow) this.car.add(shadowMesh(shadow, this.opts.mats.shadow, 'studio-shadow'));
     const k = carKit(id);
     this.length = k.length;
     this.height = k.height;

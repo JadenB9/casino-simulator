@@ -41,6 +41,12 @@ export function lotCars(stalls: readonly Stall[], mats: CarMaterials, opts: { se
     group.add(mesh);
     geos.push(geo);
   }
+  // v8: every parked car's shadow on the tarmac, one more draw call for the lot
+  const shadow = batch.shadows();
+  if (shadow) {
+    group.add(shadowMesh(shadow, mats.shadow, 'lot-shadows'));
+    geos.push(shadow);
+  }
   return {
     group,
     dispose() {
@@ -48,6 +54,14 @@ export function lotCars(stalls: readonly Stall[], mats: CarMaterials, opts: { se
       for (const g of geos) g.dispose();
     },
   };
+}
+
+/** A mesh of cars' shadows (MatBatch.shadows), drawn before the see-through things like the floor's. */
+export function shadowMesh(geo: THREE.BufferGeometry, mat: THREE.Material, name: string): THREE.Mesh {
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.name = name;
+  mesh.renderOrder = -1;
+  return mesh;
 }
 
 /**
@@ -65,19 +79,30 @@ export class CarFleet {
 
   constructor(readonly id: string, readonly count: number, mats: CarMaterials) {
     this.group.name = `fleet-${id}`;
-    const one = new MatBatch().car({ id, paint: '#ffffff', matrix: new THREE.Matrix4(), lite: true }).build();
-    for (const [m, geo] of one) {
-      const mesh = new THREE.InstancedMesh(geo, mats.get(m === 'lamp' ? 'glow' : m), count);
+    const batch = new MatBatch().car({ id, paint: '#ffffff', matrix: new THREE.Matrix4(), lite: true });
+    const add = (geo: THREE.BufferGeometry, mat: THREE.Material): THREE.InstancedMesh => {
+      const mesh = new THREE.InstancedMesh(geo, mat, count);
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       mesh.frustumCulled = false;
       for (let i = 0; i < count; i++) mesh.setMatrixAt(i, this.zero);
+      this.meshes.push(mesh);
+      this.geos.push(geo);
+      this.group.add(mesh);
+      return mesh;
+    };
+    for (const [m, geo] of batch.build()) {
+      const mesh = add(geo, mats.get(m === 'lamp' ? 'glow' : m));
       if (m === 'paint') {
         for (let i = 0; i < count; i++) mesh.setColorAt(i, this.tint.set('#ffffff'));
         this.paintMeshes.push(mesh);
       }
-      this.meshes.push(mesh);
-      this.geos.push(geo);
-      this.group.add(mesh);
+    }
+    // v8: each car's shadow on the road goes with it, an instance per car like its other parts
+    const shadow = batch.shadows();
+    if (shadow) {
+      const mesh = add(shadow, mats.shadow);
+      mesh.name = `fleet-${id}-shadows`;
+      mesh.renderOrder = -1;
     }
   }
 

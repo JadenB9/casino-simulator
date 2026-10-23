@@ -92,7 +92,9 @@ export class Batch {
       }
       if (geos.length === 0) continue;
       const vertices = geos.reduce((n, [, g]) => n + g.getAttribute('position').count, 0);
-      const mesh = new THREE.BatchedMesh(geos.length, vertices, vertices, mat);
+      // (pieces taken as they are, raw(), may be indexed: the contact shadows are)
+      const indices = geos.reduce((n, [, g]) => n + (g.index?.count ?? 0), 0);
+      const mesh = new THREE.BatchedMesh(geos.length, vertices, indices || vertices, mat);
       mesh.name = `${name}:${mat.name || mat.type}`;
       for (const [room, g] of geos) {
         const id = mesh.addInstance(mesh.addGeometry(g));

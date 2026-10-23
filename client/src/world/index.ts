@@ -24,6 +24,7 @@ import { buildDecor } from './decor.ts';
 import { tickWater } from './decor-themes.ts';
 import { buildSigns, floorSigns, loadSignFonts, signGain, signProblems } from './signs.ts';
 import { GlowMerge, Lighting, buildPools } from './lighting.ts';
+import { Grounding, floorShadows, stationShadows, wallStrips } from './grounding.ts';
 import { Props } from './props.ts';
 import { Characters } from './characters.ts';
 import { Player } from './player.ts';
@@ -247,6 +248,9 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
   const signSpecs = [...floorSigns(plan, batch, mats), ...decor.signs];
   const staticMeshes = batch.build(root, 'floor');
   const glowMeshes = glow.build(root);
+  // soft contact shadows under everything that stands on the floor, the tables by their own outline
+  root.updateMatrixWorld(true);
+  const grounding = new Grounding([...floorShadows(plan), ...stationShadows(stations, vpMode === 'floor')], wallStrips(plan), root);
   const signs = buildSigns(signSpecs, root, quality, aniso);
   const furniture = new Furniture(plan, mats);
   root.add(furniture.group);
@@ -312,6 +316,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
     for (const r of plan.rooms) {
       staticMeshes.setRoom(r.id, vis.has(r.id));
       glowMeshes.setRoom(r.id, vis.has(r.id));
+      grounding.setRoom(r.id, vis.has(r.id));
     }
     furniture.setRooms(vis);
     props.setRooms(vis);
@@ -354,7 +359,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
     player,
     interact,
     lighting,
-    casino: [...staticMeshes.meshes, ...glowMeshes.meshes, ...(signs ? [signs.mesh] : []), ...directories.meshes, ...bulletin.meshes, furniture.group, props.group, stationRoot, staff.group, mannequins.group, life.crew.group],
+    casino: [...staticMeshes.meshes, ...glowMeshes.meshes, ...grounding.meshes.meshes, ...(signs ? [signs.mesh] : []), ...directories.meshes, ...bulletin.meshes, furniture.group, props.group, stationRoot, staff.group, mannequins.group, life.crew.group],
     addSeats: (seats) => life.seating.add(seats),
     standUp: () => life.seating.stand({ send: false, walk: true }),
     seated: () => interact.seated !== null,
@@ -641,6 +646,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
       reflections?.dispose();
       renderer.info.autoReset = true;
       signs?.texture.dispose();
+      grounding.dispose();
       for (const m of [...staticMeshes.meshes, ...glowMeshes.meshes]) m.dispose();
       mats.dispose();
       root.removeFromParent();

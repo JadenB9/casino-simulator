@@ -91,6 +91,7 @@ export function buildRoof(mats: Mats, col: Collider, quality: Quality): ZoneBuil
   for (const z of [C.z0 + 0.5, C.z1 - 0.5]) {
     kit.cylinder('brass', C.x0 + 0.5, z, 0.09, 0, cy, 14);
     kit.post(C.x0 + 0.5, z, 0.12, cy);
+    kit.shadeRound(C.x0 + 0.5, z, 0.09, 1.2);
   }
   for (let x = C.x0 + 1.4; x < P.x0 - 0.6; x += 2.4) {
     for (const z of [-3.6, 0, 3.6]) {
@@ -101,6 +102,7 @@ export function buildRoof(mats: Mats, col: Collider, quality: Quality): ZoneBuil
   // big pots with palms either side of the arrivals
   for (const z of [C.z0 - 0.9, C.z1 + 0.9]) {
     kit.cylinder('stone-warm', P.x0 - 1.6, z, 0.62, 0, 0.8, 24, 0.7);
+    kit.shadeRound(P.x0 - 1.6, z, 0.62, 0.8);
     kit.prop('palm', P.x0 - 1.6, z, 4.2, z * 0.5, 0.8);
     kit.post(P.x0 - 1.6, z, 0.7, 1.5);
   }
@@ -116,6 +118,7 @@ export function buildRoof(mats: Mats, col: Collider, quality: Quality): ZoneBuil
     kit.batch.add(new THREE.BoxGeometry(0.72, 0.1, 0.7), kit.mat('cushion'), { x: x + 0.72, y: 0.62, z, rz: 0.72 });
     kit.batch.add(new THREE.BoxGeometry(0.7, 0.05, 0.74), kit.mat('teak'), { x: x + 0.8, y: 0.56, z, rz: 0.72 });
     kit.solid(x - 1.0, x + 1.05, z - 0.4, z + 0.4, 0.9);
+    kit.shade(x - 1.0, x + 1.05, z - 0.38, z + 0.38, 0.6, true);
     kit.seat({ id: `roof.lounger.${i + 1}`, x: x + 0.28, z, yaw: -Math.PI / 2, top: 0.42, kind: 'chair' });
     // a side table between pairs
     if (i % 2 === 0 && loungers[i + 1] !== undefined) {
@@ -123,6 +126,7 @@ export function buildRoof(mats: Mats, col: Collider, quality: Quality): ZoneBuil
       kit.cylinder('teak', x + 0.2, tz, 0.26, 0.44, 0.48, 18);
       kit.cylinder('chrome', x + 0.2, tz, 0.03, 0, 0.44, 8);
       kit.post(x + 0.2, tz, 0.28, 0.5);
+      kit.shadeRound(x + 0.2, tz, 0.26, 0.48, true);
     }
   });
   // a coin telescope on the prow, looking west
@@ -132,6 +136,7 @@ export function buildRoof(mats: Mats, col: Collider, quality: Quality): ZoneBuil
   kit.batch.add(new THREE.CylinderGeometry(0.1, 0.14, 0.62, 16), kit.mat('brass'), { x: tx - 0.08, y: 1.3, z: 0, rz: Math.PI / 2 - 0.12 });
   kit.box('steel', tx - 0.12, tx + 0.12, 1.08, 1.22, -0.14, 0.14);
   kit.post(tx, 0, 0.24, 1.4);
+  kit.shadeRound(tx, 0, 0.22, 1.2);
 
   // --- two sofa groups round fire tables, under strings of bulbs ---------------------------------------
   const sofa = FURNITURE.sofa;
@@ -142,6 +147,7 @@ export function buildRoof(mats: Mats, col: Collider, quality: Quality): ZoneBuil
       const yaw = side < 0 ? 0 : Math.PI;
       kit.prop('couch', gx, cz, sofa.w, yaw);
       kit.solid(gx - sofa.w / 2, gx + sofa.w / 2, cz - sofa.d / 2, cz + sofa.d / 2, sofa.h);
+      kit.shade(gx - sofa.w / 2, gx + sofa.w / 2, cz - sofa.d / 2, cz + sofa.d / 2, sofa.h, true);
       sofa.seats!.forEach((s, k) => {
         const lx = side < 0 ? s.x : -s.x;
         kit.seat({ id: `roof.sofa.${gi + 1}${side < 0 ? 'a' : 'b'}.${k + 1}`, x: gx + lx, z: cz + (side < 0 ? s.z : -s.z), yaw, top: sofa.top!, kind: 'sofa' });
@@ -155,9 +161,11 @@ export function buildRoof(mats: Mats, col: Collider, quality: Quality): ZoneBuil
     kit.light(hdr('#ff8a2a', 3.2), gx, 0.44, gz, 1.36, 0.04, 0.08);
     kit.light(hdr('#ffc070', 2.0), gx, 0.49, gz, 1.2, 0.06, 0.03);
     kit.solid(gx - 0.97, gx + 0.97, gz - 0.38, gz + 0.38, 0.62);
+    kit.shade(gx - 0.95, gx + 0.95, gz - 0.36, gz + 0.36, 0.4);
     kit.pool(gx, gz, 2.4);
     kit.prop('lamp-floor', gx - sofa.w / 2 - 0.45, gz + (gi === 0 ? -1.35 : 1.35), 1.6);
     kit.post(gx - sofa.w / 2 - 0.45, gz + (gi === 0 ? -1.35 : 1.35), 0.25, 1.6);
+    kit.shadeRound(gx - sofa.w / 2 - 0.45, gz + (gi === 0 ? -1.35 : 1.35), 0.16, 0.9);
   });
   // the strings of bulbs: four posts, bulbs hung in sagging lines between them
   const posts = [
@@ -170,6 +178,7 @@ export function buildRoof(mats: Mats, col: Collider, quality: Quality): ZoneBuil
     kit.cylinder('steel', x, z, 0.05, 0, 3.4, 10);
     kit.cylinder('steel', x, z, 0.16, 0, 0.05, 14);
     kit.post(x, z, 0.12, 3.4);
+    kit.shadeRound(x, z, 0.16, 0.8);
   }
   const bulb = hdr('#ffd9a0', 2.8);
   const string = (a: readonly [number, number], b: readonly [number, number]) => {
@@ -192,6 +201,7 @@ export function buildRoof(mats: Mats, col: Collider, quality: Quality): ZoneBuil
   kit.box('brass', bar.x0, bar.x1, 0.2, 0.24, bar.z1 + 0.18, bar.z1 + 0.22);
   kit.light(GLOW.shelf, (bar.x0 + bar.x1) / 2, 1.02, bar.z1 + 0.005, bar.x1 - bar.x0 - 0.2, 0.02, 0.01);
   kit.solid(bar.x0, bar.x1, bar.z0, bar.z1 + 0.12, 1.1);
+  kit.shade(bar.x0, bar.x1, bar.z0, bar.z1, 1.1);
   // the back bar: a cabinet with lit shelves and bottles, a canopy over the whole
   const bb = { z0: D.z0 + 0.55, z1: D.z0 + 1.05 };
   kit.box('wood', bar.x0, bar.x1, 0, 0.95, bb.z0, bb.z1, 1.2);
@@ -201,6 +211,7 @@ export function buildRoof(mats: Mats, col: Collider, quality: Quality): ZoneBuil
     kit.light(GLOW.shelf, (bar.x0 + bar.x1) / 2, y - 0.035, bb.z1 - 0.02, bar.x1 - bar.x0 - 0.4, 0.01, 0.02);
   }
   kit.solid(bar.x0, bar.x1, bb.z0, bb.z1, 2.4);
+  kit.shade(bar.x0, bar.x1, bb.z0, bb.z1, 1.6);
   const bottles = ['bottle-tall', 'bottle-red', 'bottle-white'] as const;
   const brnd = rng(0xba7);
   for (const y of [0.95, 1.35, 1.8]) {
@@ -215,6 +226,7 @@ export function buildRoof(mats: Mats, col: Collider, quality: Quality): ZoneBuil
     kit.box('teak', x - 0.06, x + 0.06, 0, 2.7, bb.z0 - 0.1, bb.z0 + 0.02);
     kit.box('teak', x - 0.06, x + 0.06, 0, 2.7, bar.z1 + 0.48, bar.z1 + 0.6);
     kit.post(x, bar.z1 + 0.54, 0.08, 2.7);
+    kit.shade(x - 0.06, x + 0.06, bar.z1 + 0.48, bar.z1 + 0.6, 1);
   }
   for (let x = bar.x0 + 0.9; x < bar.x1 - 0.4; x += 1.62) {
     kit.glow.add(new THREE.CylinderGeometry(0.07, 0.07, 0.012, 14), GLOW.bulb, { x, y: 2.694, z: bar.z0 + 0.7 });
@@ -225,6 +237,7 @@ export function buildRoof(mats: Mats, col: Collider, quality: Quality): ZoneBuil
   for (let x = bar.x0 + 0.8; x < bar.x1 - 0.5; x += 1.55) {
     kit.prop('stool', x, stoolZ, BAR_STOOL.h, 0);
     kit.post(x, stoolZ, BAR_STOOL.r, BAR_STOOL.h);
+    kit.shadeRound(x, stoolZ, BAR_STOOL.r - 0.01, BAR_STOOL.h);
     kit.seat({ id: `roof.stool.${++si}`, x, z: stoolZ, yaw: Math.PI, top: BAR_STOOL.h, kind: 'stool' });
   }
 
@@ -235,6 +248,7 @@ export function buildRoof(mats: Mats, col: Collider, quality: Quality): ZoneBuil
     kit.box('soil', x - 1.5, x + 1.5, 0.55, 0.56, z - 0.3, z + 0.3);
     kit.box('hedge', x - 1.45, x + 1.45, 0.56, 0.95, z - 0.26, z + 0.26, 1.2);
     kit.solid(x - 1.6, x + 1.6, z - 0.4, z + 0.4, 0.95);
+    kit.shade(x - 1.6, x + 1.6, z - 0.4, z + 0.4, 0.9);
     kit.prop('plant-b', x - 1.0, z, 1.3, x, 0.56);
     kit.prop('plant-a', x + 1.0, z, 1.2, -x, 0.56);
   }
@@ -243,6 +257,7 @@ export function buildRoof(mats: Mats, col: Collider, quality: Quality): ZoneBuil
     [D.x0 + 1.2, D.z1 - 1.2],
   ] as const) {
     kit.cylinder('stone-warm', x, z, 0.55, 0, 0.7, 22, 0.6);
+    kit.shadeRound(x, z, 0.55, 0.8);
     kit.prop('palm', x, z, 3.4, x + z, 0.7);
     kit.post(x, z, 0.6, 1.4);
   }
@@ -300,6 +315,9 @@ export function buildRoof(mats: Mats, col: Collider, quality: Quality): ZoneBuil
   const glowMeshes = kit.glow.build(group);
   const pools = kit.pools('#ffb070', 0.06);
   if (pools) group.add(pools);
+  // v8: everything standing on the deck sits in its own soft shadow
+  const shadows = kit.shadows();
+  if (shadows) group.add(shadows);
   const props = new Props(quality);
   group.add(props.group);
   const ready = props.build(kit.props, kit.chandeliers).catch((err) => console.warn('roof props failed', err));
@@ -331,7 +349,7 @@ export function buildRoof(mats: Mats, col: Collider, quality: Quality): ZoneBuil
         const mesh = o as THREE.Mesh;
         if (!mesh.isMesh) return;
         const mat = mesh.material as THREE.Material & { map?: THREE.Texture | null; emissiveMap?: THREE.Texture | null };
-        if (mat.name === 'skyline' || mat.name === 'towers' || mat.name?.startsWith('sky-') || mat.name === 'city-below' || mat.name === 'city-pools' || mat.name === 'lift-panels') {
+        if (mat.name === 'skyline' || mat.name === 'towers' || mat.name?.startsWith('sky-') || mat.name === 'city-below' || mat.name === 'city-pools' || mat.name === 'contact-shadow' || mat.name === 'lift-panels') {
           mat.map?.dispose();
           mat.emissiveMap?.dispose();
           mat.dispose();

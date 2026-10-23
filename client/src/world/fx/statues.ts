@@ -18,6 +18,7 @@ import type { Collider, Post } from '../collision.ts';
 import type { FloorPlan } from '../layout.ts';
 import type { Mats } from '../materials.ts';
 import { PLINTH, STATUE_POST, statueSpots, type StatueSpot } from './scope.ts';
+import { pieceShadow, shadowGeometry, shadowMaterial, shadowTexture } from '../grounding.ts';
 
 /** How much larger than life the figure is cast. */
 const SCALE = 1.12;
@@ -48,6 +49,9 @@ export class Statues {
   private shown: Shown[] = [];
   private run = 0;
   private golds: Partial<Record<Quality, THREE.MeshStandardMaterial | THREE.MeshPhongMaterial>> = {};
+  /** v8: the plinths' soft shadows on the marble (grounding.ts). */
+  private readonly shadowTex = shadowTexture();
+  private readonly shadowMat = shadowMaterial(this.shadowTex);
 
   constructor(private readonly deps: StatueDeps) {
     this.group.name = 'statues';
@@ -90,6 +94,8 @@ export class Statues {
     this.run++;
     this.clear();
     for (const m of Object.values(this.golds)) m?.dispose();
+    this.shadowMat.dispose();
+    this.shadowTex.dispose();
     this.group.removeFromParent();
   }
 
@@ -152,6 +158,13 @@ export class Statues {
     ])!;
     own.push(stone, brass);
     g.add(new THREE.Mesh(stone, mats.get('marble-black')), new THREE.Mesh(brass, mats.get('brass')));
+    // v8: the plinth stands in its own soft shadow, like everything else on the floor
+    const shade = shadowGeometry(pieceShadow({ x: 0, z: 0, w: PLINTH.base, d: PLINTH.base, h: 2 }));
+    own.push(shade);
+    const shadow = new THREE.Mesh(shade, this.shadowMat);
+    shadow.name = 'statue-shadow';
+    shadow.renderOrder = -1;
+    g.add(shadow);
     const texture = plaqueTexture(s.name, s.at);
     const q = this.deps.quality();
     const plaque = q === 'high' ? new THREE.MeshStandardMaterial({ map: texture, metalness: 0.9, roughness: 0.35 }) : new THREE.MeshLambertMaterial({ map: texture, emissive: '#1a1206' });

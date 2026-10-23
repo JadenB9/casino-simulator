@@ -13,7 +13,8 @@ import type { Box, Collider } from '../collision.ts';
 import type { Character, CharacterFactoryExt } from '../contract.ts';
 import type { Spot } from '../interact.ts';
 import { turnToward } from '../npcs.ts';
-import { MatBatch, bodyGeometries, carKit, wheelGeometries, wheelMatrix, type CarMat } from './models.ts';
+import { MatBatch, bodyGeometries, carKit, carShadow, wheelGeometries, wheelMatrix, type CarMat } from './models.ts';
+import { shadowMesh } from './lot.ts';
 import type { CarMaterials } from './materials.ts';
 import { along, arrivalPath, departurePath, pathLength } from './layout.ts';
 
@@ -46,6 +47,8 @@ export class Rig {
     this.half = kit.width / 2;
     // driven: its lamps are on
     for (const [m, gs] of bodyGeometries(car)) for (const g of gs) this.mesh(this.root, g, mats.get(m === 'lamp' ? 'glow' : m));
+    // v8: its shadow on the road (shared by every rig of this car: not one of the rig's own to dispose)
+    this.root.add(shadowMesh(carShadow(car), mats.shadow, 'car-shadow'));
     const wheel = wheelGeometries(car);
     for (let i = 0; i < 4; i++) {
       const w = new THREE.Group();

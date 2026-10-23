@@ -17,6 +17,7 @@ import type { Quality } from '../../render/engine3d.ts';
 import type { Box, Collider, Post } from '../collision.ts';
 import { CarMaterials } from './materials.ts';
 import { MatBatch, carKit, type CarMat } from './models.ts';
+import { shadowMesh } from './lot.ts';
 import { CAR_SPECS } from './specs.ts';
 import { GARAGE, GARAGE_LOT, LOUNGE, collection, type Bay } from './layout.ts';
 
@@ -509,6 +510,13 @@ export class Garage {
     for (const [m, geo] of batch.build()) {
       this.shown.add(new THREE.Mesh(geo, this.carMats.get(m)));
       this.shownGeos.push(geo);
+    }
+    // v8: each car's shadow on its plinth, and the turntable's on the disc (it turns with it)
+    for (const [b, parent, name] of [[batch, this.shown, 'garage-shadows'], [hero, this.turntable, 'turntable-shadow']] as const) {
+      const shadow = b.shadows();
+      if (!shadow) continue;
+      parent.add(shadowMesh(shadow, this.carMats.shadow, name));
+      this.shownGeos.push(shadow);
     }
     const heroBay = layout[0]!.bay;
     this.turntable.position.set(heroBay.x, 0, heroBay.z);

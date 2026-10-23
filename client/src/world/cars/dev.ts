@@ -11,7 +11,8 @@ import * as THREE from 'three';
 import { Engine3D, type Quality } from '../../render/engine3d.ts';
 import { CARS } from '../../../../shared/src/items.ts';
 import { CarMaterials } from './materials.ts';
-import { carKit, mergeCars, type CarMat } from './models.ts';
+import { MatBatch, carKit, type mergeCars, type CarMat } from './models.ts';
+import { shadowMesh } from './lot.ts';
 
 const q = new URLSearchParams(location.search);
 if (q.get('view') === 'ground') void import('./dev-ground.ts').then((m) => m.runGround(q));
@@ -31,7 +32,12 @@ scene.add(ground);
 
 const mats = new CarMaterials(quality, scene.environment);
 const show = (placed: Parameters<typeof mergeCars>[0]) => {
-  for (const [m, g] of mergeCars(placed)) scene.add(new THREE.Mesh(g, mats.get(m as CarMat)));
+  const b = new MatBatch();
+  for (const c of placed) b.car(c);
+  for (const [m, g] of b.build()) scene.add(new THREE.Mesh(g, mats.get(m as CarMat)));
+  // v8: their shadows on the ground, as the game draws them
+  const shadow = b.shadows();
+  if (shadow) scene.add(shadowMesh(shadow, mats.shadow, 'dev-shadows'));
 };
 
 const cam = engine.camera;

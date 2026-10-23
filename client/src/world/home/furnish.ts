@@ -134,10 +134,12 @@ class At {
     this.kit.light(color, m.x, (y0 + y1) / 2 + this.lift, m.z, x1 - x0, y1 - y0, z1 - z0, this.p.yaw);
   }
 
-  /** Solid to the walker, by its local corners. */
+  /** Solid to the walker, by its local corners; v8: and standing in its own soft shadow on the floor. */
   solid(x0: number, x1: number, z0: number, z1: number, top = 1.2): void {
     const m = this.w((x0 + x1) / 2, (z0 + z1) / 2);
     this.col.box(m.x, m.z, x1 - x0, z1 - z0, this.p.yaw, top + this.lift);
+    // (not up on a store's platform: the shadows lie on the flat's floor)
+    if (this.lift < 0.05) this.kit.shadeTurned(m.x, m.z, x1 - x0, z1 - z0, this.p.yaw, top, true);
   }
 
   /** A sphere (a pendant, a bulb, a ball). */
@@ -305,6 +307,9 @@ export function furnish(mats: Mats, col: Collider, tier: number, owned: Readonly
   }
   const built = kit.batch.build(group, 'home');
   const glows = kit.glow.build(group);
+  // v8: every piece in its soft shadow, laid over the floor and its rugs (their tops 2 cm up)
+  const shadows = kit.shadows(0.03);
+  if (shadows) group.add(shadows);
   // (no pools of light on the floor in here: the owner found the circles too plain to see)
   for (const b of own.boxes) col.boxes.push(b);
   for (const p of own.posts) col.posts.push(p);
@@ -319,6 +324,12 @@ export function furnish(mats: Mats, col: Collider, tier: number, owned: Readonly
       for (const shape of [...own.boxes, ...own.posts]) col.remove(shape);
       for (const m of [...built.meshes, ...glows.meshes]) m.dispose();
       for (const m of rack) m.geometry.dispose();
+      if (shadows) {
+        shadows.geometry.dispose();
+        const mat = shadows.material as THREE.MeshBasicMaterial;
+        mat.map?.dispose();
+        mat.dispose();
+      }
       if (neon) {
         neon.geometry.dispose();
         const mat = neon.material as THREE.MeshBasicMaterial;

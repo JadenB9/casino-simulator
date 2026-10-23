@@ -6,9 +6,13 @@
 import * as THREE from 'three';
 import type { Quality } from '../../render/engine3d.ts';
 import type { CarMat } from './models.ts';
+import { shadowMaterial, shadowTexture } from '../grounding.ts';
 
 export class CarMaterials {
   private readonly mats = new Map<CarMat, THREE.Material>();
+  private readonly shadowTex = shadowTexture();
+  /** v8: every car's contact shadow on the ground (models.ts carShadow, MatBatch.shadows). */
+  readonly shadow = shadowMaterial(this.shadowTex);
 
   constructor(
     private quality: Quality,
@@ -67,6 +71,8 @@ export class CarMaterials {
   dispose(): void {
     for (const m of this.mats.values()) m.dispose();
     this.mats.clear();
+    this.shadow.dispose();
+    this.shadowTex.dispose();
   }
 }
 

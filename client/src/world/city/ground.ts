@@ -94,6 +94,7 @@ export function buildGround(mats: Mats, col: Collider, quality: Quality): ZoneBu
       kit.cylinder('brass', x, z, 0.47, 0, 0.16, 28);
       kit.cylinder('brass', x, z, 0.47, HH - 0.74, HH - 0.54, 28);
       kit.post(x, z, 0.46, HH);
+      kit.shadeRound(x, z, 0.47, 1.6);
     }
   }
   // the concierge desk on the north side, a backlit panel behind it
@@ -102,6 +103,7 @@ export function buildGround(mats: Mats, col: Collider, quality: Quality): ZoneBu
   kit.box('marble-black', desk.x0 - 0.04, desk.x1 + 0.04, 1.06, 1.12, desk.z0 - 0.04, desk.z1 + 0.06, 1.2);
   kit.box('brass', desk.x0, desk.x1, 0.02, 0.1, desk.z1, desk.z1 + 0.012);
   kit.solid(desk.x0, desk.x1, desk.z0, desk.z1, 1.12);
+  kit.shade(desk.x0, desk.x1, desk.z0, desk.z1, 1.1);
   kit.box('wood', 113, 121, 0, 3.4, H.z0 + 0.03, H.z0 + 0.12, 1.4);
   kit.light(GLOW.soft, 117, 3.35, H.z0 + 0.14, 7.6, 0.03, 0.03);
   // sofas round two low tables on the south side, lamps, palms by the doors, plants in corners
@@ -115,6 +117,10 @@ export function buildGround(mats: Mats, col: Collider, quality: Quality): ZoneBu
     kit.solid(x - 1.1, x + 1.1, z - 1.65, z - 0.85, 0.85);
     kit.solid(x - 1.1, x + 1.1, z + 0.85, z + 1.65, 0.85);
     kit.solid(x - 0.65, x + 0.65, z - 0.35, z + 0.35, 0.42);
+    // v8: the sofas and the table in their soft shadows
+    kit.shade(x - 1.1, x + 1.1, z - 1.65, z - 0.85, 0.85, true);
+    kit.shade(x - 1.1, x + 1.1, z + 0.85, z + 1.65, 0.85, true);
+    kit.shade(x - 0.65, x + 0.65, z - 0.35, z + 0.35, 0.42);
     for (const side of [-1, 1] as const) {
       const yaw = side < 0 ? 0 : Math.PI;
       [-0.62, 0, 0.62].forEach((sx, k) => {
@@ -124,9 +130,11 @@ export function buildGround(mats: Mats, col: Collider, quality: Quality): ZoneBu
     }
     kit.prop('lamp-floor', x - 1.55, z, 1.6);
     kit.post(x - 1.55, z, 0.25, 1.6);
+    kit.shadeRound(x - 1.55, z, 0.16, 0.9);
   }
   for (const z of [-4.2, 4.2]) {
     kit.cylinder('marble-black', 125.6, z, 0.55, 0, 0.62, 24, 0.6);
+    kit.shadeRound(125.6, z, 0.55, 0.7);
     kit.prop('palm', 125.6, z, 3.2, z > 0 ? 1.2 : 0.2, 0.62);
     kit.post(125.6, z, 0.6, 1.2);
   }
@@ -135,6 +143,7 @@ export function buildGround(mats: Mats, col: Collider, quality: Quality): ZoneBu
     [106.6, 11.4],
   ] as const) {
     kit.cylinder('brass', x, z, 0.36, 0, 0.5, 20, 0.4);
+    kit.shadeRound(x, z, 0.36, 0.6);
     kit.prop('plant-a', x, z, 1.5, 0, 0.5);
     kit.post(x, z, 0.4, 1.2);
   }
@@ -161,6 +170,7 @@ export function buildGround(mats: Mats, col: Collider, quality: Quality): ZoneBu
 
   // a round table under the chandeliers with flowers on it, rugs under the sofas
   kit.cylinder('marble-black', 116.6, 0, 0.8, 0, 0.74, 32, 0.72);
+  kit.shadeRound(116.6, 0, 0.8, 0.8);
   kit.cylinder('brass', 116.6, 0, 0.9, 0.74, 0.78, 32);
   kit.prop('plant-a', 116.6, 0, 1.3, 0.4, 0.78);
   kit.post(116.6, 0, 0.9, 1.4);
@@ -187,6 +197,7 @@ export function buildGround(mats: Mats, col: Collider, quality: Quality): ZoneBu
     kit.cylinder('marble-black', C.x1 - 0.5, z, 0.3, 0, cy, 20);
     kit.cylinder('brass', C.x1 - 0.5, z, 0.34, 0, 0.3, 20);
     kit.post(C.x1 - 0.5, z, 0.34, cy);
+    kit.shadeRound(C.x1 - 0.5, z, 0.34, 1.4);
   }
   // downlights in the canopy's underside, with their pools on the drive
   for (let x = C.x0 + 1.6; x < C.x1 - 0.5; x += 3.2) {
@@ -429,6 +440,9 @@ export function buildGround(mats: Mats, col: Collider, quality: Quality): ZoneBu
   // (v7.4: a hint of each lamp's light, no more: the owner found the circles too plain)
   const pools = kit.pools('#ffc98a', 0.066);
   if (pools) group.add(pools);
+  // v8: the hall's furniture, the columns and the lot lights' feet in their soft shadows
+  const shadows = kit.shadows();
+  if (shadows) group.add(shadows);
   // 1.3: the street lamps, which a car can knock over
   const lamps = new StreetLamps(kit.lamps, mats, col);
   group.add(lamps.group);
@@ -476,7 +490,7 @@ export function buildGround(mats: Mats, col: Collider, quality: Quality): ZoneBu
         const mesh = o as THREE.Mesh;
         if (!mesh.isMesh) return;
         const mat = mesh.material as THREE.Material & { map?: THREE.Texture | null; emissiveMap?: THREE.Texture | null };
-        if (mat.name === 'skyline' || mat.name === 'towers' || mat.name?.startsWith('sky-') || mat.name === 'city-signs' || mat.name === 'city-pools' || mat.name === 'lift-panels') {
+        if (mat.name === 'skyline' || mat.name === 'towers' || mat.name?.startsWith('sky-') || mat.name === 'city-signs' || mat.name === 'city-pools' || mat.name === 'contact-shadow' || mat.name === 'lift-panels') {
           mat.map?.dispose();
           mat.emissiveMap?.dispose();
           mat.dispose();
@@ -493,6 +507,7 @@ function lamp(kit: Kit, x: number, z: number, h: number, heads: number): void {
   kit.cylinder('steel', x, z, 0.1, 0, h, 10, 0.07);
   kit.cylinder('concrete', x, z, 0.3, 0, 0.5, 14);
   kit.post(x, z, 0.3, h);
+  kit.shadeRound(x, z, 0.3, 0.8);
   const span = 1.4;
   kit.box('steel', x - span / 2 - 0.3, x + span / 2 + 0.3, h - 0.08, h, z - 0.06, z + 0.06);
   for (let i = 0; i < heads; i++) {

@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import type { Engine3D } from '../render/engine3d.ts';
 import type { GameClientModule } from '../games/contract.ts';
 import type { Station } from './contract.ts';
+import { modelShadow, shadowGeometry, shadowMaterial, shadowTexture } from './grounding.ts';
 
 export function devRoom(engine: Engine3D, module: GameClientModule, variant: string): Station {
   const scene = engine.scene;
@@ -16,7 +17,17 @@ export function devRoom(engine: Engine3D, module: GameClientModule, variant: str
   floor.rotation.x = -Math.PI / 2;
   scene.add(floor);
   const anchor = new THREE.Group();
-  anchor.add(module.createModel({ variant, quality: engine.quality }));
+  const model = module.createModel({ variant, quality: engine.quality });
+  anchor.add(model);
   scene.add(anchor);
+  // v8: the table stands in its own soft shadow, as it does on the floor (grounding.ts)
+  anchor.updateMatrixWorld(true);
+  const outline = modelShadow(model, anchor);
+  if (outline) {
+    const shadow = new THREE.Mesh(shadowGeometry(outline), shadowMaterial(shadowTexture()));
+    shadow.name = 'dev-room-shadow';
+    shadow.renderOrder = -1;
+    scene.add(shadow);
+  }
   return { id: `dev-${module.game}`, game: module.game, variant, anchor };
 }

@@ -16,6 +16,7 @@ import { canvasTexture } from '../carpet.ts';
 import { rng } from './sky.ts';
 import { wrapped } from '../home/surfaces.ts';
 import type { LampSpec } from './lamps.ts';
+import { pieceShadow, shadowMaterial, shadowTexture, shadowsGeometry, type Shadow } from '../grounding.ts';
 
 export class Kit {
   readonly batch = new Batch();
@@ -26,6 +27,8 @@ export class Kit {
   /** 1.3: the street lamps, built apart so a car can knock them over (lamps.ts). */
   readonly lamps: LampSpec[] = [];
   private readonly poolGeos: THREE.BufferGeometry[] = [];
+  /** v8: the contact shadows under what stands on the ground (grounding.ts). */
+  private readonly shadowList: Shadow[] = [];
 
   constructor(
     readonly zone: string,
@@ -135,6 +138,35 @@ export class Kit {
     g.rotateX(-Math.PI / 2);
     g.translate(x, y, z);
     this.poolGeos.push(g);
+  }
+
+  /** v8: a soft contact shadow under a box standing on the ground, by its corners, `h` tall (`legs`: on legs or feet). */
+  shade(x0: number, x1: number, z0: number, z1: number, h: number, legs = false): void {
+    this.shadowList.push(pieceShadow({ x: (x0 + x1) / 2, z: (z0 + z1) / 2, w: x1 - x0, d: z1 - z0, h, legs }));
+  }
+
+  /** v8: a contact shadow under something round (a planter, a pole's foot, a stool), radius r. */
+  shadeRound(x: number, z: number, r: number, h: number, legs = false): void {
+    this.shadowList.push(pieceShadow({ x, z, w: 2 * r, d: 2 * r, h, round: true, legs }));
+  }
+
+  /** v8: a contact shadow under a box turned about y, by its middle (a sofa set at an angle). */
+  shadeTurned(x: number, z: number, w: number, d: number, yaw: number, h: number, legs = false): void {
+    this.shadowList.push(pieceShadow({ x, z, w, d, yaw, h, legs }));
+  }
+
+  /**
+   * The contact shadows as one mesh, lying `y` up (over the zone's floor and its rugs), or null. The
+   * material is named 'contact-shadow' for the zone's dispose.
+   */
+  shadows(y?: number): THREE.Mesh | null {
+    const geo = shadowsGeometry(this.shadowList, y);
+    this.shadowList.length = 0;
+    if (!geo) return null;
+    const mesh = new THREE.Mesh(geo, shadowMaterial(shadowTexture()));
+    mesh.name = `${this.zone}:shadows`;
+    mesh.renderOrder = -1;
+    return mesh;
   }
 
   prop(kind: PropPlace['kind'], x: number, z: number, size: number, ry = 0, y = 0): void {
