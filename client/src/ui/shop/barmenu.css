@@ -78,5 +78,7 @@
   .dine-sheet .sheet-sub { display: none; }
   .dine-jump { display: flex; }
   .dine-item { grid-template-columns: 26px 1fr auto; gap: 10px; }
+  /* the words always under the line, so every row reads the same */
+  .dine-under { flex-direction: column; align-items: flex-start; gap: 4px; }
   .bar-does-list { justify-content: flex-start; margin-left: 0; }
 }

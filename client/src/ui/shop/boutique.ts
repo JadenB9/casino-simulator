@@ -32,7 +32,7 @@ import { Showroom, framingFor, type Mood, type Shower } from './showroom.ts';
 import { applyMoney } from './bar.ts';
 import { newOp } from './api.ts';
 import { keyLabel } from '../keys.ts';
-import { drawItem, itemPicture } from './art.ts';
+import { drawItem } from './art.ts';
 import { shopIcon } from './icons.ts';
 import { isSaved, savedIds, toggleSaved } from './saved.ts';
 import {
@@ -112,7 +112,14 @@ interface Card {
   cover: HTMLElement | null;
   heart: HTMLElement;
   state: string;
+  label: string;
 }
+
+/**
+ * A card per piece per section: the Vault lists the same pieces as their kinds do, and a card
+ * picked there has to stay in the Vault (a search finds a piece in its own section).
+ */
+const keyOf = (e: Entry) => `${e.section}:${e.id}`;
 
 export function openShop(deps: ShopDeps): Closable {
   const { session } = deps;
@@ -301,6 +308,22 @@ export function openShop(deps: ShopDeps): Closable {
   // ---- the cards
   /** Cards are kept for as long as the boutique is open: each piece's picture is drawn once. */
   const cards = new Map<string, Card>();
+  /**
+   * A picture is drawn when its card first comes into view (or near it), so a long search or a
+   * visit to every section only ever draws what was looked at. Without the observer (an old
+   * browser) each is drawn at once.
+   */
+  const unseen = new Map<Element, () => void>();
+  const io = typeof IntersectionObserver === 'function'
+    ? new IntersectionObserver((seen, obs) => {
+        for (const en of seen) {
+          if (!en.isIntersecting) continue;
+          unseen.get(en.target)?.();
+          unseen.delete(en.target);
+          obs.unobserve(en.target);
+        }
+      }, { root: list, rootMargin: '160px 0px' })
+    : null;
   const statueBox = el('div', 'bq-statues');
   /** What the grid shows: a section (and kind), or every section's matches for the search; filtered and in order. */
   const listed = (): Entry[] => {
@@ -309,7 +332,7 @@ export function openShop(deps: ShopDeps): Closable {
   };
 
   const cardFor = (e: Entry): Card => {
-    let c = cards.get(e.id);
+    let c = cards.get(keyOf(e));
     if (c) return c;
     const vault = inVault(e);
     const row = el('button', `bq-item${e.reward ? ' reward' : ''}${vault ? ' vault' : ''}`);
@@ -317,7 +340,14 @@ export function openShop(deps: ShopDeps): Closable {
     row.setAttribute('role', 'option');
     row.dataset.id = e.id;
     const pic = el('span', 'bq-pic');
-    pic.append(itemPicture(e.id, vault ? 240 : 200, vault ? 120 : 100));
+    const art = el('canvas', 'bq-art');
+    art.setAttribute('aria-hidden', 'true');
+    const draw = () => drawItem(art, e.id, vault ? 240 : 200, vault ? 120 : 100);
+    pic.append(art);
+    if (io) {
+      unseen.set(pic, draw);
+      io.observe(pic);
+    } else draw();
     const heart = el('span', 'bq-heart');
     heart.append(shopIcon('heart'));
     pic.append(heart);
@@ -341,8 +371,8 @@ export function openShop(deps: ShopDeps): Closable {
     row.append(pic, text);
     row.addEventListener('click', () => pick(e));
     row.addEventListener('dblclick', () => primary.click());
-    c = { row, chip, fill, cover, heart, state: '\0' };
-    cards.set(e.id, c);
+    c = { row, chip, fill, cover, heart, state: '\0', label: '' };
+    cards.set(keyOf(e), c);
     return c;
   };
 
@@ -371,7 +401,8 @@ export function openShop(deps: ShopDeps): Closable {
       const c = cardFor(e);
       // a short stagger as the cards come in (CSS holds it still under calm)
       c.row.style.setProperty('--i', String(Math.min(i, 10)));
-      if (fresh) c.row.classList.remove('bq-in');
+      // off for every card, so one put back in place doesn't play its entrance again
+      c.row.classList.remove('bq-in');
       out.push(c.row);
     });
     if (here.length === 0) out.push(emptyNote());
@@ -380,7 +411,7 @@ export function openShop(deps: ShopDeps): Closable {
     if (fresh) {
       // restart the entrance: a reflow per render, never per frame
       void list.offsetWidth;
-      for (const e of here) cards.get(e.id)!.row.classList.add('bq-in');
+      for (const e of here) cards.get(keyOf(e))!.row.classList.add('bq-in');
       list.scrollTop = 0;
     }
     paintRows();
@@ -441,7 +472,7 @@ export function openShop(deps: ShopDeps): Closable {
     const mixed = here.some((e) => !e.reward && !NEW_IDS.has(e.id));
     const bal = balance();
     for (const e of here) {
-      const c = cards.get(e.id);
+      const c = cards.get(keyOf(e));
       if (!c) continue;
       const on = e.id === picked.id;
       c.row.setAttribute('aria-selected', String(on));
@@ -452,7 +483,8 @@ export function openShop(deps: ShopDeps): Closable {
         c.chip.textContent = state;
         c.chip.className = `bq-chip ${state.toLowerCase()}`.trim();
       }
-      c.row.setAttribute('aria-label', `${e.name}, ${e.reward ? 'won, never sold' : formatMoney(e.price)}${state ? `, ${state.toLowerCase()}` : ''}`);
+      const label = `${e.name}, ${e.reward ? 'won, never sold' : formatMoney(e.price)}${state ? `, ${state.toLowerCase()}` : ''}`;
+      if (label !== c.label) c.row.setAttribute('aria-label', (c.label = label));
       const short = !e.reward && !isOwned(e) && e.price > bal;
       c.row.classList.toggle('short', short);
       if (c.cover && c.fill) {
@@ -537,40 +569,53 @@ export function openShop(deps: ShopDeps): Closable {
     return { line: money, ...buy };
   };
 
+  /** Paint runs each second on the effects tab: write only what changed. */
+  const put = (node: HTMLElement, text: string) => {
+    if (node.textContent !== text) node.textContent = text;
+  };
+  const attr = (node: HTMLElement, name: string, value: string) => {
+    if (node.getAttribute(name) !== value) node.setAttribute(name, value);
+  };
+
   const paint = () => {
     const e = picked;
     // a filter's set can change under it (a purchase, a change of balance): the grid follows
     if (list.childElementCount && listed().map((x) => x.id).join() !== shownIds) renderList(false);
-    balVal.textContent = formatMoney(balance());
+    put(balVal, formatMoney(balance()));
     const n = owned ? owned.size : 0;
     const s = savedIds().size;
-    ownVal.textContent = owned ? [n ? `${n} owned` : 'Nothing owned yet', s ? `${s} saved` : ''].filter(Boolean).join(' · ') : '';
-    sub.textContent =
+    put(ownVal, owned ? [n ? `${n} owned` : 'Nothing owned yet', s ? `${s} saved` : ''].filter(Boolean).join(' · ') : '');
+    put(
+      sub,
       query ? 'Every section, by name, what it is or what it is made of.'
       : section === 'fx' ? 'Paid each time. It plays where you stand, for everyone to see.'
       : section === 'vault' ? 'The private collection: a billion dollars and up.'
-      : 'Paid from your balance. Yours to keep.';
-    kinds.root.hidden = section !== 'wear' || !!query;
+      : 'Paid from your balance. Yours to keep.',
+    );
+    const noKinds = section !== 'wear' || !!query;
+    if (kinds.root.hidden !== noKinds) kinds.root.hidden = noKinds;
     tabBox.classList.toggle('searching', !!query);
-    capName.textContent = NAME_IN_LIGHTS.has(e.id) ? (session.profile?.name ?? e.name) : e.name;
+    put(capName, NAME_IN_LIGHTS.has(e.id) ? (session.profile?.name ?? e.name) : e.name);
     capName.classList.toggle('led', NAME_IN_LIGHTS.has(e.id));
-    capLine.textContent = capLineOf(e);
-    selName.textContent = e.name;
-    selPrice.textContent = e.reward ? 'Reward' : formatMoney(e.price);
-    selMeta.textContent = metaOf(e);
-    selAbout.textContent = e.about;
+    put(capLine, capLineOf(e));
+    put(selName, e.name);
+    put(selPrice, e.reward ? 'Reward' : formatMoney(e.price));
+    put(selMeta, metaOf(e));
+    put(selAbout, e.about);
     foot.classList.toggle('vault', inVault(e));
     const d = decide(e);
-    primary.textContent = busy ? primary.textContent : d.label;
-    primary.disabled = busy || !d.enabled;
+    if (!busy) put(primary, d.label);
+    const off = busy || !d.enabled;
+    if (primary.disabled !== off) primary.disabled = off;
     primary.classList.toggle('armed', armed?.id === e.id);
     const saved = isSaved(e.id);
-    saveBtn.setAttribute('aria-pressed', String(saved));
-    saveBtn.setAttribute('aria-label', saved ? `Saved: take ${theName(e.name)} off your list` : `Save ${theName(e.name)} to your list`);
-    saveBtn.title = saved ? 'Saved (on this device)' : 'Save for later (on this device)';
+    attr(saveBtn, 'aria-pressed', String(saved));
+    attr(saveBtn, 'aria-label', saved ? `Saved: take ${theName(e.name)} off your list` : `Save ${theName(e.name)} to your list`);
+    attr(saveBtn, 'title', saved ? 'Saved (on this device)' : 'Save for later (on this device)');
     const line = note ?? d.line;
-    status.textContent = line.text;
-    status.className = `bq-status ${line.kind}`.trim();
+    put(status, line.text);
+    const cls = `bq-status ${line.kind}`.trim();
+    if (status.className !== cls) status.className = cls;
     if (section === 'statue') paintStatues();
     paintRows();
   };
@@ -606,7 +651,7 @@ export function openShop(deps: ShopDeps): Closable {
     preview(e);
     deps.sfx?.play('ui-switch', { volume: 0.18 });
     paint();
-    const row = cards.get(e.id)?.row;
+    const row = cards.get(keyOf(e))?.row;
     if (row?.isConnected) {
       row.scrollIntoView({ block: 'nearest' });
       if (focus) row.focus();
@@ -842,7 +887,7 @@ export function openShop(deps: ShopDeps): Closable {
     };
     const inList = (ev.target as HTMLElement).closest('.bq-list');
     if (!inTabs && (ev.key === 'ArrowDown' || ev.key === 'ArrowUp')) {
-      const cols = inList ? columns(here.map((e) => cards.get(e.id)!.row)) : 1;
+      const cols = inList ? columns(here.map((e) => cards.get(keyOf(e))!.row)) : 1;
       step(ev.key === 'ArrowDown' ? cols : -cols);
     } else if (inList && (ev.key === 'ArrowRight' || ev.key === 'ArrowLeft')) step(ev.key === 'ArrowRight' ? 1 : -1);
     else if (inList && (ev.key === 'Home' || ev.key === 'End')) step(ev.key === 'Home' ? -here.length : here.length);
@@ -885,6 +930,8 @@ export function openShop(deps: ShopDeps): Closable {
     clearInterval(replay);
     clearInterval(ticker);
     clearTimeout(disarm);
+    io?.disconnect();
+    unseen.clear();
     release();
     offSession();
     removeEventListener('resize', onResize);
@@ -915,7 +962,7 @@ export function openShop(deps: ShopDeps): Closable {
       paint();
     });
   queueMicrotask(() => {
-    const row = cards.get(picked.id)?.row;
+    const row = cards.get(keyOf(picked))?.row;
     if (row?.isConnected) row.focus();
     else focusFirst(panel);
   });

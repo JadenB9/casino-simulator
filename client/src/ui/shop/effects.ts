@@ -105,8 +105,11 @@ export function openEffects(deps: EffectsDeps): Closable {
       const wait = at ? waitFor(list, fx, me(), at.x, at.z, now) : null;
       const mine = list.filter((e) => e.fx === fx.id && e.id === me());
       const booked = wait !== null && wait.at - now > FX_MAX_WAIT_MS;
+      const isArmed = armed?.id === fx.id;
       let when = '';
-      if (mine.some((e) => e.at <= now)) when = `Yours is on, ${clockText(Math.max(...mine.map((e) => e.until)) - now)} left`;
+      // pressed once: what a second press leaves you with, by the button (the note under the list says it in full)
+      if (isArmed && busy === null) when = `Balance after: ${formatMoney(bal - fx.price)}`;
+      else if (mine.some((e) => e.at <= now)) when = `Yours is on, ${clockText(Math.max(...mine.map((e) => e.until)) - now)} left`;
       else if (mine.length) when = `Yours starts in ${clockText(Math.min(...mine.map((e) => e.at)) - now)}`;
       else if (booked) when = 'Booked up for now';
       else if (wait?.behind && wait.at > now) {
@@ -117,7 +120,6 @@ export function openEffects(deps: EffectsDeps): Closable {
       else if (bal < fx.price) when = `${formatMoney(fx.price - bal)} short`;
       if (r.when.textContent !== when) r.when.textContent = when;
       r.row.classList.toggle('on', mine.length > 0);
-      const isArmed = armed?.id === fx.id;
       r.row.classList.toggle('armed', isArmed);
       r.btn.classList.toggle('primary', isArmed);
       const text = busy === fx.id ? 'Paying' : isArmed ? 'Confirm' : 'Play';

@@ -73,7 +73,8 @@
 .bq-item.bq-in { animation: bq-card-in 0.34s var(--ease) both; animation-delay: calc(var(--i, 0) * 18ms); }
 @keyframes bq-card-in { from { opacity: 0; transform: translateY(6px); } }
 .bq-pic { position: relative; display: block; padding: 6px 6px 0; background: radial-gradient(120% 90% at 50% 40%, rgba(var(--brass-hi-rgb), 0.1), rgba(var(--brass-hi-rgb), 0) 70%); }
-.bq-art { display: block; width: 100%; height: auto; }
+/* the picture's box keeps its shape before it's drawn, so nothing moves when it is */
+.bq-art { display: block; width: 100%; height: auto; aspect-ratio: 2 / 1; }
 .bq-heart { position: absolute; top: 7px; right: 7px; color: var(--lose); }
 .bq-heart .ico { width: 15px; height: 15px; }
 .bq-heart .ico path { fill: currentColor; }
@@ -81,7 +82,8 @@
 .bq-kind { font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--brass); }
 .bq-list:not(.mixed) .bq-item:not(.vault) .bq-kind { display: none; }
 .bq-name { font-family: var(--serif); font-size: 15px; font-weight: 600; line-height: 1.25; letter-spacing: 0.04em; color: var(--ink); overflow-wrap: anywhere; }
-.bq-line { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-width: 0; }
+/* the chip drops under the price on a narrow card rather than run off its edge */
+.bq-line { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 3px 6px; min-width: 0; }
 .bq-price { font-size: 16px; line-height: 1.2; color: var(--ink); white-space: nowrap; }
 .bq-item.short .bq-price { color: var(--ink-3); }
 .bq-meta { font-size: 11.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); }
@@ -168,6 +170,17 @@
 body.calm .bq-item.bq-in { animation: none; }
 body.calm .bq-item, body.calm .bq-cover-fill { transition: none; }
 
+/* A narrow case (a tablet upright, a small laptop): the kinds keep to one line, scrolling sideways
+   if they must, and the sort is its arrow. */
+.bq-panel { container: bq-case / inline-size; }
+@container bq-case (max-width: 480px) {
+  .bq-sub { overflow-x: auto; scrollbar-width: none; }
+  .bq-sub .seg-btn { flex: 1 0 auto; padding: 0 7px; white-space: nowrap; }
+}
+@container bq-case (max-width: 440px) {
+  .bq-sort-word { display: none; }
+}
+
 /* A phone upright: the showroom on top, the case below with its head and foot kept short. */
 @media (max-width: 760px) {
   .boutique { flex-direction: column; }
@@ -233,8 +246,11 @@ body.calm .bq-item, body.calm .bq-cover-fill { transition: none; }
   .bq-buttons { grid-column: 2; grid-row: 1 / span 2; }
   .bq-primary { min-width: 150px; height: 40px; font-size: 15px; }
   .bq-save { height: 40px; }
-  .bq-caption { bottom: 58px; }
+  /* the name clear of the turn control under it */
+  .bq-caption { bottom: 60px; }
   .bq-cap-name { font-size: 19px; }
+  .bq-turn { bottom: 10px; gap: 10px; padding: 3px; }
+  .bq-turn-btn { width: 30px; height: 30px; }
 }
 
 /* ---------------------------------------------------------------- effects (HUD) */
@@ -255,7 +271,7 @@ body.calm .bq-item, body.calm .bq-cover-fill { transition: none; }
 .fx-meta .ico { width: 13px; height: 13px; }
 .fx-when { min-height: 0; font-size: 13.5px; color: var(--ink-3); }
 .fx-when:empty { display: none; }
-.fx-row.on .fx-when { color: var(--brass-hi); }
+.fx-row.on .fx-when, .fx-row.armed .fx-when { color: var(--brass-hi); }
 .fx-side { display: grid; justify-items: end; gap: 4px; }
 .fx-price { font-size: 15.5px; text-align: right; color: var(--ink-2); white-space: nowrap; }
 .fx-play { min-width: 86px; height: 32px; padding: 0 12px; font-size: 14px; }
