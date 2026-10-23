@@ -22,11 +22,12 @@ import { buildCabinet, bulbMaterial, buttonAtUv, candleColor, payGlassPlacement,
 import { blink, calm, wave } from '../../app/comfort.ts';
 import { lineCells, lineColor, paintMeters, paintOverlay, type MeterValues } from './glass.ts';
 import { MachineSound } from './sound.ts';
-import { mountDeck, Banner, CountUp, SessionLog, SessionPanel, countEase } from './deck.ts';
+import { mountDeck, Banner, CountUp, SessionPanel } from './deck.ts';
+import { SessionLog } from './session.ts';
 import type { SpinOutcome } from './auto.ts';
 import { openPays, type PaysSheet } from './pays.ts';
 import { addSheen } from './sheen.ts';
-import { winTier, slotsTip, timesBet, neonHand } from './moments.ts';
+import { winTier, slotsTip, timesBet, neonHand, countEase } from './moments.ts';
 import { celebrate } from '../../table/celebrate.ts';
 
 /** IRS W-2G slot threshold from 2026: an attendant pays this by hand. */

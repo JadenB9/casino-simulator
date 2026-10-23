@@ -9,7 +9,8 @@
 import { formatCompact } from '../../../../shared/src/money.ts';
 import { LINEUP, isSlotId, type SlotId } from '../../../../shared/src/games/slots/lineup.ts';
 import { isMachineId } from '../../../../shared/src/games/slots/machines.ts';
-import { mountDeck, Banner, CountUp, SessionLog, SessionPanel } from './deck.ts';
+import { mountDeck, Banner, CountUp, SessionPanel } from './deck.ts';
+import { SessionLog } from './session.ts';
 import { openPays, type PaysSheet } from './pays.ts';
 import { openPaysheet } from './paysheet.ts';
 import { isSkinned } from './play.ts';

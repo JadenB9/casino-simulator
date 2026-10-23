@@ -31,12 +31,13 @@ import { EMPTY_OVERLAY, lineColorOf, paintLineOverlay, paintSkinMeters, winCells
 import { DIAMOND_COLUMNS } from './diamonds.ts';
 import { REGIONS } from './glass.ts';
 import { MachineSound } from './sound.ts';
-import { mountDeck, Banner, CountUp, SessionLog, SessionPanel, countEase } from './deck.ts';
+import { mountDeck, Banner, CountUp, SessionPanel } from './deck.ts';
+import { SessionLog } from './session.ts';
 import type { SpinOutcome } from './auto.ts';
 import { openPaysheet } from './paysheet.ts';
 import type { PaysSheet } from './pays.ts';
 import { addSheen } from './sheen.ts';
-import { slotsTip, timesBet, winTier } from './moments.ts';
+import { countEase, slotsTip, timesBet, winTier } from './moments.ts';
 import { presentBlowdown } from './pigs-bonus.ts';
 import './slots2.css';
 

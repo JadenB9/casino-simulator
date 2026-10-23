@@ -13,6 +13,7 @@ import { wait } from '../../table/tween.ts';
 import { mountAutoDeck, type AutoDeck } from './autodeck.ts';
 import type { SpinFn } from './auto.ts';
 import { timesBet } from './moments.ts';
+import { clock, netText, type SessionLog } from './session.ts';
 
 export interface DeckOpts {
   ui: HTMLElement;
@@ -212,48 +213,8 @@ export class CountUp {
   }
 }
 
-/** The big win's count: quick off the mark and slowing into the total, the way a meter lands. */
-export const countEase = (k: number): number => 1 - (1 - k) * (1 - k);
-
 // ---------------------------------------------------------------------------------------------
-// the session: what this sitting at the machine has come to
-
-export class SessionLog {
-  spins = 0;
-  bet: Cents = 0;
-  paid: Cents = 0;
-  best: Cents = 0;
-  bestBet: Cents = 0;
-  readonly since = performance.now();
-
-  add(bet: Cents, win: Cents): void {
-    this.spins++;
-    this.bet += bet;
-    this.paid += win;
-    if (win > this.best) {
-      this.best = win;
-      this.bestBet = bet;
-    }
-  }
-
-  get net(): Cents {
-    return this.paid - this.bet;
-  }
-}
-
-/** "4:07", "1:02:45": time at the machine. */
-export function clock(ms: number): string {
-  const s = Math.max(0, Math.floor(ms / 1000));
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const ss = String(s % 60).padStart(2, '0');
-  return h ? `${h}:${String(m).padStart(2, '0')}:${ss}` : `${m}:${ss}`;
-}
-
-/** The net in the deck's words: "+$4.50", "−$1.25", "$0.00". */
-export function netText(net: Cents): string {
-  return net === 0 ? formatMoney(0) : formatMoney(net, { sign: true });
-}
+// the session: what this sitting at the machine has come to (session.ts keeps the count)
 
 /**
  * The session readout: a small panel at the top right on a wide screen (always there), and on an

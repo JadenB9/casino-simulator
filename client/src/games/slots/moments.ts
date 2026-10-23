@@ -8,6 +8,9 @@ export const HUGE_X = 50;
 
 export type WinTier = 'big' | 'huge';
 
+/** A big win's count-up: quick off the mark and slowing into the total, the way a meter lands. */
+export const countEase = (k: number): number => 1 - (1 - k) * (1 - k);
+
 export function winTier(win: number, bet: number): WinTier | null {
   if (bet <= 0 || win <= bet) return null;
   return win >= HUGE_X * bet ? 'huge' : win >= BIG_X * bet ? 'big' : null;
