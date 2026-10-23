@@ -7,6 +7,7 @@
 // balance=<dollars> sets the high roller's balance. bank: pane=<checking|savings|deposits|fund|send|
 // statement>, empty=1 for a bank never used. valet: car=<id>, curb=<id> (a car of yours waiting out
 // front). store: store=guns|home. art: every picture the boutique and the valet draw, in a grid.
+// bar: happy=on (happy hour now, everything half price) or happy=next (the next one in 23 minutes).
 // wear: your character in the showroom wearing what the URL says, to look at the pieces up close:
 // body=m|f, outfit=suit, chain=, grill=, clothes=, watch=, shades=, hat=, held=<bar item>,
 // view=full|chest|face|head|wrist|hand, yaw=<radians> (holds the turn still).
@@ -36,6 +37,7 @@ import { openStore } from '../stores/store.ts';
 import { itemPicture } from './art.ts';
 import { entries } from './catalog.ts';
 import './dev.css';
+import { setHappyHour } from '../../world/celebs/happy.ts';
 import type { Profile } from '../../../../shared/src/protocol.ts';
 import { ApiError } from '../../net/api.ts';
 import { el } from '../kit.ts';
@@ -299,6 +301,10 @@ async function start(): Promise<void> {
   }
 
   await ensureSession();
+  // happy hour as the floor would tell it: on now, or the next one coming
+  const happy = q.get('happy');
+  if (happy === 'on') setHappyHour({ start: serverNow() - 3 * 60_000, end: serverNow() + 12 * 60_000 });
+  else if (happy === 'next') setHappyHour({ start: serverNow() + 23 * 60_000, end: serverNow() + 38 * 60_000 });
   const floor = fixture ? fixtureFloor() : null;
   const api = floor ? fixtureApi(floor) : { shop: shopApi.shop, buy: shopApi.buy, fx: shopApi.fx, order: shopApi.order, saveLook: realApi.saveLook };
   const where = () => (floor ? FIXTURE_AT : null);
