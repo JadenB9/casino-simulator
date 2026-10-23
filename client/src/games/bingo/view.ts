@@ -282,6 +282,8 @@ export function mountBingo(ctx: TableViewCtx): TableView {
     const have = cards.size;
     const room = MAX_CARDS - have;
     buy.hidden = !sale || mySeat === null;
+    // a phone gives the sale the bottom of the screen to itself (bingo.css)
+    cardsRow.classList.toggle('selling', sale && mySeat !== null);
     countBtns.forEach((b, i) => {
       b.setAttribute('aria-pressed', String(i + 1 === Math.min(count, Math.max(1, room))));
       b.disabled = i + 1 > room;

@@ -109,12 +109,58 @@
   .bg-cell { height: 25px; font-size: 16px; }
   .bg-letter { font-size: 16px; line-height: 22px; }
 }
+/* A phone upright. The cards sit low on the left in rows of two, clear of the tip panel and the chat
+   in the bottom-right corner; the calls are one strip under the HUD; while cards are on sale the
+   sale has the bottom to itself (your cards show again at eyes down: they're in its total). The
+   cells keep a card's proportions rather than a finger's 40 px, so four cards fit (auto daub, on by
+   default, marks them). */
 @media (max-width: 760px) {
-  .bg-cards { flex-wrap: wrap; justify-content: center; width: calc(100vw - 16px); bottom: 56px; gap: 6px; }
+  .bg-cards { left: 10px; transform: none; flex-wrap: wrap; justify-content: flex-start; width: auto; max-width: calc(100vw - 80px); bottom: 84px; gap: 6px; }
+  .bg-cards.selling { display: none; }
   .bg-card { width: 132px; padding: 5px; }
-  .bg-cell { height: 21px; font-size: 14px; }
+  #ui .bg-cell { min-height: 0; height: 23px; font-size: 14px; }
   .bg-hall { display: none; }
-  .bg-calls { width: 200px; padding: 8px 10px; }
+  .bg-calls { left: 10px; right: 10px; width: auto; display: flex; align-items: center; gap: 10px; padding: 6px 10px; }
   .bg-calls .bg-recent, .bg-calls .bg-paysnow { display: none; }
-  .bg-buy, .bg-results { top: auto; bottom: 56px; transform: none; left: 50%; translate: -50% 0; width: min(320px, calc(100vw - 16px)); }
+  .bg-calls-head { flex: 1 1 auto; gap: 10px; }
+  .bg-ball.big { width: 46px; height: 46px; }
+  .bg-ball.big .l { font-size: 10px; padding: 0 4px; }
+  .bg-ball.big .n { font-size: 18px; padding: 0 5px 1px; }
+  .bg-count-n { font-size: 24px; }
+  .bg-toggles { flex: 0 0 auto; flex-direction: column; gap: 4px; }
+  .bg-toggle { height: 30px; flex: none; }
+  .bg-buy, .bg-results { top: auto; bottom: 84px; transform: none; left: 50%; translate: -50% 0; width: min(320px, calc(100vw - 16px)); }
+  /* the game's result under the calls, clear of the cards it's about */
+  .bg-results { top: calc(var(--below-hud) + 70px); bottom: auto; }
+  .bg-cards ~ .tip-line { bottom: auto; top: calc(var(--below-hud) + 70px); }
+}
+/* A phone on its side: the calls compact at the top right, the sale and the results down the left;
+   at eyes down the cards take the bottom from the back chip to the tip panel. */
+@media (max-height: 480px) {
+  .bg-cards { left: 130px; right: auto; transform: none; translate: none; width: auto; max-width: calc(100vw - 330px); flex-wrap: nowrap; justify-content: flex-start; bottom: max(8px, env(safe-area-inset-bottom, 0px)); gap: 6px; }
+  .bg-cards.selling { display: none; }
+  .bg-card { width: 118px; padding: 4px 4px 3px; }
+  .bg-card-head { margin-bottom: 2px; }
+  .bg-letter { font-size: 14px; line-height: 18px; }
+  #ui .bg-cell { min-height: 0; height: 19px; font-size: 13px; }
+  .bg-card-foot { margin-top: 2px; font-size: 11px; }
+  .bg-tag { padding: 2px 6px; font-size: 12px; }
+  .bg-calls { top: calc(var(--below-hud) + 4px); left: auto; right: 10px; width: 196px; display: grid; padding: 8px 10px; gap: 6px; }
+  .bg-calls .bg-recent, .bg-calls .bg-paysnow { display: none; }
+  .bg-toggles { flex-direction: row; }
+  .bg-ball.big { width: 52px; height: 52px; }
+  .bg-ball.big .l { font-size: 11px; padding: 0 4px; }
+  .bg-ball.big .n { font-size: 20px; padding: 0 5px 1px; }
+  .bg-count-n { font-size: 26px; }
+  .bg-toggle { height: 30px; flex: 1; }
+  .bg-buy, .bg-results { top: calc(var(--below-hud) + 4px); bottom: auto; left: 10px; transform: none; translate: none; width: 216px; max-height: calc(100vh - var(--below-hud) - 16px); max-height: calc(100dvh - var(--below-hud) - 16px); overflow: auto; padding: 8px 10px; gap: 6px; }
+  .bg-buy-btn { height: 38px; font-size: 16px; }
+  /* Buy and Call side by side, Rebuy and Return under them: two rows instead of three */
+  .bg-buy-acts .bg-buy-btn, .bg-buy-acts .btn.primary:not(.bg-buy-btn) { grid-column: auto; }
+  .bg-buy-acts > :nth-child(1) { order: 1; }
+  .bg-buy-acts > :nth-child(4) { order: 2; }
+  .bg-buy-acts > :nth-child(2) { order: 3; }
+  .bg-buy-acts > :nth-child(3) { order: 4; }
+  .bg-hall { display: none; }
+  .bg-cards ~ .tip-line { top: auto; bottom: 12px; left: 236px; right: 196px; transform: none; max-width: none; }
 }
