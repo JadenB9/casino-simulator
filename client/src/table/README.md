@@ -79,12 +79,14 @@ decideBar.dataset.dock = 'bar';    // a bottom bar of the game's own (the tray i
 meters.dataset.dock = 'css';       // a panel low on the screen: kept where its CSS puts it across, raised over the bar if it must be
 picker.dataset.dock = 'start';     // over the bar's left end (the Hands picker is, by its class)
 panel.dataset.dock = 'end';        // over the bar's right end (Tip the dealer is, by its class)
-panel.dataset.dock = 'top';        // at the top: moved down below any table panel it would cover (History, the dealer's line)
+panel.dataset.dock = 'top';        // at the top: moved down below a table panel, button or betting clock it would cover (History, the dealer's line)
 bar.toggleAttribute('data-tip-wait', handOn);   // the Tip panel waits meanwhile (Hold'em during a hand)
 ```
 
 The Tips line rides over the bar too. The Tip panel waits for room when the only place left is in
-the HUD's rows. `client/test/dock.test.ts` covers the stacking.
+the HUD's rows. What the board fit ignores (`data-fit="ignore"`) the dock ignores too, and so the
+hover tips that follow the pointer over a layout (`rl-tip`, `sb-tip`...). `client/test/dock.test.ts`
+covers the stacking.
 
 ## The bet bar (`betbar.ts`)
 
