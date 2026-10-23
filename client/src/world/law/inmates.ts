@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import type { Look } from '../../../../shared/src/look.ts';
 import { INMATE_IDS, THEFT_WALK_MS, inmatePose, type InmateId } from '../../../../shared/src/law/inmates.ts';
 import type { Characters, Person } from '../characters.ts';
+import { motionOf } from '../contract.ts';
 
 const LOOKS: Look[] = [
   { v: 1, body: 'm', outfit: 'hoodie', skin: 1, hair: '#1a1410', top: '#e8641c', bottom: '#e0601a', shoes: '#f2f2f0' },
@@ -102,7 +103,7 @@ export class Inmates {
       const l = this.last.get(id);
       const speed = l && dt > 0 ? Math.hypot(x - l.x, z - l.z) / dt : 0;
       this.last.set(id, { x, z });
-      p.setMotion(moving ? Math.min(2, speed / 1.75) : 0);
+      p.setMotion(moving ? Math.min(2, motionOf(speed)) : 0);
       p.update(dt);
     }
   }

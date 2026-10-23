@@ -183,6 +183,72 @@ function casinoEnvironment(renderer: THREE.WebGLRenderer): THREE.Texture {
   return out;
 }
 
+// --- the body's own shading (v8) ------------------------------------------------------------------
+//
+// One material draws every character's body (characters.ts), and each vertex says what it is made
+// of in its `surface` attribute (roughness, metalness, sheen, skin): skin with a soft sheen, hair
+// glossier, cloth matte, a shoe's leather, the wet of an eye, a badge's brass. Cloth and hair
+// catch the room's light along their edges, a soft sheen that keeps a figure from melting into
+// the dark carpet behind it; on skin the light wraps a little past the edge of its shadow, and
+// comes through warm there, the way it does through skin. Special clothes and a hat's tuck build
+// on it (both call bodyShading too).
+
+/** What a vertex without a `surface` attribute is taken to be: matte cloth. */
+const PLAIN_SURFACE = [0.8, 0, 0.35, 0];
+/** How far the light wraps round skin (a share of a quarter turn), and the colour it comes through. */
+const SKIN_WRAP = 0.45;
+const SKIN_GLSL = 'vec3(0.85, 0.38, 0.26)';
+/** How bright the sheen at a figure's edges is, at the most, against the room's light on it. */
+const SHEEN = 1.25;
+
+/** A body's direct light: the diffuse part wrapped round skin (the specular keeps the true edge). */
+function wrapped(chunk: string, diffuse: string): string {
+  const line = `reflectedLight.directDiffuse += irradiance * BRDF_Lambert( ${diffuse} )`;
+  if (!chunk.includes(line)) return chunk;
+  return chunk.replace(
+    line,
+    `float bodyD = dot( geometryNormal, directLight.direction );
+	float bodyW = vBodySurface.w * ${SKIN_WRAP.toFixed(2)};
+	vec3 bodyLight = irradiance + directLight.color * max( 0.0, saturate( ( bodyD + bodyW ) / ( 1.0 + bodyW ) ) - saturate( bodyD ) ) * ${SKIN_GLSL};
+	reflectedLight.directDiffuse += bodyLight * BRDF_Lambert( ${diffuse} )`,
+  );
+}
+
+/**
+ * The body's shading in a material's shaders (physical: MeshStandard or MeshPhysical; else
+ * Lambert, Low quality's). Call it after any other replacements of the same includes, so what it
+ * sets (roughness, metalness) comes first and theirs can build on it.
+ */
+export function bodyShading(s: { vertexShader: string; fragmentShader: string }, physical: boolean): void {
+  s.vertexShader = s.vertexShader
+    .replace('#include <common>', '#include <common>\nattribute vec4 surface;\nvarying vec4 vBodySurface;')
+    .replace('#include <begin_vertex>', '#include <begin_vertex>\nvBodySurface = surface;');
+  const pars = physical ? THREE.ShaderChunk.lights_physical_pars_fragment : THREE.ShaderChunk.lights_lambert_pars_fragment;
+  const diffuse = physical ? 'material.diffuseContribution' : 'material.diffuseColor';
+  let f = s.fragmentShader
+    .replace('#include <common>', '#include <common>\nvarying vec4 vBodySurface;')
+    .replace(physical ? '#include <lights_physical_pars_fragment>' : '#include <lights_lambert_pars_fragment>', wrapped(pars, diffuse))
+    .replace(
+      '#include <lights_fragment_end>',
+      `#include <lights_fragment_end>
+	reflectedLight.indirectDiffuse += irradiance * BRDF_Lambert( ${diffuse} ) * vBodySurface.z * ${SHEEN.toFixed(2)} * pow( 1.0 - saturate( dot( geometryNormal, geometryViewDir ) ), 3.0 );`,
+    );
+  if (physical) {
+    f = f
+      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = vBodySurface.x;')
+      .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = vBodySurface.y;');
+  }
+  s.fragmentShader = f;
+}
+
+/** Give a body material the shading above (and a sensible surface where a mesh has none). */
+export function shadeBody<M extends THREE.Material>(m: M, physical: boolean, key: string): M {
+  (m as unknown as { defaultAttributeValues: Record<string, number[]> }).defaultAttributeValues = { surface: PLAIN_SURFACE };
+  m.onBeforeCompile = (s) => bodyShading(s, physical);
+  m.customProgramCacheKey = () => key;
+  return m;
+}
+
 // --- shared materials --------------------------------------------------------------------------
 
 const NOISE_GLSL = /* glsl */ `
@@ -2272,7 +2338,11 @@ ${code.color ?? ''}`,
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>\n${code.normal ?? ''}`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\n${code.emissive ?? ''}`)
       .replace('#include <lights_physical_fragment>', `#include <lights_physical_fragment>\n${code.sheen ? `#ifdef USE_SHEEN\n${code.sheen}\n#endif` : ''}`);
+    // v8: the skin, hair and eyes under the clothes as every body has them (after the clothes' own
+    // finish, so theirs builds on it)
+    bodyShading(s, true);
   };
+  (m as unknown as { defaultAttributeValues: Record<string, number[]> }).defaultAttributeValues = { surface: PLAIN_SURFACE };
   const cacheKey = `wear-clothes-${spec.cloth}-${fit.id}${tuck ? '-tuck' : ''}`;
   m.customProgramCacheKey = () => cacheKey;
   reflect(m);
@@ -2372,8 +2442,16 @@ function tuckMaterial(base: THREE.Material, fit: Fit, hat: string, tuck: Tuck): 
   if (m) return m;
   m = base.clone();
   m.name = `${base.name}:tuck`;
-  m.onBeforeCompile = (s) => tuckShader(s, tuck, true);
-  const cacheKey = `wear-tuck-${base.type}-${fit.id}-${hat}`;
+  // (the base's own shading, the body's (v8), with the tuck on top: a clone doesn't keep either)
+  const own = base.onBeforeCompile.bind(base);
+  const ownKey = base.customProgramCacheKey();
+  m.onBeforeCompile = (s, r) => {
+    tuckShader(s, tuck, true);
+    own(s, r);
+  };
+  const dflt = (base as unknown as { defaultAttributeValues?: Record<string, number[]> }).defaultAttributeValues;
+  if (dflt) (m as unknown as { defaultAttributeValues: Record<string, number[]> }).defaultAttributeValues = dflt;
+  const cacheKey = `wear-tuck-${base.type}-${fit.id}-${hat}-${ownKey}`;
   m.customProgramCacheKey = () => cacheKey;
   tuckMats.set(key, m);
   return m;

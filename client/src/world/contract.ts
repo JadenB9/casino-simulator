@@ -19,7 +19,7 @@ export interface Station {
 export interface Character {
   root: THREE.Object3D;
   setLook(look: Look): void;
-  /** 0 = idle, 1 = walking; blends the animations. */
+  /** 0 = idle, 1 = walking, 2 = running (motionOf turns a ground speed into this); blends the animations. */
   setMotion(speed: number): void;
   setName(name: string): void;
   update(dt: number): void;
@@ -36,6 +36,27 @@ export interface Character {
    * camera frames what's on show by it, whatever the body's height or pose.
    */
   part?(p: BodyPart, out: THREE.Vector3): THREE.Vector3 | null;
+}
+
+/**
+ * The ground speeds setMotion's numbers stand for: 1 is a walk at WALK_CYCLE, 2 a run at RUN_CYCLE,
+ * and in between and beyond in proportion (m/s). Callers work their number out from a real speed
+ * (motionOf) and the character's gait turns it back (characters.ts), so its feet keep pace.
+ */
+export const WALK_CYCLE = 1.75;
+export const RUN_CYCLE = 3.9;
+/** The fastest anything goes on foot or on a ride (player.ts MAX_PACE), as setMotion's number. */
+export const MOTION_MAX = 4.5;
+
+/** A ground speed (m/s) as setMotion's number. */
+export function motionOf(speed: number): number {
+  if (!(speed >= 0.05)) return 0;
+  return speed <= WALK_CYCLE ? speed / WALK_CYCLE : Math.min(MOTION_MAX, 1 + (speed - WALK_CYCLE) / (RUN_CYCLE - WALK_CYCLE));
+}
+
+/** setMotion's number as the ground speed it means (m/s). */
+export function speedOf(motion: number): number {
+  return motion <= 1 ? motion * WALK_CYCLE : WALK_CYCLE + (motion - 1) * (RUN_CYCLE - WALK_CYCLE);
 }
 
 /** A part of the body a piece is shown on: a watch's wrist, the face (shades, a grill), a chain's chest, a hat's crown, the hand that holds. */

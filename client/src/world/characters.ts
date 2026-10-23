@@ -27,9 +27,9 @@ import { skipWhileHidden } from '../render/matrices.ts';
 import { modelBytes } from '../render/model-bytes.ts';
 import { DEFAULT_LOOK, OUTFITS, SKIN_TONES, type Body, type Look } from '../../../shared/src/look.ts';
 import type { Quality } from '../render/engine3d.ts';
-import type { BodyPart, Character, CharacterFactory } from './contract.ts';
+import { MOTION_MAX, speedOf, type BodyPart, type Character, type CharacterFactory } from './contract.ts';
 import type { EmoteId } from '../../../shared/src/protocol.ts';
-import { Wearables, dressed } from './wearables.ts';
+import { Wearables, dressed, shadeBody } from './wearables.ts';
 import { DOWN, PIVOT, gestureOf, mirror, movesLegs, smooth, dances, type BoneKey, type Foot, type Hand, type HandMix, type Pose, type PropId, type StaffGesture, type LawGesture, type Turn, type Vec } from './gestures.ts';
 import { disposeProp, propMesh } from './emote-props.ts';
 import { Ride, kneeFor, rideSpec, stanceYaw, type RideSpec } from './rides.ts';
@@ -41,8 +41,41 @@ export const MODEL_BASE = `${import.meta.env.BASE_URL}assets/models/`;
 type Slot = 'skin' | 'skinShade' | 'hair' | 'hairShade' | 'brows' | 'top' | 'bottom' | 'shoes';
 const SLOTS: Slot[] = ['skin', 'skinShade', 'hair', 'hairShade', 'brows', 'top', 'bottom', 'shoes'];
 /** The template's buffers every character of an outfit draws with; only the colours are its own. */
-const SHARED_ATTRIBUTES = ['position', 'normal', 'skinIndex', 'skinWeight'] as const;
+const SHARED_ATTRIBUTES = ['position', 'normal', 'skinIndex', 'skinWeight', 'surface'] as const;
 const FIXED = 255;
+
+/**
+ * v8: what each vertex is made of, for how it takes the light: a `surface` attribute (roughness,
+ * metalness, sheen, skin) the body's material reads per vertex (wearables.ts bodyShading), so skin,
+ * hair, cloth, leather, metal and the wet of an eye all differ while a character stays one mesh.
+ */
+const KIND = { skin: 0, hair: 1, brows: 2, eye: 3, cloth: 4, shoes: 5, metal: 6, silk: 7 } as const;
+/** Per kind: roughness, metalness, how much a soft sheen lights its edges, and how much light wraps round it as it does round skin. */
+const SURFACES: readonly (readonly [number, number, number, number])[] = [
+  [0.55, 0, 0.28, 1],
+  [0.56, 0, 0.5, 0],
+  [0.85, 0, 0.1, 0],
+  [0.12, 0, 0, 0],
+  [0.86, 0, 0.62, 0],
+  [0.4, 0, 0.18, 0],
+  [0.3, 1, 0, 0],
+  [0.32, 0, 0.5, 0],
+];
+
+/** A vertex's kind from the Look slot it takes its colour from and the model's own material and part. */
+function kindOf(slot: Slot | null, material: string, part: string): number {
+  if (slot === 'skin' || slot === 'skinShade') return KIND.skin;
+  if (slot === 'hair' || slot === 'hairShade') return KIND.hair;
+  if (slot === 'brows') return KIND.brows;
+  if (slot === 'shoes') return KIND.shoes;
+  if (slot) return KIND.cloth;
+  if (material === 'Eye') return KIND.eye;
+  if (material === 'Earrings' || material === 'Gold') return KIND.metal;
+  if (material === 'Tie') return KIND.silk;
+  // two of the women's faces draw their eyes in plain brown or black
+  if ((material === 'Brown' || material === 'Black') && part.endsWith('_Head')) return KIND.eye;
+  return KIND.cloth;
+}
 
 interface OutfitEntry {
   file: string;
@@ -63,13 +96,50 @@ interface Template {
   geometry: THREE.BufferGeometry;
   slot: Uint8Array;
   base: Float32Array;
+  /** v8: what each vertex is made of (SKIN, HAIR, ... above). */
+  kind: Uint8Array;
   clips: THREE.AnimationClip[];
   height: number;
+  /** v8: how far the walk and the run carry the body (measureGait), for feet that don't slide. */
+  gait: Gait | null;
+}
+
+/**
+ * v8: one locomotion clip as measured on its model: the ground a whole cycle (two steps) covers
+ * with the feet planted, the clip's length, and where in it (0-1) the right foot is furthest ahead
+ * of the left (the walk and the run are played in step from there).
+ */
+interface Stride {
+  length: number;
+  dur: number;
+  at: number;
+}
+
+interface Gait {
+  walk: Stride;
+  run: Stride;
 }
 
 const NAME_Y = 2.08;
 const LABEL_RANGE = 20;
 const LABEL_MAX = 24;
+
+/**
+ * v8 gait: cadences in cycles a second (a cycle is two steps). Up to EASY_HZ's pace the walk comes
+ * in over the idle at that cadence; alone it quickens to BRISK_HZ, crosses into the run by JOG_HZ,
+ * and the run quickens up to SPRINT_HZ (any faster and the legs would blur: the feet slide instead).
+ */
+const EASY_HZ = 0.75;
+const BRISK_HZ = 1.1;
+const JOG_HZ = 1.25;
+const SPRINT_HZ = 2.1;
+/** v8: radians of lean per (rad/s of turn × m/s of speed), and the most a body leans. */
+const LEAN = 0.012;
+const LEAN_MAX = 0.12;
+
+function fract(x: number): number {
+  return x - Math.floor(x);
+}
 
 export class Characters implements CharacterFactory {
   private manifest: Promise<Manifest>;
@@ -99,8 +169,11 @@ export class Characters implements CharacterFactory {
   material(): THREE.Material {
     let m = this.mats[this.quality];
     if (!m) {
-      m = this.quality === 'high' ? new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.78, metalness: 0 }) : new THREE.MeshLambertMaterial({ vertexColors: true });
+      const high = this.quality === 'high';
+      m = high ? new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.78, metalness: 0 }) : new THREE.MeshLambertMaterial({ vertexColors: true });
       m.name = 'character';
+      // v8: skin, hair, cloth and the rest each take the light their own way (wearables.ts)
+      shadeBody(m, high, `body-${this.quality}`);
       this.mats[this.quality] = m;
     }
     return m;
@@ -183,6 +256,7 @@ export class Characters implements CharacterFactory {
     const geos: THREE.BufferGeometry[] = [];
     const slots: number[] = [];
     const base: number[] = [];
+    const kinds: number[] = [];
     /** Per vertex, which part and original material it came from (for uniforms). */
     const from: { part: string; material: string }[] = [];
     parts.forEach((mesh, i) => {
@@ -195,9 +269,11 @@ export class Characters implements CharacterFactory {
       const s = slot ? SLOTS.indexOf(slot) : FIXED;
       const c = mat.color ?? new THREE.Color(1, 1, 1);
       const src = { part: prim?.part ?? '', material: mat.name };
+      const kind = kindOf(slot, mat.name, src.part);
       for (let k = 0; k < n; k++) {
         slots.push(s);
         base.push(c.r, c.g, c.b);
+        kinds.push(kind);
         if (uniform) from.push(src);
       }
       geos.push(g);
@@ -220,10 +296,18 @@ export class Characters implements CharacterFactory {
       geometry: merged,
       slot: Uint8Array.from(slots),
       base: Float32Array.from(base),
+      kind: Uint8Array.from(kinds),
       clips: gltf.animations,
       height: box.max.y - box.min.y,
+      gait: null,
     };
-    return uniform ? tailor(tpl, joined, uniform, from, body === 'f' ? 'f' : 'm') : tpl;
+    const cut = uniform ? tailor(tpl, joined, uniform, from, body === 'f' ? 'f' : 'm') : tpl;
+    // v8: smooth shading, and the walk's and the run's strides
+    const soft = soften(cut);
+    joined.geometry = soft.geometry;
+    if (soft.geometry !== cut.geometry) cut.geometry.dispose();
+    soft.gait = measureGait(soft.root, soft.clips);
+    return soft;
   }
 }
 
@@ -267,6 +351,13 @@ export class Person implements Character {
    * on a ride, how it's done there (RideAct), chosen as it starts.
    */
   private act: { e: EmoteId | StaffGesture | LawGesture; t: number; fade: number; ride: RideAct } | null = null;
+  /** v8: the ground speed being walked (m/s, eased) and where in the gait's cycle the feet are (0-1). */
+  private ground = 0;
+  private gaitPhase = 0;
+  /** v8: the heading last frame, how fast it turns (rad/s, eased) and the lean into the turn. */
+  private leanYaw = Number.NaN;
+  private leanRate = 0;
+  private leanK = 0;
   /** Room for where the mixer had the bones an emote moves (kept in `moved`, below). */
   private readonly spareAt = new Map<THREE.Object3D, THREE.Vector3>();
   /** The legs as the emotes pose them, and the chest's turn in the idle pose (for Hand.frame). */
@@ -370,8 +461,9 @@ export class Person implements Character {
       });
   }
 
+  /** 0 idle, 1 a walk, 2 a run (motionOf turns a ground speed into this); past 2 the run quickens. */
   setMotion(speed: number): void {
-    this.speed = Math.max(0, Math.min(2, speed));
+    this.speed = Number.isFinite(speed) ? Math.max(0, Math.min(MOTION_MAX, speed)) : 0;
   }
 
   setName(name: string): void {
@@ -570,6 +662,8 @@ export class Person implements Character {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     g.setAttribute('color', new THREE.BufferAttribute((this.colors.array as Uint16Array).slice(), 3, true));
+    const surface = mesh.geometry.getAttribute('surface') as THREE.BufferAttribute | undefined;
+    if (surface) g.setAttribute('surface', new THREE.BufferAttribute((surface.array as Uint8Array).slice(), 4, true));
     g.setIndex(new THREE.BufferAttribute((index.array as Uint16Array | Uint32Array).slice(), 1));
     g.computeVertexNormals();
     g.computeBoundingSphere();
@@ -600,16 +694,12 @@ export class Person implements Character {
       this.model.quaternion.copy(this.modelQ);
     }
     const riding = this.rideOn(dt);
-    // idle -> walk -> run by weight, eased so starts and stops cross-fade (a rider stands still on it)
+    // idle -> walk -> run, eased so starts and stops cross-fade (a rider stands still on it): with
+    // the feet planted where the model's strides are known, else by weight alone
     const s = riding ? 0 : this.speed;
-    const target = s <= 1 ? [1 - s, s, 0] : [0, 2 - s, s - 1];
-    const k = 1 - Math.exp(-dt * 9);
-    for (let i = 0; i < 3; i++) {
-      this.weights[i] = this.weights[i]! + (target[i]! - this.weights[i]!) * k;
-      this.actions[i]?.setEffectiveWeight(this.weights[i]!);
-    }
-    const walk = this.actions[1];
-    if (walk) walk.timeScale = 0.85 + 0.3 * Math.min(1, s);
+    const gait = this.template?.gait;
+    if (gait && this.actions[1] && this.actions[2]) this.stride(dt, s, gait);
+    else this.blend(dt, Math.min(2, s));
     this.mixer.update(dt);
     // then the hand posing, each layer on top of the last: legs, body, head, arms
     this.root.updateWorldMatrix(true, false);
@@ -619,6 +709,7 @@ export class Person implements Character {
     if (this.seatTop !== null) drop = this.sitPose();
     else if (riding) this.model!.position.y = this.modelAt.y + this.ridePose();
     else if (this.swaySeed !== null) this.swayPose(dt);
+    this.lean(dt, this.seatTop === null && !riding && this.crouchK === 0);
     if (this.crouchOn || this.crouchK > 0) {
       this.crouchK += ((this.crouchOn ? 1 : 0) - this.crouchK) * (1 - Math.exp(-dt * 9));
       if (this.crouchK < 0.005) this.crouchK = 0;
@@ -631,6 +722,85 @@ export class Person implements Character {
     if (this.prop) this.holdProp();
     if (this.gun.mesh) this.placeGun();
     this.settle(drop);
+  }
+
+  /** Idle, walk and run by weight alone, eased (a model whose strides weren't measured). */
+  private blend(dt: number, s: number): void {
+    const target = s <= 1 ? [1 - s, s, 0] : [0, 2 - s, s - 1];
+    const k = 1 - Math.exp(-dt * 9);
+    for (let i = 0; i < 3; i++) {
+      this.weights[i] = this.weights[i]! + (target[i]! - this.weights[i]!) * k;
+      this.actions[i]?.setEffectiveWeight(this.weights[i]!);
+    }
+    const walk = this.actions[1];
+    if (walk) walk.timeScale = 0.85 + 0.3 * Math.min(1, s);
+  }
+
+  /**
+   * v8: walking and running with the feet planted. The ground speed asked for (eased, so starts and
+   * stops cross-fade) picks the blend and the cadence: up to an easy pace the walk comes in over the
+   * idle at its own cadence (its stride grows with its weight), then it quickens alone, then crosses
+   * into the run, the two played in step (the same foot forward at the same moment), and last the
+   * run quickens. At every speed the cadence is the one at which the blend's stride covers the
+   * ground the body does, so a foot on the floor stays where it was put down.
+   */
+  private stride(dt: number, s: number, gait: Gait): void {
+    this.ground += (speedOf(s) - this.ground) * (1 - Math.exp(-dt * 9));
+    const v = this.ground;
+    // (the steps grow with the model: its build widens it, the root's scale sizes it all)
+    const k = this.root.scale.z * (this.look.build ?? 1);
+    const sw = gait.walk.length * k;
+    const sr = gait.run.length * k;
+    let walk = 0;
+    let run = 0;
+    let hz = EASY_HZ;
+    if (v < sw * EASY_HZ) {
+      // (a blend with the idle shortens the steps more than its weight would say: the walk comes
+      // in sooner, so the feet still keep up)
+      walk = Math.sqrt(v / (sw * EASY_HZ));
+    } else if (v < sw * BRISK_HZ) {
+      walk = 1;
+      hz = v / sw;
+    } else if (v < sr * JOG_HZ) {
+      run = smooth((v - sw * BRISK_HZ) / (sr * JOG_HZ - sw * BRISK_HZ));
+      walk = 1 - run;
+      hz = v / (sw + (sr - sw) * run);
+    } else {
+      run = 1;
+      hz = Math.min(SPRINT_HZ, v / sr);
+    }
+    this.weights[0] = 1 - walk - run;
+    this.weights[1] = walk;
+    this.weights[2] = run;
+    for (let i = 0; i < 3; i++) this.actions[i]!.setEffectiveWeight(this.weights[i]!);
+    this.gaitPhase = (this.gaitPhase + hz * dt) % 1;
+    // both clips are posed at the phase by hand (the mixer only blends them)
+    const w = this.actions[1]!;
+    const r = this.actions[2]!;
+    w.timeScale = r.timeScale = 0;
+    w.time = fract(this.gaitPhase + gait.walk.at) * gait.walk.dur;
+    r.time = fract(this.gaitPhase + gait.run.at) * gait.run.dur;
+  }
+
+  /**
+   * v8: into a turn the body leans (more the faster it goes), as anyone running round a corner
+   * does; the turn rate is read off the root's own heading, so it's the same for you, everyone else
+   * and the staff. `on` false eases it out (sitting, riding, crouched: those lean their own way).
+   */
+  private lean(dt: number, on: boolean): void {
+    const yaw = this.root.rotation.y;
+    if (!(dt > 0) || Number.isNaN(this.leanYaw)) {
+      this.leanYaw = yaw;
+      return;
+    }
+    const d = Math.atan2(Math.sin(yaw - this.leanYaw), Math.cos(yaw - this.leanYaw));
+    this.leanYaw = yaw;
+    // (a snap round, someone placed somewhere new, isn't a turn)
+    const rate = Math.abs(d) < 0.8 ? d / dt : 0;
+    this.leanRate += (rate - this.leanRate) * (1 - Math.exp(-dt * 6));
+    const want = on ? THREE.MathUtils.clamp(-this.leanRate * this.ground * LEAN, -LEAN_MAX, LEAN_MAX) : 0;
+    this.leanK += (want - this.leanK) * (1 - Math.exp(-dt * 8));
+    if (Math.abs(this.leanK) > 1e-3) this.turn('body', [0, 0, this.leanK]);
   }
 
   /**
@@ -1217,14 +1387,15 @@ export class Person implements Character {
 
   /**
    * Give back this character's own buffer (the colours) and nothing else: the positions, normals,
-   * skin weights and index are the template's, drawn by everyone in the outfit, and disposing a
+   * skin weights, surfaces and index are the template's, drawn by everyone in the outfit, and the
+   * rest positions a hat or special clothes put on (wearables.ts) are the model's; disposing a
    * geometry frees every attribute still on it. Taking the shared ones off first keeps the rest
    * of the crowd from uploading their mesh again the next frame each time someone leaves.
    */
   private freeGeometry(): void {
     const g = this.mesh?.geometry;
     if (!g) return;
-    for (const name of SHARED_ATTRIBUTES) g.deleteAttribute(name);
+    for (const name of Object.keys(g.attributes)) if (name !== 'color') g.deleteAttribute(name);
     g.setIndex(null);
     g.dispose();
   }
@@ -1245,7 +1416,10 @@ export class Person implements Character {
     const m = mesh as THREE.SkinnedMesh;
     // share every attribute with the template except this character's own colours
     const g = new THREE.BufferGeometry();
-    for (const name of SHARED_ATTRIBUTES) g.setAttribute(name, tpl.geometry.getAttribute(name));
+    for (const name of SHARED_ATTRIBUTES) {
+      const a = tpl.geometry.getAttribute(name);
+      if (a) g.setAttribute(name, a);
+    }
     g.setIndex(tpl.geometry.index);
     const n = tpl.slot.length;
     this.colors = new THREE.BufferAttribute(new Uint16Array(n * 3), 3, true);
@@ -1753,6 +1927,228 @@ const _pv = new THREE.Vector3();
 /** Every outfit id per body, for pickers and checks. */
 export const ALL_OUTFITS = OUTFITS;
 
+// --- smooth shading and strides (v8) ---------------------------------------------------------------
+
+/**
+ * Faces meeting at less than this angle shade as one smooth surface; a sharper turn (a shoe's sole,
+ * the line of a nose, a lapel's edge, a box's corner) stays an edge.
+ */
+const CREASE = Math.cos((62 * Math.PI) / 180);
+
+/**
+ * The models come flat-shaded: every face has corners of its own carrying the face's own normal,
+ * which read as facets on a cheek or a sleeve. Each corner is given the normal of the surface round
+ * it instead: the faces at the same place that turn less than CREASE from the corner's own face,
+ * each weighted by its angle there, so curves shade smoothly and real edges stay crisp. Corners
+ * left alike (the same place, normal, skinning, slot, colour and kind) become one vertex, a third
+ * as many to skin. Done once per model; every character in the outfit draws the result, and the
+ * `surface` attribute (what each vertex is made of) goes on with it.
+ */
+export function soften<T extends { geometry: THREE.BufferGeometry; slot: Uint8Array; base: Float32Array; kind: Uint8Array }>(tpl: T): T {
+  const geo = tpl.geometry;
+  const index = geo.getIndex();
+  const pos = geo.getAttribute('position') as THREE.BufferAttribute | undefined;
+  const nor = geo.getAttribute('normal') as THREE.BufferAttribute | undefined;
+  const si = geo.getAttribute('skinIndex') as THREE.BufferAttribute | undefined;
+  const sw = geo.getAttribute('skinWeight') as THREE.BufferAttribute | undefined;
+  if (!index || !pos || !nor || !si || !sw) return tpl;
+  const n = pos.count;
+  // one id per place: the stored (quantized) numbers, so corners at one place match exactly
+  const raw = pos.array;
+  const placeOf = new Int32Array(n);
+  const places = new Map<string, number>();
+  for (let i = 0; i < n; i++) {
+    const key = `${raw[i * 3]},${raw[i * 3 + 1]},${raw[i * 3 + 2]}`;
+    let id = places.get(key);
+    if (id === undefined) places.set(key, (id = places.size));
+    placeOf[i] = id;
+  }
+  // each face's normal, and its angle at each corner
+  const corners = index.count;
+  const faceN = new Float32Array(corners);
+  const angle = new Float32Array(corners);
+  const a = new THREE.Vector3();
+  const b = new THREE.Vector3();
+  const c = new THREE.Vector3();
+  const ab = new THREE.Vector3();
+  const ac = new THREE.Vector3();
+  const bc = new THREE.Vector3();
+  const f = new THREE.Vector3();
+  for (let t = 0; t + 2 < corners; t += 3) {
+    a.fromBufferAttribute(pos, index.getX(t));
+    b.fromBufferAttribute(pos, index.getX(t + 1));
+    c.fromBufferAttribute(pos, index.getX(t + 2));
+    ab.subVectors(b, a);
+    ac.subVectors(c, a);
+    bc.subVectors(c, b);
+    f.crossVectors(ab, ac);
+    if (f.lengthSq() < 1e-20) continue;
+    f.normalize().toArray(faceN, t);
+    angle[t] = ab.angleTo(ac);
+    angle[t + 1] = ab.negate().angleTo(bc);
+    angle[t + 2] = Math.max(0, Math.PI - angle[t]! - angle[t + 1]!);
+  }
+  // the corners of faces at each place
+  const first = new Int32Array(places.size + 1);
+  for (let k = 0; k < corners; k++) first[placeOf[index.getX(k)]! + 1]!++;
+  for (let p = 0; p < places.size; p++) first[p + 1]! += first[p]!;
+  const fill = first.slice(0, places.size);
+  const round = new Int32Array(corners);
+  for (let k = 0; k < corners; k++) round[fill[placeOf[index.getX(k)]!]!++] = k;
+  // each vertex's own normal (the face it was drawn with), and the surface round it
+  const normal = new Float32Array(n * 3);
+  const own = new THREE.Vector3();
+  const sum = new THREE.Vector3();
+  for (let i = 0; i < n; i++) {
+    own.fromBufferAttribute(nor, i);
+    if (own.lengthSq() < 1e-12) own.set(0, 1, 0);
+    own.normalize();
+    sum.set(0, 0, 0);
+    const p = placeOf[i]!;
+    for (let r = first[p]!; r < first[p + 1]!; r++) {
+      const k = round[r]!;
+      const t = k - (k % 3);
+      const fx = faceN[t]!;
+      const fy = faceN[t + 1]!;
+      const fz = faceN[t + 2]!;
+      if (fx * own.x + fy * own.y + fz * own.z <= CREASE) continue;
+      const w = angle[k]!;
+      sum.x += fx * w;
+      sum.y += fy * w;
+      sum.z += fz * w;
+    }
+    if (sum.lengthSq() < 1e-12) sum.copy(own);
+    sum.normalize().toArray(normal, i * 3);
+  }
+  // corners left alike become one vertex
+  const remap = new Int32Array(n);
+  const keep: number[] = [];
+  const alike = new Map<string, number>();
+  const q = (x: number) => Math.round(x * 4096);
+  for (let i = 0; i < n; i++) {
+    const s = tpl.slot[i]!;
+    const tint = s === FIXED ? `${q(tpl.base[i * 3]!)},${q(tpl.base[i * 3 + 1]!)},${q(tpl.base[i * 3 + 2]!)}` : '';
+    const key = `${placeOf[i]}|${q(normal[i * 3]!)},${q(normal[i * 3 + 1]!)},${q(normal[i * 3 + 2]!)}|${si.getX(i)},${si.getY(i)},${si.getZ(i)},${si.getW(i)}|${sw.array[i * 4]},${sw.array[i * 4 + 1]},${sw.array[i * 4 + 2]},${sw.array[i * 4 + 3]}|${s}|${tpl.kind[i]}|${tint}`;
+    let j = alike.get(key);
+    if (j === undefined) {
+      alike.set(key, (j = keep.length));
+      keep.push(i);
+    }
+    remap[i] = j;
+  }
+  const m = keep.length;
+  const out = new THREE.BufferGeometry();
+  const copy = (src: THREE.BufferAttribute): THREE.BufferAttribute => {
+    const Arr = src.array.constructor as new (len: number) => THREE.TypedArray;
+    const w = src.itemSize;
+    const arr = new Arr(m * w);
+    for (let j = 0; j < m; j++) for (let e = 0; e < w; e++) arr[j * w + e] = src.array[keep[j]! * w + e]!;
+    return new THREE.BufferAttribute(arr, w, src.normalized);
+  };
+  out.setAttribute('position', copy(pos));
+  const normals = new Float32Array(m * 3);
+  for (let j = 0; j < m; j++) for (let e = 0; e < 3; e++) normals[j * 3 + e] = normal[keep[j]! * 3 + e]!;
+  out.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+  out.setAttribute('skinIndex', copy(si));
+  out.setAttribute('skinWeight', copy(sw));
+  const surface = new Uint8Array(m * 4);
+  const slot = new Uint8Array(m);
+  const base = new Float32Array(m * 3);
+  const kind = new Uint8Array(m);
+  for (let j = 0; j < m; j++) {
+    const i = keep[j]!;
+    slot[j] = tpl.slot[i]!;
+    kind[j] = tpl.kind[i]!;
+    base[j * 3] = tpl.base[i * 3]!;
+    base[j * 3 + 1] = tpl.base[i * 3 + 1]!;
+    base[j * 3 + 2] = tpl.base[i * 3 + 2]!;
+    const sf = SURFACES[kind[j]!] ?? SURFACES[KIND.cloth]!;
+    for (let e = 0; e < 4; e++) surface[j * 4 + e] = Math.round(sf[e]! * 255);
+  }
+  out.setAttribute('surface', new THREE.BufferAttribute(surface, 4, true));
+  const tris = m < 65536 ? new Uint16Array(corners) : new Uint32Array(corners);
+  for (let k = 0; k < corners; k++) tris[k] = remap[index.getX(k)]!;
+  out.setIndex(new THREE.BufferAttribute(tris, 1));
+  out.computeBoundingSphere();
+  return { ...tpl, geometry: out, slot, base, kind };
+}
+
+/** A foot this near the lowest either foot gets in a clip is down on the floor (metres). */
+const FOOT_DOWN = 0.03;
+
+/**
+ * The walk's and the run's strides, measured on the model itself (the clips' pace differs from one
+ * body to the other): each clip is stepped through, and while a foot is down (near the floor) it
+ * slides back under the body as fast as the body goes, so how far it slides in the steps it's down
+ * gives the clip's speed, and over the whole cycle its stride. Where the right foot is furthest
+ * ahead of the left is noted too, so the two clips can be played in step. Null if the model has no
+ * feet or no clips to measure.
+ */
+export function measureGait(root: THREE.Object3D, clips: THREE.AnimationClip[]): Gait | null {
+  const footR = root.getObjectByName('FootR') ?? root.getObjectByName('Foot.R');
+  const footL = root.getObjectByName('FootL') ?? root.getObjectByName('Foot.L');
+  const walk = clips.find((c) => c.name === 'Walk');
+  const run = clips.find((c) => c.name === 'Run');
+  if (!footR || !footL || !walk || !run) return null;
+  const mixer = new THREE.AnimationMixer(root);
+  const v = new THREE.Vector3();
+  const N = 48;
+  const one = (clip: THREE.AnimationClip): Stride | null => {
+    const action = mixer.clipAction(clip);
+    action.play();
+    const z = [new Float32Array(N), new Float32Array(N)];
+    const y = [new Float32Array(N), new Float32Array(N)];
+    for (let k = 0; k < N; k++) {
+      action.time = (k / N) * clip.duration;
+      mixer.update(0);
+      root.updateMatrixWorld(true);
+      [footR, footL].forEach((foot, s) => {
+        root.worldToLocal(foot.getWorldPosition(v));
+        z[s]![k] = v.z;
+        y[s]![k] = v.y;
+      });
+    }
+    action.stop();
+    mixer.uncacheAction(clip);
+    const low = Math.min(...y[0]!, ...y[1]!) + FOOT_DOWN;
+    let slid = 0;
+    let down = 0;
+    let ahead = -Infinity;
+    let at = 0;
+    for (let k = 0; k < N; k++) {
+      const next = (k + 1) % N;
+      let step = 0;
+      let feet = 0;
+      for (let s = 0; s < 2; s++) {
+        if (y[s]![k]! > low || y[s]![next]! > low) continue;
+        step += z[s]![k]! - z[s]![next]!;
+        feet++;
+      }
+      if (feet) {
+        slid += step / feet;
+        down++;
+      }
+      const d = z[0]![k]! - z[1]![k]!;
+      if (d > ahead) {
+        ahead = d;
+        at = k / N;
+      }
+    }
+    // (in the air between strides the body keeps the pace it had)
+    const length = down ? (slid / down) * N : 0;
+    return length > 0.2 ? { length, dur: clip.duration, at } : null;
+  };
+  try {
+    const w = one(walk);
+    const r = one(run);
+    return w && r ? { walk: w, run: r } : null;
+  } finally {
+    mixer.stopAllAction();
+    mixer.uncacheRoot(root);
+    root.updateMatrixWorld(true);
+  }
+}
+
 // --- staff uniforms ------------------------------------------------------------------------------
 //
 // The floor's staff wear outfits made from the players' own models (nothing more to download): a
@@ -1851,17 +2247,20 @@ function restyle(tpl: Template, mesh: THREE.SkinnedMesh, u: Uniform, from: { par
   }
   const slot = tpl.slot;
   const base = tpl.base;
+  const kind = tpl.kind;
   const TOP = SLOTS.indexOf('top');
   const HAIR = SLOTS.indexOf('hair');
   const SKIN = SLOTS.indexOf('skin');
   const BOTTOM = SLOTS.indexOf('bottom');
+  // (whatever the uniform recolours is cloth: a shirt, the vest, the trousers)
   const fix = (i: number, c: THREE.Color) => {
     slot[i] = FIXED;
+    kind[i] = KIND.cloth;
     base[i * 3] = c.r;
     base[i * 3 + 1] = c.g;
     base[i * 3 + 2] = c.b;
   };
-  const shirt = (i: number) => (u.sleeves === 'shirt' ? fix(i, SHIRT) : (slot[i] = TOP));
+  const shirt = (i: number) => (u.sleeves === 'shirt' ? fix(i, SHIRT) : ((slot[i] = TOP), (kind[i] = KIND.cloth)));
   const isShirt = new Uint8Array(n);
   const ownFront = from.some((f, i) => f.material === 'White' && f.part.endsWith('_Body') && slot[i] === FIXED);
   for (let i = 0; i < n; i++) {
@@ -1939,20 +2338,20 @@ function restyle(tpl: Template, mesh: THREE.SkinnedMesh, u: Uniform, from: { par
   };
 
   /** Additions in the character's frame, each vertex skinned like the body vertex `skin` names. */
-  const extras: { geo: THREE.BufferGeometry; color: THREE.Color; skin: number[] }[] = [];
+  const extras: { geo: THREE.BufferGeometry; color: THREE.Color; kind: number; skin: number[] }[] = [];
   const each = (g: THREE.BufferGeometry, i: number) => new Array<number>(g.getAttribute('position').count).fill(i);
   if (!ownFront) {
     // A top with a plain round neck (unlike the suit) gets a shirt front: a V laid over its chest,
     // a few millimetres proud of it, so the bow tie sits on white as it does on the men.
     const patch = shirtFront(collarY, front);
-    if (patch) extras.push({ geo: patch.geo, color: SHIRT, skin: patch.skin });
+    if (patch) extras.push({ geo: patch.geo, color: SHIRT, kind: KIND.cloth, skin: patch.skin });
   }
   if (u.bow) {
     const y = collarY - 0.022;
     const f = front(0, y);
     if (f.i >= 0) {
       const g = bowTie(new THREE.Vector3(0, y, f.z + (ownFront ? 0.008 : 0.011)));
-      extras.push({ geo: g, color: BOW, skin: each(g, f.i) });
+      extras.push({ geo: g, color: BOW, kind: KIND.silk, skin: each(g, f.i) });
     }
   }
   if (u.badge) {
@@ -1967,7 +2366,7 @@ function restyle(tpl: Template, mesh: THREE.SkinnedMesh, u: Uniform, from: { par
     if (f.i >= 0) {
       const g = new THREE.BoxGeometry(0.066, 0.019, 0.005);
       g.translate(x, y, f.z + 0.004);
-      extras.push({ geo: g, color: BADGE, skin: each(g, f.i) });
+      extras.push({ geo: g, color: BADGE, kind: KIND.metal, skin: each(g, f.i) });
     }
   }
 
@@ -1976,6 +2375,7 @@ function restyle(tpl: Template, mesh: THREE.SkinnedMesh, u: Uniform, from: { par
   if (extras.length === 0) return tpl;
   const slots = Array.from(slot);
   const bases = Array.from(base);
+  const kinds = Array.from(kind);
   const pieces: THREE.BufferGeometry[] = [geo];
   const toMesh = new Map<number, { m: THREE.Matrix4; turn: THREE.Matrix3 }>();
   const inverse = (j: number) => {
@@ -2011,6 +2411,7 @@ function restyle(tpl: Template, mesh: THREE.SkinnedMesh, u: Uniform, from: { par
       wt.setXYZW(k, sw.getX(j), sw.getY(j), sw.getZ(j), sw.getW(j));
       slots.push(FIXED);
       bases.push(x.color.r, x.color.g, x.color.b);
+      kinds.push(x.kind);
     }
     out.setIndex(src.getIndex());
     pieces.push(out);
@@ -2021,7 +2422,7 @@ function restyle(tpl: Template, mesh: THREE.SkinnedMesh, u: Uniform, from: { par
   joined.computeBoundingSphere();
   mesh.geometry = joined;
   geo.dispose();
-  return { ...tpl, geometry: joined, slot: Uint8Array.from(slots), base: Float32Array.from(bases) };
+  return { ...tpl, geometry: joined, slot: Uint8Array.from(slots), base: Float32Array.from(bases), kind: Uint8Array.from(kinds) };
 }
 
 /** Mesh space to the character's frame, at rest, for a vertex skinned like vertex `j`. */

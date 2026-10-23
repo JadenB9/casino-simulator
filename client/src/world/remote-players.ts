@@ -9,7 +9,7 @@
 
 import * as THREE from 'three';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
-import type { Character, CharacterFactory } from './contract.ts';
+import { WALK_CYCLE, motionOf, type Character, type CharacterFactory } from './contract.ts';
 import { byteToYaw, type FloorLink, type RemotePlayer } from '../net/presence.ts';
 import { serverNow } from '../net/clock.ts';
 import { SKIN_TONES, type Look } from '../../../shared/src/look.ts';
@@ -223,7 +223,7 @@ export class RemotePlayers {
     root.position.set(x, 0, z);
     root.rotation.y = byteToYaw(pose.r);
     // Past a walking pace the blend leans toward the run cycle, as it does for your own character.
-    d.ch.setMotion(Math.min(2, d.speed / this.walkSpeed));
+    d.ch.setMotion(motionOf(d.speed * (WALK_CYCLE / this.walkSpeed)));
     return true;
   }
 

@@ -24,7 +24,7 @@
 import * as THREE from 'three';
 import { isTyping, onOverlayChange, overlayCount } from '../ui/keyboard.ts';
 import { held, isKey, type KeyAction, modified } from '../ui/keys.ts';
-import type { Character } from './contract.ts';
+import { motionOf, type Character } from './contract.ts';
 import type { Collider } from './collision.ts';
 
 import { loadMouse, onMouseChange, setMouseSettings, type MouseSettings, type View } from './mouse.ts';
@@ -40,9 +40,6 @@ const RUN = 4.8;
 export const paceBoost = { k: 1, /** v7.4: drunk, 0-1: the walk weaves */ stagger: 0, /** v7.4: crouched: a slow creep, no running */ crouch: false, /** v7.4: aiming down a gun: a steady walk, no running */ aim: false };
 /** Nothing the walker does goes faster than this (m/s): the floor server allows 9. */
 const MAX_PACE = 8.5;
-/** The speeds the walk and run cycles were made for; the blend between them follows these. */
-const WALK_CYCLE = 1.75;
-const RUN_CYCLE = 3.9;
 /** v7: how long a knock keeps you down (the 'knock' gesture is on the ground about this long). */
 const KNOCK_S = 2.1;
 /** The follow camera's target over the walker's feet (m). */
@@ -450,8 +447,8 @@ export class Player {
       if (!this.locked && this.mouse.view === 'third' && this.clock - this.manualAt > RECENTER_AFTER && iz >= 0) this.camYaw = turn(this.camYaw, this.heading + Math.PI, 1 - Math.exp(-dt * 1.4));
     }
     this.speed = moved;
-    const motion = moved < 0.05 ? 0 : moved <= WALK_CYCLE ? moved / WALK_CYCLE : Math.min(2, 1 + (moved - WALK_CYCLE) / (RUN_CYCLE - WALK_CYCLE));
-    this.character.setMotion(motion);
+    // (the character plays its walk and run at the cadence that keeps its feet planted at this speed)
+    this.character.setMotion(motionOf(moved));
     this.syncCharacter();
     this.placeCamera(dt);
     this.floorY = this.position.y;

@@ -24,6 +24,7 @@ import {
   type Celeb, type CelebServerMsg, type GiftBox, type StopKind, type Timeline, type Visit,
 } from '../../../../shared/src/celebs.ts';
 import type { Characters, Person } from '../characters.ts';
+import { motionOf } from '../contract.ts';
 import type { Spot } from '../interact.ts';
 import type { Player } from '../player.ts';
 import type { NavGrid } from '../life/nav.ts';
@@ -92,7 +93,6 @@ const ASK_MS = 5_000;
 const HEAD_Y = 1.62;
 /** A line's bubble: as high as a player's emote bubble (emotes.ts), clear of the name tag under it. */
 const BUBBLE_Y = 2.46;
-const WALK_CYCLE = 1.75;
 
 interface Actor {
   ch: Person;
@@ -434,7 +434,7 @@ export class Celebs {
       return;
     }
     const moved = a.placed ? Math.hypot(x - a.x, z - a.z) : 0;
-    a.ch.setMotion(dt > 0 ? Math.min(1.4, moved / dt / WALK_CYCLE) : 0);
+    a.ch.setMotion(dt > 0 ? Math.min(1.4, motionOf(moved / dt)) : 0);
     // a big step (a fan walking up, a reconnect) isn't eased; a turn always is
     a.yaw = a.placed ? lerpAngle(a.yaw, yaw, Math.min(1, dt * 6)) : yaw;
     a.x = x;

@@ -9,6 +9,7 @@ import { STAFF, detourOf, loopPose, poseAt, type Detour, type Pose, type StaffId
 import { pathLength, type NavGrid, type Pt } from '../life/nav.ts';
 import { DEFAULT_LOOK, type Look } from '../../../../shared/src/look.ts';
 import { uniformOutfit, type Characters, type LawGesture, type Person } from '../characters.ts';
+import { motionOf } from '../contract.ts';
 import { earpiece, guardCap, hangOn, radio, tablet } from './gear.ts';
 
 const LOOKS: Record<'boss' | 'guard' | 'officer', Look> = {
@@ -20,8 +21,6 @@ const LOOKS: Record<'boss' | 'guard' | 'officer', Look> = {
 const GUARD_SKIN = [3, 5, 1, 6];
 const GUARD_HAIR = ['#1b1512', '#0e0c0b', '#4a3020', '#2b1d14'];
 
-/** Walk animation weight per m/s (the clip is made for a brisk walk). */
-const WALK_PER_MS = 0.72;
 /** How fast a turn catches up with the heading (per second). */
 const TURN_RATE = 7;
 
@@ -148,7 +147,7 @@ export class LawStaff {
       m.yaw += d * Math.min(1, dt * TURN_RATE);
       m.person.root.position.set(x, 0, z);
       m.person.root.rotation.y = m.yaw;
-      m.person.setMotion(speed * WALK_PER_MS);
+      m.person.setMotion(motionOf(speed));
       // an eye on you when you're close and in front
       if (watch) {
         const dx = watch.x - x;
