@@ -96,11 +96,12 @@
 }
 .he-pot {
   position: absolute;
-  padding: 3px 12px;
+  padding: 3px 13px;
   border-radius: 999px;
   background: rgba(var(--glass-rgb), 0.86);
   border: 1px solid var(--line-strong);
-  font-size: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
+  font-size: 18px;
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -109,11 +110,12 @@
 }
 .he-sidepot {
   position: absolute;
-  font-size: 12px;
+  font-size: 13px;
   letter-spacing: 0.06em;
-  color: var(--ink-2);
-  background: rgba(var(--glass-rgb), 0.76);
-  padding: 0 6px;
+  color: var(--ink);
+  background: rgba(var(--glass-rgb), 0.8);
+  border: 1px solid var(--line);
+  padding: 0 7px;
   border-radius: 3px;
 }
 
