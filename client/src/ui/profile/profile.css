@@ -5,7 +5,7 @@
 /* the head: your initial, your name, the title you wear */
 .profile-sheet .sheet-head { align-items: center; }
 .pf-mono .monogram { width: 46px; height: 46px; font-size: 21px; }
-.pf-worn { margin: 3px 0 0; font-size: 13px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--brass); }
+.pf-worn { margin: 3px 0 0; font-size: 13px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--brass-hi); }
 .pf-strip { margin-bottom: 22px; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); }
 .pf-strip .stat.lead { background: rgba(var(--brass-rgb), 0.07); }
 .pf-strip .stat.lead .stat-value { color: var(--brass-hi); }

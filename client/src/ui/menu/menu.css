@@ -120,7 +120,7 @@ body.calm .front-rise { animation-name: front-fade; }
 .menu-who .monogram { width: 48px; height: 48px; font-size: 22px; }
 .menu-who-text { display: grid; gap: 4px; min-width: 0; }
 .menu-who-name { overflow: hidden; font: 700 21px/1.1 var(--serif); letter-spacing: 0.04em; color: var(--ink); text-overflow: ellipsis; white-space: nowrap; }
-.menu-who-title { margin-top: -1px; font-size: 12px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--brass); }
+.menu-who-title { margin-top: -1px; font-size: 12px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--brass-hi); }
 .menu-who-money { display: flex; flex-wrap: wrap; gap: 2px 16px; }
 .menu-who-tile { display: inline-flex; align-items: baseline; gap: 7px; white-space: nowrap; }
 .menu-who-label { font-size: 12px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-3); }

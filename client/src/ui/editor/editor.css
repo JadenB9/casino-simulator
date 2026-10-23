@@ -8,13 +8,13 @@
 
 .editor-stage { position: relative; flex: 1; min-width: 0; cursor: grab; touch-action: none; }
 .editor-stage.dragging { cursor: grabbing; }
-.ed-view { position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); display: flex; align-items: center; gap: 3px; padding: 5px; border: 1px solid var(--line); border-radius: 999px; background: rgba(var(--glass-rgb), 0.82); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.32); cursor: default; white-space: nowrap; }
+.ed-view { position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); display: flex; align-items: center; gap: 3px; padding: 5px; border: 1px solid var(--line); border-radius: 999px; background: rgba(var(--glass-rgb), 0.92); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.32); cursor: default; white-space: nowrap; }
 .ed-view-btn { display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 1px solid transparent; border-radius: 50%; background: transparent; color: var(--ink-2); cursor: pointer; transition: color 0.15s, border-color 0.15s, background-color 0.15s, transform 0.08s; }
 .ed-view-btn:hover { border-color: var(--line-strong); background: rgba(var(--lift-rgb), 0.05); color: var(--ink); }
 .ed-view-btn:active { transform: scale(0.94); }
 .ed-view-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 .ed-view-sep { width: 1px; height: 20px; margin: 0 4px; background: var(--line); }
-.ed-view-hint { display: flex; align-items: center; gap: 6px; margin: 0 8px; font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-3); }
+.ed-view-hint { display: flex; align-items: center; gap: 6px; margin: 0 8px; font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-2); }
 .ed-view-hint .kc { min-width: 20px; height: 19px; }
 
 .editor-panel { position: relative; flex: none; display: flex; flex-direction: column; width: 420px; background: rgba(var(--sheet-rgb), 0.97); border-left: 1px solid var(--line); box-shadow: -24px 0 60px rgba(0, 0, 0, 0.45); animation: ed-panel-in 0.35s var(--ease); }
@@ -43,7 +43,7 @@ body.calm .editor-panel { animation-name: front-in; }
 .ed-part { animation: ed-part-in 0.32s var(--ease) both; }
 @keyframes ed-part-in { from { opacity: 0; transform: translateY(6px); } }
 body.calm .ed-part { animation-name: front-in; }
-.ed-section-title { display: flex; align-items: center; gap: 12px; margin: 16px 0 0; font: 600 12px/1 var(--ui); letter-spacing: 0.18em; text-transform: uppercase; color: var(--brass); }
+.ed-section-title { display: flex; align-items: center; gap: 12px; margin: 16px 0 0; font: 600 12px/1 var(--ui); letter-spacing: 0.18em; text-transform: uppercase; color: var(--brass-hi); }
 .ed-section-title::after { content: ''; flex: 1; height: 1px; background: var(--line); }
 .ed-section:first-child .ed-section-title { margin-top: 8px; }
 .ed-field { padding: 12px 0 14px; border-bottom: 1px solid rgba(var(--brass-rgb), 0.09); }

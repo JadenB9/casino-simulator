@@ -11,7 +11,7 @@ body.calm .guide-card { animation-name: guide-fade; }
 @keyframes guide-fade { from { opacity: 0; } }
 
 .guide-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 9px; }
-.guide-step { font-size: 12px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--brass); }
+.guide-step { font-size: 12px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--brass-hi); }
 .guide-skip { padding: 4px 2px; border: 0; background: none; color: var(--ink-3); font: 600 12px/1 var(--ui); letter-spacing: 0.12em; text-transform: uppercase; cursor: pointer; transition: color 0.15s; }
 .guide-skip:hover { color: var(--ink); }
 .guide-skip:focus-visible { border-radius: 3px; outline: 2px solid var(--focus); outline-offset: 2px; }

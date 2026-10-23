@@ -29,7 +29,7 @@
 .daily-day.today .daily-day-label { color: var(--brass-hi); }
 .daily-day.today .daily-day-amount, .daily-day.today .daily-day-short { color: var(--ink); font-size: 18px; }
 .daily-day.tomorrow { border-style: dashed; border-color: var(--line-strong); }
-.daily-day.tomorrow .daily-day-label { color: var(--brass); }
+.daily-day.tomorrow .daily-day-label { color: var(--brass-hi); }
 /* the day just claimed: pressed into place once (not while motion is reduced) */
 .daily-day.stamp { animation: daily-stamp 0.5s var(--ease); }
 @keyframes daily-stamp { from { transform: scale(1.1); } }
@@ -41,7 +41,7 @@
 .daily-note { margin: -6px 0 0; font-size: 14px; letter-spacing: 0.03em; color: var(--ink-3); }
 
 .daily-met-head { display: flex; align-items: baseline; justify-content: space-between; padding-top: 12px; border-top: 1px solid var(--line); }
-.daily-met-title { font-size: 13px; font-weight: 600; letter-spacing: 0.2em; text-transform: uppercase; color: var(--brass); }
+.daily-met-title { font-size: 13px; font-weight: 600; letter-spacing: 0.2em; text-transform: uppercase; color: var(--brass-hi); }
 .daily-met-count { font-size: 15px; font-weight: 600; letter-spacing: 0.04em; color: var(--ink-2); }
 .daily-met { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 0; padding: 0; list-style: none; }
 .daily-celeb { display: grid; gap: 1px; padding: 7px 10px 8px; border: 1px solid rgba(var(--brass-rgb), 0.14); border-radius: 6px; background: rgba(var(--lift-rgb), 0.015); }
