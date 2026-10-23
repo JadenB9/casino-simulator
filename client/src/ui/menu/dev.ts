@@ -4,7 +4,8 @@
 // new=1 (a brand-new player: the flow walks them through picking a look first),
 // name=<n> (log in as n), backdrop=3d (a slow orbit of the room behind login and menu),
 // online=<n>, seated=0, dock=0 (hide the screen links, for screenshots); with screen=daily,
-// streak=<n> and claimed=1 (the daily bonus from a stand-in, over the HUD).
+// streak=<n> and claimed=1 (the daily bonus from a stand-in, over the HUD); still=1 stops drawing
+// the room after its first second (a 2D screen's screenshot in software rendering, much sooner).
 // It is also a worked example of the wiring app/boot.ts needs; see README.md.
 
 import './dev.css';
@@ -28,6 +29,7 @@ const engine = new Engine3D(document.getElementById('scene') as HTMLCanvasElemen
 const sfx = new Sfx();
 void sfx.load().catch(() => {});
 devRoom(engine, GAMES.highcard, '');
+if (q.get('still') === '1') setTimeout(() => (engine.paused = true), 1000);
 const cam = engine.camera;
 const rest = () => {
   cam.position.set(1.95, 1.5, 2.35);

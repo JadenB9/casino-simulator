@@ -100,13 +100,13 @@ body.calm .ed-part { animation-name: front-in; }
 .ed-buttons .btn.ghost:not(.ed-icon):not([hidden]) + .btn.primary { margin-left: 0; }
 .ed-icon { gap: 7px; padding: 0 12px; white-space: nowrap; }
 .ed-icon .ico { width: 18px; height: 18px; }
-.ed-icon:not(:has(.ed-btn-text)) { width: 40px; padding: 0; }
 
 /* ---------------------------------------------------------------- phones and tablets */
 
-/* Narrow screens: the stage above, the panel as a sheet of a fixed height along the bottom (so a
-   step with fewer fields doesn't move the figure), its buttons clear of the back chip. */
-@media (max-width: 760px) {
+/* Narrow screens, and tablets held upright: the stage above, the panel as a sheet of a fixed
+   height along the bottom (so a step with fewer fields doesn't move the figure), its buttons
+   clear of the back chip. */
+@media (max-width: 760px), (max-aspect-ratio: 4/5) {
   .editor { flex-direction: column; }
   .editor-stage { flex: 1; min-height: 0; }
   .editor-panel { width: 100%; height: 58vh; border-top: 1px solid var(--line); border-left: 0; border-radius: 14px 14px 0 0; box-shadow: 0 -20px 50px rgba(0, 0, 0, 0.45); animation-name: ed-sheet-in; }
@@ -124,9 +124,10 @@ body.calm .ed-part { animation-name: front-in; }
   .ed-slider { grid-template-columns: 56px minmax(0, 1fr) 104px; gap: 10px; }
   @keyframes ed-sheet-in { from { opacity: 0; transform: translateY(24px); } }
 }
+/* the narrowest phones: Surprise me as its dice alone (its name stays its label) */
 @media (max-width: 420px) {
   .ed-icon .ed-btn-text { display: none; }
-  .ed-icon { width: 40px; padding: 0; }
+  .ed-icon { width: 44px; padding: 0; }
 }
 
 /* Touch screens: the view's buttons, the tabs and the swatches a thumb's width. */
@@ -136,8 +137,14 @@ body.calm .ed-part { animation-name: front-in; }
   .sw { width: 42px; height: 42px; }
   .ed-buttons .btn { height: 44px; }
 }
-@media (pointer: coarse) and (max-width: 760px) {
+@media (pointer: coarse) and (max-width: 760px), (pointer: coarse) and (max-aspect-ratio: 4/5) {
   .editor-panel { height: 58dvh; }
+}
+/* A tablet upright: the back chip has its name beside its arrow there, so the buttons start
+   further in, and the sheet needs less of the height. */
+@media (max-aspect-ratio: 4/5) and (min-width: 641px) {
+  .ed-foot { padding-left: 116px; }
+  .editor-panel { height: 52vh; height: 52dvh; }
 }
 /* A phone on its side: the panel a little narrower, its head and foot slimmer. */
 @media (max-height: 480px) and (min-width: 761px) {

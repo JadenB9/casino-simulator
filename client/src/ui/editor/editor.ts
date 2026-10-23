@@ -437,13 +437,17 @@ export function openEditor(deps: EditorDeps): Closable {
     const reserve = v.width > v.height ? v.height + 30 : 16;
     free = side ? { x0: 0, x1: Math.max(1, r.left), y0: 0, y1: vh - reserve } : { x0: 0, x1: vw, y0: 0, y1: Math.max(1, r.top - reserve) };
   };
-  /** Where the camera stands to show `h` metres of the figure around height `y`, centred in the free space. */
-  const framing = (y: number, h: number, out: { pos: THREE.Vector3; look: THREE.Vector3 }) => {
+  /**
+   * Where the camera stands to show `h` metres of the figure around height `y` (and `wide` metres
+   * across, for a tall narrow stage), centred in the free space.
+   */
+  const framing = (y: number, h: number, wide: number, out: { pos: THREE.Vector3; look: THREE.Vector3 }) => {
     const vw = innerWidth;
     const vh = innerHeight;
     const half = Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2);
     const frac = (free.y1 - free.y0) / vh;
-    const d = h / (2 * half * frac * 0.9);
+    const fracX = (free.x1 - free.x0) / vw;
+    const d = Math.max(h / (2 * half * frac * 0.9), wide / (2 * half * (vw / vh) * fracX * 0.9));
     const cx = ((free.x0 + free.x1) / 2 / vw) * 2 - 1;
     const cy = -(((free.y0 + free.y1) / 2 / vh) * 2 - 1);
     _focus.copy(room.group.position);
@@ -454,13 +458,13 @@ export function openEditor(deps: EditorDeps): Closable {
     out.look.set(_focus.x - cx * halfW, _focus.y + 0.08 - cy * halfH, _focus.z);
   };
   const frame = () => {
-    framing(0.86, FRAME_H, full);
+    framing(0.86, FRAME_H, 1.4, full);
     // the face, once the model can say where it is; until then, where a face usually is
     if (faceY === null) {
       const at = character.part?.('face', _face);
       if (at) faceY = at.y;
     }
-    framing((faceY ?? 1.52 * (look.height ?? 1)) - 0.13, CLOSE_H, close);
+    framing((faceY ?? 1.52 * (look.height ?? 1)) - 0.13, CLOSE_H, 0.55, close);
   };
   let framed = false;
   let settled = -1;
