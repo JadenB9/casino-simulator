@@ -2,10 +2,10 @@
 // The amount stands large in tabular figures, a slider runs along the table's range under it
 // (stepped on a log scale when the range is wide, so the minimum and the most you can are both a
 // short drag apart), quick amounts sit under that (the minimum, round amounts up the range, the
-// most you can), and the field says what's wrong as you type instead of after. Enter buys in, Esc
-// cancels, the arrow keys step the slider. It takes over the kit's plain prompt (ui/kit.ts
-// askBuyIn hands its every call here once this module is loaded) with the same options and the
-// same answer: cents, or null. Whole dollars, as before.
+// most you can), and the field says what's wrong as you type instead of after. Enter buys in (from
+// the field or the slider), Esc cancels, the arrow keys step the slider. It takes over the kit's
+// plain prompt (ui/kit.ts askBuyIn hands its every call here once this module is loaded) with the
+// same options and the same answer: cents, or null. Whole dollars, as before.
 
 import { formatMoney, type Cents } from '../../../../shared/src/money.ts';
 import { REFILL_BELOW, REFILL_TO } from '../../../../shared/src/bank.ts';
@@ -144,6 +144,12 @@ export function buyInPanel(opts: BuyInOpts, signal?: AbortSignal): Promise<Cents
     const start = Math.min(max, Math.max(min, opts.suggested ?? picks[1] ?? min));
     m = modal(opts.title ?? 'Buy in', [note, amount, slider, ends, quick, why], [ok, button('Cancel', dismiss, { cls: 'ghost' })], dismiss);
     m.root.classList.add('buyin');
+    // Enter on the slider (anywhere but a button, which takes its own) buys in, as in the field
+    m.root.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' || e.target === input || e.target instanceof HTMLButtonElement) return;
+      e.preventDefault();
+      ok.click();
+    });
     set(start, 'start');
     // A finger gets the slider and the picks, not a keyboard thrown up over them.
     if (touch()) {
