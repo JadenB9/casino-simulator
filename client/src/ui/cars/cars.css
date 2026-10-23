@@ -20,6 +20,8 @@
 .vl-spec-bar { height: 4px; border-radius: 2px; background: rgba(var(--brass-rgb), 0.14); overflow: hidden; }
 .vl-spec-bar i { display: block; height: 100%; background: var(--brass); transform-origin: left center; transition: transform 0.45s var(--ease); }
 .vl-spec-value { color: var(--ink-2); text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.vl-spec-seats { display: flex; gap: 4px; }
+.vl-spec-seats i { width: 12px; height: 4px; border-radius: 2px; background: var(--brass); }
 
 .valet .vl-buttons { display: grid; grid-template-columns: 1fr; gap: 8px; }
 

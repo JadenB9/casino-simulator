@@ -107,6 +107,9 @@ export function openValet(deps: ValetDeps): Closable {
   const curb = el('div', 'vl-curb');
   curb.setAttribute('aria-live', 'polite');
   const curbText = el('span', 'vl-curb-text');
+  const curbName = el('span', 'vl-curb-name');
+  const curbLeft = el('span', 'vl-curb-left money');
+  curbText.append(el('span', 'vl-curb-label', 'At the curb'), curbName, curbLeft);
   const curbBack = el('button', 'btn ghost vl-curb-back', 'Send it back');
   curbBack.type = 'button';
   curb.append(curbText, curbBack);
@@ -188,8 +191,12 @@ export function openValet(deps: ValetDeps): Closable {
     return k;
   };
 
-  const renderList = () => {
+  /** The ids on show, so a repaint can tell when a filter's set has changed under it (a purchase, a balance). */
+  let shownIds = '';
+  /** Draw the list; `fresh` (a new tab) brings it in from the top, otherwise it changes in place. */
+  const renderList = (fresh = true) => {
     const here = listed();
+    shownIds = here.map((c) => c.id).join();
     const out: HTMLElement[] = [];
     if (here.length === 0) {
       const box = el('div', 'bq-empty-box');
@@ -203,9 +210,12 @@ export function openValet(deps: ValetDeps): Closable {
       out.push(k.row);
     });
     list.replaceChildren(...out);
-    void list.offsetWidth;
-    for (const c of here) cards.get(c.id)!.row.classList.add('bq-in');
-    list.scrollTop = 0;
+    if (fresh) {
+      // restart the entrance: a reflow per render, never per frame
+      void list.offsetWidth;
+      for (const c of here) cards.get(c.id)!.row.classList.add('bq-in');
+      list.scrollTop = 0;
+    }
     paintRows();
   };
 
@@ -267,37 +277,54 @@ export function openValet(deps: ValetDeps): Closable {
       return row;
     };
     specs.append(bar('Top speed', s.speed, s.speedWord), bar('Pull', s.pull, s.pullWord), bar('Size', s.size, `${s.length.toFixed(1)} m`));
+    // an open car shows its seats: one mark each
+    if (s.seats) {
+      const row = el('div', 'vl-spec');
+      const marks = el('span', 'vl-spec-seats');
+      for (let i = 0; i < s.seats; i++) marks.append(el('i'));
+      row.append(el('span', 'vl-spec-label', 'Seats'), marks, el('span', 'vl-spec-value', `${s.seats}, open top`));
+      specs.append(row);
+    }
     specs.setAttribute('aria-label', `${c.name}: top speed ${s.speedWord}, pull ${s.pullWord}, ${s.length.toFixed(1)} metres long${s.seats ? `, ${s.seats} seats` : ''}.`);
+  };
+
+  /** Paint runs each second for the curb's clock: write only what changed. */
+  const put = (node: HTMLElement, text: string) => {
+    if (node.textContent !== text) node.textContent = text;
   };
 
   const paintCurb = () => {
     const out = deps.atCurb();
-    curb.hidden = !out;
+    if (curb.hidden !== !out) curb.hidden = !out;
     if (!out) return;
-    const left = out.until - serverNow();
-    const car = carItem(out.car)?.name ?? 'Your car';
-    curbText.replaceChildren(el('span', 'vl-curb-label', 'At the curb'), el('span', 'vl-curb-name', car), el('span', 'vl-curb-left money', out.at > serverNow() ? `on its way, ${clockText(out.at - serverNow())}` : `${clockText(left)} left`));
-    curbBack.disabled = busy;
+    const now = serverNow();
+    put(curbName, carItem(out.car)?.name ?? 'Your car');
+    put(curbLeft, out.at > now ? `on its way, ${clockText(out.at - now)}` : `${clockText(out.until - now)} left`);
+    if (curbBack.disabled !== busy) curbBack.disabled = busy;
   };
 
   const paint = () => {
     const c = picked;
-    balVal.textContent = formatMoney(balance());
+    put(balVal, formatMoney(balance()));
     const n = count();
-    ownVal.textContent = owned ? (n ? `${n} of ${CARS.length} in your garage` : 'Your garage is empty') : '';
-    capName.textContent = c.name;
-    capLine.textContent = isOwned(c) ? `In your garage · ${formatMoney(c.price)}` : `Car · ${formatMoney(c.price)}`;
-    selName.textContent = c.name;
-    selPrice.textContent = formatMoney(c.price);
-    selAbout.textContent = c.about;
+    put(ownVal, owned ? (n ? `${n} of ${CARS.length} in your garage` : 'Your garage is empty') : '');
+    put(capName, c.name);
+    put(capLine, `${deps.atCurb()?.car === c.id ? 'At the curb' : isOwned(c) ? 'In your garage' : 'Car'} · ${formatMoney(c.price)}`);
+    put(selName, c.name);
+    put(selPrice, formatMoney(c.price));
+    put(selAbout, c.about);
     const d = decide(c);
-    if (!busy) primary.textContent = d.label;
-    primary.disabled = busy || !d.enabled;
+    if (!busy) put(primary, d.label);
+    const off = busy || !d.enabled;
+    if (primary.disabled !== off) primary.disabled = off;
     const line = note ?? d.line;
-    status.textContent = line.text;
-    status.className = `bq-status ${line.kind}`.trim();
+    put(status, line.text);
+    const cls = `bq-status ${line.kind}`.trim();
+    if (status.className !== cls) status.className = cls;
     paintCurb();
-    paintRows();
+    // a purchase or a balance can change what a filter lists: change it in place
+    if (tab !== 'all' && listed().map((x) => x.id).join() !== shownIds) renderList(false);
+    else paintRows();
   };
 
   const pick = (c: CarItem, focus = false) => {
