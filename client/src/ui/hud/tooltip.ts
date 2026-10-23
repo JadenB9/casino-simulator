@@ -13,7 +13,9 @@ import '../../styles/controls.css';
 import { calm } from '../../app/comfort.ts';
 import { splitKey } from './tools.ts';
 
+/** The wait before a tip shows: the HUD's own tools sooner, any other titled button (a chip in the tray) later, so play across a row of them stays quiet. */
 const SHOW_MS = 380;
+const SHOW_TITLE_MS = 650;
 /** After one hides, the next shows at once for this long: moving along the bar. */
 const WARM_MS = 450;
 /** How far from the control, and from the screen's edges. */
@@ -124,7 +126,7 @@ function begin(el: HTMLElement, now: boolean): void {
   hide();
   current = el;
   stashTitle(el);
-  const wait = now || performance.now() < warmUntil ? 0 : SHOW_MS;
+  const wait = now || performance.now() < warmUntil ? 0 : el.dataset.tip ? SHOW_MS : SHOW_TITLE_MS;
   showTimer = window.setTimeout(() => current === el && show(el), wait);
 }
 
