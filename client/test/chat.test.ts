@@ -3,7 +3,7 @@
 
 import { describe, it, expect, beforeAll } from 'vitest';
 import type { FloorLink as FloorLinkT, FloorTransport } from '../src/net/presence.ts';
-import { KEEP, RoomLog, SendGate, chatLook, nameHue, sayFor } from '../src/ui/chat/model.ts';
+import { GROUP_MS, KEEP, RoomLog, SendGate, chatLook, continues, mentions, nameHue, sayFor } from '../src/ui/chat/model.ts';
 import { CHAT_BURST, type ChatLine, type ChatServerMsg } from '../../shared/src/protocol.ts';
 
 // api.ts reads a constant Vite defines at build time; the unit project has no Vite define.
@@ -144,5 +144,42 @@ describe('the pinned chat', () => {
 
   it('stays up idle, letting the game have the clicks, once pinned and done typing', () => {
     expect(at({ open: true, pinned: true })).toBe('idle');
+  });
+});
+
+describe('runs of lines and mentions', () => {
+  it('runs a line on under the name before it: the same speaker, within two minutes', () => {
+    const a = { id: 2, at: 10_000 };
+    expect(continues(null, a)).toBe(false);
+    expect(continues(a, { id: 2, at: 10_000 + GROUP_MS - 1 })).toBe(true);
+    expect(continues(a, { id: 2, at: 10_000 + GROUP_MS })).toBe(false);
+    expect(continues(a, { id: 3, at: 10_500 })).toBe(false);
+    // a clock that went backwards isn't a run
+    expect(continues(a, { id: 2, at: 9_000 })).toBe(false);
+  });
+
+  it('finds a name said as a word of its own, with or without an @, in any case', () => {
+    expect(mentions('hey Ace_High, nice hand', 'Ace_High')).toEqual([[4, 12]]);
+    expect(mentions('@ace_high gg', 'Ace_High')).toEqual([[0, 9]]);
+    expect(mentions('ACE_HIGH and Ace_High again', 'Ace_High')).toEqual([[0, 8], [13, 21]]);
+    expect(mentions('Ace_Highs and xAce_High and Ace_High2', 'Ace_High')).toEqual([]);
+    expect(mentions('email@Ace_High', 'Ace_High')).toEqual([]);
+    expect(mentions('anything', '')).toEqual([]);
+  });
+
+  it('counts the unread lines that mention you, and reading clears both counts', () => {
+    const log = new RoomLog();
+    const forMe = (l: ChatLine) => mentions(l.text, 'p1').length > 0;
+    log.take([line(1, 2, 'hi all'), line(2, 3, 'hi p1')], true, 1, false, forMe);
+    expect([log.unread, log.mentions]).toEqual([0, 0]); // the first backlog is context
+    log.take([line(3, 2, '@p1 you there?'), line(4, 1, 'p1 here'), line(5, 3, 'ok')], false, 1, false, forMe);
+    expect([log.unread, log.mentions]).toEqual([2, 1]); // your own line counts for nothing
+    log.take([line(6, 2, 'p1!')], false, 1, true, forMe);
+    expect([log.unread, log.mentions]).toEqual([2, 1]); // nothing counts while reading the room
+    log.read();
+    expect([log.unread, log.mentions]).toEqual([0, 0]);
+    log.take([line(7, 2, 'p1?')], false, 1, false, forMe);
+    log.clear();
+    expect(log.mentions).toBe(0);
   });
 });

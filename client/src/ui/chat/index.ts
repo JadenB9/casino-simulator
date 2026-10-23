@@ -12,6 +12,7 @@ import type { ChatServerMsg } from '../../../../shared/src/protocol.ts';
 import type { FloorLink } from '../../net/presence.ts';
 import type { Character } from '../../world/contract.ts';
 import { ChatPanel, type RoomLink } from './panel.ts';
+import { session } from '../../app/session.ts';
 import { SayBubbles } from './bubbles.ts';
 
 export type { RoomLink } from './panel.ts';
@@ -58,6 +59,11 @@ export function createChat(deps: ChatDeps): Chat {
     root: deps.root,
     floor: { say: (text) => deps.floor.say(text) },
     me,
+    myName: () => deps.floor.you?.name ?? null,
+    // the quick emotes: yours, through the floor like the wheel's
+    emote: (e) => deps.floor.emote(e),
+    owned: () => session.profile?.owned,
+    onOwned: (fn) => session.on(() => fn()),
     onMute: (muted) => muted && bubbles.clearAll(),
   });
   let shown = false;

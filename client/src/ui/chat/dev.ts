@@ -1,5 +1,8 @@
 // Dev page for the chat, served by Vite in development only:
 //   /casino/src/ui/chat/dev.html?state=<open|quiet|unread|table|typing|muted|hidden>
+//   &bar=1: a table's bottom row as the games mount it (the kit's chip tray, the tip panel on its
+//   end, baccarat's meters in the corner), for the chat to keep clear of; window.dev.overlaps()
+//   says what the chat covers, the HUD included.
 // No server: a stand-in floor socket hands your lines back as the server would, and two stand-in
 // players by a dev room's table talk on a script. It is also a worked example of the wiring
 // app/boot.ts needs (createChat, setVisible, setTable, tableMessage).
@@ -18,6 +21,9 @@ import { mountHud } from '../menu/index.ts';
 import { cleanChat, type ChatLine, type ChatServerMsg, type PlayerInfo } from '../../../../shared/src/protocol.ts';
 import type { Look } from '../../../../shared/src/look.ts';
 import { createChat } from './index.ts';
+import { ChipTray } from '../kit.ts';
+import { TipControl } from '../../table/tip.ts';
+import '../../games/baccarat/baccarat.css';
 import { sceneWanted, stillBackdrop } from '../social/dev-backdrop.ts';
 
 const q = new URLSearchParams(location.search);
@@ -140,7 +146,31 @@ async function start(): Promise<void> {
       say(21, 'hello? anyone?');
       break;
   }
-  (window as unknown as { dev: unknown }).dev = { engine, chat, say, feed: (m: unknown) => feed(m) };
+  // a table's bottom row, for the chat to rise over
+  let tip: TipControl | null = null;
+  if (q.get('bar') === '1') {
+    const tray = new ChipTray({ undo: () => {}, clear: () => {}, rebet: () => {}, primary: { label: 'Deal', run: () => {} }, max: { mode: 'bet', run: () => {} } });
+    ui.append(tray.root);
+    const meters = el('div', 'bc-meters panel');
+    meters.append(el('div', 'label', 'Banker 4 · Player 3 · Tie 1'));
+    ui.append(meters);
+    tip = new TipControl(ui, () => {});
+    tip.set([500, 1000], 100_000);
+    tip.place();
+  }
+  /** What the chat's dock or box covers: the rects it overlaps, the HUD's among them. */
+  const overlaps = () => {
+    const chat = document.querySelector('.chat')!;
+    const mine = [...chat.querySelectorAll<HTMLElement>('.chat-dock, .chat-box')].filter((e) => !e.hidden).map((e) => e.getBoundingClientRect()).filter((r) => r.width > 0);
+    const others = [...document.querySelectorAll<HTMLElement>('#ui .panel, #ui .hud')].filter((e) => !chat.contains(e) && e.getBoundingClientRect().width > 0);
+    const hits: string[] = [];
+    for (const r of mine) for (const o of others) {
+      const b = o.getBoundingClientRect();
+      if (r.left < b.right && b.left < r.right && r.top < b.bottom && b.top < r.bottom) hits.push(`${o.className.split(' ')[0]} (${Math.round(Math.min(r.bottom, b.bottom) - Math.max(r.top, b.top))}px)`);
+    }
+    return hits;
+  };
+  (window as unknown as { dev: unknown }).dev = { engine, chat, say, feed: (m: unknown) => feed(m), overlaps, place: () => tip?.place() };
 }
 
 start().catch((err) => {

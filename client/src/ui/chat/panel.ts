@@ -12,13 +12,21 @@
 // Enter (or a click on its line) types again. On a touch screen the idle log is only the newest
 // lines, beside the action button and clear of the stick, and the dock starts typing. The corner
 // is shared with some tables' meters, so the whole thing rises above any panel a table keeps down
-// there. Names and lines go in with textContent only.
+// there. Lines from one person in a row run on under one name; each line's time shows on hover; a
+// line that mentions you (your name as a word, or @name) is lit, and the dock says one is waiting;
+// a name in the log is a quick reply (@name in the line); scrolled up, new lines raise a pill that
+// jumps to them. A row of quick emotes sits over the line: your starred ones from the wheel (the
+// first four everyone has until you star any), one click each. Names and lines go in with
+// textContent only.
 
 import './chat.css';
-import { CHAT_MAX, cleanChat, type ChatLine, type ChatServerMsg } from '../../../../shared/src/protocol.ts';
+import { CHAT_MAX, cleanChat, type ChatLine, type ChatServerMsg, type EmoteId } from '../../../../shared/src/protocol.ts';
+import { isFreeEmote } from '../../../../shared/src/items.ts';
+import { FAV_DEFAULT, emoteGate, favourites, noteEmote, onFavourites } from '../social/favourites.ts';
+import { EMOTE_LABELS, emoteGlyph } from '../social/icons.ts';
 import { el } from '../kit.ts';
 import { holdKeyboard, isTyping, overlayCount } from '../keyboard.ts';
-import { RoomLog, SendGate, chatLook, nameHue, type RoomId } from './model.ts';
+import { RoomLog, SendGate, chatLook, continues, mentions, nameHue, type RoomId } from './model.ts';
 import { isKey, keyLabel, keyed } from '../keys.ts';
 
 /** Where a room's lines go out: FloorLink.say, or the table socket. False while it's down. */
@@ -31,8 +39,15 @@ export interface PanelDeps {
   floor: RoomLink;
   /** Your account id, to tell your own lines apart. */
   me(): number | null;
+  /** Your name, to light up the lines that mention you. */
+  myName?(): string | null;
   /** The hide-chat switch changed. */
   onMute?(muted: boolean): void;
+  /** Make an emote (the quick row); none: no row. False while the floor is down. */
+  emote?(e: EmoteId): boolean;
+  /** Every item and emote id you have, and a way to hear when that changes (the quick row shows only yours). */
+  owned?(): Iterable<string> | undefined;
+  onOwned?(fn: () => void): () => void;
 }
 
 /** Previews shown above the closed dock, and for how long. */
@@ -40,9 +55,13 @@ const PEEKS = 3;
 const PEEK_MS = 6000;
 /** The counter shows from this many characters on. */
 const COUNT_FROM = 150;
-/** Space kept between the chat and a table's panels, and the least log it will shrink to (px). */
+/**
+ * Space kept between the chat and a table's panels, and the least log it will shrink to (px): two
+ * lines, so on a short screen (a phone on its side, a table's tray and tip panel under it) the box
+ * still fits between the table's bar and the HUD rather than coming down over the bar.
+ */
 const GAP = 10;
-const MIN_LOG = 72;
+const MIN_LOG = 44;
 const MUTED_KEY = 'casino.chat.muted';
 const OPEN_KEY = 'casino.chat.open';
 
@@ -57,6 +76,8 @@ interface Room {
   list: HTMLElement;
   tab: HTMLButtonElement;
   badge: HTMLElement;
+  /** The newest line drawn, for running the next one on under the same name. */
+  last: ChatLine | null;
 }
 
 export class ChatPanel {
@@ -72,6 +93,15 @@ export class ChatPanel {
   private readonly status = el('span', 'chat-status');
   private readonly muteBtn = el('button', 'chat-icon chat-mute');
   private readonly pinBtn = el('button', 'chat-icon chat-pin');
+  /** Scrolled up, "3 new": a click goes down to them. */
+  private readonly jump = el('button', 'chat-jump');
+  /** Your starred emotes, over the line. */
+  private readonly quick = el('div', 'chat-quick');
+  /** Lines the active room had while you were scrolled up. */
+  private unseen = 0;
+  private readonly peekTimers = new Set<number>();
+  /** The corner's place as last written (--chat-lift, --chat-log-max), so an unchanged one isn't. */
+  private placed = '';
   private readonly rooms: Record<RoomId, Room>;
   private active: RoomId = 'floor';
   private table: RoomLink | null = null;
@@ -146,7 +176,7 @@ export class ChatPanel {
       list.setAttribute('aria-labelledby', tab.id);
       list.append(el('p', 'chat-note', NOTES[id]));
       this.scroller.append(list);
-      return { log: new RoomLog(), list, tab, badge };
+      return { log: new RoomLog(), list, tab, badge, last: null };
     };
     this.rooms = { floor: room('floor', 'Floor'), table: room('table', 'Table') };
     this.rooms.table.tab.hidden = true;
@@ -177,7 +207,23 @@ export class ChatPanel {
     keepTyping(send);
     // Not live: past 150 characters it changes on every key. Refusals reach the log, which is.
     line.append(this.input, this.status, send);
-    this.box.append(head, this.scroller, line);
+    this.jump.type = 'button';
+    this.jump.hidden = true;
+    this.jump.addEventListener('click', () => this.toBottom());
+    keepTyping(this.jump);
+    this.scroller.addEventListener('scroll', () => this.unseen > 0 && this.atBottom() && this.seen(), { passive: true });
+    this.quick.setAttribute('role', 'group');
+    this.quick.setAttribute('aria-label', 'Quick emotes');
+    this.quick.hidden = !deps.emote;
+    if (deps.emote) {
+      this.paintQuick();
+      this.offs.push(onFavourites(() => this.paintQuick()));
+      if (deps.onOwned) this.offs.push(deps.onOwned(() => this.paintQuick()));
+    }
+    // the pill hangs from the log's bottom edge, whatever is under it
+    const jumpAt = el('div', 'chat-jump-at');
+    jumpAt.append(this.jump);
+    this.box.append(head, this.scroller, jumpAt, this.quick, line);
     this.box.hidden = true;
     root.append(this.peeks, this.dock, this.box);
     deps.root.append(root);
@@ -217,6 +263,21 @@ export class ChatPanel {
     addEventListener('pointercancel', up);
     addEventListener('keydown', this.onKey);
     addEventListener('resize', this.place);
+    // A table's panels mounting or going (the UI root's own children): placed again on the next
+    // frame, not only on the poll. Only that one level is watched, so it costs nothing per frame.
+    let queued = 0;
+    const watch = new MutationObserver(() => {
+      if (queued || !this.visible) return;
+      queued = requestAnimationFrame(() => {
+        queued = 0;
+        this.place();
+      });
+    });
+    watch.observe(deps.root, { childList: true });
+    this.offs.push(() => {
+      watch.disconnect();
+      cancelAnimationFrame(queued);
+    });
     // A phone's on-screen keyboard covers the bottom of the page without resizing it (iOS): rise
     // above it while it's up, so the line being typed stays in sight.
     const vv = window.visualViewport;
@@ -264,6 +325,7 @@ export class ChatPanel {
     const t = this.rooms.table;
     this.table = link;
     t.log.clear();
+    t.last = null;
     t.list.replaceChildren(el('p', 'chat-note', NOTES.table));
     t.tab.hidden = link === null;
     this.select(link ? 'table' : 'floor');
@@ -284,16 +346,27 @@ export class ChatPanel {
     const reading = this.visible && this.open && this.active === id;
     const stick = this.atBottom();
     const epoch = room.log.epoch;
-    const fresh = room.log.take(msg.lines, msg.backlog === true, this.deps.me(), reading);
+    const me = this.deps.me();
+    const fresh = room.log.take(msg.lines, msg.backlog === true, me, reading, (l) => this.forMe(l));
     if (!fresh.length) return fresh;
     // The room began again (its backlog is older than what we had): draw it from scratch.
-    if (room.log.epoch !== epoch) room.list.replaceChildren(el('p', 'chat-note', NOTES[id]));
-    for (const line of fresh) room.list.append(this.lineEl(line));
+    if (room.log.epoch !== epoch) {
+      room.list.replaceChildren(el('p', 'chat-note', NOTES[id]));
+      room.last = null;
+    }
+    for (const line of fresh) room.list.append(this.lineEl(line, room, msg.backlog !== true));
     trim(room.list);
-    if (id === this.active && (stick || fresh.some((l) => l.id === this.deps.me()))) this.toBottom();
+    if (id === this.active) {
+      if (stick || fresh.some((l) => l.id === me)) this.toBottom();
+      else if (this.open) {
+        // scrolled up reading something older: say what came in below
+        this.unseen += fresh.filter((l) => l.id !== me).length;
+        this.paintJump();
+      }
+    }
     this.paintBadges();
     if (!this.open && !msg.backlog && !this.muted && this.visible) {
-      for (const line of fresh) if (line.id !== this.deps.me()) this.peek(line, id);
+      for (const line of fresh) if (line.id !== me) this.peek(line, id);
     }
     return fresh;
   }
@@ -350,6 +423,8 @@ export class ChatPanel {
     clearTimeout(this.statusTimer);
     clearInterval(this.muteTimer);
     clearInterval(this.placeTimer);
+    for (const t of this.peekTimers) clearTimeout(t);
+    this.peekTimers.clear();
     for (const off of this.offs) off();
     this.root.remove();
   }
@@ -469,12 +544,106 @@ export class ChatPanel {
 
   // --- drawing ---------------------------------------------------------------------------------
 
-  private lineEl(line: ChatLine): HTMLElement {
+  private lineEl(line: ChatLine, room: Room, live: boolean): HTMLElement {
     const mine = line.id === this.deps.me();
     const p = el('p', 'chat-line');
-    p.append(el('span', `chat-name ${mine ? 'me' : `hue${nameHue(line.name)}`}`, line.name), el('span', 'chat-text', line.text));
-    p.title = new Date(line.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    // a line said just now fades up once (not a backlog's, and not again when its room is shown)
+    if (live) {
+      p.classList.add('new');
+      p.addEventListener('animationend', () => p.classList.remove('new'), { once: true });
+    }
+    // the same speaker again, straight after: the name stays for screen readers, out of sight
+    const before = room.list.lastElementChild;
+    if (continues(room.last, line) && before?.classList.contains('chat-line') && !before.classList.contains('chat-sys')) p.classList.add('cont');
+    room.last = line;
+    const hue = `chat-name ${mine ? 'me' : `hue${nameHue(line.name)}`}`;
+    let name: HTMLElement;
+    if (mine) name = el('span', hue, line.name);
+    else {
+      // a quick reply: @name in the line (not a tab stop: typing the name does the same)
+      const b = el('button', hue, line.name);
+      b.type = 'button';
+      b.tabIndex = -1;
+      b.title = `Reply to ${line.name}`;
+      b.addEventListener('click', () => this.replyTo(line.name));
+      keepTyping(b);
+      name = b;
+    }
+    const text = el('span', 'chat-text');
+    const spans = mine ? [] : mentions(line.text, this.deps.myName?.() ?? '');
+    if (spans.length) {
+      p.classList.add('mention');
+      marked(text, line.text, spans);
+    } else text.textContent = line.text;
+    p.append(name, text);
+    // shown on hover by the CSS (not part of the line's text)
+    p.dataset.time = new Date(line.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
     return p;
+  }
+
+  /** Someone else's line that mentions you. */
+  private forMe(l: ChatLine): boolean {
+    return l.id !== this.deps.me() && mentions(l.text, this.deps.myName?.() ?? '').length > 0;
+  }
+
+  /** Start a reply to `name`: the box open, "@name " at the start of the line. */
+  private replyTo(name: string): void {
+    this.focus();
+    if (this.input.disabled) return;
+    const tag = `@${name} `;
+    const rest = this.input.value.replace(/^@[A-Za-z0-9_]+\s*/, '');
+    this.input.value = (tag + rest).slice(0, CHAT_MAX);
+    const end = this.input.value.length;
+    this.input.setSelectionRange(end, end);
+    this.showCount();
+  }
+
+  /** The quick emotes: your starred ones that you have (the default four if none are). */
+  private paintQuick(): void {
+    const have = new Set(this.deps.owned?.() ?? []);
+    const mine = (e: EmoteId) => isFreeEmote(e) || have.has(e);
+    let picks = favourites().filter(mine);
+    if (picks.length === 0) picks = [...FAV_DEFAULT];
+    // (the profile changes with every round's balance: redrawn only when the picks do)
+    if (picks.join() === this.quick.dataset.picks) return;
+    this.quick.dataset.picks = picks.join();
+    const buttons = picks.map((e) => {
+      const b = el('button', 'chat-emo');
+      b.type = 'button';
+      const name = EMOTE_LABELS[e] ?? e;
+      b.title = name;
+      b.setAttribute('aria-label', `${name} (emote)`);
+      b.append(emoteGlyph(e));
+      b.addEventListener('click', () => this.emote(e));
+      keepTyping(b);
+      return b;
+    });
+    const hint = el('span', 'chat-quick-hint', 'Star more on the wheel');
+    hint.title = 'Open the emote wheel and press F on one to star it';
+    this.quick.replaceChildren(...buttons, hint);
+  }
+
+  private emote(e: EmoteId): void {
+    if (!emoteGate.take()) {
+      this.flash('One moment');
+      return;
+    }
+    if (this.deps.emote?.(e)) noteEmote(e);
+    else this.flash('Not connected');
+  }
+
+  /** The newest lines are in view: the pill goes. */
+  private seen(): void {
+    if (this.unseen === 0) return;
+    this.unseen = 0;
+    this.paintJump();
+  }
+
+  private paintJump(): void {
+    this.jump.hidden = this.unseen === 0;
+    if (this.unseen === 0) return;
+    this.jump.replaceChildren(icon('down'), el('span', '', `${this.unseen > 99 ? '99+' : this.unseen} new`));
+    this.jump.setAttribute('aria-label', `${this.unseen} new ${this.unseen === 1 ? 'line' : 'lines'}: go to the newest`);
   }
 
   /** A line from the game itself (a refusal), in that room's log. */
@@ -484,13 +653,14 @@ export class ChatPanel {
     const last = room.list.lastElementChild;
     if (last?.classList.contains('chat-sys') && last.textContent === text) return;
     room.list.append(el('p', 'chat-line chat-sys', text));
+    room.last = null;
     trim(room.list);
     if (id === this.active) this.toBottom();
     if (!this.open && this.visible) this.peek(null, id, text);
   }
 
   private peek(line: ChatLine | null, id: RoomId, text?: string): void {
-    const p = el('div', `chat-peek${line ? '' : ' chat-sys'}`);
+    const p = el('div', `chat-peek${line ? '' : ' chat-sys'}${line && this.forMe(line) ? ' mention' : ''}`);
     if (line) {
       if (id === 'table') p.append(el('span', 'chat-peek-room', 'Table'));
       p.append(el('span', `chat-name hue${nameHue(line.name)}`, line.name), el('span', 'chat-text', line.text));
@@ -499,28 +669,41 @@ export class ChatPanel {
     }
     this.peeks.append(p);
     while (this.peeks.childElementCount > PEEKS) this.peeks.firstElementChild!.remove();
-    setTimeout(() => {
+    const out = window.setTimeout(() => {
+      this.peekTimers.delete(out);
       p.classList.add('out');
-      setTimeout(() => p.remove(), 350);
+      const gone = window.setTimeout(() => {
+        this.peekTimers.delete(gone);
+        p.remove();
+      }, 350);
+      this.peekTimers.add(gone);
     }, PEEK_MS);
+    this.peekTimers.add(out);
   }
 
   private read(id: RoomId): void {
-    this.rooms[id].log.unread = 0;
+    this.rooms[id].log.read();
     this.paintBadges();
   }
 
   private paintBadges(): void {
     let total = 0;
+    let forMe = 0;
     for (const room of Object.values(this.rooms)) {
-      const n = this.muted || room.tab.hidden ? 0 : room.log.unread;
+      const off = this.muted || room.tab.hidden;
+      const n = off ? 0 : room.log.unread;
+      const at = off ? 0 : room.log.mentions;
       total += n;
+      forMe += at;
       room.badge.hidden = n === 0;
       room.badge.textContent = n > 99 ? '99+' : String(n);
+      room.badge.classList.toggle('at', at > 0);
     }
     this.dockBadge.hidden = total === 0;
     this.dockBadge.textContent = total > 99 ? '99+' : String(total);
-    this.dock.setAttribute('aria-label', total ? `Chat, ${total} unread` : 'Chat');
+    // a line for you among them: the badge turns (its number stays the count)
+    this.dockBadge.classList.toggle('at', forMe > 0);
+    this.dock.setAttribute('aria-label', total ? `Chat, ${total} unread${forMe ? `, ${forMe} for you` : ''}` : 'Chat');
   }
 
   private paintMute(): void {
@@ -609,6 +792,7 @@ export class ChatPanel {
 
   private toBottom(): void {
     this.scroller.scrollTop = this.scroller.scrollHeight;
+    this.seen();
   }
 
   /**
@@ -632,7 +816,9 @@ export class ChatPanel {
     const height = shown === this.box ? shown.offsetHeight - this.scroller.offsetHeight + log : shown.offsetHeight;
     const top = bottom - height;
     let lift = 0;
-    let ceiling = 0;
+    // the HUD along the top is a ceiling too (it is no .panel): the box never reaches into it
+    const hud = this.deps.root.querySelector<HTMLElement>('.hud')?.getBoundingClientRect();
+    let ceiling = hud && hud.height > 0 ? hud.bottom : 0;
     const below: DOMRect[] = [];
     for (const p of this.deps.root.querySelectorAll<HTMLElement>('.panel')) {
       if (this.root.contains(p)) continue;
@@ -658,8 +844,12 @@ export class ChatPanel {
       lift = 0;
       room = bottom - ceiling - GAP;
     }
-    this.root.style.setProperty('--chat-lift', `${Math.round(lift)}px`);
-    this.root.style.setProperty('--chat-log-max', ceiling && room < height ? `${Math.round(Math.max(MIN_LOG, room - (height - log)))}px` : 'none');
+    const liftPx = `${Math.round(lift)}px`;
+    const logMax = ceiling && room < height ? `${Math.round(Math.max(MIN_LOG, room - (height - log)))}px` : 'none';
+    if (`${liftPx} ${logMax}` === this.placed) return;
+    this.placed = `${liftPx} ${logMax}`;
+    this.root.style.setProperty('--chat-lift', liftPx);
+    this.root.style.setProperty('--chat-log-max', logMax);
   };
 }
 
@@ -675,7 +865,21 @@ function keepTyping(b: HTMLElement): void {
 
 /** Keep a log's DOM from growing without end: a few more than the lines kept, for notices. */
 function trim(list: HTMLElement): void {
+  if (list.childElementCount <= 170) return;
   while (list.childElementCount > 170) list.children[1]!.remove();
+  // the first line left has lost the one it ran on from: it shows its name again
+  list.children[1]?.classList.remove('cont');
+}
+
+/** `text` into `into`, the spans in `at` as <mark>s (text nodes only, never markup). */
+function marked(into: HTMLElement, text: string, at: [number, number][]): void {
+  let i = 0;
+  for (const [a, b] of at) {
+    if (a > i) into.append(document.createTextNode(text.slice(i, a)));
+    into.append(el('mark', 'chat-at', text.slice(a, b)));
+    i = b;
+  }
+  if (i < text.length) into.append(document.createTextNode(text.slice(i)));
 }
 
 function load(key: string): string | null {
