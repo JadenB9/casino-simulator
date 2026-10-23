@@ -10,6 +10,8 @@ import { notYet, refillFor } from '../../../../shared/src/bank.ts';
 import type { Look } from '../../../../shared/src/look.ts';
 import { ApiError } from '../../net/api.ts';
 import type { AccountApi } from './deps.ts';
+import { DAILY_AMOUNTS, type DailyStatus } from '../../../../shared/src/celebs.ts';
+import type { DailyApi } from '../daily/api.ts';
 
 const DAY = 86_400_000;
 const HOUR = 3_600_000;
@@ -117,5 +119,37 @@ export function fixtureApi(start: Profile, opts: { lastName?: string | null; lat
       return { profile: structuredClone(p), loan: { amount, at } };
     },
     forgetToken() {},
+  };
+}
+
+/**
+ * The daily bonus for the dev page (?screen=daily): `streak` days in a row so far, today's waiting
+ * (or taken, with `claimed`); a claim moves it on like the server's would.
+ */
+export function dailyFixture(streak = 3, claimed = false, latency = 220): DailyApi {
+  const now = Date.now();
+  let s: DailyStatus = {
+    day: new Date(now).toISOString().slice(0, 10),
+    streak,
+    claimed,
+    next: Math.min(DAILY_AMOUNTS.length, claimed ? streak + 1 : streak + 1),
+    amount: DAILY_AMOUNTS[Math.min(DAILY_AMOUNTS.length, streak + 1) - 1]!,
+    amounts: DAILY_AMOUNTS,
+    resetAt: now + 5 * HOUR + 12 * 60_000,
+    met: { vale: 1, quill: 3 },
+  };
+  return {
+    async status() {
+      await wait(latency);
+      return structuredClone(s);
+    },
+    async claim() {
+      await wait(latency);
+      if (s.claimed) throw new ApiError(409, { error: 'BAD_REQUEST', msg: 'Already taken today.' });
+      const amount = s.amount;
+      const next = Math.min(DAILY_AMOUNTS.length, s.streak + 2);
+      s = { ...s, claimed: true, streak: s.streak + 1, next, amount: DAILY_AMOUNTS[next - 1]! };
+      return { amount, streak: s.streak, balance: 5_000_000 + amount, inPlay: 0, rev: 2, status: structuredClone(s) };
+    },
   };
 }
