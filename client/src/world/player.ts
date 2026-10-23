@@ -29,6 +29,7 @@ import type { Collider } from './collision.ts';
 
 import { loadMouse, onMouseChange, setMouseSettings, type MouseSettings, type View } from './mouse.ts';
 import { EMOTE_S } from './emotes.ts';
+import { calm } from '../app/comfort.ts';
 import { ridePace } from './rides.ts';
 import { EMOTES } from '../../../shared/src/protocol.ts';
 
@@ -70,6 +71,9 @@ const HEAD_AHEAD = 0.06;
 const EYES_OVER_HEAD = 0.11;
 const EYES_AHEAD = 0.1;
 const NECK = 0.85;
+/** How fast the eyes follow the head up and down (1/s): through a walk's bob, and (calm) more gently. */
+const BOB_EASE = 12;
+const BOB_CALM = 5;
 /** Seconds to swing between the two views. */
 const SWITCH_S = 0.45;
 /** Your own head is left out while the camera is this close to the eyes. */
@@ -232,8 +236,8 @@ export class Player {
     }
     const sit = ch.sit?.bind(ch);
     if (sit) {
-      ch.sit = (top) => {
-        sit(top);
+      ch.sit = (top, ease) => {
+        sit(top, ease);
         this.sitting = top !== null;
       };
     }
@@ -680,7 +684,8 @@ export class Player {
     if (this.jab > 0 && Number.isFinite(this.headY)) {
       /* as it was */
     } else if (!(Math.abs(y - this.headY) < 0.5) || dt <= 0) this.headY = y;
-    else this.headY += (y - this.headY) * (1 - Math.exp(-dt * 12));
+    // (calm, v8: the walk's bob eased more than half away; the eyes still sit and stand)
+    else this.headY += (y - this.headY) * (1 - Math.exp(-dt * (calm() ? BOB_CALM : BOB_EASE)));
     const o = eyeOffset(this.camPitch);
     const jab = jabPull(JAB_S - this.jab);
     o.ahead -= JAB_PULL * jab;

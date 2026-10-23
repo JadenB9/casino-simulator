@@ -20,6 +20,7 @@ import type { WorldStation } from './stations.ts';
 import type { GameId } from '../../../shared/src/engine.ts';
 import { CATALOG } from '../../../shared/src/games/catalog.ts';
 import { rideChoice, rideLabel } from './rides.ts';
+import { promptText } from './interact.ts';
 import './touch.css';
 
 /** How far the knob travels from the centre, px. */
@@ -260,13 +261,16 @@ export class TouchControls {
     this.act.hidden = this.caption.hidden = !key;
     if (!key) return;
     if (spot) {
-      // "Order a drink" is the whole caption; the button says its first word. A one-word spot
-      // ("Sit", "Bank", "Browse") is all on the button: the caption would only say it again.
-      const first = spot.split(' ')[0]!;
+      // The button says the prompt's first word, the caption the rest of what the prompt says
+      // (v8: interact.ts promptText(), the same words): "Order" over "Order a drink", "Browse"
+      // over "Fur Coat". A one-word spot ("Sit", "Bank") is all on the button.
+      const [act, what] = promptText({ kind: 'spot', spot: { label: spot } });
+      const first = act.split(' ')[0]!;
+      const caption = [act === first ? '' : act, what].filter(Boolean).join(' · ');
       this.actLabel.textContent = first;
-      this.act.setAttribute('aria-label', spot);
-      this.caption.textContent = spot;
-      this.caption.hidden = first === spot;
+      this.act.setAttribute('aria-label', what ? `${act}: ${what}` : act);
+      this.caption.textContent = caption;
+      this.caption.hidden = !caption;
       return;
     }
     this.actLabel.textContent = station ? 'Play' : 'Visit';

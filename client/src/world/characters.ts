@@ -142,6 +142,11 @@ const SPRINT_HZ = 2.1;
 const LEAN = 0.012;
 const LEAN_MAX = 0.12;
 
+/** Move `a` toward `b` by at most `step`. */
+function stepToward(a: number, b: number, step: number): number {
+  return a < b ? Math.min(b, a + step) : Math.max(b, a - step);
+}
+
 function fract(x: number): number {
   return x - Math.floor(x);
 }
@@ -237,6 +242,63 @@ export class Characters implements CharacterFactory {
 
   forget(p: Person): void {
     this.live.delete(p);
+  }
+
+  // --- v8: one shadow pool ---------------------------------------------------------------------
+  // Each character's soft shadow was a mesh of its own, a draw call each for the guards, the
+  // celebrities and their crowd, the valets and you. With a pool, every shadow shown is one
+  // instance of one mesh; the remote players and the staff keep pools of their own (they mark
+  // their characters' shadows taken).
+
+  private pool: THREE.InstancedMesh | null = null;
+  /** Frames counted by drawShadows: a character updated this frame or the last is shown. */
+  frame = 0;
+
+  /** Draw every character's shadow from one instanced mesh under `parent` (the floor). */
+  poolShadows(parent: THREE.Object3D): void {
+    if (this.pool) return;
+    this.pool = this.makePool(16);
+    parent.add(this.pool);
+    for (const p of this.live) p.shadowPooled(true);
+  }
+
+  get pooled(): boolean {
+    return this.pool !== null;
+  }
+
+  /** Each frame, once the characters have moved: the shadows of everyone drawn, into the pool. */
+  drawShadows(): void {
+    let pool = this.pool;
+    if (!pool) return;
+    let n = 0;
+    for (const p of this.live) {
+      const b = p.shadow;
+      if (!b || b.userData.pooled || p.seen < this.frame - 1 || !drawn(p.root)) continue;
+      if (n >= pool.instanceMatrix.count) {
+        // room for twice as many, keeping this frame's so far
+        const next = this.makePool(n * 2);
+        next.instanceMatrix.array.set(pool.instanceMatrix.array.subarray(0, n * 16));
+        pool.parent?.add(next);
+        pool.removeFromParent();
+        pool.dispose();
+        this.pool = pool = next;
+      }
+      b.updateWorldMatrix(true, false);
+      pool.setMatrixAt(n++, b.matrixWorld);
+    }
+    pool.count = n;
+    pool.visible = n > 0;
+    pool.instanceMatrix.needsUpdate = true;
+    this.frame++;
+  }
+
+  private makePool(size: number): THREE.InstancedMesh {
+    const m = new THREE.InstancedMesh(this.blobGeometry, this.blob, Math.max(16, size));
+    m.name = 'shadows';
+    m.count = 0;
+    m.frustumCulled = false;
+    m.renderOrder = 1;
+    return m;
   }
 
   /** The template for an outfit, loaded once; null while it loads. */
@@ -403,6 +465,13 @@ export class Person implements Character {
   private swayT = 0;
   /** Seat top above the feet while sitting, and how far the model is lowered for it. */
   private seatTop: number | null = null;
+  /**
+   * v8: how far into the sitting pose the body is (0 standing, 1 sat), eased both ways so sitting
+   * down and getting up don't snap, and the seat it's easing onto or up from.
+   */
+  private sitK = 0;
+  private sitAt = 0.45;
+  private sitEase = false;
   /** v7.4: crouched (wanted), and how far down it is now (0-1, eased). */
   private crouchOn = false;
   private crouchK = 0;
@@ -457,6 +526,8 @@ export class Person implements Character {
       const blob = (this.blobMesh = new THREE.Mesh(factory.blobGeometry, factory.blob));
       blob.position.y = 0.012;
       blob.renderOrder = 1;
+      // (v8: on the floor the factory draws it with everyone else's: this one only places it)
+      blob.visible = !factory.pooled;
       this.root.add(blob);
     }
     this.setName(name);
@@ -501,6 +572,13 @@ export class Person implements Character {
 
   /** v8: whether this character has a name to show over its head (staff and you don't). */
   named = false;
+  /** v8: the shadow pool's frame when this character was last updated (shown). */
+  seen = -1;
+
+  /** v8: the factory pools the shadows now: this one only places its own. */
+  shadowPooled(on: boolean): void {
+    if (this.blobMesh) this.blobMesh.visible = !on;
+  }
   private readonly plate = document.createElement('span');
   private readonly nameEl = document.createElement('span');
   /** The tag's fade and size step last written (only a change is written). */
@@ -687,8 +765,10 @@ export class Person implements Character {
    * onto the seat (its name tag and bubbles with it) and the forearms come forward onto the
    * table's rail. Null stands up again.
    */
-  sit(seatTop: number | null): void {
+  sit(seatTop: number | null, ease = false): void {
     this.seatTop = seatTop;
+    if (seatTop !== null) this.sitAt = seatTop;
+    this.sitEase = ease;
   }
 
   /** v7.4: down into a crouch (knees bent, hips low, leaning in), or up again. */
@@ -731,6 +811,9 @@ export class Person implements Character {
   }
 
   update(dt: number): void {
+    // (not drawn last frame: whatever it was doing meanwhile is where it is now, not eased into)
+    const fresh = this.seen < this.factory.frame - 1;
+    this.seen = this.factory.frame;
     if (!this.mixer) {
       // still loading: a gesture made meanwhile runs out rather than playing late
       if (this.act && (this.act.t += dt) > (gestureOf(this.act.e)?.dur ?? 0)) this.act = null;
@@ -760,15 +843,17 @@ export class Person implements Character {
     this.root.getWorldQuaternion(_rootQ).invert();
     _rootInv.copy(this.root.matrixWorld).invert();
     let drop = 0;
-    if (this.seatTop !== null) drop = this.sitPose();
+    const sitting = this.seatTop !== null;
+    this.sitK = riding ? 0 : fresh || !(dt > 0) || !this.sitEase ? (sitting ? 1 : 0) : stepToward(this.sitK, sitting ? 1 : 0, dt / SIT_S);
+    if (this.sitK > 0) drop = this.sitPose(smooth(this.sitK));
     else if (riding) this.model!.position.y = this.modelAt.y + this.ridePose();
     else if (this.swaySeed !== null) this.swayPose(dt);
-    this.lean(dt, this.seatTop === null && !riding && this.crouchK === 0);
+    this.lean(dt, this.sitK === 0 && !riding && this.crouchK === 0);
     if (this.crouchOn || this.crouchK > 0) {
       this.crouchK += ((this.crouchOn ? 1 : 0) - this.crouchK) * (1 - Math.exp(-dt * 9));
       if (this.crouchK < 0.005) this.crouchK = 0;
     }
-    if (this.crouchK > 0 && !this.act && this.seatTop === null && !riding) this.crouchPose();
+    if (this.crouchK > 0 && !this.act && this.sitK === 0 && !riding) this.crouchPose();
     this.lookPose(dt);
     if (this.gun.kind || this.gun.k > 0) this.gunPose(dt);
     const whole = this.act ? this.perform(dt, riding) : null;
@@ -1370,28 +1455,31 @@ export class Person implements Character {
     if (this.blobMesh) this.blobMesh.position.y = 0.012 + drop;
   }
 
-  /** The sitting pose (see sit()); returns how far the character drops (root units). */
-  private sitPose(): number {
+  /**
+   * The sitting pose (see sit()), `k` of the way into it (v8: eased as you sit and get up); returns
+   * how far the character drops (root units).
+   */
+  private sitPose(k = 1): number {
     const legs = (this.legs ??= this.measureLegs());
     if (!legs) return 0;
     // The hip joint rides a hand's width above the seat. The thighs tip forward (from wherever
     // the idle pose holds them) until the shins, hanging from the knees, reach the floor; a high
     // stool leaves them bent at the limit with the feet on its rail.
-    const hipY = this.seatTop! + HIP_OVER_SEAT;
+    const hipY = this.sitAt + HIP_OVER_SEAT;
     const tip = Math.acos(THREE.MathUtils.clamp((hipY - legs.knee) / legs.thigh, Math.cos(SIT_BEND_MAX), Math.cos(SIT_BEND_MIN)));
     const thigh: Turn = [-(tip - legs.thighTip), 0, 0];
     const shin: Turn = [tip - legs.thighTip + legs.shinTip + 0.08, 0, 0];
-    this.turn('thighR', thigh);
-    this.turn('shinR', shin);
-    this.turn('thighL', thigh);
-    this.turn('shinL', shin);
-    this.turn('torso', [0.1, 0, 0]);
+    this.turn('thighR', thigh, k);
+    this.turn('shinR', shin, k);
+    this.turn('thighL', thigh, k);
+    this.turn('shinL', shin, k);
+    this.turn('torso', [0.1, 0, 0], k);
     // elbows down by the sides at rail height, forearms forward and a little in, resting on it
-    this.turn('upperR', SIT_UPPER);
-    this.turn('upperL', mirror(SIT_UPPER));
-    this.turn('lowerR', SIT_LOWER);
-    this.turn('lowerL', mirror(SIT_LOWER));
-    return legs.hip - hipY;
+    this.turn('upperR', SIT_UPPER, k);
+    this.turn('upperL', mirror(SIT_UPPER), k);
+    this.turn('lowerR', SIT_LOWER, k);
+    this.turn('lowerL', mirror(SIT_LOWER), k);
+    return (legs.hip - hipY) * k;
   }
 
   /**
@@ -1666,10 +1754,10 @@ export class Person implements Character {
       const shin = this.bones.shinR;
       const foot = model.getObjectByName('FootR') ?? model.getObjectByName('Foot.R');
       const shinTo = shin && foot ? local(shin, _rk).distanceTo(local(foot, _ra)) : undefined;
-      const was = this.seatTop;
-      this.seatTop = spec.seat ?? 0.45;
+      const was = this.sitAt;
+      this.sitAt = spec.seat ?? 0.45;
       const drop = this.sitPose();
-      this.seatTop = was;
+      this.sitAt = was;
       this.rideLegs(spec, drop, 1, shinTo);
       this.rideHands(ride, { palm: [0, -1, 0.1], fingers: [0.05, -0.15, 1], fist: 0.35, elbow: [-1, -0.8, -0.6] });
       return lift - drop;
@@ -1808,6 +1896,8 @@ const EYE_Y = 1.64;
 /** How far the head turns toward what it looks at, and past which it gives up and looks ahead. */
 const LOOK_YAW = 1.15;
 const LOOK_GIVE_UP = 1.9;
+/** v8: seconds to sit down onto a seat, or to get up off it. */
+const SIT_S = 0.35;
 /** Sitting: the hip joint's height over the seat top, and how far the thighs tip from straight down. */
 const HIP_OVER_SEAT = 0.1;
 const SIT_BEND_MIN = 1.2;
@@ -1977,6 +2067,16 @@ const _fz = new THREE.Vector3();
 const _basis = new THREE.Matrix4();
 const _qChest = new THREE.Quaternion();
 const _pv = new THREE.Vector3();
+
+/** Whether an object would be drawn: it and everything it hangs from shown, up to a scene. */
+function drawn(o: THREE.Object3D): boolean {
+  let top: THREE.Object3D | null = o;
+  for (; top; top = top.parent) {
+    if (!top.visible) return false;
+    if ((top as THREE.Scene).isScene) return true;
+  }
+  return false;
+}
 
 /** Every outfit id per body, for pickers and checks. */
 export const ALL_OUTFITS = OUTFITS;

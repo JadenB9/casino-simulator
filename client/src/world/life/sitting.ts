@@ -168,7 +168,7 @@ export class Seating {
     const s = this.mine;
     if (!s) return;
     this.mine = null;
-    this.character.sit?.(null);
+    this.character.sit?.(null, true);
     const me = this.link?.you?.id;
     if (me !== undefined) this.book.free(me);
     if (opts.send !== false) this.link?.send({ t: 'stand' });
@@ -199,7 +199,7 @@ export class Seating {
       this.player.heading = lerpAngle(g.fh, g.th, k);
       if (g.t >= g.dur) {
         this.glide = null;
-        if (g.sit && this.mine) this.character.sit?.(this.mine.top);
+        if (g.sit && this.mine) this.character.sit?.(this.mine.top, true);
       }
     } else if (this.mine) {
       p.x = this.mine.x;

@@ -378,6 +378,14 @@ const ARRIVE_M = 1.4;
 const STRAY_M = 1.8;
 /** Seconds the chip says you're there before it goes. */
 const THERE_S = 3;
+/**
+ * What else hangs under the HUD (the party, what you're eating or drinking, the cards down the
+ * right, the law's warning): the chip steps down past whichever of them is where it would be. It
+ * looks every CLEAR_S seconds and keeps CLEAR_GAP px from them.
+ */
+const UNDER_HUD = '.party, .dine-hud, .celeb-stack, .law-hud';
+const CLEAR_S = 0.5;
+const CLEAR_GAP = 8;
 /** The trail's brass (added onto the floor: darker is fainter). */
 const TRAIL_COLOR = new THREE.Color('#ffcf7a').multiplyScalar(0.9);
 
@@ -497,11 +505,13 @@ export class MapOverlay {
   private grid: NavGrid | null = null;
   private trail: Trail | null = null;
   private route: { dest: Destination; path: Pt[] | null; again: number; there: number } | null = null;
-  private chip: { root: HTMLElement; arrow: SVGSVGElement; to: HTMLElement; far: HTMLElement; text: string; turn: number } | null = null;
+  private chip: { root: HTMLElement; arrow: SVGSVGElement; to: HTMLElement; far: HTMLElement; text: string; turn: number; down: number; clear: number } | null = null;
   /** The open map's own parts for the way: the line, each station's shape (by placement id), the games list. */
   private routeEl: SVGPolylineElement | null = null;
   private stationEls = new Map<string, SVGRectElement>();
   private tab: 'rooms' | 'games' = 'rooms';
+  /** While the map is open: switch its tabs (side()). */
+  private tabTo: ((id: 'rooms' | 'games') => void) | null = null;
   private pickedGame: string | null = null;
   private readonly look = new THREE.Vector3();
   private readonly ahead = { x: 0, z: 0, dx: 0, dz: 1 };
@@ -606,6 +616,25 @@ export class MapOverlay {
 
   close(): void {
     this.sheet?.close();
+  }
+
+  /**
+   * v8: open the map on its rooms with one of them picked: lit on the plan, what's there and the
+   * way to it under it. By the room's name ("Jade Room", "the pit") or its id, in any case; for
+   * whatever finds a room by name (the command palette). Out of the casino the building's plan
+   * opens as the lobby board shows it. False when there's no such room.
+   */
+  showRoom(name: string): boolean {
+    const want = name.trim().toLowerCase().replace(/^the /, '');
+    const r = this.deps.plan.rooms.find((q) => q.id === want || q.name.toLowerCase().replace(/^the /, '') === want);
+    if (!r) return false;
+    if (this.alt) this.close();
+    // (out of the casino, where the way isn't shown: the building's plan as the lobby's board has it)
+    if (!this.sheet) this.show(this.deps.route?.() === 'off', 'rooms');
+    else this.tabTo?.('rooms');
+    this.pick(r.id);
+    this.sheet?.body.querySelector<HTMLElement>(`.map-legend-pick[data-room="${r.id}"]`)?.scrollIntoView?.({ block: 'nearest' });
+    return true;
   }
 
   /**
@@ -776,6 +805,32 @@ export class MapOverlay {
     }
     (this.trail ??= new Trail(this.guide)).place(r.path, pos.at, pos.left, dt, calm());
     this.paintChip(false, pos);
+    const c = this.chip;
+    if (c && (c.clear -= dt) <= 0) {
+      c.clear = CLEAR_S;
+      this.keepClear(c);
+    }
+  }
+
+  /** Step the chip down past whatever else hangs under the HUD where it would be (back up once it's gone). */
+  private keepClear(c: NonNullable<MapOverlay['chip']>): void {
+    const box = c.root.getBoundingClientRect();
+    if (!box.width) return;
+    const base = box.top - c.down;
+    const near: DOMRect[] = [];
+    for (const n of document.querySelectorAll<HTMLElement>(UNDER_HUD)) {
+      if (n.hidden) continue;
+      const b = n.getBoundingClientRect();
+      if (b.height > 0 && b.right > box.left - CLEAR_GAP && b.left < box.right + CLEAR_GAP) near.push(b);
+    }
+    near.sort((a, b) => a.top - b.top);
+    let at = base;
+    for (const b of near) if (b.top < at + box.height + CLEAR_GAP && b.bottom + CLEAR_GAP > at) at = b.bottom + CLEAR_GAP;
+    const down = Math.round(at - base);
+    if (down !== c.down) {
+      c.down = down;
+      c.root.style.setProperty('--way-down', `${down}px`);
+    }
   }
 
   /** The chip under the HUD: where to, how far, which way (and Stop). */
@@ -794,7 +849,7 @@ export class MapOverlay {
     stop.addEventListener('click', () => this.stop());
     root.append(arrow, to, far, stop);
     this.deps.ui.append(root);
-    this.chip = { root, arrow, to, far, text: '', turn: Number.NaN };
+    this.chip = { root, arrow, to, far, text: '', turn: Number.NaN, down: 0, clear: 0 };
   }
 
   /** Write the chip: only what changed (the distance in steps, the arrow in 10 degree steps). */
@@ -891,6 +946,7 @@ export class MapOverlay {
     this.stationEls.clear();
     this.routeEl = null;
     this.caption = null;
+    this.tabTo = null;
     this.button.setAttribute('aria-pressed', 'false');
   }
 
@@ -945,42 +1001,51 @@ export class MapOverlay {
     line.classList.toggle('on', !!path);
   }
 
-  /** v8: beside the plan, the rooms (the board's legend) and Find a game, as two tabs. */
+  /**
+   * v8: beside the plan, the rooms (the board's legend) and Find a game, as two tabs. Both lists
+   * are there while the map is open, the other one hidden: a legend button (.map-legend-pick, its
+   * name in .map-legend-name) can be found and pressed from either tab.
+   */
   private side(): HTMLElement {
     const side = el('div', 'map-side');
     const tabs = el('div', 'map-tabs');
     tabs.setAttribute('role', 'tablist');
     tabs.setAttribute('aria-label', 'Rooms or games');
-    const panel = el('div', 'map-tabpanel');
-    panel.setAttribute('role', 'tabpanel');
-    panel.id = `map-panel-${++mapSeq}`;
-    const make = (id: 'rooms' | 'games', label: string) => {
+    const seq = ++mapSeq;
+    const make = (id: 'rooms' | 'games', label: string, list: HTMLElement) => {
       const b = el('button', 'map-tab', label);
       b.type = 'button';
+      b.id = `map-tab-${id}-${seq}`;
       b.setAttribute('role', 'tab');
+      const panel = el('div', 'map-tabpanel');
+      panel.id = `map-panel-${id}-${seq}`;
+      panel.setAttribute('role', 'tabpanel');
+      panel.setAttribute('aria-labelledby', b.id);
+      panel.append(list);
       b.setAttribute('aria-controls', panel.id);
       b.addEventListener('click', () => show(id));
-      return b;
+      return { b, panel };
     };
-    const buttons = { rooms: make('rooms', 'Rooms'), games: make('games', 'Find a game') };
+    const buttons = { rooms: make('rooms', 'Rooms', this.legend()), games: make('games', 'Find a game', this.games()) };
     const show = (id: 'rooms' | 'games') => {
       this.tab = id;
-      for (const [k, b] of Object.entries(buttons)) {
+      for (const [k, { b, panel }] of Object.entries(buttons)) {
         b.setAttribute('aria-selected', String(k === id));
         b.tabIndex = k === id ? 0 : -1;
+        panel.hidden = k !== id;
       }
-      panel.replaceChildren(id === 'rooms' ? this.legend() : this.games());
     };
+    this.tabTo = show;
     // the arrow keys move between the two, as a tab list does
     tabs.addEventListener('keydown', (e) => {
       if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
       e.preventDefault();
       const next = this.tab === 'rooms' ? 'games' : 'rooms';
       show(next);
-      buttons[next].focus();
+      buttons[next].b.focus();
     });
-    tabs.append(buttons.rooms, buttons.games);
-    side.append(tabs, panel);
+    tabs.append(buttons.rooms.b, buttons.games.b);
+    side.append(tabs, buttons.rooms.panel, buttons.games.panel);
     show(this.tab);
     return side;
   }
@@ -997,7 +1062,10 @@ export class MapOverlay {
       const swatch = el('span', 'map-swatch');
       swatch.style.background = TINT[r.id] ?? '#444';
       pick.append(swatch, el('span', 'map-legend-name', r.name));
-      pick.addEventListener('click', () => this.pick(r.id));
+      pick.addEventListener('click', () => {
+        this.tabTo?.('rooms');
+        this.pick(r.id);
+      });
       item.append(pick);
       if (about) item.append(el('p', 'map-legend-what', about));
       if (games.length) item.append(el('p', 'map-legend-games', games.join(' · ')));

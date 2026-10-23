@@ -262,6 +262,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
   root.add(lighting.group);
 
   const characters = new Characters(quality, mats.get('blob'));
+  characters.poolShadows(root); // v8: every character's shadow in one draw
   const look = opts.look ?? DEFAULT_LOOK;
   // the bartender and the cage's tellers come with the floor's life (world/life/)
   const staff = new Staff(characters, stations, plan, col, { skip: ['bartender', 'cashier'] });
@@ -530,6 +531,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
       props.update(dt);
       tickWater(dt);
       characters.updateLabels(engine.camera);
+      characters.drawShadows();
       bloom.update(dt);
       pr.update(dt);
       life.late(dt);

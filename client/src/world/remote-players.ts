@@ -191,7 +191,7 @@ export class RemotePlayers {
       root.position.set(floorSeat.x, floorSeat.y ?? 0, floorSeat.z);
       root.rotation.y = floorSeat.yaw;
       d.ch.setMotion(0);
-      d.ch.sit?.(floorSeat.sit ?? null);
+      d.ch.sit?.(floorSeat.sit ?? null, true);
       return true;
     }
     // Someone the snapshots show walking has stood up, even if the table hasn't said so yet.
@@ -208,7 +208,8 @@ export class RemotePlayers {
       d.ch.sit?.(seat.sit ?? null);
       return true;
     }
-    d.ch.sit?.(null);
+    // (off a seat they get up over a moment, a floor seat's or a table's)
+    d.ch.sit?.(null, true);
     if (!pose) {
       d.onFloor = false;
       return false;
@@ -246,6 +247,8 @@ export class RemotePlayers {
     const own = (d.ch as { shadow?: THREE.Object3D | null }).shadow;
     if (!s || !own) return n;
     own.visible = false;
+    // (taken: the factory's own pool, characters.ts drawShadows, leaves it to this one)
+    own.userData.pooled = true;
     if (!this.shadows || n >= this.shadows.instanceMatrix.count) {
       // room for twice as many, keeping this frame's shadows so far
       const was = this.shadows;
@@ -275,6 +278,9 @@ export class RemotePlayers {
   private add(p: RemotePlayer): void {
     if (this.drawn.has(p.info.id)) return;
     const ch = this.factory.create(p.info.look, p.info.name);
+    // (its shadow is drawn with everyone else's here, not by the factory's own pool)
+    const own = (ch as { shadow?: THREE.Object3D | null }).shadow;
+    if (own && this.opts.shadow) own.userData.pooled = true;
     showTitle(ch, p.info.look); // v6 feats6
     ch.root.visible = false; // until its first update places it
     this.group.add(ch.root);

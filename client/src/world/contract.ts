@@ -26,8 +26,11 @@ export interface Character {
   dispose(): void;
   /** Act out an emote for a moment (a wave, a hop), if the character can. */
   gesture?(e: EmoteId): void;
-  /** Sit on a seat this high above the feet (metres), or stand again with null, if the character can. */
-  sit?(seatTop: number | null): void;
+  /**
+   * Sit on a seat this high above the feet (metres), or stand again with null, if the character
+   * can; `ease` (v8) sits down or gets up over a moment instead of at once (walked up to a seat).
+   */
+  sit?(seatTop: number | null, ease?: boolean): void;
   /** v7.4: crouched, or standing (characters.ts). */
   crouch?(on: boolean): void;
   /**
