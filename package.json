@@ -19,6 +19,7 @@
     "typecheck": "npm run types && tsc -p shared && tsc -p server && tsc -p client",
     "types": "wrangler types -c server/wrangler.toml server/worker-configuration.d.ts",
     "privacy": "node scripts/privacy.mjs",
+    "check": "npm run typecheck && npm test && npm run privacy",
     "postinstall": "npm run types"
   },
   "dependencies": {

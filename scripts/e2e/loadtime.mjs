@@ -4,9 +4,12 @@
 // its bytes on the wire, and anything fetched twice. Point it at a production build (`vite preview`
 // of dist/casino with the worker behind it) for real sizes; the dev server's are unbundled.
 //
-// Usage: node scripts/e2e/loadtime.mjs [port] [--net none|4g|3g] [--runs N] [--name perf_load] [--list]
+// Usage: node scripts/e2e/loadtime.mjs [port] [--net none|4g|3g] [--runs N] [--name perf_load] [--list] [--sw]
 //   --list: every request too, biggest first (kB on the wire, whether before the login screen).
 //   4g: 9 Mbps down, 1.5 up, 150 ms round trips; 3g: 1.6 Mbps, 0.75 up, 300 ms.
+//   --sw: headless on the software renderer, for a machine with no screen or GPU (the bytes are
+//   the same; the times are only good for comparing with another --sw run on the same machine).
+// `PORT_BASE=<port> npm run dev -- --preview` serves the production build with the worker behind it.
 
 import { chromium } from 'playwright';
 
@@ -22,7 +25,9 @@ const PROFILES = {
   '3g': { latency: 300, downloadThroughput: (1.6e6 / 8) | 0, uploadThroughput: (0.75e6 / 8) | 0 },
 };
 
-const browser = await chromium.launch({ headless: false, args: ['--ignore-gpu-blocklist'] });
+const browser = await chromium.launch(
+  argv.includes('--sw') ? { args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] } : { headless: false, args: ['--ignore-gpu-blocklist'] },
+);
 const all = [];
 for (let run = 0; run < runs; run++) {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 });

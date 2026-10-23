@@ -105,7 +105,7 @@ describe('game views', () => {
     const log: string[] = [];
     const stand = gv.modules.baccarat.mount(ctx);
     stand.onTable(snap(1));
-    const played = stand.onEvents([{ type: 'deal' }, { type: 'flip' }], {});
+    const played = Promise.resolve(stand.onEvents([{ type: 'deal' }, { type: 'flip' }], {}));
     stand.onSeat({} as never);
     stand.onMembers?.({} as never);
     stand.onError?.('BUSY', 'busy');
@@ -143,7 +143,7 @@ describe('game views', () => {
     const gv = views({ threecard: { ...floor('threecard'), view: d.view } }, { failed });
     const stand = gv.modules.threecard.mount(ctx);
     stand.onTable(snap(1));
-    const played = stand.onEvents([{ type: 'deal' }], {});
+    const played = Promise.resolve(stand.onEvents([{ type: 'deal' }], {}));
     d.fail(new Error('gone'));
     await tick();
     // tried once more before giving up
