@@ -206,6 +206,10 @@ export class ChipStack extends THREE.Group {
     super();
     this.shadow.radius = 0;
     this.add(this.shadow);
+    // a pile taken off the table gives its instances' buffers back (drawn again, three uploads them again)
+    this.addEventListener('removed', () => {
+      for (const c of this.children) if (c instanceof THREE.InstancedMesh) c.dispose();
+    });
   }
 
   set(amount: Cents): void {

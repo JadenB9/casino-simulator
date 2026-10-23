@@ -65,3 +65,41 @@ measured as a control over itself.
 narrow sizes and the phone layouts, projects `stage.fit.keyPoints()` with the real camera and
 checks each is on screen and clear of every control; `DEBUG=1` draws the points and the
 controls on the screenshots. `client/test/fit.test.ts` covers the maths.
+
+## The bottom of the screen (`dock.ts`)
+
+One bar sits at the bottom at a time: the chip tray while bets go down, a game's own bar while a
+decision is yours. The panels that go with it are stacked above it, measured, at every window size,
+so none of them lands on the bar or on each other (fixed `bottom:` offsets for one row of tray had
+them on its chips wherever it wrapped). The board fit creates the dock for the table's UI root and
+runs it; a view only marks what's what:
+
+```ts
+decideBar.dataset.dock = 'bar';    // a bottom bar of the game's own (the tray is one already)
+meters.dataset.dock = 'css';       // a panel low on the screen: kept where its CSS puts it across, raised over the bar if it must be
+picker.dataset.dock = 'start';     // over the bar's left end (the Hands picker is, by its class)
+panel.dataset.dock = 'end';        // over the bar's right end (Tip the dealer is, by its class)
+panel.dataset.dock = 'top';        // at the top: moved down below any table panel it would cover (History, the dealer's line)
+bar.toggleAttribute('data-tip-wait', handOn);   // the Tip panel waits meanwhile (Hold'em during a hand)
+```
+
+The Tips line rides over the bar too. The Tip panel waits for room when the only place left is in
+the HUD's rows. `client/test/dock.test.ts` covers the stacking.
+
+## The bet bar (`betbar.ts`)
+
+`BetBar` is the kit's `ChipTray` (ui/kit.ts) with what a player reads off it: each chip's number key,
+`setActs({ undo, clear, rebet, double })` to dim the buttons that have nothing to do, and
+`setDeal('Deal', down, again, ok)` to put the bet on the primary button ("Deal $125", or last round's
+again when nothing is down, which the view's primary then deals in one press). `new ChipTray(...)`
+can become `new BetBar(...)` at any table; `betbar.css` styles every tray's disabled buttons.
+
+## Rounds, wins and the deck
+
+- `history.ts`: `new RoundHistory(ctx.ui)` and `add({ what, staked, returned, detail })` as each
+  round settles; `RoundLog` gathers a round of several hands. A drawer at the top right, O.
+- `rise.ts`: `riseWin(stage, at, amount)`, a win's amount rising off its chips (calm: it fades).
+- `celebrate.ts`: `glowWin(stage, [cards])` lights a win that isn't a moment.
+- `cards.ts`: rounded cards with a shadow on the felt (`shadow.ts`, which chip piles use too), the
+  faces from one of two decks (`deck()`, `setDeck()`, `onDeck()`, `cardFaceUrl()` for DOM faces);
+  `settings.ts` has the Card deck row for the Settings sheet (`...cardSettings(row)`).
