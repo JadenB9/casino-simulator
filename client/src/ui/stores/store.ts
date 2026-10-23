@@ -63,6 +63,8 @@ export function openStore(o: StoreOpts): Sheet {
   /** One op per piece until the shop has answered it: a retry after a dropped answer is the same purchase. */
   const ops = new Map<string, string>();
   let busy: string | null = null;
+  /** The shop's last refusal, kept under the row it was for until the next try (the toast says it too). */
+  let refusal: { id: string; text: string } | null = null;
   const paint = () => {
     const balance = session.profile?.balance ?? 0;
     balVal.textContent = formatMoney(balance);
@@ -95,6 +97,7 @@ export function openStore(o: StoreOpts): Sheet {
           const row = el('div', `store-row${r.owned ? ' owned' : ''}${r.locked && !r.owned ? ' locked' : ''}${short ? ' short' : ''}`);
           const text = el('div', 'store-text');
           text.append(el('div', 'store-name', r.name), el('div', 'store-about', r.locked && !r.owned ? r.locked : r.about));
+          if (refusal?.id === r.id && !r.owned) text.append(el('div', 'store-note err', refusal.text));
           const right = el('div', 'store-right');
           const price = el('div', 'store-price');
           price.append(el('span', 'money', r.owned ? 'Yours' : formatMoney(r.price)));
@@ -157,6 +160,7 @@ export function openStore(o: StoreOpts): Sheet {
   const buy = async (r: StoreRow) => {
     if (busy) return;
     busy = r.id;
+    refusal = null;
     paint();
     const op = ops.get(r.id) ?? shopApi.newOp();
     ops.set(r.id, op);
@@ -174,7 +178,8 @@ export function openStore(o: StoreOpts): Sheet {
       // again is a retry of the same purchase and can't pay twice
       const st = (err as { status?: number }).status;
       if (st && st < 500) ops.delete(r.id);
-      toast(problemText(err), 'err');
+      refusal = { id: r.id, text: problemText(err) };
+      toast(refusal.text, 'err');
       const body = (err as { body?: { balance?: number; inPlay?: number } }).body;
       const p = session.profile;
       if (p && body?.balance !== undefined && body.inPlay !== undefined) session.set({ ...p, balance: body.balance, inPlay: body.inPlay });
