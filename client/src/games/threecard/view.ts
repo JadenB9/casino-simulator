@@ -316,7 +316,13 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
 
   const rules = el('div', 'tc-rules panel');
   rules.hidden = true;
-  const rulesBtn = button('Rules', () => (rules.hidden = !rules.hidden), { cls: 'ghost tc-rules-btn', key: 'I' });
+  const rulesBtn = button('Rules', () => showRules(rules.hidden === true), { cls: 'ghost tc-rules-btn', key: 'I' });
+  // the card it opens, said for a screen reader as for the eye
+  const showRules = (on: boolean): void => {
+    rules.hidden = !on;
+    rulesBtn.setAttribute('aria-expanded', String(on));
+  };
+  rulesBtn.setAttribute('aria-expanded', 'false');
   ctx.ui.append(rules, rulesBtn);
 
   const fillRules = (): void => {
@@ -1176,7 +1182,7 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
         return true;
       }
       if (e.code === 'KeyI') {
-        rules.hidden = !rules.hidden;
+        showRules(rules.hidden === true);
         return true;
       }
       return false;

@@ -24,7 +24,9 @@
 .pg-meters .up { color: var(--win); }
 .pg-meters .down { color: var(--lose); }
 
-.pg-rules-btn { position: fixed; top: calc(var(--below-hud) + 98px); left: 16px; height: 30px; font-size: 14px; }
+/* over the room, not a panel: on the theme's glass so it reads in either theme */
+.pg-rules-btn { position: fixed; top: calc(var(--below-hud) + 98px); left: 16px; height: 30px; font-size: 14px; background: var(--glass); backdrop-filter: blur(10px); }
+.pg-rules-btn[aria-expanded='true'] { border-color: var(--brass-hi); color: var(--brass-hi); }
 .pg-rules { position: fixed; top: calc(var(--below-hud) + 138px); left: 16px; width: 360px; max-height: calc(100vh - var(--below-hud) - 240px); overflow: auto; padding: 12px 16px 14px; font-size: 15px; line-height: 1.38; color: var(--ink-2); }
 .pg-rules[hidden] { display: none; }
 .pg-rules h3 { margin: 2px 0 6px; font-family: var(--serif); font-size: 18px; font-weight: 600; letter-spacing: 0.06em; color: var(--brass-hi); }

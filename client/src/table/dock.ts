@@ -155,7 +155,7 @@ export class Dock {
   }
 
   private matters(e: HTMLElement): boolean {
-    return e.matches(BAR) || e.matches(TOP) || DOCKED.some((d) => e.matches(d.sel)) || e.classList.contains('panel');
+    return e.matches(BAR) || e.matches(TOP) || DOCKED.some((d) => e.matches(d.sel)) || e.classList.contains('panel') || e.classList.contains('btn');
   }
 
   /** What the last arrangement was worked out from: the window, and every box that counts. */
@@ -182,7 +182,8 @@ export class Dock {
     const H = innerHeight;
     // (TOP's order: the History line first, then the dealer's line, which keeps clear of it)
     const tops = ['.th-history', '[data-dock="top"]', '.dealer-line'].flatMap((sel) => kids.filter((e) => e.matches(sel))).filter(visible);
-    const steady = kids.filter((o) => !o.matches(TOP) && o.classList.contains('panel') && !TRANSIENT.some((c) => o.classList.contains(c)) && !ignored(o) && !o.closest('.chat') && visible(o)).map((o) => o.getBoundingClientRect());
+    // (a table's panels, and its buttons that stand on their own up there: a Rules button)
+    const steady = kids.filter((o) => !o.matches(TOP) && (o.classList.contains('panel') || o.classList.contains('btn')) && !TRANSIENT.some((c) => o.classList.contains(c)) && !ignored(o) && !o.closest('.chat') && visible(o)).map((o) => o.getBoundingClientRect());
     const placedTops: Box[] = [];
     const below = tops.map((e) => {
       const r = e.getBoundingClientRect();

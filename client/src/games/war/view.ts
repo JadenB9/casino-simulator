@@ -269,7 +269,13 @@ export function mountWar(ctx: TableViewCtx): TableView {
 
   const rulesPanel = el('div', 'wr-rules panel');
   rulesPanel.hidden = true;
-  const rulesBtn = button('Rules', () => (rulesPanel.hidden = !rulesPanel.hidden), { cls: 'ghost wr-rules-btn', key: 'I' });
+  const rulesBtn = button('Rules', () => showRules(rulesPanel.hidden === true), { cls: 'ghost wr-rules-btn', key: 'I' });
+  // the card it opens, said for a screen reader as for the eye
+  const showRules = (on: boolean): void => {
+    rulesPanel.hidden = !on;
+    rulesBtn.setAttribute('aria-expanded', String(on));
+  };
+  rulesBtn.setAttribute('aria-expanded', 'false');
   ctx.ui.append(rulesPanel, rulesBtn);
 
   const fillRules = (): void => {
@@ -1240,7 +1246,7 @@ export function mountWar(ctx: TableViewCtx): TableView {
           rebet(e.shiftKey ? 2 : 1);
           return true;
         case 'KeyI':
-          rulesPanel.hidden = !rulesPanel.hidden;
+          showRules(rulesPanel.hidden === true);
           return true;
       }
       if (e.key === 'Backspace' || ((e.metaKey || e.ctrlKey) && e.key === 'z')) {
