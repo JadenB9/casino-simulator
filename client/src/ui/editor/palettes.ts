@@ -2,7 +2,7 @@
 // dyed shades for the punk looks; every value is lowercase #rrggbb, which is what the server's
 // look validator accepts.
 
-import { OUTFITS, SKIN_TONES, type Body, type Look } from '../../../../shared/src/look.ts';
+import { BUILD, HEIGHT, OUTFITS, SKIN_TONES, type Body, type Look } from '../../../../shared/src/look.ts';
 
 export interface Swatch {
   hex: string;
@@ -149,4 +149,23 @@ export function startingLook(id: number): Look {
 /** True when two looks are the same (hex case aside). */
 export function sameLook(a: Look, b: Look): boolean {
   return (['body', 'outfit', 'skin', 'hair', 'top', 'bottom', 'shoes'] as const).every((k) => String(a[k]).toLowerCase() === String(b[k]).toLowerCase());
+}
+
+/** sRGB relative luminance of a #rrggbb colour (0 black, 1 white): which check a swatch wears. */
+export function luminance(hex: string): number {
+  const n = Number.parseInt(hex.slice(1), 16);
+  const lin = (v: number) => {
+    const s = v / 255;
+    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * lin((n >> 16) & 255) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
+}
+
+/** A height or a build as a word: within a third of the way to either end of its range is average. */
+export function sizeWord(key: 'height' | 'build', v: number): string {
+  const [lo, hi] = key === 'height' ? HEIGHT : BUILD;
+  const t = (v - 1) / (v < 1 ? 1 - lo : hi - 1);
+  if (Math.abs(t) < 0.34) return 'Average';
+  if (key === 'height') return t < 0 ? 'Short' : 'Tall';
+  return t < 0 ? 'Slim' : 'Broad';
 }
