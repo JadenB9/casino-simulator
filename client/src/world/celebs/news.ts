@@ -4,6 +4,8 @@
 // name, the tip and the line they said. Text goes in with textContent only.
 
 import { el } from '../../ui/kit.ts';
+import { noticeStack } from '../../ui/feed/stack.ts';
+import { remember } from '../../ui/feed/history.ts';
 import { formatMoney, type Cents } from '../../../../shared/src/money.ts';
 import { calm } from '../../app/comfort.ts';
 
@@ -53,11 +55,12 @@ export class Notices {
       return;
     }
     this.busy = true;
+    remember({ kind: 'celeb', text: n.title, sub: n.sub });
     if (!this.box) {
       this.box = el('div', 'celeb-notices');
       this.box.setAttribute('role', 'status');
       this.box.setAttribute('aria-live', 'polite');
-      this.root.append(this.box);
+      noticeStack(this.root).append(this.box);
     }
     const t = el('div', 'celeb-notice panel');
     t.append(el('div', 'celeb-notice-tag', n.tag), el('div', 'celeb-notice-title', n.title));

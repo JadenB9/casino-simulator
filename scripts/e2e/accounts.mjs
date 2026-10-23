@@ -172,7 +172,7 @@ const selected = (p) => p.getAttribute('.menu-item.sel', 'data-id');
   await shot(p, '12-shortcuts');
   await p.keyboard.press('Escape');
   await p.waitForSelector('.sheet-scrim', { state: 'detached' });
-  await p.click('.hud-btn[title="Settings"]');
+  await p.click('.hud-btn[aria-label="Settings"]');
   await p.waitForSelector('.settings-sheet');
   await p.click('.seg-btn:text-is("Low")');
   await p.waitForTimeout(400);

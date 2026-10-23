@@ -2,25 +2,29 @@
 
 /* Under the HUD, over the dealer's line and the toasts: a player looking back at the screen
    should see this first. It takes no clicks, so nothing behind it is blocked. */
-.idle-warn { position: fixed; top: var(--below-hud); left: 50%; transform: translateX(-50%); z-index: 42; width: min(440px, calc(100vw - 32px)); padding: 12px 16px 14px; pointer-events: none; border-color: var(--line-strong); animation: idle-in 0.3s var(--ease); }
+.idle-warn { position: fixed; top: var(--below-hud); left: 50%; transform: translateX(-50%); z-index: var(--z-alert); width: min(440px, calc(100vw - 32px)); padding: 12px 16px 14px; pointer-events: none; border-color: var(--line-strong); animation: idle-in 0.3s var(--ease); }
+.idle-warn.closing { opacity: 0; transition: opacity 0.24s var(--ease); }
 .idle-title { display: block; font-family: var(--serif); font-size: 20px; font-weight: 600; letter-spacing: 0.06em; color: var(--brass-hi); }
 .idle-line { margin: 4px 0 10px; font-size: 16px; color: var(--ink-2); text-wrap: pretty; }
 .idle-secs { color: var(--ink); font-variant-numeric: tabular-nums; }
-.idle-bar { height: 2px; background: rgba(var(--lift-rgb), 0.08); overflow: hidden; }
-.idle-fill { height: 100%; background: var(--brass); transform-origin: left center; transition: transform 0.25s linear; }
+.idle-bar { height: 2px; border-radius: 1px; background: rgba(var(--lift-rgb), 0.08); overflow: hidden; }
+.idle-fill { height: 100%; background: linear-gradient(90deg, var(--brass), var(--brass-hi)); transform-origin: left center; transition: transform 0.25s linear; }
 @keyframes idle-in { from { opacity: 0; translate: 0 -6px; } }
 
-/* The away screen covers the floor (still drawn, dimmed, behind it) until Come back. */
-.away { position: fixed; inset: 0; z-index: 45; display: grid; place-items: center; padding: 24px 16px; background: radial-gradient(120% 90% at 50% 40%, rgba(42, 28, 18, 0.88) 0%, rgba(11, 9, 8, 0.95) 70%); backdrop-filter: blur(6px); animation: away-in 0.4s var(--ease); }
-.away-card { display: grid; justify-items: center; gap: 14px; max-width: 440px; text-align: center; }
+/* The away screen covers the floor (still drawn, dimmed, behind it) until Come back: the house's
+   mark, what happened and the one way on, on a veil of the page's own colours in either theme. */
+.away { position: fixed; inset: 0; z-index: var(--z-away); display: grid; place-items: center; padding: 24px 16px; background: radial-gradient(120% 90% at 50% 40%, rgba(var(--glow-rgb), 0.9) 0%, rgba(var(--bg-rgb), 0.95) 70%); backdrop-filter: blur(6px); animation: away-in 0.4s var(--ease); }
+.away.closing { opacity: 0; pointer-events: none; transition: opacity 0.26s var(--ease); }
+.away-card { display: grid; justify-items: center; gap: 14px; max-width: 460px; text-align: center; animation: away-rise 0.5s var(--ease) 0.05s both; }
+.away-mark { font-family: var(--serif); font-size: 14px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--brass); margin-right: -0.24em; }
 .away-title { margin: 0; font-family: var(--serif); font-size: clamp(24px, 4.2vw, 32px); font-weight: 600; letter-spacing: 0.05em; line-height: 1.25; color: var(--brass-hi); text-wrap: balance; }
-.away-line { margin: 0; font-size: 17px; color: var(--ink-2); text-wrap: pretty; }
+.away-rule { width: 120px; height: 1px; background: linear-gradient(90deg, rgba(var(--brass-hi-rgb), 0), rgba(var(--brass-hi-rgb), 0.8), rgba(var(--brass-hi-rgb), 0)); }
+.away-line { margin: 0; font-size: 17px; line-height: 1.4; color: var(--ink-2); text-wrap: pretty; }
 .btn.away-back { margin-top: 8px; height: 52px; min-width: 220px; padding: 0 32px; font-size: 20px; letter-spacing: 0.1em; }
+html.gfx-low .away { backdrop-filter: none; }
 @keyframes away-in { from { opacity: 0; } }
+@keyframes away-rise { from { opacity: 0; transform: translateY(8px); } }
 
 /* Reduce flashing & motion (app/comfort.ts) */
-body.calm .idle-warn, body.calm .away { animation: none; }
+body.calm .idle-warn, body.calm .away, body.calm .away-card { animation: none; }
 body.calm .idle-fill { transition: none; }
-
-/* Light (app/theme.ts): the away screen's dim is ivory. */
-:root[data-theme='light'] .away { background: radial-gradient(120% 90% at 50% 40%, rgba(249, 244, 234, 0.9) 0%, rgba(236, 228, 212, 0.96) 70%); }

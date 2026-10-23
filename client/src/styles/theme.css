@@ -53,9 +53,11 @@
      lobby, sits under the HUD's right-hand buttons). */
   --below-hud: 82px;
   --below-party: var(--below-hud);
-  /* the page behind everything, and the loading screen's glow */
+  /* the page behind everything, and the loading screen's glow (and their triplets, for a veil) */
   --bg: #0b0908;
   --boot-glow: #2a1c12;
+  --bg-rgb: 11, 9, 8;
+  --glow-rgb: 42, 28, 18;
   /* text: three weights, a brighter one for a hovered name, and the triplet for tints of it */
   --ink: #f4efe4;
   --ink-2: #c9c0ad;
@@ -150,6 +152,8 @@
 :root[data-theme='light'] {
   --bg: #ece4d4;
   --boot-glow: #f9f4ea;
+  --bg-rgb: 236, 228, 212;
+  --glow-rgb: 249, 244, 234;
   --ink: #221c15;
   --ink-2: #514639;
   --ink-3: #75695a;

@@ -168,7 +168,8 @@ log(`A: ${aDice.wins} wins of 12, net ${aDice.net}, streak ${sa.streak}; B: net 
 // qa6: leaving the table gives mouse look back, and on the GPU's headless Chrome the pointer lock
 // really takes, so the HUD isn't clickable until it's let go (Esc, for a person)
 await A.p.evaluate(() => document.exitPointerLock());
-await A.p.click('button[aria-label="Leaderboards"]');
+await A.p.click('.hud-more-btn'); // the leaderboards are in the HUD's More
+await A.p.click('.hud-more [data-tool="boards"]');
 await A.p.waitForSelector('.lb-sheet .lb-table', { timeout: 15_000 });
 await A.p.waitForTimeout(800);
 await A.p.screenshot({ path: `${out}/boards-networth.png` });
@@ -261,7 +262,8 @@ await A.p.keyboard.press('Escape');
 
 // Phone width: the boards as a strip, the sheet in one column.
 const P = await enterAs(A_NAME, { width: 390, height: 844 });
-await P.p.click('button[aria-label="Leaderboards"]').catch(() => {});
+await P.p.click('.hud-more-btn').catch(() => {}); // the leaderboards are in the HUD's More
+await P.p.click('.hud-more [data-tool="boards"]').catch(() => {});
 await P.p.waitForSelector('.lb-sheet .lb-table', { timeout: 15_000 }).catch(() => {});
 await P.p.waitForTimeout(800);
 await P.p.screenshot({ path: `${out}/boards-phone.png` });

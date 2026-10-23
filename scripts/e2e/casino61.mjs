@@ -224,7 +224,7 @@ try {
   await shot('after-break');
 
   // the Settings rows
-  await p.evaluate(() => document.querySelector('.hud-btn[title="Settings"]').click());
+  await p.evaluate(() => document.querySelector('.hud-btn[aria-label="Settings"]').click());
   await p.waitForSelector('.settings-sheet', { timeout: 5000 });
   const rows = await p.$$eval('.settings-sheet .set-label', (ls) => ls.map((l) => l.textContent));
   ok(rows.includes('Play reminder') && rows.includes('Loss limit'), `Settings has the Play rows: ${rows.join(', ')}`);

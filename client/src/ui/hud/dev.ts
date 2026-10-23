@@ -5,7 +5,8 @@
 // seated=1 (chips at a table, a dealer's line and Leave on a touch screen), touch=1 (html.touch-ui),
 // toasts=<n> (that many notes, half a second apart), wins=1 (big wins too), section=<id> (Settings
 // at a section), q=<text> (the palette with it typed), online=<n>, bg=<image url>, daily=0
-// (today's bonus taken), dock=0 (no screen links, for screenshots). window.dev has the handles.
+// (today's bonus taken), size=<standard|large|larger>, fps=1, dock=0 (no screen links, for
+// screenshots). window.dev has the handles.
 
 import './dev.css';
 import { session } from '../../app/session.ts';
@@ -19,10 +20,13 @@ import { mountDaily } from '../daily/daily.ts';
 import { WinToasts } from '../feed/toast.ts';
 import { icon } from '../menu/icons.ts';
 import type { SettingsSection } from './settings.ts';
+import { setUiSize, setShowFps, type UiSize } from './display.ts';
 import type { DailyStatus } from '../../../../shared/src/celebs.ts';
 
 const q = new URLSearchParams(location.search);
 const ui = document.getElementById('ui')!;
+if (q.has('size')) setUiSize(q.get('size') as UiSize);
+if (q.has('fps')) setShowFps(q.get('fps') === '1');
 if (q.get('touch') === '1') document.documentElement.classList.add('touch-ui');
 const bg = q.get('bg');
 if (bg) {

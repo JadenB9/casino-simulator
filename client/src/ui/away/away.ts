@@ -8,6 +8,8 @@ import { button, el } from '../kit.ts';
 import './away.css';
 
 const touch = (): boolean => typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+/** How long the warning and the away screen take to fade out (away.css). */
+const FADE_MS = 260;
 
 /** "15 minutes", from the one constant. */
 export function awayFor(ms = IDLE_MS): string {
@@ -44,7 +46,9 @@ export function showIdleWarning(opts: { root: HTMLElement; at: number; atTable: 
   return {
     close() {
       clearInterval(timer);
-      box.remove();
+      // it fades (away.css), then goes
+      box.classList.add('closing');
+      setTimeout(() => box.remove(), FADE_MS);
     },
   };
 }
@@ -62,8 +66,9 @@ export function showAway(opts: { root: HTMLElement; atTable: boolean; onBack: ()
   const title = el('h2', 'away-title', `You were away for ${awayFor()}.`);
   title.id = 'away-title';
   card.setAttribute('aria-labelledby', title.id);
-  card.append(title);
-  if (opts.atTable) card.append(el('p', 'away-line', 'You left the table. Anything still in play settles as usual, and your chips go back to your balance.'));
+  // the house's mark over it, a brass rule under it, as the loading screen has them
+  card.append(el('div', 'away-mark', 'Casino Simulator'), title, el('div', 'away-rule'));
+  card.append(el('p', 'away-line', opts.atTable ? 'You left the table. Anything still in play settles as usual, and your chips go back to your balance.' : 'You left the floor. Come back and you stand where you were.'));
   let done = false;
   const back = button('Come back', () => {
     if (done) return;
@@ -79,7 +84,9 @@ export function showAway(opts: { root: HTMLElement; atTable: boolean; onBack: ()
   back.focus({ preventScroll: true });
   function close(): void {
     release();
-    screen.remove();
+    // it fades out over the floor coming back (away.css), then goes
+    screen.classList.add('closing');
+    setTimeout(() => screen.remove(), FADE_MS);
   }
   return {
     close() {

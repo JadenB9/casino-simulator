@@ -46,9 +46,10 @@ export function dismissNotice(node: HTMLElement): void {
 export function pushNotice(node: HTMLElement, ms: number, root?: HTMLElement): () => void {
   const stack = noticeStack(root);
   stack.append(node);
-  // (the floor's notices waiting out a sheet don't take a place)
+  // the notes themselves (a box another module keeps here, the celebrities', isn't one), less the
+  // floor's notices waiting out a sheet, which don't take a place
   const covered = stack.classList.contains('covered');
-  const live = [...stack.children].filter((c): c is HTMLElement => c instanceof HTMLElement && !c.classList.contains('out') && !(covered && !c.classList.contains('toast')));
+  const live = [...stack.children].filter((c): c is HTMLElement => c instanceof HTMLElement && !c.classList.contains('out') && (c.classList.contains('toast') || (!covered && c.classList.contains('bigwin-toast'))));
   for (const old of live.slice(0, Math.max(0, live.length - MAX))) dismissNotice(old);
   const timer = window.setTimeout(() => dismissNotice(node), ms);
   return () => {

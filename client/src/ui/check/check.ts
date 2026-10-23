@@ -11,6 +11,7 @@ import type { CheckChallenge, CheckResponse } from '../../../../shared/src/proto
 import { CHECK_MSG } from '../../../../shared/src/protocol.ts';
 import { ApiError, answerCheck, getCheck } from '../../net/api.ts';
 import { button, el, modal, toast } from '../kit.ts';
+import { theme } from '../../app/theme.ts';
 import './check.css';
 
 const TURNSTILE_JS = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
@@ -50,8 +51,8 @@ export async function openCheck(first?: CheckResponse): Promise<void> {
   body.append(say, stage, status);
   let timer = 0;
   let widget: { id: string; ts: Turnstile } | null = null;
-  const fresh = button('New picture', () => void load('chip'), { cls: 'plain' });
-  const later = button('Later', () => close(), { cls: 'plain' });
+  const fresh = button('New picture', () => void load('chip'), { cls: 'ghost' });
+  const later = button('Later', () => close(), { cls: 'ghost' });
   const m = modal('Quick check', [body], [fresh, later], () => close());
   m.root.classList.add('check-modal');
   const close = () => {
@@ -126,7 +127,8 @@ export async function openCheck(first?: CheckResponse): Promise<void> {
       const ts = await loadTurnstile();
       const id = ts.render(box, {
         sitekey: ch.sitekey,
-        theme: 'dark',
+        // the widget in the panels' own light or dark
+        theme: theme(),
         callback: (token) => void submit({ id: ch.id, token }),
         // It couldn't run here (blocked, offline): the picture instead.
         'error-callback': () => {

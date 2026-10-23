@@ -576,7 +576,7 @@ class App {
     hud.addTool({ id: 'feats', button: this.feats.button, label: 'Achievements', group: 'play', order: 30, key: 'feats', keywords: 'challenges titles rewards trophy' });
     this.feats.useHud(this.hud.root);
     // the palette finds the rooms and the games as well: each opens the Floor Directory at its room
-    hud.addCommands(() => floorCommands(this.world));
+    hud.addCommands(() => [...floorCommands(this.world), ...(this.table ? [{ id: 'leave-table', label: 'Leave the table', hint: 'Esc', group: 'Action', keywords: 'stand up cash out exit', run: () => this.escape() }] : [])]);
     installCheck(); // v6 bot6: the Quick check, when a table or the API says one is waiting
     this.chat?.setVisible(true);
   }

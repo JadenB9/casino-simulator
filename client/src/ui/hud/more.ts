@@ -7,7 +7,7 @@
 // reaching the floor behind (a click there would throw a punch).
 
 import { el } from '../kit.ts';
-import { holdKeyboard } from '../keyboard.ts';
+import { holdKeyboard, onOverlayChange, topPanel } from '../keyboard.ts';
 import { keyLabel } from '../keys.ts';
 import { icon } from '../menu/icons.ts';
 import { GROUPS, buttonLabel, type HudTool } from './tools.ts';
@@ -185,11 +185,17 @@ export function openMore(d: MoreDeps): MorePanel {
   const release = holdKeyboard(panel, () => close(true));
   queueMicrotask(() => search.focus({ preventScroll: true }));
   addEventListener('resize', placeIt);
+  // something opened over it (a sheet from a global key, ? or the achievements): it's done
+  const offOver = onOverlayChange(() => {
+    const top = topPanel();
+    if (top && top !== panel) close(false);
+  });
 
   let closed = false;
   function close(focusBack: boolean): void {
     if (closed) return;
     closed = true;
+    offOver();
     release();
     removeEventListener('resize', placeIt);
     scrim.classList.add('closing');

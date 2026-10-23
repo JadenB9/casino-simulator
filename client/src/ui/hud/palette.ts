@@ -6,7 +6,7 @@
 // it's up: typing goes into its field (no game key fires), the arrows move, Esc closes.
 
 import { el } from '../kit.ts';
-import { holdKeyboard } from '../keyboard.ts';
+import { holdKeyboard, onOverlayChange, topPanel } from '../keyboard.ts';
 import { icon } from '../menu/icons.ts';
 import { bestScore } from './fuzzy.ts';
 
@@ -200,6 +200,11 @@ export function openPalette(o: PaletteOpts): Palette {
   o.root.append(scrim);
   const release = holdKeyboard(panel, () => close());
   input.focus({ preventScroll: true });
+  // something opened over it: it's done
+  const offOver = onOverlayChange(() => {
+    const top = topPanel();
+    if (top && top !== panel) close();
+  });
   // the caret after what was typed already
   input.setSelectionRange(input.value.length, input.value.length);
 
@@ -207,6 +212,7 @@ export function openPalette(o: PaletteOpts): Palette {
   function close(): void {
     if (closed) return;
     closed = true;
+    offOver();
     release();
     scrim.classList.add('closing');
     window.setTimeout(() => scrim.remove(), 160);
