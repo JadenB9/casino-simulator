@@ -51,6 +51,7 @@ import { installCheck } from '../ui/check/check.ts'; // v6 bot6: the Quick check
 import { V7 } from './v7.ts'; // v7
 import { floorCommands } from './commands.ts'; // the palette's rooms and games
 import { installTooltips } from '../ui/hud/tooltip.ts';
+import { startGuide } from '../ui/menu/guide.ts'; // the first-run tour
 
 export async function boot(): Promise<void> {
   const ui = document.getElementById('ui')!;
@@ -540,6 +541,8 @@ class App {
   private enterFloor(): void {
     // Nobody walks in as the default suit: an account still in it gets a look of its own (saved).
     ensureOwnLook({ api, session });
+    // A new player's first time out here: four coach marks (ui/menu/guide.ts), waiting behind any sheet and at tables.
+    startGuide({ root: this.ui, session, free: () => this.table === null && this.world.seated === null });
     // Back in control on the floor, the world takes the mouse (this runs inside the Enter Casino
     // click, the gesture the browser wants for Pointer Lock).
     this.world.player.setEnabled(true);

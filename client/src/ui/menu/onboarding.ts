@@ -6,6 +6,9 @@
 //
 // "New" comes from the profile alone: no rounds played, created in the last quarter of an hour,
 // and still in the default look. A reload half way through starts the walk-through again.
+//
+// Out on the floor for the first time, the tour in guide.ts takes over: four coach marks (walking,
+// sitting down to play, the map, the HUD's tools), shown once.
 
 import type { Profile } from '../../../../shared/src/protocol.ts';
 import { DEFAULT_LOOK, type Look } from '../../../../shared/src/look.ts';
