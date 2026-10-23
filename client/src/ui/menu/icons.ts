@@ -25,7 +25,9 @@ export type IconName =
   | 'chevron'
   | 'enter'
   | 'pin'
-  | 'chip';
+  | 'chip'
+  // photo mode
+  | 'camera';
 
 function svg(): SVGSVGElement {
   const s = document.createElementNS(NS, 'svg');
@@ -153,6 +155,11 @@ export function icon(name: IconName): SVGSVGElement {
       path(s, 'M9.5 6.5 15 12l-5.5 5.5');
       break;
     // a map pin: a room on the floor (the palette)
+    // a camera body, its lens and the shutter's bump: photo mode
+    case 'camera':
+      path(s, 'M4.5 8h3l1.6-2.2h5.8L16.5 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z');
+      circle(s, 3.4, false, 12, 13.2);
+      break;
     case 'pin':
       path(s, 'M12 20.5s-6-5.6-6-10.3a6 6 0 0 1 12 0c0 4.7-6 10.3-6 10.3z');
       circle(s, 2.2, false, 12, 10.2);

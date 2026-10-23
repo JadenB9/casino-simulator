@@ -47,6 +47,7 @@ import * as carsApi from '../ui/cars/api.ts';
 import { serverNow } from '../net/clock.ts';
 import { carItem } from '../../../shared/src/items.ts';
 import { keyLabel } from '../ui/keys.ts';
+import { icon } from '../ui/menu/icons.ts';
 import { installCheck } from '../ui/check/check.ts'; // v6 bot6: the Quick check
 import { V7 } from './v7.ts'; // v7
 import { floorCommands } from './commands.ts'; // the palette's rooms and games
@@ -578,7 +579,15 @@ class App {
     this.feats = mountFeats({ root: this.ui, session, sfx: this.sfx, game: () => this.table?.station.game ?? null });
     hud.addTool({ id: 'feats', button: this.feats.button, label: 'Achievements', group: 'play', order: 30, key: 'feats', keywords: 'challenges titles rewards trophy' });
     this.feats.useHud(this.hud.root);
-    // the palette finds the rooms and the games as well: each opens the Floor Directory at its room
+    // v8: photo mode, from More as well as P, so a phone has it too (on foot on the floor only)
+    const photo = document.createElement('button');
+    photo.type = 'button';
+    photo.className = 'hud-btn';
+    photo.setAttribute('aria-label', `Photo mode (${keyLabel('photo')})`);
+    photo.append(icon('camera'));
+    photo.addEventListener('click', () => requestAnimationFrame(() => this.world.photo.start() || toast('Photo mode is for when you are on your feet on the floor')));
+    hud.addTool({ id: 'photo', button: photo, label: 'Photo mode', group: 'play', order: 40, key: 'photo', keywords: 'camera picture screenshot selfie snap png' });
+    // the palette finds the rooms and the games as well: a room opens the Floor Directory there, a game shows the way
     hud.addCommands(() => [...floorCommands(this.world), ...(this.table ? [{ id: 'leave-table', label: 'Leave the table', hint: 'Esc', group: 'Action', keywords: 'stand up cash out exit', run: () => this.escape() }] : [])]);
     installCheck(); // v6 bot6: the Quick check, when a table or the API says one is waiting
     this.chat?.setVisible(true);
