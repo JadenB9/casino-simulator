@@ -22,7 +22,7 @@ import { DEFAULT_RULES, SHOE_CARDS, bestChoice, cardName, exactOdds, pluralName,
 import { CardMesh, dealCard } from '../../table/cards.ts';
 import { isChipKey } from '../../table/keys.ts';
 import { ChipStack, slideStack } from '../../table/chips.ts';
-import { celebrate } from '../../table/celebrate.ts';
+import { celebrate, glowWin } from '../../table/celebrate.ts';
 import type { Felt } from '../../table/felt.ts';
 import { wait } from '../../table/tween.ts';
 import { button, el } from '../../ui/kit.ts';
@@ -918,7 +918,8 @@ export function mountWar(ctx: TableViewCtx): TableView {
     }
     switch (r.outcome) {
       case 'win':
-        jobs.push(payOut(seat, 'bet', bets.bet));
+        // a plain win lights the bet and what it was paid (the light goes under the chips, as a war's does)
+        jobs.push(payOut(seat, 'bet', bets.bet).then((paid) => void (mineSeat && glowWin(ctx.stage, [[spotStack(seat, 'bet'), paid]]))));
         if (mineSeat) pill(seat, 'bet', signed(bets.bet), 'win');
         break;
       case 'lose':

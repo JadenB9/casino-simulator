@@ -22,7 +22,7 @@ import { advise, insuranceAdvice } from '../../../../shared/src/games/blackjack/
 import { CardMesh, dealCard, flipCard } from '../../table/cards.ts';
 import { isChipKey } from '../../table/keys.ts';
 import { ChipStack, slideStack } from '../../table/chips.ts';
-import { celebrate } from '../../table/celebrate.ts';
+import { celebrate, glowWin } from '../../table/celebrate.ts';
 import { roundMoment } from './moments.ts';
 import { tween, wait, ease } from '../../table/tween.ts';
 import { button, el } from '../../ui/kit.ts';
@@ -1162,7 +1162,12 @@ export class BlackjackTable implements TableView {
   private celebrateRound(spots: SpotView[]): void {
     for (const sp of spots) {
       const found = roundMoment(sp);
-      if (!found) continue;
+      if (!found) {
+        // a win that isn't a moment still lights the hands that won
+        const won = sp.hands.flatMap((h, hi) => (h.payout > h.bet ? [h.cards.map((_, ci) => this.cards.get(`c:${sp.seat}:${hi}:${ci}`)).filter((m): m is CardMesh => !!m)] : []));
+        if (won.length) glowWin(this.ctx.stage, won);
+        continue;
+      }
       this.inTurn(() => {
         if (this.disposed) return;
         const cards = found.hands.flatMap((hi) => (sp.hands[hi]?.cards ?? []).map((_, ci) => this.cards.get(`c:${sp.seat}:${hi}:${ci}`)).filter((m): m is CardMesh => !!m));

@@ -26,3 +26,6 @@
   .tray.panel { max-width: calc(100vw - 104px); }
   .tray.panel .btn { padding: 0 9px; }
 }
+
+/* A panel the dock has set aside for want of room (dock.ts): back when the bar gives it room. */
+#ui > .dock-away { display: none !important; }

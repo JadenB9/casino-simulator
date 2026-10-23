@@ -19,7 +19,7 @@ import {
 } from '../../../../shared/src/games/baccarat/rules.ts';
 import { engine, limitsFor } from '../../../../shared/src/games/baccarat/engine.ts';
 import { bestBet, bettingTip } from '../../../../shared/src/games/baccarat/advice.ts';
-import { celebrate } from '../../table/celebrate.ts';
+import { celebrate, glowWin } from '../../table/celebrate.ts';
 import { coupMoment } from './moments.ts';
 import { Felt } from '../../table/felt.ts';
 import { CardMesh, CARD_H, dealCard, flipCard } from '../../table/cards.ts';
@@ -898,7 +898,11 @@ export class BaccaratTable implements TableView {
   /** Your coup's moment, if it was one, with the light under the two cards that made it. */
   private celebrateCoup(r: ResultEvent, coup: Coup): void {
     const found = coupMoment(r, coup);
-    if (!found) return;
+    if (!found) {
+      // a win that isn't a moment still lights the hand it was won on
+      if (r.returned > r.wagered) glowWin(this.ctx.stage, coup.winner === 'tie' ? [this.cards.player, this.cards.banker] : [this.cards[coup.winner]]);
+      return;
+    }
     celebrate(this.ctx, { ...found.m, glow: found.hands.map((h) => this.cards[h].slice(0, 2)) });
   }
 

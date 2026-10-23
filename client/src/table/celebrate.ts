@@ -64,7 +64,7 @@ const WARM = new THREE.Color(1, 0.8, 0.47);
 export function celebrate(ctx: { stage: TableStage; ui: HTMLElement; sfx: Sfx }, m: Moment): () => void {
   banner(ctx.ui, m);
   const prints = [...(m.glow ?? []).map((g) => footprintOf(ctx.stage.root, ctx.stage.engine.camera, Array.isArray(g) ? g : [g])), ...(m.spots ?? []).map(spotPrint)].filter((f): f is Footprint => f !== null);
-  const stop = rings(ctx.stage, prints, m.tier, HOLD_MS[m.tier] + 400);
+  const stop = rings(ctx.stage, prints, PEAK[m.tier], SPREAD[m.tier], HOLD_MS[m.tier] + 400);
   if (m.tier === 'huge' && m.at) shower(ctx.stage, m.at, prints);
   chime(ctx.sfx, m.tier);
   return stop;
@@ -328,8 +328,21 @@ function bandGeometry(a: number, b: number, r: number, reach: number, solid: boo
   return g;
 }
 
-/** Ring every footprint for `ms`; returns the early stop. */
-function rings(stage: TableStage, prints: Footprint[], tier: Tier, ms: number): () => void {
+/** A plain win's light: fainter and shorter than a moment's. */
+const WIN_PEAK = 0.2;
+
+/**
+ * A win that isn't a moment (it paid, but not enough to call out): the same soft ring under the
+ * cards or spot that won, fainter and over sooner, with no banner and no sound, so every win is
+ * seen where it happened. Returns the early stop.
+ */
+export function glowWin(stage: TableStage, glow: (THREE.Object3D | THREE.Object3D[])[], ms = 1700): () => void {
+  const prints = glow.map((g) => footprintOf(stage.root, stage.engine.camera, Array.isArray(g) ? g : [g])).filter((f): f is Footprint => f !== null);
+  return rings(stage, prints, WIN_PEAK, 1, ms);
+}
+
+/** Ring every footprint for `ms` at `peak` (reaching `spread` times as far); returns the early stop. */
+function rings(stage: TableStage, prints: Footprint[], peak: number, spread: number, ms: number): () => void {
   if (!prints.length) return () => {};
   const material = (kind: 'solid' | 'outline') =>
     new THREE.MeshBasicMaterial({
@@ -346,7 +359,7 @@ function rings(stage: TableStage, prints: Footprint[], tier: Tier, ms: number): 
   const mats = { solid: material('solid'), outline: material('outline') };
   const meshes = prints.map((f) => {
     const small = Math.min(f.a, f.b) * 2;
-    const reach = Math.min(0.024, Math.max(0.01, 0.012 + 0.1 * small)) * SPREAD[tier];
+    const reach = Math.min(0.024, Math.max(0.01, 0.012 + 0.1 * small)) * spread;
     // an outline's corners at least as round as its inset, so its inner row never folds over itself
     const r = f.round ? Math.min(f.a, f.b) : Math.max(INSET, Math.min(0.1 * small, 0.008));
     const mesh = new THREE.Mesh(bandGeometry(f.a, f.b, r, reach, f.solid), f.solid ? mats.solid : mats.outline);
@@ -376,7 +389,7 @@ function rings(stage: TableStage, prints: Footprint[], tier: Tier, ms: number): 
     // In over a fifth of a second, a slow breath (slower still when calm), out over the last half second.
     const fadeIn = Math.min(1, t / 220);
     const fadeOut = Math.min(1, (ms - t) / 550);
-    mats.solid.opacity = mats.outline.opacity = PEAK[tier] * fadeIn * fadeOut * (0.86 + 0.14 * wave(t / 210));
+    mats.solid.opacity = mats.outline.opacity = peak * fadeIn * fadeOut * (0.86 + 0.14 * wave(t / 210));
     requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);

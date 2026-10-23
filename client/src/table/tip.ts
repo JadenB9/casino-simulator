@@ -42,15 +42,16 @@ export class TipControl {
   }
 
   /**
-   * A tray the view has hidden (a hand being played, a decision up) takes the panel with it. Where
-   * it sits is the dock's (dock.ts): over the right end of whatever bar is showing, clear of the
-   * panels beside it, at any window size. (The chat keeps out of the way itself: it rises over
-   * whatever is under it.)
+   * A tray the view has hidden (a hand being played, a decision up) takes the panel with it, and so
+   * does a view that marks something `data-tip-wait` (Hold'em while a hand is on: the table only
+   * takes a tip between hands). Where it sits is the dock's (dock.ts): over the right end of
+   * whatever bar is showing, clear of the panels beside it, at any window size. (The chat keeps out
+   * of the way itself: it rises over whatever is under it.)
    */
   place(): void {
     if (!this.seated) return;
     const tray = this.parent.querySelector<HTMLElement>('.tray');
-    this.trayGone = !!tray && tray.offsetWidth === 0;
+    this.trayGone = (!!tray && tray.offsetWidth === 0) || !!this.parent.querySelector('[data-tip-wait]');
     this.root.hidden = this.trayGone;
   }
 

@@ -24,7 +24,9 @@
 .vp-name { padding-left: 12px; }
 .vp-cell { text-align: right; padding-right: 14px; border-left: 2px solid #0b1a6e; }
 .vp-cell.on { background: #d4141f; color: #fff49a; }
-.vp-row.made > * { background: #3553e8; }
+/* the hand the deal made: its row lit, a marker at its name, its pay in the bet's column bright */
+.vp-row.made > * { background: #3f5ff5; color: #fff7b0; }
+.vp-row.made > .vp-name { box-shadow: inset 6px 0 0 #ffe600; }
 .vp-row.made > .vp-cell.on { background: #e0333d; }
 .vp-row.paid > * { background: #fff49a; color: #0b1a6e; }
 .vp-row.win > * { animation: vp-flash 0.44s steps(1) infinite; }
@@ -51,7 +53,10 @@
 .vp-slot:focus-visible { outline: 3px solid #fff49a; outline-offset: 2px; }
 .vp-held { height: 28px; font-size: 26px; line-height: 28px; letter-spacing: 0.14em; color: #ffffff; visibility: hidden; }
 .vp-held.on { visibility: visible; }
-.vp-card { width: 136px; height: 190px; border-radius: 9px; background: #fff; box-shadow: 0 3px 0 #050c40; transform-origin: 50% 50%; }
+.vp-card { width: 136px; height: 190px; border-radius: 9px; background: #fff; box-shadow: 0 3px 0 #050c40; transform-origin: 50% 50%; transition: translate 0.14s ease-out, box-shadow 0.14s; }
+/* a held card stands up out of the row with a gold edge (flips use transform; the lift is translate) */
+.vp-slot.held .vp-card { translate: 0 -10px; box-shadow: 0 3px 0 #050c40, 0 0 0 4px #ffe600, 0 8px 18px rgba(0, 0, 0, 0.45); }
+body.calm .vp-card { transition: none; }
 /* Tips ring the cards to hold: on the card itself, at the screen's own scale (the kit's ring on the
    whole slot would be a hairline once the screen is scaled onto the cabinet). */
 .vp-screen .vp-slot.tip-pick { box-shadow: none !important; }

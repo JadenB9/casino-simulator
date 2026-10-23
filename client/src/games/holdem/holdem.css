@@ -19,11 +19,15 @@
   color: var(--ink);
   font-family: var(--ui);
   white-space: nowrap;
-  transition: border-color 0.2s, opacity 0.25s, box-shadow 0.2s;
+  transition: border-color 0.2s, opacity 0.25s, box-shadow 0.2s, scale 0.25s var(--ease);
 }
 .he-plate.he-near { min-width: 160px; }
 .he-plate.he-me { border-color: var(--line-strong); }
-.he-plate.he-turn { border-color: var(--brass-hi); box-shadow: 0 0 0 1px rgba(var(--brass-hi-rgb), 0.35), 0 6px 22px rgba(0, 0, 0, 0.5); }
+/* whose turn it is, at a glance: the plate lifts a little and glows, the ring round the face runs
+   down (red in the last quarter); `scale`, not transform, which the label renderer owns */
+.he-plate.he-turn { border-color: var(--brass-hi); scale: 1.06; box-shadow: 0 0 0 2px rgba(var(--brass-hi-rgb), 0.5), 0 0 22px rgba(var(--brass-hi-rgb), 0.32), 0 6px 22px rgba(0, 0, 0, 0.5); }
+.he-plate.he-turn.he-late { border-color: var(--lose); box-shadow: 0 0 0 2px rgba(var(--lose-rgb), 0.5), 0 0 22px rgba(var(--lose-rgb), 0.3), 0 6px 22px rgba(0, 0, 0, 0.5); }
+.he-late .he-ring-left { stroke: var(--lose); }
 .he-plate.he-folded { opacity: 0.5; }
 .he-plate.he-out { opacity: 0.55; }
 .he-plate.he-winner { border-color: rgba(var(--win-rgb), 0.75); }
@@ -40,7 +44,7 @@
 }
 .he-initial { font-family: var(--serif); font-size: 17px; font-weight: 600; color: #f1d59a; }
 .he-ring { position: absolute; inset: -4px; width: 48px; height: 48px; transform: rotate(-90deg); }
-.he-ring circle { fill: none; stroke-width: 3; }
+.he-ring circle { fill: none; stroke-width: 3.5; }
 .he-ring-track { stroke: transparent; }
 .he-turn .he-ring-track { stroke: rgba(var(--lift-rgb), 0.14); }
 .he-ring-left { stroke: var(--brass-hi); stroke-linecap: round; }
@@ -197,6 +201,7 @@
   .he-acts { grid-template-columns: 1fr 1fr; }
   .he-bar.he-live ~ .tip-line { bottom: 330px; }
   .he-history { left: 10px; right: 10px; width: auto; }
+  .he-history:not(.he-open) { left: auto; }
   .he-seat { width: calc(100vw - 20px); min-width: 0; }
 }
 /* On its side: the bar becomes a column on the right, so your cards and the board stay in view;
@@ -210,6 +215,8 @@
   .he-acts { grid-template-columns: 1fr 1fr; gap: 6px; }
   .he-bar.he-live ~ .tip-line { left: 12px; right: 352px; bottom: 60px; transform: none; max-width: none; }
   .he-history { top: var(--below-party); left: 10px; right: auto; width: 260px; }
+  /* closed, only as wide as its title: the table has little room to spare on its side */
+  .he-history:not(.he-open) { width: auto; }
   .he-history-body { max-height: calc(100vh - var(--below-party) - 110px); max-height: calc(100dvh - var(--below-party) - 110px); }
   .he-seat { left: auto; right: 10px; bottom: max(8px, env(safe-area-inset-bottom, 0px)); transform: none; }
 }

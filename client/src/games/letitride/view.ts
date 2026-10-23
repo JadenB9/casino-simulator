@@ -35,7 +35,7 @@ import { rideAdvice } from '../../../../shared/src/games/letitride/advice.ts';
 import { CardMesh, dealCard, flipCard } from '../../table/cards.ts';
 import { isChipKey } from '../../table/keys.ts';
 import { ChipStack, slideStack } from '../../table/chips.ts';
-import { celebrate } from '../../table/celebrate.ts';
+import { celebrate, glowWin } from '../../table/celebrate.ts';
 import type { Felt } from '../../table/felt.ts';
 import { ease, tween, wait } from '../../table/tween.ts';
 import { handMoment } from './moments.ts';
@@ -398,7 +398,11 @@ export function mountLetItRide(ctx: TableViewCtx): TableView {
 
   const celebrateHand = (spot: number, r: Settlement, five: Card[]): void => {
     const m = handMoment(r, five, pay);
-    if (!m) return;
+    if (!m) {
+      // a win that isn't a moment still lights the hand that won
+      if (r.returned > r.wagered) glowWin(ctx.stage, [hands.get(spot) ?? [], boardCards]);
+      return;
+    }
     inTurn(() => {
       if (disposed) return;
       celebrate(ctx, { ...m, at: handSlot(spot, 1).pos, glow: [hands.get(spot) ?? [], boardCards] });

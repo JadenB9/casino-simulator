@@ -32,7 +32,7 @@ import { houseWayAdvice } from '../../../../shared/src/games/paigow/advice.ts';
 import { dealCard, flipCard } from '../../table/cards.ts';
 import { isChipKey } from '../../table/keys.ts';
 import { ChipStack, slideStack } from '../../table/chips.ts';
-import { celebrate } from '../../table/celebrate.ts';
+import { celebrate, glowWin } from '../../table/celebrate.ts';
 import type { Felt } from '../../table/felt.ts';
 import { ease, tween, wait } from '../../table/tween.ts';
 import { button, el } from '../../ui/kit.ts';
@@ -356,7 +356,11 @@ export function mountPaiGow(ctx: TableViewCtx): TableView {
 
   const celebrateHand = (spot: number, r: Settlement, setting: Setting): void => {
     const m = handMoment(r, setting, pay);
-    if (!m) return;
+    if (!m) {
+      // a win that isn't a moment still lights the hand that won
+      if (r.returned > r.wagered) glowWin(ctx.stage, [hands.get(spot) ?? []]);
+      return;
+    }
     inTurn(() => {
       if (disposed) return;
       celebrate(ctx, { ...m, at: seatCard(spot, 'high', 2).pos, glow: [hands.get(spot) ?? []] });

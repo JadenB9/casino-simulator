@@ -261,7 +261,8 @@ export function mountHoldem(ctx: TableViewCtx): TableView {
         const p = oval(i / 16);
         return new THREE.Vector3(p.x, TOP_Y, p.z);
       }),
-      seats.map((_, seat) => around(plateAt(slot(seat)), 0.15, 0.03)),
+      // (a little more than the plate's own size: it's a label of fixed size, larger on the table when the view widens)
+      seats.map((_, seat) => around(plateAt(slot(seat)), 0.18, 0.05)),
     );
   }
 
@@ -437,6 +438,8 @@ export function mountHoldem(ctx: TableViewCtx): TableView {
     else if (view.phase === 'runout') note = 'All-in: running the board out';
     else if (view.phase === 'results') note = 'Next hand shortly';
     bar.root.hidden = !you;
+    // the table takes a tip only between hands: the Tip panel waits meanwhile (table/tip.ts)
+    bar.root.toggleAttribute('data-tip-wait', view.phase === 'playing' || view.phase === 'runout');
     bar.set(legal, { total: view.total, note, sittingOut: !!you?.sittingOut });
     tipFor(view);
   }
@@ -924,12 +927,14 @@ export function mountHoldem(ctx: TableViewCtx): TableView {
     const t = view?.turn ?? null;
     let mineMs: number | null = null;
     let bank = false;
-    const setRing = (s: number, o: SeatObj, offset: string, inBank: boolean) => {
-      const key = `${offset}|${inBank}`;
+    const setRing = (s: number, o: SeatObj, offset: string, inBank: boolean, late = false) => {
+      const key = `${offset}|${inBank}|${late}`;
       if (ringShown.get(s) === key) return;
       ringShown.set(s, key);
       o.ring.style.strokeDashoffset = offset;
       o.plate.classList.toggle('he-bank', inBank);
+      // the last quarter of the clock: the ring goes red, so a slow turn is seen running out
+      o.plate.classList.toggle('he-late', late);
     };
     for (let s = 0; s < seats.length; s++) {
       const o = seats[s]!;
@@ -950,7 +955,7 @@ export function mountHoldem(ctx: TableViewCtx): TableView {
         frac = (t.deadline - now) / Math.max(1, t.deadline - t.bankFrom);
       } else frac = (t.deadline - now) / Math.max(1, t.deadline - turnStart);
       frac = Math.max(0, Math.min(1, frac));
-      setRing(s, o, (RING_C * (1 - frac)).toFixed(1), bank);
+      setRing(s, o, (RING_C * (1 - frac)).toFixed(1), bank, frac < 0.25);
       if (s === mySeat) mineMs = Math.max(0, (bank || t.bankFrom === null ? t.deadline : t.bankFrom) - now);
     }
     const clock = mineMs === null ? '' : `${Math.ceil(mineMs / 1000)}|${bank}`;

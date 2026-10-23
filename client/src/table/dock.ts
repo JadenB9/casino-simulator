@@ -32,6 +32,23 @@ const DOCKED: readonly { sel: string; at: Anchor }[] = [
   { sel: '.tip-line', at: 'css' },
 ];
 
+/**
+ * Panels that keep to the top of the screen (the History line, at the top right): where their
+ * stylesheet puts them, moved down below any table panel they would land on (on a phone the
+ * baccarat scoreboard spans the screen there).
+ */
+const TOP = '.th-history, [data-dock="top"]';
+/**
+ * A panel that can wait for room (tipping the dealer): when the only place left for it is up in the
+ * HUD's rows (Hold'em on a phone on its side, the action bar the whole height of the screen), it's
+ * set aside until the bar gives the room back. Every other panel is always placed.
+ */
+const SPARE = '.tip-dealer';
+const AWAY = 'dock-away';
+
+/** Panels that show for a moment, which a top panel isn't moved for. */
+const TRANSIENT = ['dealer-line', 'celebrate', 'toast'];
+
 /** Space between the bar and a panel, and between two panels, CSS px. */
 export const DOCK_GAP = 8;
 /** Kept clear of the screen's sides, CSS px. */
@@ -130,7 +147,7 @@ export class Dock {
   }
 
   private matters(e: HTMLElement): boolean {
-    return e.matches(BAR) || DOCKED.some((d) => e.matches(d.sel)) || e.classList.contains('panel');
+    return e.matches(BAR) || e.matches(TOP) || DOCKED.some((d) => e.matches(d.sel)) || e.classList.contains('panel');
   }
 
   /** Put every panel that goes with the bar above it (and give them back when there's no bar). */
@@ -140,13 +157,36 @@ export class Dock {
     const pieces: { el: HTMLElement; at: Anchor }[] = [];
     for (const d of DOCKED) for (const e of kids) if (e.matches(d.sel) && !pieces.some((p) => p.el === e)) pieces.push({ el: e, at: d.at });
     // writes first: each panel back to its stylesheet's place, so what's read next is that place
-    for (const e of this.moved) for (const k of ['left', 'right', 'bottom', 'transform'] as const) e.style[k] = '';
+    for (const e of this.moved) for (const k of ['left', 'right', 'bottom', 'top', 'transform'] as const) e.style[k] = '';
     this.moved.clear();
+    for (const p of pieces) p.el.classList.remove(AWAY);
     // then every read
     const W = innerWidth;
     const H = innerHeight;
+    const tops = kids.filter((e) => e.matches(TOP) && visible(e));
+    const below = tops.map((e) => {
+      const r = e.getBoundingClientRect();
+      let top = r.top;
+      // under every other table panel up here that it would meet
+      for (let n = 0; n < 6; n++) {
+        const box = { left: r.left, right: r.right, top, bottom: top + r.height };
+        // (not what comes and goes: the dealer's line, a celebration's banner)
+        const hit = kids.find((o) => o !== e && !o.matches(TOP) && o.classList.contains('panel') && !TRANSIENT.some((c) => o.classList.contains(c)) && !o.closest('.chat') && visible(o) && overlaps(box, o.getBoundingClientRect()));
+        if (!hit) break;
+        top = hit.getBoundingClientRect().bottom + DOCK_GAP;
+      }
+      return top === r.top ? null : top;
+    });
+    // (written last, with the rest: every read comes before any write)
+    const writeTops = () =>
+      tops.forEach((e, i) => {
+        const top = below[i];
+        if (top == null) return;
+        e.style.top = `${Math.round(top)}px`;
+        this.moved.add(e);
+      });
     const bars = kids.filter((e) => e.matches(BAR) && visible(e)).map((e) => e.getBoundingClientRect());
-    if (bars.length === 0) return;
+    if (bars.length === 0) return writeTops();
     const bar = bars.reduce((a, b) => (b.width * b.height > a.width * a.height ? b : a));
     const shown = pieces.filter((p) => visible(p.el));
     const docked = new Set<Element>(pieces.map((p) => p.el));
@@ -163,9 +203,13 @@ export class Dock {
       return { at: p.at, w: r.width, h: r.height, left: r.left, floor: b.endsWith('px') ? H - parseFloat(b) : null };
     });
     const boxes = stack(bar, sized, others, W);
+    // the HUD's rows: a spare panel that would have to go up there waits instead
+    const hud = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--below-hud')) || 82;
     // and the writes
+    writeTops();
     shown.forEach((p, i) => {
       const b = boxes[i]!;
+      if (b.top < hud && p.el.matches(SPARE)) return void p.el.classList.add(AWAY);
       const s = p.el.style;
       s.bottom = `${Math.round(H - b.bottom)}px`;
       if (p.at !== 'css') {
@@ -183,7 +227,7 @@ export class Dock {
     this.resized?.disconnect();
     this.added?.disconnect();
     removeEventListener('resize', this.arrange);
-    for (const e of this.moved) for (const k of ['left', 'right', 'bottom', 'transform'] as const) e.style[k] = '';
+    for (const e of this.moved) for (const k of ['left', 'right', 'bottom', 'top', 'transform'] as const) e.style[k] = '';
     this.moved.clear();
     this.watched.clear();
   }

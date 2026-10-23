@@ -136,7 +136,11 @@ export class MachineScreen {
   }
 
   setHeld(i: number, on: boolean): void {
-    this.slots[i]!.held.classList.toggle('on', on);
+    const s = this.slots[i]!;
+    s.held.classList.toggle('on', on);
+    // the card itself lifts with a gold edge, and says so to a screen reader
+    s.root.classList.toggle('held', on);
+    s.root.setAttribute('aria-pressed', String(on));
   }
 
   setHoldable(on: boolean): void {
