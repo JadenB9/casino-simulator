@@ -195,14 +195,20 @@ body.calm .rl-result { animation: rl-rise-calm 0.35s both; }
   .rl-track-head { gap: 4px 8px; }
 }
 
-/* Phones: over the wheel, the result plaque would stand behind the panels under an upright HUD, or
-   under the HUD itself on its side. It sits over the table just above the chip tray (and the chat dock's spot) instead. (The label renderer
-   places it with an inline transform; these pin it.) */
-@media (max-width: 560px) {
+/* The result plaque keeps one place on the screen. Anchored over the wheel it stood behind the
+   board once the camera was back over the layout (it stays up through the next bets), and under the
+   HUD on a phone. A big screen: the free space at the top under the dealer's line (in the wheel's
+   shot that is over its far rim, where the anchor put it). Narrower: over the table just above the
+   chip tray (and the chat dock's spot). On its side: bottom left. (The label renderer places it
+   with an inline transform; these pin it.) */
+@media (min-width: 1180px) {
+  .rl-result { position: fixed !important; top: calc(var(--below-hud, 82px) + 48px); left: 50%; transform: translateX(-50%) !important; }
+}
+@media (max-width: 1179px) {
   .rl-result { position: fixed !important; left: 50%; bottom: 232px; transform: translateX(-50%) !important; }
 }
 @media (max-height: 480px) {
-  .rl-result { position: fixed !important; left: 10px; bottom: 72px; transform: none !important; gap: 10px; padding: 8px 14px 8px 8px; }
+  .rl-result { position: fixed !important; top: auto; left: 10px; bottom: 72px; transform: none !important; gap: 10px; padding: 8px 14px 8px 8px; }
   .rl-result-badge { width: 44px; height: 44px; font-size: 22px; }
   .rl-result-call { font-size: 20px; }
   .rl-result-detail { font-size: 13px; }
