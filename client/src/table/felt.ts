@@ -49,10 +49,16 @@ export class Felt {
     const tex = new THREE.CanvasTexture(canvas);
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.anisotropy = 16;
-    // the fibre, a tile every FIBRE_TILE metres (a copy of the one shared picture, uploaded once)
-    const fibre = fibreTexture().clone();
-    fibre.repeat.set(spec.width / FIBRE_TILE, spec.depth / FIBRE_TILE);
-    const mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.95, normalMap: fibre, normalScale: new THREE.Vector2(0.45, 0.45) });
+    const mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.95 });
+    // the fibre, a tile every FIBRE_TILE metres (a copy of the one shared picture, uploaded once),
+    // on the felt you sit at: the floor's tables, painted coarser and seen from across the room,
+    // would only pay for it
+    if (ppm >= FIBRE_FROM) {
+      const fibre = fibreTexture().clone();
+      fibre.repeat.set(spec.width / FIBRE_TILE, spec.depth / FIBRE_TILE);
+      mat.normalMap = fibre;
+      mat.normalScale.set(0.45, 0.45);
+    }
     this.mesh = new THREE.Mesh(new THREE.PlaneGeometry(spec.width, spec.depth), mat);
     this.mesh.rotation.x = -Math.PI / 2;
     this.mesh.name = 'felt';
@@ -124,6 +130,11 @@ function dye(g: CanvasRenderingContext2D, w: number, h: number): void {
 
 /** How much felt one tile of the fibre covers, m (half a millimetre a texel). */
 const FIBRE_TILE = 0.12;
+/**
+ * A felt painted at least this sharp (pixels a metre) is one you sit at, and gets the fibre: the
+ * tables you play at paint theirs at 1,260 to 1,500, the floor's at 320 to 1,100.
+ */
+const FIBRE_FROM = 1150;
 let fibre: THREE.Texture | null = null;
 
 /**

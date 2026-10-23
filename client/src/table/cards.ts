@@ -111,27 +111,42 @@ function newTexture(canvas: HTMLCanvasElement): THREE.CanvasTexture {
   return tex;
 }
 
-async function draw(url: string, canvas: HTMLCanvasElement): Promise<void> {
+async function decoded(url: string): Promise<HTMLImageElement> {
   const img = new Image();
   img.decoding = 'async';
   img.src = url;
   await img.decode();
+  return img;
+}
+
+function draw(img: HTMLImageElement, canvas: HTMLCanvasElement): void {
   const g = canvas.getContext('2d')!;
   g.clearRect(0, 0, canvas.width, canvas.height);
   g.drawImage(img, 0, 0, canvas.width, canvas.height);
 }
 
+/** The latest repaint asked of each face: an older one still decoding gives way to it. */
+const tickets = new Map<string, number>();
+
 /** (Re)paint one face for the deck in use: its URL, then its texture in place. */
 async function paint(code: string): Promise<void> {
+  const ticket = (tickets.get(code) ?? 0) + 1;
+  tickets.set(code, ticket);
   const src = sources.get(code);
-  const old = urls.get(code);
   let url = `${base}assets/cards/${code}.svg`;
   if (src !== undefined) url = URL.createObjectURL(new Blob([faceSvg(src, code, current)], { type: 'image/svg+xml' }));
-  let tex = textures.get(code);
-  const canvas = (tex?.image as HTMLCanvasElement | undefined) ?? Object.assign(document.createElement('canvas'), { width: TEX_W, height: TEX_H });
-  await draw(url, canvas);
+  const img = await decoded(url);
+  // (the deck was changed again while this one decoded: the newer repaint has the face)
+  if (tickets.get(code) !== ticket) {
+    if (url.startsWith('blob:')) URL.revokeObjectURL(url);
+    return;
+  }
+  const old = urls.get(code);
   urls.set(code, url);
   if (old?.startsWith('blob:')) URL.revokeObjectURL(old);
+  let tex = textures.get(code);
+  const canvas = (tex?.image as HTMLCanvasElement | undefined) ?? Object.assign(document.createElement('canvas'), { width: TEX_W, height: TEX_H });
+  draw(img, canvas);
   if (tex) tex.needsUpdate = true;
   else {
     tex = newTexture(canvas);

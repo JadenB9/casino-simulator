@@ -16,8 +16,8 @@
 //
 // It runs when any of them shows, hides or changes size (a ResizeObserver, which reports after
 // layout and before the frame is painted, so nothing is ever drawn in the wrong place), when the
-// window changes, and from the board fit's own measuring as a backstop. One pass reads every box,
-// then writes: no layout is read between two writes.
+// window changes, and from the board fit's own measuring as a backstop (check(): only when a box
+// has moved since). One pass reads every box, then writes: no layout is read between two writes.
 
 /** A bar: the chip tray, or a game's own bottom bar. */
 const BAR = '.tray, [data-dock="bar"]';
@@ -158,19 +158,28 @@ export class Dock {
     return e.matches(BAR) || e.matches(TOP) || DOCKED.some((d) => e.matches(d.sel)) || e.classList.contains('panel') || e.classList.contains('btn');
   }
 
-  /** What the last arrangement was worked out from: the window, and every box that counts. */
+  /** The boxes as the last arrangement left them, with the window's size. */
   private last = '';
 
+  private signature(kids: HTMLElement[]): string {
+    return [innerWidth, innerHeight, ...kids.filter((e) => this.watched.has(e)).map((e) => (visible(e) ? box(e) : '-'))].join('|');
+  }
+
   /**
-   * Put every panel that goes with the bar above it (and give them back when there's no bar).
-   * Nothing is written when nothing it depends on has changed since the last time (the board fit
-   * calls it a few times a second as a backstop): a glance at the boxes, read as they stand.
+   * The board fit's backstop, a few times a second: arrange again only if a box has moved since
+   * the last arrangement (a bar moved by a class, with no change of size for the observer to see).
+   * A glance at the boxes as they stand; nothing is written when nothing has changed.
    */
+  check(): void {
+    if (this.disposed) return;
+    const kids = [...this.ui.children].filter((e): e is HTMLElement => e instanceof HTMLElement);
+    if (this.signature(kids) !== this.last) this.arrange();
+  }
+
+  /** Put every panel that goes with the bar above it (and give them back when there's no bar). */
   readonly arrange = (): void => {
     if (this.disposed) return;
     const kids = [...this.ui.children].filter((e): e is HTMLElement => e instanceof HTMLElement);
-    const sig = [innerWidth, innerHeight, ...kids.filter((e) => this.watched.has(e)).map((e) => (visible(e) ? box(e) : '-'))].join('|');
-    if (sig === this.last) return;
     const pieces: { el: HTMLElement; at: Anchor }[] = [];
     for (const d of DOCKED) for (const e of kids) if (e.matches(d.sel) && !pieces.some((p) => p.el === e)) pieces.push({ el: e, at: d.at });
     // writes first: each panel back to its stylesheet's place, so what's read next is that place
@@ -196,6 +205,8 @@ export class Dock {
         if (!hit) break;
         top = hit.bottom + DOCK_GAP;
       }
+      // (pushed past the middle of a small screen, it keeps its own place: better there than lost)
+      if (top + r.height > H * 0.55) top = r.top;
       placedTops.push({ left: r.left, right: r.right, top, bottom: top + r.height });
       return top === r.top ? null : top;
     });
@@ -247,14 +258,13 @@ export class Dock {
     this.settled();
   };
 
-  /** Note the boxes as the arrangement leaves them (read on the next frame, after the writes have taken). */
+  /**
+   * Note the boxes as the arrangement leaves them, for check(). Read straight after the writes:
+   * one more layout, only when there was something to arrange (left to a later frame, a panel
+   * shown meanwhile was noted where it stood before being placed, and then never placed).
+   */
   private settled(): void {
-    this.last = '';
-    requestAnimationFrame(() => {
-      if (this.disposed) return;
-      const kids = [...this.ui.children].filter((e): e is HTMLElement => e instanceof HTMLElement);
-      this.last = [innerWidth, innerHeight, ...kids.filter((e) => this.watched.has(e)).map((e) => (visible(e) ? box(e) : '-'))].join('|');
-    });
+    this.last = this.signature([...this.ui.children].filter((e): e is HTMLElement => e instanceof HTMLElement));
   }
 
   dispose(): void {

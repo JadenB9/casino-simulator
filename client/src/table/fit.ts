@@ -477,7 +477,7 @@ export class BoardFit {
   private measure(now: number, w: number, h: number): void {
     // the panels over the bar first, so what's measured is where they go (the dock's own
     // observers place them as they change; this catches a bar that moved without a resize)
-    this.dock?.arrange();
+    this.dock?.check();
     // the site's back chip owns the bottom-left corner (j4den.com puts it over every page)
     const back = document.querySelector('.j4-back');
     const top = this.roots.flatMap((r) => [...r.children]);
