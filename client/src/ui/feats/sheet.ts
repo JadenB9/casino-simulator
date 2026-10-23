@@ -1,6 +1,9 @@
 // The Achievements sheet: every feat on the list, grouped the way the building is (the house, the
 // tables, the machines, the online lounge), earned or not, with what each pays. Challenges show
-// how far along they are. The title you wear under your name is picked here too.
+// how far along they are, each game in the rail how much of it is earned, and today's three when
+// they change. Filters show all, the ones still to earn or the ones earned; a search finds a feat
+// by its name, its line, its rewards or its game, across every game at once. The title you wear
+// under your name is picked here too.
 //
 // It opens straight away from what the profile knows (the feats earned) and fills in the progress
 // bars once GET /feats answers; progress made at a table you're still sitting at reaches D1 now
@@ -15,7 +18,15 @@ import type { Closable, SessionLike } from '../menu/deps.ts';
 import { openSheet } from '../menu/sheet.ts';
 import { problemText } from '../menu/parts.ts';
 import { medal } from './icons.ts';
-import { cashNote, dollars, earnedOn, featGroups, paidNote, progressOf, rewardParts, titleText, type FeatGroup } from './lines.ts';
+import { cashNote, dollars, earnedOn, featGroups, matchesFeat, nextDayIn, paidNote, progressOf, rewardParts, titleText, untilText, type FeatGroup } from './lines.ts';
+
+/** Which feats the list shows: every one, the ones still to earn, or the ones earned. */
+type Filter = 'all' | 'todo' | 'done';
+const FILTERS: [Filter, string][] = [
+  ['all', 'All'],
+  ['todo', 'In progress'],
+  ['done', 'Earned'],
+];
 
 export interface FeatsApi {
   feats(): Promise<FeatsResponse>;
@@ -40,6 +51,7 @@ export function openFeats(deps: FeatsSheetDeps): FeatsSheet {
   const { session, api } = deps;
   let alive = true;
   let off = () => {};
+  let clockTimer = 0;
   const sheet = openSheet(deps.root, {
     title: 'Achievements',
     subtitle: 'Each one is earned once and paid once. Challenges fill as you win.',
@@ -47,6 +59,7 @@ export function openFeats(deps: FeatsSheetDeps): FeatsSheet {
     onClose: () => {
       alive = false;
       off();
+      clearInterval(clockTimer);
       deps.onClose?.();
     },
   });
@@ -71,6 +84,11 @@ export function openFeats(deps: FeatsSheetDeps): FeatsSheet {
     return v;
   };
   const sEarned = tile('Earned');
+  // the share of the whole list earned, as a bar under the count
+  const sBar = el('div', 'ft-bar ft-bar-all');
+  const sFill = el('i');
+  sBar.append(sFill);
+  sEarned.parentElement!.append(sBar);
   const sPaid = tile('Paid out');
   const sWon = tile('Won in all');
   const sGames = tile('Games won at');
@@ -131,6 +149,58 @@ export function openFeats(deps: FeatsSheetDeps): FeatsSheet {
     for (const f of mine) choice(f.reward.title!, f.id);
   }
 
+  // --- the filters and the search ---------------------------------------------------------------
+
+  let filter: Filter = 'all';
+  let query = '';
+  const tools = el('div', 'ft-tools');
+  const filterSeg = el('div', 'seg ft-filter');
+  filterSeg.setAttribute('role', 'radiogroup');
+  filterSeg.setAttribute('aria-label', 'Show');
+  const filterBtns = FILTERS.map(([id, label]) => {
+    const b = el('button', 'seg-btn', label);
+    b.type = 'button';
+    b.setAttribute('role', 'radio');
+    b.addEventListener('click', () => {
+      filter = id;
+      paintFilter();
+      paintList();
+    });
+    filterSeg.append(b);
+    return { id, b };
+  });
+  const paintFilter = () => {
+    for (const { id, b } of filterBtns) {
+      b.setAttribute('aria-checked', String(id === filter));
+      b.tabIndex = id === filter ? 0 : -1;
+    }
+  };
+  filterSeg.addEventListener('keydown', (e) => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    e.preventDefault();
+    const i = FILTERS.findIndex(([id]) => id === filter);
+    filter = FILTERS[(i + (e.key === 'ArrowRight' ? 1 : FILTERS.length - 1)) % FILTERS.length]![0];
+    paintFilter();
+    paintList();
+    filterBtns.find((x) => x.id === filter)?.b.focus();
+  });
+  const find = el('label', 'ft-search');
+  const findInput = el('input', 'ft-search-input');
+  findInput.type = 'search';
+  findInput.placeholder = 'Search';
+  findInput.autocomplete = 'off';
+  findInput.spellcheck = false;
+  findInput.maxLength = 40;
+  findInput.setAttribute('aria-label', 'Find an achievement by name, reward or game');
+  findInput.addEventListener('input', () => {
+    query = findInput.value;
+    paintRail();
+    paintList();
+    list.scrollTop = 0;
+  });
+  find.append(searchIcon(), findInput);
+  tools.append(filterSeg, find);
+
   // --- the rail: every group, with how many are earned ------------------------------------------
 
   const main = el('div', 'ft-main');
@@ -139,7 +209,7 @@ export function openFeats(deps: FeatsSheetDeps): FeatsSheet {
   const list = el('section', 'ft-list');
   list.setAttribute('aria-live', 'polite');
   main.append(rail, list);
-  const railButtons = new Map<string, { b: HTMLButtonElement; n: HTMLElement }>();
+  const railButtons = new Map<string, { b: HTMLButtonElement; n: HTMLElement; fill: HTMLElement }>();
 
   let part = '';
   for (const g of groups) {
@@ -150,10 +220,18 @@ export function openFeats(deps: FeatsSheetDeps): FeatsSheet {
     const b = el('button', 'ft-rail-btn');
     b.type = 'button';
     const n = el('span', 'ft-rail-n money');
-    b.append(el('span', 'ft-rail-name', g.name), n);
-    b.addEventListener('click', () => select(g));
+    // how much of the group is earned, as a hairline under its name
+    const bar = el('span', 'ft-rail-bar');
+    const fill = el('i');
+    bar.append(fill);
+    b.append(el('span', 'ft-rail-name', g.name), n, bar);
+    b.addEventListener('click', () => {
+      // picking a game puts a search away: the rail is where you are
+      if (query) findInput.value = query = '';
+      select(g);
+    });
     rail.append(b);
-    railButtons.set(g.id, { b, n });
+    railButtons.set(g.id, { b, n, fill });
   }
   // Up and down walk the rail, like a list.
   rail.addEventListener('keydown', (e) => {
@@ -178,7 +256,9 @@ export function openFeats(deps: FeatsSheetDeps): FeatsSheet {
       const have = g.feats.filter((f) => earned.has(f.id)).length;
       r.n.textContent = `${have}/${g.feats.length}`;
       r.b.classList.toggle('done', have === g.feats.length);
-      const on = g === current;
+      r.fill.style.width = `${g.feats.length ? Math.round((have / g.feats.length) * 1000) / 10 : 0}%`;
+      // while searching, no group is the one shown
+      const on = g === current && !query;
       r.b.classList.toggle('on', on);
       r.b.setAttribute('aria-current', String(on));
     }
@@ -222,31 +302,61 @@ export function openFeats(deps: FeatsSheetDeps): FeatsSheet {
     return r;
   }
 
+  /** Whether the filter lets a feat through. */
+  const shown = (f: Feat) => filter === 'all' || (filter === 'done') === earned.has(f.id);
+  /** Achievements first, then the amount challenges; the list's own order within each. */
+  const ordered = (feats: Feat[]) => [...feats].sort((a, b) => (a.kind === b.kind ? 0 : a.kind === 'achievement' ? -1 : 1));
+
   function paintList(): void {
-    const g = current;
-    const head = el('header', 'ft-head');
-    const have = g.feats.filter((f) => earned.has(f.id)).length;
-    const titles = el('div', 'ft-head-titles');
-    titles.append(el('h3', 'ft-group', g.name), el('div', 'ft-count', `${have} of ${g.feats.length} earned`));
-    head.append(titles);
-    if (g.id === 'today') head.append(el('div', 'ft-won no', 'New at midnight, Las Vegas time'));
-    // a game: whether it counts toward Champion yet
-    else if (g.id !== 'house' && tally) {
-      const won = (tally[`wins:${g.id}`] ?? 0) > 0;
-      head.append(el('div', `ft-won ${won ? 'yes' : 'no'}`, won ? 'Won here' : 'No win here yet'));
+    const nodes: HTMLElement[] = [];
+    if (query.trim()) {
+      // the search: every group's matches, each under its group's name
+      const found = groups.map((g) => ({ g, feats: ordered(g.feats.filter((f) => matchesFeat(f, query) && shown(f))) })).filter((x) => x.feats.length > 0);
+      const n = found.reduce((a, x) => a + x.feats.length, 0);
+      const head = el('header', 'ft-head');
+      const titles = el('div', 'ft-head-titles');
+      titles.append(el('h3', 'ft-group', 'Search'), el('div', 'ft-count', n === 0 ? `Nothing matches "${query.trim()}"` : `${n} ${n === 1 ? 'match' : 'matches'} for "${query.trim()}"`));
+      head.append(titles);
+      nodes.push(head);
+      for (const { g, feats } of found) {
+        const rows = el('div', 'ft-rows');
+        rows.append(el('h4', 'ft-sub', g.id === 'today' ? 'Today' : g.name));
+        for (const f of feats) rows.append(row(f));
+        nodes.push(rows);
+      }
+    } else {
+      const g = current;
+      const head = el('header', 'ft-head');
+      const have = g.feats.filter((f) => earned.has(f.id)).length;
+      const titles = el('div', 'ft-head-titles');
+      titles.append(el('h3', 'ft-group', g.name), el('div', 'ft-count', `${have} of ${g.feats.length} earned`));
+      head.append(titles);
+      if (g.id === 'today') {
+        // when the three change, counted down (the clock repaints it)
+        const next = el('div', 'ft-won no ft-next', `New in ${untilText(nextDayIn())}`);
+        next.title = 'At midnight, Las Vegas time';
+        head.append(next);
+      }
+      // a game: whether it counts toward Champion yet
+      else if (g.id !== 'house' && tally) {
+        const won = (tally[`wins:${g.id}`] ?? 0) > 0;
+        head.append(el('div', `ft-won ${won ? 'yes' : 'no'}`, won ? 'Won here' : 'No win here yet'));
+      }
+      const rows = el('div', 'ft-rows');
+      const feats = ordered(g.feats.filter(shown));
+      for (const f of feats) rows.append(row(f));
+      nodes.push(head, rows);
+      if (feats.length === 0) nodes.push(el('p', 'quiet ft-none', filter === 'done' ? 'None earned here yet.' : 'Every one here is earned.'));
     }
-    const rows = el('div', 'ft-rows');
-    // achievements first, then the amount challenges; the list's own order within each
-    const sorted = [...g.feats].sort((a, b) => (a.kind === b.kind ? 0 : a.kind === 'achievement' ? -1 : 1));
-    for (const f of sorted) rows.append(row(f));
-    const nodes: HTMLElement[] = [head, rows];
     if (problem) nodes.push(el('p', 'quiet ft-problem', `Progress isn't showing: ${problem}`));
     list.replaceChildren(...nodes);
   }
 
   function paintSummary(): void {
     // the list's feats; a day's challenges come and go
-    sEarned.textContent = `${FEATS.filter((f) => earned.has(f.id)).length} of ${FEATS.length}`;
+    const all = FEATS.filter((f) => earned.has(f.id)).length;
+    sEarned.textContent = `${all} of ${FEATS.length}`;
+    sFill.style.width = `${Math.round((all / FEATS.length) * 1000) / 10}%`;
     let paid = 0;
     // what each paid, as the server says; a feat whose cash doesn't scale paid what it lists
     for (const id of earned.keys()) {
@@ -265,8 +375,14 @@ export function openFeats(deps: FeatsSheetDeps): FeatsSheet {
     paintList();
   }
 
-  sheet.body.append(summary, titleRow, main);
+  sheet.body.append(summary, titleRow, tools, main);
+  paintFilter();
   paint();
+  // Today's countdown, while the sheet is up
+  clockTimer = window.setInterval(() => {
+    const next = list.querySelector('.ft-next');
+    if (next) next.textContent = `New in ${untilText(nextDayIn())}`;
+  }, 30_000);
   // the list opens where you are
   queueMicrotask(() => railButtons.get(current.id)?.b.scrollIntoView({ block: 'nearest' }));
 
@@ -304,3 +420,20 @@ export function openFeats(deps: FeatsSheetDeps): FeatsSheet {
 
 /** The title's words for a look (for the HUD and the name tags), or null. */
 export { titleText };
+
+/** The search field's glass (the lobby's, drawn the same way). */
+function searchIcon(): SVGSVGElement {
+  const NS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 16 16');
+  svg.setAttribute('class', 'ft-search-ico');
+  svg.setAttribute('aria-hidden', 'true');
+  const ring = document.createElementNS(NS, 'circle');
+  ring.setAttribute('cx', '7');
+  ring.setAttribute('cy', '7');
+  ring.setAttribute('r', '4.3');
+  const handle = document.createElementNS(NS, 'path');
+  handle.setAttribute('d', 'm10.2 10.2 3.6 3.6');
+  svg.append(ring, handle);
+  return svg;
+}

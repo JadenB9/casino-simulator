@@ -143,3 +143,33 @@ export function earnedOn(at: number, now = Date.now()): string {
   const sameYear = d.getFullYear() === new Date(now).getFullYear();
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', ...(sameYear ? {} : { year: 'numeric' }) });
 }
+
+/** Whether a feat answers a search: its name, its line, its rewards or its game, any case. */
+export function matchesFeat(f: Feat, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  const words = [f.name, f.about, f.game ? CATALOG[f.game].name : 'Anywhere', f.daily ? 'Daily' : f.kind, ...rewardParts(f).map((p) => p.text)];
+  return words.join(' ').toLowerCase().includes(q);
+}
+
+/** Milliseconds until the casino's day turns over (Las Vegas midnight), found to the second. */
+export function nextDayIn(now = Date.now()): number {
+  const today = casinoDay(now);
+  // a day there is 23 to 25 hours long: 26 hours on is always another day
+  let lo = now;
+  let hi = now + 26 * 3_600_000;
+  while (hi - lo > 1000) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (casinoDay(mid) === today) lo = mid;
+    else hi = mid;
+  }
+  return hi - now;
+}
+
+/** "5 h 12 m", "12 m", "under a minute": a wait, said briefly. */
+export function untilText(ms: number): string {
+  const m = Math.floor(ms / 60_000);
+  if (m < 1) return 'under a minute';
+  const h = Math.floor(m / 60);
+  return h > 0 ? `${h} h ${m % 60} m` : `${m} m`;
+}

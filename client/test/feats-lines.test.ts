@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { FEATS, featOf } from '../../shared/src/feats.ts';
-import { cashNote, dollars, earnedOn, paidNote, featGroups, feedLines, isMoneyTally, progressOf, rewardParts, titleText, unlockKind, unlockSub } from '../src/ui/feats/lines.ts';
+import { cashNote, dollars, earnedOn, paidNote, featGroups, feedLines, isMoneyTally, matchesFeat, nextDayIn, progressOf, rewardParts, titleText, unlockKind, unlockSub, untilText } from '../src/ui/feats/lines.ts';
+import { casinoDay } from '../../shared/src/feats.ts';
 
 // How the achievements read: the sheet's groups and bars, the card when you earn one, the feed.
 describe('the sheet', () => {
@@ -102,5 +103,34 @@ describe('the card and the feed', () => {
     expect(titleText('bj-blackjack')).toBeNull();
     expect(titleText(undefined)).toBeNull();
     expect(dollars(123_456)).toBe('$1,234');
+  });
+});
+
+describe('finding and timing', () => {
+  it('finds a feat by its name, its line, its rewards or its game, any case', () => {
+    const royal = featOf('vp-royal')!;
+    expect(matchesFeat(royal, '')).toBe(true);
+    expect(matchesFeat(royal, 'royal flush')).toBe(true);
+    expect(matchesFeat(royal, 'VIDEO POKER')).toBe(true);
+    expect(matchesFeat(royal, 'pendant')).toBe(true);
+    expect(matchesFeat(royal, 'roulette')).toBe(false);
+    const any = FEATS.find((f) => !f.game)!;
+    expect(matchesFeat(any, 'anywhere')).toBe(true);
+  });
+
+  it("counts down to the next casino day, Las Vegas midnight, to the second", () => {
+    for (const now of [Date.UTC(2026, 8, 25, 18), Date.UTC(2026, 2, 8, 9, 30), Date.UTC(2026, 10, 1, 7, 59, 59)]) {
+      const left = nextDayIn(now);
+      expect(left).toBeGreaterThan(0);
+      expect(left).toBeLessThanOrEqual(25 * 3_600_000);
+      expect(casinoDay(now + left - 1500)).toBe(casinoDay(now));
+      expect(casinoDay(now + left)).not.toBe(casinoDay(now));
+    }
+  });
+
+  it('says a wait briefly', () => {
+    expect(untilText(30_000)).toBe('under a minute');
+    expect(untilText(12 * 60_000 + 5_000)).toBe('12 m');
+    expect(untilText((5 * 60 + 12) * 60_000)).toBe('5 h 12 m');
   });
 });

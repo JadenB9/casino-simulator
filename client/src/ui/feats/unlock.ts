@@ -1,7 +1,8 @@
 // The moment you earn one: a card slides in at the right, under the HUD's buttons, clear of the
-// dealer's line and the table's own banners in the middle. The medallion lights, the feat's name
-// in the house serif, what came with it under that. One at a time; a round that earned three
-// shows them in turn. At a table the caller waits until the round has been shown.
+// dealer's line and the table's own banners in the middle. The medallion lights with a ring of
+// brass light going out from it once, the feat's name in the house serif, what came with it under
+// that, and a hairline along the bottom running down while it's up. One at a time; a round that
+// earned three shows them in turn. At a table the caller waits until the round has been shown.
 
 import './feats.css';
 import { featOf } from '../../../../shared/src/feats.ts';
@@ -69,7 +70,11 @@ export class UnlockCards {
       el('div', 'ft-card-name', f.name),
       el('div', 'ft-card-sub', unlockSub(f, next?.paid)),
     );
-    card.append(medal(true), text);
+    const mark = el('span', 'ft-card-medal');
+    mark.append(medal(true));
+    // how long it stays: a hairline running down (CSS, over SHOW_MS)
+    const time = el('span', 'ft-card-time');
+    card.append(mark, text, time);
     card.addEventListener('click', () => this.onOpen?.(id));
     this.box.replaceChildren(card);
     if (this.sfx && !this.sfx.muted) {
