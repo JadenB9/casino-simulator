@@ -251,6 +251,9 @@
 /* the profit line sits behind the Profit tile's own figure */
 .os-stat-chart { position: relative; overflow: hidden; }
 .os-stat-chart > :not(.os-chart) { position: relative; }
+/* the line goes round the figure, never through it (a straight run of two or three bets read as
+   the figure struck out) */
+.os-stat-chart .os-stat-value { text-shadow: 0 0 3px var(--os-card), 0 0 6px var(--os-card), 0 0 9px var(--os-card); }
 .os-chart { position: absolute; left: 0; right: 0; bottom: 4px; display: block; width: 100%; height: 26px; opacity: 0.55; }
 .os-chart-line { fill: none; stroke: var(--os-ink-3); stroke-width: 1.6; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
 .os-chart.up .os-chart-line { stroke: var(--os-win); }

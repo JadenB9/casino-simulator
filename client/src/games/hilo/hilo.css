@@ -60,8 +60,9 @@
 .hl-arrow { width: 20px; height: 20px; }
 .hl-guess.hi .hl-arrow { fill: #1fd65f; }
 .hl-guess.lo .hl-arrow { fill: #ff5a5f; }
-.hl-guess-text { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; min-width: 0; }
-.hl-guess-label { font-size: 15px; font-weight: 700; white-space: nowrap; }
-.hl-guess-odds { font-family: var(--os-num); font-size: 17px; color: var(--os-ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* the guess over its odds, so neither runs under the keycap at the panel's width */
+.hl-guess-text { display: grid; gap: 1px; min-width: 0; }
+.hl-guess-label { font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hl-guess-odds { font-family: var(--os-num); font-size: 15px; line-height: 1.1; color: var(--os-ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .os-action.hl-skip { height: 44px; font-size: 15px; font-weight: 700; }

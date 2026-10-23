@@ -204,7 +204,6 @@ export const keno: GameClientModule = {
       if (p === 0) site.profit('Top pay', null, 'pick 1 to 10 numbers');
       else site.profit('Top pay', (b / 100) * PAYS[risk][p - 1]![p]! - b, `${multText(PAYS[risk][p - 1]![p]!)} · ${p} of ${p} hit`);
       if (p === 0) {
-        info.set('picks', 'Picks', `0 of ${MAX_PICKS}`);
         info.set('odds', 'Top pay odds', '—');
         info.set('rtp', 'Return', `${pct(range.min)} to ${pct(range.max)}`);
         info.set('profit', 'A profit from', '—');
@@ -216,7 +215,6 @@ export const keno: GameClientModule = {
           if (m >= 100) back += hitChance(p, h);
         });
         const from = row.findIndex((m) => m > 100);
-        info.set('picks', 'Picks', `${p} of ${MAX_PICKS}`);
         info.set('rtp', 'Return', pct(tableRtp(risk, p)));
         info.set('odds', 'Top pay odds', oneIn(hitChance(p, p)));
         info.set('profit', 'A profit from', `${from} hit${from === 1 ? '' : 's'}`);
