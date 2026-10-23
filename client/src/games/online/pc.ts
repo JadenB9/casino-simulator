@@ -4,7 +4,7 @@
 // camera sits square to it. On the floor the glass shows the game's own attract picture.
 //
 // Every static part is merged per material when the model is built, so a desk costs six draw
-// calls up close however many boxes it's made of; the lounge holds a dozen of them.
+// calls up close however many boxes it's made of; the lounge holds two dozen of them.
 
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -100,7 +100,9 @@ function materials(accent: string) {
   };
   let a = accents.get(accent);
   if (!a) {
-    a = new THREE.MeshStandardMaterial({ color: accent, roughness: 0.6 });
+    // a gaming chair's trim and the desk's light strip glow a little in the game's colour, so a
+    // row of desks reads across the dim lounge (bloom picks up the strip, never the whole chair)
+    a = new THREE.MeshStandardMaterial({ color: accent, roughness: 0.6, emissive: accent, emissiveIntensity: 0.28 });
     accents.set(accent, a);
   }
   return { ...mats, accent: a };
@@ -152,6 +154,8 @@ export function pcModel(opts: PcOptions): THREE.Group {
   const accent = merged([
     ...[-0.19, 0.19].map((x): Part => box(0.07, 0.6, 0.095, [x, 0.87, PC_SEAT[2] + 0.26], [-0.12, 0, 0])),
     box(0.4, 0.02, 0.095, [0, 1.1, PC_SEAT[2] + 0.29], [-0.12, 0, 0]),
+    // the light strip under the desk's front edge, in the same material (no draw call of its own)
+    box(1.08, 0.012, 0.014, [0, DESK_TOP - 0.042, DESK_Z + 0.34]),
   ]);
   for (const [geo, mat] of [
     [deskWood, m.wood],
