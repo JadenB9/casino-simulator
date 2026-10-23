@@ -77,9 +77,9 @@ try {
   const typed = await bob.inputValue('.lobby-pin-input');
   if (typed !== pin) throw new Error(`typed PIN landed as "${typed}"`);
   await bob.keyboard.press('Enter');
-  // the table the PIN opens is shown first (its limits and seats), and Enter joins it
-  await bob.waitForSelector('.lobby-go-btn:not([disabled])');
-  await bob.keyboard.press('Enter');
+  // the table the PIN opens is shown first (its limits and seats): join it, as tables6.mjs does
+  await bob.waitForSelector('.lobby-go-btn');
+  await bob.click('.lobby-go-btn');
   await bob.waitForSelector('.party-member:nth-child(2)');
   await alice.waitForFunction(() => document.querySelectorAll('.party-member').length === 2);
   steps.push(`bob joined; alice sees ${JSON.stringify(await partyNames(alice))}`);
