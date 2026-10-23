@@ -15,7 +15,7 @@ import { tips } from '../../app/tips.ts';
 import { isTyping, overlayCount, topPanel } from '../keyboard.ts';
 import { formatMoney, type Cents } from '../../../../shared/src/money.ts';
 import type { Profile } from '../../../../shared/src/protocol.ts';
-import { el } from '../kit.ts';
+import { el, toast } from '../kit.ts';
 import type { Closable, SessionLike, SfxLike } from '../menu/deps.ts';
 import { icon, type IconName } from '../menu/icons.ts';
 import { formatDuration } from '../menu/parts.ts';
@@ -73,6 +73,23 @@ export interface Hud extends Closable {
   openPalette(query?: string): void;
   /** Open Settings, at a section if given. */
   openSettings(section?: SettingsSection): void;
+}
+
+const HINT_KEY = 'casino.hud.more';
+
+/**
+ * Once per browser, a few seconds onto the floor: where the buttons that used to fill the bar went.
+ * Not for a browser a script drives (the checks read the toasts), and not again once it's said.
+ */
+function hintOnce(): void {
+  try {
+    if (navigator.webdriver || localStorage.getItem(HINT_KEY)) return;
+    localStorage.setItem(HINT_KEY, '1');
+  } catch {
+    return;
+  }
+  const keys = matchMedia('(any-pointer: fine)').matches ? `, and ${PALETTE_KEY} finds anything` : '';
+  toast(`The boutique, the bar, the daily bonus and the rest are under More now${keys}.`, 'info', 7_000);
 }
 
 /** Ctrl K on Windows and Linux, ⌘ K on a Mac: the palette's key, as its keycap says it. */
@@ -338,6 +355,7 @@ export function mountHud(deps: HudDeps): Hud {
     }
     if (overlayCount() > 0) return;
     hideTooltip();
+    deps.sfx.play('ui-click', { volume: 0.3 });
     moreBtn.setAttribute('aria-expanded', 'true');
     moreBtn.classList.add('open');
     more = openMore({
@@ -385,6 +403,7 @@ export function mountHud(deps: HudDeps): Hud {
     if (palette) return;
     more?.close();
     hideTooltip();
+    if (!query) deps.sfx.play('ui-click', { volume: 0.3 });
     palette = openPalette({ root: deps.root, commands, query, onClose: () => (palette = null) });
   }
 
@@ -525,6 +544,7 @@ export function mountHud(deps: HudDeps): Hud {
   addEventListener('resize', measure);
 
   const offFps = mountFps(left);
+  const hintTimer = window.setTimeout(hintOnce, 5_000);
   const off = deps.session.on(paint);
   if (deps.session.profile) paint(deps.session.profile);
   paintMute();
@@ -581,6 +601,7 @@ export function mountHud(deps: HudDeps): Hud {
       removeEventListener('keydown', onPaletteKey, true);
       clearInterval(clock);
       clearTimeout(netTimer);
+      clearTimeout(hintTimer);
       reminder.close();
       shortcuts?.close();
       notes?.close();

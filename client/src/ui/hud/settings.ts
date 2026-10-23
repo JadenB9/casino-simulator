@@ -184,6 +184,7 @@ export function openSettings(deps: SettingsDeps): Closable {
       row('Interface size', sizeCtl.root, note('The HUD, its panels and the notes under it. For everything else larger as well, use the browser’s own zoom (Ctrl and +).')),
     ],
     social: [...bigWinSettings(row), ...inviteSettings(row)],
+    // (the card tables' own rows, the table kit's settings fragment, join Play here)
     play: [
       row('Tips', tipsCtl.root, note('Shows the best play where a game has one (basic strategy, the video poker holds, Q-6-4) and which bets are better elsewhere.')),
       ...reminderSettings(row),
