@@ -52,12 +52,13 @@ export class History {
     this.row.replaceChildren();
     this.tally.replaceChildren();
     this.tally.hidden = rolls.length === 0;
-    this.count.textContent = rolls.length > 12 ? `${rolls.length} rolls` : '';
+    this.count.textContent = rolls.length > 13 ? `${rolls.length} rolls` : '';
     if (rolls.length === 0) {
       this.row.append(el('span', 'sb-history-empty', 'No rolls yet'));
       return;
     }
-    rolls.slice(0, 12).forEach((d, i) => {
+    // the latest and two rows of six (five on a phone: the stylesheet hides the rest)
+    rolls.slice(0, 13).forEach((d, i) => {
       const s = sorted(d);
       const kind = rollKind(s);
       const cell = el('span', `sb-roll ${kind}${i === 0 ? ' latest' : ''}`);
