@@ -39,6 +39,7 @@ shared/src/        pure TS; imported by server, client and tests; runs anywhere
   names.ts         the username rule, shared by client and server
   password.ts      the password rule (4-64 characters), shared the same way
   bank.ts          the bank's top-up rule (under $10,000 in all, back up to $50,000)
+  table-configs.ts every engine's config() as data, for the page (written and checked by its test)
   games/<game>/    one folder per game: rules, engine, protocol, tests
 server/src/        Cloudflare Worker + Durable Objects
   index.ts         gateway: router, CORS, Origin allowlist, tokens, rate limits
@@ -52,6 +53,7 @@ client/src/
   world/           floor scene, props, lighting, character, controller, camera, stations
   table/           table-view kit: stage, felt painter + hit regions, cards, chips, dice, tween
   games/<game>/    each game's table model and view
+  games/index.ts   every game's module; lazy.ts fetches a view that comes as code (see Client)
   ui/              menu, profile, character editor, HUD, lobby panels, bet controls, banners
   audio/           sound manager with a persisted mute
 scripts/build.mjs  vite build + worker bundle, and --out <site repo> to publish into j4den
@@ -352,13 +354,32 @@ statistical test checks the crypto source itself.
 
 - **Boot** preloads models, card art and sounds behind a loading screen, then shows the menu
   over a slow camera pass through the real casino.
+- **Code on demand.** The entry chunk holds what the page needs to open (three.js has a chunk of
+  its own beside it, and index.html names both, so they download as the HTML is read). The floor
+  needs every table's model from the first frame but no table's view until someone sits there,
+  so a game's folder can hand over its view as code to fetch (`games/contract.ts`,
+  `GameClientDef.view`: a dynamic import of its view file). `games/lazy.ts` fetches each once:
+  every one in idle moments after the casino opens (`warmViews()` from `main.ts`), and the
+  table's own as E is pressed (the app waits for it with the cards before opening the table, so
+  picking limits covers any wait). A mount that comes first anyway gets a stand-in that keeps
+  what the table says, in order, for the real view. The views' stylesheets are still imported
+  from `games/index.ts`, so the page keeps one stylesheet in the same order. The page reads a
+  table's limits from `shared/src/table-configs.ts` (every engine's `config()` as data) rather
+  than importing the engines, which only the server runs. A new game's view goes the same way:
+  nothing its index.ts gives the floor (model, seats, poses, preload) may come from the view
+  file, or the whole view is in the entry again.
 - **Floor**: third-person controller (WASD/arrows), a follow camera that pulls in when a wall
   or table is in the way, circle-vs-box collision on the floor plan, idle/walk blending, name
   tags. Stations (tables, machines, the cashier) show "Press E" within range.
 - **Table view** happens in the same scene: the camera flies to the table's play pose and the
   DOM controls fade in. Other players keep walking past behind the table.
-- **Remote players** are drawn 300 ms in the past, interpolated between snapshots, each position
-  placed at the moment it reached the server (the snapshot's time less the row's age).
+- **Remote players** are drawn 300 ms in the past, each position placed at the moment it reached
+  the server (the snapshot's time less the row's age), on a cubic Hermite curve through the
+  samples whose slope at each comes from its neighbours (none at a stop), so speed and heading
+  change smoothly through every sample (`net/interp.ts`). When a new sample moves the path under
+  where someone is drawn (an extrapolation that turned out wrong, or the newest sample's slope
+  revised), the drawn pose carries on from where it was and the difference eases out over a few
+  frames; one over 1.5 m is a real jump and is drawn at once.
 - **Quality**: High (bloom on emissive surfaces, MSAA, pixel ratio up to 2 with an adaptive
   step-down) and Low (no bloom, pixel ratio 1, cheaper materials), suggested from a frame-time
   probe and changeable in Settings.
