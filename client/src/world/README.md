@@ -371,11 +371,69 @@ bar over the bartender's Order, a computer over its own desk chair).
 - High: the marble, lacquer and wood reflect the casino itself (a PMREM capture from inside the
   doors, taken once at load); the metals keep the studio environment. The chandeliers glint (one
   point cloud, one draw call).
+- High (v8): the wood has a lacquered clear coat and the leather a soft waxed one, the velvet and
+  upholstery a sheen along their edges (MeshPhysicalMaterial); Low keeps them Lambert.
 - Low: no bloom, pixel ratio 1, Lambert/Basic materials, no spots, Quaternius chandeliers.
 - The canvas itself isn't multisampled (the app and the dev floor make the engine with
   `antialias: false`): on High the bloom draws the scene into its own 4x target, and a
   multisampled canvas would only cost memory and make each pixel-ratio step stall. The pixel ratio
   steps back up only after eight fast seconds and never within 30 s of stepping down.
+
+### Contact shadows (v8)
+Nothing on the floor floats: everything that stands on it sits in a soft shadow of its own shape,
+dark under it and fading out past its edge (grounding.ts), and a strip of soft dark runs along the
+foot of every wall where it meets a room's floor (not across doorways). No shadow maps: each is a
+flat decal (black at the alpha of a small falloff texture, pulled toward the eye by polygonOffset
+over the floor it lies on), all of a room's in one geometry of one batch, so the whole floor's
+grounding is one draw call, drawn and hidden with each room. Black at an alpha multiplies what's
+under it, so overlapping shadows darken together in any order and need no sorting; they draw
+before the light pools, which still warm the carpet round a table.
+
+- The plan's solids standing on the floor cast by their footprint (a box's reach, a round thing's
+  radius): chairs and stools, slot and pachinko islands, counters, cabinets, planters, benches,
+  sofas, cases, plinths, the columns, the fountain's basin. A high-top casts its table and its
+  three stools; a floor lamp only its foot. Pieces on legs are dark under their middle and lighter
+  at their edge; a box down to the floor (a counter, an island's plinth) is dark right to its edge.
+- Tables, wheels and desks cast by their own outline, measured from their models at load (their
+  parts between the floor and the rail, in K directions round them), so a half-moon blackjack table
+  casts a half-moon. The bingo hall is one station the size of the hall: its long tables and the
+  caller's stage come from games/bingo/layout.ts.
+- The ground floor, the roof and the apartment use the same decals through their Kit
+  (`kit.shade`, `kit.shadeRound`, `kit.shadeTurned`, then `kit.shadows()` as one mesh); the
+  apartment's pieces get theirs from `At.solid`, laid over its rugs. Every car carries its shadow
+  (cars/models.ts `carShadow`, `MatBatch.shadows()`): the lot's parked cars one mesh, each traffic
+  fleet one more instanced mesh, the garage, the turntables and a driven car's rig their own. The
+  lobby's statues stand in theirs.
+- `client/test/world-grounding.test.ts` checks every floor solid and table seat has one, that each
+  decal is convex round its middle, in its room and facing up, and that no wall's strip crosses a
+  doorway.
+
+### The post pass and the graphics options (v8)
+- The output pass (bloom.ts) grades the picture for the room the camera is in (`GRADES`: a white
+  balance within a few percent of white, saturation, a gentle S of contrast, a vignette): warmer in
+  the pit, the bar and the lounge, cooler in the online lounge, the salon's green, the parlour's
+  pink, the ground floor's night, the roof's sunset. It eases from room to room over a second or so
+  and never pulses. A fixed fine dither under one step of 8 bits keeps the dark ceilings and walls
+  from banding (the same every frame, so `world3.mjs read`'s glow on/off frames differ by the glow
+  alone). With the glow off (the option, or `world.glow(false)`) the resolved scene goes straight
+  to the grade: the copy and the bloom's passes are skipped.
+- Low: where the graphics card renders half-float targets, the scene is drawn into one and put on
+  the canvas by a single smoothing pass, three's FXAA with each of its taps tone-mapped and graded
+  (one more draw call); elsewhere it draws straight to the canvas as before.
+- render/graphics.ts keeps the options that apply at once (localStorage `casino.graphics`):
+  Resolution (Auto as before; Sharp: the screen's own pixels, never stepping down; Fast: one on
+  High, three quarters on Low), Glow (High), Smooth edges (Low), Film look (the grade and the
+  vignette) and Frame rate (Saver: Engine3D draws thirty frames a second, skipping the screen's
+  refreshes between, clock and callbacks too; the adaptive pixel ratio holds still meanwhile).
+  render/graphics-settings.ts is their rows for the Settings sheet, with Quality as it always was;
+  `dev-floor-graphics.html` shows them on their own, `dev-floor-post.html` the post pass on a small
+  room of its own (`&quality=`, `&room=` a grade, `&film=0`, `&glow=0`), and the dev floor's
+  `casino.gfx.set(k, v)` changes one live.
+- Textures filter up to 16x anisotropic on High (8 on Low), so the carpet stays crisp toward the
+  far wall.
+- Room visibility (visibility.ts) works its rooms out every frame without making anything new: the
+  screen rectangles are kept per room, the rooms drawn compared as bits, and `visible` is a new set
+  only when it changes (`client/test/world-visibility.test.ts` holds it to the old way's answers).
 
 ### The frame's CPU
 - Labels (name tags, speech and emote bubbles, a table's totals) are drawn by render/labels.ts, a
@@ -428,3 +486,5 @@ WASD/arrows, Shift runs, click to look with the mouse (Esc lets go) or drag, whe
 sit, Esc to stand. `&quality=low|high`,
 `&view=overview|slots|pit|cashier|bar|poker|lounge|bigsix|parlour|cardroom|bingo|table`, `&stats=1`, `&lineup=1`,
 `&slots=sevens,neon,...` (the slot islands to lay out instead of the catalogue's).
+`dev-floor-graphics.html?quality=high|low` is the Settings sheet's graphics rows on their own;
+`dev-floor-post.html` the post pass (bloom, grade, Low's smoothing) without the floor.
