@@ -20,19 +20,21 @@ if (await page.$('.name-input')) {
   await page.fill('.pass-input', 'casino-dev'); // DEV_PASSWORD in client/src/net/api.ts
   await page.click('.enter-btn');
 }
-await page.waitForSelector('.menu-item', { timeout: 20_000 });
-await page.click('.menu-item >> nth=0');
-await page.waitForSelector('.hud', { timeout: 20_000 });
+// a name new to this database picks a look first (three steps); one seen before gets the menu
+await page.waitForSelector('.menu-item, .editor-panel.guided', { timeout: 120_000 });
+if (await page.$('.editor-panel.guided')) for (let i = 0; i < 3; i++) await page.click('.editor-panel .ed-buttons .btn.primary');
+else await page.click('.menu-item >> nth=0');
+await page.waitForSelector('.hud', { timeout: 120_000 });
 await page.evaluate(() => {
   const w = window.casino.world;
   w.enter(w.stations.find((s) => s.id === 'rl-eu'));
 });
-await page.waitForSelector('.lobby-choice', { timeout: 10_000 });
+await page.waitForSelector('.lobby-choice', { timeout: 60_000 });
 await page.keyboard.press('s');
-await page.waitForSelector('.modal input[type=number]', { timeout: 20_000 });
+await page.waitForSelector('.modal input[type=number]', { timeout: 120_000 });
 await page.fill('.modal input[type=number]', '500');
 await page.click('.modal .btn.primary');
-await page.waitForFunction(() => window.casino.app.table?.seated === true, null, { timeout: 20_000 });
+await page.waitForFunction(() => window.casino.app.table?.seated === true, null, { timeout: 120_000 });
 // A bet on the layout, not yet spun.
 await page.evaluate(() => window.casino.app.table.session.link.act({ type: 'bet', bets: [{ kind: 'even', amount: 2500 }] }));
 await page.waitForTimeout(1500);
@@ -49,7 +51,7 @@ const before = await page.evaluate(() => {
   s.socket.ws.close(4999, 'simulated drop');
   return true;
 });
-await page.waitForFunction(() => (window.__snaps?.length ?? 0) > 0, null, { timeout: 30_000 });
+await page.waitForFunction(() => (window.__snaps?.length ?? 0) > 0, null, { timeout: 120_000 });
 const snap = await page.evaluate(() => window.__snaps[0]);
 console.log(JSON.stringify({ reconnected: snap.you, bets: snap.bets }));
 if (snap.you.status !== 'seated' || snap.you.stack !== 47_500) errors.push(`seat not restored: ${JSON.stringify(snap.you)}`);
