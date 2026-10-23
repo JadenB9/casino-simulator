@@ -3,7 +3,9 @@
 // coalesced by a floor that flushes every 100 ms with each row's age, carried with jitter, and
 // drawn by the real interpolation (net/interp.ts). Compared with the scheme before it (a position
 // every 100 ms, flushes every 66 ms stamped at flush time, drawn 200 ms back), the drawn path
-// must stay about as close to the truth and never visibly stall while the walker walks.
+// must stay about as close to the truth and never visibly stall while the walker walks. And
+// drawn on the curve through the samples, the walker's speed must change far more gently from
+// one frame to the next than on straight segments between them, which jolt at every sample.
 
 import { describe, expect, it } from 'vitest';
 import { DELAY_MS, Track } from '../src/net/interp.ts';
@@ -55,8 +57,47 @@ interface Scheme {
   delayMs: number;
 }
 
-/** Drive one walk through a scheme; the drawn path's worst error and its longest stand-still while walking. */
-function simulate(scheme: Scheme, seed: number) {
+/** What draws the walker: the real interpolation, or a stand-in with the same two calls. */
+interface Drawer {
+  push(t: number, pose: { x: number; z: number; r: number; moving: boolean }): void;
+  at(serverTime: number): { x: number; z: number } | null;
+}
+
+/** Straight segments between the samples (the interpolation before the curve), for comparison. */
+class Segments implements Drawer {
+  private s: { t: number; x: number; z: number; moving: boolean }[] = [];
+  push(t: number, p: { x: number; z: number; moving: boolean }): void {
+    const last = this.s[this.s.length - 1];
+    if (last && t <= last.t) return;
+    if (last && t - last.t > 500) this.s.push({ ...last, t: t - 100 });
+    this.s.push({ t, x: p.x, z: p.z, moving: p.moving });
+  }
+  at(serverTime: number): { x: number; z: number } | null {
+    const s = this.s;
+    if (!s.length) return null;
+    const t = serverTime - DELAY_MS;
+    if (t <= s[0]!.t) return s[0]!;
+    for (let i = 1; i < s.length; i++) {
+      const a = s[i - 1]!;
+      const b = s[i]!;
+      if (b.t >= t) return { x: a.x + ((b.x - a.x) * (t - a.t)) / (b.t - a.t), z: a.z + ((b.z - a.z) * (t - a.t)) / (b.t - a.t) };
+    }
+    const last = s[s.length - 1]!;
+    const prev = s[s.length - 2];
+    if (!prev || !last.moving) return last;
+    const k = Math.min(200, t - last.t) / (last.t - prev.t);
+    return { x: last.x + (last.x - prev.x) * k, z: last.z + (last.z - prev.z) * k };
+  }
+}
+
+/** The script's steady stretches (drawn time, ms): no turn in the truth, so any jolt is the drawing's. */
+const STEADY: [number, number][] = [[400, 1_900], [2_400, 3_900], [5_800, 6_400]];
+
+/**
+ * Drive one walk through a scheme; the drawn path's worst error, its longest stand-still while
+ * walking, and its sharpest change of velocity from one frame to the next along a straight stretch.
+ */
+function simulate(scheme: Scheme, seed: number, drawer: () => Drawer = () => new Track()) {
   const DURATION = 7_500;
   const truth = truePath(DURATION);
   const rand = rand32(seed);
@@ -100,12 +141,14 @@ function simulate(scheme: Scheme, seed: number) {
   if (pending) flush(lastFlush + scheme.flushMs);
   rows.sort((a, b) => a.recv - b.recv);
   // Receiver: a frame every 16 ms; draws DELAY behind (its clock is the server's, as clock.ts keeps).
-  const track = new Track();
+  const track = drawer();
   let next = 0;
   let worst = 0;
   let still = 0;
   let longestStill = 0;
   let prevDrawn: { x: number; z: number } | null = null;
+  let prevV: { x: number; z: number } | null = null;
+  let jolt = 0;
   for (let t = 400; t <= DURATION; t += 16) {
     while (next < rows.length && rows[next]!.recv <= t) {
       const r = rows[next++]!;
@@ -125,9 +168,13 @@ function simulate(scheme: Scheme, seed: number) {
     } else {
       still = 0;
     }
+    // velocity in cm/s, and how much it changed since the frame before
+    const v = prevDrawn ? { x: ((drawn.x - prevDrawn.x) * 1000) / 16, z: ((drawn.z - prevDrawn.z) * 1000) / 16 } : null;
+    if (v && prevV && STEADY.some(([a, b]) => target >= a && target <= b)) jolt = Math.max(jolt, Math.hypot(v.x - prevV.x, v.z - prevV.z));
+    prevV = v;
     prevDrawn = { x: drawn.x, z: drawn.z };
   }
-  return { sent: arrivals.length, worstCm: Math.round(worst), longestStillMs: longestStill };
+  return { sent: arrivals.length, worstCm: Math.round(worst), longestStillMs: longestStill, joltCmPerS: Math.round(jolt) };
 }
 
 const OLD: Scheme = { send: (cur, now, last) => !last || now - last.at >= 100, flushMs: 66, ages: false, delayMs: 200 };
@@ -145,6 +192,19 @@ describe('another walker, drawn from fewer positions', () => {
       // ...and it never visibly stands still mid-walk waiting for the next position: at most a
       // frame or two where a corner meets the straight line it was drawing past it.
       expect(after.longestStillMs, `seed ${seed}`).toBeLessThanOrEqual(48);
+    }
+  });
+
+  it('on the curve through the samples, the speed changes gently from frame to frame where straight segments jolt', () => {
+    const NEW: Scheme = { send: shouldSend, flushMs: 100, ages: true, delayMs: DELAY_MS };
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const curve = simulate(NEW, seed);
+      const segments = simulate(NEW, seed, () => new Segments());
+      // the same samples, no further from the truth...
+      expect(curve.worstCm, `seed ${seed}`).toBeLessThanOrEqual(Math.max(segments.worstCm, 40));
+      // ...and along a straight walk the sharpest frame-to-frame change of velocity well under
+      // half of what the segments' corners at each sample give
+      expect(curve.joltCmPerS, `seed ${seed}: ${curve.joltCmPerS} vs ${segments.joltCmPerS}`).toBeLessThan(segments.joltCmPerS * 0.5);
     }
   });
 });

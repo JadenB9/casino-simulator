@@ -144,8 +144,12 @@ describe('FloorLink receiving', () => {
     recv({ t: 's', ts: 1_000_200, p: [[2, 120, 200, 0, 0]] });
     expect(link.players.has(1)).toBe(false); // our own rows are ignored, as are strangers'
     expect(link.players.has(99)).toBe(false);
-    // Drawn DELAY_MS (300 ms) behind: at server time 1_000_450 we see the pose from 1_000_150.
-    expect(link.players.get(2)!.track.at(1_000_450)!.x).toBeCloseTo(115);
+    // Drawn DELAY_MS (300 ms) behind: at server time 1_000_400 we see the row from 1_000_100, and
+    // at 1_000_450 the walk between it and the next (on the curve through them, easing to the stop).
+    expect(link.players.get(2)!.track.at(1_000_400)!.x).toBeCloseTo(110);
+    const between = link.players.get(2)!.track.at(1_000_450)!.x;
+    expect(between).toBeGreaterThan(110);
+    expect(between).toBeLessThan(120);
     // A row's age places it when its position reached the server, not when the snapshot went out.
     recv({ t: 's', ts: 1_000_400, p: [[2, 140, 200, 0, 1, 100]] });
     expect(link.players.get(2)!.track.at(1_000_600)!.x).toBeCloseTo(140);
