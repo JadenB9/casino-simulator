@@ -8,7 +8,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { CHIPS, formatMoney, type ChipSpec } from '../../../../shared/src/money.ts';
 import { chipFaceCanvas, CHIP_R } from '../../table/chips.ts';
-import { engine } from '../../../../shared/src/games/blackjack/engine.ts';
+import { tableConfig } from '../../../../shared/src/table-configs.ts';
 import type { TableConfig } from '../../../../shared/src/engine.ts';
 import { repaintable } from '../../table/limit-sign.ts';
 import { DECKS } from '../../../../shared/src/games/blackjack/rules.ts';
@@ -317,7 +317,7 @@ function paintSign(g: CanvasRenderingContext2D, cfg: TableConfig): void {
 }
 
 function limitSign(m: ReturnType<typeof materials>): THREE.Object3D {
-  if (!signTexture) signTexture = canvasTexture(512, 320, (g) => paintSign(g, engine.config('', 'multi')));
+  if (!signTexture) signTexture = canvasTexture(512, 320, (g) => paintSign(g, tableConfig('blackjack', '', 'multi')));
   const g = new THREE.Group();
   const post = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.2, 12), m.brass);
   post.position.y = 0.1;

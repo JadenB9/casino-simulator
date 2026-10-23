@@ -3,7 +3,7 @@
 // is drawn box by box from layout.ts, the same data the click zones, the chips and the lights use.
 
 import * as THREE from 'three';
-import { engine } from '../../../../shared/src/games/sicbo/engine.ts';
+import { tableConfig } from '../../../../shared/src/table-configs.ts';
 import { spotByKey, paysLabel } from '../../../../shared/src/games/sicbo/rules.ts';
 import { formatMoney } from '../../../../shared/src/money.ts';
 import type { TableConfig } from '../../../../shared/src/engine.ts';
@@ -226,7 +226,7 @@ function limitSign(): THREE.Mesh {
   const c = document.createElement('canvas');
   c.width = 640;
   c.height = 440;
-  paintSign(c.getContext('2d')!, engine.config('', 'multi'));
+  paintSign(c.getContext('2d')!, tableConfig('sicbo', '', 'multi'));
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;

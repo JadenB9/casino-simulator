@@ -30,7 +30,6 @@ import { showAway, showIdleWarning, type AwayHandle, type WarningHandle } from '
 import { IdleWatch } from './idle.ts';
 import { RideSound, rideKey } from '../world/rides.ts';
 import { mountFeats, type FeatsUi } from '../ui/feats/index.ts'; // v6 feats6
-import { ENGINES } from '../../../shared/src/games/index.ts';
 import { mountDaily, dailyApi, type DailyHandle } from '../ui/daily/index.ts'; // v6 celebs6
 // v6 bank6: the bank's calls and its transfer notices
 import * as bankApi from '../ui/bank/api.ts';

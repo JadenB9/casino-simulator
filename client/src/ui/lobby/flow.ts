@@ -11,7 +11,7 @@
 import type { GameId } from '../../../../shared/src/engine.ts';
 import type { LobbySummary } from '../../../../shared/src/protocol.ts';
 import { CATALOG, type GameInfo } from '../../../../shared/src/games/catalog.ts';
-import { ENGINES } from '../../../../shared/src/games/index.ts';
+import { tableConfig } from '../../../../shared/src/table-configs.ts';
 import { applyLimits, hasLimitChoice, limitSpec, limitsDetail, limitsLabel } from '../../../../shared/src/limits.ts';
 import { ApiError, createTable as apiCreateTable, joinByPin as apiJoinByPin } from '../../net/api.ts';
 import type { TableTarget } from '../../app/table-session.ts';
@@ -348,7 +348,7 @@ class TableFlow {
     fact('Seats', `${lobby.players} of ${lobby.max} taken`);
     card.append(host, facts);
     if (lobby.limits) {
-      const cfg = applyLimits(ENGINES[this.opts.game].config(lobby.variant, 'multi'), lobby.limits);
+      const cfg = applyLimits(tableConfig(this.opts.game, lobby.variant, 'multi'), lobby.limits);
       card.append(el('p', 'lim-detail', limitsDetail(cfg).join(' · ')));
     }
     const full = isFull(lobby);

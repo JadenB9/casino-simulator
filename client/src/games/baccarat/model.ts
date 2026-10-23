@@ -9,7 +9,7 @@ import type { Quality } from '../../render/engine3d.ts';
 import { Felt } from '../../table/felt.ts';
 import { CHIP_R, chipFaceCanvas } from '../../table/chips.ts';
 import { CHIPS, formatMoney } from '../../../../shared/src/money.ts';
-import { engine } from '../../../../shared/src/games/baccarat/engine.ts';
+import { tableConfig } from '../../../../shared/src/table-configs.ts';
 import type { TableConfig } from '../../../../shared/src/engine.ts';
 import { repaintable } from '../../table/limit-sign.ts';
 import { feltSpec, kidneyGeometry } from './felt.ts';
@@ -270,7 +270,7 @@ function limitSign(): THREE.Object3D {
     tex.anisotropy = 4;
     signTex = tex;
     paintWithFonts(() => {
-      paintSign(c.getContext('2d')!, engine.config('', 'multi'));
+      paintSign(c.getContext('2d')!, tableConfig('baccarat', '', 'multi'));
       tex.needsUpdate = true;
     });
   }

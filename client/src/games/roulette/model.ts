@@ -5,7 +5,7 @@
 
 import * as THREE from 'three';
 import { type Variant, DOUBLE_ZERO, asVariant, colorOf } from '../../../../shared/src/games/roulette/rules.ts';
-import { engine } from '../../../../shared/src/games/roulette/engine.ts';
+import { tableConfig } from '../../../../shared/src/table-configs.ts';
 import type { TableConfig } from '../../../../shared/src/engine.ts';
 import { repaintable } from '../../table/limit-sign.ts';
 import { formatMoney } from '../../../../shared/src/money.ts';
@@ -230,7 +230,7 @@ function limitSign(v: Variant): THREE.Mesh {
   const c = document.createElement('canvas');
   c.width = 640;
   c.height = 440;
-  paintSign(c.getContext('2d')!, engine.config(v, 'multi'));
+  paintSign(c.getContext('2d')!, tableConfig('roulette', v, 'multi'));
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;

@@ -5,7 +5,7 @@
 // shows those rules as it goes, so nothing the server does comes as a surprise.
 
 import type { GameId } from '../../../../shared/src/engine.ts';
-import { ENGINES } from '../../../../shared/src/games/index.ts';
+import { tableConfig } from '../../../../shared/src/table-configs.ts';
 import { formatMoney, type Cents } from '../../../../shared/src/money.ts';
 import {
   applyLimits,
@@ -237,7 +237,7 @@ export class LimitsPicker {
       this.detail.textContent = '';
       return;
     }
-    const cfg = applyLimits(ENGINES[this.game].config(this.variant, 'multi'), v);
+    const cfg = applyLimits(tableConfig(this.game, this.variant, 'multi'), v);
     const lines = limitsDetail(cfg);
     this.buyIn.textContent = lines.pop()!;
     // Said before sitting down, not after: a table whose smallest buy-in is more than the balance.

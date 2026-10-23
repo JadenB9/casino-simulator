@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import type { GameId } from '../../../shared/src/engine.ts';
 import { CATALOG } from '../../../shared/src/games/catalog.ts';
-import { ENGINES } from '../../../shared/src/games/index.ts';
+import { tableConfig } from '../../../shared/src/table-configs.ts';
 import { formatMoney } from '../../../shared/src/money.ts';
 import { limitSpec, limitsSpan } from '../../../shared/src/limits.ts';
 import { GAMES } from '../games/index.ts';
@@ -55,7 +55,7 @@ export function limitsText(game: GameId, variant: string): string {
   try {
     const span = limitsSpan(game);
     if (span) return span;
-    const l = ENGINES[game].config(variant, 'solo').limits.default;
+    const l = tableConfig(game, variant, 'solo').limits.default;
     return `${formatMoney(l.min)}–${formatMoney(l.max)}`;
   } catch {
     return '';

@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { CHIPS, formatMoney } from '../../../../shared/src/money.ts';
 import { DEFAULT_RULES, DECKS } from '../../../../shared/src/games/war/rules.ts';
-import { engine } from '../../../../shared/src/games/war/engine.ts';
+import { tableConfig } from '../../../../shared/src/table-configs.ts';
 import type { TableConfig } from '../../../../shared/src/engine.ts';
 import { repaintable } from '../../table/limit-sign.ts';
 import type { Quality } from '../../render/engine3d.ts';
@@ -180,7 +180,7 @@ function paintSign(g: CanvasRenderingContext2D, cfg: TableConfig): void {
 
 /** The lit limits sign on the dealer's right, painted from the table's own config. */
 function limitSign(m: ReturnType<typeof materials>): THREE.Group {
-  if (!signTexture) signTexture = canvasTexture(512, 320, (g) => paintSign(g, engine.config('', 'multi')));
+  if (!signTexture) signTexture = canvasTexture(512, 320, (g) => paintSign(g, tableConfig('war', '', 'multi')));
   const g = new THREE.Group();
   const post = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.2, 12), m.brass);
   post.position.y = 0.1;

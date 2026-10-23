@@ -5,7 +5,7 @@
 
 import * as THREE from 'three';
 import { SPOTS } from '../../../../shared/src/games/bigsix/rules.ts';
-import { engine } from '../../../../shared/src/games/bigsix/engine.ts';
+import { tableConfig } from '../../../../shared/src/table-configs.ts';
 import { formatMoney } from '../../../../shared/src/money.ts';
 import type { TableConfig } from '../../../../shared/src/engine.ts';
 import { repaintable } from '../../table/limit-sign.ts';
@@ -178,7 +178,7 @@ function limitSign(): THREE.Mesh {
   c.width = 640;
   c.height = 440;
   const g = c.getContext('2d')!;
-  paintSign(g, engine.config('', 'multi'));
+  paintSign(g, tableConfig('bigsix', '', 'multi'));
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
