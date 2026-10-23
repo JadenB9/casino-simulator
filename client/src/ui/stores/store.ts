@@ -150,6 +150,8 @@ export function openStore(o: StoreOpts): Sheet {
     }, { cls: 'primary' });
     const m = modal(`Buy ${r.name}?`, [el('p', 'bq-confirm-price money', formatMoney(r.price)), rows, el('p', 'bq-confirm-note', `${r.about} It comes out of your balance; chips on tables stay where they are.`)], [go, button('Cancel', () => m.close(), { cls: 'ghost' })], () => m.close());
     m.root.classList.add('bq-confirm', 'store-confirm');
+    // over the store's own sheet (a modal's scrim sits under sheets by default)
+    m.root.parentElement?.classList.add('store-over');
     go.focus();
   };
   const buy = async (r: StoreRow) => {
