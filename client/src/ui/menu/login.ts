@@ -95,7 +95,7 @@ export function mountLogin(deps: LoginDeps): Closable {
   pass.autocomplete = 'current-password';
   pass.spellcheck = false;
   pass.setAttribute('autocapitalize', 'off');
-  pass.setAttribute('aria-describedby', 'login-pass-rule login-caps');
+  pass.setAttribute('aria-describedby', 'login-pass-rule');
   const show = el('button', 'pass-show');
   show.type = 'button';
   show.setAttribute('aria-controls', 'login-pass');
@@ -289,9 +289,15 @@ export function mountLogin(deps: LoginDeps): Closable {
     paintPass();
   });
   // Caps Lock: known only from a key event, so it shows from the first key typed in either field
+  // (and the password field is described by it only while it shows: a hidden node named in
+  // aria-describedby would still be read out)
+  const setCaps = (on: boolean) => {
+    if (caps.hidden === !on) return;
+    caps.hidden = !on;
+    pass.setAttribute('aria-describedby', on ? 'login-pass-rule login-caps' : 'login-pass-rule');
+  };
   const paintCaps = (e: KeyboardEvent) => {
-    if (typeof e.getModifierState !== 'function') return;
-    caps.hidden = !e.getModifierState('CapsLock');
+    if (typeof e.getModifierState === 'function') setCaps(e.getModifierState('CapsLock'));
   };
   for (const f of [input, pass]) {
     f.addEventListener('keydown', paintCaps);
@@ -300,7 +306,7 @@ export function mountLogin(deps: LoginDeps): Closable {
   form.addEventListener('focusout', () => {
     // leaving the form for good (not just going from one field to the other)
     queueMicrotask(() => {
-      if (!form.contains(document.activeElement)) caps.hidden = true;
+      if (!form.contains(document.activeElement)) setCaps(false);
     });
   });
   show.addEventListener('click', () => {

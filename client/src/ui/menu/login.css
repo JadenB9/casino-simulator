@@ -18,6 +18,8 @@
 .continue-label { font-size: 12px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; opacity: 0.8; }
 .continue-name { overflow: hidden; font-family: var(--serif); font-size: 22px; font-weight: 700; line-height: 1.1; letter-spacing: 0.04em; text-overflow: ellipsis; white-space: nowrap; }
 .continue-btn .kc { margin-left: auto; }
+/* another name typed: Enter is Enter's now, not this */
+.continue-btn:not(.primary) .kc { visibility: hidden; }
 .login-or { display: flex; align-items: center; gap: 12px; margin: 0 0 -4px; font-size: 12px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-3); }
 .login-or::before, .login-or::after { content: ''; flex: 1; height: 1px; background: var(--line); }
 

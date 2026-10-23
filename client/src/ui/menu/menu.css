@@ -54,7 +54,9 @@
 
 /* ---------------------------------------------------------------- sheets */
 
-.sheet-scrim { position: fixed; inset: 0; z-index: 35; display: grid; place-items: center; padding: 24px 16px; background: rgba(var(--scrim-rgb), 0.62); animation: scrim-in 0.2s var(--ease); }
+/* (the one column is the screen's width at most: a sheet with a wide table in it, the profile's
+   games on a phone, scrolls the table inside rather than growing off the screen) */
+.sheet-scrim { position: fixed; inset: 0; z-index: 35; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: 24px 16px; background: rgba(var(--scrim-rgb), 0.62); animation: scrim-in 0.2s var(--ease); }
 .sheet-scrim.closing { opacity: 0; transition: opacity 0.16s; pointer-events: none; }
 .sheet { position: relative; display: flex; flex-direction: column; width: min(560px, 100%); max-height: calc(100vh - 48px); background: rgba(var(--sheet-rgb), 0.97); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(var(--brass-hi-rgb), 0.07); animation: sheet-in 0.26s var(--ease); outline: none; }
 .sheet::before { content: ''; position: absolute; left: 28px; right: 28px; top: -1px; height: 1px; background: linear-gradient(90deg, rgba(var(--brass-hi-rgb), 0), rgba(var(--brass-hi-rgb), 0.75), rgba(var(--brass-hi-rgb), 0)); }
@@ -75,9 +77,10 @@
 
 /* ---------------------------------------------------------------- front: login and menu */
 
-/* The screen is a grid with the card in it: centred on the height, on the left third of a wide
-   screen, and kept out of the bottom 56 px, which is the site's back chip's corner. */
-.front { position: fixed; inset: 0; z-index: 20; display: grid; align-items: center; justify-items: start; padding: 24px clamp(16px, 6vw, 112px) 56px; overflow: hidden; background: var(--bg); animation: front-in 0.45s var(--ease); }
+/* The screen is a grid with the card in it: on the left third of a wide screen, its top at the
+   same height on the login and the menu (so the title holds still from one to the other), and
+   kept out of the bottom 56 px, which is the site's back chip's corner. */
+.front { position: fixed; inset: 0; z-index: 20; display: grid; align-items: start; justify-items: start; padding: clamp(24px, 11vh, 132px) clamp(16px, 6vw, 112px) 56px; overflow: hidden; background: var(--bg); animation: front-in 0.45s var(--ease); }
 .front.over-scene { background: transparent; }
 .front.closing { opacity: 0; transition: opacity 0.22s var(--ease); pointer-events: none; }
 .front.busy { cursor: progress; }
@@ -194,6 +197,10 @@ body.calm .front-rise { animation-name: front-fade; }
   .sheet-title { font-size: 19px; }
   .sheet-body { padding: 12px 18px 14px; }
   .sheet-foot { margin-top: 12px; }
+}
+/* A tablet held upright: the card in the middle of the screen's width. */
+@media (max-aspect-ratio: 4/5) and (min-width: 561px) {
+  .front { justify-items: center; }
 }
 /* A phone upright: the card spans the screen under the theme button, clear of the back chip;
    sheets edge to edge, stat tiles two across. */
