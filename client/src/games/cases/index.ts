@@ -230,7 +230,6 @@ export const cases: GameClientModule = {
       site.profit('Top item', (b / 100) * top.mult - b, `${multText(top.mult)} · ${chanceText(top.weight)}`);
       info.set('more', 'Pays more than the case', pctText(more));
       info.set('likely', 'Most likely', `${likely.name} · ${multText(likely.mult)}`);
-      info.set('rtp', 'Return', '99.00%');
       const lim = site.limits;
       const range = lim ? ` · Cases ${formatMoney(lim.min)} to ${formatMoney(lim.max)}` : '';
       screen.setNote(`Return 99.00% on every case · ${c.name}${range} · Space opens · Q quick open`);
