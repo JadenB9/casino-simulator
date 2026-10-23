@@ -19,6 +19,23 @@ describe('guns', () => {
       expect(CARS.some((c) => c.id === g.id)).toBe(false);
     }
   });
+  it('say in the shop as many rounds as they hold', () => {
+    const WORDS: Record<string, number> = { five: 5, six: 6, seven: 7, eight: 8, ten: 10, twelve: 12, fifteen: 15, thirty: 30, fifty: 50, 'two hundred': 200, 'a thousand': 1000 };
+    const count = (about: string): number | null => {
+      // "eight rounds", "30 rounds", "a fifty-round drum", "six in the cylinder", "eight in the tube"
+      const m = /\b(\d+|two hundred|a thousand|[a-z]+)[ -](?:rounds?\b|in the (?:cylinder|tube))/.exec(about);
+      if (!m) return null;
+      return /^\d+$/.test(m[1]!) ? Number(m[1]) : (WORDS[m[1]!] ?? null);
+    };
+    let said = 0;
+    for (const g of GUNS) {
+      const n = count(g.about);
+      if (n === null) continue;
+      said++;
+      expect(n, `${g.name}: "${g.about}"`).toBe(g.mag);
+    }
+    expect(said).toBeGreaterThanOrEqual(6);
+  });
   it('hit the nearest person on the line, within reach, never behind', () => {
     const c = [
       { id: 'far', x: 0, z: 20 },
