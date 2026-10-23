@@ -125,6 +125,8 @@ const box = (e: HTMLElement): string => {
  * rl-tip...), which the bar's panels would otherwise shy away from as the mouse moves.
  */
 const ignored = (e: HTMLElement): boolean => e.dataset.fit === 'ignore' || [...e.classList].some((c) => /^[a-z]+-tip$/.test(c));
+/** A table's betting clock (tc-clock, wr-clock...). */
+const isClock = (e: HTMLElement): boolean => [...e.classList].some((c) => /^[a-z]+-clock$/.test(c));
 
 export class Dock {
   private readonly resized: ResizeObserver | null;
@@ -160,7 +162,7 @@ export class Dock {
 
   private matters(e: HTMLElement): boolean {
     if (ignored(e)) return false;
-    return e.matches(BAR) || e.matches(TOP) || DOCKED.some((d) => e.matches(d.sel)) || e.classList.contains('panel') || e.classList.contains('btn');
+    return e.matches(BAR) || e.matches(TOP) || DOCKED.some((d) => e.matches(d.sel)) || e.classList.contains('panel') || e.classList.contains('btn') || isClock(e);
   }
 
   /** The boxes as the last arrangement left them, with the window's size. */
@@ -196,8 +198,9 @@ export class Dock {
     const H = innerHeight;
     // (TOP's order: the History line first, then the dealer's line, which keeps clear of it)
     const tops = ['.th-history', '[data-dock="top"]', '.dealer-line'].flatMap((sel) => kids.filter((e) => e.matches(sel))).filter(visible);
-    // (a table's panels, and its buttons that stand on their own up there: a Rules button)
-    const steady = kids.filter((o) => !o.matches(TOP) && (o.classList.contains('panel') || o.classList.contains('btn')) && !TRANSIENT.some((c) => o.classList.contains(c)) && !ignored(o) && !o.closest('.chat') && visible(o)).map((o) => o.getBoundingClientRect());
+    // (a table's panels, its buttons that stand on their own up there (a Rules button), and its
+    // betting clock at the top in the middle, where the dealer's line comes)
+    const steady = kids.filter((o) => !o.matches(TOP) && (o.classList.contains('panel') || o.classList.contains('btn') || isClock(o)) && !TRANSIENT.some((c) => o.classList.contains(c)) && !ignored(o) && !o.closest('.chat') && visible(o)).map((o) => o.getBoundingClientRect());
     const placedTops: Box[] = [];
     const below = tops.map((e) => {
       const r = e.getBoundingClientRect();
