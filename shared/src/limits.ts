@@ -222,10 +222,11 @@ export function maxRange(spec: LimitSpec, min: Cents): { low: Cents; high: Cents
 
 /**
  * Why these limits can't be a table of this game, in words for the player, or null if they can.
- * The wording names the rule broken, so the picker can show it under the fields.
+ * The wording names the rule broken, so the picker can show it under the fields. `salon`: at a
+ * table in the High Limit Salon (the same rules as clampLimits').
  */
-export function limitsProblem(game: GameId, l: TableLimits): string | null {
-  const spec = limitSpec(game);
+export function limitsProblem(game: GameId, l: TableLimits, salon = false): string | null {
+  const spec = limitSpec(game, salon);
   if (!spec) return 'This game has no limits to choose.';
   const blinds = spec.kind === 'blinds';
   const minWord = blinds ? 'The small blind' : 'The minimum';

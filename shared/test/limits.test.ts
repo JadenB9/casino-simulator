@@ -203,6 +203,18 @@ describe('custom limits', () => {
     expect(limitsProblem('slots', { min: D, max: 10 * D })).not.toBeNull();
   });
 
+  it('the High Limit Salon: its games take custom limits to $1 trillion there and nowhere else', () => {
+    const big = { min: 50_000_000 * D, max: 1_000_000_000 * D };
+    expect(limitsProblem('blackjack', big)).toMatch(/minimum is \$1 to \$100,000/);
+    expect(limitsProblem('blackjack', big, true)).toBeNull();
+    expect(limitsProblem('roulette', { min: 100_000_000_000 * D, max: 1_000_000_000_000 * D }, true)).toBeNull();
+    expect(limitsProblem('baccarat', { min: 25 * D, max: 1_500_000_000_000 * D }, true)).toBe('The maximum here is at most $1,000,000,000,000.');
+    // a game the salon has no table for keeps its usual rules there
+    expect(limitsProblem('sicbo', big, true)).toBe(limitsProblem('sicbo', big));
+    // and whatever the salon's clamp gives back, the salon's rules allow
+    expect(limitsProblem('blackjack', clampLimits('blackjack', { min: 1e15, max: 1e15 }, true)!, true)).toBeNull();
+  });
+
   it("Hold'em: any blinds from $0.50/$1 to $100,000/$300,000, the big blind two to three times the small", () => {
     expect(limitsProblem('holdem', { min: 2 * D, max: 5 * D })).toBeNull();
     expect(limitsProblem('holdem', { min: 1 * D, max: 3 * D })).toBeNull();
