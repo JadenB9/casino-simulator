@@ -14,17 +14,18 @@ import { formatCompact, formatMoney, type Cents } from '../../../../shared/src/m
 import { MACHINES, isMachineId, type Machine, type MachineId } from '../../../../shared/src/games/slots/machines.ts';
 import { neonSymbolAt } from '../../../../shared/src/games/slots/rules.ts';
 import type { ReelsEvent, ResultEvent, SlotsEvent, SlotsView, SpinEvent } from '../../../../shared/src/games/slots/protocol.ts';
-import { el, button } from '../../ui/kit.ts';
+import { el } from '../../ui/kit.ts';
 import { session } from '../../app/session.ts';
 import { tween, wait, ease } from '../../table/tween.ts';
 import { ReelSet, reelMaterial, type SpinTiming } from './reels.ts';
 import { buildCabinet, bulbMaterial, buttonAtUv, candleColor, payGlassPlacement, playFace, type CabinetHandle } from './cabinet.ts';
-import { blink, wave } from '../../app/comfort.ts';
-import { lineColor, paintMeters, paintOverlay, COIN_COLUMNS, type MeterValues } from './glass.ts';
+import { blink, calm, wave } from '../../app/comfort.ts';
+import { lineCells, lineColor, paintMeters, paintOverlay, type MeterValues } from './glass.ts';
 import { MachineSound } from './sound.ts';
-import { mountAutoDeck } from './autodeck.ts';
+import { mountDeck, Banner, CountUp, SessionLog, SessionPanel, countEase } from './deck.ts';
 import type { SpinOutcome } from './auto.ts';
-import { openPays } from './pays.ts';
+import { openPays, type PaysSheet } from './pays.ts';
+import { addSheen } from './sheen.ts';
 import { winTier, slotsTip, timesBet, neonHand } from './moments.ts';
 import { celebrate } from '../../table/celebrate.ts';
 
@@ -99,6 +100,8 @@ export function mountSlots(ctx: TableViewCtx): TableView {
   const paylineMat = new THREE.MeshBasicMaterial({ color: '#ff3326', toneMapped: false });
   const sharedPayline = handle.payline?.material ?? null;
   if (handle.payline) handle.payline.material = paylineMat;
+  // the glass in front of the reels (sheen.ts)
+  const sheen = addSheen(ctx.stage.root, l.window.w, l.window.h, new THREE.Vector3(0, l.window.cy, l.reels.zFront + 0.005));
 
   const bulbMode = { value: 0 };
   const bulbMat = bulbMaterial(handle.clock, bulbMode);
@@ -124,7 +127,7 @@ export function mountSlots(ctx: TableViewCtx): TableView {
     column.matrixAutoUpdate = false;
     column.userData.columns = pg.columns;
     column.userData.base = pg.matrix;
-    handle.root.parent === ctx.stage.anchor || owned ? ctx.stage.root.add(column) : ctx.stage.root.add(column);
+    ctx.stage.root.add(column);
   }
 
   // --- bet state
@@ -138,53 +141,31 @@ export function mountSlots(ctx: TableViewCtx): TableView {
   let meters: MeterValues = { credit: 0, bet: betOf(), win: null };
   let lastWin: Cents | null = null;
 
-  // --- DOM: the button deck, a result tag at the win meter, banners
-  const deck = el('div', 'slots-deck panel');
-  const paysBtn = button('Pays', () => togglePays(), { key: 'I', cls: 'ghost' });
-  const coinBtn = button('', () => nextCoin(), { key: 'C', title: 'Coin value (C, Shift+C or ← → to step)' });
-  coinBtn.classList.add('slots-coin');
-  const downBtn = button('−', () => setCoins(coins - 1), { key: '↓', title: video ? 'Fewer credits per line' : 'One coin less' });
-  const betLabel = el('div', 'slots-bet');
-  const upBtn = button('+', () => setCoins(coins + 1), { key: '↑', title: video ? 'More credits per line' : 'One coin more' });
-  const maxBtn = button('Max bet', () => setCoins(m.maxCoins), { key: 'A' });
-  const insertBtn = button('Insert', () => void insert(), { cls: 'ghost', title: 'Add money to this machine' });
-  // Spin (tap for one, hold to keep going) and Auto: each next spin only once the last has settled
-  const auto = mountAutoDeck({
-    spin: () => spin(),
-    deck,
-    canvas: ctx.stage.engine.renderer.domElement,
+  // --- DOM: the button deck (deck.ts), the feature banner, the count-up meter under the
+  // celebration on a big win, the session, and a result tag at the win meter
+  const deck = mountDeck({
     ui: ctx.ui,
+    canvas: ctx.stage.engine.renderer.domElement,
+    stepper: !video,
+    lines: m.lines,
+    insert: () => void insert(),
+    pays: () => togglePays(),
+    nextCoin: () => nextCoin(),
+    step: (dir) => setCoins(coins + dir),
+    max: () => setCoins(m.maxCoins),
+    session: () => sessionPanel.toggle(),
+    spin: () => spin(),
     bet: betOf,
     seated: () => status === 'seated',
     say: (text) => ctx.kit.say(text),
     changed: () => refreshButtons(),
   });
-  const spinBtn = auto.spinBtn;
-  const sep = () => el('div', 'sep');
-  deck.append(insertBtn, paysBtn, sep(), coinBtn, downBtn, betLabel, upBtn, maxBtn, sep(), auto.autoBtn, spinBtn);
-  ctx.ui.append(deck);
-
-  const banner = el('div', 'slots-banner');
-  banner.hidden = true;
-  const bannerTier = el('div', 'tier');
-  const bannerAmount = el('div', 'amount');
-  banner.append(bannerTier, bannerAmount);
-  ctx.ui.append(banner);
-
-  // the count-up meter under the celebration banner: the win climbing, and how many bets it is
-  const countup = el('div', `slots-countup ${video ? 'video' : 'stepper'}`);
-  countup.hidden = true;
-  const countLabel = el('div', 'label', 'Win');
-  const countAmount = el('div', 'amount');
-  const countTimes = el('div', 'times');
-  countup.append(countLabel, countAmount, countTimes);
-  ctx.ui.append(countup);
-  const showCount = (label: string, win: Cents, bet: Cents) => {
-    countLabel.textContent = label;
-    countAmount.textContent = formatMoney(win);
-    countTimes.textContent = win >= bet ? timesBet(win, bet) : '';
-    countup.hidden = false;
-  };
+  const { auto, spinBtn, coinBtn, downBtn, upBtn, maxBtn, insertBtn } = deck;
+  const banner = new Banner(ctx.ui, 'slots-banner');
+  const countup = new CountUp(ctx.ui, `slots-countup ${video ? 'video' : 'stepper'}`);
+  const showCount = (label: string, win: Cents, bet: Cents) => countup.show(label, win, bet);
+  const sessionLog = new SessionLog();
+  const sessionPanel = new SessionPanel(ctx.ui, sessionLog, deck);
 
   // Tips: the one honest line, for as long as the player wants tips
   const refreshTip = () => ctx.kit.tip(ctx.tips.on ? slotsTip(m) : null);
@@ -193,7 +174,10 @@ export function mountSlots(ctx: TableViewCtx): TableView {
 
   const winAt = new THREE.Vector3(((840 / 1024) - 0.5) * l.meters.w, l.meters.cy + l.meters.h / 2 + 0.028, l.plate.zBack + l.plate.depth + 0.02);
   let resultTag: { obj: THREE.Object3D; el: HTMLElement } | null = null;
-  const tagAt = new THREE.Vector3(0, l.window.cy + l.window.h / 2 + 0.03, l.plate.zBack + l.plate.depth + 0.02);
+  // the line tag sits just over the window and the feature tag above it, clear of the result pill
+  // that hangs over the win meter below the window (as on the newer machines, play.ts)
+  const tagAt = new THREE.Vector3(0, l.window.cy + l.window.h / 2 + 0.05, l.plate.zBack + l.plate.depth + 0.02);
+  const lineAt = new THREE.Vector3(0, l.window.cy + l.window.h / 2 + 0.015, l.plate.zBack + l.plate.depth + 0.01);
   let featureTag: { obj: THREE.Object3D; el: HTMLElement } | null = null;
 
   const clearResult = () => {
@@ -235,14 +219,14 @@ export function mountSlots(ctx: TableViewCtx): TableView {
   // "$0.25" up to "$10K" on the high-limit coins
   const coinText = () => formatCompact(m.denoms[denomIdx]!);
   const refreshBet = () => {
-    coinBtn.firstChild!.textContent = `Coin ${coinText()}`;
-    betLabel.textContent = video ? `${coins} per line · ${formatMoney(betOf())}` : `${coins} coin${coins > 1 ? 's' : ''} · ${formatMoney(betOf())}`;
+    deck.showBet(coins, coinText(), betOf());
     tintMat.color.set(candleColor(m.denoms[denomIdx]!));
     if (column) {
       const cols = column.userData.columns as number[];
       column.matrix.copy(column.userData.base as THREE.Matrix4).multiply(new THREE.Matrix4().makeTranslation(cols[coins - 1] ?? 0, -0.01, 0.001));
     }
     if (!busy) setMeters({ bet: betOf() });
+    pays?.bet({ coins, denom: m.denoms[denomIdx]! });
     refreshButtons();
   };
   const refreshButtons = () => {
@@ -258,7 +242,6 @@ export function mountSlots(ctx: TableViewCtx): TableView {
     insertBtn.classList.toggle('attn', seated && idle && stack < m.lines * m.denoms[0]!);
     auto.refresh();
   };
-  void COIN_COLUMNS;
 
   const setCoins = (n: number) => {
     if (busy || pressed) return;
@@ -312,14 +295,14 @@ export function mountSlots(ctx: TableViewCtx): TableView {
   };
 
   // --- pays screen
-  let pays: { close: () => void } | null = null;
+  let pays: PaysSheet | null = null;
   const togglePays = () => {
     if (pays) {
       pays.close();
       pays = null;
       return;
     }
-    pays = openPays(ctx.ui, machineId, () => (pays = null));
+    pays = openPays(ctx.ui, deck.root, machineId, { coins, denom: m.denoms[denomIdx]! }, () => (pays = null));
   };
 
   // --- 3D deck buttons
@@ -343,12 +326,18 @@ export function mountSlots(ctx: TableViewCtx): TableView {
   let hitReels: boolean[] = [];
   let paylineGlow = 0;
   let candleFlash: 0 | 1 | 2 = 0;
+  /** The candle as last painted while flashing (lit or dim); null at its resting colours. */
+  let candleLit: boolean | null = null;
   let flashT = 0;
   let skip: (() => void) | null = null;
 
   const drawOverlay = (show: { line: number; count: number }[] | null, scatters: [number, number][] = []) => {
     if (!overlayCanvas || !overlayTex) return;
-    paintOverlay(overlayCanvas, show, handle.scale, scatters);
+    // a win on show veils the cells that didn't take part; calm keeps every winning line's cells
+    // lit through the cycle, so nothing flicks from lit to dark each second
+    const lit = show && (show.length || scatters.length) ? (calm() && lineCycle ? lineCycle.lines : show) : null;
+    const keep = lit ? [...lit.flatMap((w) => lineCells(w.line, w.count)), ...scatters.map(([reel, row]) => reel * 3 + row)] : null;
+    paintOverlay(overlayCanvas, show, handle.scale, scatters, keep);
     overlayTex.needsUpdate = true;
   };
 
@@ -371,7 +360,7 @@ export function mountSlots(ctx: TableViewCtx): TableView {
     }
     if (!lineTagEl) {
       const e = el('div', 'slots-line');
-      lineTagEl = { obj: ctx.stage.label(e, new THREE.Vector3(0, l.window.cy - l.window.h / 2 - 0.016, l.plate.zBack + l.plate.depth + 0.01)), el: e };
+      lineTagEl = { obj: ctx.stage.label(e, lineAt), el: e };
     }
     lineTagEl.el.textContent = text;
     if (color) lineTagEl.el.style.borderColor = color;
@@ -400,11 +389,15 @@ export function mountSlots(ctx: TableViewCtx): TableView {
     }
   };
 
-  /** Count the win meter (and the credit meter with it) from one value to another. */
-  const rollup = async (from: { win: number; credit: number }, to: { win: number; credit: number }, seconds: number, ticks: boolean, onValue?: (win: number) => void) => {
+  /**
+   * Count the win meter (and the credit meter with it) from one value to another. `land()` on what
+   * it returns puts both at the end at once and stops the count there (a big win skipped), so
+   * nothing goes on counting behind it into the next spin.
+   */
+  const rollup = (from: { win: number; credit: number }, to: { win: number; credit: number }, seconds: number, ticks: boolean, onValue?: (win: number) => void, curve = ease.linear) => {
     let lastTick = 0;
     let done = false;
-    const finish = () => {
+    const land = () => {
       if (done) return;
       done = true;
       setMeters({ win: to.win, credit: to.credit });
@@ -424,24 +417,29 @@ export function mountSlots(ctx: TableViewCtx): TableView {
           sound.tick();
         }
       },
-      ease.linear,
-    );
-    await run;
-    finish();
+      curve,
+    ).then(land);
+    return Object.assign(run, { land });
   };
 
-  /** Wait, but let Space or a click cut it short once `after` ms have passed. */
-  const skippable = (ms: number, after: number): Promise<void> =>
+  /**
+   * Wait, but let Space or a click cut it short once `after` ms have passed; with `hint`, the
+   * count-up says so while it can be.
+   */
+  const skippable = (ms: number, after: number, hint = false): Promise<void> =>
     new Promise((resolve) => {
       let over = false;
       const end = () => {
         if (over) return;
         over = true;
         skip = null;
+        if (hint) countup.skippable(false);
         resolve();
       };
       void wait(after).then(() => {
-        if (!over) skip = end;
+        if (over) return;
+        skip = end;
+        if (hint) countup.skippable(true);
       });
       void wait(ms).then(end);
     });
@@ -504,12 +502,10 @@ export function mountSlots(ctx: TableViewCtx): TableView {
   };
 
   const showBanner = async (tier: string, amount: string, kind: 'feature', ms: number) => {
-    banner.className = `slots-banner ${kind}`;
-    bannerTier.textContent = tier;
-    bannerAmount.textContent = amount;
-    banner.hidden = false;
-    await wait(ms);
-    banner.hidden = true;
+    banner.show(tier, amount, `slots-banner ${kind}`);
+    // Space or a click moves on, as on the newer machines
+    await skippable(ms, 600);
+    banner.hide();
   };
 
   const party = { stage: ctx.stage, ui: ctx.ui, sfx: ctx.sfx };
@@ -523,7 +519,6 @@ export function mountSlots(ctx: TableViewCtx): TableView {
   };
 
   const finish = async (res: ResultEvent) => {
-    const r = round!;
     const total = res.win;
     const bet = res.bet;
     const ratio = total / bet;
@@ -552,8 +547,8 @@ export function mountSlots(ctx: TableViewCtx): TableView {
       if (top || tier) celebrate(party, { title: top ? 'Jackpot · Hand pay' : `${tier === 'huge' ? 'Huge' : 'Big'} win · Hand pay`, sub: `${handOf(res, lastReels)} · ${timesBet(total, bet)}`, tier: tier ?? 'big' });
       showCount('Hand pay', total, bet);
       const shown = top || tier;
-      await skippable(shown ? 4200 : 2400, shown ? 1500 : 800);
-      countup.hidden = true;
+      await skippable(shown ? 4200 : 2400, shown ? 1500 : 800, true);
+      countup.hide();
       setMeters({ win: total, credit: res.credit });
       showResult(`Hand pay ${formatMoney(total)} · ${formatMoney(total - bet, { sign: true })}`, 'win');
       await wait(shown ? 1200 : 600);
@@ -572,26 +567,22 @@ export function mountSlots(ctx: TableViewCtx): TableView {
       sound.jingle(video ? 7 : 6);
       celebrate(party, { title: tier === 'huge' ? 'Huge win' : 'Big win', sub: `${handOf(res, lastReels)} · ${timesBet(total, bet)}`, tier });
       const seconds = video ? Math.min(8, 4 + ratio / 25) : Math.min(6, 3.2 + ratio / 40);
-      let counted = false;
       showCount('Win', 0, bet);
-      await Promise.race([
-        rollup({ win: 0, credit: res.credit - total }, { win: total, credit: res.credit }, seconds, true, (v) => {
-          if (!counted) showCount('Win', v, bet);
-        }),
-        skippable(seconds * 1000, 1000),
-      ]);
-      counted = true;
-      setMeters({ win: total, credit: res.credit });
-      showCount('Win', total, bet);
+      const count = rollup({ win: 0, credit: res.credit - total }, { win: total, credit: res.credit }, seconds, true, (v) => showCount('Win', v, bet), countEase);
+      await Promise.race([count, skippable(seconds * 1000, 1000, true)]);
+      // skipped or not, the meters and the count-up stand at the total from here
+      count.land();
+      countup.landed();
       await skippable(1400, 0);
-      countup.hidden = true;
+      countup.hide();
       bulbMode.value = IDLE;
       candleFlash = 0;
       showResult(`Paid ${formatMoney(total)} · ${formatMoney(total - bet, { sign: true })}`, 'win');
     }
     lastWin = total > 0 ? total : null;
     outcome = { bet, win: total, credit: res.credit, feature: res.freeSpins > 0, jackpot: !!top };
-    void r;
+    sessionLog.add(bet, total);
+    sessionPanel.refresh();
   };
 
   let lastReelsEvent: ReelsEvent | null = null;
@@ -627,8 +618,8 @@ export function mountSlots(ctx: TableViewCtx): TableView {
       }
       lastWin = v.last && v.last.win > 0 ? v.last.win : null;
       clearWinShow();
-      banner.hidden = true;
-      countup.hidden = true;
+      banner.clear();
+      countup.hide();
       bulbMode.value = IDLE;
       candleFlash = 0;
       refreshBet();
@@ -710,11 +701,16 @@ export function mountSlots(ctx: TableViewCtx): TableView {
         togglePays();
         return true;
       }
+      if (e.key === 'Escape' && sessionPanel.open) {
+        sessionPanel.close();
+        return true;
+      }
       return false;
     },
 
     update(dt) {
       flashT += dt;
+      sessionPanel.tick();
       // the 5-reel cycles through its winning lines, one at a time after showing them all
       if (lineCycle && lineCycle.lines.length > 1) {
         lineCycle.t += dt;
@@ -736,11 +732,16 @@ export function mountSlots(ctx: TableViewCtx): TableView {
         const k = paylineGlow ? 0.5 + 0.5 * wave(flashT * 7) : 0;
         paylineMat.color.setRGB(1, 0.2 + 0.7 * k, 0.15 + 0.7 * k);
       }
+      // the candle's colours change only when it turns on or off (not parsed again every frame)
       if (candleFlash) {
         const on = blink(candleFlash === 1 ? Math.sin(flashT * 18) > 0 : Math.cos(flashT * Math.PI) > 0);
-        whiteMat.color.set(on ? '#ffffff' : '#3a3632');
-        tintMat.color.set(candleColor(m.denoms[denomIdx]!)).multiplyScalar(on ? 1.2 : 0.35);
-      } else {
+        if (on !== candleLit) {
+          candleLit = on;
+          whiteMat.color.set(on ? '#ffffff' : '#3a3632');
+          tintMat.color.set(candleColor(m.denoms[denomIdx]!)).multiplyScalar(on ? 1.2 : 0.35);
+        }
+      } else if (candleLit !== null) {
+        candleLit = null;
         whiteMat.color.set('#fff8ec');
         tintMat.color.set(candleColor(m.denoms[denomIdx]!));
       }
@@ -751,11 +752,11 @@ export function mountSlots(ctx: TableViewCtx): TableView {
       unTips();
       ctx.kit.tip(null);
       removeEventListener('pointerdown', onPointer);
-      auto.dispose();
       pays?.close();
-      deck.remove();
-      banner.remove();
-      countup.remove();
+      deck.dispose();
+      banner.root.remove();
+      countup.root.remove();
+      sessionPanel.dispose();
       clearResult();
       setFeatureTag(null);
       lineTag(null);
@@ -769,6 +770,7 @@ export function mountSlots(ctx: TableViewCtx): TableView {
       overlayTex?.dispose();
       if (handle.payline && sharedPayline) handle.payline.material = sharedPayline;
       paylineMat.dispose();
+      sheen.dispose();
       handle.bulbs.material = sharedBulbs;
       bulbMat.dispose();
       handle.candleTint.material = sharedTint;

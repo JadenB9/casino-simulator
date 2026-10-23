@@ -1,14 +1,16 @@
 // The Pays screen (I) for Diamond Line, Lucky Cherries, Gold Rush and Straw, Sticks & Bricks: the pay table, the rules,
 // the published PAR figures, the lines and the reel strips, all generated from the machine's own
-// data, the same tables the server scores with. Same sheet and styles as the first three (pays.ts).
+// data, the same tables the server scores with. Same sheet, money column and styles as the first
+// three (pays.ts).
 
 import { DIAMONDS } from '../../../../shared/src/games/slots/diamonds.ts';
 import { CHERRIES } from '../../../../shared/src/games/slots/cherries.ts';
 import { GOLDRUSH } from '../../../../shared/src/games/slots/goldrush.ts';
 import { PIGS } from '../../../../shared/src/games/slots/pigs.ts';
-import { el, button } from '../../ui/kit.ts';
+import { el } from '../../ui/kit.ts';
 import { skinEntry } from './build.ts';
 import { lineColorOf, type SkinId } from './skin.ts';
+import { PayCells, coinHeads, paysFrame, table, type PaysBet, type PaysSheet } from './pays.ts';
 
 const n = (x: number) => x.toLocaleString('en-US');
 
@@ -25,24 +27,6 @@ function icon(id: SkinId, sym: string, w = 54, h = 34): HTMLCanvasElement {
   g.translate(w / 2, h / 2);
   skin.drawSymbol(g, sym, w * 0.86, h * 0.9);
   return c;
-}
-
-function table(head: string[], rows: (string | HTMLElement[])[][]): HTMLTableElement {
-  const t = el('table', 'slots-table');
-  const tr = el('tr');
-  for (const h of head) tr.append(el('th', '', h));
-  t.append(tr);
-  for (const r of rows) {
-    const row = el('tr');
-    for (const cell of r) {
-      const td = el('td');
-      if (typeof cell === 'string') td.textContent = cell;
-      else td.append(...cell);
-      row.append(td);
-    }
-    t.append(row);
-  }
-  return t;
 }
 
 function rules(items: string[]): HTMLElement {
@@ -98,10 +82,10 @@ const DIAMOND_CELLS: Record<string, string[]> = {
 };
 const titleCase = (s: string) => (s === '10' ? 'Ten' : s.charAt(0) + s.slice(1).toLowerCase());
 
-function diamondsSheet(box: HTMLElement): void {
+function diamondsSheet(box: HTMLElement, cells: PayCells): void {
   box.append(el('p', 'slots-note', 'Pays per coin on the center line. Coins multiply every pay. Only the highest win on the line is paid.'));
-  const rows = DIAMONDS.pays.map((p) => [DIAMOND_CELLS[p.combo]!.map((s) => icon('diamonds', s)), p.label, n(p.pay), n(p.pay * 2), n(p.pay * 3)]);
-  box.append(table(['', 'Line', '1 coin', '2 coins', '3 coins'], rows));
+  const rows = DIAMONDS.pays.map((p) => [DIAMOND_CELLS[p.combo]!.map((s) => icon('diamonds', s)), p.label, ...[1, 2, 3].map((k) => cells.cell(p.pay * k, 'coins', k))]);
+  box.append(paid(cells, table(coinHeads(cells), rows)));
   box.append(
     rules([
       'The DIAMOND is wild for every symbol, cherries included. One DIAMOND in a win pays double; two pay four times.',
@@ -126,10 +110,10 @@ function stripTable(strips: readonly (readonly string[])[]): HTMLTableElement {
   return table(['Stop', 'Reel 1', 'Reel 2', 'Reel 3', 'Reel 4', 'Reel 5'], rows);
 }
 
-function cherriesSheet(box: HTMLElement): void {
+function cherriesSheet(box: HTMLElement, cells: PayCells): void {
   box.append(el('p', 'slots-note', 'Pays per credit bet on a line, for adjacent matches from the left reel. All 10 lines play on every spin; line wins add up.'));
-  const rows = (Object.entries(CHERRIES.linePays) as [string, readonly number[]][]).map(([sym, p]) => [[icon('cherries', sym)], titleCase(sym), n(p[3]!), n(p[2]!), n(p[1]!), p[0] ? n(p[0]) : '']);
-  box.append(table(['', 'Fruit', '5', '4', '3', '2'], rows));
+  const rows = (Object.entries(CHERRIES.linePays) as [string, readonly number[]][]).map(([sym, p]) => [[icon('cherries', sym)], titleCase(sym), cells.cell(p[3]!, 'line'), cells.cell(p[2]!, 'line'), cells.cell(p[1]!, 'line'), p[0] ? cells.cell(p[0], 'line') : '']);
+  box.append(paid(cells, table(['', 'Fruit', '5', '4', '3', '2'], rows)));
   const counts = new Map<number, number>();
   for (const p of CHERRIES.wheel) counts.set(p, (counts.get(p) ?? 0) + 1);
   const wheel = [...counts.entries()].sort((a, b) => a[0] - b[0]).map(([p, k]) => `${p}x on ${k}`).join(', ');
@@ -149,10 +133,10 @@ function cherriesSheet(box: HTMLElement): void {
   box.append(strips);
 }
 
-function goldSheet(box: HTMLElement): void {
+function goldSheet(box: HTMLElement, cells: PayCells): void {
   box.append(el('p', 'slots-note', 'Pays per credit bet on a line, for 3, 4 or 5 of a kind on adjacent reels from the left. All 40 lines play on every spin; line wins add up.'));
-  const rows = (Object.entries(GOLDRUSH.linePays) as [string, readonly number[]][]).map(([sym, p]) => [[icon('goldrush', sym)], titleCase(sym), n(p[3]!), n(p[2]!), n(p[1]!)]);
-  box.append(table(['', 'Symbol', '5', '4', '3'], rows));
+  const rows = (Object.entries(GOLDRUSH.linePays) as [string, readonly number[]][]).map(([sym, p]) => [[icon('goldrush', sym)], titleCase(sym), cells.cell(p[3]!, 'line'), cells.cell(p[2]!, 'line'), cells.cell(p[1]!, 'line')]);
+  box.append(paid(cells, table(['', 'Symbol', '5', '4', '3'], rows)));
   box.append(
     rules([
       'WILD appears on reels 2 to 5 and stands in for every symbol except NUGGET. It pays nothing on its own.',
@@ -177,10 +161,10 @@ function goldSheet(box: HTMLElement): void {
 
 const PIG_NAMES: Record<string, string> = { BRICKPIG: 'Brick pig', STICKPIG: 'Stick pig', STRAWPIG: 'Straw pig', POT: 'Pot', CHURN: 'Churn', APPLE: 'Apple', TURNIP: 'Turnip' };
 
-function pigsSheet(box: HTMLElement): void {
+function pigsSheet(box: HTMLElement, cells: PayCells): void {
   box.append(el('p', 'slots-note', 'Pays per credit bet on a line, for 3, 4 or 5 of a kind on adjacent reels from the left. All 20 lines play on every spin; line wins add up.'));
-  const rows = (Object.entries(PIGS.linePays) as [string, readonly number[]][]).map(([sym, p]) => [[icon('pigs', sym)], PIG_NAMES[sym] ?? titleCase(sym), n(p[3]!), n(p[2]!), n(p[1]!)]);
-  box.append(table(['', 'Symbol', '5', '4', '3'], rows));
+  const rows = (Object.entries(PIGS.linePays) as [string, readonly number[]][]).map(([sym, p]) => [[icon('pigs', sym)], PIG_NAMES[sym] ?? titleCase(sym), cells.cell(p[3]!, 'line'), cells.cell(p[2]!, 'line'), cells.cell(p[1]!, 'line')]);
+  box.append(paid(cells, table(['', 'Symbol', '5', '4', '3'], rows)));
   const b = PIGS.bonus;
   const list = (g: number) => b.prizes[g]!.map((x) => `${x}x`).join(', ');
   box.append(
@@ -204,21 +188,22 @@ function pigsSheet(box: HTMLElement): void {
 }
 
 const NAMES: Record<SkinId, string> = { diamonds: DIAMONDS.name, cherries: CHERRIES.name, goldrush: GOLDRUSH.name, pigs: PIGS.name };
+const LINES: Record<SkinId, number> = { diamonds: DIAMONDS.lines, cherries: CHERRIES.lines, goldrush: GOLDRUSH.lines, pigs: PIGS.lines };
 
-export function openPaysheet(ui: HTMLElement, id: SkinId, onClose: () => void): { close: () => void } {
-  const box = el('div', 'slots-pays panel');
-  box.setAttribute('role', 'dialog');
-  const close = () => {
-    box.remove();
-    onClose();
-  };
-  const head = el('div', 'slots-pays-head');
-  head.append(el('h2', '', `${NAMES[id]} · Pays`), button('Close', close, { key: 'I', cls: 'ghost' }));
-  box.append(head);
-  if (id === 'diamonds') diamondsSheet(box);
-  else if (id === 'cherries') cherriesSheet(box);
-  else if (id === 'pigs') pigsSheet(box);
-  else goldSheet(box);
-  ui.append(box);
-  return { close };
+/** A pay table whose cells read in credits or money at the bet (pays.ts). */
+function paid(cells: PayCells, t: HTMLTableElement): HTMLTableElement {
+  cells.table(t);
+  return t;
+}
+
+export function openPaysheet(ui: HTMLElement, deck: HTMLElement, id: SkinId, bet: PaysBet, onClose: () => void): PaysSheet {
+  const { box, close } = paysFrame(ui, deck, `${NAMES[id]} · Pays`, onClose);
+  const cells = new PayCells(LINES[id], id === 'diamonds');
+  box.append(cells.bar);
+  if (id === 'diamonds') diamondsSheet(box, cells);
+  else if (id === 'cherries') cherriesSheet(box, cells);
+  else if (id === 'pigs') pigsSheet(box, cells);
+  else goldSheet(box, cells);
+  cells.bet(bet);
+  return { close, bet: (b) => cells.bet(b) };
 }
