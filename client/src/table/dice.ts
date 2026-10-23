@@ -65,13 +65,16 @@ export async function throwDie(die: Die, from: THREE.Vector3, to: THREE.Vector3,
   const target = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), spin * 1.3).multiply(topFor(face));
   const wild = new THREE.Quaternion().setFromEuler(new THREE.Euler(9 * spin, 7, 5 * spin));
   const start = die.quaternion.clone();
+  // (one scratch quaternion for the whole throw, not a clone a frame)
+  const q = new THREE.Quaternion();
   await tween(ms, (k) => {
     die.position.lerpVectors(from, to, k);
     // two bounces on the way down
     const h = Math.abs(Math.sin(k * Math.PI * 2.5)) * (1 - k) * 0.12;
     die.position.y = to.y + SIZE / 2 + h;
-    const q = start.clone().slerp(wild, Math.min(1, k * 1.4));
-    die.quaternion.copy(k < 0.7 ? q : q.slerp(target, (k - 0.7) / 0.3));
+    q.copy(start).slerp(wild, Math.min(1, k * 1.4));
+    if (k >= 0.7) q.slerp(target, (k - 0.7) / 0.3);
+    die.quaternion.copy(q);
   }, ease.outQuint);
   die.quaternion.copy(target);
 }
