@@ -203,7 +203,21 @@ export function mountPachinko(ctx: TableViewCtx): TableView {
   dial.addEventListener('input', () => setPower(Number(dial.value)));
   powerGroup.append(powerLabel, dial, powerValue);
 
-  const launchBtn = button('Launch', () => launch(), { cls: 'primary pa-launch', key: 'Space', title: `Fire a batch of ${BATCH} balls (Space)` });
+  // Launch: a tap fires a batch; held (Space, a finger or the mouse on it) it keeps firing, the next
+  // batch as soon as the last has left the rail, the way a real machine's handle is held
+  const launchBtn = button('Launch', () => {}, { cls: 'primary pa-launch', key: 'Space', title: `Fire a batch of ${BATCH} balls (Space); hold to keep firing` });
+  // a long press on a phone is a hold, not the page's menu
+  launchBtn.addEventListener('contextmenu', (e) => e.preventDefault());
+  launchBtn.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0 || launchBtn.disabled) return;
+    e.preventDefault();
+    holdPointer = e.pointerId;
+    hold(true);
+  });
+  // Enter on the focused button: one batch (a pointer's press was its pointerdown)
+  launchBtn.addEventListener('click', (e) => {
+    if (e.detail === 0) launch();
+  });
 
   const meters = el('div', 'pa-meters');
   const trayMeter = meter('Tray');
@@ -323,6 +337,48 @@ export function mountPachinko(ctx: TableViewCtx): TableView {
     sync();
   }
 
+  /** Space or a pointer on Launch is down: fire now, and again each time the last batch is out. */
+  let held = false;
+  let holdPointer: number | null = null;
+  function hold(on: boolean): void {
+    if (on === held) return;
+    held = on;
+    launchBtn.classList.toggle('held', on);
+    if (on) launch();
+    sync();
+  }
+  /** Holding: the next batch goes once the last has left the rail (and any fever has played). */
+  function keepFiring(): void {
+    if (!held || !limits || waiting || firing() || inFever()) return;
+    if (bet > stack) {
+      // out of chips for this batch: say so once and let go
+      hold(false);
+      ctx.kit.say('Not enough chips here for another batch');
+      return;
+    }
+    launch();
+  }
+  const lift = (e: PointerEvent) => {
+    if (e.pointerId !== holdPointer) return;
+    holdPointer = null;
+    hold(false);
+  };
+  const onKeyUp = (e: KeyboardEvent) => {
+    if (e.code === 'Space') hold(false);
+  };
+  const letGo = () => {
+    holdPointer = null;
+    hold(false);
+  };
+  const onHidden = () => {
+    if (document.visibilityState === 'hidden') letGo();
+  };
+  addEventListener('pointerup', lift, true);
+  addEventListener('pointercancel', lift, true);
+  addEventListener('keyup', onKeyUp, true);
+  addEventListener('blur', letGo);
+  document.addEventListener('visibilitychange', onHidden);
+
   function launch(): void {
     if (!limits || waiting || firing() || inFever()) return;
     if (bet > stack) {
@@ -347,7 +403,8 @@ export function mountPachinko(ctx: TableViewCtx): TableView {
     const cur = batches.at(-1);
     wonMeter.set(cur ? String(cur.paid) : '0');
     creditMeter.set(formatMoney(credit));
-    launchBtn.disabled = !limits || waiting || firing() || inFever() || bet > stack;
+    // held down, the button stays live between batches so letting go is always heard
+    launchBtn.disabled = !held && (!limits || waiting || firing() || inFever() || bet > stack);
     less.disabled = !limits || bet <= limits.min;
     more.disabled = !limits || bet >= limits.max;
     maxBtn.disabled = !limits;
@@ -736,13 +793,16 @@ export function mountPachinko(ctx: TableViewCtx): TableView {
 
     onError() {
       waiting = false;
+      // a launch refused (the table closing, too fast): a hold lets go rather than asking again
+      letGo();
       sync();
     },
 
     keydown(e) {
       if (e.metaKey || e.ctrlKey || e.altKey) return false;
       if (e.code === 'Space') {
-        if (!e.repeat) launch();
+        // held, it keeps firing (keepFiring); the key's repeats are the same hold
+        if (!e.repeat) hold(true);
         return true;
       }
       if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
@@ -779,6 +839,7 @@ export function mountPachinko(ctx: TableViewCtx): TableView {
       // keep flights ready for the dial's power (and the fever lane) in a slice of each frame
       pools.fill(bucketOf(power), busy() ? 1.5 : 3);
       pools.fill(bucketOf(95), 1, true);
+      keepFiring();
       stepFiring(now);
       stepBalls(now);
       stepTags(now);
@@ -794,6 +855,12 @@ export function mountPachinko(ctx: TableViewCtx): TableView {
 
     dispose() {
       disposed = true;
+      letGo();
+      removeEventListener('pointerup', lift, true);
+      removeEventListener('pointercancel', lift, true);
+      removeEventListener('keyup', onKeyUp, true);
+      removeEventListener('blur', letGo);
+      document.removeEventListener('visibilitychange', onHidden);
       finishAll();
       offTips();
       if (tipShown) ctx.kit.tip(null);
@@ -819,6 +886,7 @@ export function mountPachinko(ctx: TableViewCtx): TableView {
         bet,
         power,
         waiting,
+        held,
         batches: batches.map((b) => ({ next: b.next, of: b.ev.shots.length, paid: b.paid, balls: b.ev.balls, outstanding: b.outstanding })),
         flying: flying.length,
         holds: holds.length,

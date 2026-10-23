@@ -15,7 +15,9 @@
 .pa-dial { width: 150px; accent-color: #ff5d98; cursor: pointer; }
 .pa-dial:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; border-radius: 2px; }
 .pa-power-value { font-family: var(--meter); font-size: 18px; color: var(--led); text-shadow: 0 0 6px rgba(var(--led-rgb), 0.45); text-align: right; }
-.pa-launch { min-width: 128px; height: 44px; font-size: 18px; }
+.pa-launch { min-width: 128px; height: 44px; font-size: 18px; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+/* held down: pressed in, the way a handle held at full turn looks */
+.pa-launch.held { transform: translateY(1px); box-shadow: inset 0 2px 7px rgba(60, 36, 8, 0.55); }
 .pa-meters { display: flex; gap: 14px; }
 .pa-meter { display: grid; gap: 2px; min-width: 64px; }
 .pa-meter-value { font-family: var(--meter); font-size: 17px; color: var(--led); text-shadow: 0 0 6px rgba(var(--led-rgb), 0.4); }
@@ -57,6 +59,21 @@ body.calm .pa-paytag { animation-name: pa-paytag-calm; }
 @media (max-height: 480px) {
   .pa-deck { left: auto; right: 10px; bottom: max(8px, env(safe-area-inset-bottom, 0px)); transform: none; max-width: calc(100vw - 150px); flex-wrap: nowrap; width: auto; gap: 8px; padding: 6px 10px; }
   .pa-note { display: none; }
-  .pa-dial { width: 96px; }
-  .pa-launch { height: 40px; }
+  /* the groups' labels go (the dial and the batch read without them), the pieces slim to one row */
+  .pa-group > .label { display: none; }
+  .pa-bet-value { min-width: 64px; font-size: 18px; }
+  .pa-power { grid-template-columns: auto 30px; }
+  .pa-dial { width: 88px; }
+  .pa-launch { min-width: 92px; height: 40px; }
+  .pa-meters { gap: 6px; }
+  .pa-meter { min-width: 44px; }
+  .pa-meter-value { font-size: 15px; }
+  /* there's room beside the machine again: the pay card stands at the top right (its pays; the data
+     lamp is on the machine), and the deck needs no Pays */
+  .pa-deck .pa-pays-btn { display: none; }
+  .pa-side:not(.open) { display: grid; }
+  .pa-side { top: calc(var(--below-hud) + 4px); width: 200px; padding: 8px 10px; gap: 6px; }
+  .pa-side .pa-data { display: none; }
+  .pa-side-title { font-size: 15px; }
+  .pa-pay { font-size: 13px; }
 }
