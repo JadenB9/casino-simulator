@@ -1,38 +1,67 @@
-/* The casino map (wayfinding.ts): the floor's plan over the game, in the sheets' dress. */
+/* The casino map (wayfinding.ts): the floor's plan over the game, in the sheets' dress. v8: the
+   plan beside the rooms and Find a game (two tabs), the way there on the plan, and the chip that
+   shows the way on the floor. */
 
 /* (.sheet sets its own narrower width after this file loads: both classes, to win) */
-.sheet.map-sheet { width: min(900px, 100%); }
-.map-sheet .sheet-body { padding-top: 14px; }
+.sheet.map-sheet { width: min(1120px, 100%); }
+.map-sheet .sheet-body { padding-top: 14px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, 300px); gap: 20px; align-items: start; }
+/* out of the casino a zone's own map fills the panel (city/map.ts) */
+.map-sheet .sheet-body > :only-child { grid-column: 1 / -1; }
 
-/* Read at the lobby's board: the plan big, the legend of every room beside it. */
+/* Read at the lobby's board: the plan bigger, the rooms beside it. */
 .sheet.map-directory { width: min(1240px, 100%); }
-.map-directory .sheet-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 300px); gap: 22px; align-items: start; }
 .map-plan { min-width: 0; }
+
+/* the two tabs over the list beside the plan */
+.map-side { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 10px; min-width: 0; max-height: calc(100dvh - 190px); }
+.map-tabs { display: flex; gap: 4px; padding: 3px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--well); }
+.map-tab { flex: 1; min-height: 36px; padding: 0 10px; border: 0; border-radius: 4px; background: none; color: var(--ink-2); font: 600 15px var(--ui); letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; transition: background 0.15s, color 0.15s; }
+.map-tab:hover { color: var(--ink); }
+.map-tab[aria-selected='true'] { background: rgba(var(--brass-rgb), 0.16); color: var(--brass-hi); box-shadow: inset 0 0 0 1px var(--line-strong); }
+.map-tab:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.map-tabpanel { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-right: 4px; }
+
+/* the rooms, A to Z */
 .map-legend { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
 .map-legend-room { padding: 5px 0 6px; border-bottom: 1px solid var(--line); }
 .map-legend-room:last-child { border-bottom: 0; }
-.map-legend-pick { display: flex; align-items: center; gap: 10px; width: 100%; padding: 0; border: 0; background: none; color: var(--brass-hi); font-family: var(--serif); font-size: 16px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; text-align: left; cursor: pointer; }
-.map-legend-pick:hover .map-legend-name { color: #fff4dc; }
+.map-legend-pick { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 32px; padding: 0; border: 0; background: none; color: var(--brass-hi); font-family: var(--serif); font-size: 16px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; text-align: left; cursor: pointer; }
+.map-legend-pick:hover .map-legend-name { color: var(--ink-hi); }
 .map-legend-pick:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-.map-swatch { flex: none; width: 14px; height: 14px; border-radius: 2px; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35); }
+.map-swatch { flex: none; width: 14px; height: 14px; border-radius: 2px; box-shadow: inset 0 0 0 1px rgba(var(--scrim-rgb), 0.35); }
 .map-legend-what { margin: 2px 0 0 24px; font-size: 14px; line-height: 1.3; color: var(--ink-2); }
 .map-legend-games { margin: 1px 0 0 24px; font-size: 13px; line-height: 1.3; color: var(--ink-3); }
-@media (max-width: 820px) {
-  .map-directory .sheet-body { grid-template-columns: 1fr; }
-}
+
+/* v8: Find a game, by section: the game, the rooms it's in, how far the nearest is */
+.map-games-head { margin: 10px 0 4px; font-size: 12px; font-weight: 600; letter-spacing: 0.2em; text-transform: uppercase; color: var(--ink-3); }
+.map-games-head:first-child { margin-top: 0; }
+.map-games-section { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.map-game { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'name far' 'where far'; align-items: center; column-gap: 10px; width: 100%; min-height: 44px; padding: 5px 10px; border: 1px solid transparent; border-radius: var(--radius); background: none; color: var(--ink); font: inherit; text-align: left; cursor: pointer; transition: background 0.15s, border-color 0.15s; }
+.map-game:hover { background: rgba(var(--brass-rgb), 0.08); }
+.map-game[aria-pressed='true'] { background: rgba(var(--brass-rgb), 0.14); border-color: var(--line-strong); }
+.map-game:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.map-game-name { grid-area: name; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 16px; letter-spacing: 0.03em; }
+.map-game-where { grid-area: where; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; color: var(--ink-3); }
+.map-game-far { grid-area: far; font-size: 14px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
 
 /* The whole plan in view, however tall the building grows: as wide as there's room, never taller than the window allows */
-.map-svg { display: block; width: auto; max-width: 100%; height: auto; max-height: calc(100dvh - 230px); margin: 0 auto; background: #0c0a08; border: 1px solid var(--line); border-radius: 4px; }
-.map-directory .map-svg { max-height: calc(100dvh - 170px); }
+.map-svg { display: block; width: auto; max-width: 100%; height: auto; max-height: calc(100dvh - 260px); margin: 0 auto; background: #0c0a08; border: 1px solid var(--line); border-radius: 4px; }
+.map-directory .map-svg { max-height: calc(100dvh - 200px); }
 .map-room { stroke: rgba(0, 0, 0, 0.35); stroke-width: 0.1; opacity: 0.62; cursor: pointer; transition: opacity 0.15s; }
 .map-room:hover { opacity: 0.8; }
 .map-room.here { opacity: 0.78; }
 .map-room.on { opacity: 1; stroke: var(--brass-hi); stroke-width: 0.25; }
 .map-stations rect { fill: rgba(255, 240, 210, 0.26); pointer-events: none; }
+/* v8: a game picked under Find a game: its tables or machines lit */
+.map-stations rect.on { fill: var(--led-hi); stroke: rgba(var(--scrim-rgb), 0.8); stroke-width: 0.08; }
 .map-walls line { stroke: var(--brass); stroke-width: 0.34; stroke-linecap: square; pointer-events: none; }
 .map-glass line { stroke: #9fd8e8; stroke-width: 0.2; stroke-dasharray: 0.5 0.3; pointer-events: none; }
 .map-labels text { font-family: var(--serif); font-weight: 600; letter-spacing: 0.06em; fill: #fff4dc; paint-order: stroke; stroke: rgba(0, 0, 0, 0.7); stroke-width: 0.12; pointer-events: none; }
 .map-entry path { fill: var(--brass-hi); }
+/* v8: the way there, from you: a dotted line drifting toward it */
+.map-route { fill: none; stroke: var(--led); stroke-width: 0.42; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 0.01 0.9; opacity: 0; pointer-events: none; }
+.map-route.on { opacity: 1; animation: map-route-run 1.2s linear infinite; }
+@keyframes map-route-run { to { stroke-dashoffset: -0.91; } }
 /* 1.3: everyone else, a blue dot with their name */
 .map-person circle { fill: #7cc4ff; stroke: #0d2a44; }
 .map-person text { fill: #eaf4ff; paint-order: stroke; stroke: rgba(10, 16, 28, 0.85); stroke-width: 0.12em; font-weight: 600; pointer-events: none; }
@@ -42,13 +71,66 @@
 @keyframes map-pulse { from { transform: scale(0.6); opacity: 1; } to { transform: scale(1.8); opacity: 0; } }
 
 .map-caption { min-height: 72px; padding: 12px 2px 0; }
+.map-cap-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .map-name { margin: 0; font-family: var(--serif); font-size: 18px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--brass-hi); }
+.map-cap-note { font-size: 14px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); }
+.map-way-go { min-height: 36px; padding: 0 14px; }
+.map-cap-going { display: inline-flex; align-items: center; gap: 12px; }
 .map-about { margin: 4px 0 0; font-size: 16px; color: var(--ink-2); }
 .map-games { margin: 4px 0 0; font-size: 15px; letter-spacing: 0.02em; color: var(--ink-3); }
 .map-hint { margin: 0; color: var(--ink-3); }
 
+/* v8: on the floor, under the HUD: where the way leads, how far, which way to turn, and Stop */
+.map-way {
+  position: fixed;
+  top: calc(var(--below-hud) + 6px);
+  left: 50%;
+  z-index: 9;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100vw - 32px);
+  padding: 5px 6px 5px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--glass);
+  box-shadow: 0 8px 26px rgba(var(--scrim-rgb), 0.35);
+  color: var(--ink);
+  font-size: 16px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  animation: map-way-in 0.25s var(--ease) both;
+}
+.map-way[hidden] { display: none; }
+.map-way .map-way-arrow { flex: none; width: 22px; height: 22px; fill: var(--brass-hi); stroke: none; transition: transform 0.2s var(--ease); }
+.map-way-to { overflow: hidden; text-overflow: ellipsis; }
+.map-way-far { color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.map-way-far:empty { display: none; }
+.map-way.there { border-color: rgba(var(--win-rgb), 0.6); }
+.map-way-stop { flex: none; display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: none; color: var(--ink-2); cursor: pointer; }
+.map-way-stop:hover { color: var(--ink); border-color: var(--line-strong); }
+.map-way-stop:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.map-way-stop .ico { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+@keyframes map-way-in { from { opacity: 0; transform: translate(-50%, -6px); } }
+/* a touch screen: Stop big enough for a thumb */
+html.touch-ui .map-way-stop { width: 40px; height: 40px; }
+
+/* A narrow window (a phone, a small tablet): the plan above, the tabs and the list under it */
+@media (max-width: 820px) {
+  .map-sheet .sheet-body { grid-template-columns: 1fr; }
+  .map-side { max-height: none; }
+  .map-tabpanel { overflow: visible; }
+  .map-svg { max-height: 58dvh; }
+}
+@media (max-height: 480px) {
+  .map-svg { max-height: calc(100dvh - 150px); }
+}
+
 /* Reduce flashing & motion (app/comfort.ts) */
 body.calm .map-you .map-you-halo { animation: none; }
+body.calm .map-route.on { animation: none; }
+body.calm .map-way { animation: none; }
 
 /* Light (app/theme.ts): the plan on paper rather than on a dark board. */
 :root[data-theme='light'] .map-svg { background: #f4eee2; }

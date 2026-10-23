@@ -1,0 +1,39 @@
+/* Photo mode (photo.ts): everything over the view goes but the bar along its foot; the view itself
+   takes the drags. Colours from theme.css. */
+
+#ui.photo-mode > :not(.photo) { visibility: hidden !important; }
+.photo { position: fixed; inset: 0; z-index: 70; outline: none; }
+.photo-view { position: absolute; inset: 0; cursor: grab; touch-action: none; outline: none; }
+.photo-view:active { cursor: grabbing; }
+.photo-bar {
+  position: absolute;
+  left: 50%;
+  bottom: max(18px, calc(env(safe-area-inset-bottom) + 12px));
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100vw - 32px);
+  padding: 8px 8px 8px 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--glass);
+  box-shadow: 0 10px 34px rgba(var(--scrim-rgb), 0.45);
+  transform: translateX(-50%);
+  animation: photo-bar-in 0.3s var(--ease) both;
+}
+.photo-hint { margin: 0 6px 0 0; font-size: 15px; letter-spacing: 0.03em; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.photo-bar .btn { flex: none; height: 40px; border-radius: 999px; }
+.photo-done .key { margin-left: 2px; }
+@keyframes photo-bar-in { from { opacity: 0; transform: translate(-50%, 8px); } }
+/* the shutter: a white flash over the view (calm: a soft one) */
+.photo-flash { position: absolute; inset: 0; background: #fffdf6; opacity: 0; pointer-events: none; }
+.photo-flash.go { animation: photo-flash 0.45s ease-out; }
+.photo-flash.soft { animation: photo-flash-soft 0.9s ease-in-out; }
+@keyframes photo-flash { from { opacity: 0.85; } to { opacity: 0; } }
+@keyframes photo-flash-soft { 0% { opacity: 0; } 40% { opacity: 0.22; } 100% { opacity: 0; } }
+/* a phone: the hint gives way to the buttons */
+@media (max-width: 560px) {
+  .photo-hint { display: none; }
+  .photo-bar { padding-left: 8px; }
+}
+body.calm .photo-bar { animation: none; }

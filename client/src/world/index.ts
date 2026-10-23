@@ -16,6 +16,7 @@ import { Furniture } from './furniture.ts';
 import { Mannequins } from './mannequins.ts';
 import { RoomVisibility } from './visibility.ts';
 import { MapOverlay, buildDirectories, type MapPerson } from './wayfinding.ts';
+import { PhotoMode } from './photo.ts';
 import { Bulletin } from './bulletin.ts';
 import { buildRoom } from './room.ts';
 import { buildStations, type WorldStation } from './stations.ts';
@@ -156,6 +157,8 @@ export interface FloorWorld extends World {
   readonly rooms: { readonly current: string; readonly visible: ReadonlySet<string>; showAll(on: boolean): void };
   /** The casino map (the HUD's map button, or N). */
   readonly map: MapOverlay;
+  /** v8: photo mode (P on the floor): the UI hidden, the camera round you, a PNG saved. */
+  readonly photo: PhotoMode;
   /** The procedural furniture: every table's chairs and stools, the lounges' chairs, and the rest. */
   readonly furniture: Furniture;
   /**
@@ -324,7 +327,11 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
     canOpen: () => !interact.seated && player.isEnabled,
     // v6 city6: on the ground floor or the roof, its own map
     elsewhere: () => (city.zone === 'casino' ? null : zoneMap(city.zone)),
+    // v8: the way to a room or a game, on the casino's floor
+    camera: engine.camera,
+    route: () => (city.zone !== 'casino' ? 'off' : interact.seated || !player.isEnabled ? 'hide' : 'on'),
   });
+  root.add(map.guide);
   // v6 world6: E at a directory board opens it big (the Map, as the Floor Directory)
   interact.spots(map.spots);
   interact.spots(bulletin.spots);
@@ -334,10 +341,13 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
   hint.append(el('span', 'world-key', 'Click'), 'to look around');
   hint.hidden = true;
   ui.append(hint);
+  // v8: photo mode, on foot on the floor
+  const photo = new PhotoMode({ renderer, scene, camera: engine.camera, onFrame: (fn) => engine.onFrame(fn), player, ui, labels: engine.labels.domElement, collider: col, canStart: () => !interact.seated && player.isEnabled && !player.down });
   // Phones and tablets: the thumb stick, drag-to-look, the action button and Leave at a table.
   const touch = new TouchControls({ player, ui, seated: () => interact.seated, focus: () => interact.focus, spot: () => interact.spot, sensitivity: () => player.mouseSettings.sensitivity });
   const life = new FloorLife({ root, camera: engine.camera, characters, plan, points: lifePoints(plan), player, interact, collider: col, staff: staff.posts });
   await life.load();
+  map.useGrid(life.grid); // v8: the way is found over the waiters' floor
   // v6 city6: the casino's own pieces (hidden while you're in another zone), sitting down out there
   city.attach({
     player,
@@ -572,6 +582,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
       },
     },
     map,
+    photo,
     furniture,
     city,
     get zone() {
@@ -608,6 +619,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
     dispose() {
       city.dispose();
       fx.dispose();
+      photo.dispose();
       map.dispose();
       directories.dispose();
       bulletin.dispose();
