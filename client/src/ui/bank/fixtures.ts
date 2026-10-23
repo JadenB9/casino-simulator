@@ -150,7 +150,7 @@ export function fixtureBank(session: SessionLike, opts: { empty?: boolean; laten
       send: { sendable: newUntil ? 0 : sendable(p.balance, held, sentToday), held, sentToday, newUntil, jailed: false },
       inbox: [...inbox],
       worth: p.balance + chips + savings.balance + locked + value,
-      gain: savings.earned + 75 + 2_500 * DOLLAR - 1_250 * DOLLAR,
+      gain: empty ? savings.earned : savings.earned + 75 + 2_500 * DOLLAR - 1_250 * DOLLAR,
     };
   };
 
@@ -166,7 +166,8 @@ export function fixtureBank(session: SessionLike, opts: { empty?: boolean; laten
       const from = to - days * STEPS_PER_DAY;
       const points: [number, number][] = [];
       for (let s = Math.max(first, from); s <= to; s++) if ((s - from) % days === 0 || s === to) points.push([s, priceAt(s)]);
-      return { fund: FUND_ID, name: FUND_NAME, points: empty ? points.slice(-3) : points };
+      // one market for everyone: a new account sees the same history
+      return { fund: FUND_ID, name: FUND_NAME, points };
     },
     async statement(before): Promise<StatementResponse> {
       await wait();

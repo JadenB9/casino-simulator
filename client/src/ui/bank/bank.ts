@@ -492,6 +492,8 @@ export function openBank(deps: BankDeps): Closable {
     const head = header('Savings balance');
     const earning = el('p', 'bank-earning');
     const earningNow = el('span', 'money bank-ticking');
+    const earningPaid = el('span', 'quiet');
+    earning.append(el('span', '', 'Earned since midnight '), earningNow, earningPaid);
     const tiers = el('div', 'bank-tiers');
     const tierRows: { row: HTMLElement; from: Cents; upTo: Cents }[] = [];
     let from = 0;
@@ -518,6 +520,8 @@ export function openBank(deps: BankDeps): Closable {
     const line = status();
     const put = btn('Deposit', 'primary');
     const takeOut = btn('Withdraw');
+    // nothing to move until there's an amount
+    put.disabled = takeOut.disabled = true;
     const row = el('div', 'bank-actions');
     row.append(put, takeOut);
     const earned = el('p', 'quiet bank-terms');
@@ -591,8 +595,15 @@ export function openBank(deps: BankDeps): Closable {
       },
       tick(t) {
         if (!state) return;
-        earning.replaceChildren(el('span', '', 'Earned since midnight '), earningNow, el('span', 'quiet', ` · paid at ${timeFmt.format(nextPayday(t))}`));
-        earningNow.textContent = accruedText(state, t);
+        const st = state.savings;
+        // nothing ticks in an empty account
+        const none = st.balance === 0 && st.accrued === 0 && st.frac === 0;
+        if (earning.hidden !== none) earning.hidden = none;
+        if (none) return;
+        const paid = ` · paid at ${timeFmt.format(nextPayday(t))}`;
+        if (earningPaid.textContent !== paid) earningPaid.textContent = paid;
+        const accrued = accruedText(state, t);
+        if (earningNow.textContent !== accrued) earningNow.textContent = accrued;
       },
     };
   };
@@ -737,10 +748,11 @@ export function openBank(deps: BankDeps): Closable {
       },
       tick(t) {
         for (const { bar, left, action, d, card } of rows.values()) {
-          const done = Math.min(1, (t - d.openedAt) / (d.maturesAt - d.openedAt));
-          bar.style.transform = `scaleX(${done.toFixed(4)})`;
+          const done = `scaleX(${Math.min(1, (t - d.openedAt) / (d.maturesAt - d.openedAt)).toFixed(4)})`;
+          if (bar.style.transform !== done) bar.style.transform = done;
           const matured = t >= d.maturesAt;
-          left.textContent = matured ? `Matured ${shortFmt.format(d.maturesAt)}: collect it` : `Matures ${until(d.maturesAt - t)}, ${shortFmt.format(d.maturesAt)}`;
+          const when = matured ? `Matured ${shortFmt.format(d.maturesAt)}: collect it` : `Matures ${until(d.maturesAt - t)}, ${shortFmt.format(d.maturesAt)}`;
+          if (left.textContent !== when) left.textContent = when;
           const label = matured ? `Collect ${formatMoney(d.principal + d.interest)}` : 'Break early';
           if (action.textContent !== label && !action.disabled) action.textContent = label;
           action.classList.toggle('primary', matured);
@@ -757,6 +769,7 @@ export function openBank(deps: BankDeps): Closable {
     const change = el('span', 'bank-change money');
     const head = el('div', 'bank-price');
     head.append(price, change);
+    const holds = el('p', 'bank-headline bank-holds');
     let range: '1d' | '7d' | '30d' = '1d';
     const chart = new PriceChart();
     let asked = 0;
@@ -802,10 +815,13 @@ export function openBank(deps: BankDeps): Closable {
     const buyB = btn('Buy', 'primary');
     const sellB = btn('Sell');
     const sellAll = btn('Sell all', 'ghost');
+    // nothing to buy or sell until there's an amount (or a holding, for Sell all)
+    buyB.disabled = sellB.disabled = sellAll.disabled = true;
     const row = el('div', 'bank-actions');
     row.append(buyB, sellB, sellAll);
     root.append(
       head,
+      holds,
       seg.root,
       chart.root,
       stats,
@@ -830,7 +846,7 @@ export function openBank(deps: BankDeps): Closable {
       if (raw === '' || !amount) {
         field.problem(raw === '' ? null : 'Type an amount in dollars, like 2,500 or 99.50.');
         pbuy.show(null);
-        psell.show(s.fund.units === 0 && raw === '' ? `you don't hold any yet; buys start at ${formatMoney(FUND_MIN)}` : null);
+        psell.show(null);
         buyB.disabled = sellB.disabled = true;
         return;
       }
@@ -874,6 +890,7 @@ export function openBank(deps: BankDeps): Closable {
         gain.value.textContent = formatMoney(g, { sign: true });
         gain.value.className = `stat-value money ${g > 0 ? 'win' : g < 0 ? 'lose' : ''}`.trim();
         gainPct.textContent = s.fund.cost > 0 ? `${g >= 0 ? '+' : '−'}${Math.abs((g / s.fund.cost) * 100).toFixed(2)}% on cost` : '';
+        holds.textContent = s.fund.units > 0 ? `You hold ${formatUnits(s.fund.units)} units, worth ${formatMoney(s.fund.value)} at the price now.` : `You hold none yet. Buys start at ${formatMoney(FUND_MIN)}, at the price now.`;
         fromChecking.paint();
         holding.paint();
         check();
@@ -927,6 +944,7 @@ export function openBank(deps: BankDeps): Closable {
       go.disabled = !s || s.send.sendable <= 0 || !!bad || !!to.hint.textContent;
     };
     for (const i of [to.input, field.input, note.input]) i.addEventListener('input', check);
+    check();
     const send = (confirm: boolean) => {
       const amount = field.value();
       const name = to.input.value.trim();
