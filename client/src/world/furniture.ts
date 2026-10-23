@@ -234,7 +234,9 @@ function stool(velvet: boolean): Part[] {
     cyl(seat, 0.155, 0.15, 0.07, { y: t - 0.035 }, 20),
     cyl(metal, 0.16, 0.16, 0.015, { y: t - 0.078 }, 20),
     cyl(metal, 0.022, 0.03, t - 0.08, { y: (t - 0.08) / 2 }, 10),
-    cyl(metal, 0.15, 0.15, 0.02, { y: 0.01 }, 20),
+    // the foot a shallow dome, not a flat disc: a flat chrome disc mirrors the spot overhead whole
+    // and glows on the carpet like a lamp; the dome catches it in one narrow streak
+    cyl(metal, 0.045, 0.15, 0.03, { y: 0.015 }, 20),
     ring(metal, 0.12, 0.011, { y: 0.3 }),
     box(metal, 0.24, 0.014, 0.014, { y: 0.3 }),
     box(metal, 0.014, 0.014, 0.24, { y: 0.3 }),
@@ -466,7 +468,8 @@ function parlourStool(): Part[] {
     { geo: placed(back, { y: t + 0.16 }), mat: 'velvet' },
     ...[-1, 1].map((e) => cyl('chrome', 0.01, 0.01, 0.18, { x: e * 0.12, y: t + 0.02, z: -0.12 }, 6)),
     cyl('chrome', 0.03, 0.035, t - 0.1, { y: (t - 0.1) / 2 + 0.01 }, 12),
-    cyl('chrome', 0.13, 0.14, 0.02, { y: 0.01 }, 20),
+    // domed, like the backless stool's foot (a flat one glows under the spots)
+    cyl('chrome', 0.05, 0.14, 0.03, { y: 0.015 }, 20),
     ring('chrome', 0.13, 0.01, { y: 0.26 }),
   ];
 }

@@ -111,13 +111,14 @@ export function buildDecor(plan: FloorPlan, stations: WorldStation[], b: Batch, 
       if (mat instanceof THREE.Color) glow.add(new THREE.BoxGeometry(sx, sy, sz), mat, p);
       else b.add(new THREE.BoxGeometry(sx, sy, sz), mat, p, uv);
     };
-    // plinth with a lit reveal round its foot
+    // plinth with a lit reveal round its foot, just clear of the contact shadow lying on the
+    // carpet (grounding.ts SHADOW_Y), which would otherwise dim its lower half
     box(0, 0.035, 0, L + 0.5, 0.07, Dp + 0.16, lacquer);
     box(0, 0.074, 0, L + 0.52, 0.008, Dp + 0.18, brass);
-    box(0, 0.012, (Dp + 0.16) / 2 + 0.008, L + 0.5, 0.016, 0.012, led);
-    box(0, 0.012, -(Dp + 0.16) / 2 - 0.008, L + 0.5, 0.016, 0.012, led);
-    box((L + 0.5) / 2 + 0.008, 0.012, 0, 0.012, 0.016, Dp + 0.16, led);
-    box(-(L + 0.5) / 2 - 0.008, 0.012, 0, 0.012, 0.016, Dp + 0.16, led);
+    box(0, 0.02, (Dp + 0.16) / 2 + 0.008, L + 0.5, 0.016, 0.012, led);
+    box(0, 0.02, -(Dp + 0.16) / 2 - 0.008, L + 0.5, 0.016, 0.012, led);
+    box((L + 0.5) / 2 + 0.008, 0.02, 0, 0.012, 0.016, Dp + 0.16, led);
+    box(-(L + 0.5) / 2 - 0.008, 0.02, 0, 0.012, 0.016, Dp + 0.16, led);
     // spine between the back-to-back machines
     box(0, 0.75, 0, L, 1.36, 0.16, lacquer);
     box(0, 1.44, 0, L + 0.02, 0.03, 0.2, brass);
