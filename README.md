@@ -15,9 +15,11 @@ money is play money.
   high limit salon, an online lounge of gaming desks, Bandit Camp (a Rust-style wheel in a scrap
   yard), the cashier and bank, a boutique, and a north wing with a Pachinko Parlour (twelve
   machines), the Jade Room (Let It Ride and Pai Gow Poker) and a Bingo Hall. You walk it with WASD
-  and the mouse (N opens a map, F switches to first person), sit on any chair, stool or sofa, and
-  see everyone else walking, sitting and emoting, with their name over their head. Rooms and what's
-  in them are data (`client/src/world/rooms.ts`), so adding a table or a room is a data edit.
+  and the mouse (F switches to first person), sit on any chair, stool or sofa, and see everyone
+  else walking, sitting and emoting, with their name over their head. M opens the map, with every
+  room and a Find a game list: Show the way draws the route on the plan and a trail of chevrons on
+  the floor. Ctrl K (⌘ K) searches every action, room and game, and P is photo mode. Rooms and
+  what's in them are data (`client/src/world/rooms.ts`), so adding a table or a room is a data edit.
 - **Outside.** The elevators in the lobby go down to the ground floor (a valet lobby, the valet
   stand and parking, the street, and across it your garage and the jail) and up to a roof terrace
   facing a city skyline at sunset. Only the server moves you between floors
@@ -31,9 +33,12 @@ money is play money.
   craps, baccarat, Three Card Poker, Let It Ride, Pai Gow Poker, Casino War, Sic Bo, the Big Six
   wheel, the Bandit Wheel, no-limit Texas Hold'em, Jacks or Better video poker, six slot machines,
   bingo and pachinko, plus twelve online-style games on the lounge's computers: Plinko, Dice, Limbo,
-  Keno, Tower, Mines, Hi-Lo, Crash, Coinflip, Wheel, Cases and Diamonds. Every table game can be
-  played alone or in a lobby with others (public, or private with a four-digit PIN); alone you can
-  play up to five blackjack spots, or three hands at Three Card Poker, Let It Ride, Pai Gow and War.
+  Keno, Tower, Mines, Hi-Lo, Crash, Coinflip, Wheel, Cases and Diamonds (all but Hi-Lo with an Auto
+  mode that stops on a profit or a loss). Every table game can be played alone or in a lobby with
+  others (public, or private with a four-digit PIN); alone you can play up to five blackjack spots,
+  or three hands at Three Card Poker, Let It Ride, Pai Gow and War. Roulette has a racetrack with
+  neighbour bets and the French called bets, craps an Odds button and one-tap Across, Inside and
+  Hardways, and every card table a History of the sitting's rounds (O).
 - **Your limits.** Before you sit you pick the table's limits, from $5–$500 up to $5,000–$500,000
   or your own up to $1,000,000, and bring up to 100 times the table maximum. Every table has a
   Max bet (A). Hold'em runs at any stakes from $0.50/$1 to $100,000/$200,000 (or blinds of your
@@ -92,10 +97,12 @@ money is play money.
 - **Comfort.** Reduce flashing & motion (on the login screen and in Settings, on by default when
   the system asks for less motion) holds every blinking and chasing light steady, softens the
   particles and the bloom, and drops camera shake and the tipsy sway. Light and dark for the
-  menus, panels, HUD and chat (the sun and moon button on the login screen and in the HUD, or
-  Settings): the same choice as the rest of j4den.com, following the device until one is made,
-  while the casino itself keeps its own lights. Phones and tablets get a thumb stick, drag to look,
-  and layouts that fit either way up; every game's board fits on a small window.
+  menus, panels, HUD and chat (the sun and moon button on the login screen, Theme in the HUD's
+  More, or Settings): the same choice as the rest of j4den.com, following the device until one is
+  made, while the casino itself keeps its own lights. An interface size, a four-colour deck,
+  separate levels for the game sounds, the room and the music, and graphics options (resolution,
+  glow, film look, a 30 fps battery saver) are in Settings. Phones and tablets get a thumb stick,
+  drag to look, and layouts that fit either way up; every game's board fits on a small window.
 
 ## Rules and odds
 
@@ -207,6 +214,9 @@ npm test                    # unit and Worker tests
 npm run test:mc             # the Monte Carlo suite (a few minutes)
 npm run typecheck
 npm run build               # the client to dist/casino, the Worker to dist/worker
+npm run check               # the typecheck, the tests and the privacy scan in one go
+npm run size                # what the page downloads to open, and what the entry chunk holds
+npm run dev -- --preview    # the production build, served behind the worker
 ```
 
 `?dev=table&game=<game>` opens one game's table on its own, and `?dev=floor` the floor. The dev

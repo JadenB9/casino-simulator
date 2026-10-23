@@ -25,10 +25,10 @@ interface News {
 export const NEWS: readonly News[] = [
   {
     title: 'New this week',
-    where: 'Casino 1.3',
-    short: 'Map on M, crouch on Shift, run on Ctrl; everyone on the map',
+    where: 'Casino 1.5',
+    short: 'A new HUD with More and Ctrl K, Find a game, photo mode, Auto online',
     long: () =>
-      `The map opens on ${keyLabel('map')}, a tap of ${keyLabel('crouch')} crouches and ${keyLabel('run')} runs (change any of them in Settings, Controls). Every map shows where everyone else is. Wins are paid once the ball lands or the cards turn. The pit boss has to be near you, or looking your way, to catch a hot streak. An invite to a table asks for your buy-in the moment you arrive. Knock a street lamp with your car and it goes over.`,
+      `The HUD keeps the map, emotes, tips, sound and settings to hand, and More holds everything else; Ctrl K (⌘ K on a Mac) searches every action, room and game. The map (${keyLabel('map')}) has a Find a game list, and Show the way draws your route on the floor. ${keyLabel('photo')} is photo mode. Roulette has a racetrack, craps an Odds button, the card tables a History of your rounds and a four-colour deck in Settings, and the online games an Auto mode. Characters, lights, cards and chips have a new finish throughout.`,
   },
   {
     title: 'Apartments',

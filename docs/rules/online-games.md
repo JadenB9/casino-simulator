@@ -51,6 +51,14 @@ through the engines themselves.
   **Add chips**, beside the chips at the top of every page, tops the stack up from the balance to
   as much as that buy-in allows, and turns into **Buy in** when there are no chips here (after a
   bust, or a buy-in turned down).
+- **Auto.** Every game but Hi-Lo (where each guess is a decision) has an Auto mode on the page:
+  it presses the game's own button for you, one round after another, each sent once the last has
+  played out and a beat after, for 10, 25, 100 or 500 rounds or until stopped, with optional stops
+  on a profit or a loss (Mines turns the tiles you ring, Tower climbs the path you set, Coinflip
+  rides to the streak you choose, Crash bets every round with its auto cash-out). The server sees
+  ordinary bets, so nothing about the odds changes. A run stops at once when you leave, the chips
+  can't cover the next bet, the table refuses or doesn't answer, the connection drops, the tab is
+  hidden or a dialog opens.
 - **Monte Carlo.** Fixed seeds (`mcRng`), SE = SD/√N, and every tally must land within 3 SE of the
   published return. z is (measured return − published return)/SE. `npm run test:mc` reproduces
   every figure below exactly; `MC_RNG=crypto` reruns on the production generator.
@@ -71,8 +79,8 @@ through the engines themselves.
 4. Every drop is a round of its own, settled when it is made. The page plays the ball down the exact
    path it was sent, peg by peg: row r of the triangle has r + 3 pegs, and a ball that has gone right
    R times in its first r rows lands on peg R + 1 of row r. Several balls can be in the air at once.
-   Rows and risk are locked while a ball is falling, since the board can't change under it. There
-   is no autoplay.
+   Rows and risk are locked while a ball is falling, since the board can't change under it. Auto
+   (§0) drops one ball at a time.
 
 ### 1.2 Multiplier tables
 
