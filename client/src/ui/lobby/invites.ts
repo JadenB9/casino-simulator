@@ -1,6 +1,7 @@
 // v6 invite6: invites on the client. The hub lives with the floor socket: it shows each invite
 // as a card under the HUD ("Sam invited you to Blackjack · High limit · 2 seats left", Join and
-// Dismiss, a clock running down), opens the picker from the party panel, and does the join: ask
+// Dismiss, a clock and a bar running down, red for the last seconds, and Do not disturb right on
+// the card for anyone who wants no more of them), opens the picker from the party panel, and does the join: ask
 // first if you have chips down somewhere, check with the floor that the invite still stands (it
 // moves you beside the table), then a quick fade while you get up from wherever you are, and
 // you sit down at the new table the way E would, straight into the lobby you were invited to.
@@ -14,8 +15,8 @@ import { el, modal, button, toast } from '../kit.ts';
 import { isTyping } from '../keyboard.ts';
 import type { TableChoice } from './flow.ts';
 import { InvitePicker, type InviteTable } from './invite-picker.ts';
-import { Inbox, RecentPlayers, clock, doNotDisturb, inviteDetail, inviteSentence, onDoNotDisturb, tableName, type Candidate } from './invite-model.ts';
-import { cross, invite as inviteIcon, lock } from './icons.ts';
+import { Inbox, RecentPlayers, clock, doNotDisturb, inviteDetail, inviteSentence, onDoNotDisturb, recentHere, sentSummary, setDoNotDisturb, tableName, type Candidate } from './invite-model.ts';
+import { cross, invite as inviteIcon, lock, quiet } from './icons.ts';
 import './invites.css';
 
 /** What the hub needs from the floor socket (FloorLink has it all). */
@@ -55,6 +56,8 @@ const TAKE_WAIT_MS = 6000;
 const FADE_MS = 240;
 /** A card whose join failed says why for this long, then goes. */
 const FAILED_MS = 4500;
+/** The last stretch of an invite, when its bar turns red. */
+const ENDING_MS = 15_000;
 /** The walker's radius (player.ts): the spot beside a table is pushed clear of it. */
 const WALKER_R = 0.3;
 
@@ -72,11 +75,15 @@ export class InviteHub {
   private joining: { id: string; resolve: (a: Answer | null) => void } | null = null;
   /** Cards whose join failed: what went wrong. */
   private readonly failed = new Map<string, string>();
+  /** A one-player invite from the party panel, waiting for the floor's answer (said in a toast). */
+  private quick: { table: string; name: string } | null = null;
   /** The table to sit at when the world next sits us down at this station. */
   private claimFor: { stationId: string; choice: TableChoice; until: number } | null = null;
   private readonly offs: (() => void)[] = [];
   private timer = 0;
   private shown = '';
+  /** Where the cards were last hung on a narrow screen ('' for the stylesheet's place). */
+  private boxAt = '';
 
   constructor(private readonly app: InviteApp) {
     this.box.setAttribute('aria-live', 'polite');
@@ -136,6 +143,26 @@ export class InviteHub {
   /** Close the picker (leaving the table it was for). */
   closePicker(tableId?: string): void {
     if (this.picker && (!tableId || this.picker.table.tableId === tableId)) this.picker.close();
+  }
+
+  /**
+   * The party panel's quick invites: up to `n` of the people you've played with lately who are on
+   * the floor now and not at this table, newest first.
+   */
+  recentOnFloor(exclude: readonly number[], n = 3): { id: number; name: string; at: number }[] {
+    const me = this.app.floor.you?.id;
+    return recentHere(this.recent.items, new Set(this.app.floor.players.keys()), new Set([...exclude, ...(me !== undefined ? [me] : [])]), n);
+  }
+
+  /** Invite one player to this table (the party panel's quick invite); the answer is a toast. */
+  inviteOne(table: InviteTable, id: number, name: string): boolean {
+    if (!this.app.floor.send({ t: 'invite', table: table.tableId, ...(table.pin ? { pin: table.pin } : {}), to: [id] })) {
+      toast('Not connected to the floor. Try again in a moment.', 'err');
+      return false;
+    }
+    this.quick = { table: table.tableId, name };
+    this.recent.note([{ id, name }]);
+    return true;
   }
 
   /** People you sat down with: the picker offers them first next time. */
@@ -232,6 +259,11 @@ export class InviteHub {
       case 'invite.sent':
         if (m.again) this.everyone.set(m.table, m.again);
         if (this.picker?.table.tableId === m.table) this.picker.onAnswer(m);
+        else if (this.quick?.table === m.table && !m.all) {
+          // the party panel's quick invite: the same words the picker would say
+          toast(sentSummary(m, m.skipped.length ? [] : [this.quick.name]));
+          this.quick = null;
+        }
         return;
       case 'invite.no':
         if (m.id !== undefined) {
@@ -241,6 +273,7 @@ export class InviteHub {
         if (m.again && m.table) this.everyone.set(m.table, m.again);
         if (m.table && this.picker?.table.tableId === m.table) this.picker.onAnswer(m);
         else toast(m.msg, 'err');
+        if (this.quick?.table === m.table) this.quick = null;
         return;
       case 'invite.go':
         if (this.joining?.id === m.id) this.joining.resolve(m);
@@ -373,12 +406,13 @@ export class InviteHub {
     if (here) this.inbox.dropTable(here);
     const items = this.inbox.items;
     const visible = items.length > 0 && this.app.onFloor();
-    this.box.hidden = !visible;
+    if (this.box.hidden === visible) this.box.hidden = !visible;
     if (!visible) {
       if (this.shown) this.box.replaceChildren();
       this.shown = '';
       return;
     }
+    this.placeBox();
     // the cards are rebuilt only when something on them changes (the clock ticks in place)
     const key = items.map((x) => `${x.id}:${this.failed.get(x.id) ?? ''}:${this.joining?.id === x.id}`).join('|');
     if (key !== this.shown) {
@@ -391,7 +425,26 @@ export class InviteHub {
       const left = inv.until - now;
       c.querySelector('.inv-clock')!.textContent = clock(left);
       (c.querySelector('.inv-bar-fill') as HTMLElement).style.transform = `scaleX(${Math.max(0, Math.min(1, left / (inv.until - inv.at)))})`;
+      c.classList.toggle('ending', left < ENDING_MS);
     }
+  }
+
+  /**
+   * A narrow screen hangs both the party panel and the cards under the HUD: the cards go under
+   * the party panel instead of over it, and where that leaves little room, only the newest shows,
+   * in short. Measured with the clock's tick, once a second, written only when it moves.
+   */
+  private placeBox(): void {
+    const party = innerWidth <= 640 ? this.app.root.querySelector<HTMLElement>('.party:not([hidden])') : null;
+    const r = party?.getBoundingClientRect();
+    const top = r && r.height > 0 ? Math.round(r.bottom - this.app.root.getBoundingClientRect().top + 8) : null;
+    const at = top === null ? '' : `${top}px`;
+    if (at !== this.boxAt) {
+      this.boxAt = at;
+      this.box.style.top = at;
+    }
+    const squeeze = top !== null && innerHeight - top < 330;
+    if (this.box.classList.contains('squeeze') !== squeeze) this.box.classList.toggle('squeeze', squeeze);
   }
 
   private card(inv: Invite, newest: boolean): HTMLElement {
@@ -435,7 +488,18 @@ export class InviteHub {
       const err = el('p', 'inv-card-error', failed);
       err.setAttribute('role', 'alert');
       c.append(err);
-    } else c.append(actions);
+    } else {
+      // no more invites, from the card itself (Settings turns them back on)
+      const dnd = el('button', 'inv-dnd');
+      dnd.type = 'button';
+      dnd.title = 'Turn invites off. Settings, Invites turns them back on.';
+      dnd.append(quiet(), el('span', '', 'Do not disturb'));
+      dnd.addEventListener('click', () => {
+        setDoNotDisturb(true);
+        toast('Invites are off. Settings turns them back on.');
+      });
+      c.append(actions, dnd);
+    }
     c.append(bar);
     return c;
   }

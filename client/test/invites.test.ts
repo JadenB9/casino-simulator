@@ -2,7 +2,7 @@
 // picker offers first, the invites waiting on screen, and what's kept per browser.
 
 import { describe, expect, it } from 'vitest';
-import { Inbox, RecentPlayers, clock, doNotDisturb, inviteDetail, inviteSentence, limitsWord, rankCandidates, seatsLeft, sentSummary, setDoNotDisturb, tableName, type Candidate } from '../src/ui/lobby/invite-model.ts';
+import { Inbox, RecentPlayers, agoText, clock, doNotDisturb, inviteDetail, inviteSentence, limitsWord, rankCandidates, recentHere, seatsLeft, sentSummary, setDoNotDisturb, tableName, type Candidate } from '../src/ui/lobby/invite-model.ts';
 import type { Invite } from '../../shared/src/protocol.ts';
 import { limitSpec } from '../../shared/src/limits.ts';
 
@@ -142,5 +142,30 @@ describe('kept per browser', () => {
     expect(new RecentPlayers(s).items).toEqual([{ id: 5, name: 'Ok', at: 1 }]);
     for (let i = 0; i < 40; i++) r.note([{ id: 100 + i, name: `P${i}` }]);
     expect(r.items.length).toBe(24);
+  });
+});
+
+describe("the party panel's quick invites", () => {
+  const met = [
+    { id: 5, name: 'Jo', at: 3 },
+    { id: 6, name: 'Sam', at: 2 },
+    { id: 7, name: 'Alex', at: 1 },
+    { id: 8, name: 'Kim', at: 0 },
+  ];
+
+  it('offer the people you played with lately who are on the floor and not at the table, newest first', () => {
+    expect(recentHere(met, new Set([5, 6, 7, 8]), new Set([6]), 3).map((m) => m.name)).toEqual(['Jo', 'Alex', 'Kim']);
+    expect(recentHere(met, new Set([8, 7]), new Set(), 3).map((m) => m.name)).toEqual(['Alex', 'Kim']);
+    expect(recentHere(met, new Set([5, 6, 7, 8]), new Set(), 2)).toHaveLength(2);
+    expect(recentHere([], new Set([1]), new Set(), 3)).toEqual([]);
+  });
+
+  it('say how long ago, briefly', () => {
+    expect(agoText(20_000)).toBe('just now');
+    expect(agoText(5 * 60_000)).toBe('5 m ago');
+    expect(agoText(2 * 3_600_000 + 60_000)).toBe('2 h ago');
+    expect(agoText(30 * 3_600_000)).toBe('yesterday');
+    expect(agoText(3 * 86_400_000)).toBe('3 days ago');
+    expect(agoText(-5)).toBe('just now');
   });
 });

@@ -3,6 +3,9 @@
 // Logs in as <name>, stands in front of a table in the dev room and runs the real flow against the
 // local worker: the choice, the live list over a floor socket, Create, Join with a PIN, then the
 // party panel fed by the table socket. scripts/e2e/lobby.mjs drives it with two browsers.
+//   ?screen=invites   no server: two invite cards from a stand-in floor (one about to run out), and
+//                     a private table's party panel with the people you've played with to invite
+//   ?scene=0          a still backdrop instead of the 3D room
 
 import { Engine3D, savedQuality } from '../../render/engine3d.ts';
 import { devRoom } from '../../world/dev-room.ts';
@@ -16,7 +19,10 @@ import type { TableSnapshot } from '../../games/contract.ts';
 import { formatMoney } from '../../../../shared/src/money.ts';
 import { limitsLabel } from '../../../../shared/src/limits.ts';
 import { askBuyIn, el, toast } from '../kit.ts';
-import { PartyPanel, openTableFlow, type LobbyFloor } from './index.ts';
+import { InviteHub, PartyPanel, buyInPanel, openTableFlow, type InviteFloor, type LobbyFloor } from './index.ts';
+import { regular } from '../menu/fixtures.ts';
+import { ENGINES } from '../../../../shared/src/games/index.ts';
+import type { FloorServerMsg as FloorMsg, Invite } from '../../../../shared/src/protocol.ts';
 import { sceneWanted, stillBackdrop } from '../social/dev-backdrop.ts';
 
 const params = new URLSearchParams(location.search);
@@ -135,7 +141,106 @@ function sit(tableId: string, floor: LobbyFloor, pin?: string): void {
   });
 }
 
-main().catch((err) => {
+/** ?screen=invites: the invite cards and a party panel's quick invites, with no server. */
+function invitesScreen(): void {
+  const me = regular();
+  session.set(me);
+  // people you've played with, two of them on the floor now
+  const now = Date.now();
+  try {
+    localStorage.setItem('casino.invites.recent', JSON.stringify([
+      { id: 21, name: 'Lucky_Lou', at: now - 2 * 3_600_000 },
+      { id: 22, name: 'Rosa_M', at: now - 3 * 86_400_000 },
+      { id: 29, name: 'gone_home', at: now - 3_600_000 },
+    ]));
+  } catch {
+    /* blocked: no quick invites to show */
+  }
+  const listeners = new Set<(m: FloorMsg) => void>();
+  const player = (id: number, name: string, x: number) => [id, { info: { id, name, at: null }, last: { x, z: 0 } }] as const;
+  const floor: InviteFloor = {
+    send: (m) => {
+      toast(`(sent ${m.t})`);
+      return true;
+    },
+    subscribe: (fn) => {
+      listeners.add(fn);
+      return () => listeners.delete(fn);
+    },
+    players: new Map([player(me.id, me.name, 0), player(21, 'Lucky_Lou', 300), player(22, 'Rosa_M', -900), player(23, 'snake_eyes', 1500)]),
+    you: { id: me.id },
+  };
+  const hub = new InviteHub({
+    floor,
+    root: ui,
+    stations: [],
+    collider: { resolve: () => {} },
+    where: () => ({ x: 0, z: 0 }),
+    onFloor: () => true,
+    covered: () => false,
+    atTable: () => null,
+    standUp: async () => {},
+    hold: () => {},
+    sitAt: () => {},
+  });
+  const bj = ENGINES.blackjack.config('', 'multi');
+  const invite = (id: string, over: Partial<Invite>): Invite => ({
+    id,
+    from: { id: 21, name: 'Lucky_Lou' },
+    tableId: `bj-${id.slice(0, 10)}`,
+    game: 'blackjack',
+    variant: '',
+    private: false,
+    all: false,
+    lobby: { tableId: `bj-${id.slice(0, 10)}`, game: 'blackjack', variant: '', leader: 'Lucky_Lou', players: 3, max: 7, started: false, limits: { min: 50_000, max: 5_000_000 } },
+    station: null,
+    at: now,
+    until: now + 110_000,
+    ...over,
+  });
+  for (const fn of listeners) fn({ t: 'invited', invite: invite('aaaaaaaaaaaa', {}) });
+  for (const fn of listeners) {
+    fn({
+      t: 'invited',
+      invite: invite('bbbbbbbbbbbb', {
+        from: { id: 22, name: 'Rosa_M' },
+        game: 'baccarat',
+        tableId: 'bc-bbbbbbbbbb',
+        private: true,
+        all: true,
+        lobby: { tableId: 'bc-bbbbbbbbbb', game: 'baccarat', variant: '', leader: 'Rosa_M', players: 5, max: 7, started: true },
+        at: now - 100_000,
+        until: now + 12_000,
+      }),
+    });
+  }
+  const party = new PartyPanel({
+    me: me.id,
+    game: 'blackjack',
+    send: () => {},
+    leave: () => toast('(leave)'),
+    sit: () => void buyInPanel({ min: bj.buyIn.min, max: bj.buyIn.max, balance: me.balance }),
+    root: ui,
+    invites: hub,
+  });
+  party.onTable({
+    t: 'table',
+    v: 1,
+    meta: { tableId: 'bj-devtable01', game: 'blackjack', variant: '', mode: 'multi', visibility: 'private', pin: '4827', started: false, config: bj },
+    members: [{ accountId: me.id, name: me.name, look: me.look, seat: null, joinedAt: now, connected: true, ready: false, status: 'watching', stack: 0 }],
+    leader: me.id,
+    you: { accountId: me.id, seat: null, status: 'watching', stack: 0 },
+    view: null,
+    seq: 0,
+    now,
+  });
+}
+
+if (params.get('screen') === 'invites') {
+  // (no room to stand in: the still backdrop)
+  stillBackdrop(document.getElementById('scene') as HTMLCanvasElement);
+  invitesScreen();
+} else main().catch((err) => {
   console.error(err);
   toast(`The lobby page failed: ${String(err)}`, 'err', 10_000);
 });

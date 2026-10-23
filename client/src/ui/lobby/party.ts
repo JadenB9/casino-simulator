@@ -1,7 +1,9 @@
 // The party panel at a lobby table: who is here (in join order, the leader crowned), who has
 // chips down and who is ready, the PIN for a private table, and the leader's two controls,
 // public/private and Start. It draws only what the table sends ('table' and 'members'); every
-// button sends a table message and waits for the server's answer to change anything.
+// button sends a table message and waits for the server's answer to change anything. Before the
+// game starts, the people you've played with lately who are on the floor now are offered as
+// one-click invites under the Invite button.
 
 import type { GameId } from '../../../../shared/src/engine.ts';
 import type { Member, TableClientMsg } from '../../../../shared/src/protocol.ts';
@@ -10,7 +12,8 @@ import { formatMoney } from '../../../../shared/src/money.ts';
 import { hasLimitChoice, limitsLabel, limitsOf } from '../../../../shared/src/limits.ts';
 import type { GameClientModule, MembersMsg, TableSnapshot, TableView } from '../../games/contract.ts';
 import { el, toast } from '../kit.ts';
-import { chevron, copy, crown, invite, lock, unlock } from './icons.ts';
+import { agoText } from './invite-model.ts';
+import { chevron, copy, crown, invite, lock, tick, unlock } from './icons.ts';
 import type { InviteTable } from './invite-picker.ts';
 import './lobby.css';
 import './invites.css'; // v6 invite6
@@ -38,7 +41,14 @@ export interface PartyInvites {
   /** Who is at the table changed: an open picker stops offering them. */
   tableChanged(table: InviteTable): void;
   noteMet(people: { id: number; name: string }[]): void;
+  /** People you've played with lately who are on the floor now, not at this table. */
+  recentOnFloor?(exclude: readonly number[]): { id: number; name: string; at: number }[];
+  /** Invite one of them (true once it's sent). */
+  inviteOne?(table: InviteTable, id: number, name: string): boolean;
 }
+
+/** A quick invite stays "Invited" this long (the floor won't take another to them sooner). */
+const QUICK_MS = 60_000;
 
 interface Party {
   tableId: string;
@@ -61,6 +71,8 @@ export class PartyPanel {
   private collapsed = false;
   /** A control waiting for the server's answer: its buttons stay disabled until it comes. */
   private pending = false;
+  /** Quick invites sent, by account: when each can go again. */
+  private readonly invited = new Map<number, number>();
   private pendingTimer = 0;
 
   constructor(private readonly opts: PartyPanelOpts) {
@@ -225,6 +237,8 @@ export class PartyPanel {
       inv.disabled = full;
       inv.addEventListener('click', () => invites.openPicker(this.inviteTable(p)));
       controls.append(inv);
+      const recent = !full && !p.started && invites.recentOnFloor && invites.inviteOne ? invites.recentOnFloor(p.members.map((m) => m.accountId)) : [];
+      if (recent.length > 0) controls.append(this.recentRow(recent, p));
     }
 
     const row = el('div', 'party-row');
@@ -257,6 +271,31 @@ export class PartyPanel {
     controls.append(row);
     parts.push(controls);
     this.body.replaceChildren(...parts);
+  }
+
+  /** Played with you lately and on the floor now: a chip each, one click to invite them. */
+  private recentRow(recent: { id: number; name: string; at: number }[], p: Party): HTMLElement {
+    const row = el('div', 'party-recent');
+    row.setAttribute('role', 'group');
+    row.setAttribute('aria-label', 'Played with you, on the floor now');
+    row.append(el('span', 'label', 'Played with you'));
+    const now = Date.now();
+    for (const r of recent) {
+      const sent = (this.invited.get(r.id) ?? 0) > now;
+      const b = el('button', `party-chip${sent ? ' sent' : ''}`);
+      b.type = 'button';
+      b.disabled = sent;
+      b.append(sent ? tick() : invite(), el('span', 'party-chip-name', r.name));
+      b.title = sent ? `Invited ${r.name}` : `Invite ${r.name} (played with you ${agoText(now - r.at)})`;
+      b.setAttribute('aria-label', sent ? `${r.name}, invited` : `Invite ${r.name}`);
+      b.addEventListener('click', () => {
+        if (!this.opts.invites?.inviteOne?.(this.inviteTable(p), r.id, r.name)) return;
+        this.invited.set(r.id, Date.now() + QUICK_MS);
+        this.render();
+      });
+      row.append(b);
+    }
+    return row;
   }
 
   /** v6 invite6: the table as the invite picker needs it. */

@@ -5,7 +5,9 @@
 /* ---- the cards ---- */
 
 .inv-cards { position: fixed; top: var(--below-hud); left: 16px; z-index: 18; display: grid; gap: 8px; width: min(340px, calc(100vw - 32px)); pointer-events: none; }
-.inv-card { position: relative; overflow: hidden; padding: 10px 12px 12px; pointer-events: auto; animation: inv-in 0.34s var(--ease); }
+.inv-card { position: relative; overflow: hidden; padding: 10px 12px 12px; border-color: var(--line-strong); pointer-events: auto; animation: inv-in 0.34s var(--ease); }
+/* a brass edge down the left, like the unlock card's */
+.inv-card::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: linear-gradient(var(--brass-hi), var(--brass)); }
 @keyframes inv-in { from { opacity: 0; transform: translateX(-12px); } }
 .inv-card + .inv-card { opacity: 0.86; }
 .inv-card-top { display: flex; align-items: center; gap: 8px; }
@@ -21,12 +23,19 @@
 .inv-card-detail { display: flex; align-items: center; gap: 6px; margin: 3px 0 0; font-size: 14px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
 .inv-card-detail .lb-icon { width: 12px; height: 12px; color: var(--brass); }
 .inv-card-actions { display: flex; gap: 8px; margin-top: 10px; }
-.inv-card-actions .btn { height: 32px; }
+.inv-card-actions .btn { height: 34px; }
 .inv-card-actions .btn.primary { flex: 1; }
+/* Do not disturb, under the buttons: small, but there on every card */
+.inv-dnd { display: inline-flex; align-items: center; gap: 6px; margin: 8px 0 0; padding: 2px 0; border: 0; background: none; font-size: 12px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); cursor: pointer; }
+.inv-dnd .lb-icon { width: 13px; height: 13px; }
+.inv-dnd:hover { color: var(--ink); }
+.inv-dnd:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 2px; }
 .inv-card-error { margin: 9px 0 0; font-size: 14px; color: var(--lose); }
-/* the time left, draining along the bottom edge */
-.inv-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: rgba(var(--brass-rgb), 0.12); }
-.inv-bar-fill { display: block; height: 100%; background: var(--brass); transform-origin: left; transition: transform 1s linear; }
+/* the time left, draining along the bottom edge; red for the last fifteen seconds */
+.inv-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: rgba(var(--brass-rgb), 0.14); }
+.inv-bar-fill { display: block; height: 100%; background: linear-gradient(90deg, var(--brass), var(--brass-hi)); transform-origin: left; transition: transform 1s linear, background-color 0.3s; }
+.inv-card.ending .inv-bar-fill { background: var(--lose); }
+.inv-card.ending .inv-clock { color: var(--lose); }
 
 /* ---- the fade a join goes through ---- */
 
@@ -78,17 +87,33 @@
 .inv-keys .lb-key { min-width: 0; height: 20px; font-size: 11px; }
 .inv-keys .lb-key:not(:first-child) { margin-left: 6px; }
 
-/* the party panel's Invite button */
+/* the party panel's Invite button, and the people you've played with as one-click invites */
 .party-invite .lb-icon { width: 15px; height: 15px; color: var(--brass); }
 .party-alone { margin: 0; font-size: 14px; color: var(--ink-2); }
+.party-recent { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.party-recent .label { flex: 1 0 100%; }
+.party-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; height: 28px; padding: 0 10px 0 8px; border: 1px solid var(--line-strong); border-radius: 14px; background: none; font-size: 14px; color: var(--ink); cursor: pointer; transition: border-color 0.15s, background-color 0.15s; }
+.party-chip:hover:not(:disabled) { border-color: var(--brass-hi); background: rgba(var(--brass-rgb), 0.1); }
+.party-chip:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.party-chip .lb-icon { width: 13px; height: 13px; color: var(--brass); }
+.party-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.party-chip.sent { border-color: rgba(var(--win-rgb), 0.5); color: var(--win); cursor: default; }
+.party-chip.sent .lb-icon { color: var(--win); }
 
 @media (max-width: 760px) {
   .inv-picker { top: auto; right: 12px; bottom: 72px; left: 12px; width: auto; max-height: calc(100dvh - 140px); }
 }
 @media (max-width: 640px) {
   .inv-cards { top: calc(var(--below-party) + 8px); left: 10px; right: 10px; width: auto; }
+  /* under an open party panel with little room left: the newest card, in short (invites.ts) */
+  .inv-cards.squeeze .inv-card + .inv-card, .inv-cards.squeeze .inv-card-detail, .inv-cards.squeeze .inv-dnd { display: none; }
 }
+/* Reduce flashing & motion (app/comfort.ts): cards and the picker appear where they stand. */
+body.calm .inv-card, body.calm .inv-picker { animation: none; }
+
 @media (pointer: coarse) {
+  .inv-dnd { min-height: 40px; }
+  .party-chip { height: 40px; }
   .inv-row { height: 50px; }
   .inv-card-actions .btn { height: 44px; }
   .inv-close { width: 40px; height: 40px; }

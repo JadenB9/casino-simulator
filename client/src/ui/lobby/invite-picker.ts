@@ -7,7 +7,7 @@
 import type { GameId } from '../../../../shared/src/engine.ts';
 import { INVITE_MAX_TO, INVITE_MS, type InviteServerMsg, type InviteSkip } from '../../../../shared/src/protocol.ts';
 import { el } from '../kit.ts';
-import { clock, rankCandidates, SKIP_TEXT, sentSummary, tableName, type Candidate, type RecentPlayers } from './invite-model.ts';
+import { agoText, clock, rankCandidates, SKIP_TEXT, sentSummary, tableName, type Candidate, type RecentPlayers } from './invite-model.ts';
 import { cross, invite as inviteIcon, lock, search, tick } from './icons.ts';
 import './invites.css';
 
@@ -214,13 +214,17 @@ export class InvitePicker {
     const focused = (document.activeElement as HTMLElement | null)?.dataset?.player;
     const rows: HTMLElement[] = [];
     let section: string | null = null;
+    // when you last played with each (their row says so: "At Roulette · 2 h ago")
+    const metAt = new Map(this.opts.recent.items.map((m) => [m.id, m.at]));
     for (const r of ranked) {
       const want = r.recent ? 'Played with you' : 'On the floor';
       if (want !== section && !this.query.value) {
         section = want;
         rows.push(el('div', 'inv-section label', want));
       }
-      rows.push(this.row(r.id, r.name, where(r, this.opts.stationName), this.states.get(r.id) ?? null, now));
+      const at = r.recent ? metAt.get(r.id) : undefined;
+      const place = where(r, this.opts.stationName);
+      rows.push(this.row(r.id, r.name, at !== undefined ? `${place} · ${agoText(Date.now() - at)}` : place, this.states.get(r.id) ?? null, now));
     }
     if (ranked.length === 0) {
       const empty = el('div', 'inv-empty');
