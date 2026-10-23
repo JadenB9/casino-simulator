@@ -50,7 +50,8 @@
 .bc-squeeze[aria-pressed='true'] { border-color: var(--brass-hi); color: var(--brass-hi); background: rgba(var(--brass-hi-rgb), 0.08); }
 /* the $25K chip is over this table's maximum */
 
-@media (max-width: 1259px) {
+/* (a column beside the tray only where the tray, eight chips wide, leaves the corner free) */
+@media (max-width: 1339px) {
   .bc-meters { bottom: 104px; grid-template-columns: repeat(3, auto) auto; align-items: end; gap: 14px; min-width: 0; padding: 8px 12px; }
   .bc-squeeze { margin-top: 0; }
 }

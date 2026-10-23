@@ -57,6 +57,8 @@ export class HandSetter {
     head.append(this.title, this.status);
     this.root.append(head, rows, acts);
     this.root.hidden = true;
+    // the bottom bar while it's open: the tips line stacks over it (table/dock.ts)
+    this.root.dataset.dock = 'bar';
   }
 
   /** Show seven cards to set, nothing in the low hand yet. */

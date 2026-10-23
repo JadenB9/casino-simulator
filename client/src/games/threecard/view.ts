@@ -275,6 +275,8 @@ export function mountThreeCard(ctx: TableViewCtx): TableView {
   const decideBar = el('div', 'tc-decide panel');
   decideBar.append(foldBtn, playBtn, decideHint);
   decideBar.hidden = true;
+  // the bar at the bottom while it's your move: the dock stacks the tips line over it (table/dock.ts)
+  decideBar.dataset.dock = 'bar';
   ctx.ui.append(decideBar);
 
   const meters = el('div', 'tc-meters panel');

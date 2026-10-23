@@ -31,6 +31,7 @@ import * as THREE from 'three';
 import './fit.css';
 import { Felt, type Region } from './felt.ts';
 import type { Pose } from './stage.ts';
+import { Dock } from './dock.ts';
 
 /** Screen rectangle in CSS pixels. */
 export interface Rect {
@@ -388,6 +389,8 @@ export class BoardFit {
   private key = '';
   private disposed = false;
   readonly off = fitOff();
+  /** The bottom of the screen kept in order: the bar and the panels over it (dock.ts). */
+  private dock: Dock | null = null;
 
   constructor(
     private readonly root: THREE.Object3D,
@@ -398,10 +401,12 @@ export class BoardFit {
     private readonly rest: () => { pos: THREE.Vector3; quat: THREE.Quaternion },
   ) {}
 
-  /** The controls to keep the board clear of: the table UI's root (#ui). */
+  /** The controls to keep the board clear of: the table UI's root (#ui). Its bar and the panels over it are docked too. */
   watch(...roots: Element[]): void {
     this.roots = roots;
     this.measuredAt = -Infinity;
+    this.dock?.dispose();
+    this.dock = typeof HTMLElement !== 'undefined' && roots[0] instanceof HTMLElement ? new Dock(roots[0]) : null;
   }
 
   /** The board: what must stay in view from the resting pose. Nothing given = the felts' regions. */
@@ -467,6 +472,9 @@ export class BoardFit {
   }
 
   private measure(now: number, w: number, h: number): void {
+    // the panels over the bar first, so what's measured is where they go (the dock's own
+    // observers place them as they change; this catches a bar that moved without a resize)
+    this.dock?.arrange();
     // the site's back chip owns the bottom-left corner (j4den.com puts it over every page)
     const back = document.querySelector('.j4-back');
     const top = this.roots.flatMap((r) => [...r.children]);
@@ -508,6 +516,8 @@ export class BoardFit {
   dispose(engine: { onFrame(fn: (dt: number) => void): () => void }): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.dock?.dispose();
+    this.dock = null;
     const cam = this.camera;
     const now = worn.get(cam);
     if (!now || now.owner !== this) return;

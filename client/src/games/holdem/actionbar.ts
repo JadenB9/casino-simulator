@@ -84,6 +84,8 @@ export class ActionBar {
     const head = el('div', 'he-bar-head');
     head.append(this.note, this.clock);
     this.root.append(head, this.sizing, this.acts, this.back);
+    // the table's bottom bar: the tips line and the tip panel stack over it (table/dock.ts)
+    this.root.dataset.dock = 'bar';
     this.set(null, { total: 0, note: '', sittingOut: false });
   }
 

@@ -217,6 +217,10 @@ export class BlackjackTable implements TableView {
     this.timer.append(track, this.timerLeft);
 
     for (const node of [this.tray.root, this.actions, this.insure]) node.hidden = true;
+    // the moves and the insurance question are the bottom bar while they're up, and the meters ride
+    // over whichever bar is showing (table/dock.ts)
+    this.actions.dataset.dock = this.insure.dataset.dock = 'bar';
+    this.meters.dataset.dock = 'css';
     ctx.ui.append(this.tray.root, this.picker.root, this.actions, this.insure, this.meters);
 
     this.onPointer = (e: PointerEvent) => {

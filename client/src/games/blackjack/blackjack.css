@@ -103,10 +103,10 @@
 .bj-tray .btn.primary { white-space: nowrap; }
 
 /* Phones and tablets upright: the moves wrap to rows above the back chip, like the kit's tray,
-   and the meters sit on the right just above them. */
+   and the meters ride over the bar at the left (table/dock.ts), beside the tip panel on the right. */
 @media (max-aspect-ratio: 1/1) {
   .bj-actions, .bj-insure { bottom: 54px; }
-  .bj-meters { bottom: 232px; right: 10px; }
+  .bj-meters { bottom: 232px; left: 10px; right: auto; }
 }
 @media (max-width: 560px) {
   .bj-actions, .bj-insure { flex-wrap: wrap; justify-content: center; width: calc(100vw - 20px); max-width: 440px; padding: 8px 10px 10px; }

@@ -1,8 +1,28 @@
-/* The table's controls fit the window too (fit.ts keeps the board clear of them). A laptop window
-   at half width is narrower than a chip tray with eight chips, Max and four buttons, which ran off
-   both edges: there the tray wraps its buttons under its chips. Phones have their own layout
-   (ui/mobile.css: under 560 px wide, or 390 px tall on their side). */
+/* The table's controls fit the window too (fit.ts keeps the board clear of them, dock.ts stacks
+   the panels that go with the bar above it). A laptop window at half width is narrower than a chip
+   tray with eight chips, Max and four buttons, which ran off both edges: there the tray wraps its
+   buttons under its chips. Phones have their own layout (ui/mobile.css: under 560 px wide, or
+   390 px tall on their side), adjusted here so the tray is never wider than the screen. */
 @media (min-width: 561px) and (max-width: 1060px) and (min-height: 500px) {
   .tray { left: 12px; right: 12px; transform: none; width: fit-content; margin-inline: auto; flex-wrap: wrap; justify-content: center; row-gap: 8px; }
   .tray .sep { display: none; }
+}
+
+/* Never wider than the screen: a tray that can't keep one row wraps rather than run off an edge.
+   (Its own width, not the half screen a box at `left: 50%` has to shrink into, while it fits.) */
+.tray.panel { width: max-content; max-width: calc(100vw - 16px); flex-wrap: wrap; justify-content: center; row-gap: 8px; }
+
+/* A phone upright: two rows, the chips (and Max) over the buttons, Deal at the end of the buttons'
+   row (it had a third row to itself). */
+@media (max-width: 560px) {
+  .tray.panel .acts { flex: 1 1 auto; gap: 5px; }
+  .tray.panel .acts .btn,
+  .tray.panel > .btn.primary { flex: 1 1 0; min-width: 0; padding: 0 6px; letter-spacing: 0.03em; white-space: nowrap; }
+  .tray.panel > .btn.primary { flex-grow: 1.6; }
+}
+
+/* On its side: right of the back chip's corner, one row while it fits (a slimmer button each). */
+@media (max-height: 480px) {
+  .tray.panel { max-width: calc(100vw - 104px); }
+  .tray.panel .btn { padding: 0 9px; }
 }

@@ -159,6 +159,7 @@ export function mountHoldem(ctx: TableViewCtx): TableView {
   seatRow.append(rebuy, leave);
   seatPanel.append(seatTitle, seatNote, seatRow);
   seatPanel.hidden = true;
+  seatPanel.dataset.dock = 'bar';
   ctx.ui.append(seatPanel);
   rebuy.addEventListener('click', async () => {
     const amount = await kit.askBuyIn({ min: buyIn.min, max: buyIn.max, balance: session.profile?.balance ?? 0, verb: wasSeated ? 'Rebuy' : 'Buy in' });

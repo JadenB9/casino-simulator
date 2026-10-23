@@ -170,6 +170,8 @@ export class BaccaratTable implements TableView {
     this.tray.root.classList.add('bc-tray');
     this.squeezeBtn = button('Squeeze', () => this.toggleSqueeze(), { cls: 'ghost bc-squeeze', key: 'S', title: 'Peel the second card of each hand slowly' });
     this.buildMeters();
+    // over the tray when it's in the way (a narrow window, a phone), where its stylesheet puts it otherwise (table/dock.ts)
+    this.metersBox.dataset.dock = 'css';
     this.tip.hidden = true;
     this.tip.setAttribute('role', 'tooltip');
     ctx.ui.append(this.board.root, this.metersBox, this.tray.root, this.tip);

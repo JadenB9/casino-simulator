@@ -1,0 +1,190 @@
+// The bottom of a table's screen, kept in order. One bar sits there at a time: the chip tray
+// while bets go down, a game's own bar while a decision is yours (Hit or Stand, Play or Fold,
+// Hold'em's action bar). The small panels that go with it (how many hands, tipping the dealer,
+// a game's meters, the Tips line) stack above it, measured. Each had a fixed `bottom:` for each
+// screen size, sized for a tray on one row, so wherever the tray wrapped to a second row (a
+// tablet, a phone, half a laptop screen) they sat on its chips; and the tip panel showed over
+// Deal until the next frame moved it.
+//
+// What counts: a bar is a `.tray`, or anything a game marks `data-dock="bar"`; the panels above
+// it are DOCKED below (or marked `data-dock="start" | "end" | "css"`). 'start' sits over the
+// bar's left end and 'end' over its right end; 'css' keeps the place its stylesheet gives it
+// across (the Tips line, a game's meters) and is only ever raised. Every one goes as low as it
+// can without meeting the bar, a panel placed before it, or another table panel low on the screen
+// (a game's own, which isn't moved); one over an end slides along the bar first, then rises. A
+// screen with no bar leaves everything where its stylesheet puts it.
+//
+// It runs when any of them shows, hides or changes size (a ResizeObserver, which reports after
+// layout and before the frame is painted, so nothing is ever drawn in the wrong place), when the
+// window changes, and from the board fit's own measuring as a backstop. One pass reads every box,
+// then writes: no layout is read between two writes.
+
+/** A bar: the chip tray, or a game's own bottom bar. */
+const BAR = '.tray, [data-dock="bar"]';
+
+type Anchor = 'start' | 'end' | 'css';
+
+/** The panels that go above the bar, placed in this order (the lowest first). */
+const DOCKED: readonly { sel: string; at: Anchor }[] = [
+  { sel: '.mh-picker, [data-dock="start"]', at: 'start' },
+  { sel: '.tip-dealer, [data-dock="end"]', at: 'end' },
+  { sel: '[data-dock="css"]', at: 'css' },
+  { sel: '.tip-line', at: 'css' },
+];
+
+/** Space between the bar and a panel, and between two panels, CSS px. */
+export const DOCK_GAP = 8;
+/** Kept clear of the screen's sides, CSS px. */
+const EDGE = 8;
+
+export interface Box {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
+/** One panel to place: its size, how it sits across, and where its stylesheet puts it. */
+export interface Piece {
+  at: Anchor;
+  w: number;
+  h: number;
+  /** 'css': its stylesheet's left edge, and its bottom edge (screen y; null when it has none). */
+  left?: number;
+  floor?: number | null;
+}
+
+const overlaps = (a: Box, b: Box): boolean => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+
+/**
+ * Where each piece goes over `bar` on a `w`-wide screen, given what's already low on it
+ * (`others`: the visible bars and a game's own panels). Pure, for the tests: screen px, y down.
+ */
+export function stack(bar: Box, pieces: readonly Piece[], others: readonly Box[], w: number): Box[] {
+  const placed: Box[] = [...others];
+  const out: Box[] = [];
+  for (const p of pieces) {
+    const width = Math.min(p.w, w - 2 * EDGE);
+    let left: number;
+    if (p.at === 'start') left = bar.left;
+    else if (p.at === 'end') left = bar.right - width;
+    else left = p.left ?? bar.left;
+    left = Math.max(EDGE, Math.min(left, w - EDGE - width));
+    // as low as allowed: just over the bar, or (a 'css' piece clear of the bar) where its
+    // stylesheet has it, if that's no lower than the bar's bottom
+    let bottom = bar.top - DOCK_GAP;
+    const across = left < bar.right && left + width > bar.left;
+    if (p.at === 'css' && !across && p.floor != null) bottom = Math.max(bottom, Math.min(p.floor, bar.bottom));
+    let box = { left, right: left + width, top: bottom - p.h, bottom };
+    for (let n = 0; n < 12; n++) {
+      const hit = placed.find((o) => overlaps(box, o));
+      if (!hit) break;
+      // over an end of the bar: slide along it toward the middle while there's room on the bar
+      if (p.at !== 'css') {
+        const slid = p.at === 'start' ? { ...box, left: hit.right + DOCK_GAP, right: hit.right + DOCK_GAP + width } : { ...box, right: hit.left - DOCK_GAP, left: hit.left - DOCK_GAP - width };
+        if (slid.left >= Math.max(EDGE, bar.left) && slid.right <= Math.min(w - EDGE, bar.right) && !placed.some((o) => overlaps(slid, o))) {
+          box = slid;
+          break;
+        }
+      }
+      box = { ...box, bottom: hit.top - DOCK_GAP, top: hit.top - DOCK_GAP - p.h };
+    }
+    placed.push(box);
+    out.push(box);
+  }
+  return out;
+}
+
+const visible = (e: HTMLElement): boolean => !e.hidden && e.offsetWidth > 1 && e.offsetHeight > 1;
+
+export class Dock {
+  private readonly resized: ResizeObserver | null;
+  private readonly added: MutationObserver | null;
+  private readonly watched = new Set<Element>();
+  /** The panels it has moved, so it can give them back to their stylesheet. */
+  private readonly moved = new Set<HTMLElement>();
+  private disposed = false;
+
+  constructor(private readonly ui: HTMLElement) {
+    this.resized = typeof ResizeObserver === 'function' ? new ResizeObserver(() => this.arrange()) : null;
+    this.added = typeof MutationObserver === 'function' ? new MutationObserver(() => this.watchNew()) : null;
+    this.added?.observe(ui, { childList: true });
+    addEventListener('resize', this.arrange);
+    this.watchNew();
+  }
+
+  /** Watch whatever is new among the UI's children (a bar or a panel shows up as a view mounts). */
+  private watchNew(): void {
+    if (this.disposed) return;
+    for (const e of this.watched) {
+      if (e.parentElement === this.ui) continue;
+      this.resized?.unobserve(e);
+      this.watched.delete(e);
+    }
+    for (const e of this.ui.children) {
+      if (this.watched.has(e) || !(e instanceof HTMLElement) || !this.matters(e)) continue;
+      this.watched.add(e);
+      this.resized?.observe(e);
+    }
+    this.arrange();
+  }
+
+  private matters(e: HTMLElement): boolean {
+    return e.matches(BAR) || DOCKED.some((d) => e.matches(d.sel)) || e.classList.contains('panel');
+  }
+
+  /** Put every panel that goes with the bar above it (and give them back when there's no bar). */
+  readonly arrange = (): void => {
+    if (this.disposed) return;
+    const kids = [...this.ui.children].filter((e): e is HTMLElement => e instanceof HTMLElement);
+    const pieces: { el: HTMLElement; at: Anchor }[] = [];
+    for (const d of DOCKED) for (const e of kids) if (e.matches(d.sel) && !pieces.some((p) => p.el === e)) pieces.push({ el: e, at: d.at });
+    // writes first: each panel back to its stylesheet's place, so what's read next is that place
+    for (const e of this.moved) for (const k of ['left', 'right', 'bottom', 'transform'] as const) e.style[k] = '';
+    this.moved.clear();
+    // then every read
+    const W = innerWidth;
+    const H = innerHeight;
+    const bars = kids.filter((e) => e.matches(BAR) && visible(e)).map((e) => e.getBoundingClientRect());
+    if (bars.length === 0) return;
+    const bar = bars.reduce((a, b) => (b.width * b.height > a.width * a.height ? b : a));
+    const shown = pieces.filter((p) => visible(p.el));
+    const docked = new Set<Element>(pieces.map((p) => p.el));
+    // a game's own panels low on the screen, which stay put: kept clear of (the chat moves itself)
+    const others: Box[] = [...bars];
+    for (const e of kids) {
+      if (docked.has(e) || e.matches(BAR) || !e.classList.contains('panel') || e.closest('.chat') || !visible(e)) continue;
+      const r = e.getBoundingClientRect();
+      if (r.top > H * 0.4) others.push(r);
+    }
+    const sized = shown.map((p) => {
+      const r = p.el.getBoundingClientRect();
+      const b = getComputedStyle(p.el).bottom;
+      return { at: p.at, w: r.width, h: r.height, left: r.left, floor: b.endsWith('px') ? H - parseFloat(b) : null };
+    });
+    const boxes = stack(bar, sized, others, W);
+    // and the writes
+    shown.forEach((p, i) => {
+      const b = boxes[i]!;
+      const s = p.el.style;
+      s.bottom = `${Math.round(H - b.bottom)}px`;
+      if (p.at !== 'css') {
+        s.left = `${Math.round(b.left)}px`;
+        s.right = 'auto';
+        s.transform = 'none';
+      }
+      this.moved.add(p.el);
+    });
+  };
+
+  dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
+    this.resized?.disconnect();
+    this.added?.disconnect();
+    removeEventListener('resize', this.arrange);
+    for (const e of this.moved) for (const k of ['left', 'right', 'bottom', 'transform'] as const) e.style[k] = '';
+    this.moved.clear();
+    this.watched.clear();
+  }
+}
