@@ -1,20 +1,47 @@
-/* Roulette table: last numbers, meters, the result plaque over the wheel, bet tooltips, the
-   betting clock and the players at the wheel. Built on the theme's glass panels and brass lines.
-   The bottom-left corner stays free for the site's back chip. */
+/* Roulette table: last numbers and the board's figures, meters, the racetrack, the result plaque
+   over the wheel, bet tooltips, the betting clock and the players at the wheel. Built on the
+   theme's glass panels and brass lines. The bottom-left corner stays free for the site's back chip. */
 
-.rl-history { position: fixed; top: var(--below-hud); left: 16px; padding: 8px 12px 10px; max-width: min(640px, calc(100vw - 420px)); }
-.rl-history .label { margin-bottom: 6px; }
+/* The pockets and the track keep the wheel's own red, black and green in both themes (they are the wheel's). */
+.rl-hud, .rl-track { --rl-red: #a51d24; --rl-black: #141414; --rl-green: #0d6a39; --rl-numeral: #f3e8cc; --rl-print: #ead7a2; --rl-felt: #0c3d26; }
+
+/* One see-through row under the HUD: the board on the left, the meters (with the racetrack's
+   button) and the players stacked on the right, so nothing has to guess another panel's height.
+   Only the panels take the pointer and count as controls (table/fit.ts reads through .pass). */
+.rl-hud { position: fixed; top: var(--below-hud); left: 16px; right: 16px; display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.rl-side { flex: none; display: grid; justify-items: end; gap: 8px; margin-top: calc(var(--below-party) - var(--below-hud)); margin-left: auto; }
+.rl-history { flex: 0 1 auto; min-width: 0; padding: 8px 12px 10px; max-width: min(640px, calc(100vw - 420px)); }
+.rl-history-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+.rl-history-count { font-size: 12px; letter-spacing: 0.08em; color: var(--ink-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .rl-history-row { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 .rl-history-empty { font-size: 14px; color: var(--ink-3); }
-.rl-num { display: inline-grid; place-items: center; min-width: 28px; height: 28px; padding: 0 3px; border-radius: 3px; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; color: #f3e8cc; border: 1px solid rgba(0, 0, 0, 0.35); }
-.rl-num.red { background: #a51d24; }
-.rl-num.black { background: #141414; border-color: rgba(255, 255, 255, 0.12); }
-.rl-num.green { background: #0d6a39; }
+.rl-num { display: inline-grid; grid-auto-flow: column; align-items: baseline; justify-content: center; place-items: center; min-width: 28px; height: 28px; padding: 0 3px; border-radius: 3px; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--rl-numeral); border: 1px solid rgba(0, 0, 0, 0.35); }
+.rl-num.red { background: var(--rl-red); }
+.rl-num.black { background: var(--rl-black); border-color: rgba(255, 255, 255, 0.12); }
+.rl-num.green { background: var(--rl-green); }
 .rl-num.latest { min-width: 38px; height: 38px; font-size: 21px; box-shadow: 0 0 0 1px var(--brass-hi); margin-right: 4px; }
+.rl-num.small { min-width: 26px; height: 24px; font-size: 14px; }
+.rl-num sub { margin-left: 1px; font-size: 10px; font-weight: 600; opacity: 0.82; vertical-align: baseline; }
 
-.rl-meters { position: fixed; top: var(--below-party); right: 16px; display: flex; gap: 18px; padding: 9px 16px; }
+/* The board's figures under the numbers: the colours' split, then hot and cold. */
+.rl-stats { display: grid; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+.rl-split { display: flex; height: 18px; border-radius: 3px; overflow: hidden; box-shadow: inset 0 0 0 1px rgba(var(--lift-rgb), 0.1); font-size: 12px; font-weight: 600; line-height: 18px; color: var(--rl-numeral); font-variant-numeric: tabular-nums; }
+.rl-split > span { flex-basis: 0; min-width: 30px; padding: 0 6px; overflow: hidden; white-space: nowrap; }
+.rl-split-red { background: var(--rl-red); }
+.rl-split-green { background: var(--rl-green); text-align: center; }
+.rl-split-black { background: var(--rl-black); text-align: right; }
+.rl-hotcold { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.rl-hotcold .label { margin-right: 2px; }
+.rl-hotcold .label:not(:first-child) { margin-left: 10px; }
+.rl-hotcold-none { font-size: 13px; color: var(--ink-3); }
+
+.rl-meters { display: grid; gap: 8px; padding: 9px 16px; }
+.rl-meter-row { display: flex; gap: 18px; }
 .rl-meter { display: grid; gap: 2px; min-width: 78px; }
 .rl-meter-value { font-size: 21px; font-weight: 600; color: var(--ink); }
+.rl-tools { display: flex; justify-content: flex-end; gap: 6px; padding-top: 8px; border-top: 1px solid var(--line); }
+.rl-tools .btn { height: 30px; padding: 0 10px; font-size: 14px; }
+.rl-tools .btn[aria-pressed='true'] { border-color: var(--brass-hi); background: rgba(var(--brass-rgb), 0.2); }
 
 .rl-result { position: absolute; display: flex; align-items: center; gap: 12px; padding: 10px 16px 10px 10px; pointer-events: none; animation: rl-rise 0.4s var(--ease); white-space: nowrap; }
 .rl-result-badge { display: grid; place-items: center; width: 54px; height: 54px; border-radius: 50%; font-size: 27px; font-weight: 600; color: #f3e8cc; border: 2px solid var(--brass-hi); }
@@ -27,7 +54,10 @@
 .rl-result-net { font-size: 16px; font-weight: 600; letter-spacing: 0.04em; min-height: 0; }
 .rl-result-net.win { color: var(--win); }
 .rl-result-net.quiet { color: var(--ink-3); }
-@keyframes rl-rise { from { opacity: 0; transform: translateY(8px); } }
+/* translate, not transform: the label renderer places the plaque with an inline transform */
+@keyframes rl-rise { from { opacity: 0; translate: 0 8px; } }
+body.calm .rl-result { animation: rl-rise-calm 0.35s both; }
+@keyframes rl-rise-calm { from { opacity: 0; } }
 
 #ui .rl-tip { pointer-events: none; }
 .rl-result[hidden], .rl-clock[hidden], .rl-players[hidden], .rl-tip[hidden], .rl-color-note[hidden] { display: none; }
@@ -48,7 +78,7 @@
 .rl-clock-secs { position: absolute; inset: 0; display: grid; place-items: center; font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .rl-clock-caption { font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-2); text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8); }
 
-.rl-players { position: fixed; top: calc(var(--below-party) + 72px); right: 16px; display: grid; gap: 5px; padding: 9px 12px; min-width: 230px; }
+.rl-players { display: grid; gap: 5px; padding: 9px 12px; min-width: 230px; }
 .rl-player { display: grid; grid-template-columns: 16px 1fr auto auto; align-items: center; gap: 8px; font-size: 16px; }
 .rl-player.you .rl-player-name { color: var(--brass-hi); }
 .rl-player-chip { width: 14px; height: 14px; border-radius: 50%; box-shadow: 0 0 0 2px rgba(247, 242, 234, 0.85) inset, 0 0 0 1px rgba(0, 0, 0, 0.4); }
@@ -60,35 +90,83 @@
 
 .rl-color-note { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: var(--ink-2); }
 
+/* The racetrack, over the tray and the dealer's tip (and the Tips line rises over it while it's open). */
+.rl-track { position: fixed; left: 50%; bottom: 146px; transform: translateX(-50%); z-index: 6; display: grid; gap: 6px; width: min(640px, calc(100vw - 24px)); padding: 8px 12px 10px; }
+:root:has(.rl-track:not([hidden])) { --tip-bottom: calc(146px + (min(640px, 100vw - 24px) - 24px) / 4 + 64px); }
+.rl-track-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
+.rl-track-title { font-family: var(--serif); font-size: 16px; letter-spacing: 0.06em; color: var(--brass-hi); }
+.rl-track-nb, .rl-favs { display: flex; align-items: center; gap: 4px; }
+.rl-track-nb .label, .rl-favs .label { margin-right: 4px; }
+.rl-track .btn { height: 28px; padding: 0 9px; font-size: 14px; letter-spacing: 0.04em; }
+.rl-track .rl-step { width: 30px; padding: 0; font-size: 18px; }
+.rl-track-count { min-width: 18px; text-align: center; font-size: 17px; font-weight: 600; }
+.rl-fav.empty { color: var(--ink-3); }
+.rl-track.saving .rl-fav { border-color: var(--brass-hi); background: rgba(var(--brass-rgb), 0.16); }
+.rl-fav-save[aria-pressed='true'] { border-color: var(--brass-hi); color: var(--brass-hi); }
+.rl-track .rl-track-close { margin-left: auto; width: 30px; padding: 0; font-size: 19px; }
+.rl-track-svg { display: block; width: 100%; height: auto; }
+.rl-track-bg { fill: var(--rl-felt); stroke: var(--rl-print); stroke-width: 1.2; }
+.rl-cell { cursor: pointer; outline: none; }
+.rl-cell path { stroke: var(--rl-print); stroke-width: 1.1; transition: filter 0.12s; }
+.rl-cell.red path { fill: var(--rl-red); }
+.rl-cell.black path { fill: var(--rl-black); }
+.rl-cell.green path { fill: var(--rl-green); }
+.rl-cell text { fill: var(--rl-numeral); font: 600 15px var(--ui); pointer-events: none; }
+.rl-cell.lit path { filter: brightness(1.6); stroke: #fff3c4; stroke-width: 2; }
+.rl-cell:focus-visible path { stroke: var(--focus); stroke-width: 3; }
+.rl-call { cursor: pointer; outline: none; }
+.rl-call rect { fill: rgba(0, 0, 0, 0.16); stroke: var(--rl-print); stroke-width: 1.1; transition: fill 0.12s; }
+.rl-call:hover rect, .rl-call:focus-visible rect { fill: rgba(255, 243, 196, 0.16); }
+.rl-call:focus-visible rect { stroke: var(--focus); stroke-width: 2.5; }
+.rl-call-name { fill: var(--rl-print); font: 600 15px var(--serif); letter-spacing: 0.06em; pointer-events: none; }
+.rl-call-sub { fill: var(--rl-print); opacity: 0.75; font: 600 11px var(--ui); letter-spacing: 0.08em; pointer-events: none; }
+.rl-track-hint { fill: var(--rl-print); font: 600 15px var(--ui); letter-spacing: 0.06em; }
+.rl-track.closed .rl-track-svg { opacity: 0.5; pointer-events: none; }
+
 @media (max-width: 900px) {
-  .rl-history { max-width: calc(100vw - 32px); }
-  .rl-meters { gap: 10px; padding: 7px 10px; }
+  .rl-history { max-width: none; }
+  .rl-meters { padding: 7px 10px; }
+  .rl-meter-row { gap: 10px; }
 }
 
-/* A phone upright: the meters across the top under the HUD, the last numbers under them, the
-   players' list under both. */
+/* A phone upright: one column under the HUD, the meters (with the racetrack's button beside them)
+   across the top, the last numbers under them, the players' list under both. */
 @media (max-width: 560px) {
-  .rl-meters { left: 10px; right: 10px; justify-content: space-between; gap: 8px; padding: 7px 12px; }
+  .rl-hud { top: var(--below-party); left: 10px; right: 10px; flex-direction: column; align-items: stretch; gap: 8px; }
+  .rl-side { display: contents; }
+  .rl-meters { order: 1; grid-template-columns: 1fr auto; align-items: center; gap: 8px; padding: 7px 12px; }
+  .rl-meter-row { justify-content: space-between; gap: 8px; }
+  .rl-tools { padding: 0; border: 0; }
   .rl-meter { min-width: 0; }
   .rl-meter-value { font-size: 18px; }
-  .rl-history { top: calc(var(--below-party) + 62px); left: 10px; right: 10px; max-width: none; padding: 7px 10px 8px; }
+  .rl-history { order: 2; padding: 7px 10px 8px; }
   .rl-num { min-width: 26px; height: 26px; font-size: 15px; }
   .rl-num.latest { min-width: 34px; height: 34px; font-size: 19px; }
-  .rl-players { top: calc(var(--below-party) + 132px); left: 10px; right: 10px; min-width: 0; }
+  .rl-players { order: 3; min-width: 0; }
   .rl-result { gap: 10px; padding: 8px 12px 8px 8px; }
   .rl-result-badge { width: 46px; height: 46px; font-size: 23px; }
   .rl-result-call { font-size: 21px; }
   .rl-tip { max-width: calc(100vw - 24px); }
+  .rl-track { bottom: 226px; padding: 6px 8px 8px; }
+  :root:has(.rl-track:not([hidden])) { --tip-bottom: calc(226px + (100vw - 40px) / 4 + 104px); }
+  .rl-track-title { display: none; }
 }
-/* On its side: slimmer panels in the corners. */
+/* On its side: slimmer panels in the corners, and a slimmer track. */
 @media (max-height: 480px) {
+  .rl-hud { left: 10px; right: 10px; }
   .rl-history { padding: 6px 10px 7px; }
-  .rl-history .label { margin-bottom: 4px; }
-  .rl-meters { right: 10px; gap: 12px; padding: 6px 12px; }
+  .rl-history-head { margin-bottom: 4px; }
+  .rl-stats { margin-top: 5px; padding-top: 5px; gap: 4px; }
+  .rl-meters { gap: 6px; padding: 6px 12px; }
+  .rl-meter-row { gap: 12px; }
+  .rl-tools { padding-top: 5px; }
   .rl-meter-value { font-size: 18px; }
-  .rl-players { top: calc(var(--below-party) + 58px); right: 10px; padding: 6px 10px; font-size: 15px; }
+  .rl-players { padding: 6px 10px; font-size: 15px; }
   .rl-num { min-width: 24px; height: 24px; font-size: 14px; }
   .rl-num.latest { min-width: 30px; height: 30px; font-size: 17px; }
+  .rl-track { left: 10px; bottom: 50px; transform: none; width: min(440px, calc(100vw - 20px)); padding: 6px 8px 8px; }
+  :root:has(.rl-track:not([hidden])) { --tip-bottom: calc(50px + (min(440px, 100vw - 20px) - 16px) / 4 + 60px); }
+  .rl-track-title { display: none; }
 }
 
 /* Phones: over the wheel, the result plaque would stand behind the panels under an upright HUD, or

@@ -17,9 +17,9 @@ import type { GameEvent, TableConfig } from '../../../../shared/src/engine.ts';
 import type { Member } from '../../../../shared/src/protocol.ts';
 import type { RouletteView, SeatSettle } from '../../../../shared/src/games/roulette/protocol.ts';
 import { BETTING_MS, LAUNCH_LEAD_MS, LATE_SPIN_MS } from '../../../../shared/src/games/roulette/engine.ts';
-import { asVariant, spotByKey, spotName, paysLabel, describePocket, pocketLabel, type Spot } from '../../../../shared/src/games/roulette/rules.ts';
+import { asVariant, spotByKey, spotName, paysLabel, describePocket, pocketLabel, pocketCount, type Spot } from '../../../../shared/src/games/roulette/rules.ts';
 import { formatMoney, type Cents } from '../../../../shared/src/money.ts';
-import { ChipTray, el } from '../../ui/kit.ts';
+import { ChipTray, el, button } from '../../ui/kit.ts';
 import { chipOn, maxRefusal, rouletteMax, type MaxBet } from '../../table/max.ts';
 import { tween, wait, ease } from '../../table/tween.ts';
 import { CHIP_R, CHIP_H } from '../../table/chips.ts';
@@ -31,7 +31,11 @@ import { Flight, OpenTrack, Rotor, TAU, DIMS, LAUNCH_W, BOUNCE_S } from './spin.
 import { LayoutChips, Pile, seatColor, CHIP_SCALE, type PileStyle } from './chips.ts';
 import { BallSound } from './sound.ts';
 import { History, Meters, Plaque, Tip, Clock, Players, type PlayerRow } from './hud.ts';
-import { rouletteAdvice, rouletteMoment } from './advice.ts';
+import { rouletteAdvice, rouletteMoment, spotEdge } from './advice.ts';
+import { SpinLog, logKey } from './log.ts';
+import { Racetrack, type TrackPick } from './racetrack.ts';
+import { callOf, coveredBy, neighbourPieces, placeCall, unitsOf } from './calls.ts';
+import { loadFavourites, saveFavourite, placeFavourite, saveRefusal, layoutTotal, type Layout } from './favourites.ts';
 import { celebrate } from '../../table/celebrate.ts';
 import { wave } from '../../app/comfort.ts';
 import { around, ring } from '../../table/fit.ts';
@@ -46,6 +50,20 @@ const TRAY_MAX: Cents = 500_000;
 /** Betting: the whole table from above the players' rail. The spin: close on the wheel. */
 const BET_POSE: Pose = { position: [-0.1, 2.22, 0.9], target: [-0.1, TOP_Y, 0.0] };
 const WHEEL_POSE: Pose = { position: [WHEEL_X + 0.1, TOP_Y + 0.8, 0.6], target: [WHEEL_X + 0.02, TOP_Y + 0.02, 0.0] };
+
+/** A pocket as the log keeps it. */
+const isNumber = (x: unknown): x is number => typeof x === 'number' && Number.isInteger(x) && x >= 0 && x <= 37;
+
+/** How many neighbours each side a racetrack tap takes, as the player last set it (two by default). */
+const NEIGHBOURS_KEY = 'casino.roulette.neighbours';
+function savedNeighbours(): number {
+  try {
+    const k = Number(localStorage.getItem(NEIGHBOURS_KEY));
+    return Number.isInteger(k) && k >= 1 && k <= 4 ? k : 2;
+  } catch {
+    return 2;
+  }
+}
 
 const SEATS: { position: [number, number, number]; yaw: number }[] = [
   ...[-0.7, -0.375, -0.05, 0.275, 0.6, 0.925, 1.25].map((x) => ({ position: [x, 0, TABLE_D / 2 + 0.32] as [number, number, number], yaw: Math.PI })),
@@ -215,13 +233,22 @@ function mountRoulette(ctx: TableViewCtx): TableView {
   }
 
   // DOM
-  const history = new History();
+  const history = new History(variant);
+  // the table's longer log of numbers, for the board's hot and cold (log.ts)
+  let log = new SpinLog<number>(null, isNumber);
+  let logAt: string | null = null;
   const meters = new Meters();
   const plaque = new Plaque();
   const tip = new Tip();
   const clock = new Clock();
   const players = new Players();
-  ctx.ui.append(history.root, meters.root, tip.root, players.root);
+  // The board on the left, your meters and the players on the right: one see-through row under
+  // the HUD, so the right-hand panels stack whatever their height (and on a phone, one column).
+  const side = el('div', 'rl-side pass');
+  side.append(meters.root, players.root);
+  const hud = el('div', 'rl-hud pass');
+  hud.append(history.root, side);
+  ctx.ui.append(hud, tip.root);
   const plaqueObj = stage.label(plaque.root, new THREE.Vector3(WHEEL_X + 0.05, TOP_Y + 0.2, WHEEL_Z - 0.47));
   const clockObj = stage.label(clock.root, new THREE.Vector3(WHEEL_X + 0.3, TOP_Y + 0.1, 0.36));
 
@@ -240,6 +267,29 @@ function mountRoulette(ctx: TableViewCtx): TableView {
   const colorNote = el('span', 'rl-color-note');
   tray.root.append(colorNote);
   colorNote.hidden = true;
+
+  // The racetrack and the favourites: a panel over the tray, opened from the meters (L).
+  const track = new Racetrack(variant, {
+    pick: (p) => pickTrack(p),
+    hover: (p, x, y) => hoverTrack(p, x, y),
+    neighbours: (k) => {
+      try {
+        localStorage.setItem(NEIGHBOURS_KEY, String(k));
+      } catch {
+        // kept for this visit only
+      }
+    },
+    placeSlot: (i) => placeSlot(i),
+    saveSlot: (i) => saveSlot(i),
+    close: () => toggleTrack(false),
+  }, savedNeighbours());
+  ctx.ui.append(track.root);
+  const trackBtn = button('Racetrack', () => toggleTrack(), { cls: 'rl-tool', key: 'L', title: 'The racetrack: neighbours, the called bets and your favourite layouts (L)' });
+  trackBtn.setAttribute('aria-pressed', 'false');
+  meters.tools.append(trackBtn);
+  track.setSlots(loadFavourites(variant));
+  /** The last spin's chips, for Save once the layout has been cleared. */
+  let lastLayout: Layout = {};
 
   // ------------------------------------------------------------------------------------------
   // What the player can do
@@ -286,8 +336,84 @@ function mountRoulette(ctx: TableViewCtx): TableView {
     ctx.sfx.play('chip-lay', { volume: 0.7 });
   }
 
+  // ------------------------------------------------------------------------------------------
+  // The racetrack and the favourites
+
+  function toggleTrack(on = !track.open): void {
+    track.show(on);
+    trackBtn.setAttribute('aria-pressed', String(on));
+    if (!on) hoverTrack(null, 0, 0);
+  }
+
+  /** The chips a racetrack pick is made of. */
+  function piecesOf(p: TrackPick) {
+    return p.kind === 'neighbours' ? neighbourPieces(variant, p.n, track.neighbours) : (callOf(variant, p.id)?.pieces ?? []);
+  }
+
+  /** What a racetrack pick would put down now, or why it can't. */
+  function trackBets(p: TrackPick) {
+    const inside = cfg?.limits.inside ?? cfg?.limits.default;
+    if (!cfg || !inside) return { refusal: 'The table is not ready yet.' };
+    return placeCall(variant, piecesOf(p), tray.selected.value, { inside, tableMax: cfg.limits.default.max, bets: myBets(), stack });
+  }
+
+  function pickTrack(p: TrackPick): void {
+    if (!canBet()) return;
+    // a call is chips of one size; Max has no one size to give it
+    if (tray.maxPicked) return ctx.kit.toast('Racetrack bets go down one chip a spot: pick a chip first.');
+    const r = trackBets(p);
+    if ('refusal' in r) return ctx.kit.toast(r.refusal);
+    ctx.link.act({ type: 'bet', bets: r.bets });
+    ctx.sfx.play('chip-lay', { volume: 0.7 });
+  }
+
+  /** Over a number or a call: its numbers lit on the track and the layout, and its card. */
+  function hoverTrack(p: TrackPick | null, x: number, y: number): void {
+    if (!p) {
+      track.light([]);
+      lightNumbers(null);
+      tip.hide();
+      return;
+    }
+    const pieces = piecesOf(p);
+    const nums = coveredBy(variant, pieces);
+    track.light(nums);
+    lightNumbers(nums);
+    const call = p.kind === 'call' ? callOf(variant, p.id) : null;
+    const k = track.neighbours;
+    const title = p.kind === 'call' ? (call?.name ?? '') : `${pocketLabel(p.n)} and ${k} neighbour${k === 1 ? '' : 's'} each side`;
+    const lines: { text: string; cls?: string }[] = [
+      { text: title, cls: 'rl-tip-name' },
+      { text: nums.map(pocketLabel).join(' · '), cls: 'rl-tip-edge' },
+    ];
+    const r = trackBets(p);
+    if ('refusal' in r) lines.push({ text: r.refusal, cls: 'rl-tip-mine' });
+    else lines.push({ text: `${unitsOf(pieces)} chips, ${formatMoney(r.total)}${call ? ': each pays as its split, street or corner does' : ': each pays 35 to 1'}`, cls: 'rl-tip-mine' });
+    tip.show(lines, x, y);
+  }
+
+  function placeSlot(i: number): void {
+    if (!canBet() || !cfg) return;
+    const fav = loadFavourites(variant)[i];
+    if (!fav) return;
+    const r = placeFavourite(variant, fav, cfg, myBets(), stack);
+    if ('refusal' in r) return ctx.kit.toast(r.refusal);
+    ctx.link.act({ type: 'bet', bets: r.bets });
+    ctx.sfx.play('chip-lay', { volume: 0.7 });
+  }
+
+  function saveSlot(i: number): void {
+    // the chips on the layout, or once they're gone, the last spin's
+    const layout = myTotal() > 0 ? { ...myBets() } : lastLayout;
+    const why = saveRefusal(layout);
+    if (why) return ctx.kit.toast(why);
+    track.setSlots(saveFavourite(variant, i, layout));
+    ctx.kit.toast(`Favourite ${i + 1} keeps ${Object.keys(layout).length} spots, ${formatMoney(layoutTotal(layout))}.`);
+  }
+
   function refreshControls(): void {
     const betting = canBet();
+    track.setOpen(betting);
     if (mode === 'multi') {
       tray.setPrimary(amReady() ? 'Waiting' : 'Ready', view?.phase === 'betting' && !animating && mySeat !== null);
     } else {
@@ -325,7 +451,10 @@ function mountRoulette(ctx: TableViewCtx): TableView {
 
   function tipLines(spot: Spot): { text: string; cls?: string }[] {
     const lines: { text: string; cls?: string }[] = [{ text: `${spotName(spot)} · ${paysLabel(spot)}`, cls: 'rl-tip-name' }];
-    if (spot.kind === 'topline') lines.push({ text: 'House edge 7.89%, against 5.26% on every other bet', cls: 'rl-tip-edge' });
+    const [num, den] = spotEdge(variant, spot);
+    const covers = `${spot.numbers.length} of ${pocketCount(variant)} pockets`;
+    if (spot.kind === 'topline') lines.push({ text: `${covers} · house edge 7.89%, against 5.26% on every other bet`, cls: 'rl-tip-edge' });
+    else lines.push({ text: `${covers} · house edge ${((num / den) * 100).toFixed(2)}%`, cls: 'rl-tip-edge' });
     const most = canBet() ? maxOn(spot) : null;
     if (most) lines.push({ text: 'amount' in most ? `Max adds ${formatMoney(most.amount)}` : most.none === 'AT_MAX' ? 'At the maximum' : 'Not enough chips for its minimum', cls: 'rl-tip-mine' });
     if (view) {
@@ -340,12 +469,27 @@ function mountRoulette(ctx: TableViewCtx): TableView {
     return lines;
   }
 
-  function showHover(spot: Spot | null, e: PointerEvent): void {
-    if (spot?.key !== hovered?.key) {
-      hovered = spot;
-      hoverGroup.clear();
-      if (spot) for (const r of rectsFor(variant, spot)) hoverGroup.add(rectMesh(r, hoverMat));
+  /** Light the numbers a spot covers (null: none). */
+  function light(spot: Spot | null): void {
+    if (spot?.key === hovered?.key) return;
+    hovered = spot;
+    hoverGroup.clear();
+    if (spot) for (const r of rectsFor(variant, spot)) hoverGroup.add(rectMesh(r, hoverMat));
+  }
+
+  /** Light these numbers' boxes (a racetrack bet's), or none. */
+  function lightNumbers(nums: readonly number[] | null): void {
+    hovered = null;
+    hoverGroup.clear();
+    const cells = layoutOf(variant).cells;
+    for (const n of nums ?? []) {
+      const r = cells.get(n);
+      if (r) hoverGroup.add(rectMesh(r, hoverMat));
     }
+  }
+
+  function showHover(spot: Spot | null, e: PointerEvent): void {
+    light(spot);
     if (!spot) {
       tip.hide();
       ghost.visible = false;
@@ -360,15 +504,39 @@ function mountRoulette(ctx: TableViewCtx): TableView {
     }
   }
 
-  const onMove = (e: PointerEvent) => showHover(spotUnder(e), e);
+  // A touch has no hover: a tap puts the chip down as a click does, and lights the numbers it
+  // covers with its card over the finger for a moment (read again when the chip lands).
+  let touched: { spot: Spot; x: number; y: number; timer: number } | null = null;
+  function showTouch(spot: Spot, x: number, y: number): void {
+    if (touched) clearTimeout(touched.timer);
+    light(spot);
+    ghost.visible = false;
+    tip.show(tipLines(spot), x, y, true);
+    touched = { spot, x, y, timer: window.setTimeout(endTouch, 2400) };
+  }
+  function endTouch(): void {
+    if (!touched) return;
+    clearTimeout(touched.timer);
+    touched = null;
+    light(null);
+    tip.hide();
+  }
+
+  const onMove = (e: PointerEvent) => {
+    // the racetrack lights and labels its own picks
+    if (e.pointerType === 'touch' || (e.target instanceof Node && track.root.contains(e.target))) return;
+    showHover(spotUnder(e), e);
+  };
   const onDown = (e: PointerEvent) => {
     if (e.button !== 0) return;
     const spot = spotUnder(e);
-    if (spot) place(spot);
+    if (!spot) return;
+    place(spot);
+    if (e.pointerType === 'touch' || e.pointerType === 'pen') showTouch(spot, e.clientX, e.clientY);
   };
   const onLeave = () => {
-    hovered = null;
-    hoverGroup.clear();
+    if (touched) return;
+    light(null);
     tip.hide();
     ghost.visible = false;
   };
@@ -426,7 +594,7 @@ function mountRoulette(ctx: TableViewCtx): TableView {
   function draw(v: RouletteView): void {
     view = v;
     chips.sync(v.bets);
-    history.set(v.history);
+    history.set(log.merge(v.history));
     refreshControls();
     drawPlayers();
     meters.set({ stack, win: lastWin });
@@ -436,7 +604,7 @@ function mountRoulette(ctx: TableViewCtx): TableView {
   // The wheel and ball, every frame
 
   function launch(): void {
-    rotor.kick(rotor.angle(s));
+    rotor.kick(rotor.angle(s), rotor.speed(s));
     s = 0;
     flight = null;
     restAngle = null;
@@ -503,6 +671,7 @@ function mountRoulette(ctx: TableViewCtx): TableView {
 
   async function playSpin(e: SpinEvent, settle: SettleEvent | undefined, next: RouletteView): Promise<void> {
     animating = true;
+    endTouch();
     onLeave();
     refreshControls();
     plaque.hide();
@@ -555,7 +724,7 @@ function mountRoulette(ctx: TableViewCtx): TableView {
 
   async function settleTable(pocket: number, settle: SettleEvent | undefined, next: RouletteView): Promise<void> {
     const call = describePocket(pocket);
-    history.set(next.history);
+    history.set(log.merge(next.history));
     showWinning(pocket);
     plaque.show(pocket);
     ctx.kit.say(call.call, 3600);
@@ -563,6 +732,7 @@ function mountRoulette(ctx: TableViewCtx): TableView {
     const mine = mySeat !== null ? seats[mySeat] : undefined;
     lastNet = Object.fromEntries(Object.entries(seats).map(([k, v]) => [Number(k), v.returned - v.wagered]));
     const net = mine ? mine.returned - mine.wagered : 0;
+    if (mine) lastLayout = Object.fromEntries(mine.bets.map(([key, amount]) => [key, amount]));
     if (mine) {
       if (net > 0) plaque.setNet(`You won ${formatMoney(net)}`, 'win');
       else if (mine.returned > 0) plaque.setNet(`Paid ${formatMoney(mine.returned)} · net ${net === 0 ? 'even' : '−' + formatMoney(-net)}`, 'quiet');
@@ -686,6 +856,11 @@ function mountRoulette(ctx: TableViewCtx): TableView {
     onTable(snap: TableSnapshot) {
       mode = snap.meta.mode;
       cfg = snap.meta.config;
+      const kept = logKey('roulette', snap.meta.tableId, mode, variant);
+      if (kept !== logAt) {
+        logAt = kept;
+        log = new SpinLog<number>(kept, isNumber);
+      }
       tray.setChipMax(cfg.limits.outside?.max ?? TRAY_MAX, cfg.limits.inside?.min ?? 0);
       mySeat = snap.you.seat;
       stack = snap.you.stack;
@@ -734,6 +909,7 @@ function mountRoulette(ctx: TableViewCtx): TableView {
               void tween(140, (k) => pile.position.setY(y + 0.03 * (1 - k)), ease.out);
             }
             if (e.seat !== mySeat && grown.length) ctx.sfx.play('chip-lay', { volume: 0.35 });
+            if (touched) tip.show(tipLines(touched.spot), touched.x, touched.y, true);
             refreshControls();
             break;
           }
@@ -768,11 +944,17 @@ function mountRoulette(ctx: TableViewCtx): TableView {
     },
 
     keydown(e) {
+      // Enter and Space on the racetrack's own controls are theirs (not Spin)
+      if ((e.key === 'Enter' || e.code === 'Space') && e.target instanceof Element && track.root.contains(e.target)) return false;
       if ((e.metaKey || e.ctrlKey) && (e.key === 'z' || e.key === 'Z')) {
         act({ type: 'undo' });
         return true;
       }
       if (e.metaKey || e.ctrlKey || e.altKey) return false;
+      if (e.key === 'l' || e.key === 'L') {
+        toggleTrack();
+        return true;
+      }
       if (isChipKey(e.key)) return tray.key(e);
       // Max, while a bet can go down
       if ((e.key === 'a' || e.key === 'A') && !e.shiftKey && canBet()) {
@@ -814,13 +996,14 @@ function mountRoulette(ctx: TableViewCtx): TableView {
         camHome = null;
       }
       disposed = true;
+      if (touched) clearTimeout(touched.timer);
       unTips();
       ctx.kit.tip(null);
       removeEventListener('pointermove', onMove);
       removeEventListener('pointerdown', onDown);
       canvas.removeEventListener('pointerleave', onLeave);
       sound.dispose();
-      for (const node of [history.root, meters.root, tip.root, players.root, tray.root]) node.remove();
+      for (const node of [hud, tip.root, track.root, tray.root]) node.remove();
       plaqueObj.removeFromParent();
       clockObj.removeFromParent();
       plaque.root.remove();

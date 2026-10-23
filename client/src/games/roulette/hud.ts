@@ -4,43 +4,88 @@
 
 import { el } from '../../ui/kit.ts';
 import { formatMoney, type Cents } from '../../../../shared/src/money.ts';
-import { colorOf, pocketLabel, describePocket } from '../../../../shared/src/games/roulette/rules.ts';
+import { colorOf, pocketLabel, describePocket, type Variant } from '../../../../shared/src/games/roulette/rules.ts';
+import { wheelStats, shares } from './stats.ts';
 
+/**
+ * The last twenty numbers, and under them the board's figures from the table's longer log: how
+ * red, black and the zeros have split, and the hot and cold numbers.
+ */
 export class History {
   readonly root = el('div', 'rl-history panel');
   private readonly row = el('div', 'rl-history-row');
+  private readonly count = el('span', 'rl-history-count');
+  private readonly stats = el('div', 'rl-stats');
+  private readonly split = el('div', 'rl-split');
+  private readonly hotcold = el('div', 'rl-hotcold');
+  private shown = '';
 
-  constructor() {
-    this.root.append(el('div', 'label', 'Last numbers'), this.row);
+  constructor(private readonly variant: Variant) {
+    const head = el('div', 'rl-history-head');
+    head.append(el('span', 'label', 'Last numbers'), this.count);
+    this.stats.append(this.split, this.hotcold);
+    this.stats.title = 'Every spin is a fresh draw: these say what came up, not what will.';
+    this.root.append(head, this.row, this.stats);
   }
 
-  set(numbers: readonly number[]): void {
+  /** The log, newest first (its first twenty are the server's last twenty). */
+  set(log: readonly number[]): void {
+    const key = log.join(',');
+    if (key === this.shown && this.row.childElementCount) return;
+    this.shown = key;
     this.row.replaceChildren();
-    if (numbers.length === 0) {
+    this.stats.hidden = log.length === 0;
+    this.count.textContent = log.length > 20 ? `${log.length} spins` : '';
+    if (log.length === 0) {
       this.row.append(el('span', 'rl-history-empty', 'No spins yet'));
       return;
     }
-    numbers.slice(0, 20).forEach((p, i) => {
+    log.slice(0, 20).forEach((p, i) => {
       const t = el('span', `rl-num ${colorOf(p)}${i === 0 ? ' latest' : ''}`, pocketLabel(p));
       t.title = describePocket(p).call;
       this.row.append(t);
     });
+
+    const s = wheelStats(this.variant, log);
+    const pct = shares(s);
+    this.split.replaceChildren();
+    for (const c of ['red', 'green', 'black'] as const) {
+      if (s[c] === 0) continue;
+      const seg = el('span', `rl-split-${c}`, `${pct[c]}%`);
+      seg.style.flexGrow = String(s[c]);
+      this.split.append(seg);
+    }
+    this.split.setAttribute('role', 'img');
+    this.split.setAttribute('aria-label', `Over the last ${s.spins} spins: red ${pct.red}%, black ${pct.black}%, zero ${pct.green}%`);
+    const tag = (n: number, count: number | null) => {
+      const t = el('span', `rl-num small ${colorOf(n)}`, pocketLabel(n));
+      if (count !== null) t.append(el('sub', '', `×${count}`));
+      return t;
+    };
+    this.hotcold.replaceChildren(el('span', 'label', 'Hot'));
+    if (s.hot.length) this.hotcold.append(...s.hot.map((h) => tag(h.n, h.count)));
+    else this.hotcold.append(el('span', 'rl-hotcold-none', 'none twice'));
+    this.hotcold.append(el('span', 'label', 'Cold'), ...s.cold.map((c) => tag(c.n, null)));
   }
 }
 
 export class Meters {
   readonly root = el('div', 'rl-meters panel');
+  /** A row under the meters for the view's own buttons (the racetrack's). */
+  readonly tools = el('div', 'rl-tools');
   private readonly values: Record<'stack' | 'bet' | 'win', HTMLElement>;
 
   constructor() {
+    const row = el('div', 'rl-meter-row');
     const meter = (label: string) => {
       const box = el('div', 'rl-meter');
       const v = el('div', 'rl-meter-value money', '$0');
       box.append(el('div', 'label', label), v);
-      this.root.append(box);
+      row.append(box);
       return v;
     };
     this.values = { stack: meter('Stack'), bet: meter('On layout'), win: meter('Last win') };
+    this.root.append(row, this.tools);
   }
 
   set(m: { stack?: Cents; bet?: Cents; win?: Cents }): void {
@@ -88,25 +133,35 @@ export class Plaque {
 
 export class Tip {
   readonly root = el('div', 'rl-tip panel');
+  private shown = '';
 
   constructor() {
     this.root.hidden = true;
   }
 
-  show(lines: { text: string; cls?: string }[], x: number, y: number): void {
-    this.root.replaceChildren(...lines.map((l) => el('div', l.cls ?? '', l.text)));
+  /**
+   * Above and to the right of the pointer, clear of the chips it points at; for a touch
+   * (`above`), straight over the finger, where the hand doesn't cover it. The lines are rebuilt
+   * only when they change, so following the pointer only moves the card.
+   */
+  show(lines: { text: string; cls?: string }[], x: number, y: number, above = false): void {
+    const key = lines.map((l) => `${l.cls ?? ''}:${l.text}`).join('|');
+    if (key !== this.shown) {
+      this.shown = key;
+      this.root.replaceChildren(...lines.map((l) => el('div', l.cls ?? '', l.text)));
+    }
     this.root.hidden = false;
-    this.move(x, y);
+    this.move(x, y, above);
   }
 
-  move(x: number, y: number): void {
-    // keep it on screen, beside the pointer
-    // above and to the right of the pointer, clear of the chips it is pointing at
+  move(x: number, y: number, above = false): void {
+    // keep it on screen
     const w = this.root.offsetWidth || 180;
     const h = this.root.offsetHeight || 40;
-    const left = x + 22 + w > innerWidth ? x - 22 - w : x + 22;
-    this.root.style.left = `${Math.max(8, left)}px`;
-    this.root.style.top = `${Math.max(8, y - 34 - h)}px`;
+    const left = above ? x - w / 2 : x + 22 + w > innerWidth ? x - 22 - w : x + 22;
+    const top = above ? y - h - 48 : y - 34 - h;
+    this.root.style.left = `${Math.max(8, Math.min(innerWidth - w - 8, left))}px`;
+    this.root.style.top = `${Math.max(8, top)}px`;
   }
 
   hide(): void {

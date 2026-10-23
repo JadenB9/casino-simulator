@@ -98,19 +98,45 @@ function colorMaterials(color: string): THREE.Material[] {
 
 const MAX_SHOWN = 10;
 
+/**
+ * A soft dark disc under a spot's pile, a little wider than the chips, so piles that crowd a
+ * corner of the layout read apart from each other and from the felt. One texture, one material.
+ */
+let shadowMat: THREE.MeshBasicMaterial | null = null;
+const shadowGeo = new THREE.CircleGeometry(CHIP_R * 1.32, 28).rotateX(-Math.PI / 2);
+function shadowMaterial(): THREE.MeshBasicMaterial {
+  if (shadowMat) return shadowMat;
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d')!;
+  const grad = g.createRadialGradient(32, 32, 14, 32, 32, 32);
+  grad.addColorStop(0, 'rgba(0,0,0,0.55)');
+  grad.addColorStop(0.62, 'rgba(0,0,0,0.3)');
+  grad.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 64, 64);
+  shadowMat = new THREE.MeshBasicMaterial({ map: texture(c), transparent: true, depthWrite: false });
+  return shadowMat;
+}
+
 /** A pile worth `amount`, largest chips at the bottom. Its origin is at its base. */
 export class Pile extends THREE.Group {
   amount: Cents = 0;
   height = 0;
+  /** Its shadow on the felt (only the lowest pile on a shared spot shows one). */
+  readonly shadow = new THREE.Mesh(shadowGeo, shadowMaterial());
 
   constructor(readonly style: PileStyle) {
     super();
     this.scale.setScalar(CHIP_SCALE);
+    this.shadow.position.y = 0.0002;
+    this.shadow.renderOrder = -1;
   }
 
   set(amount: Cents): this {
     this.amount = amount;
     for (const c of [...this.children]) this.remove(c);
+    this.add(this.shadow);
     const chips: ChipSpec[] = [];
     for (const { chip, count } of chipBreakdown(amount).stacks) for (let i = 0; i < count; i++) chips.push(chip);
     // a big pile shows its top chips only; the tooltip and pills carry the exact amount
@@ -185,6 +211,7 @@ export class LayoutChips {
     let h = 0;
     for (const [, pile] of here) {
       pile.position.set(a[0], this.y + h, a[1]);
+      pile.shadow.visible = h === 0;
       h += pile.height;
     }
   }

@@ -58,29 +58,37 @@ const SHAPE_N = 1.6;
 
 /**
  * The wheel head's angle over time. Idle it creeps round; the dealer gives it a push when the
- * ball goes in and it eases back toward idle. Closed form, so a flight can ask where the rotor
- * will be when the ball lands.
+ * ball goes in, it picks up speed over a moment (from whatever it was still turning at) and eases
+ * back toward idle. Closed form, so a flight can ask where the rotor will be when the ball lands.
  */
 export class Rotor {
   base = 0;
   idle = 0.1 * TAU;
   push = 0.4 * TAU;
   tau = 9;
+  /** How long the push takes to bring the head up to speed (s). */
+  rise = 0.35;
+  /** The head's speed as the push began. */
+  w0 = 0.1 * TAU;
   pushed = false;
 
   angle(t: number): number {
     if (!this.pushed) return this.base + this.idle * t;
-    return this.base + this.idle * t + (this.push - this.idle) * this.tau * (1 - Math.exp(-t / this.tau));
+    return this.base + this.idle * t + (this.push - this.idle) * this.tau * (1 - Math.exp(-t / this.tau)) + (this.w0 - this.push) * this.rise * (1 - Math.exp(-t / this.rise));
   }
 
   speed(t: number): number {
     if (!this.pushed) return this.idle;
-    return this.idle + (this.push - this.idle) * Math.exp(-t / this.tau);
+    return this.idle + (this.push - this.idle) * Math.exp(-t / this.tau) + (this.w0 - this.push) * Math.exp(-t / this.rise);
   }
 
-  /** The dealer pushes the wheel as the ball goes in; the clock restarts at 0 from this angle. */
-  kick(fromAngle: number): void {
+  /**
+   * The dealer pushes the wheel as the ball goes in; the clock restarts at 0 from this angle, and
+   * the head carries on from this speed (it never jumps), so a push mid-turn is smooth too.
+   */
+  kick(fromAngle: number, fromSpeed = this.idle): void {
     this.base = fromAngle;
+    this.w0 = fromSpeed;
     this.pushed = true;
   }
 }
@@ -131,6 +139,17 @@ interface Hop {
   h: number;
 }
 
+/** A knock against a fret: the ball thrown back against its run by `a` radians, and on again. */
+interface Knock {
+  t0: number;
+  dur: number;
+  a: number;
+}
+
+/** How long the ball rocks in its pocket before it lies still, and by how much (pockets). */
+const ROCK_S = 0.45;
+const ROCK = 0.14;
+
 /** Height of the bowl's surface at radius r (the apron), for the ball running down it. */
 export function apronY(r: number): number {
   const a = DIMS.apron;
@@ -179,6 +198,8 @@ export class Flight {
   private readonly profile: Profile;
   private readonly D: number;
   private readonly hops: Hop[] = [];
+  private readonly knocks: Knock[] = [];
+  private readonly rock: number;
   private readonly deflectHop: Hop | null = null;
   /** Whole revolutions the ball makes on the track and down the bowl (for the ≥ 4 rule). */
   readonly revolutions: number;
@@ -200,7 +221,8 @@ export class Flight {
     this.profile = solveTrack(from, this.tEnter, thetaEnter);
     this.revolutions = Math.abs(profileAngle(this.profile, this.tEnter) - profileAngle(this.profile, this.t0)) / TAU;
     this.correction = this.profile.fix;
-    // hops as it lands and skitters across the frets
+    // hops as it lands and skitters across the frets; each landing after the first knocks it
+    // back against its run for a moment (the knocks all end where they began, well before rest)
     let t = this.tEnter;
     for (const h of [0.017, 0.011, 0.0075, 0.0045, 0.0025]) {
       const hh = h * (0.75 + 0.5 * jitter());
@@ -208,6 +230,11 @@ export class Flight {
       this.hops.push({ t0: t, dur, h: hh });
       t += dur + 0.04 + 0.08 * jitter();
     }
+    this.hops.slice(0, -1).forEach((h, i) => {
+      this.knocks.push({ t0: h.t0 + h.dur, dur: 0.22 + 0.08 * jitter(), a: plan.sector * (1.3 - 0.25 * i) * (0.7 + 0.6 * jitter()) });
+    });
+    // and in the pocket it rocks against the frets either side before lying still
+    this.rock = plan.sector * ROCK * (0.7 + 0.6 * jitter()) * (jitter() < 0.5 ? -1 : 1);
     // a deflector strike on the way down, if one is near where the ball crosses its radius
     const uCross = Math.sqrt((DIMS.trackR - DIMS.deflectorR) / (DIMS.trackR - DIMS.enterR));
     const tCross = this.tDrop + uCross * FALL_S;
@@ -225,7 +252,7 @@ export class Flight {
     }
     if (t >= this.tEnter) {
       const tau = (t - this.tEnter) / BOUNCE_S;
-      const rel = this.plan.pocketAngle + this.D * (1 - tau) ** BOUNCE_P;
+      const rel = this.plan.pocketAngle + this.D * (1 - tau) ** BOUNCE_P + knockAt(this.knocks, t) + rockAt(this.rock, this.tRest, t);
       const k = Math.max(0, 1 - tau / 0.55);
       const r = DIMS.restR + (DIMS.enterR - DIMS.restR) * k * k;
       let y = rotorY(r) + DIMS.ballR;
@@ -302,6 +329,27 @@ export function solveTrack(from: { t: number; theta: number; w: number }, tEnter
   // remaining difference (under half a turn) over the track.
   const R = want - k0 * TAU;
   return { t0: from.t, T, theta0: from.theta, w0, w1: ENTER_W, n: SHAPE_N, fix: R - natural };
+}
+
+/** How far the knocks have the ball thrown back at time t: a quick swing back that eases off. */
+function knockAt(knocks: Knock[], t: number): number {
+  let out = 0;
+  for (const k of knocks) {
+    if (t <= k.t0 || t >= k.t0 + k.dur) continue;
+    const u = (t - k.t0) / k.dur;
+    out += k.a * Math.sin(Math.PI * u) * (1 - u) ** 1.5;
+  }
+  return out;
+}
+
+/**
+ * The rock in the pocket over the last ROCK_S before rest: a few swings that die away, gone (and
+ * still) at the moment of rest, so the ball lies exactly in the pocket the server chose.
+ */
+function rockAt(a: number, tRest: number, t: number): number {
+  const u = (t - (tRest - ROCK_S)) / ROCK_S;
+  if (u <= 0 || u >= 1) return 0;
+  return a * (1 - u) ** 2 * Math.sin(Math.PI * 5 * u);
 }
 
 function hopHeight(hops: Hop[], t: number): number {
