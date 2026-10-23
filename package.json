@@ -20,6 +20,7 @@
     "types": "wrangler types -c server/wrangler.toml server/worker-configuration.d.ts",
     "privacy": "node scripts/privacy.mjs",
     "check": "npm run typecheck && npm test && npm run privacy",
+    "size": "node scripts/size.mjs",
     "postinstall": "npm run types"
   },
   "dependencies": {
