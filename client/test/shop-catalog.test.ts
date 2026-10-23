@@ -4,7 +4,9 @@
 
 import { describe, expect, it } from 'vitest';
 import { EFFECTS, EMOTE_ITEMS, FX_GAP_MS, SHOP_ITEMS, effectItem, theName, type FxEvent } from '../../shared/src/items.ts';
-import { NEW_IDS, SECTIONS, VAULT_FROM, WEAR_KINDS, inVault, clockText, entries, entryOf, roomAt, roomName, secsText, waitFor } from '../src/ui/shop/catalog.ts';
+import {
+  NEW_IDS, SECTIONS, VAULT_FROM, WEAR_KINDS, allEntries, inVault, clockText, coverText, entries, entryOf, filterEntries, kindText, roomAt, roomName, searchEntries, secsText, sortEntries, waitFor,
+} from '../src/ui/shop/catalog.ts';
 import { roomAt as floorRoomAt } from '../../server/src/floor/fx.ts';
 
 describe('the boutique lists', () => {
@@ -59,6 +61,73 @@ describe('the boutique lists', () => {
     expect(entryOf('wave')).toBeNull();
     expect(entryOf('nope')).toBeNull();
     for (const id of NEW_IDS) expect(entryOf(id)).not.toBeNull();
+  });
+});
+
+describe("the case's search, filters and order", () => {
+  const ids = (es: { id: string }[]) => es.map((e) => e.id);
+
+  it('looks through every piece once, from its own section', () => {
+    const all = allEntries();
+    expect(new Set(ids(all)).size).toBe(all.length);
+    expect(all.every((e) => e.section !== 'vault')).toBe(true);
+    const want = [...SHOP_ITEMS.map((i) => i.id), ...EMOTE_ITEMS.filter((e) => e.price > 0).map((e) => e.id), ...EFFECTS.map((e) => e.id), 'statue'];
+    expect(ids(all).sort()).toEqual(want.sort());
+  });
+
+  it('finds pieces by name, by what they are made of and by kind, every word of the search', () => {
+    expect(ids(searchEntries('cuban'))).toEqual(expect.arrayContaining(['cuban-link', 'iced-cuban', 'dice-pendant']));
+    expect(ids(searchEntries('ROSE gold'))).toEqual(expect.arrayContaining(['rose-gold', 'rose-watch']));
+    expect(ids(searchEntries('rose gold')).every((id) => entryOf(id)!.about.toLowerCase().includes('rose') || entryOf(id)!.name.toLowerCase().includes('rose'))).toBe(true);
+    // by kind, plural or not
+    expect(ids(searchEntries('watch')).sort()).toEqual(['gold-watch', 'iced-watch', 'rose-watch']);
+    expect(ids(searchEntries('watches')).sort()).toEqual(['gold-watch', 'iced-watch', 'rose-watch']);
+    expect(searchEntries('emote').every((e) => e.section === 'emote')).toBe(true);
+    // accents fold away; the collection and what's won have their own words
+    expect(ids(searchEntries('pave')).sort()).toEqual(['dice-pendant', 'iced-cuban']);
+    expect(ids(searchEntries('lame'))).toContain('gold-tracksuit');
+    expect(ids(searchEntries('vault')).sort()).toEqual(ids(entries('vault')).sort());
+    expect(searchEntries('reward').every((e) => e.reward)).toBe(true);
+    expect(searchEntries('   ')).toEqual([]);
+    expect(searchEntries('zeppelin')).toEqual([]);
+  });
+
+  it('filters what your balance buys, what you own and what you saved', () => {
+    const chains = entries('wear', 'chain');
+    const owned = (e: { id: string }) => e.id === 'rope-chain' || e.id === 'twentyone-pendant';
+    const ctx = { owned, balance: 1_000_000_00, saved: new Set(['figaro', 'billionaire-chain']) };
+    // affordable, not yours already, never a reward
+    expect(ids(filterEntries(chains, 'afford', ctx))).toEqual(['figaro', 'cuban-link']);
+    expect(ids(filterEntries(chains, 'owned', ctx))).toEqual(['rope-chain', 'twentyone-pendant']);
+    expect(ids(filterEntries(chains, 'saved', ctx))).toEqual(['figaro', 'billionaire-chain']);
+    expect(filterEntries(chains, 'all', ctx)).toEqual(chains);
+    // an effect is bought each time it plays: affordable as often as you like, never owned
+    const fx = entries('fx');
+    expect(ids(filterEntries(fx, 'afford', { ...ctx, owned: () => true }))).toEqual(ids(fx.filter((e) => e.price <= ctx.balance)));
+    expect(filterEntries(fx, 'owned', { ...ctx, owned: () => true })).toEqual([]);
+  });
+
+  it('orders by price either way, a tie as it was, what is won always last', () => {
+    const chains = entries('wear', 'chain');
+    expect(sortEntries(chains, false)).toEqual(chains);
+    const down = sortEntries(chains, true);
+    const sold = down.filter((e) => !e.reward);
+    expect(sold.map((e) => e.price)).toEqual([...sold.map((e) => e.price)].sort((a, b) => b - a));
+    expect(down.slice(sold.length).every((e) => e.reward)).toBe(true);
+    // the two $5,000,000 pendants keep their order
+    expect(ids(down).indexOf('dice-pendant')).toBeLessThan(ids(down).indexOf('ace-pendant'));
+  });
+
+  it('says what a piece is in a word, and how much of it a balance covers', () => {
+    expect(kindText(entryOf('rope-chain')!)).toBe('Chain');
+    expect(kindText(entryOf('segway')!)).toBe('Ride');
+    expect(kindText(entryOf('griddy')!)).toBe('Emote');
+    expect(kindText(entryOf('fx-disco')!)).toBe('Effect');
+    expect(kindText(entryOf('statue')!)).toBe('Statue');
+    expect(coverText(0.0035)).toBe('0.35%');
+    expect(coverText(0.00004)).toBe('less than 0.01%');
+    expect(coverText(0.42)).toBe('42%');
+    expect(coverText(0.999)).toBe('nearly all');
   });
 });
 

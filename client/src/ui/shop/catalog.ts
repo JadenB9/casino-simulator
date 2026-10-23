@@ -1,10 +1,11 @@
 // What the boutique shows, section by section, as plain data: the worn pieces by kind, the rides,
 // the emotes, the effects and the statue. Each section lists what's sold, cheapest first, then the
-// pieces feats give (never sold: they show what there is to win). Pure, so the order and the
-// slot arithmetic below are tested without a page.
+// pieces feats give (never sold: they show what there is to win); a search, the filters and the
+// order work on these lists too. Pure, so the order, the search and the slot arithmetic below are
+// tested without a page.
 
 import {
-  EFFECTS, EMOTE_ITEMS, FX_GAP_MS, ITEM_KINDS, SHOP_ITEMS, STATUE,
+  EFFECTS, EMOTE_ITEMS, FX_GAP_MS, ITEM_KINDS, KIND_LABELS, KIND_ONE, SHOP_ITEMS, STATUE,
   effectItem, emoteItem, shopEmote, wornItem,
   type EffectItem, type FxEvent, type ItemKind,
 } from '../../../../shared/src/items.ts';
@@ -99,6 +100,70 @@ export function entryOf(id: string | undefined | null): Entry | null {
 /** The feat that gives a reward piece or emote, if the list has one. */
 export function rewardFeat(id: string): Feat | null {
   return FEATS.find((f) => f.reward.item === id || f.reward.emote === id) ?? null;
+}
+
+// ---------------------------------------------------------------------------------------------
+// The case's tools: a search across every section, the filters, the order
+
+export type Filter = 'all' | 'afford' | 'owned' | 'saved';
+
+/** What a piece is, in a word: its kind ("Chain", "Ride"), or "Emote", "Effect", "Statue". */
+export function kindText(e: Entry): string {
+  if (e.fx) return 'Effect';
+  if (e.section === 'emote') return 'Emote';
+  if (e.section === 'statue') return 'Statue';
+  return e.kind ? KIND_ONE[e.kind] : '';
+}
+
+/** Every piece once, from its own section (the Vault's pieces are in their kind's lists too). */
+export function allEntries(): Entry[] {
+  return [...WEAR_KINDS.flatMap((k) => entries('wear', k)), ...entries('ride'), ...entries('emote'), ...entries('fx'), ...entries('statue')];
+}
+
+/** Lower case without accents, so "creme" finds "crème". */
+const fold = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+/**
+ * The pieces a search finds: every word of it somewhere in the name, what the piece is made of,
+ * its kind, or the words for the collection and what's won ("vault", "reward").
+ */
+export function searchEntries(query: string): Entry[] {
+  const words = fold(query).split(/\s+/).filter(Boolean);
+  if (!words.length) return [];
+  return allEntries().filter((e) => {
+    const hay = fold(`${e.name} ${e.about} ${kindText(e)} ${e.kind ? KIND_LABELS[e.kind] : ''} ${e.reward ? 'reward won earned' : ''} ${inVault(e) ? 'vault private collection' : ''}`);
+    return words.every((w) => hay.includes(w));
+  });
+}
+
+/**
+ * A filter's share of a list: what your balance buys now (not what you own already, never a
+ * reward), what you own (an effect is bought each time, so never), or what you've saved.
+ */
+export function filterEntries(list: readonly Entry[], f: Filter, ctx: { owned(e: Entry): boolean; balance: Cents; saved: ReadonlySet<string> }): Entry[] {
+  switch (f) {
+    case 'afford':
+      return list.filter((e) => !e.reward && (e.fx || !ctx.owned(e)) && e.price <= ctx.balance);
+    case 'owned':
+      return list.filter((e) => !e.fx && ctx.owned(e));
+    case 'saved':
+      return list.filter((e) => ctx.saved.has(e.id));
+    default:
+      return [...list];
+  }
+}
+
+/** In price order either way (a tie keeps its order); what's won and never sold stays at the end. */
+export function sortEntries(list: readonly Entry[], down: boolean): Entry[] {
+  return [...list].sort((a, b) => Number(a.reward) - Number(b.reward) || (down ? b.price - a.price : a.price - b.price));
+}
+
+/** A share of a price as the status line says it: "0.04%", "12%", "nearly all". */
+export function coverText(k: number): string {
+  if (k >= 0.995) return 'nearly all';
+  const pct = k * 100;
+  if (pct < 0.01) return 'less than 0.01%';
+  return `${pct < 1 ? pct.toFixed(2) : Math.floor(pct)}%`;
 }
 
 // ---------------------------------------------------------------------------------------------

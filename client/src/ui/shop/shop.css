@@ -12,126 +12,258 @@
 .bq-stage { position: relative; flex: 1; min-width: 0; cursor: grab; touch-action: none; }
 .bq-stage.dragging { cursor: grabbing; }
 .bq-caption { position: absolute; left: 50%; bottom: 74px; transform: translateX(-50%); width: max-content; max-width: calc(100% - 32px); text-align: center; pointer-events: none; }
-.bq-cap-name { font-family: var(--serif); font-size: 26px; font-weight: 600; line-height: 1.15; letter-spacing: 0.1em; text-transform: uppercase; color: var(--brass-hi); text-shadow: 0 2px 22px rgba(0, 0, 0, 0.85); }
-.bq-cap-line { margin-top: 5px; font-size: 14px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-2); font-variant-numeric: tabular-nums; text-shadow: 0 1px 12px rgba(0, 0, 0, 0.9); }
+.bq-cap-name { font-family: var(--serif); font-size: 26px; font-weight: 600; line-height: 1.15; letter-spacing: 0.1em; text-transform: uppercase; color: #f1d59a; text-shadow: 0 2px 22px rgba(0, 0, 0, 0.85); }
+.bq-cap-line { margin-top: 5px; font-size: 14px; letter-spacing: 0.16em; text-transform: uppercase; color: #d9cfbb; font-variant-numeric: tabular-nums; text-shadow: 0 1px 12px rgba(0, 0, 0, 0.9); }
 .bq-turn { position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); display: flex; align-items: center; gap: 14px; padding: 5px; border: 1px solid var(--line); border-radius: 999px; background: rgba(var(--glass-rgb), 0.74); }
 .bq-turn-btn { display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: transparent; color: var(--ink-2); cursor: pointer; }
 .bq-turn-btn:hover { color: var(--ink); border-color: var(--line-strong); }
 .bq-turn-hint { display: flex; align-items: center; gap: 6px; font-size: 14px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-3); white-space: nowrap; }
 .bq-turn-hint span { margin-right: 4px; }
 
-.bq-panel { position: relative; flex: none; display: flex; flex-direction: column; width: 440px; background: var(--sheet-solid); border-left: 1px solid var(--line); box-shadow: -24px 0 60px rgba(0, 0, 0, 0.45); animation: bq-panel-in 0.35s var(--ease); }
+/* The case grows with the screen: two cards across on a laptop, three on a wide monitor. */
+.bq-panel { position: relative; flex: none; display: flex; flex-direction: column; width: clamp(420px, 36vw, 620px); background: var(--sheet-solid); border-left: 1px solid var(--line); box-shadow: -24px 0 60px rgba(0, 0, 0, 0.45); animation: bq-panel-in 0.35s var(--ease); }
 .bq-panel::before { content: ''; position: absolute; left: -1px; top: 32px; bottom: 32px; width: 1px; background: linear-gradient(rgba(var(--brass-hi-rgb), 0), rgba(var(--brass-hi-rgb), 0.6), rgba(var(--brass-hi-rgb), 0)); }
 @keyframes bq-panel-in { from { opacity: 0; transform: translateX(24px); } }
 
-.bq-money { display: flex; align-items: baseline; gap: 10px; padding: 11px 24px 12px; border-bottom: 1px solid var(--line); }
-.bq-money-label { font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-3); }
-.bq-money-val { font-size: 22px; line-height: 1; color: var(--ink); }
-.bq-money-own { margin-left: auto; font-size: 14px; letter-spacing: 0.06em; color: var(--ink-3); }
+/* the head: the title and the section's line, your balance on the right */
+.bq-head { align-items: center; padding-bottom: 13px; }
+.bq-money { display: grid; justify-items: end; gap: 1px; margin-right: 4px; }
+.bq-money-label { font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-3); }
+.bq-money-val { font-size: 22px; line-height: 1.05; color: var(--ink); white-space: nowrap; }
+.bq-money-own { font-size: 13px; letter-spacing: 0.04em; color: var(--ink-3); white-space: nowrap; }
+.bq-money-own:empty { display: none; }
 
-.bq-tabs { display: grid; gap: 8px; padding: 12px 24px 8px; }
+.bq-tabs { display: grid; gap: 8px; padding: 12px 24px 4px; }
 .bq-seg { display: flex; width: 100%; }
 .bq-seg .seg-btn { flex: 1; padding: 0 2px; font-size: 13.5px; letter-spacing: 0.05em; }
+/* while a search runs every section is in it: the tabs step back */
+.bq-tabs.searching .seg-btn[aria-checked='true']:not(.vault-tab) { background: none; color: var(--ink-2); }
 /* the kinds under Wear: quieter than the sections, text with a rule under the one picked */
 .bq-sub { display: flex; width: 100%; flex-wrap: nowrap; border: 0; border-radius: 0; border-bottom: 1px solid var(--line); overflow: visible; }
-.bq-sub .seg-btn { flex: 1; height: 30px; padding: 0 2px; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; font-size: 13px; letter-spacing: 0.08em; color: var(--ink-3); }
+.bq-sub .seg-btn { flex: 1; height: 30px; padding: 0 2px; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; font-size: 13px; letter-spacing: 0.08em; color: var(--ink-3); transition: color 0.15s, border-color 0.2s var(--ease); }
 .bq-sub .seg-btn[aria-checked='true'] { background: none; color: var(--brass-hi); border-bottom-color: var(--brass-hi); }
 /* something new in there you don't have yet: a small brass dot after the label */
 .bq-tabs .seg-btn.has-new::after { content: ''; display: inline-block; width: 5px; height: 5px; margin-left: 5px; border-radius: 50%; background: var(--brass-hi); vertical-align: 3px; }
 
-.bq-list { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 2px 12px 8px; }
-.bq-item { display: grid; grid-template-columns: 1fr auto; column-gap: 14px; row-gap: 3px; width: 100%; padding: 11px 12px 12px 14px; border: 0; border-left: 2px solid transparent; border-bottom: 1px solid rgba(var(--brass-rgb), 0.09); background: none; color: var(--ink-2); text-align: left; cursor: pointer; transition: background 0.15s, border-color 0.15s; }
-.bq-item:hover { background: rgba(var(--lift-rgb), 0.025); }
-.bq-item:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
-.bq-item[aria-selected='true'] { border-left-color: var(--brass-hi); background: rgba(var(--brass-rgb), 0.075); }
-.bq-name { font-family: var(--serif); font-size: 16px; font-weight: 600; line-height: 1.25; letter-spacing: 0.05em; color: var(--ink); }
-.bq-price { font-size: 17px; line-height: 1.2; text-align: right; color: var(--ink); }
+/* search, the filters and the order, in one row (wrapping on a narrow case) */
+.bq-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 24px 10px; }
+.bq-search { flex: 1 1 110px; display: flex; align-items: center; gap: 6px; min-width: 0; height: 32px; padding: 0 4px 0 9px; border: 1px solid var(--line); border-radius: 16px; background: var(--field); color: var(--ink-3); transition: border-color 0.15s; }
+.bq-search:focus-within { border-color: var(--brass-hi); }
+.bq-search .ico { width: 15px; height: 15px; }
+.bq-search-input { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: transparent; color: var(--ink); font: inherit; font-size: 14.5px; caret-color: var(--brass-hi); }
+.bq-search-input::placeholder { color: var(--ink-3); }
+.bq-search-clear { display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--ink-3); cursor: pointer; }
+.bq-search-clear .ico { width: 13px; height: 13px; }
+.bq-search-clear:hover { color: var(--ink); background: rgba(var(--lift-rgb), 0.06); }
+.bq-search-clear:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.bq-filter { flex: none; border-radius: 16px; }
+.bq-filter .seg-btn { height: 30px; padding: 0 9px; font-size: 12.5px; letter-spacing: 0.05em; }
+.bq-sort { flex: none; height: 32px; padding: 0 9px; border: 1px solid var(--line); border-radius: 16px; background: transparent; color: var(--ink-2); font: inherit; font-size: 12.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; cursor: pointer; transition: color 0.15s, border-color 0.15s; }
+.bq-sort:hover { color: var(--ink); border-color: var(--line-strong); }
+.bq-sort:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+/* the cards */
+/* (rows at their content's height: a card clips its corners, which would otherwise let the grid
+   squeeze it to fit the panel instead of scrolling) */
+.bq-list { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); grid-auto-rows: max-content; align-content: start; gap: 10px; padding: 4px 24px 14px; }
+.bq-item { position: relative; display: flex; flex-direction: column; min-width: 0; padding: 0 0 11px; border: 1px solid var(--line); border-radius: 8px; background: rgba(var(--lift-rgb), 0.02); color: var(--ink-2); text-align: left; cursor: pointer; overflow: hidden; transition: border-color 0.18s, box-shadow 0.25s var(--ease), transform 0.25s var(--ease), background 0.18s; }
+.bq-item:hover { border-color: var(--line-strong); transform: translateY(-1px); }
+.bq-item:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.bq-item[aria-selected='true'] { border-color: var(--brass-hi); background: rgba(var(--brass-rgb), 0.07); box-shadow: 0 0 0 1px var(--brass-hi), 0 8px 22px rgba(0, 0, 0, 0.18); }
+.bq-item.bq-in { animation: bq-card-in 0.34s var(--ease) both; animation-delay: calc(var(--i, 0) * 18ms); }
+@keyframes bq-card-in { from { opacity: 0; transform: translateY(6px); } }
+.bq-pic { position: relative; display: block; padding: 6px 6px 0; background: radial-gradient(120% 90% at 50% 40%, rgba(var(--brass-hi-rgb), 0.1), rgba(var(--brass-hi-rgb), 0) 70%); }
+.bq-art { display: block; width: 100%; height: auto; }
+.bq-heart { position: absolute; top: 7px; right: 7px; color: var(--lose); }
+.bq-heart .ico { width: 15px; height: 15px; }
+.bq-heart .ico path { fill: currentColor; }
+.bq-text { display: grid; gap: 2px; padding: 2px 11px 0; min-width: 0; }
+.bq-kind { font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--brass); }
+.bq-list:not(.mixed) .bq-item:not(.vault) .bq-kind { display: none; }
+.bq-name { font-family: var(--serif); font-size: 15px; font-weight: 600; line-height: 1.25; letter-spacing: 0.04em; color: var(--ink); overflow-wrap: anywhere; }
+.bq-line { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-width: 0; }
+.bq-price { font-size: 16px; line-height: 1.2; color: var(--ink); white-space: nowrap; }
 .bq-item.short .bq-price { color: var(--ink-3); }
-.bq-about { font-size: 14px; line-height: 1.3; color: var(--ink-3); }
-.bq-chip { align-self: start; justify-self: end; min-width: 58px; padding: 2px 6px; border: 1px solid transparent; border-radius: 3px; font-size: 11px; line-height: 14px; letter-spacing: 0.14em; text-align: center; text-transform: uppercase; }
+.bq-meta { font-size: 11.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); }
+.bq-chip { flex: none; min-width: 0; padding: 1px 6px; border: 1px solid transparent; border-radius: 3px; font-size: 10.5px; line-height: 14px; letter-spacing: 0.14em; text-align: center; text-transform: uppercase; }
+.bq-chip:empty { display: none; }
 .bq-chip.owned, .bq-chip.earned { color: var(--ink-2); border-color: var(--line-strong); }
 .bq-chip.wearing, .bq-chip.riding, .bq-chip.playing { color: var(--on-gold); background: var(--brass); border-color: var(--brass); }
 .bq-chip.queued { color: var(--brass-hi); border-color: var(--brass); }
-.bq-chip.new { min-width: 0; color: var(--brass-hi); letter-spacing: 0.18em; }
-.bq-meta { display: flex; gap: 10px; margin-bottom: 2px; font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--brass); }
-.bq-meta span + span::before { content: ''; display: inline-block; width: 3px; height: 3px; margin: 0 10px 0 0; border-radius: 50%; background: var(--ink-3); vertical-align: 3px; }
-.bq-about { display: flex; flex-direction: column; }
-.bq-group { margin: 14px 2px 4px 14px; font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-3); }
+.bq-chip.new { color: var(--brass-hi); border-color: rgba(var(--brass-rgb), 0.45); letter-spacing: 0.18em; }
+.bq-group { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; margin: 8px 0 -2px; font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-3); }
+.bq-group::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+.bq-group:empty { display: none; }
+.bq-group.vault { color: var(--brass); }
 .bq-item.reward .bq-name { color: var(--ink-2); }
 .bq-item.reward .bq-price { font-family: var(--serif); font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--brass); }
-/* The private collection: a darker case, a brass hairline round it, the price in brass. */
-.bq-group.vault { color: var(--brass); }
-.bq-item.vault { position: relative; margin: 6px 0; padding-top: 14px; padding-bottom: 16px; border: 1px solid rgba(var(--brass-rgb), 0.32); border-left-width: 2px; border-left-color: rgba(var(--brass-rgb), 0.32); background: linear-gradient(180deg, rgba(8, 7, 6, 0.9), rgba(20, 16, 11, 0.9)); box-shadow: inset 0 1px 0 rgba(var(--brass-hi-rgb), 0.08); }
-.bq-item.vault[aria-selected='true'] { border-color: var(--brass); border-left-color: var(--brass-hi); background: linear-gradient(180deg, rgba(34, 27, 16, 0.95), rgba(18, 14, 10, 0.95)); }
+/* how much of it your balance covers: a hairline along the foot of the card */
+.bq-cover { position: absolute; left: 11px; right: 11px; bottom: 5px; height: 2px; border-radius: 1px; background: rgba(var(--brass-rgb), 0.14); overflow: hidden; }
+.bq-cover-fill { display: block; height: 100%; background: var(--brass); transform-origin: left center; transform: scaleX(0); transition: transform 0.5s var(--ease); }
+
+/* The private collection: wide cases with a brass frame on a deeper ground, the picture lit. */
+.bq-vault-head { grid-column: 1 / -1; display: grid; gap: 3px; margin: 4px 0 2px; padding: 12px 14px; border: 1px solid rgba(var(--brass-rgb), 0.4); border-radius: 8px; background: linear-gradient(120deg, rgba(var(--brass-rgb), 0.16), rgba(var(--brass-rgb), 0.03) 70%); }
+.bq-vault-title { font-family: var(--serif); font-size: 16px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--brass-hi); }
+.bq-vault-sub { font-size: 14px; color: var(--ink-2); }
+.bq-item.vault { grid-column: 1 / -1; flex-direction: row; align-items: center; gap: 4px; padding: 8px 14px 8px 6px; border-color: rgba(var(--brass-rgb), 0.45); background: linear-gradient(160deg, rgba(var(--brass-rgb), 0.15), rgba(var(--brass-rgb), 0.03) 60%), var(--well); box-shadow: inset 0 1px 0 rgba(var(--brass-hi-rgb), 0.12); }
+.bq-item.vault[aria-selected='true'] { border-color: var(--brass-hi); box-shadow: 0 0 0 1px var(--brass-hi), 0 10px 26px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(var(--brass-hi-rgb), 0.18); }
+.bq-item.vault .bq-pic { flex: 0 0 46%; padding: 0; background: radial-gradient(60% 70% at 50% 55%, rgba(255, 196, 96, 0.32), rgba(255, 196, 96, 0) 72%); }
+.bq-item.vault .bq-text { flex: 1; gap: 4px; padding: 4px 0; }
 .bq-item.vault .bq-name { font-size: 18px; color: var(--brass-hi); }
 .bq-item.vault .bq-price { font-family: var(--serif); font-size: 16px; color: var(--brass-hi); }
 .bq-item.vault.short .bq-price { color: var(--brass); }
-/* how much of it your balance covers: a hairline along the bottom of the case */
-.bq-cover { position: absolute; left: 14px; right: 12px; bottom: 7px; height: 2px; background: rgba(var(--brass-rgb), 0.12); }
-.bq-cover-fill { display: block; height: 100%; min-width: 1px; background: var(--brass); }
-/* the Vault tab: brass on black, set apart from the others */
+.bq-item.vault .bq-cover { position: static; margin-top: 6px; height: 3px; }
+/* the Vault tab: brass, set apart from the others */
 .bq-seg .seg-btn.vault-tab { color: var(--brass); box-shadow: inset 1px 0 0 rgba(var(--brass-hi-rgb), 0.35); }
-.bq-seg .seg-btn.vault-tab[aria-checked='true'] { color: var(--on-gold); background: linear-gradient(180deg, var(--brass-hi), var(--brass)); }
+.bq-seg .seg-btn.vault-tab[aria-checked='true'] { color: var(--on-gold); background: linear-gradient(180deg, #f1d59a, #c99a48); }
 .bq-seg .seg-btn.vault-tab[aria-checked='true']::after { background: var(--on-gold); }
 
+/* nothing to show */
+.bq-empty-box { grid-column: 1 / -1; display: grid; justify-items: start; gap: 10px; padding: 18px 4px; }
+.bq-empty { margin: 0; font-size: 15px; line-height: 1.4; color: var(--ink-3); }
+
 /* the statue section: who stands in the lobby now */
-.bq-statues { padding: 2px 0 6px; }
-.bq-statue { display: grid; grid-template-columns: 26px 1fr auto; align-items: baseline; gap: 10px; padding: 9px 12px 9px 14px; border-bottom: 1px solid rgba(var(--brass-rgb), 0.09); }
+.bq-statues { grid-column: 1 / -1; padding: 2px 0 6px; }
+.bq-statue { display: grid; grid-template-columns: 26px 1fr auto; align-items: baseline; gap: 10px; padding: 9px 4px; border-bottom: 1px solid rgba(var(--brass-rgb), 0.12); }
 .bq-statue-n { font-family: var(--serif); font-size: 15px; color: var(--brass); }
 .bq-statue-name { font-size: 17px; color: var(--ink); }
 .bq-statue-at { font-size: 14px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
 .bq-statue.mine .bq-statue-name { color: var(--brass-hi); }
-.bq-empty { margin: 6px 14px 0; font-size: 15px; line-height: 1.4; color: var(--ink-3); }
+.bq-statues .bq-empty { margin: 6px 4px 0; }
 
-.bq-foot { display: grid; gap: 8px; padding: 14px 24px 18px; border-top: 1px solid var(--line); background: rgba(var(--glass-rgb), 0.4); }
+/* the piece that's picked */
+.bq-foot { display: grid; gap: 5px; padding: 13px 24px 16px; border-top: 1px solid var(--line); background: rgba(var(--glass-rgb), 0.4); }
+.bq-foot.vault { background: linear-gradient(180deg, rgba(var(--brass-rgb), 0.12), rgba(var(--brass-rgb), 0.02)); }
 .bq-sel { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .bq-sel-name { min-width: 0; font-family: var(--serif); font-size: 18px; font-weight: 600; letter-spacing: 0.06em; color: var(--brass-hi); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bq-sel-price { font-size: 22px; color: var(--ink); white-space: nowrap; }
-.bq-status { min-height: 20px; margin: 0; font-size: 15px; line-height: 1.35; color: var(--ink-3); }
+.bq-sel-meta { margin-top: -3px; font-size: 11.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--brass); }
+.bq-sel-about { margin: 0; font-size: 14px; line-height: 1.35; color: var(--ink-3); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.bq-status { min-height: 20px; margin: 2px 0 2px; font-size: 15px; line-height: 1.35; color: var(--ink-2); }
 .bq-status.ok { color: var(--win); }
 .bq-status.err { color: var(--lose); }
-.bq-primary { height: 42px; font-size: 17px; }
+.bq-buttons { display: flex; gap: 8px; }
+.bq-save { flex: none; width: 46px; height: 42px; padding: 0; color: var(--ink-3); }
+.bq-save .ico { width: 20px; height: 20px; }
+.bq-save[aria-pressed='true'] { color: var(--lose); border-color: rgba(var(--lose-rgb), 0.55); }
+.bq-save[aria-pressed='true'] .ico path { fill: currentColor; }
+.bq-primary { flex: 1; height: 42px; font-size: 17px; }
 .bq-primary.armed { box-shadow: 0 0 0 2px rgba(var(--brass-hi-rgb), 0.35), 0 0 26px rgba(var(--brass-hi-rgb), 0.35); }
 /* the Headline's preview: your name in lights */
-.bq-cap-name.led { font-family: var(--ui); font-weight: 700; letter-spacing: 0.22em; color: var(--led); text-shadow: 0 0 6px rgba(var(--led-rgb), 0.9), 0 0 22px rgba(255, 110, 20, 0.55); }
-.bq-confirm-price { margin: 2px 0 4px !important; font-size: 30px !important; color: var(--brass-hi) !important; font-variant-numeric: tabular-nums; }
+.bq-cap-name.led { font-family: var(--ui); font-weight: 700; letter-spacing: 0.22em; color: #ffb347; text-shadow: 0 0 6px rgba(255, 150, 40, 0.9), 0 0 22px rgba(255, 110, 20, 0.55); }
 
+/* the confirm: the piece, its price, your balance before and after */
+.modal.bq-confirm { max-width: 400px; }
+.bq-confirm-art { display: block; width: 260px; max-width: 100%; height: auto; margin: 2px auto 0; }
+.bq-confirm-tag { margin: -2px 0 2px !important; font-size: 12px !important; letter-spacing: 0.18em; text-transform: uppercase; color: var(--brass) !important; }
+.bq-confirm-price { margin: 0 0 6px !important; text-align: center; font-size: 30px !important; color: var(--brass-hi) !important; font-variant-numeric: tabular-nums; }
+.bq-confirm-rows { display: grid; gap: 2px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: rgba(var(--lift-rgb), 0.02); }
+.bq-confirm-row { display: flex; justify-content: space-between; gap: 16px; font-size: 15px; color: var(--ink-2); }
+.bq-confirm-row .money { color: var(--ink); }
+.bq-confirm-row.after { margin-top: 3px; padding-top: 5px; border-top: 1px solid var(--line); font-weight: 600; color: var(--ink); }
+.bq-confirm-row.after .money { color: var(--brass-hi); font-size: 17px; }
+.bq-confirm-note { font-size: 14px !important; line-height: 1.4; color: var(--ink-3) !important; }
+.modal.bq-confirm.vault { border-color: var(--brass); box-shadow: 0 0 0 1px rgba(var(--brass-hi-rgb), 0.25), 0 24px 70px rgba(0, 0, 0, 0.55); }
+
+body.calm .bq-item.bq-in { animation: none; }
+body.calm .bq-item, body.calm .bq-cover-fill { transition: none; }
+
+/* A phone upright: the showroom on top, the case below with its head and foot kept short. */
 @media (max-width: 760px) {
   .boutique { flex-direction: column; }
-  .bq-stage { min-height: 36vh; }
-  .bq-panel { width: 100%; max-height: 64vh; border-left: 0; border-top: 1px solid var(--line); box-shadow: 0 -20px 50px rgba(0, 0, 0, 0.45); }
+  .bq-stage { min-height: 28vh; }
+  .bq-panel { width: 100%; max-height: 72vh; border-left: 0; border-top: 1px solid var(--line); box-shadow: 0 -20px 50px rgba(0, 0, 0, 0.45); }
   .bq-panel::before { display: none; }
   .bq-caption { bottom: 62px; }
   .bq-cap-name { font-size: 21px; }
   .bq-turn { bottom: 12px; }
   .bq-turn-hint span { display: none; }
-  .bq-money, .bq-tabs, .bq-foot { padding-left: 16px; padding-right: 16px; }
-  .bq-list { padding: 2px 4px 8px; }
-  .bq-seg .seg-btn { font-size: 13px; }
+  .bq-head { padding: 12px 16px 10px; }
+  .bq-head .sheet-sub { display: none; }
+  .bq-tabs, .bq-tools, .bq-foot { padding-left: 16px; padding-right: 16px; }
+  .bq-tabs { padding-top: 10px; }
+  /* the sections scroll sideways rather than squeeze or wrap */
+  .bq-seg, .bq-sub { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .bq-seg .seg-btn { flex: 1 0 auto; padding: 0 10px; font-size: 13px; }
+  .bq-sub .seg-btn { flex: 1 0 auto; padding: 0 8px; }
+  /* one column of cards lying down, the picture on the left: three or four in view at once */
+  .bq-list { grid-template-columns: minmax(0, 1fr); gap: 6px; padding: 4px 16px 12px; }
+  .bq-item { flex-direction: row; align-items: center; padding: 0 10px 0 0; }
+  .bq-item .bq-pic { flex: 0 0 96px; padding: 3px 4px; }
+  .bq-item .bq-text { padding: 5px 0 7px 4px; }
+  .bq-item .bq-cover { left: 106px; }
+  .bq-heart { top: 3px; right: auto; left: 3px; }
+  .bq-vault-sub { display: none; }
+  .bq-search { flex-basis: 100%; }
+  .bq-filter { flex: 1; }
+  .bq-sort-word { display: none; }
+  .bq-sel-meta { display: none; }
+  .bq-filter .seg-btn { flex: 1; padding: 0 4px; }
+  .bq-sel-about { display: none; }
+  .bq-item.vault .bq-pic { flex-basis: 42%; }
+}
+
+/* Short screens (a phone on its side, a small window): the case keeps its cards in view. */
+@media (max-height: 560px) {
+  .bq-head { padding: 8px 16px 6px; }
+  .bq-head .sheet-sub, .bq-money-own, .bq-sel-meta, .bq-sel-about, .bq-sel-price, .bq-sort-word { display: none; }
+  .bq-head .sheet-title { font-size: 18px; }
+  .bq-money-val { font-size: 18px; }
+  .bq-tabs { gap: 4px; padding: 6px 16px 2px; }
+  .bq-seg .seg-btn { height: 30px; }
+  .bq-sub .seg-btn { height: 26px; }
+  .bq-tools { padding: 6px 16px 6px; gap: 6px; }
+  .bq-search { flex-basis: 120px; height: 30px; }
+  /* the cards lie down: the picture on the left, so three rows fit where one would */
+  .bq-list { padding: 2px 16px 8px; grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); gap: 6px; }
+  .bq-item { flex-direction: row; align-items: center; padding: 0 8px 0 0; }
+  .bq-item .bq-pic { flex: 0 0 74px; padding: 3px 2px; }
+  .bq-item .bq-text { padding: 4px 0 6px 2px; }
+  .bq-item .bq-name { font-size: 13.5px; }
+  .bq-item .bq-price { font-size: 14px; }
+  .bq-heart { top: 3px; right: auto; left: 3px; }
+  .bq-heart .ico { width: 12px; height: 12px; }
+  .bq-item.vault .bq-pic { flex: 0 0 96px; }
+  .bq-item.vault .bq-name { font-size: 15px; }
+  .bq-vault-head { padding: 7px 10px; }
+  .bq-vault-sub { display: none; }
+  .bq-foot { grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 2px 10px; padding: 8px 16px 10px; }
+  .bq-sel { grid-column: 1; }
+  .bq-status { grid-column: 1; min-height: 0; margin: 0; font-size: 13.5px; }
+  .bq-buttons { grid-column: 2; grid-row: 1 / span 2; }
+  .bq-primary { min-width: 150px; height: 40px; font-size: 15px; }
+  .bq-save { height: 40px; }
+  .bq-caption { bottom: 58px; }
+  .bq-cap-name { font-size: 19px; }
 }
 
 /* ---------------------------------------------------------------- effects (HUD) */
 
 /* Docked on the right over the floor, no dimming: what you buy goes off in view. */
 .sheet-scrim:has(> .fx-sheet) { display: flex; background: none; justify-content: flex-end; align-items: flex-start; padding: 76px 16px 16px; }
-.sheet.fx-sheet { width: min(430px, 100%); max-height: calc(100vh - 92px); overflow: auto; background: rgba(var(--glass-rgb), 0.9); }
-.fx-list { display: grid; }
-.fx-row { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 12px; padding: 9px 8px 10px; margin: 0 -8px; border-bottom: 1px solid rgba(var(--brass-rgb), 0.09); border-left: 2px solid transparent; transition: background 0.15s; }
-.fx-row.on { border-left-color: var(--brass); }
-.fx-row.armed { background: rgba(var(--brass-rgb), 0.08); }
-.fx-text { display: grid; gap: 2px; min-width: 0; }
-.fx-name { display: flex; align-items: center; gap: 9px; font-size: 17px; color: var(--ink); }
+.sheet.fx-sheet { width: min(460px, 100%); max-height: calc(100vh - 92px); overflow: auto; background: rgba(var(--glass-rgb), 0.92); }
+.fx-list { display: grid; gap: 6px; }
+.fx-row { display: grid; grid-template-columns: 84px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 6px 8px 6px 6px; border: 1px solid transparent; border-radius: 8px; transition: background 0.15s, border-color 0.15s; }
+.fx-row:hover { background: rgba(var(--lift-rgb), 0.03); }
+.fx-row.on { border-color: rgba(var(--brass-rgb), 0.45); }
+.fx-row.armed { border-color: var(--brass-hi); background: rgba(var(--brass-rgb), 0.1); }
+.fx-art { display: block; width: 84px; height: auto; border-radius: 5px; }
+.fx-text { display: grid; gap: 1px; min-width: 0; }
+.fx-name { display: flex; align-items: center; gap: 8px; font-size: 16.5px; color: var(--ink); }
 .fx-name .kc { min-width: 20px; height: 19px; font-size: 11px; color: var(--ink-3); }
-.fx-meta { font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--brass); }
+.fx-meta { display: flex; align-items: center; gap: 6px; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--brass); }
+.fx-meta .ico { width: 13px; height: 13px; }
 .fx-when { min-height: 0; font-size: 13.5px; color: var(--ink-3); }
 .fx-when:empty { display: none; }
 .fx-row.on .fx-when { color: var(--brass-hi); }
-.fx-price { min-width: 76px; font-size: 16px; text-align: right; color: var(--ink-2); }
-.fx-play { min-width: 82px; height: 32px; padding: 0 12px; font-size: 14px; }
+.fx-side { display: grid; justify-items: end; gap: 4px; }
+.fx-price { font-size: 15.5px; text-align: right; color: var(--ink-2); white-space: nowrap; }
+.fx-play { min-width: 86px; height: 32px; padding: 0 12px; font-size: 14px; }
 .fx-foot { margin-top: 10px; padding-top: 12px; border-top: 1px solid var(--line); justify-content: flex-end; }
 @media (max-width: 560px) {
   .sheet-scrim:has(> .fx-sheet) { padding: 60px 8px 8px; }
-  .fx-price { min-width: 0; }
+  .fx-row { grid-template-columns: 60px minmax(0, 1fr) auto; gap: 9px; }
+  .fx-art { width: 60px; }
 }
 
 /* ---------------------------------------------------------------- bar */
@@ -164,7 +296,3 @@
 @media (max-width: 560px), (max-height: 480px) {
   body:has(.boutique) .hud { display: none; }
 }
-
-/* Light (app/theme.ts): the vault's dark velvet rows on ivory. */
-:root[data-theme='light'] .bq-item.vault { background: linear-gradient(180deg, rgba(245, 238, 226, 0.9), rgba(236, 226, 206, 0.9)); }
-:root[data-theme='light'] .bq-item.vault[aria-selected='true'] { background: linear-gradient(180deg, rgba(240, 228, 200, 0.95), rgba(232, 218, 186, 0.95)); }
