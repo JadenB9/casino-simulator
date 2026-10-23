@@ -1,0 +1,5 @@
+/* The Card deck row in Settings (settings.ts): the four suits on a slip of card, beside the note. */
+.deck-note { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: center; }
+.deck-preview { display: block; width: 118px; height: auto; }
+/* card stock in either theme, with the paper's own edge */
+.deck-paper { fill: #fbf8f1; stroke: rgba(var(--brass-rgb), 0.45); stroke-width: 6; }

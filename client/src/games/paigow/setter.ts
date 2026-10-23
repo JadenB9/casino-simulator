@@ -7,8 +7,8 @@ import type { PgCard } from '../../../../shared/src/games/paigow/rules.ts';
 import { JOKER, fouls, highName, highScore, houseWay, lowName, lowScore, rankIndex } from '../../../../shared/src/games/paigow/rules.ts';
 import { button, el } from '../../ui/kit.ts';
 import { paintJoker } from './joker.ts';
-
-const base = import.meta.env.BASE_URL;
+import type { Card } from '../../../../shared/src/cards.ts';
+import { cardFaceUrl, onDeck } from '../../table/cards.ts';
 
 /** A card face for the panel: the deck's art, or the painted joker. */
 function face(card: PgCard): HTMLElement {
@@ -20,7 +20,8 @@ function face(card: PgCard): HTMLElement {
     return c;
   }
   const img = el('img', 'pg-face');
-  img.src = `${base}assets/cards/${card}.svg`;
+  // the deck in use, two colours or four (table/cards.ts)
+  img.src = cardFaceUrl(card as Card);
   img.alt = card;
   img.draggable = false;
   return img;
@@ -41,6 +42,7 @@ export class HandSetter {
   /** Indexes (into the seven as dealt) of the cards in the low hand, in the order picked. */
   private low: number[] = [];
   private faces = new Map<PgCard, HTMLElement>();
+  private readonly offDeck: () => void;
 
   constructor(private readonly onSet: (low: [number, number]) => void) {
     this.houseBtn = button('House way', () => this.houseWay(), { key: 'H', title: 'Set the hand the way the dealer sets theirs (H)' });
@@ -57,6 +59,10 @@ export class HandSetter {
     head.append(this.title, this.status);
     this.root.append(head, rows, acts);
     this.root.hidden = true;
+    // a change of deck in Settings repaints the cards in hand
+    this.offDeck = onDeck(() => {
+      for (const [c, f] of this.faces) if (f instanceof HTMLImageElement) f.src = cardFaceUrl(c as Card);
+    });
     // the bottom bar while it's open: the tips line stacks over it (table/dock.ts)
     this.root.dataset.dock = 'bar';
   }
@@ -71,6 +77,12 @@ export class HandSetter {
     this.faces.clear();
     this.root.hidden = false;
     this.render();
+  }
+
+  /** The table is going: take the panel away. */
+  dispose(): void {
+    this.offDeck();
+    this.root.remove();
   }
 
   hide(): void {

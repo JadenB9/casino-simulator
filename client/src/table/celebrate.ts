@@ -128,8 +128,9 @@ export function footprintOf(root: THREE.Object3D, camera: THREE.Camera, objects:
   const pts: THREE.Vector3[] = [];
   let round = true;
   const visit = (o: THREE.Object3D, top: boolean) => {
-    // the objects asked for count even when hidden (a stand-in); hidden parts inside them don't
-    if (!top && !o.visible) return;
+    // the objects asked for count even when hidden (a stand-in); hidden parts inside them don't,
+    // nor what lies round them (a card's shadow on the felt)
+    if (!top && (!o.visible || o.userData.decor)) return;
     if (o instanceof THREE.Mesh) {
       const box = boxOf(o);
       if (box) {

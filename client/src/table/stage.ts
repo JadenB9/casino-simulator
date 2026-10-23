@@ -65,6 +65,8 @@ export class TableStage {
     felt.mesh.position.y = y;
     this.root.add(felt.mesh);
     this.felts.push(felt);
+    // the cloth's height, for the shadows cards cast on it (cards.ts)
+    this.root.userData.feltY = Math.max(y, (this.root.userData.feltY as number | undefined) ?? -Infinity);
   }
 
   /** The felt region under a pointer event, with the local point. */

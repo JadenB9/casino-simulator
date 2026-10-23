@@ -9,12 +9,13 @@ import type { Card } from '../../../../shared/src/cards.ts';
 import { PAYTABLE, HAND_NAMES } from '../../../../shared/src/games/videopoker/hands.ts';
 import { el } from '../../ui/kit.ts';
 import { tween, ease } from '../../table/tween.ts';
+import { cardFaceUrl, onDeck } from '../../table/cards.ts';
 
 export const DESIGN_W = 800;
 export const DESIGN_H = 600;
 
-const base = import.meta.env.BASE_URL;
-const cardUrl = (card: Card | null) => `${base}assets/cards/${card ?? 'back-red'}.svg`;
+// the deck in use, two colours or four (table/cards.ts), and the table's own back
+const cardUrl = (card: Card | null) => cardFaceUrl(card);
 
 /** Screen names, as the glass prints them. */
 export const GLASS_NAMES: readonly string[] = HAND_NAMES.map((n) => n.replace('Four of a Kind', '4 of a Kind').replace('Three of a Kind', '3 of a Kind').replace('Two Pair', '2 Pair').toUpperCase());
@@ -89,6 +90,17 @@ export class MachineScreen {
       el('p', 'vp-keys', 'HOLD 1-5   ·   DEAL / DRAW Space   ·   BET ONE ↑ ↓   ·   BET MAX B   ·   COIN VALUE D   ·   PAYS H'),
     );
     this.root.append(pays, this.status, cards, bar, this.help);
+    // a change of deck in Settings repaints the cards on the glass
+    this.offDeck = onDeck(() => {
+      for (const s of this.slots) s.img.src = cardUrl(s.card);
+    });
+  }
+
+  private readonly offDeck: () => void;
+
+  /** The machine is going: stop following the deck. */
+  dispose(): void {
+    this.offDeck();
   }
 
   setCoins(coins: number): void {

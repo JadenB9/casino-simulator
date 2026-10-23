@@ -250,9 +250,12 @@ export function localBox(obj: THREE.Object3D, root: THREE.Object3D): THREE.Box3 
   const b = new THREE.Box3();
   obj.traverse((o) => {
     const g = (o as THREE.Mesh).geometry as THREE.BufferGeometry | undefined;
-    if (!g || !o.visible) return;
-    if (!g.boundingBox) g.computeBoundingBox();
-    b.copy(g.boundingBox!).applyMatrix4(m.multiplyMatrices(toRoot, o.matrixWorld));
+    // (not what lies round a thing: a card's shadow on the felt)
+    if (!g || !o.visible || o.userData.decor) return;
+    // an instanced mesh (a chip stack) spans all its instances
+    const box = o instanceof THREE.InstancedMesh ? (o.boundingBox ?? (o.computeBoundingBox(), o.boundingBox)) : (g.boundingBox ?? (g.computeBoundingBox(), g.boundingBox));
+    if (!box) return;
+    b.copy(box).applyMatrix4(m.multiplyMatrices(toRoot, o.matrixWorld));
     out.union(b);
   });
   return out;
