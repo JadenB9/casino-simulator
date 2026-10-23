@@ -244,25 +244,41 @@ export class Panel {
   }
 }
 
-/** The strip of recent results, newest first. */
+/** The strip of recent results, newest first, and how often each number has come up in the table's longer log. */
 export class History {
   readonly root = el('div', 'bw-history');
   private readonly row = el('div', 'bw-history-row');
+  private readonly tally = el('div', 'bw-tally');
   private shown = '';
 
   constructor() {
-    this.root.append(el('div', 'bw-history-label', 'Last spins'), this.row);
+    this.tally.title = 'Every spin is a fresh draw: these say what came up, not what will.';
+    this.root.append(el('div', 'bw-history-label', 'Last spins'), this.row, this.tally);
   }
 
+  /** The log, newest first (its first twenty are the server's last twenty). */
   set(slots: readonly number[]): void {
     const key = slots.join(',');
     if (key === this.shown && this.row.childElementCount) return;
     this.shown = key;
     this.row.replaceChildren();
+    this.tally.replaceChildren();
+    this.tally.hidden = slots.length === 0;
     if (slots.length === 0) {
       this.row.append(el('span', 'bw-history-empty', 'No spins yet'));
       return;
     }
+    const seen = new Map<WheelNumber, number>();
+    for (const slot of slots) seen.set(numberAt(slot), (seen.get(numberAt(slot)) ?? 0) + 1);
+    for (const n of NUMBERS) {
+      const t = el('span', 'bw-tally-item');
+      const c = squareCanvas(n, 36, n + 5);
+      c.className = 'bw-tally-sq';
+      t.append(c, el('span', 'bw-tally-n money', String(seen.get(n) ?? 0)));
+      t.title = `${n}: ${seen.get(n) ?? 0} of the last ${slots.length} spins`;
+      this.tally.append(t);
+    }
+    if (slots.length > 23) this.tally.append(el('span', 'bw-tally-of', `of ${slots.length}`));
     // the latest large, then two rows of the ones before it
     slots.slice(0, 23).forEach((slot, i) => {
       const n = numberAt(slot);

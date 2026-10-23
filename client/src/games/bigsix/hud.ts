@@ -4,23 +4,33 @@
 
 import { el } from '../../ui/kit.ts';
 import { formatMoney, type Cents } from '../../../../shared/src/money.ts';
-import { type SymbolId, symbolAt, spotOf, paysLabel, callFor } from '../../../../shared/src/games/bigsix/rules.ts';
+import { type SymbolId, SPOTS, symbolAt, spotOf, paysLabel, callFor } from '../../../../shared/src/games/bigsix/rules.ts';
 import { badgeCanvas } from './art.ts';
 
+/** The last twenty stops, and under them how often each symbol has come up in the table's longer log. */
 export class History {
   readonly root = el('div', 'bs-history panel');
   private readonly row = el('div', 'bs-history-row');
+  private readonly count = el('span', 'bs-history-count');
+  private readonly tally = el('div', 'bs-tally');
   private shown = '';
 
   constructor() {
-    this.root.append(el('div', 'label', 'Last spins'), this.row);
+    const head = el('div', 'bs-history-head');
+    head.append(el('span', 'label', 'Last spins'), this.count);
+    this.tally.title = 'Every spin is a fresh draw: these say what came up, not what will.';
+    this.root.append(head, this.row, this.tally);
   }
 
+  /** The log, newest first (its first twenty are the server's last twenty). */
   set(stops: readonly number[]): void {
-    const key = stops.slice(0, 20).join(',');
+    const key = stops.join(',');
     if (key === this.shown && this.row.childElementCount) return;
     this.shown = key;
     this.row.replaceChildren();
+    this.tally.replaceChildren();
+    this.tally.hidden = stops.length === 0;
+    this.count.textContent = stops.length > 20 ? `${stops.length} spins` : '';
     if (stops.length === 0) {
       this.row.append(el('span', 'bs-history-empty', 'No spins yet'));
       return;
@@ -32,6 +42,15 @@ export class History {
       b.title = callFor(sym);
       this.row.append(b);
     });
+    const seen = new Map<SymbolId, number>();
+    for (const stop of stops) seen.set(symbolAt(stop), (seen.get(symbolAt(stop)) ?? 0) + 1);
+    for (const spot of SPOTS) {
+      const n = seen.get(spot.key) ?? 0;
+      const t = el('span', `bs-tally-item${n === 0 ? ' none' : ''}`);
+      t.append(badgeCanvas(spot.key, 18), el('span', 'bs-tally-n money', String(n)));
+      t.title = `${spot.name}: ${n} of the last ${stops.length} (${spot.stops} of 54 stops)`;
+      this.tally.append(t);
+    }
   }
 }
 
@@ -93,20 +112,29 @@ export class Plaque {
 
 export class Tooltip {
   readonly root = el('div', 'bs-tip panel');
+  private shown = '';
 
   constructor() {
     this.root.hidden = true;
   }
 
-  show(lines: { text: string; cls?: string }[], x: number, y: number): void {
-    this.root.replaceChildren(...lines.map((l) => el('div', l.cls ?? '', l.text)));
+  /**
+   * Above and to the right of the pointer, clear of the chips it points at; for a touch
+   * (`above`), straight over the finger. The lines are rebuilt only when they change.
+   */
+  show(lines: { text: string; cls?: string }[], x: number, y: number, above = false): void {
+    const key = lines.map((l) => `${l.cls ?? ''}:${l.text}`).join('|');
+    if (key !== this.shown) {
+      this.shown = key;
+      this.root.replaceChildren(...lines.map((l) => el('div', l.cls ?? '', l.text)));
+    }
     this.root.hidden = false;
-    // above and to the right of the pointer, clear of the chips it is pointing at
     const w = this.root.offsetWidth || 200;
     const h = this.root.offsetHeight || 60;
-    const left = x + 22 + w > innerWidth ? x - 22 - w : x + 22;
-    this.root.style.left = `${Math.max(8, left)}px`;
-    this.root.style.top = `${Math.max(8, y - 34 - h)}px`;
+    const left = above ? x - w / 2 : x + 22 + w > innerWidth ? x - 22 - w : x + 22;
+    const top = above ? y - h - 48 : y - 34 - h;
+    this.root.style.left = `${Math.max(8, Math.min(innerWidth - w - 8, left))}px`;
+    this.root.style.top = `${Math.max(8, top)}px`;
   }
 
   hide(): void {

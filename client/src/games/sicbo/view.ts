@@ -30,6 +30,12 @@ import { around, ring } from '../../table/fit.ts';
 import { Shaker, SHAKER_NAME, DOME_R, buildShaker } from './shaker.ts';
 import { LayoutChips, Pile, seatColor, CHIP_SCALE, type PileStyle } from './chips.ts';
 import { History, Meters, Board, Tip, Clock, Players, type PlayerRow } from './hud.ts';
+import { wave } from '../../app/comfort.ts';
+import { SpinLog, logKey } from '../roulette/log.ts';
+
+/** Three dice as the log keeps them. */
+const isRoll = (x: unknown): x is number[] => Array.isArray(x) && x.length === 3 && x.every((f) => Number.isInteger(f) && f >= 1 && f <= 6);
+const sameRoll = (a: readonly number[], b: readonly number[]) => a[0] === b[0] && a[1] === b[1] && a[2] === b[2];
 
 const FELT_Y = TOP_Y + 0.0007;
 const CHIP_Y = TOP_Y + 0.0009;
@@ -175,6 +181,9 @@ export function mountSicBo(ctx: TableViewCtx): TableView {
 
   // DOM
   const history = new History();
+  // the table's longer log of rolls, for the figures under the strip (roulette/log.ts)
+  let log = new SpinLog<number[]>(null, isRoll, sameRoll);
+  let logAt: string | null = null;
   const meters = new Meters();
   const board = new Board();
   const tip = new Tip();
@@ -298,12 +307,16 @@ export function mountSicBo(ctx: TableViewCtx): TableView {
     return lines;
   }
 
+  /** Light the box under the pointer or finger (null: none). */
+  function light(key: string | null): void {
+    if (key === hovered) return;
+    hovered = key;
+    hoverGroup.clear();
+    if (key) hoverGroup.add(rectMesh(areaOf(key)!.rect, hoverMat));
+  }
+
   function showHover(key: string | null, e: PointerEvent): void {
-    if (key !== hovered) {
-      hovered = key;
-      hoverGroup.clear();
-      if (key) hoverGroup.add(rectMesh(areaOf(key)!.rect, hoverMat));
-    }
+    light(key);
     if (!key) {
       tip.hide();
       ghost.visible = false;
@@ -316,15 +329,38 @@ export function mountSicBo(ctx: TableViewCtx): TableView {
     ghostMat.color.set(mode === 'multi' && mySeat !== null ? seatColor(mySeat) : tray.maxPicked ? '#e2bf7c' : tray.selected.body);
   }
 
-  const onMove = (e: PointerEvent) => showHover(spotUnder(e), e);
+  // A touch has no hover: a tap puts the chip down as a click does, and lights the box with its
+  // card over the finger for a moment (read again when the chip lands).
+  let touched: { key: string; x: number; y: number; timer: number } | null = null;
+  function showTouch(key: string, x: number, y: number): void {
+    if (touched) clearTimeout(touched.timer);
+    light(key);
+    ghost.visible = false;
+    tip.show(tipLines(key), x, y, true);
+    touched = { key, x, y, timer: window.setTimeout(endTouch, 2400) };
+  }
+  function endTouch(): void {
+    if (!touched) return;
+    clearTimeout(touched.timer);
+    touched = null;
+    light(null);
+    tip.hide();
+  }
+
+  const onMove = (e: PointerEvent) => {
+    if (e.pointerType === 'touch') return;
+    showHover(spotUnder(e), e);
+  };
   const onDown = (e: PointerEvent) => {
     if (e.button !== 0) return;
     const key = spotUnder(e);
-    if (key) place(key);
+    if (!key) return;
+    place(key);
+    if (e.pointerType === 'touch' || e.pointerType === 'pen') showTouch(key, e.clientX, e.clientY);
   };
   const onLeave = () => {
-    hovered = null;
-    hoverGroup.clear();
+    if (touched) return;
+    light(null);
     tip.hide();
     ghost.visible = false;
   };
@@ -381,7 +417,7 @@ export function mountSicBo(ctx: TableViewCtx): TableView {
   function draw(v: SicBoView): void {
     view = v;
     chips.sync(v.bets);
-    history.set(v.history);
+    history.set(log.merge(v.history as number[][]));
     refreshControls();
     drawPlayers();
     meters.set({ stack, win: lastWin });
@@ -407,6 +443,7 @@ export function mountSicBo(ctx: TableViewCtx): TableView {
 
   async function playRoll(roll: RollInfo, settle: { seats: Record<number, SeatSettle> } | undefined, next: SicBoView): Promise<void> {
     animating = true;
+    endTouch();
     onLeave();
     clearResult();
     refreshControls();
@@ -451,7 +488,7 @@ export function mountSicBo(ctx: TableViewCtx): TableView {
   }
 
   async function settleTable(dice: Dice, seats: Record<number, SeatSettle>, next: SicBoView): Promise<void> {
-    history.set(next.history);
+    history.set(log.merge(next.history as number[][]));
     ctx.kit.say(callRoll(dice), 3800);
     const mine = mySeat !== null ? seats[mySeat] : undefined;
     lastNet = Object.fromEntries(Object.entries(seats).map(([k, v]) => [Number(k), v.returned - v.wagered]));
@@ -567,6 +604,11 @@ export function mountSicBo(ctx: TableViewCtx): TableView {
     onTable(snap: TableSnapshot) {
       mode = snap.meta.mode;
       cfg = snap.meta.config;
+      const kept = logKey('sicbo', snap.meta.tableId, mode);
+      if (kept !== logAt) {
+        logAt = kept;
+        log = new SpinLog<number[]>(kept, isRoll, sameRoll);
+      }
       tray.setChipMax(cfg.limits.even?.max ?? TRAY_MAX, Math.min(...Object.values(cfg.limits).map((l) => l.min)));
       mySeat = snap.you.status === 'watching' ? null : snap.you.seat;
       stack = snap.you.stack;
@@ -605,6 +647,7 @@ export function mountSicBo(ctx: TableViewCtx): TableView {
               void tween(140, (k) => pile.position.setY(y + 0.03 * (1 - k)), ease.out);
             }
             if (e.seat !== mySeat && grown.length) ctx.sfx.play('chip-lay', { volume: 0.35 });
+            if (touched) tip.show(tipLines(touched.key), touched.x, touched.y, true);
             refreshControls();
             break;
           }
@@ -672,8 +715,9 @@ export function mountSicBo(ctx: TableViewCtx): TableView {
     update() {
       updateClock();
       const t = performance.now();
-      if (litGroup.children.length) litMat.opacity = 0.24 + 0.1 * (0.5 + 0.5 * Math.sin(t / 260));
-      if (bestGroup.visible) bestMat.opacity = 0.45 + 0.3 * (0.5 + 0.5 * Math.sin(t / 420));
+      // breathing, not blinking: wave() slows it right down while calm (app/comfort.ts)
+      if (litGroup.children.length) litMat.opacity = 0.24 + 0.1 * (0.5 + 0.5 * wave(t / 260));
+      if (bestGroup.visible) bestMat.opacity = 0.45 + 0.3 * (0.5 + 0.5 * wave(t / 420));
     },
 
     dispose() {
@@ -683,6 +727,7 @@ export function mountSicBo(ctx: TableViewCtx): TableView {
         camHome = null;
       }
       disposed = true;
+      if (touched) clearTimeout(touched.timer);
       offTips();
       ctx.kit.tip(null);
       removeEventListener('pointermove', onMove);

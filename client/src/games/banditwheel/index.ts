@@ -31,6 +31,10 @@ import { WheelSound } from './sound.ts';
 import { Panel, History, Players, TerminalTag, type PlayerRow } from './hud.ts';
 import { drawScreen, type ScreenState } from './art.ts';
 import { blink, wave } from '../../app/comfort.ts';
+import { SpinLog, logKey } from '../roulette/log.ts';
+
+/** A slot as the log keeps it. */
+const isSlot = (x: unknown): x is number => typeof x === 'number' && Number.isInteger(x) && x >= 0 && x < SLOTS;
 
 const SEATS = seatPositions();
 /** Clicks are handed to the audio clock this far ahead. */
@@ -249,6 +253,9 @@ function mountBanditWheel(ctx: TableViewCtx): TableView {
     spin: () => spinNow(),
   });
   const history = new History();
+  // the table's longer log of slots, for the counts under the strip (roulette/log.ts)
+  let log = new SpinLog<number>(null, isSlot);
+  let logAt: string | null = null;
   const players = new Players();
   ctx.ui.append(history.root, players.root, panel.root);
   panel.setHints(
@@ -395,7 +402,7 @@ function mountBanditWheel(ctx: TableViewCtx): TableView {
   function draw(v: BanditView): void {
     view = v;
     chips.sync(v.bets);
-    history.set(v.history);
+    history.set(log.merge(v.history));
     refresh();
     drawPlayers();
   }
@@ -584,7 +591,7 @@ function mountBanditWheel(ctx: TableViewCtx): TableView {
     const n = e.number;
     const spot = spotOf(n)!;
     shownNumber = n;
-    history.set(next.history);
+    history.set(log.merge(next.history));
     lightSlot(e.slot);
     lightSquares(n);
     panel.setWinner(n);
@@ -719,6 +726,11 @@ function mountBanditWheel(ctx: TableViewCtx): TableView {
       gen++;
       finishAnims();
       mode = snap.meta.mode;
+      const kept = logKey('banditwheel', snap.meta.tableId, mode);
+      if (kept !== logAt) {
+        logAt = kept;
+        log = new SpinLog<number>(kept, isSlot);
+      }
       mySeat = snap.you.seat;
       fitBoard();
       stack = snap.you.stack;

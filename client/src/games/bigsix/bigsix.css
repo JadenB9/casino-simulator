@@ -3,7 +3,13 @@
    glass panels and brass lines. The bottom-left corner stays free for the site's back chip. */
 
 .bs-history { position: fixed; top: var(--below-hud); left: 16px; padding: 8px 12px 10px; max-width: min(700px, calc(100vw - 420px)); }
-.bs-history .label { margin-bottom: 6px; }
+.bs-history-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+.bs-history-count { font-size: 12px; letter-spacing: 0.08em; color: var(--ink-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* how often each symbol came up, under the strip */
+.bs-tally { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 8px; padding-top: 7px; border-top: 1px solid var(--line); }
+.bs-tally-item { display: inline-flex; align-items: center; gap: 4px; }
+.bs-tally-item.none { opacity: 0.5; }
+.bs-tally-n { min-width: 12px; font-size: 14px; font-weight: 600; color: var(--ink-2); }
 .bs-history-row { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
 .bs-history-empty { font-size: 14px; color: var(--ink-3); }
 .bs-badge { display: block; flex: none; border-radius: 50%; }
@@ -21,7 +27,10 @@
 .bs-result-net { font-size: 16px; font-weight: 600; letter-spacing: 0.04em; }
 .bs-result-net.win { color: var(--win); }
 .bs-result-net.quiet { color: var(--ink-3); }
-@keyframes bs-rise { from { opacity: 0; transform: translateY(8px); } }
+/* translate, not transform: the label renderer places the plaque with an inline transform */
+@keyframes bs-rise { from { opacity: 0; translate: 0 8px; } }
+body.calm .bs-result { animation: bs-rise-calm 0.35s both; }
+@keyframes bs-rise-calm { from { opacity: 0; } }
 
 .bs-result[hidden], .bs-clock[hidden], .bs-players[hidden], .bs-tip[hidden], .bs-color-note[hidden], .bs-best[hidden] { display: none; }
 .bs-tip { position: fixed; z-index: 20; padding: 7px 11px; font-size: 15px; line-height: 1.35; pointer-events: none; max-width: 300px; }
@@ -74,7 +83,8 @@
 /* On its side: slimmer corner panels. */
 @media (max-height: 480px) {
   .bs-history { left: 10px; padding: 6px 10px 7px; }
-  .bs-history .label { margin-bottom: 4px; }
+  .bs-history-head { margin-bottom: 4px; }
+  .bs-tally { margin-top: 5px; padding-top: 5px; }
   .bs-meters { right: 10px; gap: 12px; padding: 6px 12px; }
   .bs-meter-value { font-size: 18px; }
   .bs-players { top: calc(var(--below-party) + 58px); right: 10px; padding: 6px 10px; }

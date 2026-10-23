@@ -26,16 +26,33 @@ function rollKind(d: readonly number[]): 'small' | 'big' | 'triple' {
   return diceTotal(d) <= 10 ? 'small' : 'big';
 }
 
+/**
+ * The last rolls, and under them the table's longer log in figures: how many came small, big or
+ * a triple, odd or even, and how often each face has shown.
+ */
 export class History {
   readonly root = el('div', 'sb-history panel');
   private readonly row = el('div', 'sb-history-row');
+  private readonly count = el('span', 'sb-history-count');
+  private readonly tally = el('div', 'sb-tally');
+  private shown = '';
 
   constructor() {
-    this.root.append(el('div', 'label', 'Last rolls'), this.row);
+    const head = el('div', 'sb-history-head');
+    head.append(el('span', 'label', 'Last rolls'), this.count);
+    this.tally.title = 'Every roll is a fresh one: these say what came up, not what will.';
+    this.root.append(head, this.row, this.tally);
   }
 
+  /** The log, newest first (its first twenty are the server's last twenty). */
   set(rolls: readonly (readonly number[])[]): void {
+    const key = rolls.map((d) => d.join('')).join(',');
+    if (key === this.shown && this.row.childElementCount) return;
+    this.shown = key;
     this.row.replaceChildren();
+    this.tally.replaceChildren();
+    this.tally.hidden = rolls.length === 0;
+    this.count.textContent = rolls.length > 12 ? `${rolls.length} rolls` : '';
     if (rolls.length === 0) {
       this.row.append(el('span', 'sb-history-empty', 'No rolls yet'));
       return;
@@ -50,6 +67,30 @@ export class History {
       cell.title = `${s.join(' · ')} = ${diceTotal(s)}, ${kind}`;
       this.row.append(cell);
     });
+    // small, big and triples; odd and even as those bets see them (a triple is neither)
+    const n = { small: 0, big: 0, triple: 0, odd: 0, even: 0 };
+    const faces = [0, 0, 0, 0, 0, 0];
+    for (const d of rolls) {
+      const kind = rollKind(d);
+      n[kind]++;
+      if (kind !== 'triple') n[diceTotal(d) % 2 === 1 ? 'odd' : 'even']++;
+      for (const f of d) faces[f - 1]!++;
+    }
+    const pair = (label: string, value: number, cls = '') => {
+      const t = el('span', `sb-tally-pair ${cls}`.trim());
+      t.append(el('span', 'label', label), el('span', 'sb-tally-n money', String(value)));
+      return t;
+    };
+    const kinds = el('div', 'sb-tally-row');
+    kinds.append(pair('Small', n.small, 'small'), pair('Big', n.big, 'big'), pair('Triple', n.triple, 'triple'), pair('Odd', n.odd), pair('Even', n.even));
+    const shown = el('div', 'sb-tally-row');
+    faces.forEach((c, i) => {
+      const t = el('span', 'sb-tally-face');
+      t.append(domDie(i + 1), el('span', 'sb-tally-n money', String(c)));
+      t.title = `${i + 1} showed on ${c} of ${rolls.length * 3} dice`;
+      shown.append(t);
+    });
+    this.tally.append(kinds, shown);
   }
 }
 
@@ -118,20 +159,29 @@ export class Board {
 
 export class Tip {
   readonly root = el('div', 'sb-tip panel');
+  private shown = '';
 
   constructor() {
     this.root.hidden = true;
   }
 
-  show(lines: { text: string; cls?: string }[], x: number, y: number): void {
-    this.root.replaceChildren(...lines.map((l) => el('div', l.cls ?? '', l.text)));
+  /**
+   * Above and to the right of the pointer, clear of the chips it points at; for a touch
+   * (`above`), straight over the finger. The lines are rebuilt only when they change.
+   */
+  show(lines: { text: string; cls?: string }[], x: number, y: number, above = false): void {
+    const key = lines.map((l) => `${l.cls ?? ''}:${l.text}`).join('|');
+    if (key !== this.shown) {
+      this.shown = key;
+      this.root.replaceChildren(...lines.map((l) => el('div', l.cls ?? '', l.text)));
+    }
     this.root.hidden = false;
-    // above and to the right of the pointer, clear of the chips it is pointing at
     const w = this.root.offsetWidth || 200;
     const h = this.root.offsetHeight || 60;
-    const left = x + 22 + w > innerWidth ? x - 22 - w : x + 22;
-    this.root.style.left = `${Math.max(8, left)}px`;
-    this.root.style.top = `${Math.max(8, y - 34 - h)}px`;
+    const left = above ? x - w / 2 : x + 22 + w > innerWidth ? x - 22 - w : x + 22;
+    const top = above ? y - h - 48 : y - 34 - h;
+    this.root.style.left = `${Math.max(8, Math.min(innerWidth - w - 8, left))}px`;
+    this.root.style.top = `${Math.max(8, top)}px`;
   }
 
   hide(): void {

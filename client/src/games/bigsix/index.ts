@@ -16,7 +16,7 @@ import type { GameEvent, TableConfig } from '../../../../shared/src/engine.ts';
 import type { Member } from '../../../../shared/src/protocol.ts';
 import type { BigSixView, SeatSettle } from '../../../../shared/src/games/bigsix/protocol.ts';
 import { BETTING_MS } from '../../../../shared/src/games/bigsix/engine.ts';
-import { SPOTS, type SymbolId, spotOf, paysLabel, callFor, edgePercent } from '../../../../shared/src/games/bigsix/rules.ts';
+import { SPOTS, type SymbolId, spotOf, paysLabel, callFor, edgePercent, isStop } from '../../../../shared/src/games/bigsix/rules.ts';
 import { formatMoney, type Cents } from '../../../../shared/src/money.ts';
 import { ChipTray, el } from '../../ui/kit.ts';
 import { bigSixMax, chipOn, maxRefusal, type MaxBet } from '../../table/max.ts';
@@ -32,6 +32,7 @@ import { LayoutChips, Pile, seatColor, CHIP_SCALE, type PileStyle } from './chip
 import { ClapperSound } from './sound.ts';
 import { History, Meters, Plaque, Tooltip, Clock, Players, type PlayerRow } from './hud.ts';
 import { calm, wave } from '../../app/comfort.ts';
+import { SpinLog, logKey } from '../roulette/log.ts';
 
 const FELT_Y = TOP_Y + 0.0007;
 const CHIP_Y = TOP_Y + 0.0009;
@@ -223,6 +224,9 @@ function mountBigSix(ctx: TableViewCtx): TableView {
 
   // DOM
   const history = new History();
+  // the table's longer log of stops, for the counts under the strip (roulette/log.ts)
+  let log = new SpinLog<number>(null, isStop);
+  let logAt: string | null = null;
   const meters = new Meters();
   const plaque = new Plaque();
   const tip = new Tooltip();
@@ -357,12 +361,16 @@ function mountBigSix(ctx: TableViewCtx): TableView {
     return lines;
   }
 
+  /** Light the spot under the pointer or finger (null: none). */
+  function light(key: SymbolId | null): void {
+    if (key === hovered) return;
+    hovered = key;
+    hoverGroup.clear();
+    if (key) hoverGroup.add(spotMesh(key, hoverMat));
+  }
+
   function showHover(key: SymbolId | null, e: PointerEvent): void {
-    if (key !== hovered) {
-      hovered = key;
-      hoverGroup.clear();
-      if (key) hoverGroup.add(spotMesh(key, hoverMat));
-    }
+    light(key);
     if (!key) {
       tip.hide();
       ghost.visible = false;
@@ -376,15 +384,38 @@ function mountBigSix(ctx: TableViewCtx): TableView {
     ghostMat.color.set(mode === 'multi' && mySeat !== null ? seatColor(mySeat) : tray.maxPicked ? '#e2bf7c' : tray.selected.body);
   }
 
-  const onMove = (e: PointerEvent) => showHover(spotUnder(e), e);
+  // A touch has no hover: a tap puts the chip down as a click does, and lights the spot with its
+  // card over the finger for a moment (read again when the chip lands).
+  let touched: { key: SymbolId; x: number; y: number; timer: number } | null = null;
+  function showTouch(key: SymbolId, x: number, y: number): void {
+    if (touched) clearTimeout(touched.timer);
+    light(key);
+    ghost.visible = false;
+    tip.show(tipLines(key), x, y, true);
+    touched = { key, x, y, timer: window.setTimeout(endTouch, 2400) };
+  }
+  function endTouch(): void {
+    if (!touched) return;
+    clearTimeout(touched.timer);
+    touched = null;
+    light(null);
+    tip.hide();
+  }
+
+  const onMove = (e: PointerEvent) => {
+    if (e.pointerType === 'touch') return;
+    showHover(spotUnder(e), e);
+  };
   const onDown = (e: PointerEvent) => {
     if (e.button !== 0) return;
     const key = spotUnder(e);
-    if (key) place(key);
+    if (!key) return;
+    place(key);
+    if (e.pointerType === 'touch' || e.pointerType === 'pen') showTouch(key, e.clientX, e.clientY);
   };
   const onLeave = () => {
-    hovered = null;
-    hoverGroup.clear();
+    if (touched) return;
+    light(null);
     tip.hide();
     ghost.visible = false;
   };
@@ -443,7 +474,7 @@ function mountBigSix(ctx: TableViewCtx): TableView {
   function draw(v: BigSixView): void {
     view = v;
     chips.sync(v.bets);
-    history.set(v.history);
+    history.set(log.merge(v.history));
     refreshControls();
     drawPlayers();
     meters.set({ stack, win: lastWin });
@@ -484,10 +515,19 @@ function mountBigSix(ctx: TableViewCtx): TableView {
     }
   }
 
+  /**
+   * What the marquee showed last, as one number (the wheel's angle while it chases, a code for
+   * each steady or blinking state otherwise): its colours only go to the GPU again when it changes.
+   */
+  let bulbsShown = NaN;
   function lightBulbs(): void {
     if (!bulbs?.instanceColor) return;
     const n = bulbs.count;
     const now = performance.now();
+    const t = (now - bulbSince) / 1000;
+    const shown = calm() ? (bulbMode === 'idle' ? -1 : -2) : bulbMode === 'spin' ? theta : bulbMode === 'win' ? (t > 2.2 ? -3 : -4 - (Math.floor(t / 0.22) % 2)) : -6 - (Math.floor(now / 700) % 2);
+    if (shown === bulbsShown) return;
+    bulbsShown = shown;
     for (let k = 0; k < n; k++) {
       let on: number;
       if (calm()) {
@@ -498,7 +538,6 @@ function mountBigSix(ctx: TableViewCtx): TableView {
         const phase = ((theta / TAU) * 2 - k / n) * 2;
         on = Math.max(0, Math.cos(Math.PI * (phase - Math.round(phase)))) ** 6;
       } else if (bulbMode === 'win') {
-        const t = (now - bulbSince) / 1000;
         on = t > 2.2 ? 1 : Math.floor(t / 0.22) % 2 === 0 ? 1 : 0.05;
       } else {
         on = (k + Math.floor(now / 700)) % 2 === 0 ? 1 : 0.12;
@@ -526,6 +565,7 @@ function mountBigSix(ctx: TableViewCtx): TableView {
 
   async function playSpin(e: SpinEvent, settle: SettleEvent | undefined, next: BigSixView): Promise<void> {
     animating = true;
+    endTouch();
     onLeave();
     refreshControls();
     plaque.hide();
@@ -575,7 +615,7 @@ function mountBigSix(ctx: TableViewCtx): TableView {
   async function settleTable(e: SpinEvent, settle: SettleEvent | undefined, next: BigSixView): Promise<void> {
     const sym = e.symbol;
     const spot = spotOf(sym)!;
-    history.set(next.history);
+    history.set(log.merge(next.history));
     plaque.show(sym);
     bulbMode = 'win';
     bulbSince = performance.now();
@@ -699,6 +739,11 @@ function mountBigSix(ctx: TableViewCtx): TableView {
   const tableView: TableView & { debug: unknown } = {
     onTable(snap: TableSnapshot) {
       mode = snap.meta.mode;
+      const kept = logKey('bigsix', snap.meta.tableId, mode);
+      if (kept !== logAt) {
+        logAt = kept;
+        log = new SpinLog<number>(kept, isStop);
+      }
       cfg = snap.meta.config;
       tray.setChipMax(cfg.limits.spot?.max ?? TRAY_MAX, cfg.limits.spot?.min ?? 0);
       mySeat = snap.you.seat;
@@ -741,6 +786,7 @@ function mountBigSix(ctx: TableViewCtx): TableView {
               void tween(140, (k) => pile.position.setY(y + 0.03 * (1 - k)), ease.out);
             }
             if (e.seat !== mySeat && grown.length) ctx.sfx.play('chip-lay', { volume: 0.35 });
+            if (touched) tip.show(tipLines(touched.key), touched.x, touched.y, true);
             refreshControls();
             break;
           }
@@ -822,6 +868,7 @@ function mountBigSix(ctx: TableViewCtx): TableView {
         camHome = null;
       }
       disposed = true;
+      if (touched) clearTimeout(touched.timer);
       offTips();
       if (tipShown) ctx.kit.tip(null);
       removeEventListener('pointermove', onMove);

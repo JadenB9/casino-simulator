@@ -154,7 +154,8 @@ function faceTexture(quality: Quality): THREE.CanvasTexture {
   paintFace(c.getContext('2d')!, size);
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
-  t.anisotropy = 8;
+  // as sharp as the renderer allows (three.js caps it at the GPU's most), for the stops seen at an angle
+  t.anisotropy = 16;
   return t;
 }
 
