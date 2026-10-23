@@ -10,6 +10,7 @@ import '../menu/dev.css';
 import { Engine3D, savedQuality } from '../../render/engine3d.ts';
 import { Sfx } from '../../audio/sfx.ts';
 import { devRoom } from '../../world/dev-room.ts';
+import { sceneWanted, stillBackdrop } from './dev-backdrop.ts';
 import { GAMES } from '../../games/index.ts';
 import type { GameId } from '../../../../shared/src/engine.ts';
 import * as realApi from '../../net/api.ts';
@@ -24,12 +25,16 @@ const q = new URLSearchParams(location.search);
 const screen = q.get('screen') ?? 'leaderboard';
 const ui = document.getElementById('ui')!;
 
-const engine = new Engine3D(document.getElementById('scene') as HTMLCanvasElement, document.getElementById('labels')!, savedQuality());
+// (?scene=0: a still backdrop instead of the 3D room, for quick screenshots)
+const engine = sceneWanted() ? new Engine3D(document.getElementById('scene') as HTMLCanvasElement, document.getElementById('labels')!, savedQuality()) : null;
+if (!engine) stillBackdrop(document.getElementById('scene') as HTMLCanvasElement);
 const sfx = new Sfx();
 void sfx.load().catch(() => {});
-devRoom(engine, GAMES.blackjack, '');
-engine.camera.position.set(1.95, 1.5, 2.35);
-engine.camera.lookAt(0, 0.8, 0);
+if (engine) {
+  devRoom(engine, GAMES.blackjack, '');
+  engine.camera.position.set(1.95, 1.5, 2.35);
+  engine.camera.lookAt(0, 0.8, 0);
+}
 
 const fixture = q.get('fixture') === '1';
 const api: LeaderboardApi = fixture ? fixtureApi({ fail: q.get('fail') === '1' }) : socialApi;

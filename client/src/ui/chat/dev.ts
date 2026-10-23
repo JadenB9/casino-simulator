@@ -18,16 +18,20 @@ import { mountHud } from '../menu/index.ts';
 import { cleanChat, type ChatLine, type ChatServerMsg, type PlayerInfo } from '../../../../shared/src/protocol.ts';
 import type { Look } from '../../../../shared/src/look.ts';
 import { createChat } from './index.ts';
+import { sceneWanted, stillBackdrop } from '../social/dev-backdrop.ts';
 
 const q = new URLSearchParams(location.search);
 const state = q.get('state') ?? 'open';
 const ui = document.getElementById('ui')!;
 
-const engine = new Engine3D(document.getElementById('scene') as HTMLCanvasElement, document.getElementById('labels')!, savedQuality());
+// (?scene=0: a still backdrop and no one standing about, for quick screenshots of the panel)
+const engine = sceneWanted() ? new Engine3D(document.getElementById('scene') as HTMLCanvasElement, document.getElementById('labels')!, savedQuality()) : null;
 const sfx = new Sfx();
-devRoom(engine, GAMES.blackjack, '');
-engine.camera.position.set(0.2, 2.35, 6.4);
-engine.camera.lookAt(0, 1.45, 0);
+if (engine) {
+  devRoom(engine, GAMES.blackjack, '');
+  engine.camera.position.set(0.2, 2.35, 6.4);
+  engine.camera.lookAt(0, 1.45, 0);
+} else stillBackdrop(document.getElementById('scene') as HTMLCanvasElement);
 
 const look = (top: string, bottom: string, skin: number, hair: string, body: 'm' | 'f' = 'm'): Look => ({ v: 1, body, outfit: 'casual', skin, hair, top, bottom, shoes: '#1a1a1a' });
 const profile = regular();
@@ -38,14 +42,14 @@ const cast = [
 ];
 const factory = new CapsuleFactory();
 const chars = new Map<number, Character>();
-for (const p of cast) {
+for (const p of engine ? cast : []) {
   const ch = factory.create(p.look, p.id === profile.id ? '' : p.name);
   ch.root.position.set(p.at[0], 0, p.at[1]);
   ch.root.rotation.y = p.at[2];
-  engine.scene.add(ch.root);
+  engine!.scene.add(ch.root);
   chars.set(p.id, ch);
 }
-engine.onFrame((dt) => chars.forEach((ch) => ch.update(dt)));
+engine?.onFrame((dt) => chars.forEach((ch) => ch.update(dt)));
 
 // The stand-in floor socket.
 let n = 0;
@@ -84,7 +88,7 @@ async function start(): Promise<void> {
   session.set(profile);
   const hud = mountHud({ root: ui, session, sfx, onMenu: () => {} });
   hud.setOnline(3);
-  const chat = createChat({ root: ui, floor: link, character: (id) => chars.get(id), onFrame: (fn) => engine.onFrame(fn), camera: engine.camera });
+  const chat = createChat({ root: ui, floor: link, character: (id) => chars.get(id), ...(engine ? { onFrame: (fn: (dt: number) => void) => engine.onFrame(fn), camera: engine.camera } : {}) });
   chat.setVisible(true);
   const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
   const open = () => document.querySelector<HTMLButtonElement>('.chat-dock')?.click();

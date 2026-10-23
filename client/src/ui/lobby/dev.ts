@@ -17,21 +17,27 @@ import { formatMoney } from '../../../../shared/src/money.ts';
 import { limitsLabel } from '../../../../shared/src/limits.ts';
 import { askBuyIn, el, toast } from '../kit.ts';
 import { PartyPanel, openTableFlow, type LobbyFloor } from './index.ts';
+import { sceneWanted, stillBackdrop } from '../social/dev-backdrop.ts';
 
 const params = new URLSearchParams(location.search);
 const asked = params.get('game');
 const game = isGameId(asked) ? asked : 'blackjack';
 const variant = variantOf(game, params.get('variant'));
 const ui = document.getElementById('ui')!;
-/** For the headless check: what this page is connected to. */
-const dev: { floor?: LobbyFloor; tableId?: string | null } = {};
+/** For the headless check: what this page is connected to (and the engine, to pause for a still). */
+const dev: { floor?: LobbyFloor; tableId?: string | null; engine?: Engine3D } = {};
 
 async function main(): Promise<void> {
   // The room and the table, seen from where a player stands after walking up to it.
-  const engine = new Engine3D(document.getElementById('scene') as HTMLCanvasElement, document.getElementById('labels')!, savedQuality());
-  devRoom(engine, GAMES[game], variant);
-  engine.camera.position.set(0.95, 1.75, 2.5);
-  engine.camera.lookAt(0.95, 0.45, 0);
+  // (?scene=0: a still backdrop instead, for quick screenshots)
+  (window as unknown as { lobbyDev: unknown }).lobbyDev = dev;
+  if (sceneWanted()) {
+    const engine = new Engine3D(document.getElementById('scene') as HTMLCanvasElement, document.getElementById('labels')!, savedQuality());
+    devRoom(engine, GAMES[game], variant);
+    dev.engine = engine;
+    engine.camera.position.set(0.95, 1.75, 2.5);
+    engine.camera.lookAt(0.95, 0.45, 0);
+  } else stillBackdrop(document.getElementById('scene') as HTMLCanvasElement);
 
   session.set(await login(params.get('name') ?? `dev_${Math.random().toString(36).slice(2, 8)}`, DEV_PASSWORD));
   const hud = el('div', 'panel');
