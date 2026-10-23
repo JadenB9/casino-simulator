@@ -52,7 +52,7 @@
 .lb-table tr.podium td.lb-rank { color: var(--brass); }
 .lb-table tr.p1 td.lb-rank { color: var(--brass-hi); }
 /* the podium: gold, silver and bronze medals (things in the world: their own metals) */
-.lb-medal { display: inline-grid; place-items: center; width: 24px; height: 24px; margin-left: -4px; border-radius: 50%; font-size: 14px; font-weight: 600; color: #1d140a; box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.22), 0 1px 3px rgba(0, 0, 0, 0.3); }
+.lb-medal { display: inline-grid; place-items: center; width: 24px; height: 24px; margin-left: -4px; border-radius: 50%; font-size: 14px; font-weight: 600; color: var(--on-gold); box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.22), 0 1px 3px rgba(0, 0, 0, 0.3); }
 .lb-medal.m1 { background: linear-gradient(#f6dd97, #c9a04c); }
 .lb-medal.m2 { background: linear-gradient(#eef0f2, #a9aeb4); }
 .lb-medal.m3 { background: linear-gradient(#e7b98c, #b27845); }

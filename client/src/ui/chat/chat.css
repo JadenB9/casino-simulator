@@ -84,7 +84,7 @@
 /* one of the unread lines is for you: a red @ rides on the badge, before the count */
 .chat-badge.at { position: relative; margin-left: 12px; }
 .chat-dock .chat-badge.at { margin-left: 10px; }
-.chat-badge.at::before { content: '@'; position: absolute; top: 50%; right: calc(100% - 4px); display: grid; place-items: center; width: 17px; height: 17px; margin-top: -8.5px; border: 1px solid rgba(var(--glass-rgb), 0.9); border-radius: 50%; background: var(--lose); color: #fff; font: 700 11px/1 var(--ui); }
+.chat-badge.at::before { content: '@'; position: absolute; top: 50%; right: calc(100% - 4px); display: grid; place-items: center; width: 17px; height: 17px; margin-top: -8.5px; border: 1px solid rgba(var(--glass-rgb), 0.9); border-radius: 50%; background: var(--lose); color: var(--bg); font: 700 11px/1 var(--ui); }
 .chat.muted .chat-dock { color: var(--ink-3); }
 
 /* Previews of the newest lines while the box is closed, above the dock, newest lowest. */
