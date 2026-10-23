@@ -1,5 +1,5 @@
 // Dev page for the shell, served by Vite in development only, no worker and no 3D:
-//   /casino/src/ui/hud/dev.html?open=<more|palette|settings|keys|notes|online>
+//   /casino/src/ui/hud/dev.html?open=<more|palette|settings|keys|notes|modal|idle|away>
 // The HUD with every tool boot.ts gives it (the map's button the old way, as the world puts it
 // in), canned money, toasts and big wins, over a painted stand-in for the floor. Options:
 // seated=1 (chips at a table, a dealer's line and Leave on a touch screen), touch=1 (html.touch-ui),
@@ -21,6 +21,8 @@ import { WinToasts } from '../feed/toast.ts';
 import { icon } from '../menu/icons.ts';
 import type { SettingsSection } from './settings.ts';
 import { setUiSize, setShowFps, type UiSize } from './display.ts';
+import { showAway, showIdleWarning } from '../away/away.ts';
+import { IDLE_WARN_MS } from '../../../../shared/src/protocol.ts';
 import type { DailyStatus } from '../../../../shared/src/celebs.ts';
 
 const q = new URLSearchParams(location.search);
@@ -105,12 +107,15 @@ setTimeout(() => {
   else if (open === 'settings') hud.openSettings((q.get('section') as SettingsSection | null) ?? undefined);
   else if (open === 'keys') hud.toggleShortcuts();
   else if (open === 'notes') (document.querySelector('.hud [data-tool="notes"]') as HTMLButtonElement | null)?.click();
+  else if (open === 'modal') void kit.askBuyIn({ min: 500, max: 50_000, balance: 3_182_450 });
+  else if (open === 'idle') showIdleWarning({ root: ui, at: Date.now() + IDLE_WARN_MS - 12_000, atTable: q.get('seated') === '1' });
+  else if (open === 'away') showAway({ root: ui, atTable: q.get('seated') === '1', onBack: () => toast('Back on the floor') });
   document.body.dataset.ready = '1';
 }, 700);
 
 if (q.get('dock') !== '0') {
   const dock = el('nav', 'dev-dock');
-  for (const s of ['hud', 'more', 'palette', 'settings', 'keys', 'notes']) {
+  for (const s of ['hud', 'more', 'palette', 'settings', 'keys', 'notes', 'modal', 'idle', 'away']) {
     const a = el('a', (open ?? 'hud') === s ? 'on' : '', s);
     const p = new URLSearchParams(q);
     if (s === 'hud') p.delete('open');

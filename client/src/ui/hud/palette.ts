@@ -173,7 +173,7 @@ export function openPalette(o: PaletteOpts): Palette {
     const cmd = shown[i];
     if (!cmd) return;
     remember(cmd.id);
-    close();
+    close(false);
     cmd.run();
   };
 
@@ -197,26 +197,29 @@ export function openPalette(o: PaletteOpts): Palette {
 
   input.value = o.query ?? '';
   render();
+  // where focus goes back to when it closes without running anything
+  const before = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   o.root.append(scrim);
   const release = holdKeyboard(panel, () => close());
   input.focus({ preventScroll: true });
   // something opened over it: it's done
   const offOver = onOverlayChange(() => {
     const top = topPanel();
-    if (top && top !== panel) close();
+    if (top && top !== panel) close(false);
   });
   // the caret after what was typed already
   input.setSelectionRange(input.value.length, input.value.length);
 
   let closed = false;
-  function close(): void {
+  function close(restore = true): void {
     if (closed) return;
     closed = true;
     offOver();
     release();
     scrim.classList.add('closing');
     window.setTimeout(() => scrim.remove(), 160);
+    if (restore && before?.isConnected && before !== document.body) before.focus({ preventScroll: true });
     o.onClose?.();
   }
-  return { root: scrim, close };
+  return { root: scrim, close: () => close() };
 }

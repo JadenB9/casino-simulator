@@ -163,8 +163,7 @@ export function mountHud(deps: HudDeps): Hud {
   moreBtn.setAttribute('aria-label', 'More');
   moreBtn.setAttribute('aria-haspopup', 'dialog');
   moreBtn.setAttribute('aria-expanded', 'false');
-  moreBtn.dataset.tip = 'Every action';
-  moreBtn.dataset.tipKey = PALETTE_KEY;
+  moreBtn.dataset.tip = 'Every action, grouped';
   moreBtn.append(icon('more'), el('span', 'hud-more-label', 'More'), el('span', 'hud-more-badge'));
   moreBtn.addEventListener('click', () => toggleMore());
   right.append(online, moreBtn);
