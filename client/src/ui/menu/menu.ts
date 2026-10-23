@@ -6,6 +6,7 @@
 import './menu.css';
 import type { Profile } from '../../../../shared/src/protocol.ts';
 import { formatMoney } from '../../../../shared/src/money.ts';
+import { titleOf } from '../../../../shared/src/feats.ts';
 import { savedQuality } from '../../render/engine3d.ts';
 import { el } from '../kit.ts';
 import type { Closable, SessionLike, SfxLike } from './deps.ts';
@@ -47,6 +48,9 @@ export function mountMenu(deps: MenuDeps): MenuHandle {
   const mono = el('span', 'menu-mono');
   const whoText = el('div', 'menu-who-text');
   const whoName = el('div', 'menu-who-name');
+  // the title you wear under your name (an achievement's), when you wear one
+  const worn = el('div', 'menu-who-title');
+  worn.hidden = true;
   const money = el('div', 'menu-who-money');
   const balance = el('span', 'menu-who-figure money');
   const onTables = el('span', 'menu-who-figure money');
@@ -55,7 +59,7 @@ export function mountMenu(deps: MenuDeps): MenuHandle {
   const tablesTile = el('span', 'menu-who-tile');
   tablesTile.append(el('span', 'menu-who-label', 'On tables'), onTables);
   money.append(balanceTile, tablesTile);
-  whoText.append(whoName, money);
+  whoText.append(whoName, worn, money);
   who.append(mono, whoText);
 
   const nav = el('nav', 'menu-list front-main front-rise');
@@ -102,6 +106,9 @@ export function mountMenu(deps: MenuDeps): MenuHandle {
       mono.replaceChildren(monogram(name));
     }
     say(whoName, name);
+    const wears = (p && titleOf(p.look.title)?.reward.title) ?? '';
+    say(worn, wears);
+    worn.hidden = !wears;
     say(balance, formatMoney(p?.balance ?? 0));
     say(onTables, formatMoney(p?.inPlay ?? 0));
     tablesTile.hidden = !p || p.inPlay === 0;
@@ -133,9 +140,12 @@ export function mountMenu(deps: MenuDeps): MenuHandle {
       select(i, false, false);
       activate(i);
     });
-    it.btn.addEventListener('pointerenter', (e) => {
-      // a finger's tap goes straight to its click: no hover sound or focus move first
-      if (e.pointerType === 'mouse') select(i, true);
+    // The mouse picks a row by moving over it. A pointer that is only resting where a row comes
+    // up (where the login's Enter was) leaves Enter Casino chosen, and a finger's tap goes
+    // straight to its click with no hover sound or focus move first.
+    it.btn.addEventListener('pointermove', (e) => {
+      if (e.pointerType !== 'mouse' || (e.movementX === 0 && e.movementY === 0) || sel === i) return;
+      select(i, true);
     });
     it.btn.addEventListener('focus', () => select(i, false, false));
   });
