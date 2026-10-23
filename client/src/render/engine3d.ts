@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { Labels } from './labels.ts';
 import { framePass } from './matrices.ts';
+import { followGraphicsPrefs } from './graphics.ts';
 
 export type Quality = 'high' | 'low';
 
@@ -56,6 +57,9 @@ export function fovFor(aspect: number): number {
   return THREE.MathUtils.radToDeg(2 * Math.atan(half));
 }
 
+/** The battery saver's frame (ms): thirty a second, a little early so a 60 Hz screen draws every other one. */
+const SAVER_MS = 1000 / 30 - 4;
+
 /** The studio room's light panels, as a share of three's, and the environment's strength. */
 const ENV_PANELS = 0.3;
 const ENV_INTENSITY = 0.45;
@@ -77,6 +81,11 @@ export class Engine3D {
 
   /** The ceiling on the pixel ratio: 1.5 on phones and tablets, 2 elsewhere. */
   readonly maxPixelRatio: number;
+
+  /** The battery saver (render/graphics.ts): the least time between two drawn frames (ms), 0 for every frame. */
+  private minFrameMs = 0;
+  /** When the last frame was drawn (the animation loop's clock, ms). */
+  private drawnAt = -Infinity;
 
   /**
    * `antialias`: multisample the canvas itself (on High unless told otherwise). The floor passes
@@ -115,6 +124,7 @@ export class Engine3D {
     addEventListener('resize', this.resize);
     this.resize();
     this.watchDpr();
+    followGraphicsPrefs((p) => (this.minFrameMs = p.fps === 'saver' ? SAVER_MS : 0));
     this.renderer.setAnimationLoop((t) => this.tick(t));
   }
 
@@ -159,6 +169,10 @@ export class Engine3D {
   }
 
   private tick(t: number): void {
+    // the battery saver skips this screen refresh altogether: the clock, the frame callbacks and
+    // the draw wait for the next one, which then sees the whole time gone by
+    if (this.minFrameMs > 0 && !this.paused && t - this.drawnAt < this.minFrameMs) return;
+    this.drawnAt = t;
     this.timer.update(t);
     if (this.paused) return;
     const dt = Math.min(this.timer.getDelta(), 0.1);

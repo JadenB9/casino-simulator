@@ -215,7 +215,8 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
   const renderer = engine.renderer;
   const scene = engine.scene;
   const progress = opts.onProgress ?? (() => {});
-  const aniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  // the floors at a low angle stay crisp toward the far wall (free on a desktop card; Low keeps 8)
+  const aniso = Math.min(quality === 'high' ? 16 : 8, renderer.capabilities.getMaxAnisotropy());
   progress(0.05);
   const [tex] = await Promise.all([loadTextures(aniso), loadSignFonts(), ...Object.values(GAMES).map((g) => g.preload?.().catch(() => {}))]);
   progress(0.35);
@@ -367,7 +368,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
   let home = true;
 
   const bloom = new Bloom(engine);
-  const pr = new PixelRatio(renderer);
+  const pr = new PixelRatio(renderer, engine.maxPixelRatio);
   // bloom's extra passes would otherwise reset the counters mid-frame; world.update() resets them
   renderer.info.autoReset = false;
   let high = quality === 'high';
@@ -533,6 +534,8 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
         bloomLook = want;
         bloom.setLook(want);
       }
+      // the room's grade (bloom.ts): the room you're in, the zone outside the casino, a dressing room
+      bloom.setRoom(studio ? 'studio' : home ? visibility.room : city.zone);
       props.update(dt);
       tickWater(dt);
       characters.updateLabels(engine.camera);
@@ -642,6 +645,7 @@ export async function createWorld(engine: Engine3D, opts: WorldOptions = {}): Pr
       player.dispose();
       character.dispose();
       offDpr();
+      pr.dispose();
       bloom.dispose();
       reflections?.dispose();
       renderer.info.autoReset = true;

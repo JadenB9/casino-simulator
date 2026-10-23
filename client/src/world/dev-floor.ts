@@ -9,6 +9,8 @@
 // side by side in debug colours, to check outfits.json), &slots=sevens,neon,... (the slot islands
 // to lay out, instead of the catalogue's variants), &fx=fx-disco,... (play the shop's effects round
 // you as the floor opens), &statues=3 (sample statues in the lobby; fx/dev.ts has the console hooks).
+// v8: casino.gfx.set(key, value) changes a graphics option at once (render/graphics.ts), and
+// dev-floor-graphics.html shows the Settings sheet's graphics rows on their own.
 
 import * as THREE from 'three';
 import { Engine3D, savedQuality, type Quality } from '../render/engine3d.ts';
@@ -18,6 +20,7 @@ import { createWorld, type FloorWorld } from './index.ts';
 import { checkLayout } from './layout.ts';
 import { LIFTS } from '../../../shared/src/lifts.ts';
 import { fxDev } from './fx/dev.ts';
+import { graphicsPrefs, setGraphicsPref } from '../render/graphics.ts';
 
 interface View {
   pos: [number, number, number];
@@ -114,7 +117,10 @@ export async function runDevFloor(params: URLSearchParams): Promise<FloorWorld> 
   }
   // the shop's effects and the lobby's statues without a server (fx/dev.ts)
   const fx = fxDev(world, engine, params);
-  (window as unknown as { casino: unknown }).casino = { engine, world, THREE, fx };
+  // v8: the graphics options that apply at once (render/graphics.ts), from the console or a check:
+  // casino.gfx.set('glow', false), casino.gfx.prefs()
+  const gfx = { prefs: graphicsPrefs, set: setGraphicsPref };
+  (window as unknown as { casino: unknown }).casino = { engine, world, THREE, fx, gfx };
   return world;
 }
 
