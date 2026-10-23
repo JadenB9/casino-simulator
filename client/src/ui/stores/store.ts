@@ -8,6 +8,7 @@ import '../shop/shop.css';
 import './store.css';
 import { formatMoney, type Cents } from '../../../../shared/src/money.ts';
 import type { BuyResponse } from '../../../../shared/src/items.ts';
+import type { GunItem } from '../../../../shared/src/arms.ts';
 import { button, el, modal, toast } from '../kit.ts';
 import { openSheet, type Sheet } from '../menu/sheet.ts';
 import { problemText } from '../menu/parts.ts';
@@ -15,6 +16,12 @@ import { applyMoney } from '../shop/bar.ts';
 import * as shopApi from '../shop/api.ts';
 import { session } from '../../app/session.ts';
 import type { Sfx } from '../../audio/sfx.ts';
+
+/** A gun's line in Ace Arms: its own words, then how it fires (a revolver isn't semi-automatic) and what it holds. */
+export function gunLine(g: GunItem): string {
+  const action = g.auto ? 'Automatic' : g.model === 'revolver' ? 'Double-action revolver' : g.model === 'shotgun' ? 'Pump-action' : g.model === 'marksman' ? 'Bolt-action' : 'Semi-automatic';
+  return `${g.about} ${action}, ${g.mag} rounds.`;
+}
 
 export interface StoreRow {
   id: string;

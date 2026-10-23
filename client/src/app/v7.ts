@@ -28,7 +28,7 @@ import { Arms } from '../world/arms/index.ts';
 import { GUNS } from '../../../shared/src/arms.ts';
 import { APARTMENTS, BUILT_IN, MOVABLE, SLOT_NAMES, STOWED, type HomePlace, type HomeSlot } from '../../../shared/src/estate.ts';
 import { RESIDENCES, STORES, type StoreId } from '../../../shared/src/stores.ts';
-import { openStore, type StoreAction, type StoreRow } from '../ui/stores/store.ts';
+import { gunLine, openStore, type StoreAction, type StoreRow } from '../ui/stores/store.ts';
 import { TABLET, placeOf } from '../world/home/plan.ts';
 import { SLOT_ORDER, isPokerTable, showPiece, slotItems, type Live } from '../world/home/furnish.ts';
 import { HOME_POKER, HomePoker } from '../world/home/poker.ts';
@@ -325,7 +325,7 @@ export class V7 {
           const g = GUNS.find((x) => x.id === id);
           if (g) this.arms.draw(g);
         },
-        sections: () => [{ title: 'Guns', rows: GUNS.map((g) => ({ id: g.id, name: g.name, price: g.price, about: `${g.about} ${g.auto ? 'Automatic' : 'Semi-automatic'}, ${g.mag} rounds.`, owned: owns(g.id), use: { label: this.arms.drawn?.id === g.id ? 'Drawn' : 'Draw', done: this.arms.drawn?.id === g.id, run: () => this.arms.draw(g) } })) }],
+        sections: () => [{ title: 'Guns', rows: GUNS.map((g) => ({ id: g.id, name: g.name, price: g.price, about: gunLine(g), owned: owns(g.id), use: { label: this.arms.drawn?.id === g.id ? 'Drawn' : 'Draw', done: this.arms.drawn?.id === g.id, run: () => this.arms.draw(g) } })) }],
       });
       return;
     }

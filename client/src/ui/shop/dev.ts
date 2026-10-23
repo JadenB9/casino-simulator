@@ -33,7 +33,7 @@ import { fixtureBank } from '../bank/fixtures.ts';
 import { openValet } from '../cars/valet.ts';
 import { carPicture } from '../cars/art.ts';
 import { CarMaterials } from '../../world/cars/materials.ts';
-import { openStore } from '../stores/store.ts';
+import { gunLine, openStore } from '../stores/store.ts';
 import { itemPicture } from './art.ts';
 import { entries } from './catalog.ts';
 import './dev.css';
@@ -270,7 +270,7 @@ function store(api: { buy(item: string, op: string): Promise<BuyResponse> }): vo
     api,
     sfx,
     bought: (id) => (drawn = id),
-    sections: () => [{ title: 'Guns', rows: GUNS.map((g) => ({ id: g.id, name: g.name, price: g.price, about: `${g.about} ${g.auto ? 'Automatic' : 'Semi-automatic'}, ${g.mag} rounds.`, owned: owns(g.id), use: { label: drawn === g.id ? 'Drawn' : 'Draw', done: drawn === g.id, run: () => (drawn = g.id) } })) }],
+    sections: () => [{ title: 'Guns', rows: GUNS.map((g) => ({ id: g.id, name: g.name, price: g.price, about: gunLine(g), owned: owns(g.id), use: { label: drawn === g.id ? 'Drawn' : 'Draw', done: drawn === g.id, run: () => (drawn = g.id) } })) }],
   });
 }
 
