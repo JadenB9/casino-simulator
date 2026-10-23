@@ -160,7 +160,8 @@ function materials(quality: Quality): Shared {
   const woodTex = tile(paintWood(high ? 512 : 256));
   const rustTex = tile(paintRust(high ? 512 : 256));
   const paintTex = tile(paintPainted(high ? 512 : 256));
-  const faceTex = texture(paintFace(high ? 2048 : 1024), { anisotropy: high ? 8 : 4 });
+  // the face is read from terminals all round the arc, some at a slant: as sharp as the renderer allows there
+  const faceTex = texture(paintFace(high ? 2048 : 1024), { anisotropy: high ? 16 : 4 });
   const plateTex = texture(paintPlate(high ? 1024 : 512), { anisotropy: 8 });
   const signTex = texture(paintSign(high ? 1024 : 512), { anisotropy: 4 });
   const leatherTex = texture(paintLeather());
