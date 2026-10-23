@@ -54,7 +54,8 @@ const MARKS: readonly Mark[] = [
     title: 'Walk the floor',
     icon: 'walk',
     text: (touch) => (touch ? 'Walk with the stick at the bottom left, and drag anywhere else to look around.' : `Walk with these or the arrow keys, and look around with the mouse. Hold ${keyLabel('run')} to run.`),
-    keys: (touch) => (touch ? [] : WALK.map((a) => keyLabel(a))),
+    // in the order everyone knows them: W A S D
+    keys: (touch) => (touch ? [] : (['forward', 'left', 'back', 'right'] as const).map((a) => keyLabel(a))),
     done: WALK,
     ms: 15_000,
   },
