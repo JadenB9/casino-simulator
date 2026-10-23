@@ -29,3 +29,9 @@
 
 /* A panel the dock has set aside for want of room (dock.ts): back when the bar gives it room. */
 #ui > .dock-away { display: none !important; }
+
+/* The dealer's line (ui/kit.ts) on a phone: under the HUD, not over its second row; the dock
+   (dock.ts) moves it below the table's own panels up there (a scoreboard, the meters). */
+@media (max-width: 560px) {
+  #ui > .dealer-line { top: var(--below-hud, 82px); }
+}

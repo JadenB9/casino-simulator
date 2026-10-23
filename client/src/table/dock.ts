@@ -33,11 +33,12 @@ const DOCKED: readonly { sel: string; at: Anchor }[] = [
 ];
 
 /**
- * Panels that keep to the top of the screen (the History line, at the top right): where their
- * stylesheet puts them, moved down below any table panel they would land on (on a phone the
- * baccarat scoreboard spans the screen there).
+ * Panels that keep to the top of the screen (the History line at the top right, the dealer's line
+ * under the HUD): where their stylesheet puts them, moved down below any table panel they would
+ * land on (on a phone the baccarat scoreboard spans the screen there, and the meters and Rules
+ * of Three Card, Let It Ride, Pai Gow and War sit at its left), and below one placed before them.
  */
-const TOP = '.th-history, [data-dock="top"]';
+const TOP = '.th-history, [data-dock="top"], .dealer-line';
 /**
  * A panel that can wait for room (tipping the dealer): when the only place left for it is up in the
  * HUD's rows (Hold'em on a phone on its side, the action bar the whole height of the screen), it's
@@ -46,8 +47,8 @@ const TOP = '.th-history, [data-dock="top"]';
 const SPARE = '.tip-dealer';
 const AWAY = 'dock-away';
 
-/** Panels that show for a moment, which a top panel isn't moved for. */
-const TRANSIENT = ['dealer-line', 'celebrate', 'toast'];
+/** Panels that show for a moment (and get out of the way themselves), which a top panel isn't moved for. */
+const TRANSIENT = ['celebrate', 'toast'];
 
 /** Space between the bar and a panel, and between two panels, CSS px. */
 export const DOCK_GAP = 8;
@@ -113,6 +114,13 @@ export function stack(bar: Box, pieces: readonly Piece[], others: readonly Box[]
 }
 
 const visible = (e: HTMLElement): boolean => !e.hidden && e.offsetWidth > 1 && e.offsetHeight > 1;
+/** A box, in whole pixels, for comparing one arrangement's inputs with the next. */
+const box = (e: HTMLElement): string => {
+  const r = e.getBoundingClientRect();
+  return `${Math.round(r.left)},${Math.round(r.top)},${Math.round(r.width)},${Math.round(r.height)}`;
+};
+/** What the board fit doesn't count either: boards drawn in the DOM, overlays that come and go (More, the command palette). */
+const ignored = (e: HTMLElement): boolean => e.dataset.fit === 'ignore';
 
 export class Dock {
   private readonly resized: ResizeObserver | null;
@@ -150,10 +158,19 @@ export class Dock {
     return e.matches(BAR) || e.matches(TOP) || DOCKED.some((d) => e.matches(d.sel)) || e.classList.contains('panel');
   }
 
-  /** Put every panel that goes with the bar above it (and give them back when there's no bar). */
+  /** What the last arrangement was worked out from: the window, and every box that counts. */
+  private last = '';
+
+  /**
+   * Put every panel that goes with the bar above it (and give them back when there's no bar).
+   * Nothing is written when nothing it depends on has changed since the last time (the board fit
+   * calls it a few times a second as a backstop): a glance at the boxes, read as they stand.
+   */
   readonly arrange = (): void => {
     if (this.disposed) return;
     const kids = [...this.ui.children].filter((e): e is HTMLElement => e instanceof HTMLElement);
+    const sig = [innerWidth, innerHeight, ...kids.filter((e) => this.watched.has(e)).map((e) => (visible(e) ? box(e) : '-'))].join('|');
+    if (sig === this.last) return;
     const pieces: { el: HTMLElement; at: Anchor }[] = [];
     for (const d of DOCKED) for (const e of kids) if (e.matches(d.sel) && !pieces.some((p) => p.el === e)) pieces.push({ el: e, at: d.at });
     // writes first: each panel back to its stylesheet's place, so what's read next is that place
@@ -163,18 +180,22 @@ export class Dock {
     // then every read
     const W = innerWidth;
     const H = innerHeight;
-    const tops = kids.filter((e) => e.matches(TOP) && visible(e));
+    // (TOP's order: the History line first, then the dealer's line, which keeps clear of it)
+    const tops = ['.th-history', '[data-dock="top"]', '.dealer-line'].flatMap((sel) => kids.filter((e) => e.matches(sel))).filter(visible);
+    const steady = kids.filter((o) => !o.matches(TOP) && o.classList.contains('panel') && !TRANSIENT.some((c) => o.classList.contains(c)) && !ignored(o) && !o.closest('.chat') && visible(o)).map((o) => o.getBoundingClientRect());
+    const placedTops: Box[] = [];
     const below = tops.map((e) => {
       const r = e.getBoundingClientRect();
       let top = r.top;
-      // under every other table panel up here that it would meet
-      for (let n = 0; n < 6; n++) {
+      // under every other table panel up here that it would meet (not what comes and goes: a
+      // celebration's banner, a toast), and under a top panel placed before it
+      for (let n = 0; n < 8; n++) {
         const box = { left: r.left, right: r.right, top, bottom: top + r.height };
-        // (not what comes and goes: the dealer's line, a celebration's banner)
-        const hit = kids.find((o) => o !== e && !o.matches(TOP) && o.classList.contains('panel') && !TRANSIENT.some((c) => o.classList.contains(c)) && !o.closest('.chat') && visible(o) && overlaps(box, o.getBoundingClientRect()));
+        const hit = [...steady, ...placedTops].find((o) => overlaps(box, o));
         if (!hit) break;
-        top = hit.getBoundingClientRect().bottom + DOCK_GAP;
+        top = hit.bottom + DOCK_GAP;
       }
+      placedTops.push({ left: r.left, right: r.right, top, bottom: top + r.height });
       return top === r.top ? null : top;
     });
     // (written last, with the rest: every read comes before any write)
@@ -186,14 +207,17 @@ export class Dock {
         this.moved.add(e);
       });
     const bars = kids.filter((e) => e.matches(BAR) && visible(e)).map((e) => e.getBoundingClientRect());
-    if (bars.length === 0) return writeTops();
+    if (bars.length === 0) {
+      writeTops();
+      return this.settled();
+    }
     const bar = bars.reduce((a, b) => (b.width * b.height > a.width * a.height ? b : a));
     const shown = pieces.filter((p) => visible(p.el));
     const docked = new Set<Element>(pieces.map((p) => p.el));
     // a game's own panels low on the screen, which stay put: kept clear of (the chat moves itself)
     const others: Box[] = [...bars];
     for (const e of kids) {
-      if (docked.has(e) || e.matches(BAR) || !e.classList.contains('panel') || e.closest('.chat') || !visible(e)) continue;
+      if (docked.has(e) || e.matches(BAR) || e.matches(TOP) || !e.classList.contains('panel') || ignored(e) || e.closest('.chat') || !visible(e)) continue;
       const r = e.getBoundingClientRect();
       if (r.top > H * 0.4) others.push(r);
     }
@@ -219,7 +243,18 @@ export class Dock {
       }
       this.moved.add(p.el);
     });
+    this.settled();
   };
+
+  /** Note the boxes as the arrangement leaves them (read on the next frame, after the writes have taken). */
+  private settled(): void {
+    this.last = '';
+    requestAnimationFrame(() => {
+      if (this.disposed) return;
+      const kids = [...this.ui.children].filter((e): e is HTMLElement => e instanceof HTMLElement);
+      this.last = [innerWidth, innerHeight, ...kids.filter((e) => this.watched.has(e)).map((e) => (visible(e) ? box(e) : '-'))].join('|');
+    });
+  }
 
   dispose(): void {
     if (this.disposed) return;

@@ -1,7 +1,7 @@
 /* The last rounds at a table (history.ts): a line at the top right under the HUD (and a lobby's
    party panel), opening to a list under it. Colours are the theme's. */
 
-.th-history { position: fixed; right: 16px; top: var(--below-party); padding: 0; display: grid; }
+.th-history { position: fixed; right: 16px; top: var(--below-party, var(--below-hud, 82px)); padding: 0; display: grid; }
 .th-history-head { display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 10px 0 12px; border: 0; background: transparent; color: var(--ink-2); cursor: pointer; font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; }
 .th-history-head:hover { color: var(--ink); }
 .th-history-head:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; border-radius: var(--radius); }
@@ -30,12 +30,12 @@
   .th-history-head { height: 44px; }
   .th-history-head .key { display: none; }
 }
-/* A phone upright: under the dealer's line, which takes the HUD's second row while it's up. */
+/* A phone upright: the list as wide as the screen allows (the dealer's line keeps below the line, dock.ts). */
 @media (max-width: 560px) {
-  .th-history { right: 10px; top: calc(var(--below-party) + 36px); }
+  .th-history { right: 10px; top: var(--below-party, var(--below-hud, 82px)); }
   .th-history-body { width: min(300px, calc(100vw - 20px)); }
 }
 @media (max-height: 480px) {
   .th-history { right: 10px; }
-  .th-history-body { max-height: calc(100dvh - var(--below-party) - 110px); }
+  .th-history-body { max-height: calc(100dvh - var(--below-party, var(--below-hud, 82px)) - 110px); }
 }
