@@ -1,8 +1,10 @@
 // The bar's menu: drinks and food at casino prices, paid from your balance when you order, and
 // brought to you, printed the way a lounge prints its card: each thing drawn in brass line, what
-// it is, what it costs and what it does for you. Above it, what's in your hand now (how much is
-// left and for how long) and what's on its way; the switch for the drinks' sway on the view. A
-// sheet like the cashier's: it holds the keyboard, Esc closes it.
+// it is, what it costs and what it does for you in a word (tipsy, bubbly, quick, fed, party, from
+// the effects themselves). Above it, what's in your hand now (how much is left and for how long)
+// and what's on its way; happy hour when it's on (every price struck through and halved) or when
+// the next one starts; the switch for the drinks' sway on the view. A sheet like the cashier's:
+// it holds the keyboard, Esc closes it.
 
 import './shop.css';
 import './barmenu.css';
@@ -13,10 +15,14 @@ import { el } from '../kit.ts';
 import type { Closable, SessionLike, SfxLike } from '../menu/deps.ts';
 import { openSheet } from '../menu/sheet.ts';
 import { problemText } from '../menu/parts.ts';
+import { keyLabel } from '../keys.ts';
+import { onTheme } from '../../app/theme.ts';
 import { heldOrders } from '../../world/consumables/held.ts';
 import { drinkFx, onDrinkFx, setDrinkFx } from '../../world/consumables/prefs.ts';
 import type { Bar } from './bar.ts';
-import { barPriceNow, happyBanner, priceTag } from '../../world/celebs/happy.ts'; // v6 celebs6: happy hour
+import { barPriceNow, happyBanner, happyHour, happyOn, priceTag } from '../../world/celebs/happy.ts'; // v6 celebs6: happy hour
+import { shopIcon } from './icons.ts';
+import { doesWords } from './does.ts';
 
 export interface BarMenuDeps {
   root: HTMLElement;
@@ -27,32 +33,17 @@ export interface BarMenuDeps {
 }
 
 /** The card's sections, in order, and what's in each. */
-const SECTIONS: { title: string; items: string[] }[] = [
-  { title: 'Behind the Bar', items: ['cocktail', 'margarita', 'whiskey', 'beer', 'espresso', 'energy-drink'] },
-  { title: 'Wine & Champagne', items: ['red-wine', 'champagne', 'dom'] },
-  { title: 'Plates', items: ['sliders', 'truffle-fries', 'shrimp-cocktail', 'ribeye', 'lobster', 'caviar'] },
-  { title: 'Sweets', items: ['macarons', 'birthday-cake'] },
+const SECTIONS: { title: string; short: string; items: string[] }[] = [
+  { title: 'Behind the Bar', short: 'Drinks', items: ['cocktail', 'margarita', 'whiskey', 'beer', 'espresso', 'energy-drink'] },
+  { title: 'Wine & Champagne', short: 'Wine', items: ['red-wine', 'champagne', 'dom'] },
+  { title: 'Plates', short: 'Plates', items: ['sliders', 'truffle-fries', 'shrimp-cocktail', 'ribeye', 'lobster', 'caviar'] },
+  { title: 'Sweets', short: 'Sweets', items: ['macarons', 'birthday-cake'] },
 ];
 
-/** What each does for you, in a few words (effects.ts has the numbers). */
-const DOES: Record<string, string> = {
-  beer: 'Loosens you up',
-  'red-wine': 'A warm glow',
-  cocktail: 'Goes to your head',
-  whiskey: 'Goes to your head',
-  margarita: 'A warm glow',
-  champagne: 'You sparkle · 4 min',
-  dom: 'Pop it and spray it',
-  espresso: 'Quicker on your feet · 3 min',
-  'energy-drink': 'Quickest on your feet · 2 min',
-  sliders: 'Well fed · 5 min',
-  'truffle-fries': 'Well fed · 4 min',
-  'shrimp-cocktail': 'Well fed · 4 min',
-  ribeye: 'Well fed · 8 min',
-  lobster: 'Well fed · 7 min',
-  caviar: 'Well fed · 5 min',
-  macarons: 'Well fed · 3 min',
-  'birthday-cake': 'Blow out the candles',
+/** A flourish for the two that do something of their own when you have them. */
+const FLOURISH: Record<string, string> = {
+  dom: 'Pop it and spray it.',
+  'birthday-cake': 'Blow out the candles.',
 };
 
 /** "4 min", "40 s" */
@@ -61,13 +52,15 @@ function left(ms: number): string {
   return s >= 60 ? `${Math.ceil(s / 60)} min` : `${s} s`;
 }
 
+const timeFmt = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' });
+
 export function openBarMenu(deps: BarMenuDeps): Closable {
   const { bar, session } = deps;
   let clock = 0;
   const offs: (() => void)[] = [];
   const sheet = openSheet(deps.root, {
     title: 'The Bar',
-    subtitle: 'Paid when you order and brought to you, one after another if you order a round. Each lasts five minutes in your hand, or until you sit down to play.',
+    subtitle: 'Paid when you order and brought over, one after another for a round. Each is yours for five minutes, or until you sit down to play.',
     cls: 'bar-sheet dine-sheet',
     onClose: () => {
       clearInterval(clock);
@@ -107,10 +100,16 @@ export function openBarMenu(deps: BarMenuDeps): Closable {
   side.append(balance, fx);
   top.append(hand, side);
 
+  // happy hour: the banner while it's on (celebs/happy.ts), the next one's time while it isn't
+  const happy = el('div', 'dine-happy');
+  const happyNext = el('p', 'dine-happy-next');
+  happy.append(happyBanner(), happyNext);
+
   const note = el('p', 'bar-note');
   note.setAttribute('aria-live', 'polite');
 
   const buttons = new Map<string, HTMLButtonElement>();
+  const glyphs: { c: HTMLCanvasElement; it: BarItem | null; w: number; h: number }[] = [{ c: handIcon, it: null, w: 34, h: 44 }];
   let busy: string | null = null;
   const row = (it: BarItem) => {
     const r = el('div', 'bar-item dine-item');
@@ -119,25 +118,35 @@ export function openBarMenu(deps: BarMenuDeps): Closable {
     const line = el('div', 'dine-line');
     line.append(el('span', 'bar-name', it.name), el('span', 'dine-dots'), priceTag(it.price)); // v6 celebs6: struck through and halved in happy hour
     const under = el('div', 'dine-under');
-    under.append(el('span', 'bar-about', it.about));
-    const does = DOES[it.id];
-    if (does) under.append(el('span', 'dine-does', does));
+    under.append(el('span', 'bar-about', FLOURISH[it.id] ? `${it.about} ${FLOURISH[it.id]}` : it.about));
+    const does = el('span', 'bar-does-list');
+    for (const d of doesWords(it.id)) {
+      const chip = el('span', `bar-does ${d.kind}`);
+      chip.title = d.more;
+      chip.append(shopIcon(`does-${d.kind}`), el('span', '', d.word));
+      does.append(chip);
+    }
+    if (does.childElementCount) under.append(does);
     text.append(line, under);
     const order = el('button', 'btn bar-order', 'Order');
     order.type = 'button';
     order.setAttribute('aria-label', `Order ${it.name}, ${formatMoney(it.price)}`);
     order.addEventListener('click', () => void place(it));
     buttons.set(it.id, order);
-    r.append(glyphCanvas(it, 30, 40), text, order);
+    const g = glyphCanvas(it, 30, 40);
+    glyphs.push({ c: g, it, w: 30, h: 40 });
+    r.append(g, text, order);
     return r;
   };
   const listed = new Set(SECTIONS.flatMap((s) => s.items));
   // anything added to the menu later still shows, with its kind
   const extra = BAR_MENU.filter((i) => !listed.has(i.id));
+  const sectionEls: HTMLElement[] = [];
   const section = (title: string, items: readonly BarItem[]) => {
     const box = el('div', 'bar-section dine-section');
     box.append(el('div', 'section-label dine-label', title));
     for (const it of items) box.append(row(it));
+    sectionEls.push(box);
     return box;
   };
   const pick = (ids: string[]) => ids.map((id) => barItem(id)).filter((i): i is BarItem => !!i);
@@ -148,12 +157,28 @@ export function openBarMenu(deps: BarMenuDeps): Closable {
   food.append(section(SECTIONS[2]!.title, [...pick(SECTIONS[2]!.items), ...extra.filter((i) => i.kind === 'food')]), section(SECTIONS[3]!.title, pick(SECTIONS[3]!.items)));
   cols.append(drinks, food);
 
+  // on a phone the card is one long column: a row of its sections to jump to
+  const jump = el('nav', 'dine-jump');
+  jump.setAttribute('aria-label', 'Sections of the menu');
+  SECTIONS.forEach((s, i) => {
+    const b = el('button', 'dine-jump-btn', s.short);
+    b.type = 'button';
+    b.addEventListener('click', () => sectionEls[i]?.scrollIntoView({ block: 'start', behavior: 'smooth' }));
+    jump.append(b);
+  });
+
   const done = el('button', 'btn ghost', 'Close');
   done.type = 'button';
   done.addEventListener('click', () => sheet.close());
   const foot = el('div', 'sheet-foot bar-foot dine-foot');
-  foot.append(note, el('span', 'dine-keys', 'Q takes a sip or a bite. Stand facing someone with a drink to toast.'), done);
-  sheet.body.append(top, happyBanner(), cols, foot); // v6 celebs6: happy hour's line
+  const keys = el('span', 'dine-keys');
+  const paintKeys = () => (keys.textContent = `${keyLabel('sip')} takes a sip or a bite. Stand facing someone with a drink to toast.`);
+  paintKeys();
+  foot.append(note, keys, done);
+  sheet.body.append(top, happy, jump, cols, foot); // v6 celebs6: happy hour's line
+
+  // the drawings are in the theme's brass: drawn again when the theme changes
+  offs.push(onTheme(() => glyphs.forEach((x) => drawGlyph(x.c, x.it, x.w, x.h))));
 
   let shown: string | null = null;
   const paint = () => {
@@ -162,7 +187,8 @@ export function openBarMenu(deps: BarMenuDeps): Closable {
     for (const [id, b] of buttons) {
       const it = barItem(id)!;
       b.disabled = busy !== null || (p?.balance ?? 0) < barPriceNow(it.price); // v6 celebs6
-      b.textContent = busy === id ? 'Ordering' : 'Order';
+      const label = busy === id ? 'Ordering' : 'Order';
+      if (b.textContent !== label) b.textContent = label;
     }
     const lines: string[] = [];
     const held = bar.held();
@@ -171,21 +197,27 @@ export function openBarMenu(deps: BarMenuDeps): Closable {
     if (held) {
       const h = [...heldOrders()].find((o) => o.order === held.order);
       level = h?.state?.level ?? 1;
-      const done = h?.state?.done ?? false;
-      lines.push(done ? `In your hand: ${it?.name ?? 'an order'}, finished.` : `In your hand: ${it?.name ?? 'a drink'}, ${left(held.until - serverNow())} left.`);
+      const finished = h?.state?.done ?? false;
+      lines.push(finished ? `In your hand: ${it?.name ?? 'an order'}, finished.` : `In your hand: ${it?.name ?? 'a drink'}, ${left(held.until - serverNow())} left.`);
     }
     const coming = bar.pending.map((o) => barItem(o.item)?.name ?? 'an order');
     if (coming.length) lines.push(`On its way: ${coming.join(', ')}.`);
-    status.textContent = lines.join(' ') || 'Nothing in your hand.';
+    status.textContent = lines.join(' ') || 'Nothing in your hand. Order something and a waiter brings it over.';
     putDown.hidden = !held;
     meter.hidden = !held;
     meterFill.style.transform = `scaleX(${Math.max(0, Math.min(1, level))})`;
-    hand.classList.toggle('empty', !held);
+    hand.classList.toggle('empty', !held && coming.length === 0);
     const key = it?.id ?? null;
     if (key !== shown) {
       shown = key;
+      glyphs[0]!.it = it;
       drawGlyph(handIcon, it, 34, 44);
     }
+    // the next happy hour, once the floor has said when it is
+    const h = happyHour();
+    const next = h && !happyOn() && h.start > serverNow() ? `Happy hour next at ${timeFmt.format(h.start)}, in ${left(h.start - serverNow())}: everything half price for fifteen minutes.` : '';
+    if (happyNext.textContent !== next) happyNext.textContent = next;
+    sheet.panel.classList.toggle('happy', happyOn());
   };
 
   const place = async (it: BarItem) => {
@@ -224,6 +256,12 @@ function glyphCanvas(it: BarItem | null, w: number, h: number): HTMLCanvasElemen
   return c;
 }
 
+/** The brass the line is drawn in: the theme's, so it reads on ivory as well as on black. */
+function lineColour(c: HTMLCanvasElement): string {
+  const root = c.isConnected ? c : document.documentElement;
+  return getComputedStyle(root).getPropertyValue('--brass').trim() || '#d8b06a';
+}
+
 /** The thing, in thin brass line: its glass, bottle, cup or plate, and a touch of what's in it. */
 function drawGlyph(c: HTMLCanvasElement, it: BarItem | null, w: number, h: number): void {
   const k = Math.min(3, Math.max(1, Math.round(globalThis.devicePixelRatio || 1)));
@@ -239,10 +277,10 @@ function drawGlyph(c: HTMLCanvasElement, it: BarItem | null, w: number, h: numbe
   // drawn on a 30 x 40 grid, centred
   g.translate((w - 30 * (h / 40)) / 2, 0);
   g.scale(h / 40, h / 40);
-  g.lineWidth = 1.25;
+  g.lineWidth = 1.35;
   g.lineJoin = 'round';
   g.lineCap = 'round';
-  const line = '#d8b06a';
+  const line = lineColour(c);
   const fill = FILLS[it.id] ?? 'rgba(216, 176, 106, 0.28)';
   g.strokeStyle = line;
   const path = (pts: [number, number][], close = false) => {
@@ -333,7 +371,7 @@ function drawGlyph(c: HTMLCanvasElement, it: BarItem | null, w: number, h: numbe
       g.fillStyle = 'rgba(40, 80, 50, 0.55)';
       g.fill();
       g.stroke();
-      g.fillStyle = '#d8b06a';
+      g.fillStyle = line;
       g.fillRect(13, 2, 4, 6);
       g.strokeRect(10.5, 24, 9, 7);
       break;
@@ -342,7 +380,7 @@ function drawGlyph(c: HTMLCanvasElement, it: BarItem | null, w: number, h: numbe
       g.stroke();
       pour([[9.6, 15], [20.4, 15], [20.4, 26], [9.6, 26]]);
       path([[11, 21], [14, 17], [14, 21], [17, 17]]);
-      g.strokeStyle = '#9fe24a';
+      g.strokeStyle = '#6aa62a';
       g.stroke();
       break;
     case 'cake':
@@ -357,7 +395,7 @@ function drawGlyph(c: HTMLCanvasElement, it: BarItem | null, w: number, h: numbe
         g.stroke();
         g.beginPath();
         g.ellipse(x, 14.5, 1.1, 2, 0, 0, Math.PI * 2);
-        g.fillStyle = '#f1c35a';
+        g.fillStyle = '#e8a531';
         g.fill();
       }
       break;
@@ -400,11 +438,11 @@ function drawGlyph(c: HTMLCanvasElement, it: BarItem | null, w: number, h: numbe
 const FILLS: Record<string, string> = {
   beer: 'rgba(214, 150, 40, 0.55)',
   'red-wine': 'rgba(130, 20, 40, 0.8)',
-  cocktail: 'rgba(210, 225, 220, 0.35)',
+  cocktail: 'rgba(170, 200, 190, 0.45)',
   whiskey: 'rgba(190, 110, 30, 0.6)',
   champagne: 'rgba(230, 200, 110, 0.55)',
   espresso: 'rgba(70, 40, 20, 0.9)',
-  margarita: 'rgba(200, 220, 120, 0.5)',
+  margarita: 'rgba(180, 205, 100, 0.55)',
   'energy-drink': 'rgba(40, 40, 45, 0.9)',
   sliders: 'rgba(180, 110, 50, 0.7)',
   'truffle-fries': 'rgba(220, 170, 70, 0.6)',

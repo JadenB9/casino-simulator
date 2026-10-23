@@ -1,8 +1,9 @@
 // Effects from anywhere on the floor: the HUD's sparkle button opens this short list down the right
 // of the screen, over the floor rather than in front of it, so what you buy goes off in view.
 // Buying is two presses on the same button (or the row's number key twice): the first says what
-// it costs and when it would start, the second pays. Each row says what's on in its slot: your own
-// effects play one at a time, a room effect one per room, a casino effect one for everyone.
+// it costs, when it would start and what your balance will be after, the second pays. Each row has
+// the boutique's picture of it, and says what's on in its slot: your own effects play one at a
+// time, a room effect one per room, a casino effect one for everyone.
 
 import './shop.css';
 import { EFFECTS, FX_MAX_WAIT_MS, type EffectItem, type EffectResponse } from '../../../../shared/src/items.ts';
@@ -14,7 +15,9 @@ import { openSheet } from '../menu/sheet.ts';
 import { keycap, problemText } from '../menu/parts.ts';
 import { applyMoney } from './bar.ts';
 import { newOp } from './api.ts';
+import { itemPicture } from './art.ts';
 import type { FloorView } from './boutique.ts';
+import { shopIcon } from './icons.ts';
 import { REACH_TEXT, clockText, entryOf, roomName, secsText, waitFor } from './catalog.ts';
 
 export interface EffectsDeps {
@@ -54,20 +57,24 @@ export function openEffects(deps: EffectsDeps): Closable {
   balance.append(el('span', 'bar-balance-label', 'Balance'), balVal);
 
   const listBox = el('div', 'fx-list');
-  const rows = new Map<string, { row: HTMLElement; when: HTMLElement; btn: HTMLButtonElement }>();
+  const rows = new Map<string, { row: HTMLElement; when: HTMLElement; btn: HTMLButtonElement; label: string }>();
   EFFECTS.forEach((fx, i) => {
     const row = el('div', 'fx-row');
     const text = el('div', 'fx-text');
     const name = el('span', 'fx-name');
     name.append(keycap(String(i + 1)), el('span', '', fx.name));
     const when = el('span', 'fx-when');
-    text.append(name, el('span', 'fx-meta', `${secsText(fx.secs)} · ${REACH_TEXT[fx.reach]}`), when);
+    const meta = el('span', 'fx-meta');
+    meta.append(shopIcon(fx.reach === 'you' ? 'reach-you' : fx.reach === 'room' ? 'reach-room' : 'reach-casino'), el('span', '', `${secsText(fx.secs)} · ${REACH_TEXT[fx.reach]}`));
+    text.append(name, meta, when);
     const btn = el('button', 'btn fx-play');
     btn.type = 'button';
     btn.addEventListener('click', () => void press(fx));
-    row.append(text, el('span', 'fx-price money', formatMoney(fx.price)), btn);
+    const side = el('div', 'fx-side');
+    side.append(el('span', 'fx-price money', formatMoney(fx.price)), btn);
+    row.append(itemPicture(fx.id, 168, 84, 'fx-art'), text, side);
     listBox.append(row);
-    rows.set(fx.id, { row, when, btn });
+    rows.set(fx.id, { row, when, btn, label: '' });
   });
 
   const note = el('p', 'bar-note');
@@ -107,14 +114,17 @@ export function openEffects(deps: EffectsDeps): Closable {
         const what = entryOf(b.fx)?.name ?? 'an effect';
         when = `Starts in ${clockText(wait.at - now)}, after ${b.id === me() ? `your ${what}` : fx.reach === 'room' ? `${what} in ${roomName(wait.room)}` : `${b.name}'s ${what}`}`;
       } else if (fx.reach === 'room' && wait) when = `Everyone in ${roomName(wait.room)}`;
-      r.when.textContent = when;
+      else if (bal < fx.price) when = `${formatMoney(fx.price - bal)} short`;
+      if (r.when.textContent !== when) r.when.textContent = when;
       r.row.classList.toggle('on', mine.length > 0);
       const isArmed = armed?.id === fx.id;
       r.row.classList.toggle('armed', isArmed);
       r.btn.classList.toggle('primary', isArmed);
-      r.btn.textContent = busy === fx.id ? 'Paying' : isArmed ? 'Confirm' : 'Play';
+      const text = busy === fx.id ? 'Paying' : isArmed ? 'Confirm' : 'Play';
+      if (r.btn.textContent !== text) r.btn.textContent = text;
       r.btn.disabled = busy !== null || bal < fx.price || booked || !at;
-      r.btn.setAttribute('aria-label', `${isArmed ? 'Confirm' : 'Play'} ${fx.name}, ${formatMoney(fx.price)}`);
+      const label = `${isArmed ? 'Confirm' : 'Play'} ${fx.name}, ${formatMoney(fx.price)}`;
+      if (label !== r.label) r.btn.setAttribute('aria-label', (r.label = label));
     }
     if (!at && !note.textContent) {
       note.textContent = 'Effects play where you stand: step away from the table first.';
@@ -128,7 +138,8 @@ export function openEffects(deps: EffectsDeps): Closable {
       armed = { id: fx.id, until: Date.now() + ARM_MS };
       const wait = deps.where() ? waitFor(deps.floor?.effects() ?? [], fx, me(), deps.where()!.x, deps.where()!.z, serverNow()) : null;
       const later = wait && wait.at - serverNow() > 1500 ? ` It starts in ${clockText(wait.at - serverNow())}.` : '';
-      note.textContent = `Press again to pay ${formatMoney(fx.price)} for ${fx.name}.${later}`;
+      const after = (session.profile?.balance ?? 0) - fx.price;
+      note.textContent = `Press again to pay ${formatMoney(fx.price)} for ${fx.name}; your balance will be ${formatMoney(after)}.${later}`;
       note.className = 'bar-note';
       deps.sfx?.play('ui-click', { volume: 0.3 });
       paint();
