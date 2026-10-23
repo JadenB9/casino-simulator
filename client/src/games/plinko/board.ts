@@ -1,29 +1,36 @@
-// The Plinko board: pegs and balls on a canvas, with the bins, the recent-results column and a
-// bin's hover card as DOM over it. The layout is the usual one: row r of the triangle has r + 3
-// pegs, a ball that has gone right R times in its first r rows lands on peg R + 1 of row r, and
-// bin k sits under the gap a ball reaches after k rights.
+// The Plinko board: pegs and balls on a canvas, with the bins and a bin's hover card as DOM over
+// it. The layout is the usual one: row r of the triangle has r + 3 pegs, a ball that has gone right
+// R times in its first r rows lands on peg R + 1 of row r, and bin k sits under the gap a ball
+// reaches after k rights.
 //
 // A ball never decides anything. It follows the path the server sent, row by row: it rests on a
 // peg, hops off to the side the path says and falls onto the next one, so several balls can be
 // in the air at once while every one of them is already paid.
+//
+// The pegs are painted once per board onto a canvas of their own and the ball once onto a sprite,
+// so a frame with balls in the air is a copy of the pegs and a sprite per ball (and its short
+// trail), with nothing allocated: the balls and the peg glints live in pools that are reused.
 
 import { el } from '../../ui/kit.ts';
-import { SCREEN_PX } from '../online/screen.ts';
+import { BOARD_PX, HEAD_PX } from '../online/screen.ts';
 import { MULTS, type Risk, type Rows } from '../../../../shared/src/games/plinko/rules.ts';
-import type { DropEvent, PlinkoDrop } from '../../../../shared/src/games/plinko/engine.ts';
+import type { DropEvent } from '../../../../shared/src/games/plinko/engine.ts';
 import { flashAllowed } from '../../app/comfort.ts';
 
-/** The page's main area: the page less the bet panel, the top bar and the foot (online.css). */
-const W = SCREEN_PX.w - 330;
-const H = SCREEN_PX.h - 64 - 34;
-const COLUMN = 64;
-const TOP = 80;
+/** The board's design size (the page's main area). */
+const W = BOARD_PX.w;
+const H = BOARD_PX.h;
+/** Clear of the page's top row (the result and the recent results) and the ball's drop. */
+const TOP = HEAD_PX + 40;
 const BOTTOM = 30;
+const SIDE = 48;
 /** Canvas pixels per design pixel: the page is often drawn larger than 1:1 on a sharp screen. */
 const DPR = 2;
-const RESULTS = 5;
 const FIRST_DROP_S = 0.3;
 const FADE_S = 0.14;
+/** Positions a ball's trail keeps (one per frame). */
+const TRAIL = 6;
+const GLINT_S = 0.3;
 
 const clamp = (x: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, x));
 
@@ -40,7 +47,7 @@ interface Geometry {
 }
 
 function geometry(rows: number): Geometry {
-  const s = Math.min((W - 2 * (COLUMN + 48)) / (rows + 1), (H - TOP - BOTTOM) / ((rows - 1) * 0.9 + 1.3));
+  const s = Math.min((W - 2 * SIDE) / (rows + 1), (H - TOP - BOTTOM) / ((rows - 1) * 0.9 + 1.3));
   const g = s * 0.9;
   return {
     rows,
@@ -63,7 +70,7 @@ export function binColor(bin: number, rows: number): { face: string; lip: string
 
 /** A multiplier in hundredths as the bins print it: 1000×, 26×, 5.6×, 0.2×. */
 export function multText(m: number): string {
-  return `${m % 100 === 0 ? m / 100 : m / 100}×`;
+  return `${m / 100}×`;
 }
 
 interface Ball {
@@ -79,11 +86,14 @@ interface Ball {
   t: number;
   x: number;
   y: number;
-  /** Seconds since it dropped into the bin. */
+  /** Seconds since it dropped into the bin (negative while it falls). */
   gone: number;
+  /** The last few positions, x and y in turn, newest first; `trailN` of them are filled. */
+  trail: Float32Array;
+  trailN: number;
 }
 
-interface Flash {
+interface Glint {
   x: number;
   y: number;
   age: number;
@@ -102,12 +112,17 @@ export class PlinkoBoard {
   readonly root = el('div', 'pk-board');
   private readonly canvas = el('canvas', 'pk-canvas');
   private readonly g2: CanvasRenderingContext2D;
+  /** The pegs, painted once per board. */
+  private readonly pegCanvas = document.createElement('canvas');
+  /** The ball, painted once at the board's ball size (and its trail's ghost). */
+  private readonly ballCanvas = document.createElement('canvas');
+  private ballFor = 0;
   private readonly binRow = el('div', 'pk-bins');
-  private readonly column = el('div', 'pk-column');
   private readonly card = el('dl', 'pk-card');
   private binEls: HTMLElement[] = [];
   private balls: Ball[] = [];
-  private flashes: Flash[] = [];
+  private glints: Glint[] = [];
+  private glintsN = 0;
   private geo = geometry(16);
   private risk: Risk = 'medium';
   private dirty = true;
@@ -116,10 +131,12 @@ export class PlinkoBoard {
   constructor(private readonly hooks: BoardHooks) {
     this.canvas.width = W * DPR;
     this.canvas.height = H * DPR;
+    this.canvas.setAttribute('aria-hidden', 'true');
     this.g2 = this.canvas.getContext('2d')!;
+    this.pegCanvas.width = W * DPR;
+    this.pegCanvas.height = H * DPR;
     this.card.hidden = true;
-    this.column.hidden = true;
-    this.root.append(this.canvas, this.binRow, this.column, this.card);
+    this.root.append(this.canvas, this.binRow, this.card);
     this.setBoard(16, 'medium');
   }
 
@@ -142,6 +159,7 @@ export class PlinkoBoard {
     if (rows !== this.geo.rows) this.geo = geometry(rows);
     this.risk = risk;
     this.buildBins();
+    this.paintPegs();
     this.dirty = true;
   }
 
@@ -151,7 +169,8 @@ export class PlinkoBoard {
     const geo = this.geo;
     const { s, g, cx, pegR, ballR, binTop, binH } = geo;
     const rest = (pegR + ballR) * 0.92;
-    const pts = [{ x: cx + (Math.random() - 0.5) * 2, y: Math.max(ballR + 6, TOP - g * 0.95) }];
+    // dropped from just under the page's top row, a little way above the first peg
+    const pts = [{ x: cx + (Math.random() - 0.5) * 2, y: TOP - Math.min(g * 0.95, 42) }];
     const pegs: number[] = [];
     let rights = 0;
     for (let r = 0; r < d.rows; r++) {
@@ -161,28 +180,15 @@ export class PlinkoBoard {
     }
     pts.push({ x: cx + (d.bin - d.rows / 2) * s, y: binTop + binH * 0.25 });
     const hops = pts.map((_, i) => (i === 0 ? 0 : 0.55 + Math.random() * 0.3));
-    this.balls.push({ drop: d, geo, pts, pegs, hops, seg: 0, t: 0, x: pts[0]!.x, y: pts[0]!.y, gone: -1 });
+    this.balls.push({ drop: d, geo, pts, pegs, hops, seg: 0, t: 0, x: pts[0]!.x, y: pts[0]!.y, gone: -1, trail: new Float32Array(TRAIL * 2), trailN: 0 });
     this.dirty = true;
   }
 
   /** Drop every ball without paying anything out (a fresh snapshot supersedes them). */
   clear(): void {
-    this.balls = [];
-    this.flashes = [];
+    this.balls.length = 0;
+    this.glintsN = 0;
     this.dirty = true;
-  }
-
-  /** The results column from a view's recent drops (newest first), without animation. */
-  showResults(recent: readonly PlinkoDrop[]): void {
-    this.column.replaceChildren();
-    for (const d of recent.slice(0, RESULTS)) this.column.append(this.resultTile(d, false));
-    this.column.hidden = this.column.childElementCount === 0;
-  }
-
-  pushResult(d: PlinkoDrop): void {
-    this.column.prepend(this.resultTile(d, true));
-    while (this.column.childElementCount > RESULTS) this.column.lastElementChild!.remove();
-    this.column.hidden = false;
   }
 
   /** Refresh the hover card (the bet changed under it). */
@@ -192,17 +198,40 @@ export class PlinkoBoard {
 
   update(dt: number): void {
     const step = Math.min(dt, 0.1);
+    const had = this.balls.length > 0 || this.glintsN > 0;
     for (const b of this.balls) this.advance(b, step);
-    const before = this.balls.length;
-    this.balls = this.balls.filter((b) => b.gone < FADE_S);
-    for (const f of this.flashes) f.age += step;
-    this.flashes = this.flashes.filter((f) => f.age < 0.3);
-    if (this.dirty || this.balls.length || this.flashes.length || before !== this.balls.length) this.draw();
+    // compact in place: no new arrays each frame
+    let n = 0;
+    for (const b of this.balls) if (b.gone < FADE_S) this.balls[n++] = b;
+    this.balls.length = n;
+    let m = 0;
+    for (let i = 0; i < this.glintsN; i++) {
+      const f = this.glints[i]!;
+      f.age += step;
+      if (f.age < GLINT_S) {
+        this.glints[i] = this.glints[m]!;
+        this.glints[m++] = f;
+      }
+    }
+    this.glintsN = m;
+    if (this.dirty || had) this.draw();
     this.dirty = false;
   }
 
   private segDur(b: Ball, seg: number): number {
     return seg === 0 ? FIRST_DROP_S : 0.085 + b.geo.g * 0.0012;
+  }
+
+  private glint(x: number, y: number): void {
+    let f = this.glints[this.glintsN];
+    if (!f) {
+      f = { x, y, age: 0 };
+      this.glints.push(f);
+    }
+    f.x = x;
+    f.y = y;
+    f.age = 0;
+    this.glintsN++;
   }
 
   private advance(b: Ball, dt: number): void {
@@ -211,6 +240,11 @@ export class PlinkoBoard {
       b.gone += dt;
       return;
     }
+    // the trail: the position the ball leaves this frame, newest first
+    b.trail.copyWithin(2, 0, TRAIL * 2 - 2);
+    b.trail[0] = b.x;
+    b.trail[1] = b.y;
+    b.trailN = Math.min(TRAIL, b.trailN + 1);
     b.t += dt;
     let d = this.segDur(b, b.seg);
     while (b.t >= d) {
@@ -220,8 +254,8 @@ export class PlinkoBoard {
         // On a peg of row seg - 1.
         const p = b.pts[b.seg]!;
         const r = b.seg - 1;
-        // calm (app/comfort.ts): no flash on every peg the ball touches
-        if (flashAllowed()) this.flashes.push({ x: b.geo.cx + (b.pegs[r]! - (r + 2) / 2) * b.geo.s, y: TOP + r * b.geo.g, age: 0 });
+        // calm (app/comfort.ts): no glint on every peg the ball touches
+        if (flashAllowed()) this.glint(b.geo.cx + (b.pegs[r]! - (r + 2) / 2) * b.geo.s, TOP + r * b.geo.g);
         b.x = p.x;
         b.y = p.y;
         this.hooks.peg(r, rows);
@@ -230,6 +264,7 @@ export class PlinkoBoard {
         b.x = p.x;
         b.y = p.y;
         b.gone = 0;
+        b.trailN = 0;
         this.hit(b.drop.bin);
         this.hooks.land(b.drop);
         return;
@@ -245,41 +280,102 @@ export class PlinkoBoard {
     b.y = p0.y - v * dy * k + (1 + v) * dy * k * k;
   }
 
-  private draw(): void {
-    const c = this.g2;
+  /** The pegs, once per board: a soft shadow, a lit face and a highlight on each. */
+  private paintPegs(): void {
+    const c = this.pegCanvas.getContext('2d')!;
     const { rows, s, g, cx, pegR } = this.geo;
     c.setTransform(DPR, 0, 0, DPR, 0, 0);
     c.clearRect(0, 0, W, H);
+    const each = (fn: (x: number, y: number) => void) => {
+      for (let r = 0; r < rows; r++) for (let j = 0; j < r + 3; j++) fn(cx + (j - (r + 2) / 2) * s, TOP + r * g);
+    };
+    c.fillStyle = 'rgba(0, 0, 0, 0.35)';
+    c.beginPath();
+    each((x, y) => {
+      c.moveTo(x + pegR, y + 1.5);
+      c.arc(x, y + 1.5, pegR, 0, Math.PI * 2);
+    });
+    c.fill();
+    c.fillStyle = '#e8eef4';
+    c.beginPath();
+    each((x, y) => {
+      c.moveTo(x + pegR, y);
+      c.arc(x, y, pegR, 0, Math.PI * 2);
+    });
+    c.fill();
     c.fillStyle = '#ffffff';
     c.beginPath();
-    for (let r = 0; r < rows; r++) {
-      for (let j = 0; j < r + 3; j++) {
-        const x = cx + (j - (r + 2) / 2) * s;
-        const y = TOP + r * g;
-        c.moveTo(x + pegR, y);
-        c.arc(x, y, pegR, 0, Math.PI * 2);
-      }
-    }
+    const hi = pegR * 0.42;
+    each((x, y) => {
+      c.moveTo(x - pegR * 0.3 + hi, y - pegR * 0.3);
+      c.arc(x - pegR * 0.3, y - pegR * 0.3, hi, 0, Math.PI * 2);
+    });
     c.fill();
-    for (const f of this.flashes) {
-      const a = f.age / 0.3;
-      c.fillStyle = `rgba(255, 255, 255, ${0.42 * (1 - a)})`;
+  }
+
+  /** The ball's sprite at this board's size: a lit pink sphere (drawn again only when the size changes). */
+  private ballSprite(R: number): HTMLCanvasElement {
+    if (this.ballFor === R) return this.ballCanvas;
+    this.ballFor = R;
+    const size = Math.ceil(R * 2 + 4) * DPR;
+    this.ballCanvas.width = size;
+    this.ballCanvas.height = size;
+    const c = this.ballCanvas.getContext('2d')!;
+    c.setTransform(DPR, 0, 0, DPR, 0, 0);
+    const o = R + 2;
+    const grad = c.createRadialGradient(o - R * 0.35, o - R * 0.4, R * 0.1, o, o, R);
+    grad.addColorStop(0, '#ffb3c8');
+    grad.addColorStop(0.45, '#ff2f62');
+    grad.addColorStop(1, '#b80b38');
+    c.fillStyle = grad;
+    c.beginPath();
+    c.arc(o, o, R, 0, Math.PI * 2);
+    c.fill();
+    c.fillStyle = 'rgba(255, 255, 255, 0.75)';
+    c.beginPath();
+    c.ellipse(o - R * 0.38, o - R * 0.42, R * 0.26, R * 0.16, -0.6, 0, Math.PI * 2);
+    c.fill();
+    return this.ballCanvas;
+  }
+
+  private draw(): void {
+    const c = this.g2;
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.clearRect(0, 0, W * DPR, H * DPR);
+    c.drawImage(this.pegCanvas, 0, 0);
+    c.setTransform(DPR, 0, 0, DPR, 0, 0);
+    const pegR = this.geo.pegR;
+    for (let i = 0; i < this.glintsN; i++) {
+      const f = this.glints[i]!;
+      const a = f.age / GLINT_S;
+      c.globalAlpha = 0.5 * (1 - a);
+      c.fillStyle = '#ffffff';
       c.beginPath();
       c.arc(f.x, f.y, pegR * (1.4 + 1.9 * a), 0, Math.PI * 2);
       c.fill();
     }
+    c.globalAlpha = 1;
+    const trails = flashAllowed();
     for (const b of this.balls) {
-      const R = b.geo.ballR * (b.gone >= 0 ? 1 - b.gone / FADE_S : 1);
+      const R0 = b.geo.ballR;
+      const sprite = this.ballSprite(R0);
+      const half = sprite.width / DPR / 2;
+      // a short fading trail behind a falling ball (none while calm)
+      if (trails && b.gone < 0) {
+        for (let i = b.trailN - 1; i >= 1; i--) {
+          const k = 1 - i / TRAIL;
+          c.globalAlpha = 0.22 * k;
+          const r = half * (0.55 + 0.4 * k);
+          c.drawImage(sprite, b.trail[i * 2]! - r, b.trail[i * 2 + 1]! - r, r * 2, r * 2);
+        }
+        c.globalAlpha = 1;
+      }
+      const R = b.gone >= 0 ? 1 - b.gone / FADE_S : 1;
       if (R <= 0) continue;
-      const grad = c.createRadialGradient(b.x - R * 0.35, b.y - R * 0.4, R * 0.1, b.x, b.y, R);
-      grad.addColorStop(0, '#ff9cb6');
-      grad.addColorStop(0.45, '#ff2f62');
-      grad.addColorStop(1, '#c80d3e');
-      c.fillStyle = grad;
-      c.beginPath();
-      c.arc(b.x, b.y, R, 0, Math.PI * 2);
-      c.fill();
+      const r = half * R;
+      c.drawImage(sprite, b.x - r, b.y - r, r * 2, r * 2);
     }
+    c.globalAlpha = 1;
   }
 
   private buildBins(): void {
@@ -328,14 +424,5 @@ export class PlinkoBoard {
     this.card.style.left = `${clamp(cx + (k - rows / 2) * s, 110, W - 110)}px`;
     this.card.style.top = `${binTop - 10}px`;
     this.card.hidden = false;
-  }
-
-  private resultTile(d: PlinkoDrop, fresh: boolean): HTMLElement {
-    const t = el('div', `pk-result${fresh ? ' fresh' : ''}`, multText(d.mult));
-    const { face, lip } = binColor(d.bin, d.rows);
-    t.style.background = face;
-    t.style.setProperty('--pk-lip', lip);
-    t.title = `${d.rows} rows, ${d.risk}: bin ${d.bin + 1} of ${d.rows + 1}`;
-    return t;
   }
 }

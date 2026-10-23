@@ -1,24 +1,24 @@
 // Cases on the lounge computers (docs/rules/online-games.md §11): the desk as it stands on the
 // floor, and the website on its monitor. Pick a case and what it costs; Open settles on the server
 // at once and sends the item, and the reel runs past the marker and stops on it. Under the reel,
-// everything the case holds, with what it pays and how often.
+// everything the case holds, with what it pays and how often. Auto opens case after case (the
+// quick reel or the full one, as chosen) until one of its stops.
 
 import './cases.css';
 import type { GameClientModule, TableView } from '../contract.ts';
-import { formatMoney, type BetLimits, type Cents } from '../../../../shared/src/money.ts';
+import { formatMoney, type Cents } from '../../../../shared/src/money.ts';
 import { CASES, CASE_INFO, RARITY_NAMES, WEIGHT, rarityOf, type CaseId } from '../../../../shared/src/games/cases/rules.ts';
 import { QUICK_MS, REEL_MS, type CaseOpen, type CasesEvent, type CasesView } from '../../../../shared/src/games/cases/engine.ts';
-import { celebrate } from '../../table/celebrate.ts';
 import { el } from '../../ui/kit.ts';
-import { attractTexture, pcModel, pcPose, pcScreenCorners, PC_FOOTPRINT, PC_SEAT } from '../online/pc.ts';
-import { OnlineScreen, AddChips, BetBox, SegChoice, actionButton, labelled, InfoList, SessionTally, commitTyping, winTier, siteTone, drawSiteBar, drawAttractPanel, multText, pctText } from '../online/screen.ts';
+import { attractTexture, pcModel, pcPose, PC_FOOTPRINT, PC_SEAT } from '../online/pc.ts';
+import { SegChoice, labelled, InfoList, siteTone, shortTone, drawSiteBar, drawAttractPanel, multText, pctText } from '../online/screen.ts';
+import { OnlineSite } from '../online/site.ts';
 import { CaseReel, itemCard } from './reel.ts';
 
 /** The chair's trim on the floor: Cases' vermilion. */
 const ACCENT = '#ff5a36';
-const DROPS = 8;
 
-/** Rarity colours for the desk's picture (cases.css has the page's). */
+/** Rarity colours (cases.css has the same, for the page). */
 const RARITY_COLOR: Record<string, string> = { common: '#9aa7b5', uncommon: '#4fb3ff', rare: '#3b6cff', epic: '#9b5cff', legendary: '#e040fb', mythic: '#ff4d4f', exotic: '#ffc53d' };
 
 const chanceText = (w: number) => {
@@ -126,33 +126,47 @@ export const cases: GameClientModule = {
   playPose: () => pcPose(),
 
   mount(ctx): TableView {
-    const screen = new OnlineScreen('Cases');
-    ctx.ui.append(screen.root);
-    const cashier = new AddChips(screen, ctx);
-    const corners = pcScreenCorners();
-
     let chosen: CaseId = 'classic';
     let quick = false;
     let stack: Cents = 0;
     let busy = false;
     let sentAt = 0;
-    let limits: BetLimits | null = null;
-    let bet: BetBox | null = null;
-    let tipShown = false;
 
-    // The board: the last drops, the reel, the result line, the case's contents.
+    const site = new OnlineSite(ctx, {
+      game: 'cases',
+      title: 'Cases',
+      betLabel: 'Case price',
+      action: 'Open case',
+      primary: () => open(),
+      sync: () => sync(),
+      onBet: () => {
+        sync();
+        drawContents();
+        describe();
+      },
+      auto: {
+        gapMs: 650,
+        play: () => {
+          const bet = site.bet;
+          if (!bet || busy || reel.spinning) return false;
+          if (bet.value > stack) return 'not enough chips here for the next case';
+          send(bet.value);
+          return true;
+        },
+      },
+    });
+    const screen = site.screen;
+
+    // The board: the reel, the result line, the case's contents (the last drops are the site's top row).
     const board = el('div', 'ca-board');
-    const drops = el('div', 'ca-drops');
-    const dropsLabel = el('span', 'os-caption ca-drops-label', 'Last drops');
-    const dropsList = el('div', 'ca-drops-list');
-    drops.append(dropsLabel, dropsList);
     const reel = new CaseReel();
     const result = el('div', 'ca-result');
+    result.setAttribute('aria-live', 'polite');
     const contents = el('div', 'ca-contents');
     const contentsHead = el('div', 'ca-contents-head');
     const contentsGrid = el('div', 'ca-grid');
     contents.append(contentsHead, contentsGrid);
-    board.append(drops, reel.root, result, contents);
+    board.append(reel.root, result, contents);
     screen.main.append(board);
 
     // The bet panel.
@@ -163,46 +177,38 @@ export const cases: GameClientModule = {
         chosen = id;
         caseChanged();
       },
-    );
+    ).label('Case');
     caseSeg.root.classList.add('ca-cases');
     // each case button carries its top prize under its name
     caseSeg.root.querySelectorAll('button').forEach((b, i) => {
       const top = CASE_INFO[CASES[i]!].items.at(-1)!;
       b.append(el('span', `ca-case-top ca-r-${rarityOf(top.mult)}`, `Up to ${multText(top.mult).replace('.00', '')}`));
     });
-    const speedSeg = new SegChoice<'normal' | 'quick'>([{ value: 'normal', label: 'Full reel' }, { value: 'quick', label: 'Quick open', title: 'A short reel (Q)' }], 'normal', (v) => {
+    const speedSeg = new SegChoice<'normal' | 'quick'>([{ value: 'normal', label: 'Full reel' }, { value: 'quick', label: 'Quick open', title: 'A short reel (Q)', key: 'Q' }], 'normal', (v) => {
       quick = v === 'quick';
       siteTone(ctx.sfx, 880, 30, { type: 'triangle', gain: 0.03 });
-    });
-    const openBtn = actionButton('Open case', () => open());
-    openBtn.title = 'Open the case (Space)';
-    openBtn.classList.add('os-fixed');
+    }).label('Reel');
+    site.controls.append(labelled('Case', caseSeg.root), labelled('Reel', speedSeg.root));
     const info = new InfoList('This case');
-    const tally = new SessionTally();
-    screen.side.append(labelled('Case', caseSeg.root), labelled('Reel', speedSeg.root), openBtn, info.root, tally.root);
+    site.facts.append(info.root);
 
-    const pushDrop = (o: CaseOpen, fresh: boolean) => {
-      const it = CASE_INFO[o.case].items[o.item]!;
-      const c = itemCard(it, `ca-drop${fresh ? ' fresh' : ''}`);
-      c.title = `${it.name}, ${CASE_INFO[o.case].name} case · ${formatMoney(o.payout)} on ${formatMoney(o.bet)}`;
-      dropsList.prepend(c);
-      while (dropsList.childElementCount > DROPS) dropsList.lastElementChild!.remove();
-    };
+    const pillOf = (o: CaseOpen) => ({ text: multText(o.mult), accent: RARITY_COLOR[rarityOf(o.mult)] });
 
     const sync = () => {
-      const block = busy || reel.spinning;
+      const block = busy || reel.spinning || site.locked;
+      const bet = site.bet;
       if (!reel.spinning) screen.setStack(stack);
       bet?.setMax(stack);
       bet?.setEnabled(!block);
-      openBtn.disabled = block || !bet || bet.value > stack;
-      openBtn.textContent = bet ? `Open for ${formatMoney(bet.value)}` : 'Open case';
       caseSeg.setEnabled(!block);
       speedSeg.setEnabled(!block);
+      site.auto?.setEnabled(!busy && !reel.spinning);
+      site.paintMain(bet ? `Open for ${formatMoney(bet.value)}` : 'Open case', 'go', busy || reel.spinning || !bet || bet.value > stack, !!bet && bet.value <= stack);
     };
 
     const drawContents = () => {
       const c = CASE_INFO[chosen];
-      const b = bet?.value ?? limits?.min ?? 100;
+      const b = site.bet?.value ?? site.limits?.min ?? 100;
       contentsHead.replaceChildren(el('span', 'os-caption', `In the ${c.name} case`), el('span', 'ca-contents-about', c.about));
       contentsGrid.replaceChildren(
         ...[...c.items].reverse().map((it) => {
@@ -220,26 +226,18 @@ export const cases: GameClientModule = {
       const more = c.items.filter((it) => it.mult > 100).reduce((n, it) => n + it.weight, 0) / WEIGHT;
       const likely = c.items.reduce((a, it) => (it.weight > a.weight ? it : a));
       const top = c.items.at(-1)!;
-      info.set('rtp', 'Return', '99.00%');
-      info.set('top', 'Top item', `${multText(top.mult)} · ${chanceText(top.weight)}`);
+      const b = site.bet?.value ?? site.limits?.min ?? 100;
+      site.profit('Top item', (b / 100) * top.mult - b, `${multText(top.mult)} · ${chanceText(top.weight)}`);
       info.set('more', 'Pays more than the case', pctText(more));
       info.set('likely', 'Most likely', `${likely.name} · ${multText(likely.mult)}`);
-      const range = limits ? ` · Cases ${formatMoney(limits.min)} to ${formatMoney(limits.max)}` : '';
+      info.set('rtp', 'Return', '99.00%');
+      const lim = site.limits;
+      const range = lim ? ` · Cases ${formatMoney(lim.min)} to ${formatMoney(lim.max)}` : '';
       screen.setNote(`Return 99.00% on every case · ${c.name}${range} · Space opens · Q quick open`);
     };
 
     // Tips: every case returns the same 99%, and the tip says so.
-    const tipFor = () => {
-      if (!ctx.tips.on) {
-        if (tipShown) {
-          tipShown = false;
-          ctx.kit.tip(null);
-        }
-        return;
-      }
-      tipShown = true;
-      ctx.kit.tip('Every case returns exactly 99%: a bigger case only trades steady small items for rare big ones.');
-    };
+    const tipFor = () => site.tip(ctx.tips.on ? 'Every case returns exactly 99%: a bigger case only trades steady small items for rare big ones.' : null);
     const offTips = ctx.tips.subscribe(tipFor);
 
     const caseChanged = (sound = true) => {
@@ -251,18 +249,22 @@ export const cases: GameClientModule = {
       if (sound) siteTone(ctx.sfx, 880, 30, { type: 'triangle', gain: 0.03 });
     };
 
+    const send = (amount: Cents) => {
+      busy = true;
+      sentAt = performance.now();
+      ctx.link.act({ type: 'open', bet: amount, case: chosen, quick });
+      sync();
+    };
+
     const open = () => {
+      const bet = site.bet;
       if (!bet || busy || reel.spinning) return;
-      commitTyping(screen.root);
       if (bet.value > stack) {
-        siteTone(ctx.sfx, 150, 120, { type: 'sawtooth', gain: 0.03 });
+        shortTone(ctx.sfx);
         ctx.kit.toast('Not enough chips here for that case.', 'err');
         return;
       }
-      busy = true;
-      sentAt = performance.now();
-      ctx.link.act({ type: 'open', bet: bet.value, case: chosen, quick });
-      sync();
+      send(bet.value);
     };
 
     const showResult = (o: CaseOpen) => {
@@ -275,7 +277,8 @@ export const cases: GameClientModule = {
       );
     };
 
-    const play = async (e: CasesEvent) => {
+    const reveal = async (e: CasesEvent) => {
+      site.auto?.driver.answered();
       if (e.case !== chosen) {
         chosen = e.case;
         caseSeg.set(chosen);
@@ -294,20 +297,18 @@ export const cases: GameClientModule = {
         siteTone(ctx.sfx, 1320 + (ticks % 2) * 90, 16, { type: 'square', gain: 0.014 });
       });
       showResult(e);
-      pushDrop(e, true);
-      tally.add(e.bet, e.payout);
       screen.setStack(e.stack);
-      const r = rarityOf(e.mult);
-      if (e.payout > e.bet) {
-        const notes = r === 'exotic' || r === 'mythic' ? [523, 659, 784, 1047, 1319] : r === 'legendary' || r === 'epic' ? [659, 880, 1175] : [784, 1047];
-        notes.forEach((f, i) => siteTone(ctx.sfx, f, 170, { type: 'triangle', gain: 0.055, at: i * 75 }));
-        ctx.sfx.play('chips-stack', { volume: 0.5 });
-      } else siteTone(ctx.sfx, 330, 110, { gain: 0.04, to: 250 });
-      const tier = winTier(e.payout, e.bet);
-      if (tier) {
-        const it = CASE_INFO[e.case].items[e.item]!;
-        celebrate({ stage: ctx.stage, ui: ctx.ui, sfx: ctx.sfx }, { title: `${it.name} ${multText(e.mult)}`, sub: `${CASE_INFO[e.case].name} case · pays ${formatMoney(e.payout)} on ${formatMoney(e.bet)}`, tier });
-      }
+      const it = CASE_INFO[e.case].items[e.item]!;
+      const pill = pillOf(e);
+      if (e.payout > e.bet) ctx.sfx.play('chips-stack', { volume: 0.5 });
+      site.settle({
+        bet: e.bet,
+        payout: e.payout,
+        mult: e.mult,
+        pill: pill.text,
+        accent: pill.accent,
+        moment: { title: `${it.name} ${multText(e.mult)}`, sub: `${CASE_INFO[e.case].name} case · pays ${formatMoney(e.payout)} on ${formatMoney(e.bet)}` },
+      });
     };
 
     caseChanged(false);
@@ -315,23 +316,15 @@ export const cases: GameClientModule = {
 
     return {
       onTable(snap) {
-        cashier.table(snap);
         stack = snap.you.stack;
         busy = false;
-        const lim = snap.meta.config.limits.default;
-        if (!bet || !limits || lim.min !== limits.min || lim.max !== limits.max || lim.step !== limits.step) {
-          bet?.root.remove();
-          limits = lim;
-          bet = new BetBox({ label: 'Case price', min: lim.min, max: lim.max, step: lim.step, value: lim.min, onChange: () => {
-            if (!bet) return;
-            openBtn.disabled = busy || reel.spinning || bet.value > stack;
-            openBtn.textContent = `Open for ${formatMoney(bet.value)}`;
-          } });
-          screen.side.prepend(bet.root);
-        }
+        site.table(snap);
         const v = snap.view as CasesView;
-        dropsList.replaceChildren();
-        for (const o of v.recent.slice(0, DROPS).reverse()) pushDrop(o, false);
+        site.history.clear();
+        for (const o of v.recent.slice(0, 9).reverse()) {
+          const p = pillOf(o);
+          site.history.push(p.text, o.payout > o.bet, false, p.accent);
+        }
         const last = v.recent[0];
         if (last) {
           chosen = last.case;
@@ -341,6 +334,7 @@ export const cases: GameClientModule = {
         if (last) {
           reel.show(last.case, last.item);
           showResult(last);
+          site.result.show(last.bet, last.payout, last.mult, false);
         }
         sync();
       },
@@ -350,19 +344,19 @@ export const cases: GameClientModule = {
         for (const e of events) {
           if (e.type !== 'open') continue;
           sync();
-          await play(e as unknown as CasesEvent);
+          await reveal(e as unknown as CasesEvent);
         }
         sync();
       },
 
       onSeat(msg) {
-        cashier.seat(msg);
+        site.seat(msg);
         stack = msg.stack;
         sync();
       },
 
-      onError() {
-        cashier.refused();
+      onError(_code, msg) {
+        site.error(msg);
         busy = false;
         sync();
       },
@@ -370,10 +364,10 @@ export const cases: GameClientModule = {
       keydown(e) {
         if (e.metaKey || e.ctrlKey || e.altKey) return false;
         if (e.code === 'Space') {
-          if (!e.repeat) open();
+          if (!e.repeat) site.press();
           return true;
         }
-        if (e.key.toLowerCase() === 'q' && !reel.spinning) {
+        if (e.key.toLowerCase() === 'q' && !reel.spinning && !site.locked) {
           quick = !quick;
           speedSeg.set(quick ? 'quick' : 'normal');
           return true;
@@ -381,21 +375,17 @@ export const cases: GameClientModule = {
         return false;
       },
 
-      update() {
+      update(dt) {
         if (busy && performance.now() - sentAt > 6_000) {
           busy = false;
           sync();
         }
-        const camera = ctx.stage.engine.camera;
-        camera.updateMatrixWorld();
-        ctx.stage.root.updateWorldMatrix(true, false);
-        screen.follow(ctx.stage.root, camera, corners);
+        site.update(dt);
       },
 
       dispose() {
         offTips();
-        if (tipShown) ctx.kit.tip(null);
-        screen.dispose();
+        site.dispose();
       },
     };
   },

@@ -5,6 +5,7 @@
 
 import { el } from '../../ui/kit.ts';
 import { tween } from '../../table/tween.ts';
+import { calm } from '../../app/comfort.ts';
 import { WHEELS, type Risk, type Segments } from '../../../../shared/src/games/wheel/rules.ts';
 
 /** Canvas pixels per design pixel: the page is often drawn larger than 1:1 on a sharp screen. */
@@ -107,9 +108,7 @@ export class WheelBoard {
         if (b !== passed) {
           passed = b;
           tick();
-          this.pointer.classList.remove('flick');
-          void this.pointer.offsetWidth;
-          this.pointer.classList.add('flick');
+          this.flick();
         }
       },
       (t) => 1 - (1 - t) ** 4,
@@ -121,6 +120,19 @@ export class WheelBoard {
     this.draw();
     this.spinning = false;
   }
+
+  /**
+   * The pointer kicks back as a segment's edge passes under it: a short animation on the
+   * compositor, started afresh for each edge (no restyle, so no layout per tick). Calm keeps the
+   * kick smaller.
+   */
+  private flick(): void {
+    this.kick?.cancel();
+    const deg = calm() ? -4 : -10;
+    this.kick = this.pointer.animate([{ rotate: '0deg' }, { rotate: `${deg}deg`, offset: 0.35 }, { rotate: '0deg' }], { duration: 130, easing: 'ease-out' });
+  }
+
+  private kick: Animation | null = null;
 
   private draw(): void {
     const g = this.canvas.getContext('2d')!;
@@ -162,7 +174,11 @@ export class WheelBoard {
       g.globalAlpha = 1;
     }
     if (this.lit !== null) {
+      // the segment it stopped on: ringed in white over a soft glow of its own colour
       const a0 = -Math.PI / 2 + this.lit * step;
+      g.save();
+      g.shadowColor = multColor(mults[this.lit]!).face;
+      g.shadowBlur = 18;
       g.strokeStyle = '#ffffff';
       g.lineWidth = 3;
       g.beginPath();
@@ -170,6 +186,7 @@ export class WheelBoard {
       g.arc(cx, cx, R_IN - 1, a0 + step, a0, true);
       g.closePath();
       g.stroke();
+      g.restore();
     }
     // the hub's dark face and ring
     g.fillStyle = '#0f1e29';

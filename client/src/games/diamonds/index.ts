@@ -1,18 +1,18 @@
 // Diamonds on the lounge computers (docs/rules/online-games.md §12): the desk as it stands on the
 // floor, and the website on its monitor. Bet, and five gems are set down one by one; the hand pays
-// by how their colours group, like a poker hand. The paytable along the top lights the pattern
-// that came up, and the gems that made it glow.
+// by how their colours group, like a poker hand. The paytable along the bottom lights the pattern
+// that came up, and the gems that made it glow. Auto deals hand after hand until one of its stops.
 
 import './diamonds.css';
 import type { GameClientModule, TableView } from '../contract.ts';
-import { formatMoney, type BetLimits, type Cents } from '../../../../shared/src/money.ts';
+import { formatMoney, type Cents } from '../../../../shared/src/money.ts';
 import { GEMS, GEM_NAMES, HANDS, PATTERNS, PATTERN_NAMES, PAYS, WAYS, matched, type Pattern } from '../../../../shared/src/games/diamonds/rules.ts';
 import type { DiamondsEvent, DiamondsHand, DiamondsView } from '../../../../shared/src/games/diamonds/engine.ts';
-import { celebrate } from '../../table/celebrate.ts';
 import { wait } from '../../table/tween.ts';
 import { el } from '../../ui/kit.ts';
-import { attractTexture, pcModel, pcPose, pcScreenCorners, PC_FOOTPRINT, PC_SEAT } from '../online/pc.ts';
-import { OnlineScreen, AddChips, BetBox, actionButton, InfoList, ResultStrip, SessionTally, BetLog, commitTyping, winTier, siteTone, drawSiteBar, drawAttractPanel, multText, pctText } from '../online/screen.ts';
+import { attractTexture, pcModel, pcPose, PC_FOOTPRINT, PC_SEAT } from '../online/pc.ts';
+import { InfoList, BetLog, siteTone, shortTone, drawSiteBar, drawAttractPanel, multText, pctText } from '../online/screen.ts';
+import { OnlineSite } from '../online/site.ts';
 import { GEM_TONES, gemIcon } from './gems.ts';
 
 /** The chair's trim on the floor: Diamonds' aquamarine. */
@@ -84,24 +84,32 @@ export const diamonds: GameClientModule = {
   playPose: () => pcPose(),
 
   mount(ctx): TableView {
-    const screen = new OnlineScreen('Diamonds');
-    ctx.ui.append(screen.root);
-    const cashier = new AddChips(screen, ctx);
-    const corners = pcScreenCorners();
-
     let stack: Cents = 0;
     let busy = false;
     let animating = false;
     let sentAt = 0;
-    let limits: BetLimits | null = null;
-    let bet: BetBox | null = null;
-    let tipShown = false;
 
-    // The board: recent hands, the paytable, five pedestals, the hand's name.
+    const site = new OnlineSite(ctx, {
+      game: 'diamonds',
+      title: 'Diamonds',
+      action: 'Bet',
+      primary: () => play(),
+      sync: () => sync(),
+      auto: {
+        gapMs: 520,
+        play: () => {
+          const bet = site.bet;
+          if (!bet || busy || animating) return false;
+          if (bet.value > stack) return 'not enough chips here for the next hand';
+          send(bet.value);
+          return true;
+        },
+      },
+    });
+    const screen = site.screen;
+
+    // The board: the paytable, five pedestals, the hand's name (the recent hands are the site's top row).
     const board = el('div', 'dm-board');
-    const stripWrap = el('div', 'dm-strip');
-    const strip = new ResultStrip(9);
-    stripWrap.append(strip.root);
     const table = el('div', 'dm-paytable');
     const rows = new Map<Pattern, HTMLElement>();
     for (const p of PATTERNS) {
@@ -126,48 +134,40 @@ export const diamonds: GameClientModule = {
       stand.append(slot);
     }
     const verdict = el('div', 'dm-verdict');
-    board.append(stripWrap, table, stand, verdict);
+    verdict.setAttribute('aria-live', 'polite');
+    board.append(table, stand, verdict);
     screen.main.append(board);
 
     // The bet panel.
-    const betBtn = actionButton('Bet', () => play());
-    betBtn.title = 'Bet (Space)';
-    betBtn.classList.add('os-fixed');
     const info = new InfoList('The hand');
     const log = new BetLog('Last hands', ['Hand', 'Pays', 'Payout'], 5);
     log.root.classList.add('dm-log');
-    const tally = new SessionTally();
-    screen.side.append(betBtn, info.root, log.root, tally.root);
+    site.facts.append(info.root, log.root);
     const logHand = (h: DiamondsHand, fresh: boolean) => log.push([PATTERN_NAMES[h.pattern], multText(h.mult), formatMoney(h.payout)], h.payout > h.bet, fresh);
 
     const better = (['five', 'four', 'fullhouse', 'three', 'twopair'] as Pattern[]).reduce((n, p) => n + WAYS[p], 0);
     info.set('rtp', 'Return', '99.00%');
-    info.set('top', 'Five of a kind', `${multText(PAYS.five)} · ${oneIn(WAYS.five)}`);
     info.set('more', 'Pays more than the bet', pctText(better / HANDS));
     info.set('any', 'Pays something', pctText((HANDS - WAYS.none) / HANDS));
 
+    const lim0 = () => site.limits?.min ?? 100;
     const sync = () => {
-      const block = busy || animating;
+      const block = busy || animating || site.locked;
+      const bet = site.bet;
       if (!animating) screen.setStack(stack);
       bet?.setMax(stack);
       bet?.setEnabled(!block);
-      betBtn.disabled = block || !bet || bet.value > stack;
-      const range = limits ? ` · Bet ${formatMoney(limits.min)} to ${formatMoney(limits.max)}` : '';
+      site.auto?.setEnabled(!busy && !animating);
+      site.paintMain('Bet', 'go', busy || animating || !bet || bet.value > stack, !!bet && bet.value <= stack);
+      const b = bet?.value ?? lim0();
+      site.profit('Five of a kind', (b / 100) * PAYS.five - b, `${multText(PAYS.five)} · ${oneIn(WAYS.five)}`);
+      const lim = site.limits;
+      const range = lim ? ` · Bet ${formatMoney(lim.min)} to ${formatMoney(lim.max)}` : '';
       screen.setNote(`Return 99.00% · five gems, seven colours, each gem as likely as the next${range} · Space bets`);
     };
 
     // Tips: there is nothing to choose but the bet, and the tip says so.
-    const tipFor = () => {
-      if (!ctx.tips.on) {
-        if (tipShown) {
-          tipShown = false;
-          ctx.kit.tip(null);
-        }
-        return;
-      }
-      tipShown = true;
-      ctx.kit.tip('Every gem is drawn on its own, one of seven colours: a hand returns exactly 99% whatever came before it.');
-    };
+    const tipFor = () => site.tip(ctx.tips.on ? 'Every gem is drawn on its own, one of seven colours: a hand returns exactly 99% whatever came before it.' : null);
     const offTips = ctx.tips.subscribe(tipFor);
 
     const setGem = (i: number, color: number | null, look: '' | 'lit' | 'dim' = '') => {
@@ -199,28 +199,34 @@ export const diamonds: GameClientModule = {
       );
     };
 
-    const play = () => {
-      if (!bet || busy || animating) return;
-      commitTyping(screen.root);
-      if (bet.value > stack) {
-        siteTone(ctx.sfx, 150, 120, { type: 'sawtooth', gain: 0.03 });
-        ctx.kit.toast('Not enough chips here for that bet.', 'err');
-        return;
-      }
+    const send = (amount: Cents) => {
       busy = true;
       sentAt = performance.now();
-      ctx.link.act({ type: 'bet', bet: bet.value });
+      ctx.link.act({ type: 'bet', bet: amount });
       sync();
     };
 
+    const play = () => {
+      const bet = site.bet;
+      if (!bet || busy || animating) return;
+      if (bet.value > stack) {
+        shortTone(ctx.sfx);
+        ctx.kit.toast('Not enough chips here for that bet.', 'err');
+        return;
+      }
+      send(bet.value);
+    };
+
     const reveal = async (e: DiamondsEvent) => {
+      site.auto?.driver.answered();
       screen.setStack(e.stack - e.payout);
       for (const r of rows.values()) r.classList.remove('hit');
       verdict.replaceChildren(el('span', 'dm-verdict-idle', ''));
       slots.forEach((_, i) => setGem(i, null));
       const seen: number[] = [];
+      const gap = site.locked ? DROP_GAP_MS * 0.8 : DROP_GAP_MS;
       for (let i = 0; i < GEMS; i++) {
-        await wait(i === 0 ? 60 : DROP_GAP_MS);
+        await wait(i === 0 ? 60 : gap);
         const c = e.gems[i]!;
         setGem(i, c);
         slots[i]!.classList.add('drop');
@@ -231,18 +237,15 @@ export const diamonds: GameClientModule = {
       }
       await wait(220);
       showHand(e);
-      strip.push(multText(e.mult), e.payout > e.bet);
       logHand(e, true);
-      tally.add(e.bet, e.payout);
       screen.setStack(e.stack);
-      if (e.payout > e.bet) {
-        const notes = e.pattern === 'five' ? [523, 659, 784, 1047, 1319, 1568] : e.pattern === 'four' || e.pattern === 'fullhouse' ? [659, 880, 1175, 1319] : [784, 1047];
-        notes.forEach((f, i) => siteTone(ctx.sfx, f, 150, { type: 'triangle', gain: 0.05, at: i * 70 }));
-        ctx.sfx.play('chips-stack', { volume: 0.5 });
-      } else if (e.payout > 0) siteTone(ctx.sfx, 440, 90, { type: 'triangle', gain: 0.035 });
-      else siteTone(ctx.sfx, 250, 120, { gain: 0.04, to: 190 });
-      const tier = winTier(e.payout, e.bet);
-      if (tier) celebrate({ stage: ctx.stage, ui: ctx.ui, sfx: ctx.sfx }, { title: PATTERN_NAMES[e.pattern], sub: `Diamonds ${multText(e.mult)} · pays ${formatMoney(e.payout)} on ${formatMoney(e.bet)}`, tier });
+      if (e.payout > e.bet) ctx.sfx.play('chips-stack', { volume: 0.5 });
+      site.settle({
+        bet: e.bet,
+        payout: e.payout,
+        mult: e.mult,
+        moment: { title: PATTERN_NAMES[e.pattern], sub: `Diamonds ${multText(e.mult)} · pays ${formatMoney(e.payout)} on ${formatMoney(e.bet)}` },
+      });
     };
 
     showHand(null);
@@ -250,25 +253,18 @@ export const diamonds: GameClientModule = {
 
     return {
       onTable(snap) {
-        cashier.table(snap);
         stack = snap.you.stack;
         busy = false;
         animating = false;
-        const lim = snap.meta.config.limits.default;
-        if (!bet || !limits || lim.min !== limits.min || lim.max !== limits.max || lim.step !== limits.step) {
-          bet?.root.remove();
-          limits = lim;
-          bet = new BetBox({ label: 'Bet', min: lim.min, max: lim.max, step: lim.step, value: lim.min, onChange: () => {
-            if (bet) betBtn.disabled = busy || animating || bet.value > stack;
-          } });
-          screen.side.prepend(bet.root);
-        }
+        site.table(snap);
         const v = snap.view as DiamondsView;
-        strip.clear();
-        for (const h of v.recent.slice(0, 9).reverse()) strip.push(multText(h.mult), h.payout > h.bet, false);
+        site.history.clear();
+        for (const h of v.recent.slice(0, 9).reverse()) site.history.push(multText(h.mult), h.payout > h.bet, false);
         log.clear();
         for (const h of v.recent.slice(0, 5).reverse()) logHand(h, false);
-        showHand(v.recent[0] ?? null);
+        const last = v.recent[0] ?? null;
+        showHand(last);
+        if (last) site.result.show(last.bet, last.payout, last.mult, false);
         sync();
         tipFor();
       },
@@ -286,13 +282,13 @@ export const diamonds: GameClientModule = {
       },
 
       onSeat(msg) {
-        cashier.seat(msg);
+        site.seat(msg);
         stack = msg.stack;
         sync();
       },
 
-      onError() {
-        cashier.refused();
+      onError(_code, msg) {
+        site.error(msg);
         busy = false;
         sync();
       },
@@ -300,27 +296,23 @@ export const diamonds: GameClientModule = {
       keydown(e) {
         if (e.metaKey || e.ctrlKey || e.altKey) return false;
         if (e.code === 'Space') {
-          if (!e.repeat) play();
+          if (!e.repeat) site.press();
           return true;
         }
         return false;
       },
 
-      update() {
+      update(dt) {
         if (busy && performance.now() - sentAt > 6_000) {
           busy = false;
           sync();
         }
-        const camera = ctx.stage.engine.camera;
-        camera.updateMatrixWorld();
-        ctx.stage.root.updateWorldMatrix(true, false);
-        screen.follow(ctx.stage.root, camera, corners);
+        site.update(dt);
       },
 
       dispose() {
         offTips();
-        if (tipShown) ctx.kit.tip(null);
-        screen.dispose();
+        site.dispose();
       },
     };
   },

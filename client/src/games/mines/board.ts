@@ -1,6 +1,8 @@
 // The 5 × 5 board on the page. Tiles you haven't turned are raised slate; a gem sits in a dark
 // well with a green glow; the mine that ended a round flashes red. Where the other mines were
-// shows only once the round is over, dimmed, with the gems you didn't reach.
+// shows only once the round is over, dimmed, with the gems you didn't reach. A tile turns over
+// in depth (it swings to edge-on and back with its face showing), and for Auto the board can
+// instead take picks: the tiles a run turns each round, ringed until it's started.
 
 import { el } from '../../ui/kit.ts';
 import { wait } from '../../table/tween.ts';
@@ -17,21 +19,35 @@ export interface MinesPicture {
   live: boolean;
 }
 
+const tileName = (i: number) => `Row ${Math.floor(i / 5) + 1}, tile ${(i % 5) + 1}`;
+
 export class MinesBoard {
   readonly root = el('div', 'mn-board');
   private readonly grid = el('div', 'mn-grid');
   private readonly tiles: HTMLButtonElement[] = [];
   private enabled = false;
   private live = false;
+  /** Auto is on: its picks are ringed on closed tiles. */
+  private choosing = false;
+  /** Between rounds a click rings a tile (or takes its ring off) instead of turning it. */
+  private takes = false;
+  private chosen = new Set<number>();
 
-  constructor(private readonly onPick: (tile: number) => void) {
+  constructor(
+    private readonly onPick: (tile: number) => void,
+    private readonly onChoose: (tile: number) => void = () => {},
+  ) {
+    this.grid.setAttribute('role', 'group');
+    this.grid.setAttribute('aria-label', 'The board');
     for (let i = 0; i < TILES; i++) {
       const b = el('button', 'mn-tile');
       b.type = 'button';
-      b.title = `Row ${Math.floor(i / 5) + 1}, tile ${(i % 5) + 1}`;
+      b.title = tileName(i);
+      b.setAttribute('aria-label', `${tileName(i)}, closed`);
       b.addEventListener('mousedown', (e) => e.preventDefault());
       b.addEventListener('click', () => {
-        if (this.enabled && this.live && b.classList.contains('closed')) this.onPick(i);
+        if (this.takes && !this.live) this.onChoose(i);
+        else if (this.enabled && this.live && b.classList.contains('closed')) this.onPick(i);
       });
       this.tiles.push(b);
       this.grid.append(b);
@@ -49,13 +65,25 @@ export class MinesBoard {
       else if (p.field) this.face(t, p.field.includes(i) ? 'mine' : 'gem', 'dim');
       else this.face(t, null, 'closed');
     });
+    this.paintChosen();
     this.setEnabled(this.enabled);
   }
 
   setEnabled(on: boolean): void {
     this.enabled = on;
-    for (const t of this.tiles) t.disabled = !(on && this.live && t.classList.contains('closed'));
-    this.grid.classList.toggle('live', on && this.live);
+    const pickable = this.takes && !this.live;
+    for (const t of this.tiles) t.disabled = !(pickable || (on && this.live && t.classList.contains('closed')));
+    this.grid.classList.toggle('live', (on && this.live) || pickable);
+  }
+
+  /** Auto's picks: ring `chosen` while `on`, and take clicks as picks between rounds while `takes`. */
+  setChoosing(on: boolean, chosen: readonly number[], takes: boolean): void {
+    this.choosing = on;
+    this.takes = on && takes;
+    this.chosen = new Set(chosen);
+    this.grid.classList.toggle('choosing', this.takes);
+    this.paintChosen();
+    this.setEnabled(this.enabled);
   }
 
   /** Turn a tile over: a gem pops in; a mine flashes and shakes the board. */
@@ -96,9 +124,15 @@ export class MinesBoard {
     this.setEnabled(this.enabled);
   }
 
+  private paintChosen(): void {
+    this.tiles.forEach((t, i) => t.classList.toggle('chosen', this.choosing && this.chosen.has(i) && t.classList.contains('closed')));
+  }
+
   private face(t: HTMLButtonElement, what: 'gem' | 'mine' | null, look: 'closed' | 'lit' | 'hit' | 'dim'): void {
     t.className = `mn-tile ${look}${what ? ` ${what}` : ''}`;
     t.replaceChildren();
+    const i = this.tiles.indexOf(t);
+    t.setAttribute('aria-label', `${tileName(i)}, ${what === 'gem' ? 'a gem' : what === 'mine' ? 'a mine' : 'closed'}`);
     if (what === 'gem') t.append(gemIcon());
     else if (what === 'mine') t.append(mineIcon());
   }

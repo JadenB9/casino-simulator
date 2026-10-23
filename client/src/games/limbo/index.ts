@@ -1,18 +1,20 @@
 // Limbo on the lounge computers (docs/rules/online-games.md §3): name a target multiplier, and win
 // the target times the bet if the result reaches it. The server draws the result so that it
 // reaches any target x with probability 0.99 / x, which makes every target return exactly 99%.
-// The page counts the big number up to the result and turns it green or red.
+// The page counts the big number up to the result and turns it green or red. Auto bets again and
+// again at the same target until one of its stops.
 
 import './limbo.css';
 import type { GameClientModule, TableView } from '../contract.ts';
-import { formatMoney, type BetLimits, type Cents } from '../../../../shared/src/money.ts';
+import { formatMoney, type Cents } from '../../../../shared/src/money.ts';
 import { MIN_TARGET, MAX_TARGET, RETURN_HUNDREDTHS, winPayout, targetForChance } from '../../../../shared/src/games/limbo/rules.ts';
 import type { LimboEvent, LimboView } from '../../../../shared/src/games/limbo/engine.ts';
 import { tween, ease } from '../../table/tween.ts';
-import { celebrate } from '../../table/celebrate.ts';
 import { el } from '../../ui/kit.ts';
-import { attractTexture, pcModel, pcPose, pcScreenCorners, PC_FOOTPRINT, PC_SEAT } from '../online/pc.ts';
-import { OnlineScreen, AddChips, BetBox, actionButton, NumberField, InfoList, ResultStrip, SessionTally, BetLog, commitTyping, winTier, siteTone, drawSiteBar, drawAttractPanel } from '../online/screen.ts';
+import { calm } from '../../app/comfort.ts';
+import { attractTexture, pcModel, pcPose, PC_FOOTPRINT, PC_SEAT } from '../online/pc.ts';
+import { NumberField, InfoList, BetLog, siteTone, shortTone, drawSiteBar, drawAttractPanel } from '../online/screen.ts';
+import { OnlineSite } from '../online/site.ts';
 
 /** The chair's trim on the floor: Limbo's amber. */
 const ACCENT = '#ffb020';
@@ -52,7 +54,7 @@ function drawAttract(g: CanvasRenderingContext2D, w: number, h: number): void {
   g.font = '700 84px system-ui, sans-serif';
   g.fillText('2.47×', cx, top + 104);
   g.shadowBlur = 0;
-  g.fillStyle = '#6f8196';
+  g.fillStyle = '#8b9cb0';
   g.font = '600 14px system-ui, sans-serif';
   g.fillText('Target 2.00×', cx, top + 160);
   field('Target Multiplier', '2.00', 150, h - 58, 158);
@@ -68,31 +70,42 @@ export const limbo: GameClientModule = {
   playPose: () => pcPose(),
 
   mount(ctx): TableView {
-    const screen = new OnlineScreen('Limbo');
-    ctx.ui.append(screen.root);
-    const cashier = new AddChips(screen, ctx);
-    const corners = pcScreenCorners();
-
     /** The target multiplier, in hundredths. */
     let target = 200;
     let stack: Cents = 0;
-    let limits: BetLimits | null = null;
-    let bet: BetBox | null = null;
     let busy = false;
     /** Results still playing out: the chips on the page wait for them. */
     let playing = 0;
     let sentAt = 0;
-    let tipShown = false;
 
-    // The board: recent results, the big number, the two fields.
+    const site = new OnlineSite(ctx, {
+      game: 'limbo',
+      title: 'Limbo',
+      action: 'Bet',
+      primary: () => play(),
+      sync: () => sync(),
+      onBet: () => render(),
+      auto: {
+        gapMs: 320,
+        play: () => {
+          const bet = site.bet;
+          if (!bet || busy || playing > 0) return false;
+          if (bet.value > stack) return 'not enough chips here for the next bet';
+          send(bet.value);
+          return true;
+        },
+      },
+    });
+    const screen = site.screen;
+
+    // The board: the big number and the two fields (the recent results are the site's top row).
     const main = el('div', 'lb-main');
-    const stripWrap = el('div', 'lb-strip');
-    const strip = new ResultStrip(9);
-    stripWrap.append(strip.root);
     const stage = el('div', 'lb-stage');
     const number = el('div', 'lb-number', multText(100));
     const caption = el('div', 'lb-caption');
-    stage.append(number, caption);
+    // a band of light behind the number that rises with the count (still while calm)
+    const glow = el('div', 'lb-glow');
+    stage.append(glow, number, caption);
     const targetField = new NumberField({
       label: 'Target Multiplier',
       suffix: '×',
@@ -109,28 +122,29 @@ export const limbo: GameClientModule = {
     });
     const fields = el('div', 'lb-fields');
     fields.append(targetField.root, chanceField.root);
-    main.append(stripWrap, stage, fields);
+    main.append(stage, fields);
     screen.main.append(main);
 
-    // The bet panel.
-    const profit = new NumberField({ label: 'Profit on Win', value: 0, format: cents });
-    const betBtn = actionButton('Bet', () => play());
-    betBtn.title = 'Bet (Space)';
-    betBtn.classList.add('os-fixed');
+    // The bet panel: the facts and the last bets (the profit on a win is the bet's own line).
     const info = new InfoList('This bet');
     const log = new BetLog('Last bets', ['Target', 'Result', 'Payout'], 4);
-    const tally = new SessionTally();
-    screen.side.append(profit.root, betBtn, info.root, log.root, tally.root);
+    site.facts.append(info.root, log.root);
 
     /** The big number, sized to fit: 2.47× fills the stage, 1,000,000.00× still fits across it. */
+    let shownText = '';
     const showNumber = (m: number, tone: 'win' | 'lose' | null) => {
       const text = multText(m);
-      number.textContent = text;
-      number.style.fontSize = `${text.length <= 6 ? 168 : text.length <= 9 ? 140 : text.length <= 11 ? 118 : 100}px`;
-      number.className = `lb-number${tone ? ` ${tone}` : ''}`;
+      if (text !== shownText) {
+        shownText = text;
+        number.textContent = text;
+        number.style.fontSize = `${text.length <= 6 ? 168 : text.length <= 9 ? 140 : text.length <= 11 ? 118 : 100}px`;
+      }
+      const cls = `lb-number${tone ? ` ${tone}` : ''}`;
+      if (number.className !== cls) number.className = cls;
     };
 
     const setTarget = (t: number) => {
+      if (site.locked) return;
       target = clamp(t, MIN_TARGET, MAX_TARGET);
       render();
     };
@@ -138,60 +152,66 @@ export const limbo: GameClientModule = {
     const render = () => {
       targetField.set(target);
       chanceField.set(target);
-      const b = bet?.value ?? limits?.min ?? 100;
+      const b = site.bet?.value ?? site.limits?.min ?? 100;
       const pays = winPayout(b, target);
-      profit.set(pays - b);
+      site.profit('Profit on win', pays - b, `${multText(target)} · ${chanceText(target)}%`);
       caption.replaceChildren('Target ', el('b', '', multText(target)), ` · wins ${chanceText(target)}% of the time`);
       info.set('pays', 'A win pays', cents(pays));
-      info.set('chance', 'Win chance', `${chanceText(target)}%`);
       info.set('rtp', 'Return', '99.00%');
-      const range = limits ? ` · Bet ${formatMoney(limits.min)} to ${formatMoney(limits.max)}` : '';
+      const lim = site.limits;
+      const range = lim ? ` · Bet ${formatMoney(lim.min)} to ${formatMoney(lim.max)}` : '';
       screen.setNote(`Return 99.00% on every target${range} · Space bets`);
+      sync();
     };
 
     // Tips: there is no better target, and the tip says so.
-    const tipFor = () => {
-      if (!ctx.tips.on) {
-        if (tipShown) {
-          tipShown = false;
-          ctx.kit.tip(null);
-        }
-        return;
-      }
-      tipShown = true;
-      ctx.kit.tip('Every target returns exactly 99%: a higher one only makes the swings bigger.');
-    };
+    const tipFor = () => site.tip(ctx.tips.on ? 'Every target returns exactly 99%: a higher one only makes the swings bigger.' : null);
     const offTips = ctx.tips.subscribe(tipFor);
 
     const sync = () => {
+      const bet = site.bet;
       bet?.setMax(stack);
-      betBtn.disabled = !bet || bet.value > stack;
+      const locked = site.locked;
+      bet?.setEnabled(!locked);
+      targetField.setEnabled(!locked);
+      chanceField.setEnabled(!locked);
+      site.auto?.setEnabled(true);
+      site.paintMain('Bet', 'go', !bet || bet.value > stack);
+    };
+
+    const send = (amount: Cents) => {
+      busy = true;
+      sentAt = performance.now();
+      ctx.link.act({ type: 'bet', bet: amount, target });
     };
 
     const play = () => {
+      const bet = site.bet;
       if (!bet || busy) return;
-      commitTyping(screen.root);
       if (bet.value > stack) {
-        siteTone(ctx.sfx, 150, 120, { type: 'sawtooth', gain: 0.03 });
+        shortTone(ctx.sfx);
         ctx.kit.toast('Not enough chips here for that bet.', 'err');
         return;
       }
-      busy = true;
-      sentAt = performance.now();
-      ctx.link.act({ type: 'bet', bet: bet.value, target });
+      send(bet.value);
     };
 
     const playResult = async (ev: LimboEvent) => {
+      site.auto?.driver.answered();
       screen.setStack(ev.stack - ev.payout);
-      // Count up on a log scale, so 1.00× to 2.00× takes as long to read as 100× to 200×.
-      const ms = Math.min(1_000, 220 + 170 * Math.log10(ev.result / 100));
+      // Count up on a log scale, so 1.00× to 2.00× takes as long to read as 100× to 200×; on
+      // Auto a little quicker, so a run reads as a run.
+      const ms = Math.min(1_000, 220 + 170 * Math.log10(ev.result / 100)) * (site.locked ? 0.7 : 1);
       const top = ev.result / 100;
       let lastTick = -1;
+      stage.classList.add('counting');
       await tween(
         ms,
         (k) => {
           const shown = k >= 1 ? ev.result : Math.min(ev.result, Math.floor(100 * top ** k));
           showNumber(shown, null);
+          // the glow climbs with the count toward the target (held low while calm)
+          glow.style.setProperty('--lb-rise', calm() ? '0.2' : Math.min(1, Math.log(Math.max(1, shown / 100)) / Math.log(Math.max(1.01, ev.target / 100))).toFixed(3));
           const t = Math.floor(k * 14);
           if (t !== lastTick && k < 1) {
             lastTick = t;
@@ -200,55 +220,40 @@ export const limbo: GameClientModule = {
         },
         ease.out,
       );
+      stage.classList.remove('counting');
+      glow.style.setProperty('--lb-rise', '0');
       showNumber(ev.result, ev.win ? 'win' : 'lose');
-      strip.push(multText(ev.result), ev.win);
       log.push([multText(ev.target), multText(ev.result), cents(ev.payout)], ev.win);
-      tally.add(ev.bet, ev.payout);
       screen.setStack(ev.stack);
-      if (ev.win) {
-        siteTone(ctx.sfx, 784, 90, { type: 'triangle', gain: 0.05 });
-        siteTone(ctx.sfx, 1175, 140, { type: 'triangle', gain: 0.05, at: 70 });
-      } else siteTone(ctx.sfx, 220, 120, { gain: 0.045, to: 170 });
-      const tier = winTier(ev.payout, ev.bet);
-      if (tier) {
-        celebrate({ stage: ctx.stage, ui: ctx.ui, sfx: ctx.sfx }, { title: `Limbo ${multText(ev.target)}`, sub: `The result reached ${multText(ev.result)} · pays ${cents(ev.payout)}`, tier });
-      }
+      site.settle({
+        bet: ev.bet,
+        payout: ev.payout,
+        mult: ev.win ? ev.target : 0,
+        pill: multText(ev.result),
+        moment: { title: `Limbo ${multText(ev.target)}`, sub: `The result reached ${multText(ev.result)} · pays ${cents(ev.payout)}` },
+      });
     };
 
     render();
-    sync();
 
     return {
       onTable(snap) {
-        cashier.table(snap);
         stack = snap.you.stack;
         busy = false;
+        site.table(snap);
         screen.setStack(stack);
-        const lim = snap.meta.config.limits.default;
-        if (!bet || !limits || lim.min !== limits.min || lim.max !== limits.max || lim.step !== limits.step) {
-          bet?.root.remove();
-          limits = lim;
-          // onChange must not call setMax (sync): below the table minimum the box would clamp,
-          // change and call back forever.
-          bet = new BetBox({ label: 'Bet', min: lim.min, max: lim.max, step: lim.step, value: lim.min, onChange: () => {
-            if (!bet) return;
-            render();
-            betBtn.disabled = bet.value > stack;
-          } });
-          screen.side.prepend(bet.root);
-        }
         const v = snap.view as LimboView;
-        strip.clear();
+        site.history.clear();
         log.clear();
-        for (const b of v.recent.slice(0, 9).reverse()) strip.push(multText(b.result), b.win, false);
+        for (const b of v.recent.slice(0, 9).reverse()) site.history.push(multText(b.result), b.win, false);
         for (const b of v.recent.slice(0, 4).reverse()) log.push([multText(b.target), multText(b.result), cents(b.payout)], b.win, false);
         const last = v.recent[0];
         if (last) {
           target = last.target;
           showNumber(last.result, last.win ? 'win' : 'lose');
+          site.result.show(last.bet, last.payout, last.win ? last.target : 0, false);
         }
         render();
-        sync();
         tipFor();
       },
 
@@ -260,18 +265,19 @@ export const limbo: GameClientModule = {
           for (const e of events) if (e.type === 'result') await playResult(e as unknown as LimboEvent);
         } finally {
           playing--;
+          sync();
         }
       },
 
       onSeat(msg) {
-        cashier.seat(msg);
+        site.seat(msg);
         stack = msg.stack;
         if (playing === 0) screen.setStack(stack);
         sync();
       },
 
-      onError() {
-        cashier.refused();
+      onError(_code, msg) {
+        site.error(msg);
         busy = false;
         sync();
       },
@@ -279,27 +285,23 @@ export const limbo: GameClientModule = {
       keydown(e) {
         if (e.metaKey || e.ctrlKey || e.altKey) return false;
         if (e.code === 'Space') {
-          if (!e.repeat) play();
+          if (!e.repeat) site.press();
           return true;
         }
         return false;
       },
 
-      update() {
+      update(dt) {
         if (busy && performance.now() - sentAt > 6_000) {
           busy = false;
           sync();
         }
-        const camera = ctx.stage.engine.camera;
-        camera.updateMatrixWorld();
-        ctx.stage.root.updateWorldMatrix(true, false);
-        screen.follow(ctx.stage.root, camera, corners);
+        site.update(dt);
       },
 
       dispose() {
         offTips();
-        if (tipShown) ctx.kit.tip(null);
-        screen.dispose();
+        site.dispose();
       },
     };
   },

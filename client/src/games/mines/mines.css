@@ -1,11 +1,12 @@
-/* Mines' board on the lounge site: raised slate tiles on a dark field, gems glowing green in
-   their wells, a red flash for the mine that ends a round. Sized in the site's design pixels. */
+/* Mines' board on the lounge site: raised slate tiles on a dark field under the site's top row,
+   gems glowing green in their wells, a red flash for the mine that ends a round. A tile turns over
+   in depth; Auto's picks are ringed in gold. Sized in the site's design pixels. */
 
-.mn-board { position: absolute; inset: 0; display: grid; place-items: center; }
+.mn-board { position: absolute; inset: 0; display: grid; place-items: center; padding-top: 56px; }
 .mn-grid {
-  display: grid; grid-template-columns: repeat(5, 108px); grid-auto-rows: 108px; gap: 12px;
+  display: grid; grid-template-columns: repeat(5, 100px); grid-auto-rows: 100px; gap: 12px;
   padding: 22px; background: #132530; border: 1px solid #243b49; border-radius: 14px;
-  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.38);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 .mn-grid.shake { animation: mn-shake 0.42s linear; }
 @keyframes mn-shake {
@@ -17,31 +18,49 @@
 
 .mn-tile {
   position: relative; display: grid; place-items: center; padding: 0; border: 0; border-radius: 10px;
-  background: #2f4553; box-shadow: 0 5px 0 #1a2c38; cursor: default;
+  background: #2f4553; box-shadow: 0 5px 0 #1a2c38, inset 0 1px 0 rgba(255, 255, 255, 0.06); cursor: default;
   transition: background 0.15s, transform 0.12s, box-shadow 0.12s, opacity 0.2s;
 }
 .mn-grid:not(.live) .mn-tile.closed { background: #253a47; box-shadow: 0 5px 0 #15242e; }
 .mn-grid.live .mn-tile.closed:not(:disabled) { cursor: pointer; }
 .mn-grid.live .mn-tile.closed:hover:not(:disabled) { background: #3e5b6e; transform: translateY(-3px); box-shadow: 0 8px 0 #1a2c38; }
 .mn-grid.live .mn-tile.closed:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 2px 0 #1a2c38; }
+/* Auto's picks, ringed in gold (and marked with a dot) */
+.mn-tile.closed.chosen { background: #3a3322; box-shadow: 0 5px 0 #221c10, inset 0 0 0 3px #f5b93b; }
+.mn-tile.closed.chosen::after { content: ''; width: 14px; height: 14px; border-radius: 50%; background: #f5b93b; box-shadow: 0 0 12px rgba(245, 185, 59, 0.7); }
+.mn-grid.choosing .mn-tile.closed:hover:not(:disabled) { background: #3e4f5c; }
 
 .mn-tile.lit { background: #071824; box-shadow: inset 0 0 0 2px #1a4a35, 0 0 26px rgba(31, 214, 95, 0.18); }
 .mn-tile.hit { background: #4a121b; box-shadow: inset 0 0 0 2px #ff5a5f, 0 0 34px rgba(255, 90, 95, 0.5); }
 .mn-tile.dim { background: #0c1c27; box-shadow: none; opacity: 0.55; }
 .mn-tile.dim .mn-icon { scale: 0.72; }
 
-.mn-icon { display: block; width: 62px; height: auto; }
-.mn-mine { width: 64px; }
+.mn-icon { display: block; width: 58px; height: auto; }
+.mn-mine { width: 60px; }
 .mn-tile.lit .mn-gem { filter: drop-shadow(0 0 10px rgba(52, 245, 143, 0.45)); }
 .mn-tile.hit .mn-mine { filter: drop-shadow(0 0 12px rgba(255, 59, 63, 0.7)); }
 
+/* Turning over: the tile swings to edge-on, then back round with its face showing */
 .mn-tile.flip { animation: mn-flip 0.11s ease-in forwards; }
-@keyframes mn-flip { to { transform: scale(0.08); } }
-.mn-tile.land { animation: mn-land 0.3s cubic-bezier(0.22, 1, 0.36, 1); }
-@keyframes mn-land { from { transform: scale(0.08); } }
+@keyframes mn-flip { to { transform: perspective(520px) rotateY(90deg) scale(0.94); } }
+.mn-tile.land { animation: mn-land 0.34s var(--os-ease); }
+@keyframes mn-land { from { transform: perspective(520px) rotateY(-90deg) scale(0.94); } to { transform: perspective(520px) rotateY(0deg); } }
+/* a gem's sparkle, a mine's dark flash, as they land */
+.mn-tile.lit.land::before, .mn-tile.hit.land::before {
+  content: ''; position: absolute; inset: -6px; border-radius: 14px; pointer-events: none; animation: mn-burst 0.55s ease-out forwards;
+}
+.mn-tile.lit.land::before { background: radial-gradient(closest-side, rgba(157, 255, 201, 0.55), rgba(31, 214, 95, 0)); }
+.mn-tile.hit.land::before { background: radial-gradient(closest-side, rgba(255, 90, 95, 0.7), rgba(74, 18, 27, 0)); inset: -18px; }
+.mn-tile.dim.land::before { display: none; }
+@keyframes mn-burst { from { opacity: 1; scale: 0.6; } to { opacity: 0; scale: 1.25; } }
 
 /* Mines and Gems side by side (a typed field keeps its default width unless told otherwise) */
 .mn-counts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .mn-counts .os-field { min-width: 0; }
 .mn-counts .os-num-input { width: 0; }
 .os-action.mn-random { height: 44px; font-size: 15px; font-weight: 700; }
+.mn-choose-note { padding: 9px 12px; border-radius: 6px; background: var(--os-field); font-size: 13px; line-height: 1.4; color: var(--os-ink-2); }
+.mn-choose-note[hidden] { display: none; }
+
+/* calm: tiles turn without the sparkle or the flash */
+body.calm .mn-tile.land::before { display: none; }

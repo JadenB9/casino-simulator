@@ -18,6 +18,8 @@ export interface Frame {
 }
 
 const M = { left: 58, right: 26, top: 24, bottom: 36 };
+/** The most points the curve is drawn with. */
+const MAX_SAMPLES = 240;
 const LINE = '#ffb020';
 const LINE_CRASHED = '#ff5a5f';
 
@@ -37,6 +39,8 @@ export class CrashGraph {
   private dpr = 1;
   /** When the burst started (performance.now()), and where. */
   private burst: { at: number; x: number; y: number } | null = null;
+  /** The curve's points, x and y in turn, reused every frame. */
+  private readonly pts = new Float64Array((MAX_SAMPLES + 1) * 2);
 
   constructor() {
     this.canvas.className = 'cs-canvas';
@@ -92,7 +96,7 @@ export class CrashGraph {
       g.moveTo(M.left, y);
       g.lineTo(M.left + pw, y);
       g.stroke();
-      g.fillStyle = '#6f8196';
+      g.fillStyle = '#8b9cb0';
       g.fillText(`${v.toFixed(ys < 0.1 ? 2 : ys < 1 ? 1 : 0)}×`, M.left - 10, y);
     }
     const xs = niceStep(xMax / 1000, 6);
@@ -105,7 +109,7 @@ export class CrashGraph {
       g.moveTo(x, M.top);
       g.lineTo(x, M.top + ph);
       g.stroke();
-      g.fillStyle = '#6f8196';
+      g.fillStyle = '#8b9cb0';
       g.fillText(`${Math.round(s)}s`, x, M.top + ph + 10);
     }
 
@@ -115,29 +119,33 @@ export class CrashGraph {
       return;
     }
 
-    // The curve, sampled finely enough to stay smooth at any scale.
+    // The curve, sampled finely enough to stay smooth at any scale, into a buffer kept from frame
+    // to frame (x and y in turn).
     const color = f.phase === 'crashed' ? LINE_CRASHED : LINE;
-    const n = Math.max(24, Math.min(240, Math.round(pw / 3)));
-    const pts: [number, number][] = [];
+    const n = Math.max(24, Math.min(MAX_SAMPLES, Math.round(pw / 3)));
+    const pts = this.pts;
     for (let i = 0; i <= n; i++) {
       const s = (t * i) / n;
-      pts.push([X(s), Y(Math.min(m, Math.exp(RATE * s)))]);
+      pts[i * 2] = X(s);
+      pts[i * 2 + 1] = Y(Math.min(m, Math.exp(RATE * s)));
     }
-    const tip = pts[pts.length - 1]!;
+    const tipX = pts[n * 2]!;
+    const tipY = pts[n * 2 + 1]!;
     // Strongest along the baseline, where the area is wide, and gone by the tip: a steep curve
     // would otherwise leave a bright column under it.
-    const fill = g.createLinearGradient(0, M.top + ph, 0, tip[1]);
+    const fill = g.createLinearGradient(0, M.top + ph, 0, tipY);
     fill.addColorStop(0, f.phase === 'crashed' ? 'rgba(255, 90, 95, 0.22)' : 'rgba(255, 176, 32, 0.24)');
     fill.addColorStop(1, 'rgba(255, 176, 32, 0)');
     g.beginPath();
-    g.moveTo(pts[0]![0], M.top + ph);
-    for (const [x, y] of pts) g.lineTo(x, y);
-    g.lineTo(tip[0], M.top + ph);
+    g.moveTo(pts[0]!, M.top + ph);
+    for (let i = 0; i <= n; i++) g.lineTo(pts[i * 2]!, pts[i * 2 + 1]!);
+    g.lineTo(tipX, M.top + ph);
     g.closePath();
     g.fillStyle = fill;
     g.fill();
     g.beginPath();
-    pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
+    g.moveTo(pts[0]!, pts[1]!);
+    for (let i = 1; i <= n; i++) g.lineTo(pts[i * 2]!, pts[i * 2 + 1]!);
     g.strokeStyle = color;
     g.lineWidth = 5;
     g.lineCap = 'round';
@@ -148,15 +156,15 @@ export class CrashGraph {
     g.shadowBlur = 0;
 
     // The rocket along the tangent (in screen space), or the burst where it was.
-    const prev = pts[Math.max(0, pts.length - 4)]!;
-    const angle = Math.atan2(tip[1] - prev[1], tip[0] - prev[0]);
+    const back = Math.max(0, n - 3) * 2;
+    const angle = Math.atan2(tipY - pts[back + 1]!, tipX - pts[back]!);
     if (f.phase === 'crashed') {
       if (this.burst && Number.isNaN(this.burst.x)) {
-        this.burst.x = tip[0];
-        this.burst.y = tip[1];
+        this.burst.x = tipX;
+        this.burst.y = tipY;
       }
-      this.explosion(tip[0], tip[1]);
-    } else this.rocket(tip[0], tip[1], Number.isFinite(angle) ? angle : -Math.PI / 4, performance.now());
+      this.explosion(tipX, tipY);
+    } else this.rocket(tipX, tipY, Number.isFinite(angle) ? angle : -Math.PI / 4, performance.now());
   }
 
   /** A small rocket pointing along `angle`, nose at (x, y), its flame flickering. */

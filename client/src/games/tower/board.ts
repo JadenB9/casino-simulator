@@ -1,7 +1,9 @@
 // The tower on the page: nine rows, the first at the bottom, of two to four tiles each. The row
 // you're on is lit and its tiles show what it pays; rows climbed keep their egg; the rest wait
-// dark above. A pick flips its tile over; the dragon shakes the tower, and when the climb ends,
-// whichever way, the whole tower turns over from the bottom up.
+// dark above. A pick turns its tile over in depth; the dragon shakes the tower, and when the climb
+// ends, whichever way, the whole tower turns over from the bottom up. For Auto the board can
+// instead take a path: a tile on each row from the bottom up, ringed, that every climb of a run
+// takes before cashing out.
 
 import { el } from '../../ui/kit.ts';
 import { wait } from '../../table/tween.ts';
@@ -36,8 +38,16 @@ export class TowerBoard {
   private difficulty: Difficulty | null = null;
   private active: number | null = null;
   private enabled = false;
+  /** Auto's path (a tile per row from the bottom), ringed while `choosing`. */
+  private choosing = false;
+  /** Between climbs a click sets the path instead of picking. */
+  private takes = false;
+  private path: number[] = [];
 
-  constructor(private readonly onPick: (row: number, tile: number) => void) {
+  constructor(
+    private readonly onPick: (row: number, tile: number) => void,
+    private readonly onChoose: (row: number, tile: number) => void = () => {},
+  ) {
     const crest = el('div', 'tw-crest');
     crest.append(eggIcon(), el('span', 'tw-crest-label', 'Top of the tower'), this.crestValue);
     this.tower.append(crest, this.rowsEl);
@@ -61,9 +71,11 @@ export class TowerBoard {
         const b = el('button', 'tw-tile');
         b.type = 'button';
         b.disabled = true;
+        b.setAttribute('aria-label', `Row ${r + 1}, tile ${t + 1}`);
         b.addEventListener('mousedown', (e) => e.preventDefault());
         b.addEventListener('click', () => {
-          if (this.enabled && this.active === r) this.onPick(r, t);
+          if (this.takes && this.active === null) this.onChoose(r, t);
+          else if (this.enabled && this.active === r) this.onPick(r, t);
         });
         row.tiles.push(b);
         strip.append(b);
@@ -106,13 +118,23 @@ export class TowerBoard {
         r.root.className = 'tw-row active';
         for (const t of r.tiles) this.face(t, null, 'open');
       }
-      for (const tile of r.tiles) tile.disabled = !(this.enabled && i === row);
+      for (const tile of r.tiles) tile.disabled = !((this.enabled && i === row) || (this.takes && row === null && i <= this.path.length));
     });
+    this.paintPath();
   }
 
   /** Whether the lit row takes clicks right now (not while a pick is on its way). */
   setEnabled(on: boolean): void {
     this.enabled = on;
+    this.setActive(this.active);
+  }
+
+  /** Auto's path: ring it while `on`, and take clicks as the path between climbs while `takes`. */
+  setChoosing(on: boolean, path: readonly number[], takes: boolean): void {
+    this.choosing = on;
+    this.takes = on && takes;
+    this.path = path.slice();
+    this.tower.classList.toggle('choosing', this.takes);
     this.setActive(this.active);
   }
 
@@ -125,7 +147,7 @@ export class TowerBoard {
     return true;
   }
 
-  /** Flip the picked tile over. An egg lights the next row; the dragon shakes the tower. */
+  /** Turn the picked tile over. An egg lights the next row; the dragon shakes the tower. */
   async pick(row: number, tile: number, safe: boolean): Promise<void> {
     const r = this.rows[row];
     if (!r) return;
@@ -159,6 +181,13 @@ export class TowerBoard {
       });
       await wait(45);
     }
+  }
+
+  /** Ring the path's tiles on rows not yet turned (only between climbs and on the climb itself). */
+  private paintPath(): void {
+    this.rows.forEach((row, r) =>
+      row.tiles.forEach((tile, t) => tile.classList.toggle('chosen', this.choosing && this.path[r] === t && (tile.classList.contains('shut') || tile.classList.contains('open')))),
+    );
   }
 
   /**

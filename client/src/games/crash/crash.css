@@ -1,10 +1,8 @@
-/* Crash on the lounge site: the recent crash points along the top, the flight on a dark graph,
-   and everyone's bets in a table beside it. Sized in the site's design pixels. */
+/* Crash on the lounge site: the flight on a dark graph, and everyone's bets in a table beside
+   it; the recent crash points are the site's top row. Sized in the site's design pixels. */
 
-.cs-board { position: absolute; inset: 0; display: grid; grid-template-rows: 34px 1fr; gap: 14px; padding: 20px 22px 22px; }
-.cs-head { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 16px; min-width: 0; }
-.cs-round { font-size: 13px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--os-ink-3); white-space: nowrap; }
-.cs-history { min-width: 0; }
+.cs-board { position: absolute; inset: 0; display: grid; padding: 64px 22px 22px; }
+.cs-round { position: absolute; left: 16px; top: 12px; z-index: 1; font-size: 13px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--os-ink-3); white-space: nowrap; pointer-events: none; }
 .cs-history .os-strip-item { min-width: 70px; }
 
 .cs-body { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 16px; min-height: 0; }
@@ -18,19 +16,29 @@
 .cs-overlay { position: absolute; left: 0; right: 0; top: 16%; display: grid; justify-items: center; gap: 6px; pointer-events: none; }
 .cs-mult {
   font-family: var(--os-num); font-size: 96px; line-height: 1; color: var(--os-ink); font-variant-numeric: tabular-nums;
-  text-shadow: 0 4px 28px rgba(0, 0, 0, 0.5);
+  text-shadow: 0 4px 28px rgba(0, 0, 0, 0.5); transition: color 0.4s;
 }
+/* the number warms as it climbs: amber past 3×, a hotter orange past 10× */
+.cs-overlay.running .cs-mult.warm { color: #ffd27a; }
+.cs-overlay.running .cs-mult.hot { color: #ffab4a; text-shadow: 0 4px 28px rgba(0, 0, 0, 0.5), 0 0 30px rgba(255, 140, 40, 0.35); }
 .cs-sub { font-size: 15px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--os-ink-3); min-height: 20px; }
 .cs-overlay.betting .cs-mult { font-size: 72px; color: var(--os-ink-2); }
 .cs-overlay.betting { top: 20%; }
 .cs-overlay.crashed .cs-mult { color: var(--os-lose); }
 .cs-overlay.crashed .cs-sub { color: var(--os-lose); }
 .cs-overlay.idle .cs-mult { color: var(--os-ink-3); }
+.cs-overlay.crashed .cs-mult { animation: cs-crash 0.35s var(--os-ease); }
+@keyframes cs-crash { 30% { scale: 1.08; } }
 .cs-bar { width: 260px; height: 6px; margin-top: 8px; border-radius: 3px; background: rgba(47, 69, 83, 0.7); overflow: hidden; }
-.cs-bar-fill { height: 100%; width: 0; border-radius: 3px; background: var(--os-cash); }
+.cs-bar[hidden] { display: none; }
+/* the window's time left: the fill shrinks to the left by transform (the view writes it) */
+.cs-bar-fill { height: 100%; width: 100%; border-radius: 3px; background: var(--os-cash); transform-origin: 0 50%; transform: scaleX(0); will-change: transform; }
 .cs-graph .os-pop { top: auto; bottom: 26px; translate: -50% 0; }
 
 .cs-players { min-height: 0; }
 
 /* Auto cash-out off: the field waits dimmed */
 .os-num.cs-off .os-field { opacity: 0.45; }
+
+/* calm: the crash is said in red, without the jolt */
+body.calm .cs-overlay.crashed .cs-mult { animation: none; }

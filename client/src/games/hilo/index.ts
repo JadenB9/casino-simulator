@@ -1,20 +1,22 @@
 // Hi-Lo on the lounge computers (docs/rules/online-games.md §7): the desk as it stands on the
 // floor, and the website on its monitor. A card is always face up; Bet starts a round on it, each
 // guess has the server draw the next card (there is no next card anywhere until then), and a trail
-// along the bottom keeps the round's cards. Cash out any time after a right guess.
+// along the bottom keeps the round's cards. Cash out any time after a right guess. Every guess is
+// a decision, so Hi-Lo has no Auto.
 
 import './hilo.css';
 import type { GameClientModule, TableView } from '../contract.ts';
 import type { GameEvent } from '../../../../shared/src/engine.ts';
 import { rankNumber, type Card } from '../../../../shared/src/cards.ts';
-import { formatMoney, type BetLimits, type Cents } from '../../../../shared/src/money.ts';
+import { formatMoney, type Cents } from '../../../../shared/src/money.ts';
 import { winCount, singleReturn, bestFirstGuess, type Guess } from '../../../../shared/src/games/hilo/rules.ts';
 import type { HiloView, HiloStep, HiloOption } from '../../../../shared/src/games/hilo/engine.ts';
-import { celebrate } from '../../table/celebrate.ts';
 import { wait } from '../../table/tween.ts';
 import { el } from '../../ui/kit.ts';
-import { attractTexture, pcModel, pcPose, pcScreenCorners, PC_FOOTPRINT, PC_SEAT } from '../online/pc.ts';
-import { OnlineScreen, AddChips, BetBox, actionButton, InfoList, SessionTally, OutcomePop, CardTrail, commitTyping, winTier, siteTone, drawSiteBar, drawAttractPanel, multText, pctText, type TrailEntry } from '../online/screen.ts';
+import { calm } from '../../app/comfort.ts';
+import { attractTexture, pcModel, pcPose, PC_FOOTPRINT, PC_SEAT } from '../online/pc.ts';
+import { actionButton, InfoList, OutcomePop, CardTrail, keycap, siteTone, shortTone, drawSiteBar, drawAttractPanel, multText, pctText, type TrailEntry } from '../online/screen.ts';
+import { OnlineSite } from '../online/site.ts';
 
 /** The chair's trim on the floor: Hi-Lo's violet. */
 const ACCENT = '#8b5cff';
@@ -75,8 +77,8 @@ function drawAttract(g: CanvasRenderingContext2D, w: number, h: number): void {
     g.font = '600 11px system-ui, sans-serif';
     g.fillText(odds, 36, y + 31);
   };
-  btn(top + 122, 'Higher or same', '38.46% · 2.57×', true);
-  btn(top + 174, 'Lower or same', '69.23% · 1.43×', false);
+  btn(top + 156, 'Higher or same', '38.46% · 2.57×', true);
+  btn(top + 208, 'Lower or same', '69.23% · 1.43×', false);
 
   // The card: a 9 of hearts, drawn plainly.
   const cx = left + (w - left) / 2;
@@ -139,18 +141,20 @@ export const hilo: GameClientModule = {
   playPose: () => pcPose(),
 
   mount(ctx): TableView {
-    const screen = new OnlineScreen('Hi-Lo');
-    ctx.ui.append(screen.root);
-    const cashier = new AddChips(screen, ctx);
-    const corners = pcScreenCorners();
-
     let view: HiloView | null = null;
     let stack: Cents = 0;
     let animating = false;
     let busy = false;
-    let limits: BetLimits | null = null;
-    let bet: BetBox | null = null;
-    let tipShown = false;
+    let sentAt = 0;
+
+    const site = new OnlineSite(ctx, {
+      game: 'hilo',
+      title: 'Hi-Lo',
+      action: 'Bet',
+      primary: () => primary(),
+      sync: () => sync(),
+    });
+    const screen = site.screen;
 
     // --- the board: the deck, the card, what each guess would pay, the trail
     const stage = el('div', 'hl-stage');
@@ -162,6 +166,13 @@ export const hilo: GameClientModule = {
       back.draggable = false;
       deck.append(back);
     }
+    // the card that comes off the deck on a guess, and turns over as it lands on the face-up one
+    const flyer = el('img', 'hl-flyer');
+    flyer.src = cardUrl('back-red');
+    flyer.alt = '';
+    flyer.draggable = false;
+    flyer.hidden = true;
+    deck.append(flyer);
     const cardBox = el('div', 'hl-card-box');
     const card = el('img', 'hl-card');
     card.alt = '';
@@ -197,6 +208,7 @@ export const hilo: GameClientModule = {
       const root = el('button', `hl-guess ${dir}`);
       root.type = 'button';
       root.title = dir === 'hi' ? 'Higher (↑ or H)' : 'Lower (↓ or L)';
+      keycap(root, dir === 'hi' ? '↑' : '↓');
       root.addEventListener('mousedown', (e) => e.preventDefault());
       root.addEventListener('click', () => guess(dir));
       const label = el('span', 'hl-guess-label');
@@ -210,20 +222,19 @@ export const hilo: GameClientModule = {
     const loBtn = guessButton('lo');
     const guesses = el('div', 'hl-guesses');
     guesses.append(hiBtn.root, loBtn.root);
-    const main = actionButton('Bet', () => primary());
-    main.title = 'Bet, or cash out (Space)';
-    const skip = actionButton('Skip card', () => act({ type: 'skip' }), 'plain');
+    const skip = actionButton('Skip card', () => act({ type: 'skip' }), 'plain', 'S');
     skip.title = 'Skip this card (S)';
     skip.classList.add('hl-skip');
+    site.extras.append(guesses, skip);
     const info = new InfoList('This round');
-    const tally = new SessionTally();
-    screen.side.append(main, guesses, skip, info.root, tally.root);
+    site.facts.append(info.root);
 
     const playing = () => view?.phase === 'playing';
 
     const act = (a: object) => {
       if (busy || animating) return;
       busy = true;
+      sentAt = performance.now();
       ctx.link.act(a);
       sync();
     };
@@ -236,14 +247,14 @@ export const hilo: GameClientModule = {
     };
 
     const primary = () => {
-      commitTyping(screen.root);
       if (playing()) {
         if ((view?.mult ?? 0) > 0) act({ type: 'cashout' });
         return;
       }
+      const bet = site.bet;
       if (!bet) return;
       if (bet.value > stack) {
-        siteTone(ctx.sfx, 150, 120, { type: 'sawtooth', gain: 0.03 });
+        shortTone(ctx.sfx);
         ctx.kit.toast('Not enough chips here for that bet.', 'err');
         return;
       }
@@ -263,20 +274,17 @@ export const hilo: GameClientModule = {
     const sync = () => {
       const on = playing();
       const v = view;
+      site.midRound = on;
       if (!animating) screen.setStack(stack);
+      const bet = site.bet;
+      bet?.setMax(stack);
       bet?.setEnabled(!on && !busy);
       const stake = on && v ? v.bet : bet?.value ?? 0;
       const free = !busy && !animating;
       if (on && v) {
         const cash = (v.bet / 100) * v.mult;
-        main.className = 'os-action cash';
-        main.textContent = v.mult > 0 ? `Cash out ${formatMoney(cash)}` : 'Cash out';
-        main.disabled = !free || v.mult === 0;
-      } else {
-        main.className = 'os-action go';
-        main.textContent = 'Bet';
-        main.disabled = !free || !bet || bet.value > stack;
-      }
+        site.paintMain(v.mult > 0 ? `Cash out ${formatMoney(cash)}` : 'Cash out', 'cash', !free || v.mult === 0);
+      } else site.paintMain('Bet', 'go', !free || !bet || bet.value > stack);
       if (v) {
         showOption(hiBtn, v.hi, on && free);
         showOption(loBtn, v.lo, on && free);
@@ -290,13 +298,17 @@ export const hilo: GameClientModule = {
         profitAll.label.textContent = `Total profit (${multText(now || 100)})`;
         profitAll.value.textContent = formatMoney(now > 0 ? pay(now) - stake : 0, { sign: true });
         profitAll.value.className = `os-stat-value${now > 100 ? ' win' : ''}`;
+        // the line under the bet: the likelier guess's profit from here
+        const likely = v.hi.allowed && (!v.lo.allowed || v.hi.count >= v.lo.count) ? v.hi : v.lo;
+        site.profit(`Profit on ${likely.label.toLowerCase()}`, pay(likely.mult) - stake, `${multText(likely.mult)} · ${pctText(likely.count / 13)}`);
         info.set('now', 'Cash out now', on && v.mult > 0 ? `${multText(v.mult)} · ${formatMoney(pay(v.mult))}` : '—', on && v.mult > 0 ? 'win' : null);
         info.set('wins', 'Right guesses', String(on ? v.trail.filter((t) => t.how !== 'start' && t.how !== 'skip' && t.win).length : 0));
         info.set('skips', 'Skips left', String(v.skipsLeft));
       }
       skip.disabled = !free || (on && (v?.skipsLeft ?? 0) === 0);
-      const lim = limits ? ` · Bet ${formatMoney(limits.min)} to ${formatMoney(limits.max)}` : '';
-      screen.setNote(`Each guess pays 12.87 ÷ the winning ranks: 99% of what rides, before the cent${lim} · Space bets and cashes out · ↑ ↓ guess · S skips`);
+      const lim = site.limits;
+      const limText = lim ? ` · Bet ${formatMoney(lim.min)} to ${formatMoney(lim.max)}` : '';
+      screen.setNote(`Each guess pays 12.87 ÷ the winning ranks: 99% of what rides, before the cent${limText} · Space bets and cashes out · ↑ ↓ guess · S skips`);
       tipFor();
     };
 
@@ -304,15 +316,14 @@ export const hilo: GameClientModule = {
     // by cashing out. Before one, the floor to the cent decides: one guess returns exactly 99% on
     // an ace, 3, 5, 9, jack or king (the guess ringed), and a little less on the others, where a
     // free skip is worth more.
+    const ringable = () => [site.main, skip, hiBtn.root, loBtn.root];
     const clearTip = () => {
-      if (!tipShown) return;
-      tipShown = false;
-      ctx.kit.tip(null);
-      for (const b of [main, skip, hiBtn.root, loBtn.root]) b.classList.remove('tip-pick');
+      site.tip(null);
+      for (const b of ringable()) b.classList.remove('tip-pick');
     };
     const tipFor = () => {
       if (!ctx.tips.on || busy || animating || !view) return clearTip();
-      for (const b of [main, skip, hiBtn.root, loBtn.root]) b.classList.remove('tip-pick');
+      for (const b of ringable()) b.classList.remove('tip-pick');
       const r = rankNumber(view.card);
       const best = bestFirstGuess(r);
       const bestOpt = best === 'hi' ? view.hi : view.lo;
@@ -320,16 +331,15 @@ export const hilo: GameClientModule = {
       let ring: HTMLElement | null = null;
       if (playing() && view.mult > 0) {
         text = `Cash out: every further guess keeps another 1% of the ${formatMoney((view.bet / 100) * view.mult)} riding.`;
-        ring = main;
+        ring = site.main;
       } else if (EXACT_RANKS.includes(r)) {
         text = `${bestOpt.label} on a${r === 1 || r === 8 ? 'n' : ''} ${RANK_NAMES[r]} returns exactly 99.00% (${bestOpt.count} in 13 to win).`;
-        ring = playing() ? (best === 'hi' ? hiBtn.root : loBtn.root) : main;
+        ring = playing() ? (best === 'hi' ? hiBtn.root : loBtn.root) : site.main;
       } else {
         text = `Skip: one guess on ${EXACT_WORDS} returns 99.00%; the best guess on this ${RANK_NAMES[r]} returns ${pctText(bestReturn(r))}.`;
         ring = skip;
       }
-      tipShown = true;
-      ctx.kit.tip(text);
+      site.tip(text);
       ring?.classList.add('tip-pick');
     };
     const offTips = ctx.tips.subscribe(tipFor);
@@ -339,18 +349,30 @@ export const hilo: GameClientModule = {
       card.alt = c;
     };
 
-    /** The next card comes off the deck and turns over in the card's place. */
+    /**
+     * The next card comes off the deck: a back slides from the deck onto the face-up card and
+     * turns over there into the new one (calm: it turns over in place).
+     */
     const flipTo = async (c: Card, tone: 'win' | 'lose' | 'plain') => {
       cardBox.classList.remove('win', 'lose', 'deal');
-      card.classList.add('turn');
       ctx.sfx.play('card-flip', { volume: 0.55 });
-      await wait(140);
+      if (!calm()) {
+        flyer.hidden = false;
+        flyer.classList.remove('fly');
+        void flyer.offsetWidth;
+        flyer.classList.add('fly');
+        await wait(170);
+        flyer.hidden = true;
+        flyer.classList.remove('fly');
+      }
+      card.classList.add('turn');
+      await wait(120);
       setCard(c);
       card.classList.remove('turn');
       void cardBox.offsetWidth;
       cardBox.classList.add('deal');
       if (tone !== 'plain') cardBox.classList.add(tone);
-      await wait(260);
+      await wait(240);
     };
 
     const redraw = (v: HiloView) => {
@@ -366,30 +388,19 @@ export const hilo: GameClientModule = {
       const payout = Number(e.payout);
       const b = Number(e.bet);
       const mult = Number(e.mult);
-      tally.add(b, payout);
       if (payout > 0) {
         pop.show(mult, payout, b);
         ctx.sfx.play('chips-stack', { volume: 0.6 });
-        [784, 988, 1319].forEach((f, i) => siteTone(ctx.sfx, f, 140, { type: 'triangle', gain: 0.05, at: i * 70 }));
-        const tier = winTier(payout, b);
-        if (tier) celebrate({ stage: ctx.stage, ui: ctx.ui, sfx: ctx.sfx }, { title: `Hi-Lo ${multText(mult)}`, sub: `${Number(e.guesses)} right guesses · pays ${formatMoney(payout)} on ${formatMoney(b)}`, tier });
       }
+      site.settle({ bet: b, payout, mult, moment: { title: `Hi-Lo ${multText(mult)}`, sub: `${Number(e.guesses)} right guesses · pays ${formatMoney(payout)} on ${formatMoney(b)}` } });
     };
 
     return {
       onTable(snap) {
-        cashier.table(snap);
         stack = snap.you.stack;
         busy = false;
         animating = false;
-        const lim = snap.meta.config.limits.default;
-        if (!bet || !limits || lim.min !== limits.min || lim.max !== limits.max || lim.step !== limits.step) {
-          bet?.root.remove();
-          limits = lim;
-          bet = new BetBox({ label: 'Bet', min: lim.min, max: lim.max, step: lim.step, value: lim.min, onChange: () => sync() });
-          screen.side.prepend(bet.root);
-        }
-        bet.setMax(stack);
+        site.table(snap);
         pop.hide();
         redraw(snap.view as HiloView);
         sync();
@@ -432,14 +443,13 @@ export const hilo: GameClientModule = {
       },
 
       onSeat(msg) {
-        cashier.seat(msg);
+        site.seat(msg);
         stack = msg.stack;
-        bet?.setMax(stack);
         sync();
       },
 
-      onError() {
-        cashier.refused();
+      onError(_code, msg) {
+        site.error(msg);
         busy = false;
         sync();
       },
@@ -447,7 +457,7 @@ export const hilo: GameClientModule = {
       keydown(e) {
         if (e.metaKey || e.ctrlKey || e.altKey) return false;
         if (e.code === 'Space') {
-          if (!e.repeat) primary();
+          if (!e.repeat) site.press();
           return true;
         }
         const k = e.key.toLowerCase();
@@ -466,18 +476,20 @@ export const hilo: GameClientModule = {
         return false;
       },
 
-      update() {
-        const camera = ctx.stage.engine.camera;
-        camera.updateMatrixWorld();
-        ctx.stage.root.updateWorldMatrix(true, false);
-        screen.follow(ctx.stage.root, camera, corners);
+      update(dt) {
+        // An action the server never answered (the socket dropped it) frees the page again.
+        if (busy && performance.now() - sentAt > 6_000) {
+          busy = false;
+          sync();
+        }
+        site.update(dt);
       },
 
       dispose() {
         offTips();
         clearTip();
         pop.hide();
-        screen.dispose();
+        site.dispose();
       },
     };
   },

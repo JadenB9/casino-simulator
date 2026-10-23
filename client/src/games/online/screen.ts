@@ -1,33 +1,72 @@
-// The website on the computer's monitor: every online game draws inside this frame, so the eight
+// The website on the computer's monitor: every online game draws inside this frame, so the twelve
 // of them read as one site. It's built at a fixed 1280 x 800 and mapped onto the four projected
 // corners of the 3D monitor every frame (the same projective mapping as the video poker glass),
 // so it stays glued to the desk while the camera flies in and is a plain scaled rectangle, with
 // crisp text, once the camera sits square to it.
 //
+// On a phone or a tablet held upright the monitor would come out a few inches wide and the page's
+// text a few pixels high, so there the page lies flat over the scene instead (the `flat` layout):
+// it fills the part of the screen the HUD, the chat and the back chip leave free, its panel at the
+// screen's own size (thumb-sized buttons, readable text) and the board scaled into what's left,
+// beside the panel on a phone on its side, above it upright.
+//
 //   .os-top    the site's name, the game's name, and the chips you have at this computer
-//   .os-side   the bet panel: a game puts its BetBox and its own controls here
-//   .os-main   the game's board
-//   .os-foot   one line of rules: the return, the limits
+//   .os-side   the bet panel: the bet, the game's choices, the main button, its facts, the tally
+//   .os-stage  holds .os-main, the game's board (950 x 702 design pixels, scaled when flat)
+//   .os-head   the board's top row: the last round's result and the recent results
+//   .os-foot   one line of rules: the return, the limits, the keys
 
 import * as THREE from 'three';
 import './online.css';
 import { DOLLAR, formatMoney, type Cents } from '../../../../shared/src/money.ts';
 import { el } from '../../ui/kit.ts';
-import { fitOf } from '../../table/fit.ts';
+import { bestSpace, fitOf, measureChrome, type Rect } from '../../table/fit.ts';
 import { session } from '../../app/session.ts';
 import type { SeatMsg, TableSnapshot, TableViewCtx } from '../contract.ts';
 
 export const SCREEN_PX = { w: 1280, h: 800 } as const;
+/** The board's design size: the page less the panel, the top bar and the foot (online.css). */
+export const BOARD_PX = { w: 950, h: 702 } as const;
+/** The board's top row (.os-head): boards keep their own pictures below it. */
+export const HEAD_PX = 64;
+
+/**
+ * Whether the page lies flat over the scene rather than on the monitor: a screen too small or too
+ * tall for a 16:10 monitor to come out readable (a phone either way up, a tablet upright).
+ */
+export function flatScreen(w = innerWidth, h = innerHeight): boolean {
+  return w < 900 || h < 560 || w / h < 1.05;
+}
+
+/** A flat page's top bar and board row heights, and the least room its panel keeps upright, px. */
+const FLAT_TOP = 46;
+const FLAT_HEAD = 42;
+const FLAT_PANEL_MIN = 236;
+/** How often a flat page measures the controls around it, ms (and at once on a resize). */
+const MEASURE_MS = 250;
+/** Something that showed keeps its place this long after it hides, so the page doesn't breathe. */
+const REMEMBER_MS = 12_000;
 
 export class OnlineScreen {
   readonly root = el('div', 'os-screen');
   /** The game's board. */
   readonly main = el('div', 'os-main');
-  /** The bet panel down the left: BetBox first, then the game's buttons. */
+  /** The bet panel down the left (under the board when flat and upright). */
   readonly side = el('div', 'os-side');
+  /** The board's top row: the round's result on the left, the recent results on the right. */
+  readonly head = el('div', 'os-head');
+  private readonly stage = el('div', 'os-stage');
+  /** The board's window: the board itself when on the monitor, its scaled copy when flat. */
+  private readonly view = el('div', 'os-view');
+  private readonly body = el('div', 'os-body');
   private readonly stack = el('span', 'os-stack-value', '$0');
   private readonly foot = el('div', 'os-foot');
   private transform = '';
+  private flat: boolean | null = null;
+  private flatKey = '';
+  private measuredAt = -Infinity;
+  private seen = new Map<Element, { rect: Rect; at: number }>();
+  private size = { w: 0, h: 0 };
 
   constructor(title: string) {
     const top = el('div', 'os-top');
@@ -36,21 +75,31 @@ export class OnlineScreen {
     const stack = el('div', 'os-stack');
     stack.append(el('span', 'os-stack-label', 'Chips'), this.stack);
     top.append(brand, el('div', 'os-title', title), stack);
-    const body = el('div', 'os-body');
-    body.append(this.side, this.main);
-    this.root.append(top, body, this.foot);
+    this.main.append(this.head);
+    this.view.append(this.main);
+    this.stage.append(this.view);
+    this.body.append(this.side, this.stage);
+    this.root.append(top, this.body, this.foot);
     this.root.hidden = true;
+    this.root.setAttribute('role', 'region');
+    this.root.setAttribute('aria-label', `${title}, House Originals`);
     // the monitor's page is the board the table keeps in view, not a control over it (table/fit.ts)
     this.root.dataset.fit = 'ignore';
   }
 
   setStack(cents: Cents): void {
-    this.stack.textContent = formatMoney(cents);
+    const t = formatMoney(cents);
+    if (this.stack.textContent !== t) this.stack.textContent = t;
   }
 
   /** The line at the foot of the page: the game's return and limits. */
   setNote(text: string): void {
-    this.foot.textContent = text;
+    if (this.foot.textContent !== text) this.foot.textContent = text;
+  }
+
+  /** Whether the page lies flat over the scene now (a phone, a tablet upright). */
+  get isFlat(): boolean {
+    return this.flat === true;
   }
 
   /**
@@ -91,17 +140,115 @@ export class OnlineScreen {
   /**
    * Call from the view's update(): keeps the page on the monitor's glass as the camera moves. The
    * glass is the board the table keeps in view (table/fit.ts), so on a small window the camera's
-   * lens takes in the whole monitor clear of the HUD and the page shrinks with it.
+   * lens takes in the whole monitor clear of the HUD and the page shrinks with it. A flat page
+   * instead fills the free part of the screen (see the top of this file).
    */
   follow(root: THREE.Object3D, camera: THREE.Camera, corners: THREE.Vector3[]): void {
     if (!this.boarded) {
       this.boarded = true;
       fitOf(root)?.setBoard(corners);
     }
-    this.place(corners.map((c) => toScreen(c, root, camera)));
+    const w = innerWidth;
+    const h = innerHeight;
+    const flat = flatScreen(w, h);
+    if (flat !== this.flat) this.setFlat(flat);
+    if (flat) {
+      this.layFlat(w, h);
+      return;
+    }
+    // Moved only when a corner did (a camera at rest costs four projections and no DOM work).
+    let moved = this.corners.length !== corners.length;
+    for (let i = 0; i < corners.length; i++) {
+      const q = toScreen(corners[i]!, root, camera);
+      const was = this.corners[i];
+      if (!q || !was || Math.abs(q.x - was.x) > 0.01 || Math.abs(q.y - was.y) > 0.01) moved = true;
+      this.corners[i] = q;
+    }
+    if (moved || this.root.hidden) this.place(this.corners);
   }
 
   private boarded = false;
+  private corners: ({ x: number; y: number } | null)[] = [];
+
+  private setFlat(on: boolean): void {
+    this.flat = on;
+    this.flatKey = '';
+    this.seen.clear();
+    this.measuredAt = -Infinity;
+    this.root.classList.toggle('flat', on);
+    this.corners = [];
+    if (on) {
+      this.transform = '';
+      this.root.style.transform = 'none';
+      // the result and the history read at the screen's own size, over the board
+      this.stage.prepend(this.head);
+    } else {
+      for (const p of ['left', 'top', 'width', 'height', '--os-k', '--os-bw', '--os-bh', '--os-sw']) this.root.style.removeProperty(p);
+      this.root.classList.remove('upright', 'sideways');
+      this.main.prepend(this.head);
+    }
+  }
+
+  /**
+   * Lie flat in the largest part of the screen clear of the controls (the HUD's clusters, the
+   * chat, the back chip, the tips line), measured as the board fit measures them; the panel at the
+   * screen's own size and the board scaled into the rest.
+   */
+  private layFlat(w: number, h: number): void {
+    const now = performance.now();
+    const resized = w !== this.size.w || h !== this.size.h;
+    if (resized) {
+      this.size = { w, h };
+      this.seen.clear();
+    }
+    this.root.hidden = false;
+    if (!resized && now - this.measuredAt < MEASURE_MS) return;
+    this.measuredAt = now;
+    const ui = this.root.parentElement;
+    const back = document.querySelector('.j4-back');
+    const els = [...(ui ? [...ui.children] : []), ...(back ? [back] : [])];
+    for (const { el: e, rect } of measureChrome(els, w, h)) this.seen.set(e, { rect, at: now });
+    for (const [e, s] of this.seen) if (now - s.at > REMEMBER_MS || !e.isConnected) this.seen.delete(e);
+    const obstacles = [...this.seen.values()].map((s) => s.rect);
+    // the clear-space search only when the screen or what's on it changed
+    const key = [w, h, ...obstacles.flatMap((o) => [o.left, o.top, o.right, o.bottom])].map((x) => Math.round(x)).join(',');
+    if (key === this.flatKey) return;
+    this.flatKey = key;
+    const upright = h > w;
+    // The shape the page wants: upright, all the width it can have; on its side, the height.
+    const want = upright ? { width: w, height: w * 0.75 } : { width: Math.min(w, h * 2), height: h };
+    const b = { left: (w - want.width) / 2, top: (h - want.height) / 2, right: (w + want.width) / 2, bottom: (h + want.height) / 2 };
+    const { safe } = bestSpace(b, obstacles, w, h);
+    const sw = Math.max(0, safe.right - safe.left);
+    const sh = Math.max(0, safe.bottom - safe.top);
+    // The board's top row moves above the board when flat (FLAT_TOP, FLAT_HEAD in online.css), so
+    // the board's own top is cropped off.
+    const bh = BOARD_PX.h - HEAD_PX;
+    const rows = FLAT_TOP + FLAT_HEAD;
+    let k: number;
+    let panelW = 0;
+    if (upright) {
+      // the panel keeps room under the board for at least the bet and the main button
+      k = Math.min(sw / BOARD_PX.w, (sh - rows - FLAT_PANEL_MIN) / bh);
+    } else {
+      // on its side the height decides the board; the panel takes what's left beside it
+      k = (sh - rows) / bh;
+      panelW = Math.round(Math.min(400, Math.max(250, sw - BOARD_PX.w * k)));
+      k = Math.min(k, (sw - panelW) / BOARD_PX.w);
+    }
+    k = Math.max(0.2, k);
+    const s = this.root.style;
+    s.left = `${Math.round(safe.left)}px`;
+    s.top = `${Math.round(safe.top)}px`;
+    s.width = `${Math.round(sw)}px`;
+    s.height = `${Math.round(sh)}px`;
+    s.setProperty('--os-k', k.toFixed(4));
+    s.setProperty('--os-bw', `${Math.floor(BOARD_PX.w * k)}px`);
+    s.setProperty('--os-bh', `${Math.floor(bh * k)}px`);
+    s.setProperty('--os-sw', `${panelW}px`);
+    this.root.classList.toggle('upright', upright);
+    this.root.classList.toggle('sideways', !upright);
+  }
 
   dispose(): void {
     this.root.remove();
@@ -132,12 +279,18 @@ export interface BetBoxOptions {
 
 /**
  * The bet field every online game shares: dollars typed or nudged with half, double and Max.
- * Max bets the most the table allows or everything you have here, whichever is less.
+ * Max bets the most the table allows or everything you have here, whichever is less. Under it,
+ * the same line in every game: what a win of this bet makes (or, where a round can pay many
+ * ways, its top pay), with the multiplier and the chance.
  */
 export class BetBox {
   readonly root = el('div', 'os-bet');
   private readonly input = el('input', 'os-bet-input');
   private readonly buttons: HTMLButtonElement[] = [];
+  private readonly footLabel = el('span', 'os-bet-foot-label');
+  private readonly footValue = el('span', 'os-bet-foot-value');
+  private readonly footNote = el('span', 'os-bet-foot-note');
+  private readonly foot = el('div', 'os-bet-foot');
   private cap: Cents;
   private current: Cents;
 
@@ -145,22 +298,26 @@ export class BetBox {
     this.cap = opts.max;
     this.current = opts.value;
     const head = el('div', 'os-bet-head');
-    head.append(el('span', 'os-label', opts.label ?? 'Bet'), el('span', 'os-bet-range', `${formatMoney(opts.min)} to ${formatMoney(opts.max)}`));
+    const label = el('label', 'os-label', opts.label ?? 'Bet');
+    head.append(label, el('span', 'os-bet-range', `${formatMoney(opts.min)} to ${formatMoney(opts.max)}`));
     this.input.type = 'text';
     this.input.inputMode = 'numeric';
     this.input.autocomplete = 'off';
     this.input.spellcheck = false;
+    this.input.id = `os-bet-${++betIds}`;
+    label.htmlFor = this.input.id;
     this.input.addEventListener('change', () => this.set(Math.round(Number(this.input.value.replace(/[^0-9.]/g, '')) * 100) || opts.min));
     this.input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') this.input.blur();
     });
     const row = el('div', 'os-bet-row');
-    const field = el('label', 'os-bet-field');
+    const field = el('div', 'os-bet-field');
     field.append(el('span', 'os-bet-sign', '$'), this.input);
     const nudge = (text: string, title: string, fn: () => void) => {
       const b = el('button', 'os-chip-btn', text);
       b.type = 'button';
       b.title = title;
+      b.setAttribute('aria-label', title);
       b.addEventListener('mousedown', (e) => e.preventDefault());
       b.addEventListener('click', fn);
       this.buttons.push(b);
@@ -172,7 +329,9 @@ export class BetBox {
       nudge('2×', 'Double the bet', () => this.set(this.current * 2)),
       nudge('Max', 'The most you can bet here', () => this.set(this.cap)),
     );
-    this.root.append(head, row);
+    this.foot.append(this.footLabel, this.footValue, this.footNote);
+    this.foot.hidden = true;
+    this.root.append(head, row, this.foot);
     this.set(opts.value);
   }
 
@@ -180,20 +339,40 @@ export class BetBox {
     return this.current;
   }
 
-  /** Snap to the step and clamp into [min, the most you can bet now]. */
+  /** The line under the field: "Profit on win · +$1.00 · 2.00× · 49.50%"; null hides it. */
+  setFoot(foot: { label: string; value: string; note?: string; tone?: 'win' | null } | null): void {
+    this.foot.hidden = foot === null;
+    if (!foot) return;
+    if (this.footLabel.textContent !== foot.label) this.footLabel.textContent = foot.label;
+    if (this.footValue.textContent !== foot.value) this.footValue.textContent = foot.value;
+    const note = foot.note ?? '';
+    if (this.footNote.textContent !== note) this.footNote.textContent = note;
+    this.footValue.classList.toggle('win', foot.tone === 'win');
+  }
+
+  /**
+   * Snap to the step and clamp into [min, the most you can bet now]; the owner hears a change
+   * (only a change: the same bet again, typed or clamped, is no news).
+   */
   set(value: number): void {
     const { min, step } = this.opts;
     const top = Math.max(min, this.cap);
     const v = Math.min(top, Math.max(min, Math.floor(value / step) * step));
+    const changed = v !== this.current;
     this.current = v;
     this.input.value = (v / 100).toFixed(v % 100 === 0 ? 0 : 2);
-    this.opts.onChange?.(v);
+    if (changed) this.opts.onChange?.(v);
   }
 
-  /** The most you can bet right now: the table max or your chips here, whichever is less. */
+  /**
+   * The most you can bet right now: the table max or your chips here, whichever is less. A bet
+   * over it comes down to it, never below the table minimum (chips short of the minimum leave the
+   * bet at the minimum, which the button then won't place), so a view may call this from its
+   * redraw without the box calling back for ever.
+   */
   setMax(max: Cents): void {
     this.cap = Math.min(this.opts.max, max);
-    if (this.current > this.cap) this.set(this.cap);
+    if (this.current > Math.max(this.opts.min, this.cap)) this.set(this.cap);
   }
 
   setEnabled(on: boolean): void {
@@ -201,25 +380,44 @@ export class BetBox {
     for (const b of this.buttons) b.disabled = !on;
   }
 }
+let betIds = 0;
 
-/** A big primary button for the page's main action (Bet, Drop, Cash out). */
-export function actionButton(text: string, onClick: () => void, kind: 'go' | 'cash' | 'plain' = 'go'): HTMLButtonElement {
+/**
+ * A big primary button for the page's main action (Bet, Drop, Cash out). `key` is printed on it
+ * as a keycap (from data-key, in CSS, so the button's text stays its label).
+ */
+export function actionButton(text: string, onClick: () => void, kind: 'go' | 'cash' | 'plain' = 'go', key?: string): HTMLButtonElement {
   const b = el('button', `os-action ${kind}`, text);
   b.type = 'button';
+  if (key) keycap(b, key);
   b.addEventListener('mousedown', (e) => e.preventDefault());
   b.addEventListener('click', onClick);
   return b;
 }
 
-// ---------------------------------------------------------------------------------------------
-// Added with Plinko, Dice, Limbo and Keno (additions only; nothing above changes): a segmented
-// choice, a typed number field, a key-value list, the recent-results strip, the session tally,
-// a synthesized tone, the celebration threshold, and the site's bar for the desks' attract pictures.
+/** Print a key on a control as its keycap, or take it off with null. */
+export function keycap(b: HTMLElement, key: string | null): void {
+  if (key) b.dataset.key = key;
+  else delete b.dataset.key;
+  if (key && !b.getAttribute('aria-keyshortcuts')) b.setAttribute('aria-keyshortcuts', key === '␣' || key === 'Space' ? 'Space' : key);
+}
+
+/** Label, look and state of an action button, written only when they change. */
+export function paintButton(b: HTMLButtonElement, label: string, kind: 'go' | 'cash' | 'plain', disabled: boolean): void {
+  if (b.textContent !== label) b.textContent = label;
+  if (!b.classList.contains(kind)) {
+    b.classList.remove('go', 'cash', 'plain');
+    b.classList.add(kind);
+  }
+  if (b.disabled !== disabled) b.disabled = disabled;
+}
 
 export interface SegOption<T> {
   value: T;
   label: string;
   title?: string;
+  /** A key that picks it, printed on it as a keycap. */
+  key?: string;
 }
 
 /** A segmented choice on the shared `os-seg` look: risk, rows, Classic/Low/Medium/High. */
@@ -228,18 +426,20 @@ export class SegChoice<T extends string | number> {
   private readonly buttons = new Map<T, HTMLButtonElement>();
   private current: T;
 
-  constructor(options: readonly SegOption<T>[], value: T, onPick: (value: T) => void) {
+  constructor(
+    options: readonly SegOption<T>[],
+    value: T,
+    private readonly onPick: (value: T) => void,
+  ) {
     this.current = value;
+    this.root.setAttribute('role', 'group');
     for (const o of options) {
       const b = el('button', '', o.label);
       b.type = 'button';
       if (o.title) b.title = o.title;
+      if (o.key) keycap(b, o.key);
       b.addEventListener('mousedown', (e) => e.preventDefault());
-      b.addEventListener('click', () => {
-        if (o.value === this.current) return;
-        this.set(o.value);
-        onPick(o.value);
-      });
+      b.addEventListener('click', () => this.pick(o.value));
       this.buttons.set(o.value, b);
       this.root.append(b);
     }
@@ -253,11 +453,37 @@ export class SegChoice<T extends string | number> {
   /** Show `value` as the choice (no callback). */
   set(value: T): void {
     this.current = value;
-    for (const [v, b] of this.buttons) b.classList.toggle('on', v === value);
+    for (const [v, b] of this.buttons) {
+      b.classList.toggle('on', v === value);
+      b.setAttribute('aria-pressed', String(v === value));
+    }
+  }
+
+  /** Choose `value` as a click would (the callback runs); false when it can't be chosen now. */
+  pick(value: T): boolean {
+    const b = this.buttons.get(value);
+    if (!b || b.disabled) return false;
+    if (value === this.current) return true;
+    this.set(value);
+    this.onPick(value);
+    return true;
+  }
+
+  /** Choose the option after (1) or before (-1) the current one; false at either end. */
+  step(dir: 1 | -1): boolean {
+    const values = [...this.buttons.keys()];
+    const next = values[values.indexOf(this.current) + dir];
+    return next !== undefined && this.pick(next);
+  }
+
+  /** Name the whole choice for a screen reader ("Risk"). */
+  label(text: string): this {
+    this.root.setAttribute('aria-label', text);
+    return this;
   }
 
   setEnabled(on: boolean): void {
-    for (const b of this.buttons.values()) b.disabled = !on;
+    for (const b of this.buttons.values()) if (b.disabled === on) b.disabled = !on;
   }
 
   /** Ring the option the tips recommend; null clears it. */
@@ -276,6 +502,8 @@ export interface NumberFieldOptions {
   onCommit?: (typed: number) => void;
 }
 
+let fieldIds = 0;
+
 /**
  * A labelled number the player types (a multiplier, a win chance, a target) or only reads (the
  * profit on a win). It commits on Enter or when it loses focus; the owner snaps the value and
@@ -284,14 +512,16 @@ export interface NumberFieldOptions {
 export class NumberField {
   readonly root = el('div', 'os-num');
   readonly input = el('input', 'os-num-input');
-  private readonly label = el('span', 'os-label');
+  private readonly label = el('label', 'os-label');
   private readonly note = el('span', 'os-num-note');
-  private readonly field = el('label', 'os-field');
+  private readonly field = el('div', 'os-field');
   private current: number;
 
   constructor(private readonly opts: NumberFieldOptions) {
     this.current = opts.value;
     this.label.textContent = opts.label;
+    this.input.id = `os-num-${++fieldIds}`;
+    this.label.htmlFor = this.input.id;
     const head = el('div', 'os-num-head');
     head.append(this.label, this.note);
     this.input.type = 'text';
@@ -316,11 +546,12 @@ export class NumberField {
 
   set(value: number): void {
     this.current = value;
-    this.input.value = this.opts.format(value);
+    const t = this.opts.format(value);
+    if (this.input.value !== t) this.input.value = t;
   }
 
   setLabel(text: string): void {
-    this.label.textContent = text;
+    if (this.label.textContent !== text) this.label.textContent = text;
   }
 
   /** A few words on the right of the label ("98.70% at this bet"). */
@@ -334,6 +565,7 @@ export class NumberField {
     const b = el('button', 'os-num-btn', text);
     b.type = 'button';
     b.title = title;
+    b.setAttribute('aria-label', title);
     b.addEventListener('mousedown', (e) => e.preventDefault());
     b.addEventListener('click', (e) => {
       e.preventDefault();
@@ -375,20 +607,31 @@ export class InfoList {
       this.list.append(r);
       this.rows.set(key, row);
     }
-    row.label.textContent = label;
-    row.value.textContent = value;
-    row.value.className = tone ?? '';
+    if (row.label.textContent !== label) row.label.textContent = label;
+    if (row.value.textContent !== value) row.value.textContent = value;
+    const cls = tone ?? '';
+    if (row.value.className !== cls) row.value.className = cls;
   }
 }
 
-/** The last few results along the top of a board, newest on the right: green paid more than the bet. */
+/**
+ * The last results, newest on the right, in the board's top row: green when the round paid more
+ * than the bet. `accent` colours a pill's edge (Plinko's bin, a case item's rarity).
+ */
 export class ResultStrip {
   readonly root = el('div', 'os-strip');
 
-  constructor(private readonly size = 8) {}
+  constructor(private readonly size = 8) {
+    this.root.setAttribute('aria-label', 'Recent results');
+  }
 
-  push(text: string, win: boolean, fresh = true): void {
-    this.root.append(el('span', `os-strip-item${win ? ' win' : ''}${fresh ? ' fresh' : ''}`, text));
+  push(text: string, win: boolean, fresh = true, accent?: string): void {
+    const pill = el('span', `os-strip-item${win ? ' win' : ''}${fresh ? ' fresh' : ''}`, text);
+    if (accent) {
+      pill.classList.add('accent');
+      pill.style.setProperty('--os-accent', accent);
+    }
+    this.root.append(pill);
     while (this.root.childElementCount > this.size) this.root.firstElementChild!.remove();
   }
 
@@ -397,7 +640,50 @@ export class ResultStrip {
   }
 }
 
-/** Bets, wagered and profit since sitting down at this computer. */
+/**
+ * What the last round came to, at the left of the board's top row, the same in every game: the
+ * money won or lost and the multiplier, green for a profit, quiet for a loss, plain for the bet
+ * back. Read out to a screen reader as it changes.
+ */
+export class RoundResult {
+  readonly root = el('div', 'os-round');
+  private readonly amount = el('span', 'os-round-amt');
+  private readonly mult = el('span', 'os-round-x');
+
+  constructor() {
+    this.root.setAttribute('aria-live', 'polite');
+    this.root.append(this.amount, this.mult);
+    this.root.hidden = true;
+  }
+
+  show(bet: Cents, payout: Cents, mult: number | null, fresh = true): void {
+    const net = payout - bet;
+    const tone = net > 0 ? 'win' : net < 0 ? 'lose' : 'even';
+    this.root.className = `os-round ${tone}${fresh ? ' fresh' : ''}`;
+    // restart the slide-in for a result like the last one
+    if (fresh) {
+      this.root.classList.remove('fresh');
+      void this.root.offsetWidth;
+      this.root.classList.add('fresh');
+    }
+    this.amount.textContent = net > 0 ? `Won ${formatMoney(net)}` : net < 0 ? `Lost ${formatMoney(-net)}` : 'Bet back';
+    this.mult.textContent = mult === null ? '' : multText(mult);
+    this.mult.hidden = mult === null;
+    this.root.hidden = false;
+  }
+
+  clear(): void {
+    this.root.hidden = true;
+  }
+}
+
+/** How many bets the session chart keeps (the oldest drop off as new ones come). */
+const CHART_POINTS = 120;
+
+/**
+ * Bets, wagered and profit since sitting down at this computer, with a small line of the profit
+ * bet by bet: green above the line it started from, red below.
+ */
 export class SessionTally {
   readonly root = el('div', 'os-tally');
   private bets = 0;
@@ -406,6 +692,10 @@ export class SessionTally {
   private readonly betsEl = el('span', 'os-stat-value', '0');
   private readonly wageredEl = el('span', 'os-stat-value', '$0');
   private readonly netEl = el('span', 'os-stat-value', '$0');
+  private readonly path: number[] = [0];
+  private readonly chart = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  private readonly line = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+  private readonly zero = document.createElementNS('http://www.w3.org/2000/svg', 'line');
 
   constructor() {
     const stats = el('div', 'os-stats');
@@ -414,7 +704,19 @@ export class SessionTally {
       s.append(el('span', 'os-stat-label', label), value);
       return s;
     };
-    stats.append(stat('Bets', this.betsEl), stat('Wagered', this.wageredEl), stat('Profit', this.netEl));
+    const profit = stat('Profit', this.netEl);
+    profit.classList.add('os-stat-chart');
+    stats.append(stat('Bets', this.betsEl), stat('Wagered', this.wageredEl), profit);
+    // the profit bet by bet, a faint line behind the profit's own figure
+    this.chart.setAttribute('class', 'os-chart');
+    this.chart.setAttribute('viewBox', '0 0 100 24');
+    this.chart.setAttribute('preserveAspectRatio', 'none');
+    this.chart.setAttribute('aria-hidden', 'true');
+    this.zero.setAttribute('class', 'os-chart-zero');
+    this.line.setAttribute('class', 'os-chart-line');
+    this.chart.append(this.zero, this.line);
+    this.chart.style.display = 'none';
+    profit.prepend(this.chart);
     this.root.append(el('div', 'os-caption', 'This session'), stats);
   }
 
@@ -426,6 +728,31 @@ export class SessionTally {
     this.wageredEl.textContent = formatMoney(this.wagered);
     this.netEl.textContent = formatMoney(this.net, { sign: true });
     this.netEl.className = `os-stat-value${this.net > 0 ? ' win' : this.net < 0 ? ' lose' : ''}`;
+    this.path.push(this.net);
+    if (this.path.length > CHART_POINTS + 1) this.path.shift();
+    this.draw();
+  }
+
+  private draw(): void {
+    const pts = this.path;
+    if (pts.length < 3) return;
+    let lo = 0;
+    let hi = 0;
+    for (const p of pts) {
+      if (p < lo) lo = p;
+      if (p > hi) hi = p;
+    }
+    const span = hi - lo || 1;
+    const y = (p: number) => (22 - ((p - lo) / span) * 20).toFixed(2);
+    const step = 100 / (pts.length - 1);
+    this.line.setAttribute('points', pts.map((p, i) => `${(i * step).toFixed(2)},${y(p)}`).join(' '));
+    this.zero.setAttribute('x1', '0');
+    this.zero.setAttribute('x2', '100');
+    this.zero.setAttribute('y1', y(0));
+    this.zero.setAttribute('y2', y(0));
+    this.chart.classList.toggle('up', this.net > 0);
+    this.chart.classList.toggle('down', this.net < 0);
+    this.chart.style.display = '';
   }
 }
 
@@ -445,16 +772,13 @@ export function winTier(returned: Cents, bet: Cents): 'nice' | 'big' | 'huge' | 
   return returned >= bet * 100 ? 'big' : 'nice';
 }
 
+type ToneSfx = { muted: boolean; audio: AudioContext; out: AudioNode };
+
 /**
  * One synthesized note through the site's master gain, so mute and volume cover it: a peg's tick,
  * a keno pop, a win's chime. Silent until the page has had a gesture.
  */
-export function siteTone(
-  sfx: { muted: boolean; audio: AudioContext; out: AudioNode },
-  freq: number,
-  ms: number,
-  opts: { type?: OscillatorType; gain?: number; at?: number; to?: number } = {},
-): void {
+export function siteTone(sfx: ToneSfx, freq: number, ms: number, opts: { type?: OscillatorType; gain?: number; at?: number; to?: number } = {}): void {
   if (sfx.muted) return;
   const ctx = sfx.audio;
   if (ctx.state !== 'running') return;
@@ -474,6 +798,25 @@ export function siteTone(
 }
 
 /**
+ * The site's sound for a round that has played out, the same in every game: a rising chime for a
+ * win (longer the bigger it is), a single note for the bet back, a low fall for a loss. The
+ * biggest wins add the table's celebration chime on top (celebrate()).
+ */
+export function resultTone(sfx: ToneSfx, payout: Cents, bet: Cents): void {
+  if (payout > bet) {
+    const x = bet > 0 ? payout / bet : 1;
+    const notes = x >= 10 ? [660, 880, 1175, 1568] : x >= 3 ? [784, 988, 1319] : [784, 1175];
+    notes.forEach((f, i) => siteTone(sfx, f, 140, { type: 'triangle', gain: 0.05, at: i * 70 }));
+  } else if (payout > 0 && payout === bet) siteTone(sfx, 587, 110, { type: 'triangle', gain: 0.04 });
+  else siteTone(sfx, 220, 130, { gain: 0.045, to: 165 });
+}
+
+/** The thud for a bet the chips here can't cover. */
+export function shortTone(sfx: ToneSfx): void {
+  siteTone(sfx, 150, 120, { type: 'sawtooth', gain: 0.03 });
+}
+
+/**
  * The site's top bar painted on a desk's attract picture (pc.ts attractTexture), so a row of
  * desks reads as one site. Returns the y where the page below the bar starts.
  */
@@ -489,7 +832,7 @@ export function drawSiteBar(g: CanvasRenderingContext2D, w: number, title: strin
   g.fillText('HOUSE', 16, 22);
   const x = 16 + g.measureText('HOUSE').width + 7;
   g.font = '600 11px system-ui, sans-serif';
-  g.fillStyle = '#6f8196';
+  g.fillStyle = '#8b9cb0';
   g.fillText('ORIGINALS', x, 23);
   g.font = '700 18px system-ui, sans-serif';
   g.fillStyle = '#eef3f8';
@@ -505,6 +848,7 @@ export function labelled(label: string, control: HTMLElement, note?: HTMLElement
   const head = el('div', 'os-group-head');
   head.append(el('span', 'os-label', label));
   if (note) head.append(note);
+  if (!control.getAttribute('aria-label')) control.setAttribute('aria-label', label);
   g.append(head, control);
   return g;
 }
@@ -543,7 +887,23 @@ export function drawAttractPanel(g: CanvasRenderingContext2D, top: number, h: nu
   g.fillRect(0, top, w, h - top);
   g.textBaseline = 'middle';
   g.textAlign = 'left';
-  let y = top + 18;
+  // Manual and Auto, as the page's panel opens
+  g.fillStyle = '#0f1e29';
+  g.beginPath();
+  g.roundRect(10, top + 10, 112, 24, 12);
+  g.fill();
+  g.fillStyle = '#2f4553';
+  g.beginPath();
+  g.roundRect(12, top + 12, 54, 20, 10);
+  g.fill();
+  g.font = '700 10px system-ui, sans-serif';
+  g.textAlign = 'center';
+  g.fillStyle = '#eef3f8';
+  g.fillText('Manual', 39, top + 22);
+  g.fillStyle = '#8b9cb0';
+  g.fillText('Auto', 94, top + 22);
+  g.textAlign = 'left';
+  let y = top + 52;
   for (const [label, value] of fields) {
     g.fillStyle = '#a7b4c6';
     g.font = '600 11px system-ui, sans-serif';
@@ -569,11 +929,6 @@ export function drawAttractPanel(g: CanvasRenderingContext2D, top: number, h: nu
   return w;
 }
 
-// ---------------------------------------------------------------------------------------------
-// Added with Tower, Mines, Hi-Lo and Crash (additions only; nothing above changes): the multiplier
-// and percent text those four print, the pop over their boards when a round ends in a payout,
-// Hi-Lo's trail of cards, and Crash's table of everyone's bets.
-
 const multFormat = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 /** "2.34×", "1,013.76×" from hundredths. */
@@ -596,12 +951,12 @@ export class OutcomePop {
 
   constructor(private readonly parent: HTMLElement) {}
 
-  /** Pop the result for `ms` (0 keeps it up until hide()). */
-  show(mult: number, payout: Cents, bet: Cents, ms = 0): void {
+  /** Pop the result for `ms` (0 keeps it up until hide()); `line` replaces "Won $X" under it. */
+  show(mult: number, payout: Cents, bet: Cents, ms = 0, line?: string): void {
     this.hide();
     const win = payout > bet;
     const box = el('div', `os-result os-pop${win ? '' : ' lose'}`);
-    box.append(el('div', 'os-result-mult', multText(mult)), el('div', 'os-result-paid', `${win ? 'Won' : 'Paid'} ${formatMoney(payout)}`));
+    box.append(el('div', 'os-result-mult', multText(mult)), el('div', 'os-result-paid', line ?? `${win ? 'Won' : 'Paid'} ${formatMoney(payout)}`));
     this.parent.append(box);
     this.box = box;
     if (ms > 0) this.timer = window.setTimeout(() => this.hide(), ms);
@@ -665,6 +1020,7 @@ export class PlayersTable {
   private readonly count = el('span', 'os-players-count');
   private readonly total = el('span', 'os-players-total');
   private readonly list = el('div', 'os-players-list');
+  private key = '';
 
   constructor() {
     const head = el('div', 'os-players-head');
@@ -676,6 +1032,10 @@ export class PlayersTable {
   }
 
   set(rows: PlayerRow[]): void {
+    // the same rows again (most syncs) change nothing on the page
+    const key = JSON.stringify(rows);
+    if (key === this.key) return;
+    this.key = key;
     const sorted = [...rows].sort((a, b) => Number(b.you) - Number(a.you) || b.bet - a.bet || a.name.localeCompare(b.name));
     this.count.textContent = `${rows.length} ${rows.length === 1 ? 'player' : 'players'}`;
     this.total.textContent = formatMoney(rows.reduce((n, r) => n + r.bet, 0));
@@ -696,9 +1056,6 @@ export class PlayersTable {
     if (rows.length === 0) this.list.append(el('div', 'os-players-empty', 'No bets yet this round'));
   }
 }
-
-// ---------------------------------------------------------------------------------------------
-// Added with the money pass (additions only): the site's cashier beside the chips at the top.
 
 /**
  * "Add chips", beside the chips at the top of the page, the way a site's wallet button sits by the

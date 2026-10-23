@@ -117,7 +117,7 @@ for (const game of games) {
     const drops = events('drop');
     check(drops.length === 5, `5 drops settled (got ${drops.length})`);
     check(drops.every((d) => d.rows === 12 && d.risk === 'high' && d.bet === 300 && d.path.length === 12), 'drops carry the chosen board and bet');
-    const tiles = await page.$$eval('.pk-result', (t) => t.map((x) => x.textContent));
+    const tiles = await page.$$eval('.os-head .os-strip-item', (t) => t.map((x) => x.textContent));
     out.notes.push(`results column: ${tiles.join(' ')}; server bins ${drops.map((d) => d.bin).join(',')}`);
     const last = drops.at(-1);
     check(last && (await text('.os-stack-value')) === money(last.stack), `chips shown match the server (${await text('.os-stack-value')} vs ${last && money(last.stack)})`);

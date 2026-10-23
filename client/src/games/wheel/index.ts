@@ -1,17 +1,18 @@
 // Wheel on the lounge computers (docs/rules/online-games.md §10): the desk as it stands on the
 // floor, and the website on its monitor. Pick a risk and how many segments; Spin settles on the
 // server at once and sends the segment, and the wheel turns onto it. Under the wheel, a key of
-// every multiplier on it: hover one for its chance and what it pays at this bet.
+// every multiplier on it: hover one for its chance and what it pays at this bet. Auto spins again
+// once the wheel has stopped, until one of its stops.
 
 import './wheel.css';
 import type { GameClientModule, TableView } from '../contract.ts';
-import { formatMoney, type BetLimits, type Cents } from '../../../../shared/src/money.ts';
+import { formatMoney, type Cents } from '../../../../shared/src/money.ts';
 import { RISKS, RISK_NAMES, SEGMENTS, WHEELS, wheelTable, type Risk, type Segments } from '../../../../shared/src/games/wheel/rules.ts';
 import { SPIN_MS, type WheelEvent, type WheelSpin, type WheelView } from '../../../../shared/src/games/wheel/engine.ts';
-import { celebrate } from '../../table/celebrate.ts';
 import { el } from '../../ui/kit.ts';
-import { attractTexture, pcModel, pcPose, pcScreenCorners, PC_FOOTPRINT, PC_SEAT } from '../online/pc.ts';
-import { OnlineScreen, AddChips, BetBox, SegChoice, actionButton, labelled, InfoList, ResultStrip, SessionTally, commitTyping, winTier, siteTone, drawSiteBar, drawAttractPanel, multText, pctText } from '../online/screen.ts';
+import { attractTexture, pcModel, pcPose, PC_FOOTPRINT, PC_SEAT } from '../online/pc.ts';
+import { SegChoice, labelled, InfoList, siteTone, shortTone, drawSiteBar, drawAttractPanel, multText, pctText } from '../online/screen.ts';
+import { OnlineSite } from '../online/site.ts';
 import { WheelBoard, multColor } from './board.ts';
 
 /** The chair's trim on the floor: Wheel's yellow. */
@@ -66,63 +67,74 @@ export const wheel: GameClientModule = {
   playPose: () => pcPose(),
 
   mount(ctx): TableView {
-    const screen = new OnlineScreen('Wheel');
-    ctx.ui.append(screen.root);
-    const cashier = new AddChips(screen, ctx);
-    const corners = pcScreenCorners();
-
     let risk: Risk = 'medium';
     let segs: Segments = 30;
     let stack: Cents = 0;
     let busy = false;
     let sentAt = 0;
-    let limits: BetLimits | null = null;
-    let bet: BetBox | null = null;
-    let tipShown = false;
 
-    // The board: recent spins, the wheel, the key of multipliers.
+    const site = new OnlineSite(ctx, {
+      game: 'wheel',
+      title: 'Wheel',
+      action: 'Spin',
+      primary: () => spin(),
+      sync: () => sync(),
+      onBet: () => {
+        sync();
+        describe();
+      },
+      auto: {
+        gapMs: 500,
+        play: () => {
+          const bet = site.bet;
+          if (!bet || busy || wheelView.spinning) return false;
+          if (bet.value > stack) return 'not enough chips here for the next spin';
+          send(bet.value);
+          return true;
+        },
+      },
+    });
+    const screen = site.screen;
+
+    // The board: the wheel and the key of multipliers (the recent spins are the site's top row).
     const board = el('div', 'wh-board');
-    const stripWrap = el('div', 'wh-strip');
-    const strip = new ResultStrip(9);
-    stripWrap.append(strip.root);
     const wheelView = new WheelBoard();
     const key = el('div', 'wh-key');
     const card = el('dl', 'wh-card');
     card.hidden = true;
-    board.append(stripWrap, wheelView.root, key, card);
+    board.append(wheelView.root, key, card);
     screen.main.append(board);
 
     // The bet panel.
     const riskSeg = new SegChoice(RISKS.map((r) => ({ value: r, label: RISK_NAMES[r] })), risk, (r) => {
       risk = r;
       wheelChanged();
-    });
+    }).label('Risk');
     const segSeg = new SegChoice(SEGMENTS.map((n) => ({ value: n, label: String(n), title: `${n} segments` })), segs, (n) => {
       segs = n;
       wheelChanged();
-    });
+    }).label('Segments');
     segSeg.root.classList.add('dense');
-    const spinBtn = actionButton('Spin', () => spin());
-    spinBtn.title = 'Spin (Space)';
-    spinBtn.classList.add('os-fixed');
+    site.controls.append(labelled('Risk', riskSeg.root), labelled('Segments', segSeg.root));
     const info = new InfoList('This wheel');
-    const tally = new SessionTally();
-    screen.side.append(labelled('Risk', riskSeg.root), labelled('Segments', segSeg.root), spinBtn, info.root, tally.root);
+    site.facts.append(info.root);
 
-    const pushStrip = (s: WheelSpin, fresh: boolean) => strip.push(multText(s.mult), s.payout > s.bet, fresh);
+    const pushStrip = (s: WheelSpin, fresh: boolean) => site.history.push(multText(s.mult), s.payout > s.bet, fresh, multColor(s.mult).face);
 
     const sync = () => {
-      const block = busy || wheelView.spinning;
+      const block = busy || wheelView.spinning || site.locked;
+      const bet = site.bet;
       if (!wheelView.spinning) screen.setStack(stack);
       bet?.setMax(stack);
       bet?.setEnabled(!block);
-      spinBtn.disabled = block || !bet || bet.value > stack;
       riskSeg.setEnabled(!block);
       segSeg.setEnabled(!block);
+      site.auto?.setEnabled(!busy && !wheelView.spinning);
+      site.paintMain('Spin', 'go', busy || wheelView.spinning || !bet || bet.value > stack, !!bet && bet.value <= stack);
     };
 
     const showCard = (mult: number, count: number, at: HTMLElement) => {
-      const b = bet?.value ?? limits?.min ?? 100;
+      const b = site.bet?.value ?? site.limits?.min ?? 100;
       const rows: [string, string][] = [
         ['Pays', `${formatMoney((b / 100) * mult)} (${multText(mult)})`],
         ['Profit', formatMoney((b / 100) * mult - b, { sign: true })],
@@ -134,7 +146,9 @@ export const wheel: GameClientModule = {
       const host = board.getBoundingClientRect();
       // the page is scaled onto the monitor: measure in its own design pixels
       const scale = host.width / board.offsetWidth || 1;
-      card.style.left = `${(box.left + box.width / 2 - host.left) / scale}px`;
+      const x = (box.left + box.width / 2 - host.left) / scale;
+      // kept inside the board at its ends
+      card.style.left = `${Math.min(board.offsetWidth - 110, Math.max(110, x))}px`;
       card.style.top = `${(box.top - host.top) / scale - 10}px`;
     };
 
@@ -160,26 +174,18 @@ export const wheel: GameClientModule = {
       const top = table[0]!;
       const paying = table.filter((r) => r.mult > 0).reduce((n, r) => n + r.count, 0);
       const more = table.filter((r) => r.mult > 100).reduce((n, r) => n + r.count, 0);
-      info.set('rtp', 'Return', '99.00%');
-      info.set('top', 'Top pay', `${multText(top.mult)} · ${top.count} in ${segs}`);
+      const b = site.bet?.value ?? site.limits?.min ?? 100;
+      site.profit('Top pay', (b / 100) * top.mult - b, `${multText(top.mult)} · ${top.count} in ${segs}`);
       info.set('pays', 'Pays something', pctText(paying / segs));
       info.set('more', 'Pays more than the bet', pctText(more / segs));
-      const range = limits ? ` · Bet ${formatMoney(limits.min)} to ${formatMoney(limits.max)}` : '';
+      info.set('rtp', 'Return', '99.00%');
+      const lim = site.limits;
+      const range = lim ? ` · Bet ${formatMoney(lim.min)} to ${formatMoney(lim.max)}` : '';
       screen.setNote(`Return 99.00% on every wheel · ${segs} segments, ${RISK_NAMES[risk]}${range} · Space spins`);
     };
 
     // Tips: every wheel returns the same 99%, and the tip says so.
-    const tipFor = () => {
-      if (!ctx.tips.on) {
-        if (tipShown) {
-          tipShown = false;
-          ctx.kit.tip(null);
-        }
-        return;
-      }
-      tipShown = true;
-      ctx.kit.tip('All fifteen wheels return exactly 99%: risk and segments only change how often it pays and how much.');
-    };
+    const tipFor = () => site.tip(ctx.tips.on ? 'All fifteen wheels return exactly 99%: risk and segments only change how often it pays and how much.' : null);
     const offTips = ctx.tips.subscribe(tipFor);
 
     const wheelChanged = () => {
@@ -190,21 +196,26 @@ export const wheel: GameClientModule = {
       siteTone(ctx.sfx, 880, 30, { type: 'triangle', gain: 0.03 });
     };
 
-    const spin = () => {
-      if (!bet || busy || wheelView.spinning) return;
-      commitTyping(screen.root);
-      if (bet.value > stack) {
-        siteTone(ctx.sfx, 150, 120, { type: 'sawtooth', gain: 0.03 });
-        ctx.kit.toast('Not enough chips here for that bet.', 'err');
-        return;
-      }
+    const send = (amount: Cents) => {
       busy = true;
       sentAt = performance.now();
-      ctx.link.act({ type: 'spin', bet: bet.value, risk, segments: segs });
+      ctx.link.act({ type: 'spin', bet: amount, risk, segments: segs });
       sync();
     };
 
+    const spin = () => {
+      const bet = site.bet;
+      if (!bet || busy || wheelView.spinning) return;
+      if (bet.value > stack) {
+        shortTone(ctx.sfx);
+        ctx.kit.toast('Not enough chips here for that bet.', 'err');
+        return;
+      }
+      send(bet.value);
+    };
+
     const play = async (e: WheelEvent) => {
+      site.auto?.driver.answered();
       if (e.risk !== risk || e.segments !== segs) {
         risk = e.risk;
         segs = e.segments;
@@ -225,18 +236,14 @@ export const wheel: GameClientModule = {
       });
       wheelView.setHub(e.mult, e.payout > 0 ? `Pays ${formatMoney(e.payout)}` : 'No pay');
       key.querySelector(`[data-mult="${e.mult}"]`)?.classList.add('hit');
-      pushStrip(e, true);
-      tally.add(e.bet, e.payout);
       screen.setStack(e.stack);
-      if (e.payout > e.bet) {
-        const notes = e.mult >= 990 ? [660, 880, 1320, 1760] : [784, 1175];
-        notes.forEach((f, i) => siteTone(ctx.sfx, f, 150, { type: 'triangle', gain: 0.055, at: i * 80 }));
-      } else if (e.payout > 0) siteTone(ctx.sfx, 520, 110, { type: 'triangle', gain: 0.04 });
-      else siteTone(ctx.sfx, 220, 140, { gain: 0.045, to: 160 });
-      const tier = winTier(e.payout, e.bet);
-      if (tier) {
-        celebrate({ stage: ctx.stage, ui: ctx.ui, sfx: ctx.sfx }, { title: `Wheel ${multText(e.mult)}`, sub: `${e.segments} segments, ${RISK_NAMES[e.risk]} · pays ${formatMoney(e.payout)} on ${formatMoney(e.bet)}`, tier });
-      }
+      site.settle({
+        bet: e.bet,
+        payout: e.payout,
+        mult: e.mult,
+        accent: multColor(e.mult).face,
+        moment: { title: `Wheel ${multText(e.mult)}`, sub: `${e.segments} segments, ${RISK_NAMES[e.risk]} · pays ${formatMoney(e.payout)} on ${formatMoney(e.bet)}` },
+      });
     };
 
     wheelView.setWheel(risk, segs);
@@ -246,20 +253,11 @@ export const wheel: GameClientModule = {
 
     return {
       onTable(snap) {
-        cashier.table(snap);
         stack = snap.you.stack;
         busy = false;
-        const lim = snap.meta.config.limits.default;
-        if (!bet || !limits || lim.min !== limits.min || lim.max !== limits.max || lim.step !== limits.step) {
-          bet?.root.remove();
-          limits = lim;
-          bet = new BetBox({ label: 'Bet', min: lim.min, max: lim.max, step: lim.step, value: lim.min, onChange: () => {
-            if (bet) spinBtn.disabled = busy || wheelView.spinning || bet.value > stack;
-          } });
-          screen.side.prepend(bet.root);
-        }
+        site.table(snap);
         const v = snap.view as WheelView;
-        strip.clear();
+        site.history.clear();
         for (const s of v.recent.slice(0, 9).reverse()) pushStrip(s, false);
         const last = v.recent[0];
         if (last) {
@@ -270,6 +268,7 @@ export const wheel: GameClientModule = {
           wheelView.setWheel(risk, segs);
           wheelView.restOn(last.segment);
           wheelView.setHub(last.mult, last.payout > 0 ? `Pays ${formatMoney(last.payout)}` : 'No pay');
+          site.result.show(last.bet, last.payout, last.mult, false);
         }
         drawKey();
         describe();
@@ -288,13 +287,13 @@ export const wheel: GameClientModule = {
       },
 
       onSeat(msg) {
-        cashier.seat(msg);
+        site.seat(msg);
         stack = msg.stack;
         sync();
       },
 
-      onError() {
-        cashier.refused();
+      onError(_code, msg) {
+        site.error(msg);
         busy = false;
         sync();
       },
@@ -302,27 +301,23 @@ export const wheel: GameClientModule = {
       keydown(e) {
         if (e.metaKey || e.ctrlKey || e.altKey) return false;
         if (e.code === 'Space') {
-          if (!e.repeat) spin();
+          if (!e.repeat) site.press();
           return true;
         }
         return false;
       },
 
-      update() {
+      update(dt) {
         if (busy && performance.now() - sentAt > 6_000) {
           busy = false;
           sync();
         }
-        const camera = ctx.stage.engine.camera;
-        camera.updateMatrixWorld();
-        ctx.stage.root.updateWorldMatrix(true, false);
-        screen.follow(ctx.stage.root, camera, corners);
+        site.update(dt);
       },
 
       dispose() {
         offTips();
-        if (tipShown) ctx.kit.tip(null);
-        screen.dispose();
+        site.dispose();
       },
     };
   },

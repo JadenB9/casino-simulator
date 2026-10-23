@@ -2,16 +2,18 @@
 // monitor (docs/rules/online-games.md §1). Every Drop is a round of its own: the server settles it
 // at once and sends the path, and a ball plays that path down the pegs while more can follow it.
 // The chips at the top of the page count a ball's payout only when it lands, the way the site
-// would; the server has already paid it.
+// would; the server has already paid it. Auto drops ball after ball at the same board: each once
+// the server has settled the one before, so a run keeps a few balls in the air, as a quick hand
+// at the button would.
 
 import './plinko.css';
 import type { GameClientModule, TableView } from '../contract.ts';
-import { formatMoney, type BetLimits, type Cents } from '../../../../shared/src/money.ts';
+import { formatMoney, type Cents } from '../../../../shared/src/money.ts';
 import { ROWS, RISKS, RISK_NAMES, MULTS, binChance, boardRtp, bestBoard, returnRange, type Risk, type Rows } from '../../../../shared/src/games/plinko/rules.ts';
 import type { DropEvent, PlinkoView } from '../../../../shared/src/games/plinko/engine.ts';
-import { celebrate } from '../../table/celebrate.ts';
-import { attractTexture, pcModel, pcPose, pcScreenCorners, PC_FOOTPRINT, PC_SEAT } from '../online/pc.ts';
-import { OnlineScreen, AddChips, BetBox, actionButton, SegChoice, InfoList, SessionTally, commitTyping, labelled, winTier, siteTone, drawSiteBar, drawAttractPanel } from '../online/screen.ts';
+import { attractTexture, pcModel, pcPose, PC_FOOTPRINT, PC_SEAT } from '../online/pc.ts';
+import { SegChoice, InfoList, labelled, siteTone, shortTone, drawSiteBar, drawAttractPanel } from '../online/screen.ts';
+import { OnlineSite } from '../online/site.ts';
 import { PlinkoBoard, binColor, multText } from './board.ts';
 
 /** The chair's trim on the floor: Plinko's pink. */
@@ -72,11 +74,6 @@ export const plinko: GameClientModule = {
   playPose: () => pcPose(),
 
   mount(ctx): TableView {
-    const screen = new OnlineScreen('Plinko');
-    ctx.ui.append(screen.root);
-    const cashier = new AddChips(screen, ctx);
-    const corners = pcScreenCorners();
-
     let rows: Rows = 16;
     let risk: Risk = 'medium';
     /** The seat's stack as the server last said: every drop already paid. */
@@ -87,9 +84,31 @@ export const plinko: GameClientModule = {
     let waiting = 0;
     let sentAt = 0;
     let tickAt = 0;
-    let limits: BetLimits | null = null;
-    let bet: BetBox | null = null;
-    let tipShown = false;
+
+    const site = new OnlineSite(ctx, {
+      game: 'plinko',
+      title: 'Plinko',
+      action: 'Drop',
+      primary: () => drop(),
+      sync: () => sync(),
+      onBet: () => {
+        sync();
+        describeBoard();
+        board.refreshCard();
+      },
+      // The next ball goes a beat after the server settles the last: a few stay in the air.
+      auto: {
+        gapMs: 340,
+        play: () => {
+          const bet = site.bet;
+          if (!bet || waiting > 0) return false;
+          if (bet.value > stack) return 'not enough chips here for the next ball';
+          send(bet.value);
+          return true;
+        },
+      },
+    });
+    const screen = site.screen;
 
     const board = new PlinkoBoard({
       peg: () => {
@@ -101,7 +120,7 @@ export const plinko: GameClientModule = {
       land: (d) => landed(d),
       describe: (k) => {
         const m = MULTS[rows][risk][k]!;
-        const b = bet?.value ?? limits?.min ?? 100;
+        const b = site.bet?.value ?? site.limits?.min ?? 100;
         const p = binChance(rows, k);
         return [
           ['Pays', `${formatMoney((b / 100) * m)} (${multText(m)})`],
@@ -115,27 +134,28 @@ export const plinko: GameClientModule = {
     const riskSeg = new SegChoice(RISKS.map((r) => ({ value: r, label: RISK_NAMES[r] })), risk, (r) => {
       risk = r;
       boardChanged();
-    });
+    }).label('Risk');
     const rowsSeg = new SegChoice(ROWS.map((n) => ({ value: n, label: String(n), title: `${n} rows` })), rows, (n) => {
       rows = n;
       boardChanged();
-    });
+    }).label('Rows');
     rowsSeg.root.classList.add('dense');
-    const dropBtn = actionButton('Drop', () => drop());
-    dropBtn.title = 'Drop a ball (Space)';
-    dropBtn.classList.add('os-fixed');
+    site.controls.append(labelled('Risk', riskSeg.root), labelled('Rows', rowsSeg.root));
     const info = new InfoList('This board');
-    const tally = new SessionTally();
-    screen.side.append(labelled('Risk', riskSeg.root), labelled('Rows', rowsSeg.root), dropBtn, info.root, tally.root);
+    site.facts.append(info.root);
 
     const sync = () => {
+      const bet = site.bet;
       screen.setStack(stack - falling);
       bet?.setMax(stack);
-      dropBtn.disabled = !bet || bet.value > stack;
+      const locked = site.locked;
+      bet?.setEnabled(!locked);
       // The board can't change under a ball: rows and risk wait for the last one to land.
-      const busy = board.inFlight > 0 || waiting > 0;
+      const busy = board.inFlight > 0 || waiting > 0 || locked;
       riskSeg.setEnabled(!busy);
       rowsSeg.setEnabled(!busy);
+      site.auto?.setEnabled(true);
+      site.paintMain('Drop', 'go', !bet || bet.value > stack);
     };
 
     const describeBoard = () => {
@@ -150,12 +170,13 @@ export const plinko: GameClientModule = {
         if (p > likely[1]) likely = [m, p];
         if (m >= 100) back += p;
       }
-      info.set('rtp', 'Return', pct(rtp));
-      info.set('top', 'Top pay', multText(mults[0]!));
-      info.set('odds', 'Top pay odds', oneIn(2 / 2 ** rows));
+      const b = site.bet?.value ?? site.limits?.min ?? 100;
+      site.profit('Top pay', (b / 100) * mults[0]! - b, `${multText(mults[0]!)} · ${oneIn(2 / 2 ** rows)}`);
       info.set('likely', 'Most likely', `${multText(likely[0])} · ${pct(likely[1])}`);
       info.set('back', 'Pays the bet or more', pct(back));
-      const range = limits ? ` · Bet ${formatMoney(limits.min)} to ${formatMoney(limits.max)}` : '';
+      info.set('rtp', 'Return', pct(rtp));
+      const lim = site.limits;
+      const range = lim ? ` · Bet ${formatMoney(lim.min)} to ${formatMoney(lim.max)}` : '';
       screen.setNote(`Return ${pct(rtp)} · ${rows} rows, ${RISK_NAMES[risk]}${range} · Space drops a ball`);
     };
 
@@ -165,17 +186,13 @@ export const plinko: GameClientModule = {
     const best = bestBoard();
     const tipFor = () => {
       if (!ctx.tips.on) {
-        if (tipShown) {
-          tipShown = false;
-          ctx.kit.tip(null);
-          riskSeg.tip(null);
-          rowsSeg.tip(null);
-        }
+        site.tip(null);
+        riskSeg.tip(null);
+        rowsSeg.tip(null);
         return;
       }
-      tipShown = true;
       const here = boardRtp(rows, risk);
-      ctx.kit.tip(
+      site.tip(
         rows === best.rows && risk === best.risk
           ? `${best.rows} rows, ${RISK_NAMES[best.risk]} returns ${pct(best.rtp)}: the most of any board.`
           : `This board returns ${pct(here)}. Every board is ${pct(range.min)} to ${pct(range.max)}; ${best.rows} rows, ${RISK_NAMES[best.risk]} returns the most.`,
@@ -192,21 +209,25 @@ export const plinko: GameClientModule = {
       siteTone(ctx.sfx, 880, 30, { type: 'triangle', gain: 0.03 });
     };
 
+    const send = (amount: Cents) => {
+      sentAt = performance.now();
+      waiting++;
+      ctx.link.act({ type: 'drop', bet: amount, rows, risk });
+      siteTone(ctx.sfx, 560, 45, { type: 'triangle', gain: 0.04, to: 820 });
+      sync();
+    };
+
     const drop = () => {
+      const bet = site.bet;
       if (!bet) return;
-      commitTyping(screen.root);
       const now = performance.now();
       if (now - sentAt < MIN_GAP_MS) return;
       if (bet.value > stack) {
-        siteTone(ctx.sfx, 150, 120, { type: 'sawtooth', gain: 0.03 });
+        shortTone(ctx.sfx);
         ctx.kit.toast('Not enough chips here for that bet.', 'err');
         return;
       }
-      sentAt = now;
-      waiting++;
-      ctx.link.act({ type: 'drop', bet: bet.value, rows, risk });
-      siteTone(ctx.sfx, 560, 45, { type: 'triangle', gain: 0.04, to: 820 });
-      sync();
+      send(bet.value);
     };
 
     /** The HUD's chips wait for every ball in the air to land (TableView.settled). */
@@ -218,18 +239,16 @@ export const plinko: GameClientModule = {
     const landed = (d: DropEvent) => {
       falling = Math.max(0, falling - d.payout);
       queueMicrotask(calmed);
-      tally.add(d.bet, d.payout);
-      board.pushResult(d);
-      if (d.mult < 100) siteTone(ctx.sfx, 330, 110, { gain: 0.045, to: 240 });
-      else if (d.mult < 200) siteTone(ctx.sfx, 660, 110, { type: 'triangle', gain: 0.05 });
-      else {
-        const notes = d.mult >= 1_000 ? [660, 880, 1320] : [660, 990];
-        notes.forEach((f, i) => siteTone(ctx.sfx, f, 150, { type: 'triangle', gain: 0.055, at: i * 80 }));
-      }
-      const tier = winTier(d.payout, d.bet);
-      if (tier) {
-        celebrate({ stage: ctx.stage, ui: ctx.ui, sfx: ctx.sfx }, { title: `Plinko ${multText(d.mult)}`, sub: `Pays ${formatMoney(d.payout)} on ${formatMoney(d.bet)}`, tier });
-      }
+      site.settle({
+        bet: d.bet,
+        payout: d.payout,
+        mult: d.mult,
+        pill: multText(d.mult),
+        accent: binColor(d.bin, d.rows).face,
+        // auto counted this drop when the server settled it
+        auto: false,
+        moment: { title: `Plinko ${multText(d.mult)}`, sub: `Pays ${formatMoney(d.payout)} on ${formatMoney(d.bet)}` },
+      });
       sync();
     };
 
@@ -238,29 +257,12 @@ export const plinko: GameClientModule = {
 
     return {
       onTable(snap) {
-        cashier.table(snap);
         stack = snap.you.stack;
         waiting = 0;
         falling = 0;
         board.clear();
         calmed();
-        const lim = snap.meta.config.limits.default;
-        if (!bet || !limits || lim.min !== limits.min || lim.max !== limits.max || lim.step !== limits.step) {
-          bet?.root.remove();
-          limits = lim;
-          bet = new BetBox({
-            label: 'Bet',
-            min: lim.min,
-            max: lim.max,
-            step: lim.step,
-            value: lim.min,
-            onChange: () => {
-              if (bet) dropBtn.disabled = bet.value > stack;
-              board.refreshCard();
-            },
-          });
-          screen.side.prepend(bet.root);
-        }
+        site.table(snap);
         const v = snap.view as PlinkoView;
         const last = v.recent[0];
         if (last) {
@@ -268,9 +270,11 @@ export const plinko: GameClientModule = {
           risk = last.risk;
           riskSeg.set(risk);
           rowsSeg.set(rows);
+          site.result.show(last.bet, last.payout, last.mult, false);
         }
+        site.history.clear();
+        for (const d of v.recent.slice(0, 9).reverse()) site.history.push(multText(d.mult), d.payout > d.bet, false, binColor(d.bin, d.rows).face);
         board.setBoard(rows, risk);
-        board.showResults(v.recent);
         describeBoard();
         sync();
         tipFor();
@@ -292,18 +296,21 @@ export const plinko: GameClientModule = {
             describeBoard();
           }
           board.drop(d);
+          // settled on the server: a run's next ball can go once its beat has passed
+          site.auto?.driver.answered();
+          site.auto?.driver.settled(d.bet, d.payout);
         }
         sync();
       },
 
       onSeat(msg) {
-        cashier.seat(msg);
+        site.seat(msg);
         stack = msg.stack;
         sync();
       },
 
-      onError() {
-        cashier.refused();
+      onError(_code, msg) {
+        site.error(msg);
         waiting = Math.max(0, waiting - 1);
         sync();
       },
@@ -311,7 +318,7 @@ export const plinko: GameClientModule = {
       keydown(e) {
         if (e.metaKey || e.ctrlKey || e.altKey) return false;
         if (e.code === 'Space') {
-          if (!e.repeat) drop();
+          if (!e.repeat) site.press();
           return true;
         }
         return false;
@@ -324,10 +331,7 @@ export const plinko: GameClientModule = {
           waiting = 0;
           sync();
         }
-        const camera = ctx.stage.engine.camera;
-        camera.updateMatrixWorld();
-        ctx.stage.root.updateWorldMatrix(true, false);
-        screen.follow(ctx.stage.root, camera, corners);
+        site.update(dt);
       },
 
       settled() {
@@ -336,9 +340,8 @@ export const plinko: GameClientModule = {
 
       dispose() {
         offTips();
-        if (tipShown) ctx.kit.tip(null);
         for (const r of calm.splice(0)) r();
-        screen.dispose();
+        site.dispose();
       },
     };
   },

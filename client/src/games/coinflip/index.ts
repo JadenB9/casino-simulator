@@ -3,18 +3,21 @@
 // 1.98× and the round stays open, so every further right call doubles what rides, and the ladder
 // under the coin shows how far the streak has climbed. Cash out any time. Each flip is drawn on
 // the server when it is called, so there is nothing ahead of time for the page to know.
+//
+// Auto: each round of a run bets on the call, calls it again until the streak reaches the number
+// set, then cashes out (a wrong call ends the round as a loss). Only the round's own messages go.
 
 import './coinflip.css';
 import type { GameClientModule, TableView } from '../contract.ts';
 import type { GameEvent } from '../../../../shared/src/engine.ts';
-import { formatMoney, type BetLimits, type Cents } from '../../../../shared/src/money.ts';
+import { formatMoney, type Cents } from '../../../../shared/src/money.ts';
 import { MAX_STREAK, streakMult, type Side } from '../../../../shared/src/games/coinflip/rules.ts';
 import type { CoinflipRound, CoinflipView } from '../../../../shared/src/games/coinflip/engine.ts';
-import { celebrate } from '../../table/celebrate.ts';
 import { tween, ease } from '../../table/tween.ts';
 import { el } from '../../ui/kit.ts';
-import { attractTexture, pcModel, pcPose, pcScreenCorners, PC_FOOTPRINT, PC_SEAT } from '../online/pc.ts';
-import { OnlineScreen, AddChips, BetBox, SegChoice, actionButton, labelled, InfoList, ResultStrip, SessionTally, OutcomePop, commitTyping, winTier, siteTone, drawSiteBar, drawAttractPanel, multText } from '../online/screen.ts';
+import { attractTexture, pcModel, pcPose, PC_FOOTPRINT, PC_SEAT } from '../online/pc.ts';
+import { SegChoice, NumberField, actionButton, labelled, InfoList, OutcomePop, siteTone, shortTone, drawSiteBar, drawAttractPanel, multText } from '../online/screen.ts';
+import { OnlineSite } from '../online/site.ts';
 import { coinFace } from './coin.ts';
 
 /** The chair's trim on the floor: Coinflip's gold. */
@@ -86,28 +89,42 @@ export const coinflip: GameClientModule = {
   playPose: () => pcPose(),
 
   mount(ctx): TableView {
-    const screen = new OnlineScreen('Coinflip');
-    ctx.ui.append(screen.root);
-    const cashier = new AddChips(screen, ctx);
-    const corners = pcScreenCorners();
-
     let side: Side = 'heads';
     let view: CoinflipView | null = null;
     let stack: Cents = 0;
     let busy = false;
     let animating = false;
     let sentAt = 0;
-    let limits: BetLimits | null = null;
-    let bet: BetBox | null = null;
-    let tipShown = false;
     /** The coin's turn about its horizontal axis, degrees: a multiple of 360 shows heads. */
     let angle = 0;
+    /** Auto cashes out once a round's streak reaches this many right calls. */
+    let target = 1;
+    /** The round on the coin is a run's: the page calls again and cashes out itself. */
+    let autoRound = false;
 
-    // The board: recent rounds, the coin, this round's flips, the streak ladder.
+    const site = new OnlineSite(ctx, {
+      game: 'coinflip',
+      title: 'Coinflip',
+      action: 'Bet',
+      primary: () => primary(),
+      sync: () => sync(),
+      auto: {
+        gapMs: 600,
+        play: () => {
+          const bet = site.bet;
+          if (!bet || busy || animating || playing()) return false;
+          if (bet.value > stack) return 'not enough chips here for the next round';
+          autoRound = true;
+          pop.hide();
+          act({ type: 'bet', amount: bet.value, side });
+          return true;
+        },
+      },
+    });
+    const screen = site.screen;
+
+    // The board: the coin, this round's flips, the streak ladder (recent rounds are the site's top row).
     const board = el('div', 'cf-board');
-    const stripWrap = el('div', 'cf-strip');
-    const strip = new ResultStrip(9);
-    stripWrap.append(strip.root);
     const stage = el('div', 'cf-stage');
     const shadow = el('div', 'cf-shadow');
     const toss = el('div', 'cf-toss');
@@ -116,9 +133,12 @@ export const coinflip: GameClientModule = {
     const back = el('div', 'cf-side cf-back');
     front.append(coinFace('heads'));
     back.append(coinFace('tails'));
-    coin.append(front, back);
+    // the coin's milled edge, seen as it turns edge-on
+    const rim = el('div', 'cf-rim');
+    coin.append(rim, front, back);
     toss.append(coin);
     const caption = el('div', 'cf-caption');
+    caption.setAttribute('aria-live', 'polite');
     stage.append(shadow, toss, caption);
     const flipsRow = el('div', 'cf-flips');
     const ladder = el('div', 'cf-ladder');
@@ -133,32 +153,54 @@ export const coinflip: GameClientModule = {
     const trackWindow = el('div', 'cf-track-window');
     trackWindow.append(track);
     ladder.append(trackWindow);
-    board.append(stripWrap, stage, flipsRow, ladder);
+    board.append(stage, flipsRow, ladder);
     screen.main.append(board);
     const pop = new OutcomePop(stage);
 
     // The bet panel.
-    const callSeg = new SegChoice<Side>([{ value: 'heads', label: 'Heads', title: 'Call heads (H)' }, { value: 'tails', label: 'Tails', title: 'Call tails (T)' }], side, (s) => {
+    const callSeg = new SegChoice<Side>([{ value: 'heads', label: 'Heads', title: 'Call heads (H)', key: 'H' }, { value: 'tails', label: 'Tails', title: 'Call tails (T)', key: 'T' }], side, (s) => {
       side = s;
       siteTone(ctx.sfx, 880, 30, { type: 'triangle', gain: 0.03 });
       sync();
-    });
+    }).label('Call');
     callSeg.root.classList.add('cf-call');
-    const main = actionButton('Bet', () => primary());
-    main.classList.add('os-fixed');
-    const cash = actionButton('Cash out', () => cashOut(), 'cash');
+    // Auto: how many right calls a round rides before it cashes out
+    const targetField = new NumberField({
+      label: 'Auto cashes out after',
+      suffix: 'right',
+      format: (n) => String(n),
+      value: target,
+      onCommit: (n) => {
+        target = Math.min(MAX_STREAK, Math.max(1, Math.round(n)));
+        targetField.set(target);
+        sync();
+      },
+    });
+    targetField.addButton('−', 'One call fewer', () => {
+      target = Math.max(1, target - 1);
+      targetField.set(target);
+      sync();
+    });
+    targetField.addButton('+', 'One call more', () => {
+      target = Math.min(MAX_STREAK, target + 1);
+      targetField.set(target);
+      sync();
+    });
+    targetField.root.classList.add('cf-target');
+    site.controls.append(labelled('Call', callSeg.root), targetField.root);
+    const cash = actionButton('Cash out', () => cashOut(), 'cash', 'C');
     cash.classList.add('os-fixed', 'cf-cash');
     cash.title = 'Take what rides (C)';
     const random = actionButton('Random call', () => {
       callSeg.set(Math.random() < 0.5 ? 'heads' : 'tails');
       side = callSeg.value;
       primary();
-    }, 'plain');
+    }, 'plain', 'R');
     random.classList.add('cf-random');
     random.title = 'Call a side at random (R)';
+    site.extras.append(cash, random);
     const info = new InfoList('This round');
-    const tally = new SessionTally();
-    screen.side.append(labelled('Call', callSeg.root), main, cash, random, info.root, tally.root);
+    site.facts.append(info.root);
 
     const playing = () => view?.phase === 'playing';
     const streak = () => (playing() && view ? view.streak : 0);
@@ -168,27 +210,36 @@ export const coinflip: GameClientModule = {
       busy = true;
       sentAt = performance.now();
       ctx.link.act(a);
+      site.auto?.driver.asked();
       sync();
     };
 
     const primary = () => {
-      commitTyping(screen.root);
       if (playing()) {
         act({ type: 'flip', side });
         return;
       }
+      const bet = site.bet;
       if (!bet) return;
       if (bet.value > stack) {
-        siteTone(ctx.sfx, 150, 120, { type: 'sawtooth', gain: 0.03 });
+        shortTone(ctx.sfx);
         ctx.kit.toast('Not enough chips here for that bet.', 'err');
         return;
       }
       pop.hide();
+      autoRound = false;
       act({ type: 'bet', amount: bet.value, side });
     };
 
     const cashOut = () => {
-      if (playing() && streak() > 0) act({ type: 'cashout' });
+      if (playing() && streak() > 0 && !(site.locked && autoRound)) act({ type: 'cashout' });
+    };
+
+    /** A run's round goes on by itself: call again until the streak is the target, then cash out. */
+    const autoStep = () => {
+      if (!autoRound || !site.locked || !playing() || busy || animating) return;
+      if (streak() >= target) act({ type: 'cashout' });
+      else act({ type: 'flip', side });
     };
 
     /** Where the ladder sits: the step being played for second from the left. */
@@ -196,6 +247,7 @@ export const coinflip: GameClientModule = {
       steps.forEach((s, i) => {
         s.classList.toggle('done', i < k);
         s.classList.toggle('next', live && i === k);
+        s.classList.toggle('goal', site.autoOn && i === target - 1);
       });
       const first = Math.max(0, Math.min(MAX_STREAK - STEPS_SHOWN, k - 1));
       track.style.transform = `translateX(${-first * STEP_W}px)`;
@@ -203,7 +255,7 @@ export const coinflip: GameClientModule = {
 
     const setCoin = (a: number, lift: number) => {
       coin.style.transform = `rotateX(${a}deg)`;
-      toss.style.transform = `translateY(${-lift * 150}px) scale(${1 + lift * 0.18})`;
+      toss.style.transform = `translateY(${-lift * 70}px) scale(${1 + lift * 0.16})`;
       shadow.style.transform = `scale(${1 - lift * 0.55})`;
       shadow.style.opacity = String(1 - lift * 0.6);
     };
@@ -225,56 +277,60 @@ export const coinflip: GameClientModule = {
     const sync = () => {
       const on = playing();
       const k = streak();
+      const locked = site.locked;
+      const autoOn = site.autoOn;
+      site.midRound = on;
       if (!animating) screen.setStack(stack);
-      bet?.setEnabled(!on && !busy);
+      const bet = site.bet;
+      bet?.setEnabled(!on && !busy && !locked);
       bet?.setMax(stack);
       const block = busy || animating;
       if (on && view) {
-        main.textContent = `Flip ${sideName(side).toLowerCase()} · ${multText(streakMult(k + 1))}`;
-        main.disabled = block;
+        site.paintMain(`Flip ${sideName(side).toLowerCase()} · ${multText(streakMult(k + 1))}`, 'go', block || (locked && autoRound));
         cash.hidden = false;
         cash.textContent = `Cash out ${formatMoney((view.bet / 100) * view.mult)}`;
-        cash.disabled = block || k === 0;
+        cash.disabled = block || k === 0 || (locked && autoRound);
       } else {
-        main.textContent = 'Bet';
-        main.disabled = block || !bet || bet.value > stack;
+        site.paintMain('Bet', 'go', block || !bet || bet.value > stack, !!bet && bet.value <= stack);
         cash.hidden = true;
       }
-      main.title = on ? 'Call again (Space)' : 'Bet and flip (Space)';
-      random.disabled = main.disabled;
-      callSeg.setEnabled(!block);
+      site.main.title = on ? 'Call again (Space)' : 'Bet and flip (Space)';
+      random.disabled = block || locked || (!on && (!bet || bet.value > stack));
+      random.hidden = autoOn && !on;
+      callSeg.setEnabled(!block && !locked);
+      targetField.root.hidden = !autoOn;
+      targetField.setEnabled(!locked);
+      site.auto?.setEnabled(!on && !block);
+      showLadder(on && view ? view.streak : 0, on);
 
-      const b = on && view ? view.bet : (bet?.value ?? limits?.min ?? 100);
+      const b = on && view ? view.bet : (bet?.value ?? site.limits?.min ?? 100);
+      site.profit(on ? 'Profit on the next call' : 'Profit on a right call', (b / 100) * streakMult(k + 1) - b, `${multText(streakMult(k + 1))} · 50.00%`);
       info.set('streak', 'Streak', on ? `${k} right` : '—');
       info.set('now', 'Cash out now', on && k > 0 ? `${multText(streakMult(k))} · ${formatMoney((b / 100) * streakMult(k))}` : '—', on && k > 0 ? 'win' : null);
       info.set('next', on ? 'Next right call pays' : 'A right call pays', `${multText(streakMult(k + 1))} · ${formatMoney((b / 100) * streakMult(k + 1))}`);
       info.set('odds', 'Chance', '50.00%');
       if (!view || view.phase === 'idle') caption.replaceChildren('Call ', el('b', '', sideName(side)), ' and bet: a right call pays 1.98×');
-      const lim = limits ? ` · Bet ${formatMoney(limits.min)} to ${formatMoney(limits.max)}` : '';
-      screen.setNote(`Return 99.00% at every stop${lim} · Space bets and flips · C cashes out · H and T call a side`);
+      if (autoOn && !on && !locked) targetField.setNote(`${multText(streakMult(target))} · ${formatMoney((b / 100) * streakMult(target))}`);
+      else targetField.setNote('');
+      const lim = site.limits;
+      const limText = lim ? ` · Bet ${formatMoney(lim.min)} to ${formatMoney(lim.max)}` : '';
+      screen.setNote(`Return 99.00% at every stop${limText} · Space bets and flips · C cashes out · H and T call a side · R calls at random`);
       tipFor();
     };
 
     // Tips: no call and no stop is better than another, and the tip says so.
-    const tipFor = () => {
-      if (!ctx.tips.on) {
-        if (tipShown) {
-          tipShown = false;
-          ctx.kit.tip(null);
-        }
-        return;
-      }
-      tipShown = true;
-      ctx.kit.tip(
-        playing()
-          ? 'Cashing out now and flipping on are worth exactly the same 99%: the next call only doubles the swing.'
-          : 'Heads and tails are an even 50%, and every stop returns exactly 99%: how long you ride only changes the swings.',
+    const tipFor = () =>
+      site.tip(
+        !ctx.tips.on
+          ? null
+          : playing()
+            ? 'Cashing out now and flipping on are worth exactly the same 99%: the next call only doubles the swing.'
+            : 'Heads and tails are an even 50%, and every stop returns exactly 99%: how long you ride only changes the swings.',
       );
-    };
     const offTips = ctx.tips.subscribe(tipFor);
 
     const flipTo = async (landed: Side) => {
-      // four to five whole turns, ending on the side that landed
+      // four to five whole turns, ending on the side that landed (a little quicker on Auto)
       const turns = 4 + (Math.random() < 0.5 ? 1 : 0);
       const from = angle;
       let to = from + turns * 360;
@@ -282,7 +338,7 @@ export const coinflip: GameClientModule = {
       siteTone(ctx.sfx, 620, 70, { type: 'triangle', gain: 0.04, to: 980 });
       let ticks = 0;
       await tween(
-        FLIP_MS,
+        site.locked ? FLIP_MS * 0.8 : FLIP_MS,
         (k) => {
           const spin = 1 - (1 - k) ** 2;
           const lift = Math.sin(Math.PI * k);
@@ -297,29 +353,32 @@ export const coinflip: GameClientModule = {
       );
       angle = to % 360;
       setCoin(angle, 0);
+      // it lands with a little bounce
+      toss.classList.remove('land');
       coin.classList.remove('land');
       void coin.offsetWidth;
       coin.classList.add('land');
+      toss.classList.add('land');
     };
 
-    const pushRound = (r: CoinflipRound, fresh: boolean) => strip.push(r.outcome === 'bust' ? '0.00×' : multText(r.mult), r.payout > r.bet, fresh);
+    const pushRound = (r: CoinflipRound, fresh: boolean) => site.history.push(r.outcome === 'bust' ? '0.00×' : multText(r.mult), r.payout > r.bet, fresh);
 
     const onOver = (e: GameEvent) => {
       const payout = Number(e.payout);
       const b = Number(e.bet);
       const k = Number(e.streak);
-      tally.add(b, payout);
-      pushRound(e as unknown as CoinflipRound, true);
+      autoRound = false;
       if (payout > 0) {
         pop.show(Number(e.mult), payout, b, 2_600);
         ctx.sfx.play('chips-stack', { volume: 0.6 });
-        [784, 988, 1319].forEach((f, i) => siteTone(ctx.sfx, f, 140, { type: 'triangle', gain: 0.05, at: i * 70 }));
         caption.replaceChildren('Cashed out after ', el('b', '', `${k} right call${k === 1 ? '' : 's'}`));
-        const tier = winTier(payout, b);
-        if (tier) {
-          celebrate({ stage: ctx.stage, ui: ctx.ui, sfx: ctx.sfx }, { title: e.outcome === 'max' ? 'Twenty in a row' : `Coinflip ${multText(Number(e.mult))}`, sub: `${k} right calls · pays ${formatMoney(payout)} on ${formatMoney(b)}`, tier });
-        }
       }
+      site.settle({
+        bet: b,
+        payout,
+        mult: payout > 0 ? Number(e.mult) : 0,
+        moment: { title: e.outcome === 'max' ? 'Twenty in a row' : `Coinflip ${multText(Number(e.mult))}`, sub: `${k} right calls · pays ${formatMoney(payout)} on ${formatMoney(b)}` },
+      });
     };
 
     const redraw = (v: CoinflipView) => {
@@ -347,24 +406,17 @@ export const coinflip: GameClientModule = {
 
     return {
       onTable(snap) {
-        cashier.table(snap);
         stack = snap.you.stack;
         busy = false;
         animating = false;
-        const lim = snap.meta.config.limits.default;
-        if (!bet || !limits || lim.min !== limits.min || lim.max !== limits.max || lim.step !== limits.step) {
-          bet?.root.remove();
-          limits = lim;
-          bet = new BetBox({ label: 'Bet', min: lim.min, max: lim.max, step: lim.step, value: lim.min, onChange: () => {
-            if (!bet) return;
-            main.disabled = !playing() && bet.value > stack;
-          } });
-          screen.side.prepend(bet.root);
-        }
+        autoRound = false;
+        site.table(snap);
         pop.hide();
         const v = snap.view as CoinflipView;
-        strip.clear();
+        site.history.clear();
         for (const r of v.recent.slice(0, 9).reverse()) pushRound(r, false);
+        const last = v.recent[0];
+        if (last) site.result.show(last.bet, last.payout, last.outcome === 'bust' ? 0 : last.mult, false);
         redraw(v);
         sync();
       },
@@ -373,6 +425,7 @@ export const coinflip: GameClientModule = {
         const next = v as CoinflipView;
         animating = true;
         busy = false;
+        site.auto?.driver.answered();
         sync();
         try {
           for (const e of events) {
@@ -406,27 +459,30 @@ export const coinflip: GameClientModule = {
           view = next;
           showLadder(next.phase === 'playing' ? next.streak : next.result?.streak ?? 0, next.phase === 'playing');
           sync();
+          autoStep();
         }
       },
 
       onSeat(msg) {
-        cashier.seat(msg);
+        site.seat(msg);
         stack = msg.stack;
         sync();
       },
 
-      onError() {
-        cashier.refused();
+      onError(_code, msg) {
+        site.error(msg);
         busy = false;
+        autoRound = false;
         sync();
       },
 
       keydown(e) {
         if (e.metaKey || e.ctrlKey || e.altKey) return false;
         if (e.code === 'Space') {
-          if (!e.repeat) primary();
+          if (!e.repeat) site.press();
           return true;
         }
+        if (site.locked) return false;
         const key = e.key.toLowerCase();
         if (key === 'c' && playing()) {
           cashOut();
@@ -438,30 +494,26 @@ export const coinflip: GameClientModule = {
           sync();
           return true;
         }
-        if (key === 'r') {
+        if (key === 'r' && !random.hidden) {
           random.click();
           return true;
         }
         return false;
       },
 
-      update() {
+      update(dt) {
         // A call the server never answered (the socket dropped it) stops holding the page.
         if (busy && performance.now() - sentAt > 6_000) {
           busy = false;
           sync();
         }
-        const camera = ctx.stage.engine.camera;
-        camera.updateMatrixWorld();
-        ctx.stage.root.updateWorldMatrix(true, false);
-        screen.follow(ctx.stage.root, camera, corners);
+        site.update(dt);
       },
 
       dispose() {
         offTips();
-        if (tipShown) ctx.kit.tip(null);
         pop.hide();
-        screen.dispose();
+        site.dispose();
       },
     };
   },

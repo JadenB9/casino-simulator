@@ -4,26 +4,27 @@
 // on the server's clock (so every screen at the table shows the same multiplier) and knows the
 // crash point only when the crash arrives. A cash-out is judged by the server at the moment it
 // gets there. Everyone's bets and cash-outs show in the table beside the graph.
+//
+// Auto: a bet in every round's betting window, each with the auto cash-out (a run turns it on),
+// until one of its stops; the bet is the same one the button places.
 
 import './crash.css';
 import type { GameClientModule, TableView } from '../contract.ts';
 import type { GameEvent } from '../../../../shared/src/engine.ts';
-import { formatMoney, type BetLimits, type Cents } from '../../../../shared/src/money.ts';
+import { formatMoney, type Cents } from '../../../../shared/src/money.ts';
 import { CAP, MIN_AUTO, MAX_AUTO, timeTo, multAt } from '../../../../shared/src/games/crash/rules.ts';
 import { BETTING_MS, type CrashView, type CrashViewBet } from '../../../../shared/src/games/crash/engine.ts';
 import { serverNow } from '../../net/clock.ts';
-import { celebrate } from '../../table/celebrate.ts';
 import { el } from '../../ui/kit.ts';
-import { attractTexture, pcModel, pcPose, pcScreenCorners, PC_FOOTPRINT, PC_SEAT } from '../online/pc.ts';
-import {
-  OnlineScreen, BetBox, NumberField, SegChoice, actionButton, InfoList, SessionTally, ResultStrip, PlayersTable, OutcomePop,
-  commitTyping, labelled, winTier, siteTone, drawSiteBar, drawAttractPanel, multText, pctText,
-  AddChips,
-} from '../online/screen.ts';
+import { attractTexture, pcModel, pcPose, PC_FOOTPRINT, PC_SEAT } from '../online/pc.ts';
+import { NumberField, SegChoice, InfoList, PlayersTable, OutcomePop, labelled, siteTone, shortTone, drawSiteBar, drawAttractPanel, multText, pctText } from '../online/screen.ts';
+import { OnlineSite } from '../online/site.ts';
 import { CrashGraph } from './graph.ts';
 
 /** The chair's trim on the floor: Crash's sky blue. */
 const ACCENT = '#39a0ff';
+/** A run's bet goes only while this much of the window is left (it must reach the table in time). */
+const WINDOW_SPARE_MS = 700;
 
 /** The monitor on the floor: the site's bar, a curve with its rocket, and the multiplier. */
 function drawAttract(g: CanvasRenderingContext2D, w: number, h: number): void {
@@ -86,11 +87,6 @@ export const crash: GameClientModule = {
   playPose: () => pcPose(),
 
   mount(ctx): TableView {
-    const screen = new OnlineScreen('Crash');
-    ctx.ui.append(screen.root);
-    const cashier = new AddChips(screen, ctx);
-    const corners = pcScreenCorners();
-
     let view: CrashView | null = null;
     let mySeat: number | null = null;
     let stack: Cents = 0;
@@ -101,25 +97,42 @@ export const crash: GameClientModule = {
     let queued = false;
     let autoOn = false;
     let autoAt = 200;
-    let limits: BetLimits | null = null;
-    let bet: BetBox | null = null;
-    let tipShown = false;
     /** The betting window's length as last announced (a full window, or the short one once everyone is in). */
     let windowMs = BETTING_MS;
     /** Rounds already counted in the session tally. */
     let tallied = -1;
     let lastWhole = 1;
-    let shown = { mult: '', sub: '', cls: '', button: '' };
+    let shown = { mult: '', sub: '', cls: '', bar: -1, round: '' };
+    let tone = '';
 
-    // --- the board
+    const site = new OnlineSite(ctx, {
+      game: 'crash',
+      title: 'Crash',
+      action: 'Bet',
+      history: 12,
+      primary: () => primary(),
+      sync: () => sync(),
+      // A run bets in each window (with the auto cash-out on) once the last round has settled.
+      auto: {
+        gapMs: 0,
+        play: () => {
+          const bet = site.bet;
+          if (!bet || busy || !view || mine()) return false;
+          if (view.phase !== 'betting' || !view.deadline || view.deadline - serverNow() < WINDOW_SPARE_MS) return false;
+          if (bet.value > stack) return 'not enough chips here for the next round';
+          act({ type: 'bet', amount: bet.value, auto: autoAt });
+          return true;
+        },
+      },
+    });
+    const screen = site.screen;
+    site.history.root.classList.add('cs-history');
+
+    // --- the board (the recent crash points are the site's top row)
     const board = el('div', 'cs-board');
-    const head = el('div', 'cs-head');
-    const history = new ResultStrip(12);
-    history.root.classList.add('cs-history');
-    const roundLabel = el('span', 'cs-round');
-    head.append(roundLabel, history.root);
     const graphBox = el('div', 'cs-graph');
     const graph = new CrashGraph();
+    const roundLabel = el('span', 'cs-round');
     const multEl = el('div', 'cs-mult');
     const subEl = el('div', 'cs-sub');
     const bar = el('div', 'cs-bar');
@@ -127,14 +140,19 @@ export const crash: GameClientModule = {
     bar.append(barFill);
     const overlay = el('div', 'cs-overlay');
     overlay.append(multEl, subEl, bar);
-    graphBox.append(graph.canvas, overlay);
+    graphBox.append(graph.canvas, roundLabel, overlay);
     const pop = new OutcomePop(graphBox);
     const players = new PlayersTable();
     players.root.classList.add('cs-players');
     const body = el('div', 'cs-body');
     body.append(graphBox, players.root);
-    board.append(head, body);
+    board.append(body);
     screen.main.append(board);
+    // The graph's box is a fixed part of the page: measured when it changes size, never per frame.
+    let box = { w: 0, h: 0 };
+    const measure = () => (box = { w: graphBox.offsetWidth, h: graphBox.offsetHeight });
+    const resize = new ResizeObserver(measure);
+    resize.observe(graphBox);
 
     // --- the panel
     const autoField = new NumberField({
@@ -150,7 +168,7 @@ export const crash: GameClientModule = {
     });
     const autoSeg = new SegChoice(
       [
-        { value: 'off', label: 'Manual' },
+        { value: 'off', label: 'By hand', title: 'Cash out with the button (Space)' },
         { value: 'on', label: 'Auto cash-out' },
       ],
       'off',
@@ -158,29 +176,30 @@ export const crash: GameClientModule = {
         autoOn = v === 'on';
         sync();
       },
-    );
-    const main = actionButton('Bet', () => primary());
-    main.title = 'Bet, cancel, or cash out (Space)';
+    ).label('Cash out');
+    site.controls.append(labelled('Cash out', autoSeg.root), autoField.root);
     const info = new InfoList('This bet');
-    const tally = new SessionTally();
-    screen.side.append(labelled('Cash out', autoSeg.root), autoField.root, main, info.root, tally.root);
+    site.facts.append(info.root);
 
     const mine = (): CrashViewBet | null => (view && mySeat !== null ? view.bets.find((b) => b.seat === mySeat) ?? null : null);
     const riding = () => view?.phase === 'running' && mine()?.cashed === null;
-    const target = () => (autoOn ? autoAt : null);
+    // a run always cashes out on its own
+    const target = () => (autoOn || site.autoOn ? autoAt : null);
 
     const act = (a: object) => {
       if (busy) return;
       busy = true;
       sentAt = performance.now();
       ctx.link.act(a);
+      site.auto?.driver.asked();
       sync();
     };
 
     const placeBet = () => {
+      const bet = site.bet;
       if (!bet) return;
       if (bet.value > stack) {
-        siteTone(ctx.sfx, 150, 120, { type: 'sawtooth', gain: 0.03 });
+        shortTone(ctx.sfx);
         ctx.kit.toast('Not enough chips here for that bet.', 'err');
         return;
       }
@@ -188,7 +207,6 @@ export const crash: GameClientModule = {
     };
 
     const primary = () => {
-      commitTyping(screen.root);
       const phase = view?.phase;
       const b = mine();
       if (phase === 'betting') {
@@ -221,46 +239,51 @@ export const crash: GameClientModule = {
       const v = view;
       const b = mine();
       const phase = v?.phase ?? 'idle';
+      const locked = site.locked;
+      // a round with our bet in it is live on the page (Cash out is the button between runs)
+      site.midRound = !!b && (phase === 'betting' || riding());
       screen.setStack(stack);
-      bet?.setEnabled(!busy && !(phase === 'betting' && b));
-      autoSeg.setEnabled(!(phase === 'betting' && b) && !riding());
-      autoField.setEnabled(autoOn && !(phase === 'betting' && b) && !riding());
+      site.bet?.setMax(stack);
+      site.bet?.setEnabled(!busy && !(phase === 'betting' && b) && !locked);
+      // Auto bets always cash out on their own: the choice waits on it
+      if (site.autoOn && !autoOn) {
+        autoOn = true;
+        autoSeg.set('on');
+      }
+      autoSeg.setEnabled(!(phase === 'betting' && b) && !riding() && !site.autoOn);
+      autoField.setEnabled(autoOn && !(phase === 'betting' && b) && !riding() && !locked);
       autoField.root.classList.toggle('cs-off', !autoOn);
+      site.auto?.setEnabled(!busy && !b);
       if (v) {
         players.set(rows());
-        roundLabel.textContent = v.round > 0 ? `Round ${v.round.toLocaleString('en-US')}` : '';
+        const round = v.round > 0 ? `Round ${v.round.toLocaleString('en-US')}` : '';
+        if (round !== shown.round) roundLabel.textContent = shown.round = round;
       }
-      const amount = bet?.value ?? 0;
+      const amount = site.bet?.value ?? 0;
       const x = target();
+      if (x) site.profit(`Profit at ${multText(x)}`, (amount / 100) * x - amount, `reaches it ${pctText(0.99 / (x / 100))}`);
+      else site.profit('Profit', null, 'cash out by hand');
       info.set('auto', 'Auto cash-out', x ? `${multText(x)} · ${formatMoney((amount / 100) * x - amount, { sign: true })}` : 'Off: cash out by hand');
       info.set('odds', x ? `Reaches ${multText(x)}` : 'Reaches 2.00×', pctText(0.99 / ((x ?? 200) / 100)));
       info.set('ret', 'Return', '99.00% at any point');
-      const lim = limits ? ` · Bet ${formatMoney(limits.min)} to ${formatMoney(limits.max)}` : '';
-      screen.setNote(`The multiplier gets past x with chance 0.99 ÷ x; 1 round in 100 ends at 1.00× · Return 99.00% on every cash-out${lim} · Space bets and cashes out`);
+      const lim = site.limits;
+      const limText = lim ? ` · Bet ${formatMoney(lim.min)} to ${formatMoney(lim.max)}` : '';
+      screen.setNote(`The multiplier gets past x with chance 0.99 ÷ x; 1 round in 100 ends at 1.00× · Return 99.00% on every cash-out${limText} · Space bets and cashes out`);
       tipFor();
       frame(true);
     };
 
     // Tips: nothing is better than anything else here, and saying so is the advice: every
     // target returns exactly 99%, a lower one just wins more often, and timing a click adds nothing.
-    const clearTip = () => {
-      if (!tipShown) return;
-      tipShown = false;
-      ctx.kit.tip(null);
-    };
     const tipFor = () => {
-      if (!ctx.tips.on) return clearTip();
       const x = target() ?? 200;
-      tipShown = true;
-      ctx.kit.tip(`Every cash-out point returns exactly 99%: ${multText(x)} wins ${pctText(0.99 / (x / 100))} of rounds. Watching the curve can't tell you when it crashes.`);
+      site.tip(ctx.tips.on ? `Every cash-out point returns exactly 99%: ${multText(x)} wins ${pctText(0.99 / (x / 100))} of rounds. Watching the curve can't tell you when it crashes.` : null);
     };
     const offTips = ctx.tips.subscribe(tipFor);
 
     /** Draw the graph and refresh the texts that move with it (only when they change). */
     const frame = (force = false) => {
-      const w = graphBox.offsetWidth;
-      const h = graphBox.offsetHeight;
-      graph.resize(w, h);
+      graph.resize(box.w, box.h);
       const phase = view?.phase ?? 'idle';
       const { t, mult } = now();
       let windowLeft = 0;
@@ -269,7 +292,7 @@ export const crash: GameClientModule = {
 
       let big = multText(mult);
       let sub = '';
-      let cls = phase;
+      const cls = phase;
       if (phase === 'betting') {
         big = `${(windowLeft / 1000).toFixed(1)}s`;
         sub = 'Next round in';
@@ -284,8 +307,21 @@ export const crash: GameClientModule = {
         overlay.className = `cs-overlay ${cls}`;
         shown = { ...shown, mult: big, sub, cls };
       }
-      barFill.style.width = `${phase === 'betting' ? Math.min(100, (windowLeft / windowMs) * 100) : 0}%`;
-      bar.hidden = phase !== 'betting';
+      // the window's bar empties by transform, written only when it moves
+      const fill = phase === 'betting' ? Math.min(1, windowLeft / windowMs) : 0;
+      const q = Math.round(fill * 400) / 400;
+      if (q !== shown.bar) {
+        barFill.style.transform = `scaleX(${q})`;
+        shown.bar = q;
+      }
+      if (bar.hidden !== (phase !== 'betting')) bar.hidden = phase !== 'betting';
+      // the climbing number warms through the multiples
+      const heat = phase === 'running' ? (mult >= 1000 ? 'hot' : mult >= 300 ? 'warm' : '') : '';
+      if (heat !== tone) {
+        multEl.classList.toggle('warm', heat === 'warm');
+        multEl.classList.toggle('hot', heat === 'hot');
+        tone = heat;
+      }
 
       // The main button follows the round.
       const b = mine();
@@ -295,22 +331,18 @@ export const crash: GameClientModule = {
       if (phase === 'betting') {
         label = b ? 'Cancel bet' : 'Bet';
         kind = b ? 'plain' : 'go';
-        if (!b && (!bet || bet.value > stack)) disabled = true;
+        if (!b && (!site.bet || site.bet.value > stack)) disabled = true;
       } else if (riding() && b) {
         label = `Cash out ${formatMoney((b.amount / 100) * mult)}`;
         kind = 'cash';
+        // a run's bet cashes out at its target; Stop autobet first to take it by hand
+        if (site.locked) disabled = true;
       } else {
         label = queued ? 'Cancel next bet' : 'Bet next round';
         kind = queued ? 'plain' : 'go';
-        disabled = busy || (!queued && (!bet || bet.value > stack));
+        disabled = busy || (!queued && (!site.bet || site.bet.value > stack));
       }
-      const key = `${label}|${kind}|${disabled}`;
-      if (force || key !== shown.button) {
-        main.textContent = label;
-        main.className = `os-action ${kind}`;
-        main.disabled = disabled;
-        shown.button = key;
-      }
+      site.paintMain(label, kind, disabled, !!site.bet && site.bet.value <= stack);
 
       // A soft tick as the curve passes each whole multiplier.
       if (phase === 'running') {
@@ -328,37 +360,39 @@ export const crash: GameClientModule = {
       const payout = Number(e.payout);
       const amount = Number(e.amount);
       const at = Number(e.at);
-      tally.add(amount, payout);
       tallied = view?.round ?? tallied;
       pop.show(at, payout, amount, 2600);
       ctx.sfx.play('chips-stack', { volume: 0.6 });
-      if (payout > amount) [784, 988, 1319].forEach((f, i) => siteTone(ctx.sfx, f, 140, { type: 'triangle', gain: 0.05, at: i * 70 }));
-      const tier = winTier(payout, amount);
-      if (tier) celebrate({ stage: ctx.stage, ui: ctx.ui, sfx: ctx.sfx }, { title: `Cashed out at ${multText(at)}`, sub: `Pays ${formatMoney(payout)} on ${formatMoney(amount)}`, tier });
+      site.settle({
+        bet: amount,
+        payout,
+        mult: at,
+        history: false,
+        moment: { title: `Cashed out at ${multText(at)}`, sub: `Pays ${formatMoney(payout)} on ${formatMoney(amount)}` },
+      });
     };
 
     const onCrash = (e: GameEvent, before: CrashView | null) => {
       graph.explode();
-      history.push(multText(Number(e.crash)), Number(e.crash) >= 200);
+      site.history.push(multText(Number(e.crash)), Number(e.crash) >= 200);
       siteTone(ctx.sfx, 170, 520, { type: 'sawtooth', gain: 0.06, to: 38 });
       siteTone(ctx.sfx, 55, 400, { gain: 0.14 });
       const mineThen = before?.bets.find((b) => b.seat === mySeat && b.cashed === null);
       if (mineThen && (e.busted as number[]).includes(mySeat ?? -1) && tallied !== Number(e.round)) {
-        tally.add(mineThen.amount, 0);
         tallied = Number(e.round);
+        site.settle({ bet: mineThen.amount, payout: 0, mult: 0, history: false, sound: false });
       }
     };
 
     const load = (v: CrashView) => {
       view = v;
-      history.clear();
-      for (const c of [...v.history].reverse()) history.push(multText(c), c >= 200, false);
+      site.history.clear();
+      for (const c of [...v.history].reverse()) site.history.push(multText(c), c >= 200, false);
       if (v.phase === 'crashed') graph.explode();
     };
 
     return {
       onTable(snap) {
-        cashier.table(snap);
         // Back after a drop: a bet the table settled meanwhile (its auto cash-out, or the crash)
         // counts in this session's tally like one seen live. Still on show, it says what it paid;
         // rounds later, what the stack gained while we were away is what it paid.
@@ -366,28 +400,21 @@ export const crash: GameClientModule = {
         const was = view;
         const left = was && mySeat !== null && (was.phase === 'betting' || was.phase === 'running') ? was.bets.find((b) => b.seat === mySeat && b.cashed === null) : undefined;
         if (was && left && snap.you.status === 'seated' && tallied !== was.round) {
-          const shown = back.round === was.round ? back.bets.find((b) => b.seat === mySeat) : undefined;
-          if (shown && (shown.cashed !== null || shown.busted)) {
-            tally.add(shown.amount, shown.payout);
+          const shownBet = back.round === was.round ? back.bets.find((b) => b.seat === mySeat) : undefined;
+          if (shownBet && (shownBet.cashed !== null || shownBet.busted)) {
+            site.tally.add(shownBet.amount, shownBet.payout);
             tallied = was.round;
           } else if (back.round > was.round) {
-            tally.add(left.amount, Math.max(0, snap.you.stack - stack));
+            site.tally.add(left.amount, Math.max(0, snap.you.stack - stack));
             tallied = was.round;
           }
         }
         stack = snap.you.stack;
         mySeat = snap.you.status === 'watching' ? null : snap.you.seat;
         busy = false;
-        const lim = snap.meta.config.limits.default;
-        if (!bet || !limits || lim.min !== limits.min || lim.max !== limits.max || lim.step !== limits.step) {
-          bet?.root.remove();
-          limits = lim;
-          bet = new BetBox({ label: 'Bet', min: lim.min, max: lim.max, step: lim.step, value: lim.min, onChange: () => sync() });
-          screen.side.prepend(bet.root);
-        }
-        bet.setMax(stack);
+        site.table(snap);
         pop.hide();
-        load(snap.view as CrashView);
+        load(back);
         windowMs = BETTING_MS;
         sync();
       },
@@ -398,14 +425,17 @@ export const crash: GameClientModule = {
         view = next;
         // Our answer is an event about our seat (or the phase moving on); other players' bets
         // arriving in the meantime don't free the button.
-        if (events.some((e) => e.seat === mySeat || e.type === 'betting' || e.type === 'crash' || e.type === 'launch')) busy = false;
+        if (events.some((e) => e.seat === mySeat || e.type === 'betting' || e.type === 'crash' || e.type === 'launch')) {
+          busy = false;
+          site.auto?.driver.answered();
+        }
         for (const e of events) {
           switch (e.type) {
             case 'betting':
               graph.clearBurst();
               pop.hide();
               windowMs = BETTING_MS;
-              if (queued) {
+              if (queued && !site.autoOn) {
                 queued = false;
                 sync();
                 placeBet();
@@ -433,15 +463,14 @@ export const crash: GameClientModule = {
       },
 
       onSeat(msg) {
-        cashier.seat(msg);
+        site.seat(msg);
         stack = msg.stack;
         mySeat = msg.status === 'watching' ? null : msg.seat;
-        bet?.setMax(stack);
         sync();
       },
 
-      onError() {
-        cashier.refused();
+      onError(_code, msg) {
+        site.error(msg);
         busy = false;
         sync();
       },
@@ -449,26 +478,23 @@ export const crash: GameClientModule = {
       keydown(e) {
         if (e.metaKey || e.ctrlKey || e.altKey) return false;
         if (e.code === 'Space') {
-          if (!e.repeat) primary();
+          if (!e.repeat) site.press();
           return true;
         }
         return false;
       },
 
-      update() {
+      update(dt) {
         if (busy && performance.now() - sentAt > 5_000) busy = false;
         frame();
-        const camera = ctx.stage.engine.camera;
-        camera.updateMatrixWorld();
-        ctx.stage.root.updateWorldMatrix(true, false);
-        screen.follow(ctx.stage.root, camera, corners);
+        site.update(dt);
       },
 
       dispose() {
+        resize.disconnect();
         offTips();
-        clearTip();
         pop.hide();
-        screen.dispose();
+        site.dispose();
       },
     };
   },

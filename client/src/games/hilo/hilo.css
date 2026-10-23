@@ -1,8 +1,9 @@
 /* Hi-Lo on the lounge site: the card face up in the middle of a dark table with the deck beside
    it, the K and A marks at either end, what each guess would pay under it, and the round's trail
-   of cards along the bottom. Sized in the site's design pixels. */
+   of cards along the bottom; the site's top row is above it all. A guess sends a card off the deck
+   onto the face-up one, where it turns over. Sized in the site's design pixels. */
 
-.hl-board { position: absolute; inset: 0; display: grid; grid-template-rows: 1fr auto auto; gap: 18px; padding: 26px 30px 22px; }
+.hl-board { position: absolute; inset: 0; display: grid; grid-template-rows: 1fr auto auto; gap: 16px; padding: 66px 30px 20px; }
 
 .hl-stage {
   position: relative; display: grid; grid-template-columns: 150px 158px 214px 150px; justify-content: center; align-items: center; gap: 30px;
@@ -23,6 +24,11 @@
 .hl-back:nth-child(1) { left: 0; top: 6px; }
 .hl-back:nth-child(2) { left: 3px; top: 3px; }
 .hl-back:nth-child(3) { left: 6px; top: 0; }
+/* the card off the deck: from the top of the deck onto the face-up card, growing to its size */
+.hl-flyer { position: absolute; left: 6px; top: 0; z-index: 3; width: 150px; height: 210px; border-radius: 10px; box-shadow: 0 14px 28px rgba(0, 0, 0, 0.5); transform-origin: 50% 50%; }
+.hl-flyer[hidden] { display: none; }
+.hl-flyer.fly { animation: hl-fly 0.17s ease-in forwards; }
+@keyframes hl-fly { to { transform: translate(206px, 0) scale(1.427); } }
 
 /* The card */
 .hl-card-box { position: relative; width: 214px; height: 300px; border-radius: 13px; transition: box-shadow 0.25s; }
@@ -37,12 +43,12 @@
 .hl-stats .os-stat-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .hl-trail { padding: 12px 14px; border-radius: 10px; background: var(--os-field); }
-.hl-trail .os-trail-list { justify-content: flex-start; min-height: 118px; }
+.hl-trail .os-trail-list { justify-content: flex-start; min-height: 112px; }
 
 /* The guess buttons, one above the other */
 .hl-guesses { display: grid; gap: 8px; }
 .hl-guess {
-  display: grid; grid-template-columns: 22px 1fr; align-items: center; gap: 10px; height: 52px; padding: 0 14px;
+  display: grid; grid-template-columns: 22px 1fr auto; align-items: center; gap: 10px; height: 52px; padding: 0 14px;
   border: 0; border-radius: 6px; background: var(--os-card); color: var(--os-ink); text-align: left; cursor: pointer;
   transition: background 0.12s, transform 0.08s;
 }

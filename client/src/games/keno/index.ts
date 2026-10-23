@@ -1,22 +1,23 @@
 // Keno on the lounge computers (docs/rules/online-games.md §4): pick 1 to 10 of the 40 numbers,
 // choose a risk and bet; the server draws ten and pays for the picks among them. The page reveals
 // the ten one at a time, marks each hit with a gem, and lights the paytable column for the hits
-// so far. The picks stay on the board for the next game until they're changed.
+// so far. The picks stay on the board for the next game until they're changed; Auto plays them
+// game after game until one of its stops.
 
 import './keno.css';
 import type { GameClientModule, TableView } from '../contract.ts';
-import { formatMoney, type BetLimits, type Cents } from '../../../../shared/src/money.ts';
-import { NUMBERS, DRAWN, MAX_PICKS, RISKS, RISK_NAMES, PAYS, hitChance, tableRtp, returnRange, type Risk } from '../../../../shared/src/games/keno/rules.ts';
+import { formatMoney, type Cents } from '../../../../shared/src/money.ts';
+import { NUMBERS, MAX_PICKS, RISKS, RISK_NAMES, PAYS, hitChance, tableRtp, returnRange, type Risk } from '../../../../shared/src/games/keno/rules.ts';
 import type { KenoEvent, KenoView } from '../../../../shared/src/games/keno/engine.ts';
 import { wait } from '../../table/tween.ts';
-import { celebrate } from '../../table/celebrate.ts';
 import { el } from '../../ui/kit.ts';
-import { attractTexture, pcModel, pcPose, pcScreenCorners, PC_FOOTPRINT, PC_SEAT } from '../online/pc.ts';
-import { OnlineScreen, AddChips, BetBox, actionButton, SegChoice, InfoList, SessionTally, commitTyping, labelled, winTier, siteTone, drawSiteBar, drawAttractPanel } from '../online/screen.ts';
+import { attractTexture, pcModel, pcPose, PC_FOOTPRINT, PC_SEAT } from '../online/pc.ts';
+import { actionButton, SegChoice, InfoList, OutcomePop, labelled, siteTone, shortTone, drawSiteBar, drawAttractPanel } from '../online/screen.ts';
+import { OnlineSite } from '../online/site.ts';
 
 /** The chair's trim on the floor: Keno's violet. */
 const ACCENT = '#9b5cff';
-/** Between one drawn number and the next. */
+/** Between one drawn number and the next (a little quicker on Auto). */
 const REVEAL_MS = 130;
 
 const multText = (m: number) => `${(m / 100).toFixed(2)}×`;
@@ -66,7 +67,7 @@ function drawAttract(g: CanvasRenderingContext2D, w: number, h: number): void {
     g.beginPath();
     g.roundRect(x, py, pw, 24, 4);
     g.fill();
-    g.fillStyle = i === 3 ? '#06210f' : m === 0 ? '#6f8196' : '#eef3f8';
+    g.fillStyle = i === 3 ? '#06210f' : m === 0 ? '#8b9cb0' : '#eef3f8';
     g.fillText(multText(m), x + pw / 2, py + 12);
   });
   g.textAlign = 'left';
@@ -80,43 +81,57 @@ export const keno: GameClientModule = {
   playPose: () => pcPose(),
 
   mount(ctx): TableView {
-    const screen = new OnlineScreen('Keno');
-    ctx.ui.append(screen.root);
-    const cashier = new AddChips(screen, ctx);
-    const corners = pcScreenCorners();
-
     /** The picks, in the order they were made. */
     let picks: number[] = [];
     let risk: Risk = 'classic';
     let stack: Cents = 0;
-    let limits: BetLimits | null = null;
-    let bet: BetBox | null = null;
     /** A bet is on its way to the server; `playing` counts draws still being revealed. */
     let busy = false;
     let playing = 0;
     let sentAt = 0;
-    let tipShown = false;
     /** The last draw's marks, while they stand on the board. */
     let marked = false;
+
+    const site = new OnlineSite(ctx, {
+      game: 'keno',
+      title: 'Keno',
+      action: 'Bet',
+      primary: () => play(),
+      sync: () => render(),
+      auto: {
+        gapMs: 650,
+        play: () => {
+          const bet = site.bet;
+          if (!bet || busy || playing > 0) return false;
+          if (picks.length === 0) return 'pick 1 to 10 numbers first';
+          if (bet.value > stack) return 'not enough chips here for the next game';
+          send(bet.value);
+          return true;
+        },
+      },
+    });
+    const screen = site.screen;
 
     // The board.
     const main = el('div', 'kn-main');
     const grid = el('div', 'kn-grid');
+    grid.setAttribute('role', 'group');
+    grid.setAttribute('aria-label', 'The forty numbers');
     const tiles: HTMLButtonElement[] = [];
     for (let n = 1; n <= NUMBERS; n++) {
       const t = el('button', 'kn-tile', String(n));
       t.type = 'button';
       t.dataset.n = String(n);
+      t.setAttribute('aria-pressed', 'false');
       t.addEventListener('mousedown', (e) => e.preventDefault());
       t.addEventListener('click', () => toggle(n));
       tiles.push(t);
       grid.append(t);
     }
     const pays = el('div', 'kn-pays');
-    const result = el('div', 'os-result');
-    result.hidden = true;
-    main.append(grid, pays, result);
+    main.append(grid, pays);
     screen.main.append(main);
+    const pop = new OutcomePop(main);
 
     // The bet panel.
     const riskSeg = new SegChoice(RISKS.map((r) => ({ value: r, label: RISK_NAMES[r] })), risk, (r) => {
@@ -124,23 +139,20 @@ export const keno: GameClientModule = {
       clearMarks();
       siteTone(ctx.sfx, 880, 30, { type: 'triangle', gain: 0.03 });
       render();
-    });
-    const autoBtn = actionButton('Auto Pick', () => autoPick(), 'plain');
+    }).label('Risk');
+    const autoBtn = actionButton('Auto Pick', () => autoPick(), 'plain', 'A');
     autoBtn.title = 'Pick at random (A)';
-    const clearBtn = actionButton('Clear Table', () => clearPicks(), 'plain');
+    const clearBtn = actionButton('Clear Table', () => clearPicks(), 'plain', 'C');
     clearBtn.title = 'Clear the picks (C)';
     const pair = el('div', 'os-pair');
     pair.append(autoBtn, clearBtn);
-    const betBtn = actionButton('Bet', () => play());
-    betBtn.title = 'Bet (Space)';
-    betBtn.classList.add('os-fixed');
+    site.controls.append(labelled('Risk', riskSeg.root), pair);
     const info = new InfoList('This game');
-    const tally = new SessionTally();
-    screen.side.append(labelled('Risk', riskSeg.root), pair, betBtn, info.root, tally.root);
+    site.facts.append(info.root);
 
     const tile = (n: number) => tiles[n - 1]!;
-    const pop = (t: HTMLElement, cls = 'pop') => {
-      t.classList.remove('pop', 'full');
+    const pulse = (t: HTMLElement, cls = 'pop') => {
+      t.classList.remove('pop', 'full', 'land');
       void t.offsetWidth;
       t.classList.add(cls);
     };
@@ -162,10 +174,14 @@ export const keno: GameClientModule = {
       pays.replaceChildren(row);
     };
 
+    const locked = () => busy || playing > 0 || site.locked;
+
     const renderTiles = () => {
-      const lock = busy || playing > 0;
+      const lock = locked();
       tiles.forEach((t, i) => {
-        t.classList.toggle('picked', picks.includes(i + 1));
+        const on = picks.includes(i + 1);
+        t.classList.toggle('picked', on);
+        t.setAttribute('aria-pressed', String(on));
         t.disabled = lock;
       });
     };
@@ -174,19 +190,25 @@ export const keno: GameClientModule = {
       renderTiles();
       if (!marked) renderPays();
       const p = picks.length;
-      const lock = busy || playing > 0;
+      const lock = locked();
+      const bet = site.bet;
+      bet?.setMax(stack);
+      bet?.setEnabled(!site.locked);
       riskSeg.setEnabled(!lock);
       autoBtn.disabled = lock;
       clearBtn.disabled = lock || p === 0;
-      betBtn.disabled = lock || !bet || p === 0 || bet.value > stack;
+      site.auto?.setEnabled(!busy && playing === 0);
+      site.paintMain('Bet', 'go', lock || !bet || p === 0 || bet.value > stack, !!bet && p > 0 && bet.value <= stack);
       const range = returnRange();
+      const b = bet?.value ?? site.limits?.min ?? 100;
+      if (p === 0) site.profit('Top pay', null, 'pick 1 to 10 numbers');
+      else site.profit('Top pay', (b / 100) * PAYS[risk][p - 1]![p]! - b, `${multText(PAYS[risk][p - 1]![p]!)} · ${p} of ${p} hit`);
       if (p === 0) {
         info.set('picks', 'Picks', `0 of ${MAX_PICKS}`);
+        info.set('odds', 'Top pay odds', '—');
         info.set('rtp', 'Return', `${pct(range.min)} to ${pct(range.max)}`);
-        info.set('top', 'Top pay', '—');
         info.set('profit', 'A profit from', '—');
         info.set('back', 'Pays the bet or more', '—');
-        info.set('avg', 'Average hits', '—');
       } else {
         const row = PAYS[risk][p - 1]!;
         let back = 0;
@@ -196,14 +218,13 @@ export const keno: GameClientModule = {
         const from = row.findIndex((m) => m > 100);
         info.set('picks', 'Picks', `${p} of ${MAX_PICKS}`);
         info.set('rtp', 'Return', pct(tableRtp(risk, p)));
-        info.set('top', 'Top pay', `${multText(row[p]!)} · ${oneIn(hitChance(p, p))}`);
+        info.set('odds', 'Top pay odds', oneIn(hitChance(p, p)));
         info.set('profit', 'A profit from', `${from} hit${from === 1 ? '' : 's'}`);
         info.set('back', 'Pays the bet or more', pct(back));
-        // Each pick is drawn with chance 10/40.
-        info.set('avg', 'Average hits', ((p * DRAWN) / NUMBERS).toFixed(2));
       }
-      const lim = limits ? ` · Bet ${formatMoney(limits.min)} to ${formatMoney(limits.max)}` : '';
-      screen.setNote(p === 0 ? `Return ${pct(range.min)} to ${pct(range.max)} by risk and picks${lim} · Space bets` : `Return ${pct(tableRtp(risk, p))} · ${RISK_NAMES[risk]}, ${p} pick${p > 1 ? 's' : ''}${lim} · Space bets`);
+      const lim = site.limits;
+      const limText = lim ? ` · Bet ${formatMoney(lim.min)} to ${formatMoney(lim.max)}` : '';
+      screen.setNote(p === 0 ? `Return ${pct(range.min)} to ${pct(range.max)} by risk and picks${limText} · Space bets · A picks at random · C clears` : `Return ${pct(tableRtp(risk, p))} · ${RISK_NAMES[risk]}, ${p} pick${p > 1 ? 's' : ''}${limText} · Space bets · A picks at random · C clears`);
       tipFor();
     };
 
@@ -212,23 +233,16 @@ export const keno: GameClientModule = {
     const range = returnRange();
     const tipFor = () => {
       riskSeg.tip(null);
-      if (!ctx.tips.on) {
-        if (tipShown) {
-          tipShown = false;
-          ctx.kit.tip(null);
-        }
-        return;
-      }
-      tipShown = true;
+      if (!ctx.tips.on) return site.tip(null);
       const p = picks.length;
       if (p === 0) {
-        ctx.kit.tip(`Every table returns ${pct(range.min)} to ${pct(range.max)}; ${RISK_NAMES[range.best.risk]} with ${range.best.picks} picks returns the most.`);
+        site.tip(`Every table returns ${pct(range.min)} to ${pct(range.max)}; ${RISK_NAMES[range.best.risk]} with ${range.best.picks} picks returns the most.`);
         return;
       }
       let best: Risk = RISKS[0];
       for (const r of RISKS) if (tableRtp(r, p) > tableRtp(best, p)) best = r;
       const s = p > 1 ? 's' : '';
-      ctx.kit.tip(
+      site.tip(
         best === risk
           ? `With ${p} pick${s}, ${RISK_NAMES[risk]} returns the most: ${pct(tableRtp(risk, p))}. Every table is ${pct(range.min)} to ${pct(range.max)}.`
           : `${RISK_NAMES[risk]} with ${p} pick${s} returns ${pct(tableRtp(risk, p))}; ${RISK_NAMES[best]} returns ${pct(tableRtp(best, p))}.`,
@@ -241,31 +255,31 @@ export const keno: GameClientModule = {
     const clearMarks = () => {
       if (!marked) return;
       marked = false;
-      for (const t of tiles) t.classList.remove('drawn', 'hit');
-      result.hidden = true;
+      for (const t of tiles) t.classList.remove('drawn', 'hit', 'land');
+      pop.hide();
     };
 
     const toggle = (n: number) => {
-      if (busy || playing > 0) return;
+      if (locked()) return;
       clearMarks();
       const i = picks.indexOf(n);
       if (i >= 0) {
         picks.splice(i, 1);
         siteTone(ctx.sfx, 520, 30, { type: 'triangle', gain: 0.025 });
       } else if (picks.length >= MAX_PICKS) {
-        pop(tile(n), 'full');
+        pulse(tile(n), 'full');
         siteTone(ctx.sfx, 150, 110, { type: 'sawtooth', gain: 0.025 });
         return;
       } else {
         picks.push(n);
-        pop(tile(n));
+        pulse(tile(n));
         siteTone(ctx.sfx, 700 + n * 6, 32, { type: 'triangle', gain: 0.03 });
       }
       render();
     };
 
     const autoPick = () => {
-      if (busy || playing > 0) return;
+      if (locked()) return;
       clearMarks();
       const count = picks.length || MAX_PICKS;
       const pool = Array.from({ length: NUMBERS }, (_, i) => i + 1);
@@ -274,36 +288,40 @@ export const keno: GameClientModule = {
         [pool[i], pool[j]] = [pool[j]!, pool[i]!];
       }
       picks = pool.slice(0, count);
-      for (const n of picks) pop(tile(n));
+      for (const n of picks) pulse(tile(n));
       siteTone(ctx.sfx, 660, 50, { type: 'triangle', gain: 0.03, to: 990 });
       render();
     };
 
     const clearPicks = () => {
-      if (busy || playing > 0) return;
+      if (locked()) return;
       clearMarks();
       picks = [];
       render();
     };
 
+    const send = (amount: Cents) => {
+      busy = true;
+      sentAt = performance.now();
+      clearMarks();
+      renderPays();
+      ctx.link.act({ type: 'bet', bet: amount, picks: picks.slice(), risk });
+      render();
+    };
+
     const play = () => {
+      const bet = site.bet;
       if (!bet || busy || playing > 0) return;
-      commitTyping(screen.root);
       if (picks.length === 0) {
         ctx.kit.toast('Pick 1 to 10 numbers first.', 'err');
         return;
       }
       if (bet.value > stack) {
-        siteTone(ctx.sfx, 150, 120, { type: 'sawtooth', gain: 0.03 });
+        shortTone(ctx.sfx);
         ctx.kit.toast('Not enough chips here for that bet.', 'err');
         return;
       }
-      busy = true;
-      sentAt = performance.now();
-      clearMarks();
-      renderPays();
-      ctx.link.act({ type: 'bet', bet: bet.value, picks: picks.slice(), risk });
-      render();
+      send(bet.value);
     };
 
     /** Show a finished draw's marks at once (joining, reconnecting). */
@@ -316,6 +334,7 @@ export const keno: GameClientModule = {
     };
 
     const playDraw = async (ev: KenoEvent) => {
+      site.auto?.driver.answered();
       screen.setStack(ev.stack - ev.payout);
       // A draw starts on a clean board (a bet from this page cleared it already; a draw that
       // arrives any other way must not inherit the last one's marks), showing what was bet.
@@ -327,8 +346,9 @@ export const keno: GameClientModule = {
       render();
       renderPays(0);
       let hits = 0;
+      const gap = site.locked ? REVEAL_MS * 0.75 : REVEAL_MS;
       for (const n of ev.drawn) {
-        await wait(REVEAL_MS);
+        await wait(gap);
         const hit = ev.picks.includes(n);
         const t = tile(n);
         t.classList.add('drawn');
@@ -338,56 +358,41 @@ export const keno: GameClientModule = {
           siteTone(ctx.sfx, 880 + hits * 110, 110, { type: 'triangle', gain: 0.05 });
           siteTone(ctx.sfx, 1760 + hits * 220, 70, { type: 'sine', gain: 0.025, at: 40 });
         } else siteTone(ctx.sfx, 260 + hits * 20, 45, { type: 'sine', gain: 0.03 });
-        pop(t);
+        pulse(t, 'land');
         renderPays(hits);
       }
       const won = ev.payout > ev.bet;
       renderPays(ev.hits, won);
-      if (ev.payout > 0) {
-        result.className = `os-result${won ? '' : ' lose'}`;
-        result.replaceChildren(el('div', 'os-result-mult', multText(ev.mult)), el('div', 'os-result-paid', `${ev.hits} of ${ev.picks.length} hit · ${cents(ev.payout)}`));
-        result.hidden = false;
-      }
-      tally.add(ev.bet, ev.payout);
+      if (ev.payout > 0) pop.show(ev.mult, ev.payout, ev.bet, 0, `${ev.hits} of ${ev.picks.length} hit · ${cents(ev.payout)}`);
       screen.setStack(ev.stack);
-      if (won) {
-        siteTone(ctx.sfx, 784, 90, { type: 'triangle', gain: 0.05, at: 60 });
-        siteTone(ctx.sfx, 1175, 150, { type: 'triangle', gain: 0.05, at: 130 });
-      }
-      const tier = winTier(ev.payout, ev.bet);
-      if (tier) {
-        celebrate({ stage: ctx.stage, ui: ctx.ui, sfx: ctx.sfx }, { title: `Keno ${multText(ev.mult)}`, sub: `${ev.hits} of ${ev.picks.length} hit on ${RISK_NAMES[ev.risk]} · pays ${cents(ev.payout)}`, tier });
-      }
+      site.settle({
+        bet: ev.bet,
+        payout: ev.payout,
+        mult: ev.mult,
+        moment: { title: `Keno ${multText(ev.mult)}`, sub: `${ev.hits} of ${ev.picks.length} hit on ${RISK_NAMES[ev.risk]} · pays ${cents(ev.payout)}` },
+      });
     };
 
     render();
 
     return {
       onTable(snap) {
-        cashier.table(snap);
         stack = snap.you.stack;
         busy = false;
+        site.table(snap);
         screen.setStack(stack);
-        const lim = snap.meta.config.limits.default;
-        if (!bet || !limits || lim.min !== limits.min || lim.max !== limits.max || lim.step !== limits.step) {
-          bet?.root.remove();
-          limits = lim;
-          // onChange must not call setMax: below the table minimum the box would clamp, change
-          // and call back forever.
-          bet = new BetBox({ label: 'Bet', min: lim.min, max: lim.max, step: lim.step, value: lim.min, onChange: () => {
-            if (bet) betBtn.disabled = busy || playing > 0 || picks.length === 0 || bet.value > stack;
-          } });
-          screen.side.prepend(bet.root);
-        }
-        bet.setMax(stack);
-        const last = (snap.view as KenoView).recent[0];
+        const recent = (snap.view as KenoView).recent;
+        const last = recent[0];
         clearMarks();
+        site.history.clear();
+        for (const d of recent.slice(0, 9).reverse()) site.history.push(multText(d.mult), d.payout > d.bet, false);
         if (last) {
           picks = last.picks.slice();
           risk = last.risk;
           riskSeg.set(risk);
           showDraw(last.drawn, last.picks);
           renderPays(last.hits, last.payout > last.bet);
+          site.result.show(last.bet, last.payout, last.mult, false);
         }
         render();
       },
@@ -404,15 +409,14 @@ export const keno: GameClientModule = {
       },
 
       onSeat(msg) {
-        cashier.seat(msg);
+        site.seat(msg);
         stack = msg.stack;
         if (playing === 0) screen.setStack(stack);
-        bet?.setMax(stack);
         render();
       },
 
-      onError() {
-        cashier.refused();
+      onError(_code, msg) {
+        site.error(msg);
         busy = false;
         render();
       },
@@ -420,7 +424,7 @@ export const keno: GameClientModule = {
       keydown(e) {
         if (e.metaKey || e.ctrlKey || e.altKey) return false;
         if (e.code === 'Space') {
-          if (!e.repeat) play();
+          if (!e.repeat) site.press();
           return true;
         }
         if (e.repeat) return false;
@@ -430,21 +434,18 @@ export const keno: GameClientModule = {
         return true;
       },
 
-      update() {
+      update(dt) {
         if (busy && performance.now() - sentAt > 6_000) {
           busy = false;
           render();
         }
-        const camera = ctx.stage.engine.camera;
-        camera.updateMatrixWorld();
-        ctx.stage.root.updateWorldMatrix(true, false);
-        screen.follow(ctx.stage.root, camera, corners);
+        site.update(dt);
       },
 
       dispose() {
         offTips();
-        if (tipShown) ctx.kit.tip(null);
-        screen.dispose();
+        pop.hide();
+        site.dispose();
       },
     };
   },

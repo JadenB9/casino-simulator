@@ -1,7 +1,9 @@
 /* The online games' website, as it shows on the lounge's monitors: a dense dark page in the
    manner of the big crypto-casino sites (bet panel down the left, the board filling the rest, a
    bright green action button), not the casino floor's brass-and-felt look. Built at 1280 x 800
-   and mapped onto the monitor by screen.ts; everything here is sized in design pixels. */
+   and mapped onto the monitor by screen.ts; everything here is sized in design pixels. On a phone
+   or a tablet upright it lies flat over the scene instead (.flat, at the end), at the screen's own
+   size. It is a screen in the world, so it keeps its own colours in both themes. */
 
 .os-screen {
   --os-bg: #0f1e29;
@@ -9,17 +11,21 @@
   --os-card: #213743;
   --os-field: #0f1e29;
   --os-line: #2f4553;
+  --os-line-2: #557086;
   --os-ink: #eef3f8;
   --os-ink-2: #a7b4c6;
-  --os-ink-3: #6f8196;
+  /* the quiet text: 4.7:1 on the cards, more on the panel and the fields */
+  --os-ink-3: #8fa1b5;
   --os-go: #1fd65f;
   --os-go-ink: #06210f;
   --os-cash: #f5b93b;
   --os-cash-ink: #2a1a00;
   --os-win: #1fd65f;
-  --os-lose: #ff5a5f;
+  --os-lose: #ff6b70;
+  --os-focus: #7cc4ff;
   --os-font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --os-num: 'Barlow Condensed', 'Arial Narrow', system-ui, sans-serif;
+  --os-ease: var(--ease, cubic-bezier(0.22, 1, 0.36, 1));
   position: absolute; left: 0; top: 0; width: 1280px; height: 800px;
   transform-origin: 0 0;
   display: grid; grid-template-rows: 64px 1fr 34px;
@@ -29,32 +35,43 @@
 }
 .os-screen[hidden] { display: none; }
 .os-screen button { font-family: var(--os-font); }
+/* Keyboard focus shows on every control; a click doesn't leave a ring */
+.os-screen :focus { outline: none; }
+.os-screen :focus-visible { outline: 3px solid var(--os-focus); outline-offset: 2px; }
+.os-screen input:focus-visible { outline: none; }
 
 /* Top bar */
 .os-top {
   display: grid; grid-template-columns: 220px 1fr auto; align-items: center; gap: 16px;
-  padding: 0 22px; background: var(--os-panel); border-bottom: 1px solid var(--os-line);
+  padding: 0 22px; background: var(--os-panel); border-bottom: 1px solid var(--os-line); min-width: 0;
 }
 .os-brand { display: flex; align-items: baseline; gap: 6px; }
 .os-brand-mark { font-weight: 800; font-size: 20px; letter-spacing: 0.06em; }
 .os-brand-sub { font-weight: 600; font-size: 12px; letter-spacing: 0.16em; color: var(--os-ink-3); }
-.os-title { font-weight: 700; font-size: 18px; }
+.os-title { font-weight: 700; font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .os-stack {
-  display: flex; align-items: center; gap: 10px; padding: 8px 14px;
+  display: flex; align-items: center; gap: 10px; padding: 8px 14px; min-width: 0;
   background: var(--os-field); border: 1px solid var(--os-line); border-radius: 6px;
 }
 .os-stack-label { font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--os-ink-3); }
-.os-stack-value { font-family: var(--os-num); font-size: 22px; font-variant-numeric: tabular-nums; }
+.os-stack-value { font-family: var(--os-num); font-size: 22px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 /* Body: the bet panel and the board */
 .os-body { display: grid; grid-template-columns: 330px 1fr; min-height: 0; }
 .os-side {
-  display: flex; flex-direction: column; gap: 14px; padding: 18px;
+  display: flex; flex-direction: column; gap: 12px; padding: 18px;
   background: var(--os-panel); border-right: 1px solid var(--os-line); overflow: hidden;
 }
-.os-main { position: relative; min-width: 0; min-height: 0; overflow: hidden; }
+/* The panel's parts (site.ts): each lays its own controls out with the panel's gap */
+.os-controls, .os-extras, .os-facts, .os-bet-slot { display: flex; flex-direction: column; gap: 12px; flex-shrink: 0; }
+.os-facts { flex-shrink: 1; min-height: 0; overflow: hidden; }
+.os-controls:empty, .os-extras:empty, .os-facts:empty { display: none; }
+.os-facts[hidden], .os-auto[hidden] { display: none; }
+.os-stage { position: relative; min-width: 0; min-height: 0; }
+.os-view { position: absolute; inset: 0; overflow: hidden; }
+.os-main { position: relative; width: 950px; height: 702px; min-width: 0; min-height: 0; overflow: hidden; }
 .os-foot {
-  display: flex; align-items: center; padding: 0 22px; gap: 18px;
+  display: flex; align-items: center; padding: 0 22px; gap: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   font-size: 13px; color: var(--os-ink-3); border-top: 1px solid var(--os-line); background: var(--os-panel);
 }
 
@@ -63,8 +80,9 @@
 .os-field {
   display: flex; align-items: center; height: 44px; padding: 0 12px; gap: 8px;
   background: var(--os-field); border: 2px solid var(--os-line); border-radius: 6px;
+  transition: border-color 0.15s;
 }
-.os-field:focus-within { border-color: #557086; }
+.os-field:focus-within { border-color: var(--os-line-2); }
 
 /* The bet field */
 .os-bet { display: grid; gap: 6px; }
@@ -72,36 +90,54 @@
 .os-bet-range { font-size: 12px; color: var(--os-ink-3); }
 .os-bet-row { display: grid; grid-template-columns: 1fr 48px 48px 58px; gap: 6px; }
 .os-bet-field {
-  display: flex; align-items: center; height: 44px; padding: 0 10px; gap: 4px;
+  display: flex; align-items: center; height: 44px; padding: 0 10px; gap: 4px; min-width: 0;
   background: var(--os-field); border: 2px solid var(--os-line); border-radius: 6px 0 0 6px;
+  transition: border-color 0.15s;
 }
-.os-bet-field:focus-within { border-color: #557086; }
+.os-bet-field:focus-within { border-color: var(--os-line-2); }
 .os-bet-sign { color: var(--os-ink-3); font-weight: 600; }
 .os-bet-input {
   width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--os-ink);
   font-family: var(--os-num); font-size: 22px; font-variant-numeric: tabular-nums;
 }
+.os-bet-input:disabled, .os-num-input:disabled { color: var(--os-ink-3); }
+/* The line under the bet: the profit on a win (or the top pay) at this bet */
+.os-bet-foot { display: flex; align-items: baseline; gap: 8px; min-width: 0; padding: 0 2px; white-space: nowrap; }
+.os-bet-foot[hidden] { display: none; }
+.os-bet-foot-label { font-size: 12px; font-weight: 600; color: var(--os-ink-3); }
+.os-bet-foot-value { font-family: var(--os-num); font-size: 17px; font-variant-numeric: tabular-nums; color: var(--os-ink); }
+.os-bet-foot-value.win { color: var(--os-win); }
+.os-bet-foot-note { flex: 1; min-width: 0; text-align: right; overflow: hidden; text-overflow: ellipsis; font-family: var(--os-num); font-size: 15px; font-variant-numeric: tabular-nums; color: var(--os-ink-3); }
 .os-chip-btn {
   height: 44px; border: 0; border-radius: 0; background: var(--os-card); color: var(--os-ink);
-  font-weight: 700; font-size: 15px; cursor: pointer;
+  font-weight: 700; font-size: 15px; cursor: pointer; transition: background 0.12s;
 }
 .os-chip-btn:last-child { border-radius: 0 6px 6px 0; }
 .os-chip-btn:hover:not(:disabled) { background: var(--os-line); }
 .os-chip-btn:disabled { color: var(--os-ink-3); cursor: default; }
 
-/* Segmented choices: risk, difficulty, rows, over/under */
+/* Segmented choices: risk, difficulty, rows, over/under, Manual and Auto */
 .os-seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; padding: 4px; background: var(--os-field); border-radius: 8px; }
 .os-seg button {
-  height: 38px; border: 0; border-radius: 5px; background: transparent; color: var(--os-ink-2);
-  font-weight: 600; font-size: 14px; cursor: pointer;
+  position: relative; height: 38px; border: 0; border-radius: 5px; background: transparent; color: var(--os-ink-2);
+  font-weight: 600; font-size: 14px; cursor: pointer; transition: background 0.15s, color 0.15s;
 }
-.os-seg button.on { background: var(--os-card); color: var(--os-ink); }
+.os-seg button.on { background: var(--os-card); color: var(--os-ink); box-shadow: inset 0 -2px 0 rgba(255, 255, 255, 0.06), 0 2px 6px rgba(0, 0, 0, 0.25); }
 .os-seg button:disabled { cursor: default; opacity: 0.5; }
+.os-seg button.on:disabled { opacity: 0.75; }
+.os-seg button:hover:not(:disabled):not(.on) { color: var(--os-ink); background: rgba(47, 69, 83, 0.6); }
+.os-seg button.tip-pick { box-shadow: inset 0 0 0 2px var(--focus, #f1d59a); }
+.os-seg.dense button { font-size: 13px; padding: 0; font-variant-numeric: tabular-nums; }
+
+/* Manual or Auto at the top of the panel: a pill pair */
+.os-seg.os-modes { border-radius: 22px; padding: 4px; flex-shrink: 0; }
+.os-seg.os-modes button { height: 34px; border-radius: 18px; font-size: 14px; font-weight: 700; }
 
 /* The main action */
 .os-action {
   height: 54px; border: 0; border-radius: 6px; font-weight: 800; font-size: 17px; letter-spacing: 0.02em;
-  cursor: pointer; transition: filter 0.12s, transform 0.08s;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  cursor: pointer; transition: filter 0.12s, transform 0.08s, background-color 0.15s;
 }
 .os-action.go { background: var(--os-go); color: var(--os-go-ink); }
 .os-action.cash { background: var(--os-cash); color: var(--os-cash-ink); }
@@ -110,10 +146,22 @@
 .os-action:active:not(:disabled) { transform: translateY(1px); }
 .os-action:disabled { filter: grayscale(0.6) brightness(0.7); cursor: default; }
 .os-action.tip-pick { outline: 3px solid var(--focus, #f1d59a); outline-offset: 2px; }
+.os-action[hidden] { display: none; }
+
+/* A control's key, printed on it as a keycap (data-key; a touch screen has none to press) */
+.os-screen [data-key]::after {
+  content: attr(data-key); flex: none; display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px;
+  border: 1.5px solid currentColor; border-radius: 4px; font-size: 11px; font-weight: 700; letter-spacing: 0.02em;
+  line-height: 1; opacity: 0.55; box-sizing: border-box;
+}
+.os-seg button[data-key]::after { position: absolute; right: 5px; top: 50%; translate: 0 -50%; min-width: 16px; height: 16px; padding: 0 3px; font-size: 10px; opacity: 0.45; }
+@media (pointer: coarse) {
+  .os-screen [data-key]::after { display: none; }
+}
 
 /* Stat tiles under the board (profit on win, chance, multiplier) */
 .os-stats { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 10px; }
-.os-stat { display: grid; gap: 4px; padding: 10px 12px; background: var(--os-card); border-radius: 6px; }
+.os-stat { display: grid; gap: 4px; padding: 10px 12px; background: var(--os-card); border-radius: 6px; min-width: 0; }
 .os-stat-label { font-size: 12px; color: var(--os-ink-3); font-weight: 600; }
 .os-stat-value { font-family: var(--os-num); font-size: 22px; font-variant-numeric: tabular-nums; }
 
@@ -122,20 +170,13 @@
   position: absolute; left: 50%; top: 50%; translate: -50% -50%;
   display: grid; justify-items: center; gap: 4px; padding: 18px 28px;
   background: rgba(15, 30, 41, 0.92); border: 3px solid var(--os-win); border-radius: 10px;
-  animation: os-pop 0.22s var(--ease, ease-out);
+  animation: os-pop 0.26s var(--os-ease);
 }
 .os-result.lose { border-color: var(--os-line); }
 .os-result-mult { font-family: var(--os-num); font-size: 44px; color: var(--os-win); }
 .os-result.lose .os-result-mult { color: var(--os-ink-2); }
 .os-result-paid { font-size: 16px; color: var(--os-ink-2); }
 @keyframes os-pop { from { opacity: 0; scale: 0.85; } }
-
-/* ---- Added with Plinko, Dice, Limbo and Keno (additions only) ---- */
-
-/* Segmented choices: hover, and the option the tips recommend */
-.os-seg button:hover:not(:disabled):not(.on) { color: var(--os-ink); background: rgba(47, 69, 83, 0.6); }
-.os-seg button.tip-pick { box-shadow: inset 0 0 0 2px var(--focus, #f1d59a); }
-.os-seg.dense button { font-size: 13px; padding: 0; font-variant-numeric: tabular-nums; }
 
 /* A labelled panel block: its label row above a control */
 .os-group { display: grid; gap: 6px; }
@@ -154,6 +195,7 @@
 }
 .os-num.readonly .os-field { background: var(--os-card); border-color: var(--os-card); }
 .os-num.readonly .os-num-input { color: var(--os-ink-2); cursor: default; }
+.os-num.readonly.win .os-num-input { color: var(--os-win); }
 .os-num-suffix { color: var(--os-ink-3); font-weight: 700; font-size: 16px; }
 .os-num-btn {
   width: 32px; height: 32px; margin-right: -6px; border: 0; border-radius: 5px; background: var(--os-card);
@@ -170,27 +212,50 @@
 .os-info { display: grid; margin: 0; padding: 2px 12px; background: var(--os-field); border-radius: 6px; }
 .os-info-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--os-panel); }
 .os-info-row:last-child { border-bottom: 0; }
-.os-info dt { font-size: 13px; color: var(--os-ink-3); font-weight: 600; }
-.os-info dd { margin: 0; font-family: var(--os-num); font-size: 18px; font-variant-numeric: tabular-nums; color: var(--os-ink); text-align: right; }
+.os-info dt { font-size: 13px; color: var(--os-ink-3); font-weight: 600; white-space: nowrap; }
+.os-info dd { margin: 0; font-family: var(--os-num); font-size: 18px; font-variant-numeric: tabular-nums; color: var(--os-ink); text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .os-info dd.win { color: var(--os-win); }
 .os-info dd.lose { color: var(--os-lose); }
 
-/* Recent results, newest on the right */
-.os-strip { display: flex; justify-content: flex-end; gap: 6px; height: 34px; overflow: hidden; }
+/* The board's top row: the last round's result on the left, the recent results on the right */
+.os-head { position: absolute; left: 24px; right: 24px; top: 18px; height: 34px; z-index: 4; display: flex; align-items: center; gap: 16px; min-width: 0; }
+.os-round { flex: none; display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px 0 10px; border-radius: 17px; background: var(--os-panel); white-space: nowrap; }
+.os-round[hidden] { display: none; }
+.os-round::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--os-ink-3); }
+.os-round.win::before { background: var(--os-win); box-shadow: 0 0 10px rgba(31, 214, 95, 0.6); }
+.os-round.lose::before { background: var(--os-lose); }
+.os-round-amt { font-family: var(--os-num); font-size: 19px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--os-ink-2); }
+.os-round.win .os-round-amt { color: var(--os-win); }
+.os-round-x { font-family: var(--os-num); font-size: 16px; font-variant-numeric: tabular-nums; color: var(--os-ink-3); }
+.os-round-x[hidden] { display: none; }
+.os-round.fresh { animation: os-round-in 0.32s var(--os-ease); }
+@keyframes os-round-in { from { opacity: 0; translate: -10px 0; } }
+
+/* Recent results, newest on the right (the oldest slip off the left) */
+.os-strip { flex: 1; min-width: 0; display: flex; justify-content: flex-end; gap: 6px; height: 34px; overflow: hidden; }
 .os-strip-item {
   flex: none; display: grid; place-items: center; min-width: 64px; padding: 0 12px; border-radius: 17px;
   background: var(--os-card); color: var(--os-ink-2); font-family: var(--os-num); font-size: 16px; font-variant-numeric: tabular-nums;
 }
 .os-strip-item.win { background: var(--os-win); color: var(--os-go-ink); }
-.os-strip-item.fresh { animation: os-strip-in 0.28s var(--ease, ease-out); }
+.os-strip-item.accent { box-shadow: inset 0 -3px 0 var(--os-accent); }
+.os-strip-item.fresh { animation: os-strip-in 0.3s var(--os-ease); }
 @keyframes os-strip-in { from { opacity: 0; translate: 22px 0; scale: 0.8; } }
 
-/* The session tally at the foot of the bet panel */
-.os-tally { display: grid; gap: 8px; margin-top: auto; }
+/* The session tally at the foot of the bet panel, with its little line of profit */
+.os-tally { display: grid; gap: 8px; margin-top: auto; flex-shrink: 0; }
 .os-tally .os-stat { padding: 8px 10px; }
 .os-tally .os-stat-value { font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .os-stat-value.win { color: var(--os-win); }
 .os-stat-value.lose { color: var(--os-lose); }
+/* the profit line sits behind the Profit tile's own figure */
+.os-stat-chart { position: relative; overflow: hidden; }
+.os-stat-chart > :not(.os-chart) { position: relative; }
+.os-chart { position: absolute; left: 0; right: 0; bottom: 4px; display: block; width: 100%; height: 26px; opacity: 0.55; }
+.os-chart-line { fill: none; stroke: var(--os-ink-3); stroke-width: 1.6; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.os-chart.up .os-chart-line { stroke: var(--os-win); }
+.os-chart.down .os-chart-line { stroke: var(--os-lose); }
+.os-chart-zero { stroke: var(--os-line); stroke-width: 1; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
 
 /* Two plain buttons side by side in the panel (Auto Pick, Clear) */
 .os-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -205,7 +270,7 @@
 .os-log-row > :last-child { text-align: right; }
 .os-log-body { display: grid; gap: 2px; }
 .os-log-body .os-log-row { background: var(--os-field); border-radius: 4px; }
-.os-log-row.fresh { animation: os-log-in 0.25s var(--ease, ease-out); }
+.os-log-row.fresh { animation: os-log-in 0.25s var(--os-ease); }
 @keyframes os-log-in { from { opacity: 0; translate: 0 -6px; } }
 .os-log-head { padding-top: 0; padding-bottom: 0; font-family: var(--os-font); font-size: 12px; font-weight: 600; color: var(--os-ink-3); }
 .os-log-row .win { color: var(--os-win); }
@@ -215,7 +280,19 @@
 .os-fixed { flex-shrink: 0; }
 .os-log { min-height: 0; overflow: hidden; }
 
-/* ---- Added with Tower, Mines, Hi-Lo and Crash (additions only) ---- */
+/* Auto-bet's settings (autopanel.ts) */
+.os-auto { display: grid; gap: 12px; flex-shrink: 0; }
+.os-auto-stops { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.os-auto-stops .os-field { min-width: 0; padding: 0 10px; }
+.os-auto-input { font-size: 20px; }
+.os-auto-input::placeholder { color: var(--os-ink-3); opacity: 1; }
+.os-auto-count button { font-variant-numeric: tabular-nums; }
+.os-auto-status {
+  min-height: 38px; padding: 9px 12px; border-radius: 6px; background: var(--os-field);
+  font-size: 13px; line-height: 1.4; color: var(--os-ink-2);
+}
+.os-auto-status.win { color: var(--os-win); }
+.os-auto-status.lose { color: var(--os-lose); }
 
 /* The end-of-round pop over a board: it never takes the board's clicks */
 .os-pop { pointer-events: none; z-index: 5; min-width: 180px; box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45); }
@@ -234,7 +311,7 @@
 .os-trail-item.win .os-trail-cap { background: rgba(31, 214, 95, 0.16); color: var(--os-win); }
 .os-trail-item.lose .os-trail-cap { background: rgba(255, 90, 95, 0.16); color: var(--os-lose); }
 .os-trail-item.lose .os-trail-card { outline: 2px solid var(--os-lose); outline-offset: 1px; }
-.os-trail-item.fresh { animation: os-trail-in 0.3s var(--ease, ease-out); }
+.os-trail-item.fresh { animation: os-trail-in 0.3s var(--os-ease); }
 @keyframes os-trail-in { from { opacity: 0; translate: 26px 0; } }
 
 /* Crash's table of everyone's bets */
@@ -256,8 +333,56 @@
 
 /* The cashier beside the chips (AddChips) */
 .os-add {
-  height: 30px; padding: 0 12px; margin-left: 4px; border: 0; border-radius: 4px;
-  background: var(--os-card); color: var(--os-ink); font-size: 13px; font-weight: 700; cursor: pointer;
+  flex: none; height: 30px; padding: 0 12px; margin-left: 4px; border: 0; border-radius: 4px;
+  background: var(--os-card); color: var(--os-ink); font-size: 13px; font-weight: 700; cursor: pointer; transition: background 0.12s;
 }
-.os-add:hover:not(:disabled) { background: #2f4553; }
+.os-add:hover:not(:disabled) { background: var(--os-line); }
 .os-add:disabled { opacity: 0.45; cursor: default; }
+
+/* ---- Flat: on a phone either way up, or a tablet upright, the page lies over the scene at the
+   screen's own size (screen.ts places it clear of the HUD, the chat and the back chip and sets
+   --os-k, the board's scale, and the board's and panel's sizes). Upright the board sits under the
+   top bar with the panel below it; on its side the panel runs down the left. In the panel the
+   main button comes up under the bet, so a round is one tap whatever the game. ---- */
+
+.os-screen.flat { width: auto; height: auto; display: grid; grid-template-rows: 46px minmax(0, 1fr); border-radius: 10px; box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5); }
+.os-screen.flat .os-foot { display: none; }
+.os-screen.flat .os-top { grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; padding: 0 8px 0 12px; }
+.os-screen.flat .os-brand-mark { font-size: 16px; }
+.os-screen.flat .os-brand-sub { display: none; }
+.os-screen.flat .os-title { font-size: 16px; }
+.os-screen.flat .os-stack { gap: 8px; padding: 3px 4px 3px 10px; }
+.os-screen.flat .os-stack-label { display: none; }
+.os-screen.flat .os-stack-value { font-size: 19px; }
+.os-screen.flat .os-add { height: 32px; margin-left: 0; }
+.os-screen.flat .os-body { display: flex; flex-direction: column; min-height: 0; }
+.os-screen.flat.sideways .os-body { flex-direction: row; }
+.os-screen.flat .os-stage { flex: none; display: flex; flex-direction: column; align-items: center; background: var(--os-bg); }
+.os-screen.flat.sideways .os-stage { flex: 1; min-width: 0; }
+.os-screen.flat .os-head { position: relative; left: auto; right: auto; top: auto; align-self: stretch; height: 42px; padding: 0 10px; gap: 10px; }
+.os-screen.flat .os-round { height: 30px; padding: 0 10px 0 8px; }
+.os-screen.flat .os-round-amt { font-size: 17px; }
+.os-screen.flat .os-strip { height: 30px; gap: 4px; }
+.os-screen.flat .os-strip-item { min-width: 0; padding: 0 9px; border-radius: 15px; font-size: 15px; }
+.os-screen.flat .os-view { position: relative; inset: auto; flex: none; width: var(--os-bw); height: var(--os-bh); }
+.os-screen.flat .os-main { position: absolute; left: 0; top: 0; transform-origin: 0 0; transform: scale(var(--os-k)) translateY(-64px); }
+.os-screen.flat .os-side { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 12px; gap: 12px; border-right: 0; border-top: 1px solid var(--os-line); }
+.os-screen.flat.sideways .os-side { flex: none; width: var(--os-sw); order: -1; border-top: 0; border-right: 1px solid var(--os-line); }
+.os-screen.flat .os-side > .os-bet-slot { order: 1; }
+.os-screen.flat .os-side > .os-main-btn { order: 2; }
+.os-screen.flat .os-side > .os-extras { order: 3; }
+.os-screen.flat .os-side > .os-controls { order: 4; }
+.os-screen.flat .os-side > .os-modes { order: 5; }
+.os-screen.flat .os-side > .os-auto { order: 6; }
+.os-screen.flat .os-side > .os-facts { order: 7; flex-shrink: 0; overflow: visible; }
+.os-screen.flat .os-side > .os-tally { order: 8; margin-top: 0; }
+.os-screen.flat .os-log { overflow: visible; }
+
+/* ---- Reduce flashing & motion (app/comfort.ts): what's new fades in where it stands instead of
+   sliding or popping into place; colours and glows stay as they are */
+body.calm .os-round.fresh,
+body.calm .os-strip-item.fresh,
+body.calm .os-log-row.fresh,
+body.calm .os-trail-item.fresh,
+body.calm .os-result { animation: os-fade 0.3s both; }
+@keyframes os-fade { from { opacity: 0; } }

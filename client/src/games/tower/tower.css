@@ -1,7 +1,9 @@
-/* Tower's board on the lounge site: a stone-dark tower of slate tiles, the row you're on lit,
-   eggs glowing gold and the dragon's eye in red. Sized in the site's design pixels (1280 x 800). */
+/* Tower's board on the lounge site: a stone-dark tower of slate tiles under the site's top row,
+   the row you're on lit (its edge breathing gold), eggs glowing gold and the dragon's eye in red.
+   A pick turns over in depth; Auto's path is ringed in gold. Sized in the site's design pixels
+   (1280 x 800). */
 
-.tw-board { position: absolute; inset: 0; display: grid; place-items: center; }
+.tw-board { position: absolute; inset: 0; display: grid; place-items: center; padding-top: 56px; }
 
 .tw-tower {
   width: 610px; padding: 16px 22px 22px 12px;
@@ -28,13 +30,13 @@
 /* Rows, the first at the bottom */
 .tw-rows { display: flex; flex-direction: column-reverse; gap: 7px; }
 .tw-row { display: grid; grid-template-columns: 70px 1fr; align-items: center; gap: 12px; }
-.tw-row-mult { font-family: var(--os-num); font-size: 17px; text-align: right; color: #4f6275; font-variant-numeric: tabular-nums; transition: color 0.2s; }
+.tw-row-mult { font-family: var(--os-num); font-size: 17px; text-align: right; color: #6d8195; font-variant-numeric: tabular-nums; transition: color 0.2s; }
 .tw-row.active .tw-row-mult { color: var(--os-ink); }
-.tw-row.passed .tw-row-mult { color: #c99a3a; }
+.tw-row.passed .tw-row-mult { color: #d6a640; }
 .tw-tiles { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 8px; }
 
 .tw-tile {
-  position: relative; height: 54px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 7px;
+  position: relative; height: 48px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 7px;
   background: #1a2d39; box-shadow: 0 4px 0 #0b1720; color: var(--os-ink); cursor: default;
   transition: background 0.15s, transform 0.12s, box-shadow 0.12s, opacity 0.2s;
 }
@@ -42,23 +44,43 @@
 .tw-tile.open:not(:disabled) { cursor: pointer; }
 .tw-tile.open:hover:not(:disabled) { background: #3e5b6e; transform: translateY(-2px); box-shadow: 0 6px 0 #182a36; }
 .tw-tile.open:active:not(:disabled) { transform: translateY(2px); box-shadow: 0 2px 0 #182a36; }
-.tw-row.active .tw-tile.open { box-shadow: 0 4px 0 #182a36, 0 0 0 1px rgba(255, 201, 63, 0.12); }
+/* the row waiting for a pick: its tiles' edge breathes gold, so the next move is plain to see
+   (an opacity on an edge of its own, which the compositor runs) */
+.tw-row.active .tw-tile.open { box-shadow: 0 4px 0 #182a36, 0 0 0 1px rgba(255, 201, 63, 0.14); }
+.tw-row.active .tw-tile.open::before {
+  content: ''; position: absolute; inset: 0; border-radius: 7px; pointer-events: none; will-change: opacity;
+  box-shadow: 0 0 0 2px rgba(255, 201, 63, 0.5), 0 0 16px rgba(255, 201, 63, 0.18); opacity: 0.25;
+  animation: tw-breathe 1.8s ease-in-out infinite;
+}
+@keyframes tw-breathe { 50% { opacity: 1; } }
 .tw-row.active.tip-pick .tw-tile.open { box-shadow: 0 4px 0 #182a36, 0 0 0 2px var(--focus, #f1d59a); }
+.tw-row.active.tip-pick .tw-tile.open::before { display: none; }
 .tw-tile-mult { font-family: var(--os-num); font-size: 20px; font-variant-numeric: tabular-nums; color: var(--os-ink); }
 .tw-tile.egg.lit { background: #3b2d0f; box-shadow: 0 4px 0 #1e1606, inset 0 0 0 2px #f5b93b, 0 0 24px rgba(245, 185, 59, 0.3); }
 .tw-tile.dragon.lit { background: #4a121b; box-shadow: 0 4px 0 #210609, inset 0 0 0 2px #ff5a5f, 0 0 28px rgba(255, 90, 95, 0.4); }
 .tw-tile.dim { opacity: 0.42; }
 .tw-tile.dim.egg, .tw-tile.dim.dragon { background: #112330; box-shadow: 0 4px 0 #0a151d; }
 .tw-row.ahead .tw-tile { background: #172834; box-shadow: 0 4px 0 #0a151d; }
+/* Auto's path, ringed in gold on the rows it hasn't climbed yet */
+.tw-tile.chosen, .tw-row.ahead .tw-tile.chosen { background: #3a3322; box-shadow: 0 4px 0 #221c10, inset 0 0 0 3px #f5b93b; }
+.tw-tile.chosen::after { content: ''; position: absolute; left: 10px; top: 50%; width: 10px; height: 10px; translate: 0 -50%; border-radius: 50%; background: #f5b93b; }
+.tw-tower.choosing .tw-tile:not(:disabled) { cursor: pointer; }
+.tw-tower.choosing .tw-tile:hover:not(:disabled):not(.chosen) { background: #2b4150; }
 
-.tw-icon { display: block; height: 36px; width: auto; }
-.tw-tile .tw-dragon { height: 30px; }
-.tw-tile.dim .tw-icon { height: 28px; }
-.tw-tile.dim .tw-dragon { height: 24px; }
+.tw-icon { display: block; height: 34px; width: auto; }
+.tw-tile .tw-dragon { height: 28px; }
+.tw-tile.dim .tw-icon { height: 26px; }
+.tw-tile.dim .tw-dragon { height: 22px; }
 
+/* Turning over: the tile swings to edge-on and back round with its face showing */
 .tw-tile.flip { animation: tw-flip 0.13s ease-in forwards; }
-@keyframes tw-flip { to { transform: scaleX(0.04); } }
-.tw-tile.land { animation: tw-land 0.28s cubic-bezier(0.22, 1, 0.36, 1); }
-@keyframes tw-land { from { transform: scaleX(0.04); } }
+@keyframes tw-flip { to { transform: perspective(480px) rotateX(90deg); } }
+.tw-tile.land { animation: tw-land 0.32s var(--os-ease); }
+@keyframes tw-land { from { transform: perspective(480px) rotateX(-90deg); } to { transform: perspective(480px) rotateX(0deg); } }
 
 .os-action.tw-random { height: 44px; font-size: 15px; font-weight: 700; }
+.tw-path-note { padding: 9px 12px; border-radius: 6px; background: var(--os-field); font-size: 13px; line-height: 1.4; color: var(--os-ink-2); }
+.tw-path-note[hidden] { display: none; }
+
+/* calm: the waiting row's edge holds steady, lit, instead of breathing */
+body.calm .tw-row.active .tw-tile.open::before { animation: none; opacity: 0.7; }
