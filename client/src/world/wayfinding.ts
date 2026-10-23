@@ -634,7 +634,16 @@ export class MapOverlay {
     else this.tabTo?.('rooms');
     this.pick(r.id);
     this.sheet?.body.querySelector<HTMLElement>(`.map-legend-pick[data-room="${r.id}"]`)?.scrollIntoView?.({ block: 'nearest' });
+    this.reveal();
     return true;
+  }
+
+  /**
+   * After a pick from a list: the plan's caption (what's there, Show the way) into view. Beside the
+   * list it already is; under it (a phone) the sheet scrolls back up to it.
+   */
+  private reveal(): void {
+    this.caption?.scrollIntoView?.({ block: 'nearest', behavior: calm() ? 'auto' : 'smooth' });
   }
 
   /**
@@ -1065,6 +1074,7 @@ export class MapOverlay {
       pick.addEventListener('click', () => {
         this.tabTo?.('rooms');
         this.pick(r.id);
+        this.reveal();
       });
       item.append(pick);
       if (about) item.append(el('p', 'map-legend-what', about));
@@ -1091,7 +1101,10 @@ export class MapOverlay {
         b.dataset.game = g.key;
         b.setAttribute('aria-pressed', String(this.pickedGame === g.key));
         b.append(el('span', 'map-game-name', g.name), el('span', 'map-game-where', g.rooms.join(' · ')), el('span', 'map-game-far', distanceText(near)));
-        b.addEventListener('click', () => this.pickGame(g.key));
+        b.addEventListener('click', () => {
+          this.pickGame(g.key);
+          this.reveal();
+        });
         item.append(b);
         list.append(item);
       }

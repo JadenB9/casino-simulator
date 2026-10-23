@@ -187,7 +187,9 @@ export class PhotoMode {
     view.addEventListener('wheel', this.onWheel, { passive: false });
     view.addEventListener('contextmenu', (e) => e.preventDefault());
     const bar = el('div', 'photo-bar');
-    const hint = el('p', 'photo-hint', 'Drag to turn round you, the wheel to come closer');
+    // (on a touch screen: a finger to turn round you, two to come closer)
+    const touch = document.documentElement.classList.contains('touch-ui');
+    const hint = el('p', 'photo-hint', touch ? 'Drag to turn round you, pinch to come closer' : 'Drag to turn round you, the wheel to come closer');
     const save = el('button', 'btn primary photo-save', 'Save photo');
     save.type = 'button';
     save.addEventListener('click', () => this.save());

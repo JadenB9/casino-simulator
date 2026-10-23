@@ -24,6 +24,8 @@
 .photo-hint { margin: 0 6px 0 0; font-size: 15px; letter-spacing: 0.03em; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .photo-bar .btn { flex: none; height: 40px; border-radius: 999px; }
 .photo-done .key { margin-left: 2px; }
+/* (no Esc key to name on a touch screen) */
+html.touch-ui .photo-done .key { display: none; }
 @keyframes photo-bar-in { from { opacity: 0; transform: translate(-50%, 8px); } }
 /* the shutter: a white flash over the view (calm: a soft one) */
 .photo-flash { position: absolute; inset: 0; background: #fffdf6; opacity: 0; pointer-events: none; }
