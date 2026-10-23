@@ -121,7 +121,7 @@ function graphicsBlock(deps: SettingsDeps): HTMLElement[] {
 // end of graphics ---------------------------------------------------------------------------------
 
 /** The Sound section: on or off, the volume, and each kind of sound's own level where the manager has them. */
-function soundBlock(sfx: SfxLike): HTMLElement[] {
+function soundBlock(sfx: SfxLike): { nodes: HTMLElement[]; dispose(): void } {
   const sliders: HTMLInputElement[] = [];
   const sound = segmented<'on' | 'off'>('Sound', [{ id: 'on', label: 'On' }, { id: 'off', label: 'Off' }], sfx.muted ? 'off' : 'on', (v) => {
     sfx.setMuted(v === 'off');
@@ -146,7 +146,16 @@ function soundBlock(sfx: SfxLike): HTMLElement[] {
     }
   }
   for (const s of sliders) s.disabled = sfx.muted;
-  return out;
+  // the mute key works over the sheet too: the rows follow it
+  let shown = sfx.muted;
+  const off =
+    sfx.onChange?.(() => {
+      if (sfx.muted === shown) return;
+      shown = sfx.muted;
+      sound.set(shown ? 'off' : 'on');
+      for (const s of sliders) s.disabled = shown;
+    }) ?? (() => {});
+  return { nodes: out, dispose: off };
 }
 
 export function openSettings(deps: SettingsDeps): Closable {
@@ -157,6 +166,7 @@ export function openSettings(deps: SettingsDeps): Closable {
     cls: 'settings-sheet',
     onClose: () => {
       keys?.dispose();
+      sound.dispose();
       sheet.body.removeEventListener('scroll', spy);
       deps.onClose?.();
     },
@@ -168,6 +178,7 @@ export function openSettings(deps: SettingsDeps): Closable {
   // flashing and motion (app/comfort.ts): applies at once, everywhere
   const calmCtl = segmented<'full' | 'reduced'>('Reduce flashing & motion', [{ id: 'full', label: 'Full' }, { id: 'reduced', label: 'Reduced' }], calm() ? 'reduced' : 'full', (v) => setCalm(v === 'reduced'));
   const sizeCtl = segmented<UiSize>('Interface size', [{ id: 'standard', label: 'Standard' }, { id: 'large', label: 'Large' }, { id: 'larger', label: 'Larger' }], uiSize(), (v) => setUiSize(v));
+  const sound = soundBlock(deps.sfx);
   const tipsCtl = segmented<'on' | 'off'>('Tips', [{ id: 'on', label: 'On' }, { id: 'off', label: 'Off' }], tips.on ? 'on' : 'off', (v) => tips.set(v === 'on'));
 
   const content: Record<SettingsSection, HTMLElement[]> = {
@@ -178,7 +189,7 @@ export function openSettings(deps: SettingsDeps): Closable {
     // v7.4: the controls and the keys near the top, where they're found
     controls: [...controlSettings(row), ...(keys?.nodes ?? [])],
     graphics: graphicsBlock(deps),
-    sound: soundBlock(deps.sfx),
+    sound: sound.nodes,
     access: [
       row('Flashing & motion', calmCtl.root, note('Reduced: steady lights instead of flashing and chasing, fewer particles, no camera shake.')),
       row('Interface size', sizeCtl.root, note('The HUD, its panels and the notes under it. For everything else larger as well, use the browser’s own zoom (Ctrl and +).')),

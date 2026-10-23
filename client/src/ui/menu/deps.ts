@@ -47,6 +47,8 @@ export interface SfxLike {
   /** A kind's own level, 0 to 1, where the sound manager has them (Settings, Sound). */
   level?(kind: SoundKind): number;
   setLevel?(kind: SoundKind, v: number): void;
+  /** Hear mute, volume and level changes, wherever they come from (the mute key over Settings). */
+  onChange?(fn: () => void): () => void;
 }
 
 /** Something that can be closed; every mount and open returns at least this. */

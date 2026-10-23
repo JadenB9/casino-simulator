@@ -147,7 +147,7 @@ export class Sfx {
   play(name: string, opts: { volume?: number; rate?: number; delay?: number } = {}): void {
     const bufs = this.buffers.get(name);
     // (nothing is made for a sound nobody would hear)
-    if (!bufs?.length || !this.ctx || this.silent()) return;
+    if (!bufs?.length || !this.ctx || !this.audible('game')) return;
     const src = this.ctx.createBufferSource();
     src.buffer = bufs[Math.floor(Math.random() * bufs.length)]!;
     src.playbackRate.value = (opts.rate ?? 1) * (0.96 + Math.random() * 0.08);

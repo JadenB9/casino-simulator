@@ -79,15 +79,18 @@ const HINT_KEY = 'casino.hud.more';
 
 /**
  * Once per browser, a few seconds onto the floor: where the buttons that used to fill the bar went.
- * Not for a browser a script drives (the checks read the toasts), and not again once it's said.
+ * Only for a player who knew the old bar (an account that has played, or is more than a day old):
+ * a new one is never told, now or later. Not for a browser a script drives (the checks read the
+ * toasts), and not again once it's said.
  */
-function hintOnce(): void {
+function hintOnce(p: Profile | null): void {
   try {
     if (navigator.webdriver || localStorage.getItem(HINT_KEY)) return;
     localStorage.setItem(HINT_KEY, '1');
   } catch {
     return;
   }
+  if (!p || (p.stats.total.rounds === 0 && Date.now() - p.createdAt < 86_400_000)) return;
   const keys = matchMedia('(any-pointer: fine)').matches ? `, and ${PALETTE_KEY} finds anything` : '';
   toast(`The boutique, the bar, the daily bonus and the rest are under More now${keys}.`, 'info', 7_000);
 }
@@ -441,15 +444,17 @@ export function mountHud(deps: HudDeps): Hud {
   addEventListener('keydown', onKey);
 
   // Ctrl K (⌘ K): the palette, from the floor or a table, or from More. Ahead of everything (a
-  // table hears K as a tip) and never while typing in a field.
+  // table hears K as a tip) and never while typing in a field, but for the palette's own: there
+  // it closes it (rather than the browser's own Ctrl K taking it to the address bar).
   const onPaletteKey = (e: KeyboardEvent) => {
-    if (e.code !== 'KeyK' || !(MAC ? e.metaKey : e.ctrlKey) || e.altKey || e.shiftKey || e.repeat || isTyping(e)) return;
+    if (e.code !== 'KeyK' || !(MAC ? e.metaKey : e.ctrlKey) || e.altKey || e.shiftKey || e.repeat) return;
     if (palette) {
       e.preventDefault();
       e.stopPropagation();
       palette.close();
       return;
     }
+    if (isTyping(e)) return;
     const top = topPanel();
     if (overlayCount() > 0 && !(more && top && more.root.contains(top))) return;
     e.preventDefault();
@@ -544,12 +549,20 @@ export function mountHud(deps: HudDeps): Hud {
   addEventListener('resize', measure);
 
   const offFps = mountFps(left);
-  const hintTimer = window.setTimeout(hintOnce, 5_000);
+  const hintTimer = window.setTimeout(() => hintOnce(deps.session.profile), 5_000);
   const off = deps.session.on(paint);
   if (deps.session.profile) paint(deps.session.profile);
   paintMute();
   paintSession();
   const offMuteKey = keyed(paintMute);
+  // muted from Settings (or anywhere else): the button follows at once
+  let shownMuted = deps.sfx.muted;
+  const offSfx =
+    deps.sfx.onChange?.(() => {
+      if (deps.sfx.muted === shownMuted) return;
+      shownMuted = deps.sfx.muted;
+      paintMute();
+    }) ?? (() => {});
   requestAnimationFrame(measure);
 
   return {
@@ -589,6 +602,7 @@ export function mountHud(deps: HudDeps): Hud {
       off();
       offTips();
       offMuteKey();
+      offSfx();
       offFps();
       themeBtn.dispose();
       for (const fn of offKeys.values()) fn();

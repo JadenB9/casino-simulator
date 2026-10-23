@@ -170,9 +170,8 @@ export function openMore(d: MoreDeps): MorePanel {
     list[next]?.focus();
   });
   scrim.addEventListener('pointerdown', (e) => {
+    // (the scrim covers the HUD too, so a press on More itself lands here and closes it)
     if (e.target !== scrim) return;
-    // the More button's own click closes it (and so doesn't open it again straight after)
-    if (d.anchor.contains(e.target as Node)) return;
     e.preventDefault();
     close(false);
   });
